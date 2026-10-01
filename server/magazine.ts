@@ -16,7 +16,7 @@ import { and, asc, eq, inArray, ne } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { getAdminEmail } from "./session.js";
 import { uploadPhoto } from "./photoStorage.js";
-import { bioPages, clips, hostedShows, magazineAds, magazinePages, podcasterProfiles, signups, sponsors } from "../shared/schema.js";
+import { bioPages, clips, discoveryCache, hostedShows, magazineAds, magazinePages, podcasterProfiles, signups, sponsors } from "../shared/schema.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 const now = () => new Date().toISOString();
@@ -37,6 +37,49 @@ async function eventFor(slug?: string) {
   return storage.getFeaturedEvent();
 }
 
+type Episode = { title: string; date: string; audioUrl: string };
+const unxml = (t: string) => t.replace(/<!\[CDATA\[|\]\]>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'").replace(/&#(\d+);/g, (_, d) => String.fromCharCode(Number(d))).trim();
+
+/** A show's newest few episodes, from its feed (an Apple Podcasts page is looked up to its feed first). */
+async function recentEpisodes(raw: string): Promise<Episode[]> {
+  try {
+    let feed = raw.trim();
+    const appleId = /podcasts\.apple\.com\/.*\/id(\d+)/i.exec(feed)?.[1];
+    if (appleId) feed = ((await (await fetch(`https://itunes.apple.com/lookup?id=${appleId}&entity=podcast`, { signal: AbortSignal.timeout(5_000) })).json()) as { results?: { feedUrl?: string }[] }).results?.[0]?.feedUrl ?? "";
+    if (!/^https?:\/\//i.test(feed)) return [];
+    const xml = (await (await fetch(feed, { signal: AbortSignal.timeout(7_000), headers: { "User-Agent": "MilitaryVoices.ai/1.0 (+https://www.militaryvoices.ai)" } })).text()).slice(0, 600_000);
+    const out: Episode[] = [];
+    for (const chunk of xml.split(/<item[\s>]/i).slice(1)) {
+      const item = chunk.split(/<\/item>/i)[0];
+      const audioUrl = /<enclosure\b[^>]*\burl\s*=\s*["']([^"']+)["']/i.exec(item)?.[1] ?? "";
+      const title = unxml(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(item)?.[1] ?? "");
+      if (!title || !/^https?:\/\//i.test(audioUrl)) continue;
+      const when = Date.parse(unxml(/<pubDate[^>]*>([\s\S]*?)<\/pubDate>/i.exec(item)?.[1] ?? ""));
+      out.push({ title: title.slice(0, 160), audioUrl: unxml(audioUrl), date: Number.isFinite(when) ? new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", year: "numeric" }).format(new Date(when)) : "" });
+      if (out.length >= 4) break;
+    }
+    return out;
+  } catch {
+    return [];
+  }
+}
+
+/** Every show's newest episodes, kept half a day (feeds are slow; the magazine is opened often). */
+async function episodesFor(eventId: number, lineup: { id: number; rssUrl: string }[]): Promise<Record<number, Episode[]>> {
+  const key = `mag:episodes:${eventId}`;
+  const [row] = await db.select().from(discoveryCache).where(eq(discoveryCache.key, key));
+  const have = row ? (JSON.parse(row.payload) as Record<number, Episode[]>) : {};
+  const fresh = row && Date.now() - Date.parse(row.createdAt) < 12 * 3600_000;
+  if (fresh && lineup.every((s) => s.id in have)) return have;
+  const got = await Promise.all(lineup.map(async (s) => [s.id, s.rssUrl ? await recentEpisodes(s.rssUrl) : []] as const));
+  // A feed that didn't answer this time keeps what it had.
+  const next: Record<number, Episode[]> = Object.fromEntries(got.map(([id, eps]) => [id, eps.length ? eps : have[id] ?? []]));
+  const payload = JSON.stringify(next);
+  const createdAt = now();
+  await db.insert(discoveryCache).values({ key, payload, createdAt }).onConflictDoUpdate({ target: discoveryCache.key, set: { payload, createdAt } });
+  return next;
+}
+
 /** Everything the magazine prints, in running order. */
 async function buildMagazine(eventId: number) {
   const ev = await storage.getEventById(eventId);
@@ -51,6 +94,7 @@ async function buildMagazine(eventId: number) {
   const start = Date.parse(ev.startAtUtc);
   const et = (ms: number) => new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }).format(new Date(ms)) + " ET";
   const out = new Set(words.filter((x) => x.hidden).map((x) => x.signupId));
+  const episodes = await episodesFor(eventId, lineup.filter((s) => !out.has(s.id)).map((s) => ({ id: s.id, rssUrl: s.rssUrl ?? "" }))).catch(() => ({} as Record<number, Episode[]>));
   const shows = lineup.filter((s) => !out.has(s.id)).map((s, i) => {
     const e = s.email.trim().toLowerCase();
     const p = byEmail(profiles, e);
@@ -74,6 +118,7 @@ async function buildMagazine(eventId: number) {
       // In their own words: the bio on their SmartLink.
       about: clean(bio?.bio, 650),
       audio: w?.audio ?? "",
+      episodes: episodes[s.id] ?? [],
       edited: w?.edited ?? false,
       // Where the QR goes: their SmartLink, else the show we host, else their share page.
       link: bio?.handle ? `${ORIGIN}/${bio.handle}` : show ? `${ORIGIN}/podcast/${show.slug}` : `${ORIGIN}/s/${s.id}`,

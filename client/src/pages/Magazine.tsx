@@ -10,8 +10,9 @@ import { Loader2, Pause, Play, Printer } from "lucide-react";
 
 type Show = {
   signupId: number; number: number; time: string; podcastName: string; hostName: string; branch: string; service: string;
-  headshot: string; printQuality: boolean; art: string; blurb: string; quote: string; link: string; about?: string; audio?: string;
+  headshot: string; printQuality: boolean; art: string; blurb: string; quote: string; link: string; about?: string; audio?: string; episodes?: Episode[];
 };
+type Episode = { title: string; date: string; audioUrl: string };
 type Mag = {
   event: { name: string; day: string; occasion: string; tagline: string };
   published: boolean; admin?: boolean; welcome: string;
@@ -73,57 +74,51 @@ function AdPage({ ad, n }: { ad: Ad; n: number }) {
 }
 
 /**
- * In the digital magazine, their show plays right on the page: their segment from the day once
- * we have it, their latest episode until then. Hidden in print, where the QR does the job.
+ * In the digital magazine their show plays right on the page: their segment from the day once
+ * we have it, their newest episode until then, or whichever episode they tap. Hidden in print,
+ * where the QR does the job.
  */
-function Listen({ s }: { s: Show }) {
-  const ref = useRef<HTMLDivElement | null>(null);
+function Listen({ s, ep, label, go }: { s: Show; ep: Episode | null; label: string; go: number }) {
   const audio = useRef<HTMLAudioElement | null>(null);
-  const [ep, setEp] = useState<{ title: string; audioUrl: string; durationLabel?: string } | null | undefined>(s.audio ? { title: "Their segment from the Marathon", audioUrl: s.audio } : undefined);
   const [playing, setPlaying] = useState(false);
   const [t, setT] = useState({ at: 0, of: 0 });
-  // The feed is only asked for once the page is near the screen.
-  useEffect(() => {
-    if (ep !== undefined || !ref.current) return;
-    const io = new IntersectionObserver((es) => {
-      if (!es.some((e) => e.isIntersecting)) return;
-      io.disconnect();
-      void fetch(`/api/signups/${s.signupId}/latest-episode`).then((r) => r.json()).then((j) => setEp(j?.audioUrl ? j : null)).catch(() => setEp(null));
-    }, { rootMargin: "600px" });
-    io.observe(ref.current);
-    return () => io.disconnect();
-  }, [ep, s.signupId]);
-  if (ep === null) return null;
-  const mmss = (x: number) => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, "0")}`;
-  const toggle = () => {
+  const play = () => {
     const a = audio.current;
     if (!a) return;
-    if (a.paused) {
-      // One show at a time: starting this one stops any other.
-      document.querySelectorAll("audio[data-mag]").forEach((o) => { if (o !== a) (o as HTMLAudioElement).pause(); });
-      void a.play();
-    } else a.pause();
+    // One show at a time: starting this one stops any other.
+    document.querySelectorAll("audio[data-mag]").forEach((o) => { if (o !== a) (o as HTMLAudioElement).pause(); });
+    void a.play();
   };
+  // Tapping an episode in the list plays it.
+  useEffect(() => { if (go) { setT({ at: 0, of: 0 }); setTimeout(play, 0); } }, [go]); // eslint-disable-line react-hooks/exhaustive-deps
+  if (!ep) return null;
+  const mmss = (x: number) => `${Math.floor(x / 60)}:${String(Math.floor(x % 60)).padStart(2, "0")}`;
   return (
-    <div ref={ref} className="mag-listen flex items-center gap-4 rounded-2xl px-4 py-3 print:hidden" style={{ background: NAVY }}>
-      <button type="button" onClick={toggle} disabled={!ep} aria-label={playing ? "Pause" : `Play ${s.podcastName}`} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full" style={{ background: GOLD, color: NAVY }} data-testid={`mag-play-${s.signupId}`}>
+    <div className="mag-listen flex items-center gap-4 rounded-2xl px-4 py-3 print:hidden" style={{ background: NAVY }}>
+      <button type="button" onClick={() => (audio.current?.paused ? play() : audio.current?.pause())} aria-label={playing ? "Pause" : `Play ${s.podcastName}`} className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full" style={{ background: GOLD, color: NAVY }} data-testid={`mag-play-${s.signupId}`}>
         {playing ? <Pause className="h-5 w-5" fill="currentColor" /> : <Play className="ml-0.5 h-5 w-5" fill="currentColor" />}
       </button>
       <div className="min-w-0 flex-1">
-        <p className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: GOLD }}>{s.audio ? "Listen to their segment" : "Listen to their latest episode"}</p>
-        <p className="truncate text-[14px] font-semibold text-white">{ep?.title ?? "Loading…"}</p>
+        <p className="text-[11px] font-bold uppercase tracking-[0.18em]" style={{ color: GOLD }}>{label}</p>
+        <p className="truncate text-[14px] font-semibold text-white">{ep.title}</p>
         <div className="mt-1.5 h-1 overflow-hidden rounded-full bg-white/15">
           <div className="h-full rounded-full" style={{ width: `${t.of ? (t.at / t.of) * 100 : 0}%`, background: GOLD }} />
         </div>
       </div>
-      <span className="shrink-0 text-[12px] tabular-nums text-white/60">{t.of ? `${mmss(t.at)} / ${mmss(t.of)}` : ep?.durationLabel ?? ""}</span>
-      {ep && <audio ref={audio} data-mag src={ep.audioUrl} preload="none" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onTimeUpdate={(e) => setT({ at: e.currentTarget.currentTime, of: e.currentTarget.duration || 0 })} />}
+      {t.of > 0 && <span className="shrink-0 text-[12px] tabular-nums text-white/60">{mmss(t.at)} / {mmss(t.of)}</span>}
+      <audio ref={audio} key={ep.audioUrl} data-mag src={ep.audioUrl} preload="none" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onTimeUpdate={(e) => setT({ at: e.currentTarget.currentTime, of: e.currentTarget.duration || 0 })} />
     </div>
   );
 }
 
 function ShowPage({ s, n, event }: { s: Show; n: number; event: Mag["event"] }) {
   const who = [s.branch, s.service].filter(Boolean).join(" · ");
+  const eps = s.episodes ?? [];
+  const [pick, setPick] = useState(-1);
+  const [go, setGo] = useState(0);
+  const segment: Episode | null = s.audio ? { title: "Their segment from the Marathon", audioUrl: s.audio, date: "" } : null;
+  const current = pick >= 0 ? eps[pick] : segment ?? eps[0] ?? null;
+  const label = pick < 0 && segment ? "Listen to their segment" : pick < 0 ? "Listen to their latest episode" : "Now playing";
   const first = s.hostName.replace(/^(dr|mr|mrs|ms|sgt|sergeant major)\.?\s+(\(ret\.\)\s+)?/i, "").trim().split(/\s+/)[0];
   return (
     <Page n={n}>
@@ -156,7 +151,23 @@ function ShowPage({ s, n, event }: { s: Show; n: number; event: Mag["event"] }) 
               <p className="mt-2 text-[14.5px] leading-[1.6] text-slate-700">{s.about}</p>
             </div>
           )}
-          <div className="mt-auto"><Listen s={s} /></div>
+          {eps.length > 0 && (
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: GOLD }}>Start with these episodes</p>
+              <ol className="mt-2 divide-y divide-slate-200 border-y border-slate-200">
+                {eps.slice(0, s.about || s.quote ? 3 : 4).map((e, i) => (
+                  <li key={e.audioUrl}>
+                    <button type="button" onClick={() => { setPick(i); setGo((g) => g + 1); }} className="group flex w-full items-baseline gap-3 py-2 text-left">
+                      <Play className="relative top-0.5 h-3.5 w-3.5 shrink-0 print:hidden" style={{ color: GOLD }} fill="currentColor" />
+                      <span className="min-w-0 flex-1 truncate text-[14.5px] font-semibold text-slate-800 group-hover:underline">{e.title}</span>
+                      {e.date && <span className="shrink-0 text-[12px] tabular-nums text-slate-400">{e.date}</span>}
+                    </button>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+          <div className="mt-auto"><Listen s={s} ep={current} label={label} go={go} /></div>
         </div>
       </div>
       <footer className="absolute inset-x-0 bottom-0 flex items-center gap-4 px-12 pb-10 pt-4" style={{ borderTop: "1px solid #e5e7eb" }}>
