@@ -40,12 +40,35 @@ async function eventFor(slug?: string) {
 type Episode = { title: string; date: string; audioUrl: string };
 const unxml = (t: string) => t.replace(/<!\[CDATA\[|\]\]>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#0?39;|&apos;/g, "'").replace(/&#(\d+);/g, (_, d) => String.fromCharCode(Number(d))).trim();
 
+const words = (t: string) => new Set(t.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w.length > 2 && !["the", "podcast", "show", "with", "and"].includes(w)));
+
+/**
+ * A show's feed when what we were given isn't one (a StreamYard or Spotify link, or nothing): Apple
+ * Podcasts' directory, searched by the show's name, kept only when the name matches closely and
+ * the host's surname is on it, so we never play somebody else's show.
+ */
+async function findFeed(show: string, host: string): Promise<string> {
+  const term = show.split(/[:|]/)[0].trim();
+  const r = (await (await fetch(`https://itunes.apple.com/search?media=podcast&entity=podcast&limit=8&term=${encodeURIComponent(term)}`, { signal: AbortSignal.timeout(5_000) })).json()) as { results?: { collectionName?: string; artistName?: string; feedUrl?: string }[] };
+  const want = words(term);
+  const surname = host.trim().split(/\s+/).pop()?.toLowerCase() ?? "";
+  for (const c of r.results ?? []) {
+    const got = words(c.collectionName ?? "");
+    const shared = Array.from(want).filter((w) => got.has(w)).length;
+    const close = want.size > 0 && shared / want.size >= 0.75 && shared / Math.max(got.size, 1) >= 0.6;
+    const theirs = surname.length > 2 && `${c.artistName ?? ""} ${c.collectionName ?? ""}`.toLowerCase().includes(surname);
+    if (close && theirs && c.feedUrl) return c.feedUrl;
+  }
+  return "";
+}
+
 /** A show's newest few episodes, from its feed (an Apple Podcasts page is looked up to its feed first). */
-async function recentEpisodes(raw: string): Promise<Episode[]> {
+async function recentEpisodes(raw: string, show = "", host = ""): Promise<Episode[]> {
   try {
     let feed = raw.trim();
     const appleId = /podcasts\.apple\.com\/.*\/id(\d+)/i.exec(feed)?.[1];
     if (appleId) feed = ((await (await fetch(`https://itunes.apple.com/lookup?id=${appleId}&entity=podcast`, { signal: AbortSignal.timeout(5_000) })).json()) as { results?: { feedUrl?: string }[] }).results?.[0]?.feedUrl ?? "";
+    else if (!/^https?:\/\//i.test(feed) || /streamyard\.com|spotify\.com|youtube\.com|youtu\.be|\/episodes\/?$/i.test(feed)) feed = show ? await findFeed(show, host) : "";
     if (!/^https?:\/\//i.test(feed)) return [];
     const xml = (await (await fetch(feed, { signal: AbortSignal.timeout(7_000), headers: { "User-Agent": "MilitaryVoices.ai/1.0 (+https://www.militaryvoices.ai)" } })).text()).slice(0, 600_000);
     const out: Episode[] = [];
@@ -65,13 +88,13 @@ async function recentEpisodes(raw: string): Promise<Episode[]> {
 }
 
 /** Every show's newest episodes, kept half a day (feeds are slow; the magazine is opened often). */
-async function episodesFor(eventId: number, lineup: { id: number; rssUrl: string }[]): Promise<Record<number, Episode[]>> {
-  const key = `mag:episodes:${eventId}`;
+async function episodesFor(eventId: number, lineup: { id: number; rssUrl: string; show: string; host: string }[]): Promise<Record<number, Episode[]>> {
+  const key = `mag:episodes2:${eventId}`;
   const [row] = await db.select().from(discoveryCache).where(eq(discoveryCache.key, key));
   const have = row ? (JSON.parse(row.payload) as Record<number, Episode[]>) : {};
   const fresh = row && Date.now() - Date.parse(row.createdAt) < 12 * 3600_000;
   if (fresh && lineup.every((s) => s.id in have)) return have;
-  const got = await Promise.all(lineup.map(async (s) => [s.id, s.rssUrl ? await recentEpisodes(s.rssUrl) : []] as const));
+  const got = await Promise.all(lineup.map(async (s) => [s.id, await recentEpisodes(s.rssUrl, s.show, s.host)] as const));
   // A feed that didn't answer this time keeps what it had.
   const next: Record<number, Episode[]> = Object.fromEntries(got.map(([id, eps]) => [id, eps.length ? eps : have[id] ?? []]));
   const payload = JSON.stringify(next);
@@ -94,7 +117,7 @@ async function buildMagazine(eventId: number) {
   const start = Date.parse(ev.startAtUtc);
   const et = (ms: number) => new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }).format(new Date(ms)) + " ET";
   const out = new Set(words.filter((x) => x.hidden).map((x) => x.signupId));
-  const episodes = await episodesFor(eventId, lineup.filter((s) => !out.has(s.id)).map((s) => ({ id: s.id, rssUrl: s.rssUrl ?? "" }))).catch(() => ({} as Record<number, Episode[]>));
+  const episodes = await episodesFor(eventId, lineup.filter((s) => !out.has(s.id) && !/ceremon/i.test(s.podcastName)).map((s) => ({ id: s.id, rssUrl: s.rssUrl ?? "", show: s.podcastName, host: s.hostName }))).catch(() => ({} as Record<number, Episode[]>));
   const shows = lineup.filter((s) => !out.has(s.id)).map((s, i) => {
     const e = s.email.trim().toLowerCase();
     const p = byEmail(profiles, e);
