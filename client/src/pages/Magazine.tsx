@@ -92,7 +92,7 @@ const rnd = (i: number, k: number) => { const x = Math.sin(i * 12.9898 + k * 78.
 function CoverCollage({ faces, style }: { faces: Face[]; style: CoverStyle }) {
   if (!faces.length) return null;
   if (style === "medallion") {
-    const cx = 408, cy = 350;
+    const cx = 408, cy = 338;
     const inner = faces.slice(0, Math.min(11, faces.length));
     const outer = faces.slice(inner.length);
     const ring = (list: Face[], r: number, size: number, turn: number) => list.map((f, i) => {
@@ -108,9 +108,9 @@ function CoverCollage({ faces, style }: { faces: Face[]; style: CoverStyle }) {
     });
     return (
       <div className="absolute inset-x-0 top-0" style={{ height: 720, background: `radial-gradient(circle at 50% 33%, rgba(240,167,31,0.28), rgba(0,7,65,0) 55%)` }}>
-        {ring(outer, 318, 96, Math.PI / 20)}
-        {ring(inner, 196, 112, 0)}
-        <div className="absolute rounded-full" style={{ left: cx - 92, top: cy - 92, width: 184, height: 184, padding: 4, background: `linear-gradient(145deg, #fff3c4, ${GOLD} 45%, #8a5a00)`, boxShadow: "0 0 50px rgba(240,167,31,0.55)" }}>
+        {ring(outer, 282, 82, Math.PI / 20)}
+        {ring(inner, 172, 98, 0)}
+        <div className="absolute rounded-full" style={{ left: cx - 80, top: cy - 80, width: 160, height: 160, padding: 4, background: `linear-gradient(145deg, #fff3c4, ${GOLD} 45%, #8a5a00)`, boxShadow: "0 0 50px rgba(240,167,31,0.55)" }}>
           <div className="relative h-full w-full overflow-hidden rounded-full bg-white">
             <img src="/nmpd-logo.jpg" alt="" className="h-full w-full object-contain" />
             <div className="absolute inset-0" style={{ background: "radial-gradient(circle at 32% 22%, rgba(255,255,255,0.75), rgba(255,255,255,0) 40%)" }} />
@@ -123,7 +123,7 @@ function CoverCollage({ faces, style }: { faces: Face[]; style: CoverStyle }) {
     const cols = 6, rows = 5, w = 150, h = 176;
     const tiles = cycle(faces, Math.max(faces.length, cols * rows)).slice(0, Math.max(faces.length, cols * rows));
     return (
-      <div className="absolute inset-x-0 top-0 overflow-hidden" style={{ height: 700 }}>
+      <div className="absolute inset-x-0 top-0 overflow-hidden" style={{ height: 650 }}>
         {tiles.map((f, i) => {
           const c = i % cols, r = Math.floor(i / cols) % rows, layer = Math.floor(i / (cols * rows));
           const x = -30 + c * 140 + (rnd(i, 1) - 0.5) * 40 + layer * 70;
@@ -342,7 +342,7 @@ export default function Magazine({ slug }: { slug?: string }) {
           <div className="absolute inset-x-0" style={{ top: 440, height: 200, background: `linear-gradient(to bottom, transparent, ${NAVY})` }} />
         </>
       )}
-      <div className="absolute inset-x-12" style={{ top: 640 }}>
+      <div className="absolute inset-x-12" style={{ top: coverStyle === "medallion" ? 690 : 640, zIndex: 300 }}>
         <p className="text-[13px] font-bold uppercase tracking-[0.3em]" style={{ color: GOLD }}>Keepsake edition · {m.event.occasion}</p>
         <h1 className="mt-3 text-[76px] font-bold leading-[0.95] tracking-tight" style={HEAD}>{m.event.name}</h1>
         <p className="mt-5 text-[20px] font-medium text-white/80">{m.event.day}</p>
