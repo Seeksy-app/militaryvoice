@@ -7,6 +7,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { adminSend, adminUpload } from "@/lib/adminApi";
 import { fitForUpload } from "@/lib/cropImage";
+import { CoverCollage, type CoverStyle, type Face } from "@/pages/Magazine";
 
 type Show = { signupId: number; number: number; time: string; podcastName: string; hostName: string; headshot: string; printQuality: boolean; art: string; blurb: string; quote: string; link: string; audio?: string; about?: string; aboutOwn?: string };
 type Ad = { id: number; sponsorId: number; name: string; headline: string; body: string; site: string; logo: string; artwork: string };
@@ -118,7 +119,7 @@ export function MagazineAdmin({ eventId, slug }: { eventId: number; slug: string
       </div>
 
       <SegmentsPanel eventId={eventId} seg={m.segments} total={m.shows.length} onChanged={refresh} />
-      <CoverPanel eventId={eventId} photo={m.cover?.photo ?? ""} style={m.cover?.style || (m.cover?.photo ? "photo" : "glass")} slug={slug} onChanged={refresh} />
+      <CoverPanel eventId={eventId} photo={m.cover?.photo ?? ""} style={m.cover?.style || (m.cover?.photo ? "photo" : "glass")} slug={slug} faces={m.shows.map((x) => ({ id: x.signupId, src: x.headshot || x.art, who: x.hostName.trim().toLowerCase() })).filter((f, i, all) => f.src && all.findIndex((y) => y.src === f.src || y.who === f.who) === i)} onChanged={refresh} />
       <AdsPanel eventId={eventId} ads={m.ads ?? []} onChanged={refresh} />
 
       <section className="rounded-2xl border border-border bg-card p-5">
@@ -179,7 +180,7 @@ const COVER_STYLES = [
   { v: "photo", label: "One photo", hint: "A single photo, full page" },
 ] as const;
 
-function CoverPanel({ eventId, photo, style, slug, onChanged }: { eventId: number; photo: string; style: string; slug: string; onChanged: () => unknown }) {
+function CoverPanel({ eventId, photo, style, slug, faces, onChanged }: { eventId: number; photo: string; style: string; slug: string; faces: Face[]; onChanged: () => unknown }) {
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
   const put = async (f: File) => {
@@ -198,10 +199,17 @@ function CoverPanel({ eventId, photo, style, slug, onChanged }: { eventId: numbe
   const pick = async (v: string) => { setBusy(true); try { await adminSend("PUT", `/api/admin/magazine/${eventId}/cover-style`, { style: v }); await onChanged(); } finally { setBusy(false); } };
   return (
     <section className="flex flex-wrap items-center gap-4 rounded-2xl border border-border bg-card p-5" data-testid="magazine-cover">
-      <div className="h-28 w-[86px] shrink-0 overflow-hidden rounded-md bg-[#000741]">{photo && <img src={photo} alt="" className="h-full w-full object-cover" />}</div>
+      {/* The cover as it is: the chosen style drawn small (the page is 816 × 1056). */}
+      <div className="relative h-[112px] w-[86px] shrink-0 overflow-hidden rounded-md bg-[#000741] shadow-sm" data-testid="magazine-cover-thumb">
+        {style === "photo" ? (photo && <img src={photo} alt="" className="h-full w-full object-cover" />) : (
+          <div className="absolute left-0 top-0 origin-top-left" style={{ width: 816, height: 1056, transform: `scale(${86 / 816})` }}>
+            <CoverCollage faces={faces} style={style as CoverStyle} />
+          </div>
+        )}
+      </div>
       <div className="min-w-0 flex-1">
         <h3 className="font-semibold">Cover</h3>
-        <p className="mt-0.5 text-sm text-muted-foreground">Every podcaster's face, three glossy ways, or one photo for the whole cover.</p>
+        <p className="mt-0.5 text-sm text-muted-foreground">Every podcaster's face, four ways, or one photo for the whole cover.</p>
         <div className="mt-3 flex flex-wrap gap-2">
           {COVER_STYLES.filter((c) => c.v !== "photo" || photo).map((c) => (
             <button key={c.v} type="button" disabled={busy} title={c.hint} onClick={() => void pick(c.v)} className={`rounded-full border px-3 py-1.5 text-sm font-medium ${style === c.v ? "border-[#053877] bg-[#053877] text-white" : "border-input hover:bg-muted"}`} data-testid={`magazine-cover-${c.v}`}>{c.label}</button>

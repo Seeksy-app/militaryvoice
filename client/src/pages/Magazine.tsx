@@ -73,7 +73,7 @@ function AdPage({ ad, n }: { ad: Ad; n: number }) {
   );
 }
 
-type Face = { id: number; src: string };
+export type Face = { id: number; src: string };
 export type CoverStyle = "glass" | "medallion" | "prints" | "letters";
 
 /** A highlight across a picture, as light catches a gloss-coated print. */
@@ -136,7 +136,7 @@ function WordTiles({ faces, tiles, cols, x0, y0, w, h }: { faces: Face[]; tiles:
  * "glass" a tilted wall of gloss tiles, "medallion" the day's badge ringed by every face as
  * glass buttons, "prints" a scatter of glossy photo prints.
  */
-function CoverCollage({ faces, style }: { faces: Face[]; style: CoverStyle }) {
+export function CoverCollage({ faces, style }: { faces: Face[]; style: CoverStyle }) {
   if (!faces.length) return null;
   if (style === "letters") {
     // One giant word cut out of everyone's photos, black and white, a gold script across it.
