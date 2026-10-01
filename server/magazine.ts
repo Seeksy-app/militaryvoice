@@ -15,6 +15,7 @@ import crypto from "node:crypto";
 import { and, asc, eq, inArray, ne } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { getAdminEmail } from "./session.js";
+import { emailShell, EMAIL_BANNERS, sendOneOffEmail } from "./email.js";
 import { uploadPhoto } from "./photoStorage.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
 import { bioPages, clips, discoveryCache, hostedShows, magazineAds, magazinePages, podcasterProfiles, recordings, segmentCuts, signups, sponsors } from "../shared/schema.js";
@@ -24,6 +25,8 @@ const now = () => new Date().toISOString();
 /** The row that says the magazine is out: until then only admins can open it. */
 const PUBLISHED = -1;
 const WELCOME = 0;
+/** When the magazine went out to the podcasters (blurb: JSON {at, sent}), so it isn't sent twice. */
+const DISTRIBUTED = -3;
 /** The cover photo, when one is set (in `art`); without it the cover is every podcaster's face. */
 const COVER = -2;
 
@@ -231,6 +234,7 @@ async function buildMagazine(eventId: number) {
   return {
     event: { id: ev.id, name: ev.name, tagline: ev.tagline || "", day, occasion: (ev as { occasion?: string }).occasion || "National Military Podcast Day" },
     published: words.some((x) => x.signupId === PUBLISHED),
+    distributed: (() => { try { return JSON.parse(words.find((x) => x.signupId === DISTRIBUTED)?.blurb || "null") as { at: string; sent: number } | null; } catch { return null; } })(),
     welcome: words.find((x) => x.signupId === WELCOME)?.blurb ?? "",
     host: { name: "Riccoh Player", title: "USMC (Ret.) · Host", photo: riccoh?.photoOriginalUrl || riccoh?.photoUrl || "" },
     shows,
@@ -470,6 +474,88 @@ export function registerMagazine(app: Express, requireAdmin: RequestHandler, req
   app.delete("/api/admin/magazine/:eventId/cover", requireAdmin, async (req, res) => {
     await db.delete(magazinePages).where(and(eq(magazinePages.eventId, Number(req.params.eventId)), eq(magazinePages.signupId, COVER)));
     res.json({ ok: true });
+  });
+
+  /**
+   * Distribute: publish the magazine and email every podcaster on it (and their co-host) from
+   * Riccoh, each with a link straight to their own page. { test: true } sends one sample to the
+   * admin pressing the button. Sends once; { again: true } to send a second time on purpose.
+   */
+  app.post("/api/admin/magazine/:eventId/distribute", requireAdmin, async (req, res) => {
+    const eventId = Number(req.params.eventId);
+    const m = await buildMagazine(eventId);
+    if (!m) return res.status(404).json({ message: "No such magazine." });
+    const ev = await storage.getEventById(eventId);
+    const base = `${ORIGIN}/magazine${ev?.slug ? `/${encodeURIComponent(ev.slug)}` : ""}`;
+    const lineup = await db.select().from(signups).where(and(eq(signups.eventId, eventId), ne(signups.status, "cancelled")));
+    const riccoh = "riccoh.player@drphil.tv";
+    // Everyone with a page (not the ceremonies), once each; a co-host gets their own copy.
+    const people = new Map<string, { first: string; show: string; signupId: number }>();
+    for (const s of m.shows) {
+      if (/ceremon/i.test(s.podcastName)) continue;
+      const sg = lineup.find((x) => x.id === s.signupId);
+      for (const email of [sg?.email, sg?.coHostEmail].map((e) => (e ?? "").trim().toLowerCase()).filter((e) => /@/.test(e) && e !== riccoh)) {
+        if (!people.has(email)) people.set(email, { first: email === sg?.email.trim().toLowerCase() ? s.hostName : "", show: s.podcastName, signupId: s.signupId });
+      }
+    }
+    const firstName = (n: string) => n.replace(/^(dr|mr|mrs|ms|sgt|sergeant major)\.?\s+(\(ret\.\)\s+)?/i, "").trim().split(/\s+/)[0] || "there";
+    const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    const subject = "Your page in the Podcast Marathon keepsake magazine";
+    const letter = (p: { first: string; show: string; signupId: number }) => {
+      const link = `${base}#show-${p.signupId}`;
+      const hi = p.first ? firstName(p.first) : "there";
+      const text = `Hi ${hi},
+
+The keepsake magazine from the Podcast Marathon is out, and ${p.show} has its own page in it: your photo, a few words about the show, and your latest episodes, which play right from the page.
+
+See your page: ${link}
+
+It's a keepsake of everyone who was part of National Military Podcast Day. Share your page with your listeners, and flip through the other shows while you're there.
+
+Thank you for being part of the day.
+
+Riccoh`;
+      const html = emailShell({
+        banner: EMAIL_BANNERS.podcasters,
+        eyebrow: "The Podcast Marathon · keepsake magazine",
+        heading: "Your page in the magazine",
+        body: `<p>Hi ${esc(hi)},</p>
+<p>The keepsake magazine from the Podcast Marathon is out, and <strong>${esc(p.show)}</strong> has its own page in it: your photo, a few words about the show, and your latest episodes, which play right from the page.</p>
+<p>It's a keepsake of everyone who was part of National Military Podcast Day. Share your page with your listeners, and flip through the other shows while you're there.</p>
+<p>Thank you for being part of the day.</p>
+<p>Riccoh</p>`,
+        cta: { href: link, label: "See your page" },
+      });
+      return { text, html };
+    };
+
+    if (req.body?.test === true) {
+      const me = (getAdminEmail(req) ?? "").trim().toLowerCase();
+      const sample = Array.from(people.values())[0];
+      if (!me || !sample) return res.status(400).json({ message: "Nothing to send a test of." });
+      const { text, html } = letter(sample);
+      const id = await sendOneOffEmail({ kind: "magazine-test", to: me, subject: `[Test] ${subject}`, html, text });
+      if (!id) return res.status(502).json({ message: "The mail provider didn't accept it." });
+      return res.json({ ok: true, test: true, to: me, recipients: people.size });
+    }
+
+    if (m.distributed && req.body?.again !== true) return res.status(409).json({ message: `Already sent to ${m.distributed.sent} on ${new Date(m.distributed.at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}.` });
+    // The link has to work when they click it.
+    await saveWords(eventId, PUBLISHED, { blurb: "published" });
+    let sent = 0;
+    const failed: string[] = [];
+    for (const [email, p] of Array.from(people.entries())) {
+      const { text, html } = letter(p);
+      const id = await sendOneOffEmail({ kind: "magazine", to: email, subject, html, text }).catch(() => null);
+      if (id) {
+        sent++;
+        await storage.recordOneOffSend({ eventId, subject, bodyText: text, sender: "member:1", banner: "podcasters", email, resendId: id }).catch(() => {});
+      } else failed.push(email);
+      // The mail provider takes a couple a second.
+      await new Promise((r) => setTimeout(r, 550));
+    }
+    await saveWords(eventId, DISTRIBUTED, { blurb: JSON.stringify({ at: now(), sent }) });
+    res.json({ ok: true, sent, failed });
   });
 
   /** Out to the world, or back to admins only. */

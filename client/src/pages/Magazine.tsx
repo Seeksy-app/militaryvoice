@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import QRCode from "qrcode";
 import { Loader2, Pause, Play, Printer } from "lucide-react";
@@ -365,6 +365,12 @@ export default function Magazine({ slug }: { slug?: string }) {
     window.addEventListener("resize", fit);
     return () => window.removeEventListener("resize", fit);
   }, [q.data]);
+  // A link to someone's page (#show-42, from the email) opens on it.
+  useEffect(() => {
+    if (!q.data || !window.location.hash.startsWith("#show-")) return;
+    const t = setTimeout(() => document.getElementById(window.location.hash.slice(1))?.scrollIntoView({ block: "start" }), 400);
+    return () => clearTimeout(t);
+  }, [q.data]);
   useEffect(() => {
     if (!printing || !q.data) return;
     document.title = `${q.data.event.name} — Keepsake Magazine`;
@@ -536,7 +542,7 @@ export default function Magazine({ slug }: { slug?: string }) {
       </div>
       <div ref={box} className="mx-auto max-w-[816px] px-0 py-6 sm:py-10 print:max-w-none print:p-0">
         {pages.map((p, i) => (
-          <div key={i} className="mag-frame mx-auto mb-8 overflow-hidden shadow-xl print:mb-0 print:overflow-visible print:shadow-none" style={{ width: W * scale, height: H * scale }}>
+          <div key={i} id={typeof (p as ReactElement)?.key === "string" && /^\d+$/.test((p as ReactElement).key as string) ? `show-${(p as ReactElement).key}` : undefined} className="mag-frame mx-auto mb-8 overflow-hidden shadow-xl print:mb-0 print:overflow-visible print:shadow-none" style={{ width: W * scale, height: H * scale }}>
             <div className="mag-sheet origin-top-left" style={{ width: W, height: H, transform: `scale(${scale})` }}>{p}</div>
           </div>
         ))}

@@ -10,7 +10,7 @@ import { fitForUpload } from "@/lib/cropImage";
 
 type Show = { signupId: number; number: number; time: string; podcastName: string; hostName: string; headshot: string; printQuality: boolean; art: string; blurb: string; quote: string; link: string; audio?: string; about?: string; aboutOwn?: string };
 type Ad = { id: number; sponsorId: number; name: string; headline: string; body: string; site: string; logo: string; artwork: string };
-type Mag = { event: { name: string }; published: boolean; welcome: string; shows: Show[]; leftOut?: { signupId: number; podcastName: string; hostName: string }[]; cover?: { photo: string; style?: string }; ads?: Ad[]; segments?: { done: number; working: number; failed: number } };
+type Mag = { event: { name: string }; published: boolean; welcome: string; shows: Show[]; leftOut?: { signupId: number; podcastName: string; hostName: string }[]; cover?: { photo: string; style?: string }; ads?: Ad[]; segments?: { done: number; working: number; failed: number }; distributed?: { at: string; sent: number } | null };
 
 /**
  * The keepsake magazine, from admin: SI drafts every page, a person reads and
@@ -109,6 +109,7 @@ export function MagazineAdmin({ eventId, slug }: { eventId: number; slug: string
           </Button>
           <Button asChild variant="outline" className="gap-1.5 rounded-full"><a href={url} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open</a></Button>
           <Button asChild variant="outline" className="gap-1.5 rounded-full"><a href={`${url}?print=1`} target="_blank" rel="noreferrer"><Printer className="h-4 w-4" /> Print / PDF</a></Button>
+          <DistributeButton eventId={eventId} distributed={m.distributed ?? null} onDone={refresh} />
           <label className="flex items-center gap-2 rounded-full border border-border px-3 py-1.5 text-sm font-medium">
             <Switch checked={m.published} onCheckedChange={(v) => void publish(v)} data-testid="magazine-publish" />
             {m.published ? <span className="font-semibold text-[#15834f]">Published</span> : <span className="text-muted-foreground">Admins only</span>}
@@ -328,5 +329,51 @@ function SegmentsPanel({ eventId, seg, total, onChanged }: { eventId: number; se
         {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Cut them now
       </Button>
     </section>
+  );
+}
+
+/** Publish and email every podcaster their page, from Riccoh. A test to yourself first; never twice by accident. */
+function DistributeButton({ eventId, distributed, onDone }: { eventId: number; distributed: { at: string; sent: number } | null; onDone: () => unknown }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [busy, setBusy] = useState<"" | "test" | "send">("");
+  const go = async (test: boolean) => {
+    setBusy(test ? "test" : "send");
+    try {
+      const r = (await (await adminSend("POST", `/api/admin/magazine/${eventId}/distribute`, test ? { test: true } : distributed ? { again: true } : {})).json()) as { to?: string; recipients?: number; sent?: number; failed?: string[] };
+      if (test) toast({ title: "Test sent", description: `To ${r.to}. The real one goes to ${r.recipients} podcasters.` });
+      else {
+        setOpen(false);
+        await onDone();
+        toast({ title: `Sent to ${r.sent} podcasters`, description: r.failed?.length ? `Didn't go to: ${r.failed.join(", ")}` : "The magazine is published, and each of them has a link to their own page." });
+      }
+    } catch (e) {
+      toast({ title: "Couldn't send", description: (e as Error).message, variant: "destructive" });
+    } finally {
+      setBusy("");
+    }
+  };
+  return (
+    <>
+      <Button onClick={() => setOpen(true)} className="gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b944]" data-testid="magazine-distribute">
+        <Mail className="h-4 w-4" /> {distributed ? `Sent to ${distributed.sent}` : "Distribute"}
+      </Button>
+      {open && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4" onClick={() => !busy && setOpen(false)}>
+          <div className="w-full max-w-md rounded-2xl bg-card p-6 shadow-2xl" onClick={(e) => e.stopPropagation()} data-testid="magazine-distribute-dialog">
+            <h3 className="text-lg font-bold">{distributed ? "Send the magazine again?" : "Send the magazine to every podcaster?"}</h3>
+            <p className="mt-2 text-sm text-muted-foreground">
+              {distributed
+                ? `It went to ${distributed.sent} podcasters on ${new Date(distributed.at).toLocaleDateString("en-US", { month: "short", day: "numeric" })}. Sending again emails all of them a second time.`
+                : "This publishes the magazine and emails each podcaster (and co-host) from Riccoh, with a link straight to their own page."}
+            </p>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <Button variant="outline" className="rounded-full" disabled={!!busy} onClick={() => void go(true)} data-testid="magazine-distribute-test">{busy === "test" ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Send me a test first</Button>
+              <Button className="gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" disabled={!!busy} onClick={() => void go(false)} data-testid="magazine-distribute-send">{busy === "send" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />} {distributed ? "Send again" : "Publish and send"}</Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
   );
 }
