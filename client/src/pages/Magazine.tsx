@@ -17,7 +17,10 @@ type Mag = {
   published: boolean; admin?: boolean; welcome: string;
   host: { name: string; title: string; photo: string };
   shows: Show[]; sponsors: { name: string; logo: string; url: string }[];
+  cover?: { photo: string };
+  ads?: Ad[];
 };
+type Ad = { id: number; name: string; headline: string; body: string; site: string; link: string; logo: string; artwork: string };
 
 const NAVY = "#000741";
 const GOLD = "#F0A71F";
@@ -38,6 +41,35 @@ function Qr({ url, size = 96 }: { url: string; size?: number }) {
   const [src, setSrc] = useState("");
   useEffect(() => { void QRCode.toDataURL(url, { margin: 1, width: size * 3, color: { dark: NAVY, light: "#ffffff" } }).then(setSrc).catch(() => {}); }, [url, size]);
   return src ? <img src={src} alt="" style={{ width: size, height: size }} /> : <span style={{ width: size, height: size }} className="block bg-slate-100" />;
+}
+
+/** A full-page ad: their own artwork edge to edge, or one we set from their logo, words and a QR. */
+function AdPage({ ad, n }: { ad: Ad; n: number }) {
+  if (ad.artwork) {
+    return (
+      <Page n={n}>
+        <img src={ad.artwork} alt={ad.name} className="absolute inset-0 h-full w-full object-cover" />
+      </Page>
+    );
+  }
+  return (
+    <Page bg={NAVY} color="#fff" n={n}>
+      <div className="absolute inset-0 flex flex-col items-center px-16 pb-16 pt-24 text-center">
+        <p className="text-[12px] font-bold uppercase tracking-[0.3em]" style={{ color: GOLD }}>A word from our sponsor</p>
+        <div className="mt-14 flex h-40 w-full items-center justify-center">
+          {ad.logo ? <img src={ad.logo} alt={ad.name} className="max-h-full max-w-[460px] object-contain" /> : <span className="text-[44px] font-bold" style={HEAD}>{ad.name}</span>}
+        </div>
+        {ad.headline && <h2 className="mt-14 text-balance text-[48px] font-bold leading-[1.05] tracking-tight" style={HEAD}>{ad.headline}</h2>}
+        {ad.body && <p className="mt-6 max-w-[560px] text-pretty text-[19px] leading-[1.55] text-white/80">{ad.body}</p>}
+        {ad.link && (
+          <div className="mt-auto flex flex-col items-center gap-4">
+            <div className="rounded-2xl bg-white p-3"><Qr url={ad.link} size={132} /></div>
+            <p className="text-[18px] font-semibold" style={{ color: GOLD }}>{(ad.site || ad.link).replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}</p>
+          </div>
+        )}
+      </div>
+    </Page>
+  );
 }
 
 function ShowPage({ s, n, event }: { s: Show; n: number; event: Mag["event"] }) {
@@ -108,17 +140,35 @@ export default function Magazine({ slug }: { slug?: string }) {
   if (q.isLoading) return <div className="flex min-h-screen items-center justify-center bg-slate-200"><Loader2 className="h-6 w-6 animate-spin text-slate-500" /></div>;
   if (q.isError || !q.data) return <div className="flex min-h-screen items-center justify-center bg-slate-200 p-6 text-center text-slate-600">{(q.error as Error)?.message ?? "The magazine isn't out yet."}</div>;
   const m = q.data;
-  const faces = m.shows.filter((s) => s.headshot).slice(0, 24);
+  // Every show on the cover: their photo, or their show's art when we haven't got one.
+  const faces = m.shows.map((s) => ({ id: s.signupId, src: s.headshot || s.art })).filter((f) => f.src);
+  const cols = faces.length > 24 ? 8 : 6;
   const half = Math.ceil(m.shows.length / 2);
+  const ads = m.ads ?? [];
+  // The first ad faces the welcome; the rest are spread evenly through the show pages.
+  const after = new Map<number, Ad[]>();
+  ads.slice(1).forEach((ad, k) => {
+    const at = Math.max(0, Math.round(((k + 1) * m.shows.length) / ads.length) - 1);
+    after.set(at, [...(after.get(at) ?? []), ad]);
+  });
   let n = 1;
 
   const pages: ReactNode[] = [
     // Cover
     <Page key="cover" bg={NAVY} color="#fff">
-      <div className="absolute inset-x-0 top-0 grid grid-cols-6 gap-1.5 p-1.5 opacity-90" style={{ height: 600 }}>
-        {faces.map((s) => <img key={s.signupId} src={s.headshot} alt="" className="h-full w-full object-cover" style={{ objectPosition: "50% 25%" }} />)}
-      </div>
-      <div className="absolute inset-x-0" style={{ top: 420, height: 200, background: `linear-gradient(to bottom, transparent, ${NAVY})` }} />
+      {m.cover?.photo ? (
+        <>
+          <img src={m.cover.photo} alt="" className="absolute inset-0 h-full w-full object-cover" />
+          <div className="absolute inset-x-0 bottom-0" style={{ height: 620, background: `linear-gradient(to bottom, transparent, ${NAVY} 62%)` }} />
+        </>
+      ) : (
+        <>
+          <div className="absolute inset-x-0 top-0 grid gap-1 p-1" style={{ height: 620, gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))` }}>
+            {faces.map((f) => <img key={f.id} src={f.src} alt="" className="h-full w-full object-cover" style={{ objectPosition: "50% 25%" }} />)}
+          </div>
+          <div className="absolute inset-x-0" style={{ top: 440, height: 200, background: `linear-gradient(to bottom, transparent, ${NAVY})` }} />
+        </>
+      )}
       <div className="absolute inset-x-12" style={{ top: 640 }}>
         <p className="text-[13px] font-bold uppercase tracking-[0.3em]" style={{ color: GOLD }}>Keepsake edition · {m.event.occasion}</p>
         <h1 className="mt-3 text-[76px] font-bold leading-[0.95] tracking-tight" style={HEAD}>{m.event.name}</h1>
@@ -142,6 +192,7 @@ export default function Magazine({ slug }: { slug?: string }) {
         <p className="text-[14px] text-slate-500">{m.host.title}</p>
       </div>
     </Page>,
+    ...(ads[0] ? [<AdPage key={`ad-${ads[0].id}`} ad={ads[0]} n={++n} />] : []),
     // The lineup
     <Page key="lineup" n={++n}>
       <div className="absolute inset-x-14 top-16">
@@ -162,7 +213,10 @@ export default function Magazine({ slug }: { slug?: string }) {
         <p className="mt-6 text-[12px] text-slate-400">All times Eastern.</p>
       </div>
     </Page>,
-    ...m.shows.map((s) => <ShowPage key={s.signupId} s={s} n={++n} event={m.event} />),
+    ...m.shows.flatMap((s, i) => [
+      <ShowPage key={s.signupId} s={s} n={++n} event={m.event} />,
+      ...(after.get(i) ?? []).map((ad) => <AdPage key={`ad-${ad.id}`} ad={ad} n={++n} />),
+    ]),
     // Friends of the Marathon
     <Page key="sponsors" n={++n}>
       <div className="absolute inset-x-14 top-16">

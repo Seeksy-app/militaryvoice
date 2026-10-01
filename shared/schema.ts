@@ -2797,3 +2797,24 @@ export const magazinePages = pgTable("magazine_pages", {
   updatedAt: text("updated_at").notNull().default(""),
 }, (t) => [uniqueIndex("magazine_pages_event_signup_idx").on(t.eventId, t.signupId)]);
 export type MagazinePageRow = typeof magazinePages.$inferSelect;
+
+/**
+ * A full-page ad in the keepsake magazine. Either the advertiser's own artwork (US Letter,
+ * full bleed) or a page we compose from their logo, a headline, a line or two and a QR.
+ */
+export const magazineAds = pgTable("magazine_ads", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull(),
+  /** A sponsor on the event (its logo, and the counted /go/sponsor link), or 0 for anyone else. */
+  sponsorId: integer("sponsor_id").notNull().default(0),
+  name: text("name").notNull().default(""),
+  headline: text("headline").notNull().default(""),
+  body: text("body").notNull().default(""),
+  url: text("url").notNull().default(""),
+  logoUrl: text("logo_url").notNull().default(""),
+  /** Their finished page, when they send one: printed edge to edge instead of ours. */
+  artworkUrl: text("artwork_url").notNull().default(""),
+  sortOrder: integer("sort_order").notNull().default(0),
+  createdAt: text("created_at").notNull().default(""),
+});
+export type MagazineAdRow = typeof magazineAds.$inferSelect;

@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, Camera, Check, EyeOff, ExternalLink, Loader2, Mail, Printer, Sparkles, Undo2 } from "lucide-react";
+import { BookOpen, Camera, Check, EyeOff, ExternalLink, ImageIcon, Loader2, Mail, Megaphone, Plus, Printer, Sparkles, Trash2, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -9,7 +9,8 @@ import { adminSend, adminUpload } from "@/lib/adminApi";
 import { fitForUpload } from "@/lib/cropImage";
 
 type Show = { signupId: number; number: number; time: string; podcastName: string; hostName: string; headshot: string; printQuality: boolean; art: string; blurb: string; quote: string; link: string };
-type Mag = { event: { name: string }; published: boolean; welcome: string; shows: Show[]; leftOut?: { signupId: number; podcastName: string; hostName: string }[] };
+type Ad = { id: number; sponsorId: number; name: string; headline: string; body: string; site: string; logo: string; artwork: string };
+type Mag = { event: { name: string }; published: boolean; welcome: string; shows: Show[]; leftOut?: { signupId: number; podcastName: string; hostName: string }[]; cover?: { photo: string }; ads?: Ad[] };
 
 /**
  * The keepsake magazine, from admin: SI drafts every page, a person reads and
@@ -115,6 +116,9 @@ export function MagazineAdmin({ eventId, slug }: { eventId: number; slug: string
         </div>
       </div>
 
+      <CoverPanel eventId={eventId} photo={m.cover?.photo ?? ""} onChanged={refresh} />
+      <AdsPanel eventId={eventId} ads={m.ads ?? []} onChanged={refresh} />
+
       <section className="rounded-2xl border border-border bg-card p-5">
         <h3 className="font-semibold">Riccoh's welcome</h3>
         <Textarea defaultValue={m.welcome} key={`w-${m.welcome.length}`} rows={7} className="mt-2" placeholder="SI writes it with the rest, in Riccoh's voice." onBlur={(e) => { if (e.target.value !== m.welcome) void save(0, { blurb: e.target.value }); }} data-testid="magazine-welcome" />
@@ -159,5 +163,121 @@ export function MagazineAdmin({ eventId, slug }: { eventId: number; slug: string
       )}
 
     </div>
+  );
+}
+
+/** The cover: a photo of our choosing, or (none set) every podcaster's face. */
+function CoverPanel({ eventId, photo, onChanged }: { eventId: number; photo: string; onChanged: () => unknown }) {
+  const { toast } = useToast();
+  const [busy, setBusy] = useState(false);
+  const put = async (f: File) => {
+    setBusy(true);
+    try {
+      const fd = new FormData();
+      fd.append("photo", f, f.name);
+      const r = (await (await adminUpload(`/api/admin/magazine/${eventId}/cover`, fd)).json()) as { width: number; height: number };
+      await onChanged();
+      const small = r.height > 0 && r.height < 2400;
+      toast({ title: "The cover photo is in", description: small ? `It's ${r.width} × ${r.height}: fine online, soft on the printed cover (2550 × 3300 is ideal).` : "Open the magazine to see it." });
+    } catch (e) { toast({ title: "Couldn't use that photo", description: (e as Error).message, variant: "destructive" }); }
+    finally { setBusy(false); }
+  };
+  const clear = async () => { setBusy(true); try { await adminSend("DELETE", `/api/admin/magazine/${eventId}/cover`); await onChanged(); } finally { setBusy(false); } };
+  return (
+    <section className="flex flex-wrap items-center gap-4 rounded-2xl border border-border bg-card p-5" data-testid="magazine-cover">
+      <div className="h-28 w-[86px] shrink-0 overflow-hidden rounded-md bg-[#000741]">{photo && <img src={photo} alt="" className="h-full w-full object-cover" />}</div>
+      <div className="min-w-0 flex-1">
+        <h3 className="font-semibold">Cover</h3>
+        <p className="mt-0.5 text-sm text-muted-foreground">{photo ? "Your photo, full page, with the title over the bottom." : "Every podcaster's photo (their show art until a photo comes in). Or put in one photo for the whole cover."}</p>
+      </div>
+      <div className="flex items-center gap-2">
+        <label className={`inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full border border-input bg-background px-4 text-sm font-medium hover:bg-muted ${busy ? "pointer-events-none opacity-50" : ""}`}>
+          {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />} {photo ? "Change cover photo" : "Use a cover photo"}
+          <input type="file" accept="image/*" className="sr-only" aria-label="Cover photo" data-testid="magazine-cover-input" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void put(f); }} />
+        </label>
+        {photo && <Button type="button" variant="ghost" size="sm" className="rounded-full text-muted-foreground" disabled={busy} onClick={() => void clear()}>Back to the faces</Button>}
+      </div>
+    </section>
+  );
+}
+
+/** Full-page ads: a sponsor's (their logo, a counted link) or anyone's. Their artwork, or a page we set. */
+function AdsPanel({ eventId, ads, onChanged }: { eventId: number; ads: Ad[]; onChanged: () => unknown }) {
+  const { toast } = useToast();
+  const sponsors = useQuery<{ id: number; name: string; logoUrl: string; url: string }[]>({ queryKey: ["/api/sponsors"], queryFn: async () => (await fetch("/api/sponsors")).json() });
+  const [pick, setPick] = useState("");
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState<number | "new" | null>(null);
+  const run = async (key: number | "new", fn: () => Promise<unknown>, done?: string) => {
+    setBusy(key);
+    try { await fn(); await onChanged(); if (done) toast({ title: done }); }
+    catch (e) { toast({ title: "Couldn't do that", description: (e as Error).message, variant: "destructive" }); }
+    finally { setBusy(null); }
+  };
+  const add = () => run("new", async () => {
+    const fd = new FormData();
+    if (pick && pick !== "other") fd.append("sponsorId", pick);
+    else fd.append("name", name.trim());
+    await adminUpload(`/api/admin/magazine/${eventId}/ads`, fd);
+    setPick(""); setName("");
+  }, "Ad page added");
+  const patch = (id: number, body: Record<string, string>) => run(id, () => adminSend("PUT", `/api/admin/magazine/ads/${id}`, body));
+  const artwork = (id: number, f: File) => run(id, async () => {
+    const fd = new FormData();
+    fd.append("artwork", f, f.name);
+    const r = (await (await adminUpload(`/api/admin/magazine/ads/${id}/artwork`, fd)).json()) as { width: number; height: number };
+    if (r.height && r.height < 2400) toast({ title: "Their ad is in", description: `It's ${r.width} × ${r.height}: soft in print. Ask them for 2550 × 3300 (8.5 × 11 in at 300 dpi).` });
+  });
+  return (
+    <section className="rounded-2xl border border-border bg-card p-5" data-testid="magazine-ads">
+      <h3 className="flex items-center gap-2 font-semibold"><Megaphone className="h-4 w-4 text-[#053877]" /> Ad pages</h3>
+      <p className="mt-0.5 text-sm text-muted-foreground">A full page each. The first faces Riccoh's welcome; the rest are spread through the show pages. Put in their finished ad (8.5 × 11 in), or we set one from their logo, a headline, a line or two and a QR to their site.</p>
+      <ul className="mt-4 space-y-3">
+        {ads.map((a) => (
+          <li key={a.id} className="flex gap-4 rounded-xl border border-border p-3" data-testid={`magazine-ad-${a.id}`}>
+            <div className="flex h-28 w-[86px] shrink-0 items-center justify-center overflow-hidden rounded-md bg-[#000741] p-1.5">
+              {a.artwork ? <img src={a.artwork} alt="" className="h-full w-full object-cover" /> : a.logo ? <img src={a.logo} alt="" className="max-h-full max-w-full object-contain" /> : <span className="text-center text-[10px] font-bold text-white">{a.name}</span>}
+            </div>
+            <div className="min-w-0 flex-1 space-y-2">
+              <p className="text-sm font-semibold">{a.name}{busy === a.id && <Loader2 className="ml-2 inline h-3.5 w-3.5 animate-spin" />}</p>
+              {a.artwork ? (
+                <p className="text-sm text-muted-foreground">Their own ad, printed edge to edge.</p>
+              ) : (
+                <>
+                  <input defaultValue={a.headline} key={`h-${a.id}-${a.headline}`} placeholder="Headline" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm font-semibold" onBlur={(e) => { if (e.target.value !== a.headline) void patch(a.id, { headline: e.target.value }); }} />
+                  <Textarea defaultValue={a.body} key={`b-${a.id}-${a.body.length}`} rows={2} placeholder="A line or two" onBlur={(e) => { if (e.target.value !== a.body) void patch(a.id, { body: e.target.value }); }} />
+                  <input defaultValue={a.site} key={`u-${a.id}-${a.site}`} placeholder="Their website (the QR goes here)" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" onBlur={(e) => { if (e.target.value !== a.site) void patch(a.id, { url: e.target.value }); }} />
+                </>
+              )}
+              <div className="flex flex-wrap gap-2">
+                <label className={`inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full border border-input bg-background px-3 text-sm font-medium hover:bg-muted ${busy === a.id ? "pointer-events-none opacity-50" : ""}`}>
+                  <ImageIcon className="h-3.5 w-3.5" /> {a.artwork ? "Replace their ad" : "Use their own ad"}
+                  <input type="file" accept="image/*" className="sr-only" aria-label={`${a.name} ad artwork`} data-testid={`magazine-ad-art-${a.id}`} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void artwork(a.id, f); }} />
+                </label>
+                {a.artwork && <Button type="button" variant="ghost" size="sm" className="h-8 rounded-full text-muted-foreground" onClick={() => void patch(a.id, { artwork: "" })}>Set it from their logo instead</Button>}
+                {!a.artwork && !a.sponsorId && (
+                  <label className={`inline-flex h-8 cursor-pointer items-center gap-1.5 rounded-full border border-input bg-background px-3 text-sm font-medium hover:bg-muted ${busy === a.id ? "pointer-events-none opacity-50" : ""}`}>
+                    <ImageIcon className="h-3.5 w-3.5" /> {a.logo ? "Change logo" : "Add their logo"}
+                    <input type="file" accept="image/*" className="sr-only" aria-label={`${a.name} logo`} data-testid={`magazine-ad-logo-${a.id}`} onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void run(a.id, () => { const fd = new FormData(); fd.append("logo", f, f.name); return adminUpload(`/api/admin/magazine/ads/${a.id}/logo`, fd); }); }} />
+                  </label>
+                )}
+                <Button type="button" variant="ghost" size="sm" className="h-8 gap-1.5 rounded-full text-muted-foreground" onClick={() => void run(a.id, () => adminSend("DELETE", `/api/admin/magazine/ads/${a.id}`), `${a.name} is out of the magazine`)}><Trash2 className="h-3.5 w-3.5" /> Remove</Button>
+              </div>
+            </div>
+          </li>
+        ))}
+      </ul>
+      <div className="mt-4 flex flex-wrap items-center gap-2">
+        <select value={pick} onChange={(e) => setPick(e.target.value)} className="h-9 rounded-md border border-input bg-background px-3 text-sm" aria-label="Advertiser" data-testid="magazine-ad-pick">
+          <option value="">Add an ad page for…</option>
+          {(sponsors.data ?? []).map((sp) => <option key={sp.id} value={String(sp.id)}>{sp.name}</option>)}
+          <option value="other">Someone else</option>
+        </select>
+        {pick === "other" && <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Advertiser's name" className="h-9 rounded-md border border-input bg-background px-3 text-sm" data-testid="magazine-ad-name" />}
+        <Button type="button" size="sm" className="h-9 gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" disabled={!pick || (pick === "other" && !name.trim()) || busy === "new"} onClick={() => void add()} data-testid="magazine-ad-add">
+          {busy === "new" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Add
+        </Button>
+      </div>
+    </section>
   );
 }

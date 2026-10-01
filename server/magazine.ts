@@ -9,16 +9,22 @@
 // (the same page, printed to PDF at US Letter).
 import type { Express, RequestHandler } from "express";
 import Anthropic from "@anthropic-ai/sdk";
-import { and, eq, inArray, ne } from "drizzle-orm";
+import multer from "multer";
+import sharp from "sharp";
+import crypto from "node:crypto";
+import { and, asc, eq, inArray, ne } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { getAdminEmail } from "./session.js";
-import { bioPages, clips, hostedShows, magazinePages, podcasterProfiles, signups, sponsors } from "../shared/schema.js";
+import { uploadPhoto } from "./photoStorage.js";
+import { bioPages, clips, hostedShows, magazineAds, magazinePages, podcasterProfiles, signups, sponsors } from "../shared/schema.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 const now = () => new Date().toISOString();
 /** The row that says the magazine is out: until then only admins can open it. */
 const PUBLISHED = -1;
 const WELCOME = 0;
+/** The cover photo, when one is set (in `art`); without it the cover is every podcaster's face. */
+const COVER = -2;
 
 const clean = (s: unknown, n: number) => {
   const t = String(s ?? "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim();
@@ -71,6 +77,8 @@ async function buildMagazine(eventId: number) {
     };
   });
   const sponsorRows = (await db.select().from(sponsors).where(and(eq(sponsors.eventId, eventId), eq(sponsors.active, true)))).sort((a, b) => a.sortOrder - b.sortOrder);
+  const adRows = await db.select().from(magazineAds).where(eq(magazineAds.eventId, eventId)).orderBy(asc(magazineAds.sortOrder), asc(magazineAds.id));
+  const allSponsors = adRows.some((a) => a.sponsorId) ? await db.select().from(sponsors) : [];
   const riccoh = await storage.getProfileByEmail("riccoh.player@drphil.tv").catch(() => undefined);
   const day = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "America/New_York" }).format(new Date(start));
   return {
@@ -82,6 +90,17 @@ async function buildMagazine(eventId: number) {
     /** Left out by an admin (listed for admin only, so they can be put back). */
     leftOut: lineup.filter((s) => out.has(s.id)).map((s) => ({ signupId: s.id, podcastName: s.podcastName, hostName: s.hostName })),
     sponsors: sponsorRows.map((r) => ({ name: r.name, logo: r.logoUrl, url: r.url })),
+    cover: { photo: words.find((x) => x.signupId === COVER)?.art ?? "" },
+    // A sponsor's QR goes through the counted link, so the magazine's scans show in their numbers.
+    ads: adRows.map((a) => {
+      const sp = allSponsors.find((x) => x.id === a.sponsorId);
+      const site = a.url || sp?.url || "";
+      return {
+        id: a.id, sponsorId: a.sponsorId, name: a.name || sp?.name || "", headline: a.headline, body: a.body,
+        site, link: sp ? `${ORIGIN}/go/sponsor/${sp.id}?src=magazine` : site,
+        logo: a.logoUrl || sp?.logoUrl || "", artwork: a.artworkUrl,
+      };
+    }),
   };
 }
 
@@ -192,6 +211,81 @@ export function registerMagazine(app: Express, requireAdmin: RequestHandler) {
       ...(typeof req.body?.quote === "string" ? { quote: req.body.quote.slice(0, 300) } : {}),
       ...(typeof req.body?.hidden === "boolean" ? { hidden: req.body.hidden } : { edited: true }),
     });
+    res.json({ ok: true });
+  });
+
+  const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 40 * 1024 * 1024 }, fileFilter: (_req, f, cb) => cb(null, f.mimetype.startsWith("image/")) });
+  /** A page-sized picture: up to 2550 × 3300 (US Letter at 300 dpi), never enlarged. */
+  const savePage = async (buf: Buffer, tag: string) => {
+    const out = await sharp(buf).rotate().resize(2550, 3300, { fit: "inside", withoutEnlargement: true }).jpeg({ quality: 90 }).toBuffer();
+    return uploadPhoto(`magazine/${tag}-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.jpg`, out);
+  };
+
+  /** An ad page: a sponsor's (their logo and counted link), or anyone's by name and link. */
+  app.post("/api/admin/magazine/:eventId/ads", requireAdmin, upload.single("artwork"), async (req, res) => {
+    const eventId = Number(req.params.eventId);
+    const b = req.body ?? {};
+    const sponsorId = Number(b.sponsorId) || 0;
+    const name = String(b.name ?? "").trim().slice(0, 120);
+    if (!sponsorId && !name) return res.status(400).json({ message: "Pick a sponsor or give the advertiser a name." });
+    const url = String(b.url ?? "").trim().slice(0, 500);
+    const count = (await db.select({ id: magazineAds.id }).from(magazineAds).where(eq(magazineAds.eventId, eventId))).length;
+    const [row] = await db.insert(magazineAds).values({
+      eventId, sponsorId, name,
+      headline: String(b.headline ?? "").trim().slice(0, 140),
+      body: String(b.body ?? "").trim().slice(0, 600),
+      url: url && !/^https?:\/\//i.test(url) ? `https://${url}` : url,
+      artworkUrl: req.file ? await savePage(req.file.buffer, "ad") : "",
+      sortOrder: count,
+      createdAt: now(),
+    }).returning();
+    res.json(row);
+  });
+
+  app.put("/api/admin/magazine/ads/:id", requireAdmin, async (req, res) => {
+    const b = req.body ?? {};
+    const patch: Record<string, string | number> = {};
+    for (const [k, n] of [["name", 120], ["headline", 140], ["body", 600], ["url", 500]] as const) if (typeof b[k] === "string") patch[k] = b[k].trim().slice(0, n);
+    if (typeof patch.url === "string" && patch.url && !/^https?:\/\//i.test(patch.url)) patch.url = `https://${patch.url}`;
+    if (b.artwork === "") patch.artworkUrl = "";
+    if (Number.isInteger(b.sortOrder)) patch.sortOrder = b.sortOrder;
+    if (Object.keys(patch).length) await db.update(magazineAds).set(patch).where(eq(magazineAds.id, Number(req.params.id)));
+    res.json({ ok: true });
+  });
+
+  /** Their finished page, edge to edge. */
+  app.post("/api/admin/magazine/ads/:id/artwork", requireAdmin, upload.single("artwork"), async (req, res) => {
+    if (!req.file) return res.status(400).json({ message: "Pick their ad first (a JPG or PNG)." });
+    const meta = await sharp(req.file.buffer).metadata().catch(() => ({} as { width?: number; height?: number }));
+    const artworkUrl = await savePage(req.file.buffer, "ad");
+    await db.update(magazineAds).set({ artworkUrl }).where(eq(magazineAds.id, Number(req.params.id)));
+    res.json({ ok: true, artworkUrl, width: meta.width ?? 0, height: meta.height ?? 0 });
+  });
+
+  /** An advertiser's logo, when they aren't one of the event's sponsors (kept as sent: a PNG keeps its see-through background). */
+  app.post("/api/admin/magazine/ads/:id/logo", requireAdmin, upload.single("logo"), async (req, res) => {
+    if (!req.file) return res.status(400).json({ message: "Pick their logo first." });
+    const ext = req.file.mimetype === "image/png" ? "png" : req.file.mimetype === "image/svg+xml" ? "svg" : "jpg";
+    const logoUrl = await uploadPhoto(`magazine/logo-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.${ext}`, req.file.buffer, req.file.mimetype);
+    await db.update(magazineAds).set({ logoUrl }).where(eq(magazineAds.id, Number(req.params.id)));
+    res.json({ ok: true, logoUrl });
+  });
+
+  app.delete("/api/admin/magazine/ads/:id", requireAdmin, async (req, res) => {
+    await db.delete(magazineAds).where(eq(magazineAds.id, Number(req.params.id)));
+    res.json({ ok: true });
+  });
+
+  /** The cover photo (or, deleted, back to every podcaster's face). */
+  app.post("/api/admin/magazine/:eventId/cover", requireAdmin, upload.single("photo"), async (req, res) => {
+    if (!req.file) return res.status(400).json({ message: "Pick a photo first." });
+    const meta = await sharp(req.file.buffer).metadata().catch(() => ({} as { width?: number; height?: number }));
+    const art = await savePage(req.file.buffer, "cover");
+    await saveWords(Number(req.params.eventId), COVER, { art });
+    res.json({ ok: true, photo: art, width: meta.width ?? 0, height: meta.height ?? 0 });
+  });
+  app.delete("/api/admin/magazine/:eventId/cover", requireAdmin, async (req, res) => {
+    await db.delete(magazinePages).where(and(eq(magazinePages.eventId, Number(req.params.eventId)), eq(magazinePages.signupId, COVER)));
     res.json({ ok: true });
   });
 
