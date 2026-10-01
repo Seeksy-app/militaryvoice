@@ -460,7 +460,7 @@ export function registerMagazine(app: Express, requireAdmin: RequestHandler, req
   });
   /** Which cover: a collage style ("glass", "medallion", "prints") or "photo". Kept in the cover row's quote field. */
   app.put("/api/admin/magazine/:eventId/cover-style", requireAdmin, async (req, res) => {
-    const style = ["glass", "medallion", "prints", "photo"].includes(String(req.body?.style)) ? String(req.body.style) : "";
+    const style = ["glass", "medallion", "prints", "letters", "photo"].includes(String(req.body?.style)) ? String(req.body.style) : "";
     if (!style) return res.status(400).json({ message: "Which cover?" });
     await saveWords(Number(req.params.eventId), COVER, { quote: style });
     res.json({ ok: true, style });

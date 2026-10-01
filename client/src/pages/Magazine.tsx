@@ -74,7 +74,7 @@ function AdPage({ ad, n }: { ad: Ad; n: number }) {
 }
 
 type Face = { id: number; src: string };
-export type CoverStyle = "glass" | "medallion" | "prints";
+export type CoverStyle = "glass" | "medallion" | "prints" | "letters";
 
 /** A highlight across a picture, as light catches a gloss-coated print. */
 const SHEEN = "linear-gradient(135deg, rgba(255,255,255,0.55) 0%, rgba(255,255,255,0.14) 32%, rgba(255,255,255,0) 46%)";
@@ -91,6 +91,33 @@ const rnd = (i: number, k: number) => { const x = Math.sin(i * 12.9898 + k * 78.
  */
 function CoverCollage({ faces, style }: { faces: Face[]; style: CoverStyle }) {
   if (!faces.length) return null;
+  if (style === "letters") {
+    // One giant word cut out of everyone's photos, black and white, a gold script across it.
+    const cols = 10, rows = 2, x0 = 30, y0 = 268, w = 756 / cols, h = 330 / rows;
+    const tiles = cycle(faces, cols * rows);
+    return (
+      <svg className="absolute inset-0" viewBox={`0 0 ${W} ${H}`} width={W} height={H}>
+        <defs>
+          <clipPath id="mag-word"><text x={W / 2} y={588} textAnchor="middle" fontFamily="Anton, Impact, sans-serif" fontSize={345} textLength={756} lengthAdjust="spacingAndGlyphs">VOICES</text></clipPath>
+          <filter id="mag-bw"><feColorMatrix type="saturate" values="0" /><feComponentTransfer><feFuncR type="linear" slope="1.12" intercept="-0.04" /><feFuncG type="linear" slope="1.12" intercept="-0.04" /><feFuncB type="linear" slope="1.12" intercept="-0.04" /></feComponentTransfer></filter>
+          <linearGradient id="mag-band" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#c9cfdc" /><stop offset="1" stopColor="#eef1f6" /></linearGradient>
+          <linearGradient id="mag-fade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#fff" stopOpacity="0" /><stop offset="1" stopColor="#fff" stopOpacity="1" /></linearGradient>
+        </defs>
+        <rect width={W} height={H} fill="#ffffff" />
+        {/* The crowd, faint, behind the word. */}
+        <g opacity={0.16} filter="url(#mag-bw)">
+          {cycle(faces, 24).map((f, i) => <image key={`bg-${i}`} href={f.src} x={(i % 8) * 102} y={Math.floor(i / 8) * 130} width={102} height={130} preserveAspectRatio="xMidYMid slice" />)}
+        </g>
+        <rect y={330} width={W} height={300} fill="url(#mag-band)" opacity={0.55} />
+        <rect y={250} width={W} height={150} fill="url(#mag-fade)" opacity={0.35} />
+        <g clipPath="url(#mag-word)" filter="url(#mag-bw)">
+          {tiles.map((f, i) => <image key={`w-${i}`} href={f.src} x={x0 + (i % cols) * w} y={y0 + Math.floor(i / cols) * h} width={w} height={h} preserveAspectRatio="xMidYMid slice" />)}
+        </g>
+        <text x={W / 2} y={232} textAnchor="middle" fontFamily="'General Sans', Inter, sans-serif" fontWeight={500} fontSize={44} letterSpacing={3} fill="#0b0b12">THE PODCAST MARATHON</text>
+        <text x={W / 2 + 40} y={690} textAnchor="middle" fontFamily="Yellowtail, cursive" fontSize={132} fill={GOLD} transform={`rotate(-5 ${W / 2} 690)`}>of the Military</text>
+      </svg>
+    );
+  }
   if (style === "medallion") {
     const cx = 408, cy = 338;
     const inner = faces.slice(0, Math.min(11, faces.length));
@@ -293,7 +320,7 @@ export default function Magazine({ slug }: { slug?: string }) {
     document.title = `${q.data.event.name} — Keepsake Magazine`;
     // Wait for every picture, then print.
     const imgs = Array.from(document.images);
-    void Promise.all(imgs.map((i) => (i.complete ? Promise.resolve() : new Promise((r) => { i.onload = i.onerror = () => r(null); })))).then(() => setTimeout(() => window.print(), 600));
+    void Promise.all([document.fonts?.ready, ...imgs.map((i) => (i.complete ? Promise.resolve() : new Promise((r) => { i.onload = i.onerror = () => r(null); })))]).then(() => setTimeout(() => window.print(), 600));
   }, [printing, q.data]);
 
   if (q.isLoading) return <div className="flex min-h-screen items-center justify-center bg-slate-200"><Loader2 className="h-6 w-6 animate-spin text-slate-500" /></div>;
@@ -307,7 +334,7 @@ export default function Magazine({ slug }: { slug?: string }) {
   const fill = (cols - (faces.length % cols)) % cols;
   // The cover: a collage style, or their photo (?cover= previews one without saving it).
   const asked = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("cover") : null;
-  const coverStyle: CoverStyle | "photo" = (["glass", "medallion", "prints", "photo"] as const).find((x) => x === asked) ?? (m.cover?.style as CoverStyle | "photo" | undefined) ?? (m.cover?.photo ? "photo" : "glass");
+  const coverStyle: CoverStyle | "photo" = (["glass", "medallion", "prints", "letters", "photo"] as const).find((x) => x === asked) ?? (m.cover?.style as CoverStyle | "photo" | undefined) ?? (m.cover?.photo ? "photo" : "glass");
   // The faces page is portrait: fewer across, so each face stays a face.
   const pageCols = 6;
   const pageRows = Math.ceil((faces.length + 1) / pageCols);
@@ -342,6 +369,14 @@ export default function Magazine({ slug }: { slug?: string }) {
           <div className="absolute inset-x-0" style={{ top: 440, height: 200, background: `linear-gradient(to bottom, transparent, ${NAVY})` }} />
         </>
       )}
+      {coverStyle === "letters" ? (
+        <div className="absolute inset-x-12 text-center" style={{ top: 800, zIndex: 300 }}>
+          <p className="text-[13px] font-bold uppercase tracking-[0.3em]" style={{ color: "#8a5a00" }}>Keepsake edition · {m.event.occasion}</p>
+          <p className="mt-3 text-[22px] font-semibold" style={{ ...HEAD, color: NAVY }}>{m.event.day}</p>
+          <p className="mt-1.5 text-[16px] text-slate-600">{m.shows.filter((s) => !/ceremon/i.test(s.podcastName)).length} military and veteran shows, back to back, one day.</p>
+          <p className="mt-8 text-[14px] font-bold tracking-wide" style={{ color: NAVY }}>MILITARYVOICES.AI</p>
+        </div>
+      ) : <>
       <div className="absolute inset-x-12" style={{ top: coverStyle === "medallion" ? 690 : 640, zIndex: 300 }}>
         <p className="text-[13px] font-bold uppercase tracking-[0.3em]" style={{ color: GOLD }}>Keepsake edition · {m.event.occasion}</p>
         <h1 className="mt-3 text-[76px] font-bold leading-[0.95] tracking-tight" style={HEAD}>{m.event.name}</h1>
@@ -349,6 +384,7 @@ export default function Magazine({ slug }: { slug?: string }) {
         <p className="mt-2 text-[16px] text-white/60">{m.shows.filter((s) => !/ceremon/i.test(s.podcastName)).length} military and veteran shows, back to back, one day.</p>
       </div>
       <p className="absolute bottom-10 left-12 text-[14px] font-bold tracking-wide" style={{ color: GOLD }}>MILITARYVOICES.AI</p>
+      </>}
     </Page>,
     // Welcome
     <Page key="welcome" n={++n}>
@@ -438,7 +474,7 @@ export default function Magazine({ slug }: { slug?: string }) {
 
   return (
     <div className="min-h-screen bg-slate-200 print:bg-white">
-      <style>{`@page { size: 8.5in 11in; margin: 0; } @media print { .mag-bar { display: none !important; } .mag-sheet { transform: none !important; } .mag-frame { width: auto !important; height: auto !important; margin: 0 !important; } .mag-page { break-after: page; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Anton&family=Yellowtail&display=block'); @page { size: 8.5in 11in; margin: 0; } @media print { .mag-bar { display: none !important; } .mag-sheet { transform: none !important; } .mag-frame { width: auto !important; height: auto !important; margin: 0 !important; } .mag-page { break-after: page; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }`}</style>
       <div className="mag-bar sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-300 bg-white/95 px-4 py-2.5 backdrop-blur">
         <p className="truncate text-sm font-semibold text-slate-800">{m.event.name} · Keepsake magazine{!m.published ? " · draft (admins only)" : ""}</p>
         <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-1.5 rounded-full bg-[#053877] px-4 py-1.5 text-sm font-semibold text-white hover:bg-[#0a4a99]" data-testid="magazine-print">

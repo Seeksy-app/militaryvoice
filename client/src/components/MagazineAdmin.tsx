@@ -170,6 +170,7 @@ export function MagazineAdmin({ eventId, slug }: { eventId: number; slug: string
 
 /** The cover: a photo of our choosing, or (none set) every podcaster's face. */
 const COVER_STYLES = [
+  { v: "letters", label: "VOICES", hint: "A giant word cut from everyone's photos" },
   { v: "glass", label: "Glass mosaic", hint: "Every face as a gloss tile, the wall tilted" },
   { v: "medallion", label: "Medallion", hint: "The day's badge, ringed by every face" },
   { v: "prints", label: "Glossy prints", hint: "Photo prints scattered on the page" },
