@@ -220,7 +220,9 @@ export default function Magazine({ slug }: { slug?: string }) {
   const fill = (cols - (faces.length % cols)) % cols;
   // The faces page is portrait: fewer across, so each face stays a face.
   const pageCols = 6;
-  const pageFill = (pageCols - (faces.length % pageCols)) % pageCols;
+  const pageRows = Math.ceil((faces.length + 1) / pageCols);
+  const pageTileW = Math.floor((W - 80 - (pageCols - 1) * 6) / pageCols);
+  const pageTileH = Math.min(Math.round(pageTileW * 1.25), Math.floor((H - 190 - 48 - (pageRows - 1) * 6) / pageRows));
   const half = Math.ceil(m.shows.length / 2);
   const ads = m.ads ?? [];
   // The first ad faces the welcome; the rest are spread evenly through the show pages.
@@ -298,9 +300,13 @@ export default function Magazine({ slug }: { slug?: string }) {
         <p className="text-[12px] font-bold uppercase tracking-[0.3em]" style={{ color: GOLD }}>The voices of the day</p>
         <h2 className="mt-3 text-[40px] font-bold tracking-tight" style={HEAD}>Faces of the Marathon</h2>
       </div>
-      <div className="absolute inset-x-10 grid gap-1.5" style={{ top: 190, bottom: 48, gridTemplateColumns: `repeat(${pageCols}, minmax(0, 1fr))`, gridAutoRows: "1fr" }}>
-        {faces.map((f) => <img key={f.id} src={f.src} alt="" className="h-full w-full rounded-md object-cover" style={{ objectPosition: "50% 25%" }} />)}
-        {Array.from({ length: pageFill }, (_, i) => <div key={`fill-${i}`} className="flex items-center justify-center rounded-md bg-white p-2"><img src="/nmpd-logo.jpg" alt="" className="max-h-full max-w-full object-contain" /></div>)}
+      {/* Every face the same size, rows that fit the page, the last row centred (with the day's badge). */}
+      <div className="absolute inset-x-10 flex flex-wrap content-start justify-center gap-1.5" style={{ top: 190, bottom: 48 }}>
+        {[...faces.map((f) => ({ id: String(f.id), src: f.src, badge: false })), { id: "badge", src: "/nmpd-logo.jpg", badge: true }].map((t) => (
+          <div key={t.id} className={`overflow-hidden rounded-md ${t.badge ? "flex items-center justify-center bg-white p-2" : ""}`} style={{ width: pageTileW, height: pageTileH }}>
+            <img src={t.src} alt="" className={t.badge ? "max-h-full max-w-full object-contain" : "h-full w-full object-cover"} style={t.badge ? undefined : { objectPosition: "50% 25%" }} />
+          </div>
+        ))}
       </div>
     </Page>,
     ...m.shows.flatMap((s, i) => [
