@@ -90,6 +90,48 @@ const cycle = (faces: Face[], n: number) => {
 const rnd = (i: number, k: number) => { const x = Math.sin(i * 12.9898 + k * 78.233) * 43758.5453; return x - Math.floor(x); };
 
 /**
+ * The faces inside the cover's word. Online they take turns: every so often one tile fades to
+ * someone else, so the word keeps moving through everyone. Still in print, and for anyone who
+ * has asked their device for less motion.
+ */
+function WordTiles({ faces, tiles, cols, x0, y0, w, h }: { faces: Face[]; tiles: Face[]; cols: number; x0: number; y0: number; w: number; h: number }) {
+  const [shown, setShown] = useState(() => tiles.map((f) => ({ cur: f, prev: null as Face | null, n: 0 })));
+  useEffect(() => setShown(tiles.map((f) => ({ cur: f, prev: null, n: 0 }))), [tiles.length]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => {
+    const still = new URLSearchParams(window.location.search).has("print") || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+    if (still || faces.length < 2) return;
+    let k = 0;
+    const t = window.setInterval(() => {
+      if (document.visibilityState !== "visible") return;
+      k++;
+      setShown((prev) => {
+        const i = Math.floor(rnd(k, 5) * prev.length);
+        const onScreen = new Set(prev.map((x) => x.cur.id));
+        // Prefer someone not in the word right now; anyone but the face already there, otherwise.
+        const pool = faces.filter((f) => !onScreen.has(f.id));
+        const choices = pool.length ? pool : faces.filter((f) => f.id !== prev[i].cur.id);
+        const next = choices[Math.floor(rnd(k, 6) * choices.length)];
+        return prev.map((x, j) => (j === i ? { cur: next, prev: x.cur, n: x.n + 1 } : x));
+      });
+    }, 1100);
+    return () => window.clearInterval(t);
+  }, [faces]);
+  return (
+    <>
+      {shown.map((t, i) => {
+        const x = x0 + (i % cols) * w, y = y0 + Math.floor(i / cols) * h;
+        return (
+          <g key={`w-${i}`}>
+            {t.prev && <image href={t.prev.src} x={x} y={y} width={w} height={h} preserveAspectRatio="xMidYMid slice" />}
+            <image key={t.n} className={t.n ? "mag-fade-in" : undefined} href={t.cur.src} x={x} y={y} width={w} height={h} preserveAspectRatio="xMidYMid slice" />
+          </g>
+        );
+      })}
+    </>
+  );
+}
+
+/**
  * The cover as a collage of everyone on the day, three ways, each made to look glossy:
  * "glass" a tilted wall of gloss tiles, "medallion" the day's badge ringed by every face as
  * glass buttons, "prints" a scatter of glossy photo prints.
@@ -119,7 +161,7 @@ function CoverCollage({ faces, style }: { faces: Face[]; style: CoverStyle }) {
         <rect y={330} width={W} height={300} fill="url(#mag-band)" opacity={0.55} />
         <rect y={250} width={W} height={150} fill="url(#mag-fade)" opacity={0.35} />
         <g clipPath="url(#mag-word)" filter="url(#mag-bw)">
-          {tiles.map((f, i) => <image key={`w-${i}`} href={f.src} x={x0 + (i % cols) * w} y={y0 + Math.floor(i / cols) * h} width={w} height={h} preserveAspectRatio="xMidYMid slice" />)}
+          <WordTiles faces={faces} tiles={tiles} cols={cols} x0={x0} y0={y0} w={w} h={h} />
         </g>
         <text x={W / 2} y={232} textAnchor="middle" fontFamily="'General Sans', Inter, sans-serif" fontWeight={500} fontSize={44} letterSpacing={3} fill="#0b0b12">THE PODCAST MARATHON</text>
         <text x={W / 2 + 40} y={690} textAnchor="middle" fontFamily="Yellowtail, cursive" fontSize={132} fill={GOLD} transform={`rotate(-5 ${W / 2} 690)`}>of the Military</text>
@@ -485,7 +527,7 @@ export default function Magazine({ slug }: { slug?: string }) {
 
   return (
     <div className="min-h-screen bg-slate-200 print:bg-white">
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Anton&family=Yellowtail&display=block'); @page { size: 8.5in 11in; margin: 0; } @media print { .mag-bar { display: none !important; } .mag-sheet { transform: none !important; } .mag-frame { width: auto !important; height: auto !important; margin: 0 !important; } .mag-page { break-after: page; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Anton&family=Yellowtail&display=block'); @page { size: 8.5in 11in; margin: 0; } @keyframes magFadeIn { from { opacity: 0 } to { opacity: 1 } } .mag-fade-in { animation: magFadeIn 900ms ease-in-out both; } @media print { .mag-fade-in { animation: none !important; } } @media print { .mag-bar { display: none !important; } .mag-sheet { transform: none !important; } .mag-frame { width: auto !important; height: auto !important; margin: 0 !important; } .mag-page { break-after: page; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }`}</style>
       <div className="mag-bar sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-300 bg-white/95 px-4 py-2.5 backdrop-blur">
         <p className="truncate text-sm font-semibold text-slate-800">{m.event.name} · Keepsake magazine{!m.published ? " · draft (admins only)" : ""}</p>
         <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-1.5 rounded-full bg-[#053877] px-4 py-1.5 text-sm font-semibold text-white hover:bg-[#0a4a99]" data-testid="magazine-print">
