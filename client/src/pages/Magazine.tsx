@@ -281,7 +281,7 @@ function ShowPage({ s, n, event }: { s: Show; n: number; event: Mag["event"] }) 
               </ol>
             </div>
           )}
-          <div className="mt-auto"><Listen s={s} ep={current} label={label} go={go} /></div>
+          <Listen s={s} ep={current} label={label} go={go} />
         </div>
       </div>
       <footer className="absolute inset-x-0 bottom-0 flex items-center gap-4 px-12 pb-10 pt-4" style={{ borderTop: "1px solid #e5e7eb" }}>
@@ -336,8 +336,11 @@ export default function Magazine({ slug }: { slug?: string }) {
   const asked = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("cover") : null;
   const coverStyle: CoverStyle | "photo" = (["glass", "medallion", "prints", "letters", "photo"] as const).find((x) => x === asked) ?? (m.cover?.style as CoverStyle | "photo" | undefined) ?? (m.cover?.photo ? "photo" : "glass");
   // The faces page is portrait: fewer across, so each face stays a face.
+  // The podcasters only: Riccoh hosts (and has his own welcome page), so the rows come out even.
+  const pageFaces = faces.filter((f) => !m.shows.some((x) => x.signupId === f.id && /ceremon/i.test(x.podcastName)));
   const pageCols = 6;
-  const pageRows = Math.ceil((faces.length + 1) / pageCols);
+  const pageBadge = pageFaces.length % pageCols !== 0;
+  const pageRows = Math.ceil((pageFaces.length + (pageBadge ? 1 : 0)) / pageCols);
   const pageTileW = Math.floor((W - 80 - (pageCols - 1) * 6) / pageCols);
   const pageTileH = Math.min(Math.round(pageTileW * 1.25), Math.floor((H - 190 - 48 - (pageRows - 1) * 6) / pageRows));
   const half = Math.ceil(m.shows.length / 2);
@@ -435,7 +438,7 @@ export default function Magazine({ slug }: { slug?: string }) {
       </div>
       {/* Every face the same size, rows that fit the page, the last row centred (with the day's badge). */}
       <div className="absolute inset-x-10 flex flex-wrap content-start justify-center gap-1.5" style={{ top: 190, bottom: 48 }}>
-        {[...faces.map((f) => ({ id: String(f.id), src: f.src, badge: false })), { id: "badge", src: "/nmpd-logo.png", badge: true }].map((t) => (
+        {[...pageFaces.map((f) => ({ id: String(f.id), src: f.src, badge: false })), ...(pageBadge ? [{ id: "badge", src: "/nmpd-logo.png", badge: true }] : [])].map((t) => (
           <div key={t.id} className={`overflow-hidden rounded-md ${t.badge ? "flex items-center justify-center p-1" : ""}`} style={{ width: pageTileW, height: pageTileH }}>
             <img src={t.src} alt="" className={t.badge ? "max-h-full max-w-full object-contain" : "h-full w-full object-cover"} style={t.badge ? undefined : { objectPosition: "50% 25%" }} />
           </div>
