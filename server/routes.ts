@@ -118,7 +118,7 @@ import { renderBroadcastEmail, renderConfirmationEmail, renderNudge } from "./em
 import { alexAnswer, type AlexTurn } from "./alex.js";
 import { emailShell, EMAIL_BANNERS } from "./email.js";
 import { slackInbound } from "./slack.js";
-import { registerMagazine } from "./magazine.js";
+import { registerMagazine, planSegments, claimSegmentCut } from "./magazine.js";
 import { draftReply, matchBroadcast, isKnownSender, looksAutomatic, composeAck, firstNameFor, stripQuoted, alexSignatureHtml, threadKey } from "./inbox.js";
 import { adminChat, type ChatTurn } from "./adminChat.js";
 import { waitUntil } from "@vercel/functions";
@@ -5761,7 +5761,7 @@ export function registerRoutes(app: Express): void {
   registerTrash(app, requireHostSession);
   registerMyStudio(app, requireHostSession, { youtubeToken });
   registerCreatorCampaigns(app, requireHostSession);
-  registerMagazine(app, requireAdmin);
+  registerMagazine(app, requireAdmin, requireAgent);
   registerAutomations(app, requireAdmin, {
     unsubscribeUrl: (req, email) => unsubscribeUrl(req, email),
     resolveRecipients: (segment, eventId) => resolveBroadcastRecipients({ segment, eventId } as BroadcastRow),
@@ -5881,6 +5881,11 @@ export function registerRoutes(app: Express): void {
           });
         }
       }
+    }
+    // A show's segment to cut from the day's recording, for the magazine: quick, one MP3.
+    if (Array.isArray(req.body?.can) && req.body.can.includes("segment-cut")) {
+      const sc = await claimSegmentCut().catch((err) => { console.error("Segment cut claim failed:", err); return null; });
+      if (sc) return res.json({ job: { recordingId: sc.id, title: sc.title, durationSec: sc.durationSec, downloadUrl: sc.downloadUrl, show: "", host: "", transcript: [], segmentCut: { id: sc.id, startSec: sc.startSec, durationSec: sc.durationSec } } });
     }
     // A podcast episode to turn from a Library video into audio: quick, and someone is waiting to publish.
     if (Array.isArray(req.body?.can) && req.body.can.includes("episode-audio")) {
@@ -7644,6 +7649,8 @@ export function registerRoutes(app: Express): void {
         sizeBytes: file?.size ? String(file.size) : "0",
         error: ok ? "" : String(info.error ?? "The recorder stopped without saving."),
       });
+      // The day's recording: every show's segment for the magazine, cut from it by the worker.
+      if (ok && finished?.eventId) await planSegments(finished.eventId).catch((err) => console.error("Planning segments failed:", err));
       // A finished segment is a clip job. Queued rather than done here: the
       // work needs ffmpeg and minutes, neither of which a serverless function
       // has, so the worker picks it up.

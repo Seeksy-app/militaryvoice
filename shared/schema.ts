@@ -2820,3 +2820,23 @@ export const magazineAds = pgTable("magazine_ads", {
   createdAt: text("created_at").notNull().default(""),
 });
 export type MagazineAdRow = typeof magazineAds.$inferSelect;
+
+/**
+ * One show's segment, cut from the day's broadcast recording by the worker: where in which
+ * recording it sits (from the slot times), and the MP3 once made. The magazine plays it.
+ */
+export const segmentCuts = pgTable("segment_cuts", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull(),
+  signupId: integer("signup_id").notNull(),
+  recordingId: integer("recording_id").notNull(),
+  /** Seconds into the recording where the segment starts, and how long it runs. */
+  startSec: integer("start_sec").notNull().default(0),
+  durationSec: integer("duration_sec").notNull().default(0),
+  /** queued → claimed → done | failed */
+  status: text("status").notNull().default("queued"),
+  audioKey: text("audio_key").notNull().default(""),
+  error: text("error").notNull().default(""),
+  claimedAt: text("claimed_at").notNull().default(""),
+  updatedAt: text("updated_at").notNull().default(""),
+}, (t) => [uniqueIndex("segment_cuts_event_signup_idx").on(t.eventId, t.signupId)]);

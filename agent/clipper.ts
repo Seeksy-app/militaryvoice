@@ -116,6 +116,8 @@ interface Job {
   /** "Edit episode": the source is downloadUrl; cut to trimStart–trimEnd (0 = the end), with an intro and outro. */
   /** A hosted podcast episode: the Library video (downloadUrl) as its MP3. recordingId is the episode's id. */
   episodeAudio?: { episodeId: number; copy?: boolean; mime?: string };
+  /** The magazine: one show's segment, cut from the day's recording (downloadUrl) from startSec for durationSec, as an MP3. */
+  segmentCut?: { id: number; startSec: number; durationSec: number };
   /** Ask my show: transcribe this episode (downloadUrl) so the AI can answer from it. recordingId is the transcript's id. */
   transcriptJob?: { id: number };
   /** A still from an episode's video, for its picture. */
@@ -1987,7 +1989,34 @@ async function handleTranscript(job: Job): Promise<void> {
   }
 }
 
+/**
+ * One show's segment from the day's broadcast recording: seek to its slot and keep its
+ * minutes, sound only, at podcast loudness. The input seek reads only what's needed of a
+ * sixteen-hour file. Never throws.
+ */
+async function handleSegmentCut(job: Job): Promise<void> {
+  const c = job.segmentCut!;
+  const tag = `[segment ${c.id}] ${job.title}`;
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `segment-${c.id}-`));
+  try {
+    console.log(`${tag}: ${Math.round(c.durationSec / 60)} min from ${Math.round(c.startSec / 60)} min in`);
+    const out = path.join(dir, `segment-${c.id}.mp3`);
+    await ffmpeg(["-ss", String(c.startSec), "-i", job.downloadUrl, "-t", String(c.durationSec), "-vn", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-ac", "2", "-ar", "44100", "-c:a", "libmp3lame", "-b:a", "128k", "-id3v2_version", "3", out]);
+    const durationSec = Math.round(Number((await run("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", out]).catch(() => "0")).trim()) || c.durationSec);
+    if (durationSec < 30) throw new Error("the recording had almost nothing at that time");
+    const audioKey = await uploadBig(out, "audio/mpeg");
+    await api("POST", `/api/agent/segment-cuts/${c.id}/done`, { audioKey, durationSec });
+    console.log(`${tag}: done (${Math.round(durationSec / 60)} min)`);
+  } catch (err) {
+    console.warn(`${tag} failed: ${(err as Error).message}`);
+    await api("POST", `/api/agent/segment-cuts/${c.id}/failed`, { error: (err as Error).message }).catch(() => {});
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 async function handle(job: Job): Promise<void> {
+  if (job.segmentCut) return handleSegmentCut(job);
   if (job.transcriptJob) return handleTranscript(job);
   if (job.episodeAudio) return handleEpisodeAudio(job);
   if (job.episodeStill) return handleEpisodeStill(job);
@@ -2252,11 +2281,11 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
 }
 
 async function tick(): Promise<boolean> {
-  const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", { can: ["edit", "episode-edit", "episode-audio", "episode-copy", "episode-still", "living-squeeze", "transcript", "import", "music", "suggest"] });
+  const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", { can: ["edit", "episode-edit", "segment-cut", "episode-audio", "episode-copy", "episode-still", "living-squeeze", "transcript", "import", "music", "suggest"] });
   if (!job) return false;
   // An edit is one clip, not the recording: a shutdown mid-edit leaves it to
   // the 15-minute reclaim rather than requeuing the whole episode.
-  const clipJob = !(job.clipEdit || job.episodeEdit || job.episodeAudio || job.episodeStill || job.transcriptJob || job.importFrom || job.musicMix || job.suggestEdits);
+  const clipJob = !(job.clipEdit || job.episodeEdit || job.segmentCut || job.episodeAudio || job.episodeStill || job.transcriptJob || job.importFrom || job.musicMix || job.suggestEdits);
   if (clipJob) holding.add(job.recordingId);
   if (job.episodeEdit) editing.add(job.recordingId);
   // "Still on it", every minute: a long quiet stretch (waiting on Creatomate)

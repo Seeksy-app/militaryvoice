@@ -10,7 +10,7 @@ import { fitForUpload } from "@/lib/cropImage";
 
 type Show = { signupId: number; number: number; time: string; podcastName: string; hostName: string; headshot: string; printQuality: boolean; art: string; blurb: string; quote: string; link: string; audio?: string };
 type Ad = { id: number; sponsorId: number; name: string; headline: string; body: string; site: string; logo: string; artwork: string };
-type Mag = { event: { name: string }; published: boolean; welcome: string; shows: Show[]; leftOut?: { signupId: number; podcastName: string; hostName: string }[]; cover?: { photo: string }; ads?: Ad[] };
+type Mag = { event: { name: string }; published: boolean; welcome: string; shows: Show[]; leftOut?: { signupId: number; podcastName: string; hostName: string }[]; cover?: { photo: string }; ads?: Ad[]; segments?: { done: number; working: number; failed: number } };
 
 /**
  * The keepsake magazine, from admin: SI drafts every page, a person reads and
@@ -116,6 +116,7 @@ export function MagazineAdmin({ eventId, slug }: { eventId: number; slug: string
         </div>
       </div>
 
+      <SegmentsPanel eventId={eventId} seg={m.segments} total={m.shows.length} onChanged={refresh} />
       <CoverPanel eventId={eventId} photo={m.cover?.photo ?? ""} onChanged={refresh} />
       <AdsPanel eventId={eventId} ads={m.ads ?? []} onChanged={refresh} />
 
@@ -279,6 +280,37 @@ function AdsPanel({ eventId, ads, onChanged }: { eventId: number; ads: Ad[]; onC
           {busy === "new" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Add
         </Button>
       </div>
+    </section>
+  );
+}
+
+/** Each show's segment from the day, cut from the broadcast recording, for the players in the digital magazine. */
+function SegmentsPanel({ eventId, seg, total, onChanged }: { eventId: number; seg?: { done: number; working: number; failed: number }; total: number; onChanged: () => unknown }) {
+  const { toast } = useToast();
+  const [busy, setBusy] = useState(false);
+  const cut = async () => {
+    setBusy(true);
+    try {
+      const r = (await (await adminSend("POST", `/api/admin/magazine/${eventId}/segments`)).json()) as { queued: number; kept: number; notRecorded: string[] };
+      await onChanged();
+      toast({ title: r.queued ? `Cutting ${r.queued} segment${r.queued === 1 ? "" : "s"}` : "Nothing new to cut", description: r.notRecorded.length ? `No recording covers: ${r.notRecorded.join(", ")}` : "Each one is a few minutes on the worker." });
+    } catch (e) { toast({ title: "Couldn't start", description: (e as Error).message, variant: "destructive" }); }
+    finally { setBusy(false); }
+  };
+  const s = seg ?? { done: 0, working: 0, failed: 0 };
+  return (
+    <section className="flex flex-wrap items-center gap-4 rounded-2xl border border-border bg-card p-5" data-testid="magazine-segments">
+      <div className="min-w-0 flex-1">
+        <h3 className="font-semibold">Their segments from the day</h3>
+        <p className="mt-0.5 text-sm text-muted-foreground">
+          {s.done || s.working || s.failed
+            ? `${s.done} of ${total} cut${s.working ? `, ${s.working} cutting` : ""}${s.failed ? `, ${s.failed} couldn't be cut` : ""}. Each page plays its show's segment once it's cut.`
+            : "When the day's recording finishes, every show's minutes are cut from it on their own, and each page plays its segment instead of their latest episode."}
+        </p>
+      </div>
+      <Button type="button" variant="outline" className="gap-1.5 rounded-full" disabled={busy} onClick={() => void cut()} data-testid="magazine-cut-segments">
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Cut them now
+      </Button>
     </section>
   );
 }

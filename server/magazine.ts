@@ -16,7 +16,8 @@ import { and, asc, eq, inArray, ne } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { getAdminEmail } from "./session.js";
 import { uploadPhoto } from "./photoStorage.js";
-import { bioPages, clips, discoveryCache, hostedShows, magazineAds, magazinePages, podcasterProfiles, signups, sponsors } from "../shared/schema.js";
+import { signedRecordingUrl } from "./recordingStorage.js";
+import { bioPages, clips, discoveryCache, hostedShows, magazineAds, magazinePages, podcasterProfiles, recordings, segmentCuts, signups, sponsors } from "../shared/schema.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 const now = () => new Date().toISOString();
@@ -105,6 +106,74 @@ async function episodesFor(eventId: number, lineup: { id: number; rssUrl: string
   return next;
 }
 
+// ---------------------------------------------------------------------------
+// Each show's segment, cut from the day's recording
+// ---------------------------------------------------------------------------
+
+/** A show's on-air minutes, from the slot times (the buffer before or after, as the event runs it). */
+function onAir(ev: { startAtUtc: string; slotMinutes: number; onAirMinutes: number; bufferMinutes: number; bufferPosition: string }, slotIndex: number) {
+  const block = Date.parse(ev.startAtUtc) + slotIndex * ev.slotMinutes * 60_000;
+  const start = ev.bufferPosition === "before" ? block + ev.bufferMinutes * 60_000 : block;
+  return { start, end: start + ev.onAirMinutes * 60_000 };
+}
+
+/** A little either side, so a show that starts early or runs over isn't clipped mid-word. */
+const MARGIN_MS = 45_000;
+
+/**
+ * Work out every show's segment from the event's finished recordings and queue the cuts the
+ * worker hasn't made yet. Safe to run again: a cut already made from the same place is kept.
+ */
+export async function planSegments(eventId: number): Promise<{ queued: number; kept: number; notRecorded: string[] }> {
+  const ev = await storage.getEventById(eventId);
+  if (!ev) return { queued: 0, kept: 0, notRecorded: [] };
+  const recs = (await db.select().from(recordings).where(and(eq(recordings.eventId, eventId), eq(recordings.status, "Ready"))))
+    .filter((r) => r.url && r.durationSec > 0)
+    .map((r) => ({ id: r.id, from: Date.parse(r.startedAt), to: Date.parse(r.startedAt) + r.durationSec * 1000 }));
+  const lineup = await db.select().from(signups).where(and(eq(signups.eventId, eventId), ne(signups.status, "cancelled")));
+  const have = await db.select().from(segmentCuts).where(eq(segmentCuts.eventId, eventId));
+  let queued = 0;
+  let kept = 0;
+  const notRecorded: string[] = [];
+  for (const s of lineup) {
+    const w = onAir(ev as never, s.slotIndex);
+    const want = { from: w.start - MARGIN_MS, to: w.end + MARGIN_MS };
+    // The recording that holds the most of it (a restart mid-day leaves two files).
+    const best = recs
+      .map((r) => ({ r, overlap: Math.min(r.to, want.to) - Math.max(r.from, want.from) }))
+      .sort((a, b) => b.overlap - a.overlap)[0];
+    if (!best || best.overlap < 5 * 60_000) { notRecorded.push(s.podcastName); continue; }
+    const startSec = Math.max(0, Math.round((Math.max(want.from, best.r.from) - best.r.from) / 1000));
+    const durationSec = Math.round(best.overlap / 1000);
+    const prior = have.find((c) => c.signupId === s.id);
+    if (prior && prior.recordingId === best.r.id && Math.abs(prior.startSec - startSec) < 5 && prior.status !== "failed") { kept++; continue; }
+    await db.insert(segmentCuts).values({ eventId, signupId: s.id, recordingId: best.r.id, startSec, durationSec, status: "queued", audioKey: "", error: "", claimedAt: "", updatedAt: now() })
+      .onConflictDoUpdate({ target: [segmentCuts.eventId, segmentCuts.signupId], set: { recordingId: best.r.id, startSec, durationSec, status: "queued", audioKey: "", error: "", claimedAt: "", updatedAt: now() } });
+    queued++;
+  }
+  return { queued, kept, notRecorded };
+}
+
+/** The next cut for the worker (or one a worker took and went quiet on for half an hour). */
+export async function claimSegmentCut(): Promise<{ id: number; title: string; startSec: number; durationSec: number; downloadUrl: string } | null> {
+  const stale = new Date(Date.now() - 30 * 60_000).toISOString();
+  const [c] = (await db.select().from(segmentCuts).where(inArray(segmentCuts.status, ["queued", "claimed"])))
+    .filter((x) => x.status === "queued" || x.claimedAt < stale)
+    .sort((a, b) => a.id - b.id);
+  if (!c) return null;
+  const [took] = await db.update(segmentCuts).set({ status: "claimed", claimedAt: now(), updatedAt: now() })
+    .where(and(eq(segmentCuts.id, c.id), eq(segmentCuts.status, c.status), eq(segmentCuts.claimedAt, c.claimedAt))).returning();
+  if (!took) return null;
+  const [rec] = await db.select().from(recordings).where(eq(recordings.id, c.recordingId));
+  const [sg] = await db.select().from(signups).where(eq(signups.id, c.signupId));
+  const downloadUrl = !rec?.url ? "" : /^https?:\/\//i.test(rec.url) ? rec.url : await signedRecordingUrl(rec.url, 6 * 3600).catch(() => "");
+  if (!downloadUrl) {
+    await db.update(segmentCuts).set({ status: "failed", error: "The day's recording couldn't be opened.", updatedAt: now() }).where(eq(segmentCuts.id, c.id));
+    return null;
+  }
+  return { id: c.id, title: sg?.podcastName ?? `Segment ${c.id}`, startSec: c.startSec, durationSec: c.durationSec, downloadUrl };
+}
+
 /** Everything the magazine prints, in running order. */
 async function buildMagazine(eventId: number) {
   const ev = await storage.getEventById(eventId);
@@ -119,6 +188,7 @@ async function buildMagazine(eventId: number) {
   const start = Date.parse(ev.startAtUtc);
   const et = (ms: number) => new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }).format(new Date(ms)) + " ET";
   const out = new Set(words.filter((x) => x.hidden).map((x) => x.signupId));
+  const cuts = await db.select().from(segmentCuts).where(eq(segmentCuts.eventId, eventId));
   const episodes = await episodesFor(eventId, lineup.filter((s) => !out.has(s.id) && !/ceremon/i.test(s.podcastName)).map((s) => ({ id: s.id, rssUrl: s.rssUrl ?? "", show: s.podcastName, host: s.hostName }))).catch(() => ({} as Record<number, Episode[]>));
   const shows = lineup.filter((s) => !out.has(s.id)).map((s, i) => {
     const e = s.email.trim().toLowerCase();
@@ -142,7 +212,8 @@ async function buildMagazine(eventId: number) {
       quote: w?.quote ?? "",
       // In their own words: the bio on their SmartLink.
       about: clean(bio?.bio, 650),
-      audio: w?.audio ?? "",
+      // Their segment: one set by hand, else the one cut from the day's recording.
+      audio: w?.audio || (cuts.some((c) => c.signupId === s.id && c.status === "done") ? `${ORIGIN}/api/magazine/segment/${s.id}` : ""),
       episodes: episodes[s.id] ?? [],
       edited: w?.edited ?? false,
       // Where the QR goes: their SmartLink, else the show we host, else their share page.
@@ -164,6 +235,7 @@ async function buildMagazine(eventId: number) {
     leftOut: lineup.filter((s) => out.has(s.id)).map((s) => ({ signupId: s.id, podcastName: s.podcastName, hostName: s.hostName })),
     sponsors: sponsorRows.map((r) => ({ name: r.name, logo: r.logoUrl, url: r.url })),
     cover: { photo: words.find((x) => x.signupId === COVER)?.art ?? "" },
+    segments: { done: cuts.filter((c) => c.status === "done").length, working: cuts.filter((c) => c.status === "queued" || c.status === "claimed").length, failed: cuts.filter((c) => c.status === "failed").length },
     // A sponsor's QR goes through the counted link, so the magazine's scans show in their numbers.
     ads: adRows.map((a) => {
       const sp = allSponsors.find((x) => x.id === a.sponsorId);
@@ -232,7 +304,32 @@ async function draftWelcome(ai: Anthropic, eventId: number, m: NonNullable<Await
   await saveWords(eventId, WELCOME, { blurb: letter.slice(0, 2500) });
 }
 
-export function registerMagazine(app: Express, requireAdmin: RequestHandler) {
+export function registerMagazine(app: Express, requireAdmin: RequestHandler, requireAgent: RequestHandler) {
+  /** A show's segment from the day, to play: a fresh link to the MP3 each time. */
+  app.get("/api/magazine/segment/:signupId", async (req, res) => {
+    const [c] = await db.select().from(segmentCuts).where(and(eq(segmentCuts.signupId, Number(req.params.signupId)), eq(segmentCuts.status, "done")));
+    if (!c?.audioKey) return res.status(404).end();
+    res.setHeader("Cache-Control", "no-store");
+    res.redirect(302, await signedRecordingUrl(c.audioKey, 6 * 3600));
+  });
+
+  /** Cut every show's segment from the day's recording (it also runs by itself when a recording finishes). */
+  app.post("/api/admin/magazine/:eventId/segments", requireAdmin, async (req, res) => {
+    res.json(await planSegments(Number(req.params.eventId)));
+  });
+
+  app.post("/api/agent/segment-cuts/:id/done", requireAgent, async (req, res) => {
+    const key = String(req.body?.audioKey ?? "");
+    if (!/^clean\/[\w.-]+$/.test(key)) return res.status(400).json({ message: "No audio." });
+    await db.update(segmentCuts).set({ status: "done", audioKey: key, error: "", ...(Number(req.body?.durationSec) > 0 ? { durationSec: Math.round(Number(req.body.durationSec)) } : {}), updatedAt: now() }).where(eq(segmentCuts.id, Number(req.params.id)));
+    res.json({ ok: true });
+  });
+  app.post("/api/agent/segment-cuts/:id/failed", requireAgent, async (req, res) => {
+    const requeue = req.body?.requeue === true;
+    await db.update(segmentCuts).set(requeue ? { status: "queued", claimedAt: "", updatedAt: now() } : { status: "failed", error: String(req.body?.error ?? "").slice(0, 300), updatedAt: now() }).where(eq(segmentCuts.id, Number(req.params.id)));
+    res.json({ ok: true });
+  });
+
   /** The magazine. Before it's published, only admins can open it. */
   app.get(["/api/magazine", "/api/magazine/:slug"], async (req, res) => {
     await schemaIsReady();
