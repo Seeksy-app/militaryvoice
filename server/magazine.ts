@@ -51,13 +51,15 @@ async function findFeed(show: string, host: string): Promise<string> {
   const term = show.split(/[:|]/)[0].trim();
   const r = (await (await fetch(`https://itunes.apple.com/search?media=podcast&entity=podcast&limit=8&term=${encodeURIComponent(term)}`, { signal: AbortSignal.timeout(5_000) })).json()) as { results?: { collectionName?: string; artistName?: string; feedUrl?: string }[] };
   const want = words(term);
+  const whole = words(show);
   const surname = host.trim().split(/\s+/).pop()?.toLowerCase() ?? "";
   for (const c of r.results ?? []) {
     const got = words(c.collectionName ?? "");
     const shared = Array.from(want).filter((w) => got.has(w)).length;
-    const close = want.size > 0 && shared / want.size >= 0.75 && shared / Math.max(got.size, 1) >= 0.6;
+    // Exactly their show's name (nothing in it that isn't in ours), or most of it with the host's surname on it.
+    const same = want.size > 0 && shared === want.size && Array.from(got).every((w) => whole.has(w));
     const theirs = surname.length > 2 && `${c.artistName ?? ""} ${c.collectionName ?? ""}`.toLowerCase().includes(surname);
-    if (close && theirs && c.feedUrl) return c.feedUrl;
+    if (c.feedUrl && (same || (theirs && shared / Math.max(want.size, 1) >= 0.75))) return c.feedUrl;
   }
   return "";
 }
@@ -89,7 +91,7 @@ async function recentEpisodes(raw: string, show = "", host = ""): Promise<Episod
 
 /** Every show's newest episodes, kept half a day (feeds are slow; the magazine is opened often). */
 async function episodesFor(eventId: number, lineup: { id: number; rssUrl: string; show: string; host: string }[]): Promise<Record<number, Episode[]>> {
-  const key = `mag:episodes2:${eventId}`;
+  const key = `mag:episodes3:${eventId}`;
   const [row] = await db.select().from(discoveryCache).where(eq(discoveryCache.key, key));
   const have = row ? (JSON.parse(row.payload) as Record<number, Episode[]>) : {};
   const fresh = row && Date.now() - Date.parse(row.createdAt) < 12 * 3600_000;
