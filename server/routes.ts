@@ -2744,12 +2744,16 @@ export function registerRoutes(app: Express): void {
     const admins = new Set((await storage.listAdmins()).map((a) => a.email.trim().toLowerCase()));
     return (await storage.listYoutubeAccounts()).filter((a) => a.channelId && admins.has(a.email.trim().toLowerCase()));
   };
-  // System health: the studio's YouTube channels still sign in, and whether each is live right now.
+  // System health: the studio's YouTube channels still sign in and whether each is live right now;
+  // and every podcaster's connected channel still signs in (their slot goes out on it).
   addHealthCheck({
     key: "youtube-live", name: "YouTube live (studio channels)", group: "Social and podcasts", powers: "The Marathon going out on YouTube",
     run: async () => {
       if (!isYoutubeConfigured()) return { state: "off", detail: "Not set up (GOOGLE_CLIENT_ID)" };
-      const chans = await adminChannels();
+      const ev = await storage.getFeaturedEvent();
+      const house = new Set((await storage.listDestinations(ev.id)).filter((d) => !d.signupId && d.platform === "youtube" && d.ownerEmail).map((d) => d.ownerEmail.trim().toLowerCase()));
+      const all = await storage.listYoutubeAccounts();
+      const chans = [...(await adminChannels()), ...all.filter((a) => a.channelId && house.has(a.email.trim().toLowerCase()))].filter((a, i, l) => l.findIndex((x) => x.id === a.id) === i);
       if (!chans.length) return { state: "off", detail: "No studio channel connected" };
       const parts: string[] = [];
       const broken: string[] = [];
@@ -2757,7 +2761,7 @@ export function registerRoutes(app: Express): void {
         const name = a.channelTitle || a.email;
         const token = await youtubeToken(a.email.trim().toLowerCase());
         if (!token) { broken.push(name); continue; }
-        // Their live broadcasts that are on air now (one unit of quota).
+        // Their broadcasts on air now (one unit of quota).
         const r = await fetch("https://www.googleapis.com/youtube/v3/liveBroadcasts?part=status,snippet&broadcastStatus=active&broadcastType=all&maxResults=5", { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8_000) });
         if (!r.ok) { broken.push(`${name} (${r.status})`); continue; }
         const j = (await r.json()) as { items?: { snippet?: { title?: string }; status?: { lifeCycleStatus?: string } }[] };
@@ -2766,6 +2770,22 @@ export function registerRoutes(app: Express): void {
       }
       if (broken.length) return { state: "down", detail: `Sign-in failed, connect again: ${broken.join(", ")}${parts.length ? ` · ${parts.join(" · ")}` : ""}` };
       return { state: "ok", detail: parts.join(" · ") };
+    },
+  });
+  addHealthCheck({
+    key: "youtube-podcasters", name: "YouTube (podcasters' channels)", group: "Social and podcasts", powers: "Each show also going out on its own channel in its slot",
+    // A sign-in refresh only: no YouTube quota spent.
+    run: async () => {
+      if (!isYoutubeConfigured()) return { state: "off", detail: "Not set up (GOOGLE_CLIENT_ID)" };
+      const ev = await storage.getFeaturedEvent();
+      const lineup = new Map((await storage.listSignups(ev.id)).filter((x) => x.status !== "cancelled").map((x) => [x.email.trim().toLowerCase(), x.podcastName]));
+      const accts = (await storage.listYoutubeAccounts()).filter((a) => a.channelId && lineup.has(a.email.trim().toLowerCase()));
+      if (!accts.length) return { state: "off", detail: "No podcaster has connected a channel" };
+      const broken: string[] = [];
+      for (const a of accts) if (!(await youtubeToken(a.email.trim().toLowerCase()))) broken.push(lineup.get(a.email.trim().toLowerCase()) || a.channelTitle || a.email);
+      return broken.length
+        ? { state: "down", detail: `${accts.length - broken.length} of ${accts.length} sign in. Needs reconnecting: ${broken.join(", ")}` }
+        : { state: "ok", detail: `All ${accts.length} connected channels sign in` };
     },
   });
   app.get("/api/admin/studio/youtube-channels", requireAdmin, async (_req, res) => {
