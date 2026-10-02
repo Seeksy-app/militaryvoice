@@ -120,6 +120,7 @@ import { emailShell, EMAIL_BANNERS } from "./email.js";
 import { slackInbound } from "./slack.js";
 import { registerMagazine, planSegments, claimSegmentCut } from "./magazine.js";
 import { registerHealth, beat, addHealthCheck } from "./health.js";
+import { registerNotices } from "./notices.js";
 import { draftReply, matchBroadcast, isKnownSender, looksAutomatic, composeAck, firstNameFor, stripQuoted, alexSignatureHtml, threadKey } from "./inbox.js";
 import { adminChat, type ChatTurn } from "./adminChat.js";
 import { waitUntil } from "@vercel/functions";
@@ -5818,6 +5819,7 @@ export function registerRoutes(app: Express): void {
   registerCreatorCampaigns(app, requireHostSession);
   registerMagazine(app, requireAdmin, requireAgent);
   registerHealth(app, requireAdmin);
+  registerNotices(app, requireAdmin, requireHostSession);
   registerAutomations(app, requireAdmin, {
     unsubscribeUrl: (req, email) => unsubscribeUrl(req, email),
     resolveRecipients: (segment, eventId) => resolveBroadcastRecipients({ segment, eventId } as BroadcastRow),

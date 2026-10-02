@@ -112,6 +112,7 @@ import {
 } from "@/lib/schedule";
 import { isLiveOnlyBlock, LIVE_ONLY_LABEL } from "@shared/slots";
 import { IconTile } from "@/components/ui/icon-tile";
+import { HostNotice } from "@/components/HostNotice";
 
 interface HostSignup {
   id: number;
@@ -1152,6 +1153,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           </div>
         )}
 
+        {/* A celebration waiting for them (bonus credits): pops up on any screen. */}
+        {data && hasProfile && !inSetup && <HostNotice />}
         {/* The nav down the left, like the admin's, with the page beside it.
             Hidden during first-time setup, where there is only one thing to
             do. */}
