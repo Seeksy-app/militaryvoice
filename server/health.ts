@@ -123,7 +123,13 @@ const DEFS: Def[] = [
     key: "elevenlabs", name: "ElevenLabs", group: "SI", powers: "Voice in clips and reads",
     run: async () => {
       const k = env("ELEVENLABS_API_KEY", "ELEVEN_LABS_API_KEY");
-      return k ? ping("https://api.elevenlabs.io/v1/user", { headers: { "xi-api-key": k } }) : { state: "off", detail: "Runs on the clip worker; no key here" };
+      if (!k) return { state: "off", detail: "Runs on the clip worker; no key here" };
+      const res = await fetch("https://api.elevenlabs.io/v1/user", { headers: { "xi-api-key": k }, signal: AbortSignal.timeout(8_000) });
+      if (res.ok) return { state: "ok", detail: "Answering" };
+      const body = await res.text().catch(() => "");
+      // A key limited to voice work can't read the account; being told so means the key itself was accepted.
+      if (/missing the permission/i.test(body)) return { state: "ok", detail: "Key accepted (limited to voice work)" };
+      return { state: "down", detail: `${res.status}${res.status === 401 ? " (the key was refused)" : ""}` };
     },
   },
   // Social, podcasts and data
@@ -143,7 +149,16 @@ const DEFS: Def[] = [
   },
   {
     key: "influencers", name: "Influencers Club", group: "Social and podcasts", powers: "Discovery creator search and profiles",
-    run: async () => (env("INFLUENCER_CLUB_API_KEY") ? ping("https://api-dashboard.influencers.club/public/v1/account/credits", { headers: { Authorization: `Bearer ${env("INFLUENCER_CLUB_API_KEY")}` } }) : { state: "off", detail: "Not set up (INFLUENCER_CLUB_API_KEY)" }),
+    run: async () => {
+      const k = env("INFLUENCER_CLUB_API_KEY");
+      if (!k) return { state: "off", detail: "Not set up (INFLUENCER_CLUB_API_KEY)" };
+      const res = await fetch("https://api-dashboard.influencers.club/public/v1/account/credits", { headers: { Authorization: `Bearer ${k}` }, signal: AbortSignal.timeout(8_000) });
+      if (res.ok) return { state: "ok", detail: "Answering" };
+      const body = await res.text().catch(() => "");
+      // Their API answers a bad key in JSON; an HTML page means the address, not the key (they have no free status call).
+      if (body.trimStart().startsWith("<")) return { state: "ok", detail: "Reachable, key set (no free status call)" };
+      return { state: "down", detail: `${res.status}${res.status === 401 || res.status === 403 ? " (the key was refused)" : ""}: ${body.slice(0, 100)}` };
+    },
   },
   { key: "parallel", name: "Parallel", group: "Social and podcasts", powers: "Sponsor finder research", run: keyOnly(["PARALLEL_API_KEY", "PARALLEL_AI_API_KEY", "PARALLELAI_API_KEY", "PARALLEL_KEY", "PARALLEL_WEB_API_KEY"], "no free status call") },
   // Money and safety
