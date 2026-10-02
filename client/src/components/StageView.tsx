@@ -586,6 +586,37 @@ function stageLoops(label?: string): boolean {
   return /\([^()]*\bloop\)\s*$/i.test(label ?? "");
 }
 
+/** An audio-only episode (an MP3 a podcaster sent): played over their card, not a black frame. */
+export function isAudioUrl(url: string): boolean {
+  try {
+    return /\.(mp3|m4a|aac|wav|ogg|opus)$/i.test(new URL(url, "https://x").pathname);
+  } catch {
+    return false;
+  }
+}
+
+function AudioFrame({ url, name, show, photo, muted, onEnded }: { url: string; name?: string; show?: string; photo?: string; muted?: boolean; onEnded?: () => void }) {
+  return (
+    <div className="absolute inset-0 overflow-hidden bg-gradient-to-br from-[#000741] via-[#053877] to-[#06498f] text-white" style={{ containerType: "inline-size" }} data-testid="stage-audio">
+      <audio src={url} autoPlay muted={muted} onEnded={onEnded} />
+      <div className="absolute inset-0 flex flex-col items-center justify-center text-center" style={{ gap: "2.2cqw", padding: "0 8cqw" }}>
+        {photo ? (
+          <img src={photo} alt="" className="rounded-full object-cover object-[50%_28%] ring-[0.45cqw] ring-[#F0A71F]/70" style={{ width: "20cqw", height: "20cqw" }} />
+        ) : (
+          <img src="/logo-wave.png?v=2" alt="" style={{ height: "8cqw" }} />
+        )}
+        {name && <p className="font-semibold leading-tight [text-wrap:balance]" style={{ ...HEADLINE_FONT, fontSize: "4.4cqw" }}>{name}</p>}
+        {show && <p className="leading-snug text-white/75 [text-wrap:balance]" style={{ fontSize: "2.2cqw" }}>{show}</p>}
+        <div className="flex items-end" style={{ gap: "0.5cqw", height: "4cqw" }} aria-hidden="true">
+          {Array.from({ length: 9 }, (_, i) => (
+            <span key={i} className="block rounded-full bg-[#F0A71F] motion-safe:animate-pulse" style={{ width: "0.6cqw", height: `${30 + ((i * 37) % 70)}%`, animationDelay: `${i * 120}ms` }} />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function FullFrameMedia({
   url,
   kind,
@@ -913,6 +944,8 @@ export function StageGrid({
         </div>
         <PeopleColumn tiles={tiles} muted={muted} order={meta.stageOrder} />
       </>
+    ) : meta.stageMediaPlaying && meta.stageMediaUrl && isAudioUrl(meta.stageMediaUrl) ? (
+      <AudioFrame url={meta.stageMediaUrl} name={meta.stageCardName} show={meta.stageCardShow} photo={meta.stageCardPhoto} muted={muted} onEnded={onMediaEnded} />
     ) : meta.stageMediaPlaying && meta.stageMediaUrl ? (
       <FullFrameMedia
         url={meta.stageMediaUrl}
