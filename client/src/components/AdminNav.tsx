@@ -53,6 +53,8 @@ export const EVENT_GROUPS: { title: string; items: AdminSection[] }[] = [
     items: [
       { key: "finances", label: "Finances", icon: DollarSign },
       { key: "setup", label: "Event details", icon: Settings2 },
+      // Not the event's, but needed from wherever you are.
+      { key: "health", label: "System health", icon: Activity },
     ],
   },
 ];

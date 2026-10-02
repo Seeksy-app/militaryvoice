@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Activity, CheckCircle2, CircleDashed, Loader2, RefreshCw, XCircle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { IconTile } from "@/components/ui/icon-tile";
@@ -65,5 +66,24 @@ export function AdminHealth() {
         </section>
       ))}
     </div>
+  );
+}
+
+/** The admin top bar's status light: green when everything answers, red with a count when not. Opens System health. */
+export function HealthLight() {
+  const [, navigate] = useLocation();
+  const q = useQuery<Health>({
+    queryKey: ["/api/admin/health"],
+    queryFn: async () => (await fetch("/api/admin/health", { credentials: "include" })).json(),
+    refetchInterval: 120_000,
+    staleTime: 60_000,
+  });
+  const d = q.data;
+  const down = d?.down ?? 0;
+  return (
+    <button type="button" onClick={() => navigate("/admin/health")} title={d ? (down ? `${down} down: ${d.checks.filter((c) => c.state === "down").map((c) => c.name).join(", ")}` : "All systems normal") : "Checking…"} className="flex shrink-0 items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs font-semibold hover:bg-muted" data-testid="health-light">
+      <span className={`h-2.5 w-2.5 rounded-full ${!d ? "bg-muted-foreground/40" : down ? "bg-red-500" : "bg-emerald-500"}`} />
+      <span className="hidden md:inline">{!d ? "Checking" : down ? `${down} down` : "All systems normal"}</span>
+    </button>
   );
 }
