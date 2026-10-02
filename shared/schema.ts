@@ -1444,6 +1444,8 @@ export const clips = pgTable(
     editShapes: text("edit_shapes").notNull().default(""),
     editError: text("edit_error").notNull().default(""),
     editAt: text("edit_at").notNull().default(""),
+    /** The clip's caption look, set in Pōstify's editor (JSON {scale, pos}); empty = the usual size and place. */
+    captionStyle: text("caption_style").notNull().default(""),
     createdAt: text("created_at").notNull(),
   },
   (t) => ({

@@ -5883,6 +5883,7 @@ export function registerRoutes(app: Express): void {
               shapes: edit.verticalUrl || edit.squareUrl || edit.url
                 ? [edit.verticalUrl && "vertical", edit.squareUrl && "square", edit.url && "wide"].filter(Boolean)
                 : edit.editShapes.split(",").filter(Boolean),
+              style: (() => { try { return edit.captionStyle ? JSON.parse(edit.captionStyle) : null; } catch { return null; } })(),
             },
           },
         });
@@ -6422,7 +6423,15 @@ export function registerRoutes(app: Express): void {
       if (endSec - startSec > 180) return res.status(400).json({ message: "Clips are 3 minutes at most." });
       Object.assign(times, { startSec, endSec });
     }
-    const row = await storage.updateClip(clip.id, { ...times, editTitle: title, editSubtitle: subtitle, editStatus: "queued", editError: "", editAt: new Date().toISOString() });
+    // Captions: bigger or smaller (0.6–1.8 × the usual) and where they sit (the middle of them, as a fraction of the height; null = the usual place).
+    const style: { captionStyle?: string } = {};
+    if (req.body?.captionStyle && typeof req.body.captionStyle === "object") {
+      const scale = Math.min(1.8, Math.max(0.6, Number(req.body.captionStyle.scale) || 1));
+      const p = req.body.captionStyle.pos;
+      const pos = p === null || p === undefined || p === "" ? null : Math.min(0.95, Math.max(0.05, Number(p)));
+      style.captionStyle = scale === 1 && pos === null ? "" : JSON.stringify({ scale: Math.round(scale * 100) / 100, pos: pos === null ? null : Math.round(pos * 1000) / 1000 });
+    }
+    const row = await storage.updateClip(clip.id, { ...times, ...style, editTitle: title, editSubtitle: subtitle, editStatus: "queued", editError: "", editAt: new Date().toISOString() });
     res.json(row);
   });
 

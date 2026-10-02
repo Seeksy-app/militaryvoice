@@ -20,6 +20,7 @@ import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/schema";
+import { Slider } from "@/components/ui/slider";
 import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2, Clapperboard, Plus, ArrowLeftToLine, ArrowRightToLine, MoreHorizontal, Blend, Brackets, Library } from "lucide-react";
 import { IconTile } from "@/components/ui/icon-tile";
 
@@ -1404,17 +1405,60 @@ function TrimClipDialog({ c, open, onOpenChange }: { c: ClipRow; open: boolean; 
   );
 }
 
+/** A clip's caption look: size as a multiple of the usual, and where their middle sits (fraction of the height; null = the usual place). */
+type CaptionLook = { scale: number; pos: number | null };
+const readLook = (raw: string | null | undefined): CaptionLook => {
+  try { const j = raw ? JSON.parse(raw) : null; return { scale: Number(j?.scale) || 1, pos: j?.pos ?? null }; } catch { return { scale: 1, pos: null }; }
+};
+const PLACES = [
+  { label: "Top", pos: 0.24 },
+  { label: "Middle", pos: 0.5 },
+  { label: "Lower third", pos: null },
+  { label: "Bottom", pos: 0.9 },
+] as const;
+
+/**
+ * The vertical clip, drawn small, with the band and captions where the remake will put them: the
+ * worker's own layout (captionLayout in agent/wordCaptions.ts) in proportion, so what you see is
+ * what you get.
+ */
+function CaptionPreview({ c, title, subtitle, look }: { c: ClipRow; title: string; subtitle: string; look: CaptionLook }) {
+  const W = 200, H = Math.round((W * 16) / 9);
+  const band = Math.round((220 / 1920) * H);
+  const size = 0.066 * W * Math.min(1.8, Math.max(0.6, look.scale));
+  const lead = size * 1.24;
+  const h = lead * 2 + size * 0.5;
+  const centre = H * (look.pos ?? 0.82);
+  const top = Math.max(band + H * 0.015, Math.min(H - h - H * 0.02, centre - h / 2));
+  const src = c.verticalUrl || c.squareUrl || c.url;
+  const word: React.CSSProperties = { WebkitTextStroke: `${Math.max(1, size * 0.12)}px #000`, paintOrder: "stroke fill" };
+  return (
+    <div className="relative mx-auto overflow-hidden rounded-xl bg-black shadow-lg" style={{ width: W, height: H }} data-testid="caption-preview">
+      {src && <video src={`${src}#t=1`} muted playsInline preload="metadata" className="absolute inset-0 h-full w-full object-cover" />}
+      <div className="absolute inset-x-0 top-0 flex flex-col items-center justify-center px-2 text-center" style={{ height: band, background: "#000741" }}>
+        <p className="line-clamp-1 text-[9px] font-extrabold leading-tight text-white">{title || "Your title"}</p>
+        {subtitle && <p className="line-clamp-1 text-[6px] font-bold uppercase tracking-wide" style={{ color: "#F0A71F" }}>{subtitle}</p>}
+      </div>
+      <div className="absolute inset-x-0 flex flex-col items-center justify-center text-center" style={{ top, height: h, fontFamily: "Montserrat, 'Arial Black', sans-serif", fontWeight: 800, fontSize: size, lineHeight: `${lead}px`, color: "#fff" }}>
+        <span style={word}>That's when I knew</span>
+        <span style={word}>we had to <span className="rounded px-0.5" style={{ background: "#F0A71F", WebkitTextStroke: "0" }}>keep</span> going</span>
+      </div>
+    </div>
+  );
+}
+
 export function EditTextDialog({ c, open, onOpenChange }: { c: ClipRow; open: boolean; onOpenChange: (v: boolean) => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [title, setTitle] = useState(c.title);
   const [subtitle, setSubtitle] = useState(c.subtitle);
+  const [look, setLook] = useState<CaptionLook>(() => readLook(c.captionStyle));
   // Three better titles from what's said in it; one click puts one in the box.
   const [ideas, setIdeas] = useState<string[]>([]);
   const [thinking, setThinking] = useState(false);
   useEffect(() => {
-    if (open) { setTitle(c.title); setSubtitle(c.subtitle); setIdeas([]); }
-  }, [open, c.title, c.subtitle]);
+    if (open) { setTitle(c.title); setSubtitle(c.subtitle); setIdeas([]); setLook(readLook(c.captionStyle)); }
+  }, [open, c.title, c.subtitle, c.captionStyle]);
   const suggest = async () => {
     setThinking(true);
     try { setIdeas(((await (await apiRequest("POST", `/api/host/clips/${c.id}/suggest-title`)).json()) as { titles: string[] }).titles); }
@@ -1422,21 +1466,22 @@ export function EditTextDialog({ c, open, onOpenChange }: { c: ClipRow; open: bo
     finally { setThinking(false); }
   };
   const save = useMutation({
-    mutationFn: async () => (await apiRequest("POST", `/api/host/clips/${c.id}/text`, { title, subtitle })).json(),
+    mutationFn: async () => (await apiRequest("POST", `/api/host/clips/${c.id}/text`, { title, subtitle, captionStyle: look })).json(),
     onSuccess: () => {
       onOpenChange(false);
       void qc.invalidateQueries({ queryKey: ["/api/host/clips"] });
-      toast({ title: "Updating the clip", description: "All three shapes, with the new words. About a minute." });
+      toast({ title: "Updating the clip", description: "Every shape, with the new words and captions. About a minute." });
     },
     onError: (e: Error) => toast({ title: "Couldn't update that", description: e.message, variant: "destructive" }),
   });
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-md">
+      <DialogContent className="max-h-[92vh] overflow-y-auto sm:max-w-2xl">
         <DialogHeader>
-          <DialogTitle>Edit text</DialogTitle>
-          <DialogDescription>The words in the band at the top of the clip. We remake the vertical, square and wide versions with them, which takes about a minute.</DialogDescription>
+          <DialogTitle>Edit text and captions</DialogTitle>
+          <DialogDescription>The words in the band at the top, and how big the captions are and where they sit. We remake every shape of the clip with them, which takes about a minute.</DialogDescription>
         </DialogHeader>
+        <div className="grid gap-6 sm:grid-cols-[1fr_200px]">
         <div className="space-y-4">
           <div>
             <Label htmlFor={`clip-title-${c.id}`}>Title</Label>
@@ -1458,6 +1503,30 @@ export function EditTextDialog({ c, open, onOpenChange }: { c: ClipRow; open: bo
             <Input id={`clip-sub-${c.id}`} className="mt-1" value={subtitle} maxLength={70} onChange={(e) => setSubtitle(e.target.value)} placeholder="Your show · the guest" data-testid="input-clip-subtitle" />
             <p className="mt-1 text-[11px] text-muted-foreground">The smaller gold line under the title, in capitals. Your show and the guest works well.</p>
           </div>
+          <div className="space-y-3 rounded-xl border border-border p-3.5" data-testid="caption-controls">
+            <p className="text-sm font-semibold">Captions</p>
+            <div>
+              <div className="flex items-center justify-between text-xs"><span className="font-medium">Size</span><span className="tabular-nums text-muted-foreground">{Math.round(look.scale * 100)}%</span></div>
+              <Slider className="mt-2" min={60} max={180} step={5} value={[Math.round(look.scale * 100)]} onValueChange={([v]) => setLook((l) => ({ ...l, scale: v / 100 }))} aria-label="Caption size" data-testid="caption-size" />
+              <div className="mt-1 flex justify-between text-[10px] text-muted-foreground"><span>Smaller</span><span>Bigger</span></div>
+            </div>
+            <div>
+              <p className="text-xs font-medium">Where they sit</p>
+              <div className="mt-1.5 flex flex-wrap gap-1.5">
+                {PLACES.map((p) => (
+                  <button key={p.label} type="button" onClick={() => setLook((l) => ({ ...l, pos: p.pos }))} className={`rounded-full border px-3 py-1 text-xs font-medium ${(look.pos ?? null) === p.pos ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:bg-muted"}`} data-testid={`caption-place-${p.label.toLowerCase().replace(/\s+/g, "-")}`}>{p.label}</button>
+                ))}
+              </div>
+              <Slider className="mt-3" min={15} max={92} step={1} value={[Math.round((look.pos ?? 0.82) * 100)]} onValueChange={([v]) => setLook((l) => ({ ...l, pos: v / 100 }))} aria-label="Caption height on the clip" data-testid="caption-pos" />
+              <div className="mt-1 flex justify-between text-[10px] text-muted-foreground"><span>Higher</span><span>Lower</span></div>
+            </div>
+            {(look.scale !== 1 || look.pos !== null) && <button type="button" onClick={() => setLook({ scale: 1, pos: null })} className="text-xs font-semibold text-[#053877] hover:underline dark:text-white">Back to the usual</button>}
+          </div>
+        </div>
+        <div>
+          <CaptionPreview c={c} title={title} subtitle={subtitle} look={look} />
+          <p className="mt-2 text-center text-[11px] text-muted-foreground">How the vertical clip will look. Square and wide follow the same size and place.</p>
+        </div>
         </div>
         <div className="flex justify-end gap-2 pt-2">
           <Button variant="outline" onClick={() => onOpenChange(false)}>Cancel</Button>
@@ -1595,7 +1664,7 @@ export function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }
                 </DropdownMenuItem>
               )}
               {!updating && <DropdownMenuItem className="gap-2" onSelect={() => setTrimmingClip(true)} data-testid="clip-trim"><Brackets className="h-3.5 w-3.5" /> Trim this clip</DropdownMenuItem>}
-              {!updating && <DropdownMenuItem className="gap-2" onSelect={() => setEditing(true)}><Pencil className="h-3.5 w-3.5" /> Edit the title and text</DropdownMenuItem>}
+              {!updating && <DropdownMenuItem className="gap-2" onSelect={() => setEditing(true)}><Pencil className="h-3.5 w-3.5" /> Edit text and captions</DropdownMenuItem>}
               <DropdownMenuItem className="gap-2 text-destructive focus:text-destructive" onSelect={() => setDeleting(true)}><Trash2 className="h-3.5 w-3.5" /> Delete this clip</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

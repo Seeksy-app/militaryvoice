@@ -54,7 +54,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import sharp from "sharp";
 import { textPath, fitSize, textWidth } from "../server/textPath.js";
 import { cutList, snapToAudio, keepRanges, selectGraph, envelope, type Word } from "./refine.js";
-import { captionTrack, type TimedWord } from "./wordCaptions.js";
+import { captionTrack, type CaptionStyle, type TimedWord } from "./wordCaptions.js";
 
 const API_BASE = (process.env.API_BASE || "http://localhost:3000").replace(/\/+$/, "");
 const AGENT_TOKEN = process.env.AGENT_TOKEN || "";
@@ -138,7 +138,7 @@ interface Job {
   /** "Suggest edits": listen to the episode (this version of it) and recommend the trim and any cuts. */
   suggestEdits?: { source: "clean" | "original" };
   /** "Edit text": remake one clip's three shapes with a new title and subtitle. */
-  clipEdit?: { clipId: number; title: string; subtitle: string; startSec: number; endSec: number; shapes?: Shape[] };
+  clipEdit?: { clipId: number; title: string; subtitle: string; startSec: number; endSec: number; shapes?: Shape[]; style?: CaptionStyle | null };
 }
 
 type Shape = "vertical" | "square" | "wide";
@@ -606,6 +606,8 @@ export async function render(
   // the way Creatomate drew them, with its framing (it follows a camera that
   // cuts, and puts a picture it can't frame whole over a blur of itself).
   words?: TimedWord[],
+  // The clip's own caption size and place (Pōstify's editor); none = the usual.
+  style?: CaptionStyle | null,
 ): Promise<void> {
   const dur = (m.endSec - m.startSec).toFixed(2);
   const size = shape === "wide" ? [1920, 1080] : shape === "vertical" ? [1080, 1920] : [1080, 1080];
@@ -689,7 +691,7 @@ export async function render(
     last = "[banded]";
   }
 
-  const track = words && dir ? await captionTrack(words, shape, W, H, m.endSec - m.startSec, path.join(dir, `words-${shape}`)) : null;
+  const track = words && dir ? await captionTrack(words, shape, W, H, m.endSec - m.startSec, path.join(dir, `words-${shape}`), style, band?.height ?? 0) : null;
   if (words) {
     if (track) {
       const idx = inputs();
@@ -1522,13 +1524,14 @@ async function handleEdit(job: Job): Promise<void> {
     const tall = shapes.includes("vertical") || shapes.includes("square");
     const geo = await framingFor(job, cut, m, [], dir, tall ? "shots" : "none");
     const files = { wide: path.join(dir, "wide.mp4"), vertical: path.join(dir, "vertical.mp4"), square: path.join(dir, "square.mp4") };
-    if (usesCreatomate()) {
+    // A caption size or place of its own is drawn here (Creatomate's layout is fixed).
+    if (usesCreatomate() && !e.style) {
       if ((await renderWithCreatomate({ ...job, show: e.subtitle }, m, cut, geo, files, shapes)).size < shapes.length) throw new Error("Creatomate couldn't make it just now");
     } else {
       const band = path.join(dir, "band.png");
       await fs.writeFile(band, await titleBand(e.title, 1080, 220, e.subtitle.toUpperCase()));
       const words = await momentWords(cut, m, [], dir);
-      await Promise.all(shapes.map((x) => render(cut, files[x], m, x, x === "wide" ? undefined : { file: band, height: 220 }, geo, [], path.join(dir, "caps"), words)));
+      await Promise.all(shapes.map((x) => render(cut, files[x], m, x, x === "wide" ? undefined : { file: band, height: 220 }, geo, [], path.join(dir, "caps"), words, e.style)));
     }
     await api("POST", `/api/agent/clip-edits/${e.clipId}/done`, {
       url: shapes.includes("wide") ? await uploadFile(files.wide, "video/mp4") : "",

@@ -216,7 +216,7 @@ export const HELP_INDEX: HelpEntry[] = [
   },
   {
     title: "Trim a clip or change its title",
-    summary: "In a clip's menu: Trim this clip, or Edit the title and text with Suggest titles. Its music stays.",
+    summary: "In a clip's menu: Trim this clip, or Edit text and captions: the title, Suggest titles, and the captions' size and where they sit, with a preview. Its music stays.",
     href: "/help/postify#clips",
     keywords: "clip trim this clip edit the title and text suggest titles subtitle headline rename clip music remake shapes",
     audience: "podcasters",

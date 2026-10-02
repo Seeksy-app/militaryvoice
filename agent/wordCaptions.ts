@@ -22,14 +22,22 @@ const FILLER = /^(um+|uh+|erm*|ah+|hmm+|mm+|uh-huh)[,.!?]*$/i;
 
 type Shape = "wide" | "vertical" | "square";
 
-/** Creatomate's placement, so a clip made here sits where one made there did. */
-export function captionLayout(shape: Shape, W: number, H: number) {
+/** A clip's own caption look, set in Pōstify's editor: size as a multiple of the usual, and where the middle of the captions sits (a fraction of the height; null = the usual place). */
+export interface CaptionStyle { scale: number; pos: number | null }
+
+/**
+ * Creatomate's placement, so a clip made here sits where one made there did, unless the clip has
+ * its own style. `top` is the title band's height: captions never go under it.
+ */
+export function captionLayout(shape: Shape, W: number, H: number, style?: CaptionStyle | null, top = 0) {
   const vmin = Math.min(W, H) / 100;
-  const size = Math.round((shape === "wide" ? 5.4 : 6.6) * vmin);
-  const centre = H * (shape === "wide" ? 0.84 : shape === "square" ? 0.86 : 0.82);
+  const scale = Math.min(1.8, Math.max(0.6, style?.scale || 1));
+  const size = Math.round((shape === "wide" ? 5.4 : 6.6) * vmin * scale);
+  const centre = H * (style?.pos != null ? Math.min(0.95, Math.max(0.05, style.pos)) : shape === "wide" ? 0.84 : shape === "square" ? 0.86 : 0.82);
   const lead = Math.round(size * 1.24);
   const h = Math.ceil((lead * 2 + size * 0.5) / 2) * 2;
-  return { size, boxW: Math.round(W * 0.86), lead, h, y: Math.max(0, Math.round(centre - h / 2)) };
+  const y = Math.round(centre - h / 2);
+  return { size, boxW: Math.round(W * 0.86), lead, h, y: Math.max(top + Math.round(H * 0.015), Math.min(H - h - Math.round(H * 0.02), y)) };
 }
 
 /** Wrap words into lines no wider than the box. */
@@ -108,12 +116,12 @@ async function statePng(group: string[], lit: number, W: number, L: ReturnType<t
  * `dir` and returns the list, where to overlay it, and how tall it is. Times
  * are seconds from the start of the clip.
  */
-export async function captionTrack(words: TimedWord[], shape: Shape, W: number, H: number, duration: number, dir: string): Promise<{ list: string; y: number } | null> {
+export async function captionTrack(words: TimedWord[], shape: Shape, W: number, H: number, duration: number, dir: string, style?: CaptionStyle | null, top = 0): Promise<{ list: string; y: number } | null> {
   // Not on screen: false starts ("a-", "honest-") and fillers. They're in the
   // sound; written out they read as mistakes in the caption.
   const clean = words.filter((w) => w.text.trim() && w.end > 0 && w.start < duration && !/-$/.test(w.text.trim()) && !FILLER.test(w.text.trim()));
   if (!clean.length) return null;
-  const L = captionLayout(shape, W, H);
+  const L = captionLayout(shape, W, H, style, top);
   await fs.mkdir(dir, { recursive: true });
   const blank = path.join(dir, "blank.png");
   await fs.writeFile(blank, await sharp({ create: { width: W, height: L.h, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } }).png().toBuffer());

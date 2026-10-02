@@ -88,9 +88,10 @@ export default function HelpPostify() {
           <p className="mt-3">Press <strong>⋯</strong> on any clip (in Pōstify or your Library's Clips tab):</p>
           <HelpSub>Trim this clip</HelpSub>
           <p className="mt-2">Play it. Press <strong>Start here</strong> and <strong>End here</strong> at the right moments, or use the sliders. It has to be at least 5 seconds. Press <strong>Play the new version</strong> to check, then <strong>Trim the clip</strong>. Every shape is remade in about a minute.</p>
-          <HelpSub>Edit the title and text</HelpSub>
-          <p className="mt-2">Change the <strong>Title</strong> (the headline across the top; six words or so reads best) and the <strong>Subtitle</strong> (the smaller gold line). Stuck? Press <strong>Suggest titles</strong> for three ideas from what's said in the clip, and click one to use it. Then press <strong>Update clip</strong>.</p>
-          <HelpNote>Your clip's music stays when it's remade after a trim or new text.</HelpNote>
+          <HelpSub>Edit text and captions</HelpSub>
+          <p className="mt-2">Change the <strong>Title</strong> (the headline across the top; six words or so reads best) and the <strong>Subtitle</strong> (the smaller gold line). Stuck? Press <strong>Suggest titles</strong> for three ideas from what's said in the clip, and click one to use it.</p>
+          <p className="mt-2">Under <strong>Captions</strong>, drag <strong>Size</strong> to make the words bigger or smaller, and pick <strong>Where they sit</strong>: <strong>Top</strong>, <strong>Middle</strong>, <strong>Lower third</strong> (the usual) or <strong>Bottom</strong>, or drag the slider to place them exactly. The preview beside it shows the clip as it will look. Then press <strong>Update clip</strong>; every shape is remade in about a minute.</p>
+          <HelpNote>Your clip's music stays when it's remade after a trim, new text or new captions.</HelpNote>
           <p className="mt-3">The same menu has downloads for each shape, <strong>Download subtitles (.srt)</strong>, <strong>Copy the caption</strong> and <strong>Delete this clip</strong>.</p>
         </HelpSection>
 
