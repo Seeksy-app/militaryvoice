@@ -17,6 +17,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Handshake, Check, Send } from "lucide-react";
 import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
+import { IconTile } from "@/components/ui/icon-tile";
 
 interface SponsorPackage {
   id: number;
@@ -139,9 +140,7 @@ export function SponsorDialog({
 
         {paid?.url ? (
           <div className="flex flex-col items-center gap-4 py-2 text-center" data-testid="sponsor-checkout">
-            <span className="flex h-12 w-12 items-center justify-center rounded-full bg-primary/10">
-              <Check className="h-6 w-6 text-primary" />
-            </span>
+            <IconTile icon={Check} />
             <div>
               <p className="text-base font-semibold">We've got it — thanks.</p>
               <p className="mt-1 text-sm text-muted-foreground">

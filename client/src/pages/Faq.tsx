@@ -9,6 +9,7 @@ import type { PublicEvent } from "@shared/schema";
 import { detectLocalTimeZone, formatDateInZone, formatTimeInZone, zoneLabel } from "@/lib/schedule";
 import { Mic2, Headphones, HelpCircle, ArrowRight, Mail, ArrowLeft } from "lucide-react";
 import { SiteFooter } from "@/components/SiteFooter";
+import { IconTile } from "@/components/ui/icon-tile";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
@@ -248,10 +249,8 @@ export default function Faq() {
 
   const Group = ({ id, icon: Icon, title, items }: { id: string; icon: typeof Mic2; title: string; items: QA[] }) => (
     <section id={id} className="scroll-mt-20">
-      <div className="mb-4 flex items-center gap-2">
-        <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-          <Icon className="h-4.5 w-4.5" />
-        </div>
+      <div className="mb-4 flex items-center gap-3">
+        <IconTile icon={Icon} />
         <h2 className="text-xl font-bold tracking-tight sm:text-2xl" style={HEADLINE_FONT}>
           {title}
         </h2>

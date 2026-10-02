@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { startPlanCheckout, startTokenCheckout, startAddonCheckout } from "@/lib/tokens";
 import { PLANS, CREDIT_PACKS, ADDONS, TEST_PACK, cents, episodeCredits } from "@shared/tokens";
 import { Check, Coins, Scissors, Wand2, Sparkles, Loader2, Gauge, Compass } from "lucide-react";
+import { IconTile } from "@/components/ui/icon-tile";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
@@ -180,7 +181,7 @@ export default function Pricing() {
         <div className="mt-12 grid gap-6 rounded-3xl border border-border bg-card p-6 sm:p-8 md:grid-cols-3">
           {HOW.map(({ icon: Icon, title, body }) => (
             <div key={title}>
-              <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]"><Icon className="h-5 w-5" /></span>
+              <IconTile icon={Icon} />
               <p className="mt-3 font-semibold text-foreground">{title}</p>
               <p className="mt-1 text-sm text-muted-foreground">{body}</p>
             </div>
@@ -191,7 +192,7 @@ export default function Pricing() {
         <section id="discovery" className="mx-auto mt-12 max-w-3xl scroll-mt-24">
           <p className="text-center text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00]">Add-on</p>
           <div className="mt-3 flex flex-col gap-5 rounded-3xl border border-border bg-card p-6 sm:flex-row sm:items-center" data-testid="addon-discovery">
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#053877] text-[#F0A71F]"><Compass className="h-6 w-6" /></span>
+            <IconTile icon={Compass} />
             <div className="min-w-0 flex-1">
               <p className="text-lg font-bold text-foreground" style={HEADLINE_FONT}>{ADDONS.discovery.name} <span className="text-base font-semibold text-muted-foreground">· {cents(ADDONS.discovery.cents)}/month</span></p>
               <p className="text-sm text-muted-foreground">{ADDONS.discovery.blurb} Works with or without a Pōstify plan.</p>

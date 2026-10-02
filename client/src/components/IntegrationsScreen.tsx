@@ -7,6 +7,7 @@ import { PodcastStatsRows } from "@/components/PodcastStats";
 import { PlatformIcon, platformLabel, platformBackground, formatFollowers, ALL_PLATFORMS } from "@/components/SocialIcons";
 import type { ProfileRow, SocialAccount } from "@shared/schema";
 import { Check, ChevronDown, ExternalLink, Headphones, Link2, Radio, RefreshCw, Share2, Upload, Video, Webhook } from "lucide-react";
+import { IconTile } from "@/components/ui/icon-tile";
 
 /**
  * Integrations as lists you read down: your social accounts, where your
@@ -125,7 +126,7 @@ export function IntegrationsScreen({
         <div id="import-link" className="scroll-mt-24">
           <Row
             testId="row-import-link"
-            icon={<span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#FF4F00] text-white"><Webhook className="h-5 w-5" /></span>}
+            icon={<IconTile icon={Webhook} />}
             name="Import link"
             line="For Zapier or any app that can send a video's link. Each one comes into your Library."
             right={
@@ -139,7 +140,7 @@ export function IntegrationsScreen({
         </div>
         <Row
           testId="row-upload"
-          icon={<span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#053877]/10 text-[#053877] dark:text-[#8ab4f8]"><Upload className="h-5 w-5" /></span>}
+          icon={<IconTile icon={Upload} />}
           name="Upload a video"
           line="MP4, MOV or WebM, up to 2GB, straight into your Library."
           right={<Button variant="outline" size="sm" className="h-8 rounded-full px-3.5 text-xs" onClick={onOpenLibrary}>Open Library</Button>}
@@ -178,7 +179,7 @@ function Row({ icon, name, line, right, children, testId }: { icon: ReactNode; n
   return (
     <div className="px-5 py-3.5" data-testid={testId}>
       <div className="flex items-center gap-3.5">
-        <span className="shrink-0">{icon}</span>
+        <span className="flex w-12 shrink-0 justify-center">{icon}</span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-foreground">{name}</p>
           <p className="truncate text-sm text-muted-foreground">{line}</p>

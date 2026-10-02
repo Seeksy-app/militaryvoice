@@ -44,6 +44,7 @@ import {
   PlayCircle,
   Film,
 } from "lucide-react";
+import { IconTile } from "@/components/ui/icon-tile";
 
 const DRAFT_KEY = "mv_profile_draft";
 interface Draft {
@@ -131,8 +132,8 @@ function SectionCard({
   return (
     <section id={id} className="overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
       <header className="flex items-start gap-3 bg-[#053877] px-5 py-4 text-white">
-        <div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white/10 text-[#F0A71F]">
-          <Icon className="h-5 w-5" />
+        <div className="relative shrink-0">
+          <IconTile icon={Icon} />
           {step !== undefined && (
             <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 items-center justify-center rounded-full bg-[#F0A71F] font-mono text-[12px] font-bold text-[#1a1200]">
               {step}

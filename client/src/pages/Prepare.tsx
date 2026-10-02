@@ -22,6 +22,7 @@ import {
   CheckCircle2,
   Flag,
 } from "lucide-react";
+import { IconTile } from "@/components/ui/icon-tile";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
@@ -245,9 +246,7 @@ export default function Prepare() {
           <div className="mt-6 grid gap-4 sm:grid-cols-2">
             {bring.map(({ icon: Icon, title, body, hint }) => (
               <div key={title} className="flex h-full flex-col rounded-2xl border border-border bg-card p-5">
-                <div className="flex h-9 w-9 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                  <Icon className="h-4.5 w-4.5" />
-                </div>
+                <IconTile icon={Icon} />
                 <h3 className="mt-3 text-base font-semibold leading-snug">{title}</h3>
                 <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">{body}</p>
                 {hint && (

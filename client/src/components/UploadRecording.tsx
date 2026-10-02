@@ -4,6 +4,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { durationOf, uploadToStorage } from "@/lib/upload";
 import { Loader2, Upload } from "lucide-react";
+import { IconTile } from "@/components/ui/icon-tile";
 
 /** Add a video you already have: it's filed as a recording, nothing more (clipping is Pōstify's). */
 export function UploadRecording({ onDone, tall = false, autoOpen = false, initialFile, title = "Drop a video here, or click to browse", note = "MP4, MOV or WebM, up to 2GB. Then make clips from it in Pōstify." }: {
@@ -86,9 +87,7 @@ export function UploadRecording({ onDone, tall = false, autoOpen = false, initia
       data-testid="recording-upload"
     >
       <input ref={input} type="file" accept="video/*" className="hidden" onChange={(e) => e.target.files?.[0] && void go(e.target.files[0])} data-testid="recording-upload-input" />
-      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]">
-        {busy ? <Loader2 className="h-6 w-6 animate-spin" /> : <Upload className="h-6 w-6" />}
-      </span>
+      <IconTile icon={busy ? Loader2 : Upload} spin={busy} />
       {busy ? (
         <div className={`min-w-0 ${tall ? "w-full max-w-md" : "flex-1"}`}>
           <p className="truncate text-sm font-semibold text-foreground">{pct! < 100 ? `Uploading ${name}` : `Saving ${name}`}</p>

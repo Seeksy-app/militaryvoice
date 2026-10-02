@@ -20,6 +20,7 @@ import {
   CalendarClock,
 } from "lucide-react";
 import { SiteFooter } from "@/components/SiteFooter";
+import { IconTile } from "@/components/ui/icon-tile";
 
 // Why Watchfloor rather than the tool they already pay for.
 //
@@ -191,9 +192,7 @@ export default function Watchfloor() {
           {PILLARS.map((p, i) => (
             <div key={p.title} className="grid items-start gap-6 md:grid-cols-[auto_1fr] md:gap-10">
               <div className="flex items-center gap-4 md:flex-col md:items-start md:gap-3">
-                <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#053877] text-white">
-                  <p.icon className="h-6 w-6 text-[#F0A71F]" />
-                </span>
+                <IconTile icon={p.icon} />
                 <span className="text-xs font-bold uppercase tracking-[0.16em] text-muted-foreground md:w-14">
                   {p.kicker}
                 </span>

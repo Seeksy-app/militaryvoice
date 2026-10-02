@@ -1,7 +1,8 @@
-import type { ComponentType, ReactNode } from "react";
+import type { ReactNode } from "react";
 import { Link } from "wouter";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { HelpSearch } from "@/components/HelpSearch";
+import { IconTile, type TileIcon } from "@/components/ui/icon-tile";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
@@ -82,10 +83,10 @@ export function HelpNote({ children }: { children: ReactNode }) {
 }
 
 /** The card at the foot of an article: where to go to do it. */
-export function HelpCta({ icon: Icon, text, label, href }: { icon: ComponentType<{ className?: string }>; text: string; label: string; href: string }) {
+export function HelpCta({ icon: Icon, text, label, href }: { icon: TileIcon; text: string; label: string; href: string }) {
   return (
     <div className="mt-12 flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-card p-5">
-      <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#053877] text-[#F0A71F]"><Icon className="h-5 w-5" /></span>
+      <IconTile icon={Icon} />
       <p className="min-w-0 flex-1 text-sm text-muted-foreground">{text}</p>
       <Link href={href} className="inline-flex h-10 items-center gap-1.5 rounded-full bg-[#053877] px-5 text-sm font-medium text-white hover:bg-[#0a4a99]">
         {label} <ArrowRight className="h-4 w-4" />

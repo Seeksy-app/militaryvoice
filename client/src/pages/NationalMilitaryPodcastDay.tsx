@@ -7,6 +7,7 @@ import { Mic2, Share2, Heart, MessageSquare, Headphones, Users, Radio } from "lu
 import type { PublicEvent, PublicSignup } from "@shared/schema";
 import { apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import { slotStart, totalSlots, detectLocalTimeZone, formatTimeInZone } from "@/lib/schedule";
+import { IconTile } from "@/components/ui/icon-tile";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
@@ -266,9 +267,7 @@ export default function NationalMilitaryPodcastDay() {
 
           {/* Founders callout */}
           <div className="mb-10 rounded-2xl border border-[#F0A71F]/25 bg-[#F0A71F]/5 p-8 text-center">
-            <div className="mb-4 inline-flex h-12 w-12 items-center justify-center rounded-full bg-[#F0A71F]/15">
-              <Mic2 className="h-6 w-6 text-[#F0A71F]" />
-            </div>
+            <IconTile icon={Mic2} className="mx-auto mb-4" />
             <p className="text-xs font-bold uppercase tracking-[0.15em] text-[#F0A71F] mb-2">Founded 2021</p>
             <h3 className="text-xl font-black text-foreground mb-1" style={HEADLINE_FONT}>
               Shane Cunningham &amp; Nick Nickerson
@@ -315,9 +314,7 @@ export default function NationalMilitaryPodcastDay() {
                 key={i}
                 className="group rounded-2xl border border-border bg-muted/20 p-6 transition-colors hover:border-[#F0A71F]/40 hover:bg-[#F0A71F]/5"
               >
-                <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-[#F0A71F]/10">
-                  <w.icon className="h-5 w-5 text-[#F0A71F]" />
-                </div>
+                <IconTile icon={w.icon} className="mb-4" />
                 <h3 className="mb-2 font-bold text-foreground" style={HEADLINE_FONT}>{w.title}</h3>
                 <p className="text-sm leading-relaxed text-muted-foreground">{w.body}</p>
               </div>

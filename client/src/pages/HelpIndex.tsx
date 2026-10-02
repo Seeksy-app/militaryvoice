@@ -4,6 +4,7 @@ import { NavBar } from "@/components/NavBar";
 import { SiteFooter } from "@/components/SiteFooter";
 import { HelpSearch, askAlex } from "@/components/HelpSearch";
 import { HELP_INDEX, HELP_CATEGORIES, type HelpCategory, type HelpEntry } from "@/lib/helpIndex";
+import { IconTile } from "@/components/ui/icon-tile";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
@@ -91,7 +92,7 @@ export default function HelpIndex() {
               return (
                 <div key={c.key} className="flex flex-col rounded-3xl border border-border bg-card p-6" data-testid={`help-category-${c.key}`}>
                   <div className="flex items-center gap-3">
-                    <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-[#053877]/10 text-[#053877]"><Icon className="h-6 w-6" /></span>
+                    <IconTile icon={Icon} />
                     <div>
                       <h3 className="text-lg font-bold leading-tight" style={HEADLINE_FONT}>{c.title}</h3>
                       <p className="text-xs text-muted-foreground">{items.length} {items.length === 1 ? "article" : "articles"}</p>

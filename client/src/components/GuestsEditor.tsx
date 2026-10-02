@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { IconTile } from "@/components/ui/icon-tile";
 
 /**
  * Guests on a slot: who's appearing with the podcaster, each with their own
@@ -49,7 +50,7 @@ export function GuestsEditor({ signupId, admin = false, compact = false }: { sig
     <div className="space-y-3" data-testid="guests-editor">
       {!compact && (
         <div className="flex items-start gap-3">
-          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#053877]/10 text-[#053877] dark:bg-[#8fb5e8]/15 dark:text-[#8fb5e8]"><Users className="h-[18px] w-[18px]" /></span>
+          <IconTile icon={Users} />
           <div>
             <p className="text-base font-bold">{admin ? "Their guests" : "Your guests"}</p>
             <p className="text-sm text-muted-foreground">Everyone appearing with {admin ? "them" : "you"}. Each gets their own link into the green room: no account, and they come on stage with {admin ? "the host" : "you"}.</p>

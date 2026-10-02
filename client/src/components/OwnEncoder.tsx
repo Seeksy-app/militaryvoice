@@ -6,6 +6,7 @@ import { Label } from "@/components/ui/label";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Cable, Copy, Eye, EyeOff, RefreshCw } from "lucide-react";
+import { IconTile } from "@/components/ui/icon-tile";
 
 // For podcasters who already run OBS, StreamYard, Riverside or similar and
 // would rather push their own produced feed than use our studio page. We give
@@ -94,10 +95,8 @@ export function OwnEncoder() {
   return (
     <section className="mt-8 rounded-2xl border border-border bg-card p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
-        <div className="flex items-start gap-2">
-          <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-            <Cable className="h-4.5 w-4.5" />
-          </div>
+        <div className="flex items-start gap-3">
+          <IconTile icon={Cable} />
           <div>
             <h2 className="text-base font-semibold text-card-foreground">Use your own gear</h2>
             <p className="max-w-xl text-sm text-muted-foreground">

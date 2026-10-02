@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { IconTile } from "@/components/ui/icon-tile";
 
 type Studio = { id: number; name: string; inviteLink: string; recording: { since: string } | null; live: { since: string; watchUrl: string } | null; youtube: boolean; youtubeOn: boolean; streams: { id: string; name: string; key: string; on: boolean }[]; ready: boolean; canRecord: boolean };
 const say = (e: unknown) => ((e as Error).message ?? "").replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, "") || "Try again in a moment.";
@@ -41,7 +42,7 @@ export function StudioHome() {
       </div>
 
       <section className="flex flex-wrap items-center gap-4 rounded-2xl bg-[#04102b] p-6 text-white shadow-sm">
-        <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-white/10"><Video className="h-7 w-7" /></span>
+        <IconTile icon={Video} />
         <div className="min-w-0 flex-1">
           <p className="text-lg font-bold">{s.name}</p>
           <p className="text-sm text-white/70">{s.live ? "You're live now." : s.recording ? "Recording now." : "Check your camera and mic, then you're in."}</p>

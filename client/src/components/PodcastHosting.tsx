@@ -10,6 +10,7 @@ import { durationOf, uploadToStorage } from "@/lib/upload";
 import { GuestFinder, ShowFinder } from "@/components/DiscoverPodcasts";
 import type { HostedEpisodeRow, HostedShowRow, RecordingRow } from "@shared/schema";
 import { AlertCircle, BarChart3, Check, ChevronLeft, Copy, ExternalLink, Film, ImagePlus, Loader2, Mic2, Pencil, Plus, Podcast, Radio, Send, Trash2, Upload } from "lucide-react";
+import { IconTile } from "@/components/ui/icon-tile";
 
 /**
  * Podcast: the show hosted on MilitaryVoices. A feed Apple, Spotify and every
@@ -66,7 +67,7 @@ export function PodcastHosting() {
     return (
       <section className="mt-2" data-testid="podcast-hosting">
         <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
-          <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[#053877] text-[#F0A71F]"><Podcast className="h-7 w-7" /></span>
+          <IconTile icon={Podcast} className="mx-auto" />
           <h1 className="mt-4 text-2xl font-bold tracking-tight">Host your podcast on MilitaryVoices</h1>
           <p className="mx-auto mt-2 max-w-xl text-balance text-muted-foreground">Your show's feed for Apple Podcasts, Spotify and every other app, with your downloads counted the way sponsors count them, and shown on your profile.</p>
           <ul className="mx-auto mt-5 grid max-w-2xl gap-3 text-left text-sm sm:grid-cols-3">

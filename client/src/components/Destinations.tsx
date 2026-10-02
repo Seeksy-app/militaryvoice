@@ -11,6 +11,7 @@ import { PlatformIcon } from "@/components/SocialIcons";
 import type { SocialPlatform, SignupRow } from "@shared/schema";
 import { Radio, Plus, Trash2, Signal, SignalHigh } from "lucide-react";
 import { StreamKeyHelp } from "@/components/StreamKeyHelp";
+import { IconTile } from "@/components/ui/icon-tile";
 
 // Where the show goes out. House destinations carry the whole event; one tied
 // to a podcaster carries their slot only, and the producer attaches it when
@@ -103,9 +104,9 @@ export function Destinations({ adminGet, adminSend, broadcasting, signups }: Pro
         }`}
         data-testid={`destination-${d.id}`}
       >
-        <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#053877] text-white">
-          {isSocial(d.platform) ? <PlatformIcon platform={d.platform} className="h-4 w-4" /> : <Radio className="h-4 w-4" />}
-        </div>
+        <IconTile icon={Radio}>
+          {isSocial(d.platform) ? <PlatformIcon platform={d.platform} className="h-6 w-6" /> : undefined}
+        </IconTile>
         <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-semibold">
             {d.label || PLATFORMS.find((p) => p.value === d.platform)?.label || d.platform}

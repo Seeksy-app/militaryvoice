@@ -2,6 +2,7 @@ import { useState } from "react";
 import { CalendarDays, TrendingUp, Compass, Flag, Check, ArrowRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import type { Interest } from "@shared/schema";
+import { IconTile } from "@/components/ui/icon-tile";
 
 /**
  * "What brings you to MilitaryVoices?" — the first thing a new account sees.
@@ -44,9 +45,7 @@ export function IntentPicker({ onDone }: { onDone: (interests: Interest[]) => vo
               }`}
               data-testid={`intent-${o.key}`}
             >
-              <span className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-xl ${on ? "bg-[#053877] text-white" : "bg-[#053877]/10 text-[#053877]"}`}>
-                <o.icon className="h-5 w-5" />
-              </span>
+              <IconTile icon={o.icon} />
               <span className="min-w-0 flex-1">
                 <span className="block font-semibold text-foreground">{o.title}</span>
                 <span className="mt-0.5 block text-sm text-muted-foreground">{o.line}</span>

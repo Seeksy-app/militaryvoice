@@ -111,6 +111,7 @@ import {
   zoneLabel,
 } from "@/lib/schedule";
 import { isLiveOnlyBlock, LIVE_ONLY_LABEL } from "@shared/slots";
+import { IconTile } from "@/components/ui/icon-tile";
 
 interface HostSignup {
   id: number;
@@ -1553,7 +1554,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                     );
                   })() : (
                     <div className="mt-6 flex flex-wrap items-center gap-4 rounded-2xl border border-dashed border-border bg-card p-5" data-testid="dashboard-podcast-empty">
-                      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[#053877]/10 text-[#053877] dark:text-[#8ab4f8]"><Headphones className="h-6 w-6" /></span>
+                      <IconTile icon={Headphones} />
                       <div className="min-w-0 flex-1"><p className="font-semibold text-foreground">Put your podcast here</p><p className="text-sm text-muted-foreground">Host it with us (your feed for Apple and Spotify, downloads sponsors trust), or connect the host you use.</p></div>
                       <div className="flex flex-wrap gap-2">
                         <Button onClick={() => goTo("podcast")} className="rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]">Host your podcast</Button>

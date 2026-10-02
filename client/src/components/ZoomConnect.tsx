@@ -60,8 +60,10 @@ export function ZoomConnect({ row = false }: { row?: boolean } = {}) {
   const z = zoom.data;
   return (
     <div className={row ? "px-5 py-3.5" : "mt-6 rounded-2xl border border-border bg-card p-5"} data-testid="zoom-connect">
-      <div className="flex flex-wrap items-center gap-3">
-        <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#0B5CFF] text-white"><Video className="h-5 w-5" /></span>
+      <div className="flex flex-wrap items-center gap-3.5">
+        {/* Zoom's own blue, like the other brand marks in Integrations; the
+            48px slot lines its name up with the rows around it. */}
+        <span className="flex w-12 shrink-0 justify-center"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0B5CFF] text-white"><Video className="h-5 w-5" /></span></span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-foreground">Zoom</p>
           <p className="text-sm text-muted-foreground">

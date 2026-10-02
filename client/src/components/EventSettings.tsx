@@ -20,11 +20,11 @@ import { apiRequest } from "@/lib/queryClient";
 import { formatDateInZone, formatTimeInZone, zoneLabel, detectLocalTimeZone, slotStart, slotEnd, onAirWindow, totalSlots } from "@/lib/schedule";
 import { isLiveOnlyBlock } from "@shared/slots";
 import type { PublicEvent } from "@shared/schema";
-import { CalendarDays, ChevronRight, ArrowLeft, ArrowRight, Check, Clock, Trash2, Megaphone, Rocket, Mic2, Users } from "lucide-react";
+import { CalendarDays, ChevronRight, ArrowLeft, ArrowRight, Check, Clock, Headphones, Trash2, Megaphone, Rocket, Mic2, Users } from "lucide-react";
 import { GreenRoomButton } from "@/components/GreenRoomButton";
 import { CohostSlots } from "@/components/CohostSlots";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
-import { StudioIcon } from "@/components/GreenRoomButton";
+import { IconTile } from "@/components/ui/icon-tile";
 
 // Choose an event, then set up the show you're bringing to it. Everything
 // about one event lives behind its own card, so a podcaster in two events
@@ -407,7 +407,7 @@ export function EventSettings({
               <Door
                 off={shutOut}
                 onClick={shutOut ? undefined : () => document.getElementById("event-show-form")?.scrollIntoView({ behavior: "smooth", block: "start" })}
-                icon={<span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#053877]/10 text-[#053877] dark:text-[#8ab4f8]"><Mic2 className="h-5 w-5" /></span>}
+                icon={<IconTile icon={Mic2} />}
                 title="Your show"
                 line={showReady ? "Name, artwork, format and guests" : "Set it up to take a time"}
                 stat={shutOut ? "Lineup full" : showReady ? "Ready" : "To do"}
@@ -417,7 +417,7 @@ export function EventSettings({
               <Door
                 off={noTime}
                 onClick={noTime ? undefined : onOpenPromotion}
-                icon={<span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#F0A71F]/15 text-[#b77a00]"><Megaphone className="h-5 w-5" /></span>}
+                icon={<IconTile icon={Megaphone} />}
                 title="Promotion"
                 line="Share card, posting plan and clips"
                 stat={shutOut ? "Lineup full" : planned.length ? `${postedCount}/${planned.length} posts out` : air ? "Plan your posts" : "After you take a time"}
@@ -428,7 +428,7 @@ export function EventSettings({
                 off={noTime}
                 onClick={noTime ? undefined : onOpenGreenRoom}
                 href={noTime || onOpenGreenRoom ? undefined : greenRoomHref}
-                icon={<StudioIcon className="h-10 w-10 rounded-xl" tone="green" />}
+                icon={<IconTile icon={Headphones} />}
                 title="Green room"
                 line="Check your camera and mic, then go live"
                 stat={shutOut ? "Lineup full" : noTime ? "After you take a time" : live ? "Go in now" : "Open any time"}
@@ -438,7 +438,7 @@ export function EventSettings({
               <Door
                 off={noTime || !(air && showReady)}
                 onClick={air && showReady ? () => setCohostOpen(true) : undefined}
-                icon={<span className="flex h-10 w-10 items-center justify-center rounded-xl bg-emerald-600/10 text-emerald-700"><Users className="h-5 w-5" /></span>}
+                icon={<IconTile icon={Users} />}
                 title="Co-host"
                 line="Sit in at the desk with Alex or Riccoh"
                 stat={shutOut ? "Lineup full" : cohostMine > 0 ? `${cohostMine} hour${cohostMine === 1 ? "" : "s"} yours` : cohostBoard ? `${cohostOpenCount} open` : air && showReady ? "Take an hour" : "After your show's set"}
@@ -568,9 +568,7 @@ export function EventSettings({
           data-testid="link-to-promotion"
         >
           <div className="flex min-w-0 items-start gap-3">
-            <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <Check className="h-4.5 w-4.5" />
-            </span>
+            <IconTile icon={Check} />
             <div className="min-w-0">
               <p className="font-semibold text-foreground">That's your show set up — it saves as you go.</p>
               <p className="mt-0.5 text-sm text-muted-foreground">

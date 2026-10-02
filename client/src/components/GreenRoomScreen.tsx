@@ -1,9 +1,10 @@
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { GreenRoomButton, StudioIcon } from "@/components/GreenRoomButton";
+import { GreenRoomButton } from "@/components/GreenRoomButton";
 import { formatDateInZone, formatTimeInZone, zoneLabel, detectLocalTimeZone, slotStart, onAirWindow } from "@/lib/schedule";
 import type { PublicEvent } from "@shared/schema";
 import { Camera, Clock, Headphones, Mic, Wifi } from "lucide-react";
+import { IconTile } from "@/components/ui/icon-tile";
 
 interface EventEntry { event: PublicEvent; slotIndex: number | null }
 
@@ -31,7 +32,7 @@ export function GreenRoomScreen() {
   return (
     <section className="mt-6" data-testid="green-room-screen">
       <div className="flex items-start gap-3">
-        <StudioIcon className="h-11 w-11" tone="green" />
+        <IconTile icon={Headphones} />
         <div>
           <h2 className="text-xl font-bold tracking-tight text-foreground">Green room</h2>
           <p className="text-sm text-muted-foreground">Check your camera and mic any time. On the day, come in early and the producer brings you on stage.</p>
@@ -71,10 +72,10 @@ export function GreenRoomScreen() {
 
       <div className="mt-6 rounded-2xl border border-border bg-card p-5">
         <p className="text-sm font-semibold text-foreground">Before you go on</p>
-        <ul className="mt-3 space-y-2.5">
+        <ul className="mt-3 space-y-3">
           {CHECKS.map(({ icon: Icon, text }) => (
-            <li key={text} className="flex items-start gap-3 text-sm text-foreground/85">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-lg bg-emerald-600/10 text-emerald-700 dark:text-emerald-400"><Icon className="h-4 w-4" /></span>
+            <li key={text} className="flex items-center gap-3 text-sm text-foreground/85">
+              <IconTile icon={Icon} />
               {text}
             </li>
           ))}

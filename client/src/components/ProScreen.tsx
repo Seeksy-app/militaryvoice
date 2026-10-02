@@ -5,6 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { ProCrmDemo } from "@/components/ProCrmDemo";
 import { StudioConsoleMock } from "@/components/platform/StudioConsoleMock";
+import { IconTile } from "@/components/ui/icon-tile";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
@@ -75,7 +76,7 @@ export function ProScreen({ feature }: { feature?: string }) {
       <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
         <div>
           <h2 className="flex items-center gap-3 text-2xl font-bold tracking-tight text-foreground sm:text-3xl" style={HEADLINE_FONT}>
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#053877]/10 text-[#053877]"><Icon className="h-5 w-5" /></span>
+            <IconTile icon={Icon} />
             {f.title}
           </h2>
           <p className="mt-2 max-w-2xl text-lg text-foreground/90">{f.lead}</p>

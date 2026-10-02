@@ -9,6 +9,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useToast } from "@/hooks/use-toast";
 import { adminGet, adminSend } from "@/lib/adminApi";
 import { CampaignBuilder, type StepDraft } from "@/components/CampaignBuilder";
+import { IconTile } from "@/components/ui/icon-tile";
 
 /**
  * Automations: an email series each person gets on their own clock, like a
@@ -82,7 +83,7 @@ export function AutomationsPanel({ eventId, teamMembers, segmentOptions, childre
           <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
         ) : !list.data?.length ? (
           <button type="button" onClick={() => void create("welcome")} disabled={busy} className="flex items-center gap-4 rounded-2xl border border-dashed border-border p-5 text-left hover:border-[#053877] hover:bg-accent" data-testid="automation-first">
-            <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#053877]/10 text-[#053877] dark:text-white"><Sparkles className="h-5 w-5" /></span>
+            <IconTile icon={Sparkles} />
             <span><span className="block font-semibold">Start with a welcome series</span><span className="block text-sm text-muted-foreground">Four emails, already written, for everyone who makes an account. Edit them, then switch it on.</span></span>
           </button>
         ) : (
@@ -90,7 +91,7 @@ export function AutomationsPanel({ eventId, teamMembers, segmentOptions, childre
             {list.data.map((a) => (
               <li key={a.id} className="border-b border-border last:border-0">
                 <button type="button" onClick={() => setOpen(a.id)} className="flex w-full items-center gap-4 px-4 py-3 text-left hover:bg-accent" data-testid={`automation-${a.id}`}>
-                  <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${a.status === "on" ? "bg-emerald-500/15 text-emerald-600" : "bg-muted text-muted-foreground"}`}><Workflow className="h-4 w-4" /></span>
+                  <IconTile icon={Workflow} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate font-semibold">{a.name}</span>
                     <span className="block truncate text-sm text-muted-foreground">{triggerLabel(a.trigger)} · {a.steps} email{a.steps === 1 ? "" : "s"}</span>

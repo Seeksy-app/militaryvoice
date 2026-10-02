@@ -3,6 +3,7 @@ import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle, SheetTr
 import { PlatformIcon } from "@/components/SocialIcons";
 import type { SocialPlatform } from "@shared/schema";
 import { HelpCircle, Radio, AlertTriangle } from "lucide-react";
+import { IconTile } from "@/components/ui/icon-tile";
 
 // "Add destination" assumes you already know what an RTMP server URL is and
 // where your stream key lives. Almost nobody does, and every platform hides it
@@ -108,10 +109,10 @@ export function StreamKeyHelp() {
         <div className="mt-6 flex flex-col gap-5">
           {GUIDES.map((g) => (
             <div key={g.key} className="rounded-xl border border-border bg-card p-4">
-              <div className="flex items-center gap-2.5">
-                <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[#053877] text-white">
-                  {g.platform ? <PlatformIcon platform={g.platform} className="h-4 w-4" /> : <Radio className="h-4 w-4" />}
-                </div>
+              <div className="flex items-center gap-3">
+                <IconTile icon={Radio}>
+                  {g.platform ? <PlatformIcon platform={g.platform} className="h-6 w-6" /> : undefined}
+                </IconTile>
                 <h3 className="text-sm font-semibold">{g.name}</h3>
               </div>
 
