@@ -199,7 +199,9 @@ const DEFS: Def[] = [
       const id = env("ZOOM_CLIENT_ID");
       if (!id) return { state: "off", detail: "Not set up (ZOOM_CLIENT_ID)" };
       if (!env("ZOOM_CLIENT_SECRET") || !env("ZOOM_WEBHOOK_SECRET")) return { state: "down", detail: "The client secret or the webhook secret token is missing" };
-      if (id === "_TSk8NSeTVi0F49DvYLN8g") return { state: "ok", detail: "Production app (approved by Zoom), secret and webhook token set" };
+      // The secret's last five characters only (the masked-key pattern), to match against Zoom's app page.
+      const tail = env("ZOOM_CLIENT_SECRET").slice(-5);
+      if (id === "_TSk8NSeTVi0F49DvYLN8g") return { state: "ok", detail: `Production app (approved by Zoom) · secret ends …${tail} · webhook token set` };
       if (id === "cexDlz0aTiS2L9byinKIsQ") return { state: "down", detail: "The development app's keys are live: only Andrew's own Zoom can connect. Switch Vercel to the production Client ID and secret" };
       return { state: "ok", detail: "Key set (an app we don't recognise)" };
     },
