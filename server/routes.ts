@@ -10430,7 +10430,8 @@ The ${eventName} team`;
     const latest = req.body?.standalone ? undefined : (await storage.listInboundByEmail(to))[0];
     const headers: Record<string, string> = {};
     if (latest?.messageId) { headers["In-Reply-To"] = latest.messageId; headers["References"] = latest.messageId; }
-    const id = await sendOneOffEmail({ kind: "chat-send", to, subject, html, text, headers, ...named, bcc: bccFor(from, to) });
+    // A group send (copy: false) doesn't copy the sender on every one: they're usually on the list themselves.
+    const id = await sendOneOffEmail({ kind: "chat-send", to, subject, html, text, headers, ...named, bcc: req.body?.copy === false ? undefined : bccFor(from, to) });
     if (!id) return res.status(502).json({ message: "The mail provider didn't accept it." });
     const featured = await storage.getFeaturedEvent();
     const team = await storage.listEventTeam(featured.id);
