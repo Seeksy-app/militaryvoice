@@ -12,9 +12,9 @@
 // anyone) and again when it's back.
 import type { Express, RequestHandler } from "express";
 import { eq, sql } from "drizzle-orm";
-import { db } from "./storage.js";
+import { db, storage } from "./storage.js";
 import { discoveryCache } from "../shared/schema.js";
-import { isLiveKitConfigured, rooms } from "./livekit.js";
+import { egress, isLiveKitConfigured, rooms } from "./livekit.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
 
 export type HealthState = "ok" | "down" | "off";
@@ -69,6 +69,24 @@ const DEFS: Def[] = [
       if (!isLiveKitConfigured()) return { state: "off", detail: "Not set up (LIVEKIT_URL)" };
       const list = await rooms().listRooms();
       return { state: "ok", detail: `${list.length} room${list.length === 1 ? "" : "s"} open` };
+    },
+  },
+  {
+    key: "egress", name: "LiveKit egress (broadcast and recording)", group: "The platform", powers: "Going live to YouTube and the destinations, recording the show",
+    // LiveKit's own list of what's running, checked against what the studio believes is running.
+    run: async () => {
+      if (!isLiveKitConfigured()) return { state: "off", detail: "Not set up (LIVEKIT_URL)" };
+      const all = await egress().listEgress({ active: true });
+      const running = new Set(all.filter((e) => /^(0|1)$|STARTING|ACTIVE/i.test(String(e.status))).map((e) => e.egressId));
+      const ev = await storage.getFeaturedEvent();
+      const lost: string[] = [];
+      let live = 0, recording = 0;
+      for (const st of await storage.listStudios(ev.id)) {
+        if (st.broadcastEgressId) { if (running.has(st.broadcastEgressId)) live++; else lost.push(`${st.name || "Studio"}'s broadcast`); }
+        if (st.recordingEgressId) { if (running.has(st.recordingEgressId)) recording++; else lost.push(`${st.name || "Studio"}'s recording`); }
+      }
+      if (lost.length) return { state: "down", detail: `The studio thinks it's running but LiveKit has stopped: ${lost.join(", ")}` };
+      return { state: "ok", detail: live || recording ? `${live ? "Broadcasting" : ""}${live && recording ? " and " : ""}${recording ? "recording" : ""} now · ${running.size} running` : running.size ? `${running.size} running` : "Ready (nothing on air)" };
     },
   },
   {
@@ -169,8 +187,15 @@ const DEFS: Def[] = [
   { key: "turnstile", name: "Cloudflare Turnstile", group: "Payments and safety", powers: "The \"are you human\" check on public forms", run: keyOnly(["TURNSTILE_SECRET_KEY"], "site key pair") },
 ];
 
+/** Checks that need the main routes' helpers (e.g. a channel's YouTube sign-in) are added from there. */
+const EXTRA: Def[] = [];
+export function addHealthCheck(d: Def): void {
+  if (!EXTRA.some((x) => x.key === d.key)) EXTRA.push(d);
+}
+
 export async function runHealth(): Promise<{ checkedAt: string; checks: HealthCheck[]; ok: number; down: number; off: number }> {
-  const checks = await Promise.all(DEFS.map(async (d): Promise<HealthCheck> => {
+  const all = [...DEFS.slice(0, DEFS.findIndex((d) => d.key === "uploadpost")), ...EXTRA, ...DEFS.slice(DEFS.findIndex((d) => d.key === "uploadpost"))];
+  const checks = await Promise.all(all.map(async (d): Promise<HealthCheck> => {
     const t = Date.now();
     try {
       const r = await Promise.race([d.run(), new Promise<{ state: HealthState; detail: string }>((resolve) => setTimeout(() => resolve({ state: "down", detail: "No answer in 10 seconds" }), 10_000))]);

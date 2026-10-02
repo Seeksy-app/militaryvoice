@@ -119,7 +119,7 @@ import { alexAnswer, type AlexTurn } from "./alex.js";
 import { emailShell, EMAIL_BANNERS } from "./email.js";
 import { slackInbound } from "./slack.js";
 import { registerMagazine, planSegments, claimSegmentCut } from "./magazine.js";
-import { registerHealth, beat } from "./health.js";
+import { registerHealth, beat, addHealthCheck } from "./health.js";
 import { draftReply, matchBroadcast, isKnownSender, looksAutomatic, composeAck, firstNameFor, stripQuoted, alexSignatureHtml, threadKey } from "./inbox.js";
 import { adminChat, type ChatTurn } from "./adminChat.js";
 import { waitUntil } from "@vercel/functions";
@@ -2744,6 +2744,30 @@ export function registerRoutes(app: Express): void {
     const admins = new Set((await storage.listAdmins()).map((a) => a.email.trim().toLowerCase()));
     return (await storage.listYoutubeAccounts()).filter((a) => a.channelId && admins.has(a.email.trim().toLowerCase()));
   };
+  // System health: the studio's YouTube channels still sign in, and whether each is live right now.
+  addHealthCheck({
+    key: "youtube-live", name: "YouTube live (studio channels)", group: "Social and podcasts", powers: "The Marathon going out on YouTube",
+    run: async () => {
+      if (!isYoutubeConfigured()) return { state: "off", detail: "Not set up (GOOGLE_CLIENT_ID)" };
+      const chans = await adminChannels();
+      if (!chans.length) return { state: "off", detail: "No studio channel connected" };
+      const parts: string[] = [];
+      const broken: string[] = [];
+      for (const a of chans) {
+        const name = a.channelTitle || a.email;
+        const token = await youtubeToken(a.email.trim().toLowerCase());
+        if (!token) { broken.push(name); continue; }
+        // Their live broadcasts that are on air now (one unit of quota).
+        const r = await fetch("https://www.googleapis.com/youtube/v3/liveBroadcasts?part=status,snippet&broadcastStatus=active&broadcastType=all&maxResults=5", { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8_000) });
+        if (!r.ok) { broken.push(`${name} (${r.status})`); continue; }
+        const j = (await r.json()) as { items?: { snippet?: { title?: string }; status?: { lifeCycleStatus?: string } }[] };
+        const on = (j.items ?? []).filter((b) => /live|testing/i.test(b.status?.lifeCycleStatus ?? ""));
+        parts.push(on.length ? `${name}: LIVE${on[0].snippet?.title ? ` ("${on[0].snippet.title.slice(0, 40)}")` : ""}` : `${name}: connected, not live`);
+      }
+      if (broken.length) return { state: "down", detail: `Sign-in failed, connect again: ${broken.join(", ")}${parts.length ? ` · ${parts.join(" · ")}` : ""}` };
+      return { state: "ok", detail: parts.join(" · ") };
+    },
+  });
   app.get("/api/admin/studio/youtube-channels", requireAdmin, async (_req, res) => {
     noStore(res);
     res.json({ configured: isYoutubeConfigured(), channels: (await adminChannels()).map((a) => ({ id: a.id, title: a.channelTitle || a.email, email: a.email })) });
