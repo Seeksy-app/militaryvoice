@@ -134,16 +134,21 @@ const DEFS: Def[] = [
           count(*) filter (where edit_suggest like '%"status":"queued"%' or edit_suggest like '%"status":"running"%')::int as suggest,
           (select count(*) from segment_cuts where status in ('queued', 'claimed'))::int as cuts,
           (select count(*) from hosted_episodes where audio_job in ('queued', 'copy', 'running', 'copying'))::int as audio,
-          (select count(*) from show_transcripts where status in ('queued', 'running'))::int as transcripts
+          (select count(*) from show_transcripts where status in ('queued', 'running'))::int as transcripts,
+          (select count(*) from show_transcripts where status = 'queued' and created_at < ${new Date(Date.now() - 3 * 3600_000).toISOString()})::int as transcripts_old
         from recordings`)) as unknown as Record<string, number>[];
       const v = (k: string) => Number(row?.[k] ?? 0);
       const [clipsWait, clipsRun, clipsStuck, imports, edits, music, suggest, cuts, audio, transcripts] = ["clips_wait", "clips_run", "clips_stuck", "imports", "edits", "music", "suggest", "cuts", "audio", "transcripts"].map(v);
       const parts = ([[clipsWait, "clips waiting"], [clipsRun, "clips running"], [imports, "imports"], [edits, "episode edits"], [music, "music mixes"], [suggest, "edit suggestions"], [cuts, "magazine segments"], [audio, "episode MP3s"], [transcripts, "transcripts for Ask my show"]] as const)
         .filter(([c]) => c > 0).map(([c, label]) => `${c} ${label}`);
-      const total = clipsWait + clipsRun + imports + edits + music + suggest + cuts + audio + transcripts;
+      // Transcripts come in batches (a whole back catalogue when Ask my show is switched on), so they
+      // count against "backing up" only when one has waited over three hours.
+      const transcriptsOld = v("transcripts_old");
+      const total = clipsWait + clipsRun + imports + edits + music + suggest + cuts + audio;
+      if (transcriptsOld) return { state: "down", detail: `${transcriptsOld} transcript${transcriptsOld === 1 ? " has" : "s have"} waited over 3 hours · ${parts.join(", ")}` };
       if (clipsStuck) return { state: "down", detail: `${clipsStuck} clip job${clipsStuck === 1 ? "" : "s"} stuck over 30 min${parts.length ? ` · ${parts.join(", ")}` : ""}` };
       if (total >= 15) return { state: "down", detail: `Backing up: ${parts.join(", ")}` };
-      return { state: "ok", detail: total ? parts.join(", ") : "Empty, nothing waiting" };
+      return { state: "ok", detail: total + transcripts ? parts.join(", ") : "Empty, nothing waiting" };
     },
   },
   {
