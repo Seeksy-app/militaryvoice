@@ -1499,25 +1499,30 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                   {/* Four doors that are about the account, not any one
                       event: on their own row under the accounts card, which keeps
                       the card to the accounts alone (Andrew, 30 Sep). */}
-                  <div className="mt-5 grid grid-cols-2 gap-2 sm:grid-cols-5" data-testid="general-doors">
+                  <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5" data-testid="general-doors">
                     {/* + Create first, as on YouTube: the three things a
                         podcaster starts from here. The green room is Go
                         live, and still on the event card below. */}
                     <CreateMenu goTo={goTo}>
-                        <button type="button" className="flex items-center gap-2.5 rounded-xl border border-[#053877] bg-[#053877] px-3.5 py-2.5 text-left text-sm font-semibold text-white transition-colors hover:bg-[#0a4a99] dark:border-[#8ab4f8]/40 dark:bg-[#0a4a99]" data-testid="door-create">
-                          <Plus className="h-4 w-4 shrink-0" /> <span className="truncate">Create</span>
+                        <button type="button" className="flex items-center gap-3 rounded-2xl border-2 border-[#053877] bg-card p-3 text-left transition-colors hover:bg-[#053877]/[0.04] dark:border-[#8ab4f8]/60" data-testid="door-create">
+                          <IconTile icon={Plus} />
+                          <span className="min-w-0"><span className="block truncate text-sm font-semibold text-foreground">Create</span><span className="hidden truncate text-xs text-muted-foreground sm:block">Post, clip or episode</span></span>
                         </button>
                     </CreateMenu>
                     {[
                       // Short names on a phone, where the long ones were cut ("Your anal…").
-                      { key: "analytics", label: "Your analytics", short: "Analytics", icon: BarChart3, go: () => goTo("analytics") },
-                      { key: "discovery", label: "Discovery", short: "Discovery", icon: Compass, go: () => goTo("discovery") },
+                      { key: "analytics", label: "Your analytics", short: "Analytics", hint: "Reach and listens", icon: BarChart3, go: () => goTo("analytics") },
+                      { key: "discovery", label: "Discovery", short: "Discovery", hint: "Guests and sponsors", icon: Compass, go: () => goTo("discovery") },
                       // On a phone Library is a tab at the bottom already.
-                      { key: "recordings", label: "Library", short: "Library", icon: Film, go: () => goTo("recordings"), desktopOnly: true },
-                      { key: "promotion", label: "Promote your show", short: "Promote", icon: Megaphone, go: () => goTo("promotion") },
+                      { key: "recordings", label: "Library", short: "Library", hint: "Recordings and clips", icon: Film, go: () => goTo("recordings"), desktopOnly: true },
+                      { key: "promotion", label: "Promote your show", short: "Promote", hint: "Share cards and posts", icon: Megaphone, go: () => goTo("promotion") },
                     ].map((d) => (
-                      <button key={d.key} type="button" onClick={d.go} className={`${d.desktopOnly ? "hidden lg:flex" : "flex"} items-center gap-2.5 rounded-xl border border-border bg-card px-3.5 py-2.5 text-left text-sm font-medium text-foreground transition-colors hover:border-[#053877]/40 hover:bg-[#053877]/[0.04]`} data-testid={`door-${d.key}`}>
-                        <d.icon className="h-4 w-4 shrink-0 text-[#053877] dark:text-[#8ab4f8]" /> <span className="truncate sm:hidden">{d.short}</span><span className="hidden truncate sm:inline">{d.label}</span>
+                      <button key={d.key} type="button" onClick={d.go} className={`${d.desktopOnly ? "hidden lg:flex" : "flex"} items-center gap-3 rounded-2xl border border-border bg-card p-3 text-left transition-colors hover:border-[#053877]/40 hover:bg-[#053877]/[0.04]`} data-testid={`door-${d.key}`}>
+                        <IconTile icon={d.icon} />
+                        <span className="min-w-0">
+                          <span className="block truncate text-sm font-semibold text-foreground"><span className="sm:hidden">{d.short}</span><span className="hidden sm:inline">{d.label}</span></span>
+                          <span className="hidden truncate text-xs text-muted-foreground sm:block">{d.hint}</span>
+                        </span>
                       </button>
                     ))}
                   </div>
