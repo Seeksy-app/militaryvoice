@@ -48,7 +48,7 @@ const ago = (ms: number) => {
 // ---------------------------------------------------------------------------
 // The checks
 // ---------------------------------------------------------------------------
-type Def = { key: string; name: string; group: string; powers: string; run: () => Promise<{ state: HealthState; detail: string }> };
+type Def = { key: string; name: string; group: string; powers: string; run: () => Promise<{ state: HealthState; detail: string }>; /** Uses our database: run one at a time (the pool is four connections). */ db?: boolean };
 
 /** A GET that has to answer 2xx (or a status you name) within eight seconds. */
 async function ping(url: string, init: RequestInit = {}, okStatus: (s: number) => boolean = (s) => s >= 200 && s < 300): Promise<{ state: HealthState; detail: string }> {
@@ -62,7 +62,7 @@ const keyOnly = (names: string[], what: string) => async () =>
 
 const DEFS: Def[] = [
   // The platform
-  { key: "db", name: "Database", group: "The platform", powers: "Everything: accounts, shows, the lineup", run: async () => { await db.execute(sql`select 1`); return { state: "ok", detail: "Answering" }; } },
+  { key: "db", db: true, name: "Database", group: "The platform", powers: "Everything: accounts, shows, the lineup", run: async () => { await db.execute(sql`select 1`); return { state: "ok", detail: "Answering" }; } },
   {
     key: "livekit", name: "LiveKit", group: "The platform", powers: "Studio, green room, Rooms, going live",
     run: async () => {
@@ -72,7 +72,7 @@ const DEFS: Def[] = [
     },
   },
   {
-    key: "egress", name: "LiveKit egress (broadcast and recording)", group: "The platform", powers: "Going live to YouTube and the destinations, recording the show",
+    key: "egress", db: true, name: "LiveKit egress (broadcast and recording)", group: "The platform", powers: "Going live to YouTube and the destinations, recording the show",
     // LiveKit's own list of what's running, checked against what the studio believes is running.
     run: async () => {
       if (!isLiveKitConfigured()) return { state: "off", detail: "Not set up (LIVEKIT_URL)" };
@@ -108,7 +108,7 @@ const DEFS: Def[] = [
     },
   },
   {
-    key: "worker", name: "Clip worker (Render)", group: "The platform", powers: "Clips, MP3s, imports, transcripts, magazine segments",
+    key: "worker", db: true, name: "Clip worker (Render)", group: "The platform", powers: "Clips, MP3s, imports, transcripts, magazine segments",
     run: async () => {
       const t = await lastBeat("worker");
       if (!t) return { state: "down", detail: "Hasn't checked in yet" };
@@ -117,7 +117,7 @@ const DEFS: Def[] = [
     },
   },
   {
-    key: "queue", name: "Worker queue (Render)", group: "The platform", powers: "How much work is waiting for the clip worker, and whether any of it is stuck",
+    key: "queue", db: true, name: "Worker queue (Render)", group: "The platform", powers: "How much work is waiting for the clip worker, and whether any of it is stuck",
     // Every queue the worker takes from, counted where it lives. Red when work piles up or a job
     // has been "running" for over half an hour (the worker died holding it and hasn't handed it on).
     run: async () => {
@@ -147,7 +147,7 @@ const DEFS: Def[] = [
     },
   },
   {
-    key: "cron", name: "Scheduled jobs (Vercel cron)", group: "The platform", powers: "Reminders, nudges, channel go-live, Listen Notes, reach",
+    key: "cron", db: true, name: "Scheduled jobs (Vercel cron)", group: "The platform", powers: "Reminders, nudges, channel go-live, Listen Notes, reach",
     run: async () => {
       const t = await lastBeat("cron");
       if (!t) return { state: "down", detail: "No run seen yet" };
@@ -219,13 +219,25 @@ const DEFS: Def[] = [
 
 /** Checks that need the main routes' helpers (e.g. a channel's YouTube sign-in) are added from there. */
 const EXTRA: Def[] = [];
-export function addHealthCheck(d: Def): void {
+export function addHealthCheck(d: Omit<Def, "db"> & { db?: boolean }): void {
   if (!EXTRA.some((x) => x.key === d.key)) EXTRA.push(d);
 }
 
-export async function runHealth(): Promise<{ checkedAt: string; checks: HealthCheck[]; ok: number; down: number; off: number }> {
+type HealthResult = { checkedAt: string; checks: HealthCheck[]; ok: number; down: number; off: number };
+let inflight: Promise<HealthResult> | null = null;
+let last: { at: number; r: HealthResult } | null = null;
+
+/** The checks, run once at a time: callers within fifteen seconds share a run (the page and the top-bar light ask together). */
+export async function runHealth(fresh = false): Promise<HealthResult> {
+  if (!fresh && last && Date.now() - last.at < 15_000) return last.r;
+  if (inflight) return inflight;
+  inflight = runAll().then((r) => { last = { at: Date.now(), r }; return r; }).finally(() => { inflight = null; });
+  return inflight;
+}
+
+async function runAll(): Promise<HealthResult> {
   const all = [...DEFS.slice(0, DEFS.findIndex((d) => d.key === "uploadpost")), ...EXTRA, ...DEFS.slice(DEFS.findIndex((d) => d.key === "uploadpost"))];
-  const checks = await Promise.all(all.map(async (d): Promise<HealthCheck> => {
+  const one = async (d: Def): Promise<HealthCheck> => {
     const t = Date.now();
     try {
       const r = await Promise.race([d.run(), new Promise<{ state: HealthState; detail: string }>((resolve) => setTimeout(() => resolve({ state: "down", detail: "No answer in 10 seconds" }), 10_000))]);
@@ -233,7 +245,14 @@ export async function runHealth(): Promise<{ checkedAt: string; checks: HealthCh
     } catch (err) {
       return { key: d.key, name: d.name, group: d.group, powers: d.powers, state: "down", detail: ((err as Error).message || "Error").slice(0, 160), ms: Date.now() - t };
     }
-  }));
+  };
+  // Outside services all at once; our database ones in turn, alongside them.
+  const byKey = new Map<string, HealthCheck>();
+  await Promise.all([
+    Promise.all(all.filter((d) => !d.db).map(async (d) => byKey.set(d.key, await one(d)))),
+    (async () => { for (const d of all.filter((x) => x.db)) byKey.set(d.key, await one(d)); })(),
+  ]);
+  const checks = all.map((d) => byKey.get(d.key)!);
   return { checkedAt: now(), checks, ok: checks.filter((c) => c.state === "ok").length, down: checks.filter((c) => c.state === "down").length, off: checks.filter((c) => c.state === "off").length };
 }
 
@@ -250,7 +269,7 @@ async function slack(text: string): Promise<void> {
 
 /** Run the checks, remember them, and tell Slack what changed. */
 export async function healthAlerts(): Promise<{ down: string[]; alerted: string[]; recovered: string[] }> {
-  const r = await runHealth();
+  const r = await runHealth(true);
   const [row] = await db.select().from(discoveryCache).where(eq(discoveryCache.key, "health:memory"));
   const mem: Memory = (() => { try { return row ? JSON.parse(row.payload) : {}; } catch { return {}; } })();
   const alerted: string[] = [];
@@ -273,9 +292,9 @@ export async function healthAlerts(): Promise<{ down: string[]; alerted: string[
 }
 
 export function registerHealth(app: Express, requireAdmin: RequestHandler): void {
-  app.get("/api/admin/health", requireAdmin, async (_req, res) => {
+  app.get("/api/admin/health", requireAdmin, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
-    res.json(await runHealth());
+    res.json(await runHealth(req.query.fresh === "1"));
   });
   app.get("/api/cron/health", async (req, res) => {
     const secret = process.env.CRON_SECRET;

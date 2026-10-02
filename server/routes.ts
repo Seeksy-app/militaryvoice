@@ -2747,7 +2747,7 @@ export function registerRoutes(app: Express): void {
   // System health: the studio's YouTube channels still sign in and whether each is live right now;
   // and every podcaster's connected channel still signs in (their slot goes out on it).
   addHealthCheck({
-    key: "youtube-live", name: "YouTube live (studio channels)", group: "Social and podcasts", powers: "The Marathon going out on YouTube",
+    key: "youtube-live", db: true, name: "YouTube live (studio channels)", group: "Social and podcasts", powers: "The Marathon going out on YouTube",
     run: async () => {
       if (!isYoutubeConfigured()) return { state: "off", detail: "Not set up (GOOGLE_CLIENT_ID)" };
       const ev = await storage.getFeaturedEvent();
@@ -2759,7 +2759,7 @@ export function registerRoutes(app: Express): void {
       const broken: string[] = [];
       for (const a of chans) {
         const name = a.channelTitle || a.email;
-        const token = await youtubeToken(a.email.trim().toLowerCase());
+        const token = await Promise.race([youtubeToken(a.email.trim().toLowerCase()).catch(() => null), new Promise<null>((r) => setTimeout(() => r(null), 5_000))]);
         if (!token) { broken.push(name); continue; }
         // Their broadcasts on air now (one unit of quota).
         const r = await fetch("https://www.googleapis.com/youtube/v3/liveBroadcasts?part=status,snippet&broadcastStatus=active&broadcastType=all&maxResults=5", { headers: { Authorization: `Bearer ${token}` }, signal: AbortSignal.timeout(8_000) });
@@ -2773,7 +2773,7 @@ export function registerRoutes(app: Express): void {
     },
   });
   addHealthCheck({
-    key: "youtube-podcasters", name: "YouTube (podcasters' channels)", group: "Social and podcasts", powers: "Each show also going out on its own channel in its slot",
+    key: "youtube-podcasters", db: true, name: "YouTube (podcasters' channels)", group: "Social and podcasts", powers: "Each show also going out on its own channel in its slot",
     // A sign-in refresh only: no YouTube quota spent.
     run: async () => {
       if (!isYoutubeConfigured()) return { state: "off", detail: "Not set up (GOOGLE_CLIENT_ID)" };

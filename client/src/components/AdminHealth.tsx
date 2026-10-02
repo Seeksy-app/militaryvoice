@@ -40,7 +40,7 @@ export function AdminHealth() {
           </p>
           <p className="mt-1 text-xs text-muted-foreground">Checked every five minutes around the clock. If anything goes down, Slack hears within ten minutes, and again when it's back.</p>
         </div>
-        <Button variant="outline" className="gap-1.5 rounded-full" disabled={q.isFetching} onClick={() => void q.refetch()} data-testid="health-recheck">
+        <Button variant="outline" className="gap-1.5 rounded-full" disabled={q.isFetching} onClick={() => void fetch("/api/admin/health?fresh=1", { credentials: "include" }).then(() => q.refetch())} data-testid="health-recheck">
           {q.isFetching ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />} Check now
         </Button>
       </section>
