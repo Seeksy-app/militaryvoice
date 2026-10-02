@@ -5,13 +5,15 @@
 // Bonus credits are the first use: Admin gives someone credits, the ledger
 // gets the row, and they find out the moment they're next in.
 import type { Express, RequestHandler } from "express";
-import { eq } from "drizzle-orm";
+import { desc, eq, like } from "drizzle-orm";
 import { db, storage } from "./storage.js";
-import { discoveryCache } from "../shared/schema.js";
+import { discoveryCache, postifyTokens } from "../shared/schema.js";
 import { getAdminEmail } from "./session.js";
 
 export type Notice = { kind: "bonus"; title: string; body: string; credits?: number; at: string };
 const key = (email: string) => `notice:${email.trim().toLowerCase()}`;
+/** When they last saw a pop-up, so admin can tell "seen" from "waiting". */
+const seenKey = (email: string) => `notice-seen:${email.trim().toLowerCase()}`;
 
 export async function setNotice(email: string, n: Notice): Promise<void> {
   const payload = JSON.stringify(n);
@@ -42,6 +44,27 @@ export function registerNotices(app: Express, requireAdmin: RequestHandler, requ
     res.json({ ok: true, balance: await storage.tokenBalance(email) });
   });
 
+  /**
+   * Every bonus given, newest first per person, with whether its pop-up is still waiting or was
+   * seen (and when). From the ledger, so bonuses given before this was built show too.
+   */
+  app.get("/api/admin/postify/bonuses", requireAdmin, async (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const rows = await db.select().from(postifyTokens).where(like(postifyTokens.reason, "Bonus credits%")).orderBy(desc(postifyTokens.createdAt));
+    const keys = await db.select().from(discoveryCache).where(like(discoveryCache.key, "notice%"));
+    const waiting = new Map(keys.filter((k) => k.key.startsWith("notice:")).map((k) => [k.key.slice(7), k.createdAt]));
+    const seen = new Map(keys.filter((k) => k.key.startsWith("notice-seen:")).map((k) => [k.key.slice(12), k.createdAt]));
+    const out: Record<string, { credits: number; total: number; at: string; popup: "waiting" | "seen" | "none"; seenAt: string }> = {};
+    for (const r of rows) {
+      const e = r.email.trim().toLowerCase();
+      if (out[e]) { out[e].total += r.delta; continue; }
+      const w = waiting.get(e);
+      const s = seen.get(e) ?? "";
+      out[e] = { credits: r.delta, total: r.delta, at: r.createdAt, popup: w ? "waiting" : s ? "seen" : "none", seenAt: s };
+    }
+    res.json(out);
+  });
+
   /** The podcaster's waiting celebration, if there is one. */
   app.get("/api/host/notice", requireHostSession, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
@@ -56,6 +79,9 @@ export function registerNotices(app: Express, requireAdmin: RequestHandler, requ
   app.post("/api/host/notice/seen", requireHostSession, async (req, res) => {
     const email = String((req as unknown as { hostEmail?: string }).hostEmail ?? "").trim().toLowerCase();
     await db.delete(discoveryCache).where(eq(discoveryCache.key, key(email)));
+    const at = new Date().toISOString();
+    await db.insert(discoveryCache).values({ key: seenKey(email), payload: JSON.stringify({ at }), createdAt: at })
+      .onConflictDoUpdate({ target: discoveryCache.key, set: { payload: JSON.stringify({ at }), createdAt: at } });
     res.json({ ok: true });
   });
 }
