@@ -69,6 +69,13 @@ async function pageFor(email: string): Promise<BioPageRow> {
   return again;
 }
 
+/** Their SmartLink, when they have one that's live; empty otherwise. For the on-air QR code. */
+export async function publishedBioUrl(email: string): Promise<string> {
+  await schemaIsReady();
+  const [row] = await db.select({ handle: bioPages.handle, published: bioPages.published }).from(bioPages).where(eq(bioPages.email, email.trim().toLowerCase())).limit(1);
+  return row?.published && row.handle ? `${ORIGIN}/${row.handle}` : "";
+}
+
 // The feed for a show that isn't hosted here: read at most every 30 minutes per server.
 const feedCache = new Map<string, { at: number; data: BioPublic["podcast"] }>();
 

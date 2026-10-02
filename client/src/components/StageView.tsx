@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from "react";
+import QRCode from "qrcode";
+import type { StageThanks } from "@shared/stageMeta";
 import {
   Room,
   RoomEvent,
@@ -57,6 +59,8 @@ export interface RoomMeta {
   stageCardPhoto?: string;
   stageCardSponsor?: string;
   stageCardSponsorLogo?: string;
+  /** The desk hand-off slide: thanks to who just finished, with a QR code to their page. */
+  stageThanks?: StageThanks | null;
 }
 
 /**
@@ -775,6 +779,90 @@ function BackgroundLayer({ url }: { url: string }) {
   );
 }
 
+/** A QR code drawn in the browser, so it works in the broadcast's headless page too. */
+function StageQr({ url, size }: { url: string; size: string }) {
+  const [src, setSrc] = useState("");
+  useEffect(() => {
+    void QRCode.toDataURL(url, { margin: 1, width: 600, color: { dark: "#000741", light: "#ffffff" } }).then(setSrc).catch(() => setSrc(""));
+  }, [url]);
+  return src ? <img src={src} alt="" className="block" style={{ width: size, height: size }} /> : <span className="block bg-white" style={{ width: size, height: size }} />;
+}
+
+const firstName = (n: string) => n.replace(/^(dr|mr|mrs|ms|sgt|sergeant major)\.?\s+(\(ret\.\)\s+)?/i, "").trim().split(/\s+/)[0] ?? n;
+
+/**
+ * Between two shows: thank you to the speaker who just finished, their face,
+ * and a QR code to their page, so the audience can follow them before the
+ * next show starts. The co-host at the desk and what's next along the bottom.
+ * Sized in container units, so it reads the same in the console and on air.
+ */
+function ThanksSlide({ t, compact = false }: { t: StageThanks; compact?: boolean }) {
+  // Sized against its own box (cqw), so beside a co-host it scales down with
+  // the frame it has rather than overflowing it.
+  const z = compact
+    ? { eyebrow: "2.3cqw", photo: "21cqw", name: "6.2cqw", show: "2.9cqw", qr: "27cqw", follow: "2.5cqw", scan: "1.9cqw", label: "1.9cqw", line: "2.7cqw", face: "9cqw" }
+    : { eyebrow: "1.7cqw", photo: "17cqw", name: "5.2cqw", show: "2.3cqw", qr: "19cqw", follow: "1.7cqw", scan: "1.25cqw", label: "1.15cqw", line: "1.9cqw", face: "6cqw" };
+  // With the co-host on camera beside the slide, their name on it is said twice.
+  const host = compact ? "" : t.deskName;
+  return (
+    <div className="absolute inset-0 overflow-hidden bg-gradient-to-br from-[#000741] via-[#053877] to-[#06498f] text-white" style={{ containerType: "inline-size" }} data-testid="stage-thanks">
+      <div className="absolute -right-[10%] -top-[25%] h-[70%] w-[45%] rounded-full bg-white/[0.04]" aria-hidden="true" />
+      <div className="absolute inset-x-0 top-[8%] bottom-[22%] flex items-center px-[7%]" style={{ gap: "5cqw" }}>
+        <div className={`flex min-w-0 flex-1 ${compact ? "flex-col items-start" : "flex-col items-start"}`}>
+          <p className="font-bold uppercase text-[#F0A71F]" style={{ fontSize: z.eyebrow, letterSpacing: "0.3em" }}>Thank you</p>
+          <div className={`mt-[3%] flex ${compact ? "flex-col items-start" : "items-center"}`} style={{ gap: compact ? "2.4cqw" : "2.6cqw" }}>
+            {t.photoUrl && <img src={t.photoUrl} alt="" className="shrink-0 rounded-full object-cover object-[50%_28%] ring-[0.45cqw] ring-[#F0A71F]/70" style={{ width: z.photo, height: z.photo }} />}
+            <div className="min-w-0">
+              <p className="font-semibold leading-[1.05] [text-wrap:balance]" style={{ ...HEADLINE_FONT, fontSize: z.name }}>{t.name}</p>
+              {t.show && <p className="mt-[0.5em] leading-snug text-white/75 [text-wrap:balance]" style={{ fontSize: z.show }}>{t.show}</p>}
+            </div>
+          </div>
+        </div>
+        <div className="flex shrink-0 flex-col items-center bg-white text-center shadow-2xl" style={{ borderRadius: "1.6cqw", padding: "1.4cqw" }}>
+          <StageQr url={t.qrUrl} size={z.qr} />
+          <p className="mt-[0.6em] font-bold text-[#000741]" style={{ fontSize: z.follow }}>Follow {firstName(t.name)}</p>
+          <p className="text-[#053877]/70" style={{ fontSize: z.scan }}>Scan with your phone</p>
+        </div>
+      </div>
+      <div className="absolute inset-x-0 bottom-0 flex h-[18%] items-center justify-between border-t border-white/10 bg-black/25 px-[7%]" style={{ gap: "3cqw" }}>
+        {host ? (
+          <div className="flex min-w-0 items-center" style={{ gap: "1.4cqw" }}>
+            {t.deskPhoto && <img src={t.deskPhoto} alt="" className="shrink-0 rounded-full object-cover object-[50%_28%] ring-[0.3cqw] ring-[#F0A71F]/70" style={{ width: z.face, height: z.face }} />}
+            <div className="min-w-0">
+              <p className="font-bold uppercase text-[#F0A71F]" style={{ fontSize: z.label, letterSpacing: "0.22em" }}>At the desk</p>
+              <p className="truncate font-semibold" style={{ fontSize: z.line }}>{host}</p>
+            </div>
+          </div>
+        ) : null}
+        {t.next && (
+          <div className={`min-w-0 ${host ? "text-right" : "flex-1 text-left"}`}>
+            <p className="font-bold uppercase text-[#F0A71F]" style={{ fontSize: z.label, letterSpacing: "0.22em" }}>Up next</p>
+            <p className="truncate text-white/85" style={{ fontSize: compact ? "2.3cqw" : "1.6cqw" }}>{t.next}</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/** Whoever is on with the hand-off slide, stacked down the right. One co-host gets a big frame. */
+function HandoffPeople({ tiles: raw, muted, order }: { tiles: StageTile[]; muted: boolean; order?: string }) {
+  const pref = (order ?? "").split(",").filter(Boolean);
+  const rank = (t: StageTile) => { const i = pref.indexOf(t.identity); return i < 0 ? 1e6 : i; };
+  const shown = [...raw].sort((a, b) => rank(a) - rank(b) || a.identity.localeCompare(b.identity)).slice(0, 3);
+  const gap = 2;
+  const h = (88 - gap * (shown.length - 1)) / shown.length;
+  return (
+    <>
+      {shown.map((t, i) => (
+        <div key={t.identity} className="absolute grid" style={{ left: "64.8%", width: "33.7%", top: `${6 + i * (h + gap)}%`, height: `${h}%` }}>
+          <Tile tile={t} muted={muted} namePos="bottom" fit="full" />
+        </div>
+      ))}
+    </>
+  );
+}
+
 /** The frame itself: standby clip, break clock, played media, the stage, or a holding card. */
 export function StageGrid({
   tiles,
@@ -834,6 +922,22 @@ export function StageGrid({
         loop={stageLoops(meta.stageMediaLabel)}
         onEnded={onMediaEnded}
       />
+    ) : meta.stageThanks ? (
+      // The desk hand-off: the slide fills the frame until the co-host adds
+      // themselves, then shares it with them, the slide left and they right.
+      <>
+        <BackgroundLayer url={meta.backgroundUrl ?? ""} />
+        {tiles.length === 0 ? (
+          <ThanksSlide t={meta.stageThanks} />
+        ) : (
+          <>
+            <div className="absolute overflow-hidden rounded-xl" style={{ left: "1.5%", top: "6%", width: "62%", height: "88%" }}>
+              <ThanksSlide t={meta.stageThanks} compact />
+            </div>
+            <HandoffPeople tiles={tiles} muted={muted} order={meta.stageOrder} />
+          </>
+        )}
+      </>
     ) : tiles.length === 0 ? (
       <div className="relative flex h-full w-full flex-col items-center justify-center gap-5 px-6 text-center">
         {/* The holding card gets the background too. Without it, a producer

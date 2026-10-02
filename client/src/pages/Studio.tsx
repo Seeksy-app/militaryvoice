@@ -39,6 +39,7 @@ import {
   Wifi,
   Clock,
   ArrowUp,
+  Loader2,
 } from "lucide-react";
 
 export interface SetupCheck {
@@ -163,8 +164,53 @@ interface StudioState {
   /** The sign-in the slot was looked up under. */
   myEmail?: string;
   isCrew?: boolean;
+  /** A host, or the co-host at the desk now or next: they add themselves to the stage. */
+  canSelfStage?: boolean;
   onStageCount: number;
   greenRoomCount: number;
+}
+
+/**
+ * The desk co-host's own button: add yourself to the screen, or step off.
+ * Gold and up front while the hand-off slide is on air, because that is the
+ * moment it's for: the speaker has been thanked and the desk is theirs.
+ */
+function SelfStage({ participantId, onStage, slideUp, thanksName }: { participantId: number; onStage: boolean; slideUp: boolean; thanksName: string }) {
+  const { toast } = useToast();
+  const queryClient = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  const move = async () => {
+    setBusy(true);
+    try {
+      await apiRequest("POST", `/api/host/studio/participants/${participantId}/state`, { state: onStage ? "Green room" : "On stage" });
+      await queryClient.invalidateQueries({ queryKey: ["/api/studio/state"] });
+    } catch (e) {
+      toast({ title: onStage ? "Couldn't take you off" : "Couldn't add you", description: (e as Error).message, variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const loud = slideUp && !onStage;
+  return (
+    <div className={`mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl p-3 ${loud ? "bg-[#F0A71F]/15 ring-1 ring-[#F0A71F]/60" : "bg-white/[0.06] ring-1 ring-white/10"}`} data-testid="self-stage">
+      <p className="min-w-0 flex-1 text-sm text-white/85">
+        {onStage
+          ? "You're on screen."
+          : slideUp
+            ? <><strong className="text-white">The desk is yours.</strong> {thanksName ? `${thanksName} has been thanked on screen. ` : ""}Add yourself when you're ready.</>
+            : "You're at the desk this hour. Add yourself when it's your turn."}
+      </p>
+      <Button
+        onClick={() => void move()}
+        disabled={busy}
+        className={`h-10 shrink-0 gap-2 rounded-full px-5 font-semibold ${onStage ? "bg-white/10 text-white hover:bg-white/20" : "bg-[#F0A71F] text-[#000741] hover:bg-[#f5b94a]"}`}
+        data-testid="button-self-stage"
+      >
+        {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+        {onStage ? "Take me off the screen" : "Add me to the screen"}
+      </Button>
+    </div>
+  );
 }
 
 /** Stable per-browser id so a refresh rejoins as the same person. */
@@ -1515,11 +1561,21 @@ export default function Studio({ slug }: { slug?: string }) {
                   idleTitle={state?.studio.name}
                 />
               </div>
+              {state?.canSelfStage && state.me && (
+                <SelfStage
+                  participantId={state.me.id}
+                  onStage={onStage}
+                  slideUp={Boolean(state.meta?.stageThanks)}
+                  thanksName={state.meta?.stageThanks?.name ?? ""}
+                />
+              )}
               <div className="mt-2 flex flex-wrap items-center justify-between gap-2">
                 <p className="text-sm text-white/55">
                   {onStage
                     ? "You're on the air. Camera and mic are being taken."
-                    : "This is what's going out. The producer brings you up when it's your turn."}
+                    : state?.canSelfStage
+                      ? "This is what's going out. Add yourself when it's your turn."
+                      : "This is what's going out. The producer brings you up when it's your turn."}
                 </p>
                 {!onStage && (
                   <Button

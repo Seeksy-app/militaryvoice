@@ -12,6 +12,29 @@ import type { StudioRow } from "./schema";
  *
  * One function, both callers. Add a graphic here and both surfaces get it.
  */
+/** The desk hand-off slide: thanks to who just finished, who's at the desk, what's next. */
+export interface StageThanks {
+  name: string;
+  show: string;
+  photoUrl: string;
+  /** Their page, for the QR code. */
+  qrUrl: string;
+  deskName: string;
+  deskPhoto: string;
+  /** "4:00 PM · VET S.O.S. with Shawn Welsh" */
+  next: string;
+}
+
+export function readThanks(raw: string | null | undefined): StageThanks | null {
+  if (!raw) return null;
+  try {
+    const t = JSON.parse(raw) as StageThanks;
+    return t && t.name ? t : null;
+  } catch {
+    return null;
+  }
+}
+
 export function stageMetaFromStudio(st: StudioRow) {
   return {
     studioName: st.name,
@@ -30,6 +53,7 @@ export function stageMetaFromStudio(st: StudioRow) {
     stageCardPhoto: st.stageCardPhoto,
     stageCardSponsor: st.stageCardSponsor,
     stageCardSponsorLogo: st.stageCardSponsorLogo,
+    stageThanks: readThanks(st.stageThanks),
     countdownEndsAtUtc: st.countdownEndsAtUtc,
     countdownLabel: st.countdownLabel,
     currentSceneId: st.currentSceneId,

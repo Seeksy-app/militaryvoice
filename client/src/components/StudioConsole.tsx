@@ -35,7 +35,7 @@ import { stageMetaFromStudio } from "@shared/stageMeta";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { STUDIO_STATUSES, LOGO_CORNERS, type StudioRow, type StudioParticipantRow, type RunItemRow, type SignupRow, type SceneRow } from "@shared/schema";
 import { detectLocalTimeZone, formatTimeInZone } from "@/lib/schedule";
-import { MonitorPlay, Users, Headphones, Mic, MicOff, Video, VideoOff, ArrowUp, ArrowDown, X, PlayCircle, Radio, Copy, AlertTriangle, Clock, Disc, Pause, Play, Square, Signal, Cable, Trash2, Check, Upload, Volume2, VolumeX, Film, Image as ImageIcon, Clapperboard, ListOrdered, Plus, Maximize2, Minimize2, LogOut, ChevronDown, Settings2, Timer, Loader2 } from "lucide-react";
+import { MonitorPlay, Users, Headphones, Mic, MicOff, Video, VideoOff, ArrowUp, ArrowDown, X, PlayCircle, Radio, Copy, AlertTriangle, Clock, Disc, Pause, Play, Square, Signal, Cable, Trash2, Check, Upload, Volume2, VolumeX, Film, Image as ImageIcon, Clapperboard, ListOrdered, Plus, Maximize2, Minimize2, LogOut, ChevronDown, Settings2, Timer, Loader2, Sparkles } from "lucide-react";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
@@ -1287,6 +1287,33 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
     .map((f) => ({ identity: f.identity, name: f.name, displayTitle: f.displayTitle, photoUrl: f.photoUrl, host: f.host, video: f.video, audio: me && f.identity === `p-${me.id}` ? null : f.audio, speaking: f.speaking }))
     .sort((a, b) => a.identity.localeCompare(b.identity));
 
+  // The hand-off to a co-host runs itself: every few seconds on air, ask the
+  // server whether a segment's time is up with a co-host waiting at the desk.
+  // It takes the thank-you slide when the stage goes quiet, holds while
+  // someone is still talking, and past three minutes over says so here.
+  const stageSpeaking = monitorTiles.some((t) => t.speaking);
+  const speakingRef = useRef(stageSpeaking);
+  speakingRef.current = stageSpeaking;
+  const [autoNote, setAutoNote] = useState<{ action: string; why: string; deskName: string; at?: string } | null>(null);
+  useEffect(() => {
+    if (!broadcasting) { setAutoNote(null); return; }
+    let stop = false;
+    const tick = async () => {
+      try {
+        const r = await adminSend("POST", "/api/admin/studio/auto-tick", { stageSpeaking: speakingRef.current });
+        const j = (await r.json()) as { action: string; why?: string; deskName?: string; at?: string };
+        if (stop) return;
+        setAutoNote(j.action === "none" ? null : { action: j.action, why: j.why ?? "", deskName: j.deskName ?? "", at: j.at });
+        if (j.action === "take") void queryClient.invalidateQueries();
+      } catch {
+        // A missed beat is fine; the next one asks again.
+      }
+    };
+    void tick();
+    const id = setInterval(() => void tick(), 5000);
+    return () => { stop = true; clearInterval(id); };
+  }, [broadcasting, adminSend, queryClient]);
+
   useEffect(() => {
     if (typeof BroadcastChannel === "undefined") return;
     const ch = new BroadcastChannel("mv-studio-console");
@@ -1560,6 +1587,22 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                 <Clock className={`h-3.5 w-3.5 ${timeLeft.remaining <= 30 && timeLeft.remaining >= 0 ? "animate-pulse" : ""}`} />
                 <span className="text-base font-bold leading-none">{timeLeft.remaining < 0 ? `+${fmtLeft(timeLeft.remaining)}` : fmtLeft(timeLeft.remaining)}</span>
                 <span className="hidden max-w-[12rem] truncate font-medium opacity-80 sm:inline">{timeLeft.remaining < 0 ? `over · ${timeLeft.label}` : `until ${timeLeft.label}`}</span>
+              </div>
+            )}
+            {autoNote && autoNote.action !== "take" && (
+              <div
+                className={`flex h-9 max-w-[22rem] items-center gap-2 rounded-full px-3 text-xs font-semibold ${autoNote.action === "escalate" ? "bg-[#ED1C24] text-white" : autoNote.action === "hold" ? "bg-[#F0A71F]/20 text-[#F0A71F] ring-1 ring-[#F0A71F]/60" : "bg-white/10 text-white/80 ring-1 ring-white/15"}`}
+                title={autoNote.why}
+                data-testid="studio-auto-handoff"
+              >
+                <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">
+                  {autoNote.action === "escalate"
+                    ? "Over time: take the thank-you slide when you're ready"
+                    : autoNote.action === "hold"
+                      ? "Holding the thank-you slide: still talking"
+                      : `Thank-you slide${autoNote.at ? ` at ${new Date(autoNote.at).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}` : ""}${autoNote.deskName ? ` · ${autoNote.deskName.split(" ")[0]} at the desk` : ""}`}
+                </span>
               </div>
             )}
             {isLive && (

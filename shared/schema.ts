@@ -1091,6 +1091,12 @@ export const studios = pgTable("studios", {
   /** The show's sponsor, for the same card: "Presented by …" with a logo. */
   stageCardSponsor: text("stage_card_sponsor").notNull().default(""),
   stageCardSponsorLogo: text("stage_card_sponsor_logo").notNull().default(""),
+  /**
+   * The desk hand-off slide, as JSON: thanks to the speaker who just finished
+   * (name, show, photo, a QR code to their page), who holds the desk, and
+   * what's next. Blank on every other scene.
+   */
+  stageThanks: text("stage_thanks").notNull().default(""),
   // Graphics: a logo burned into the corner of the stage for the whole show,
   // independent of whatever scene is up.
   logoUrl: text("logo_url").notNull().default(""),

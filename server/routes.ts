@@ -135,7 +135,9 @@ import { registerReview } from "./review.js";
 import { registerSponsorFinder } from "./sponsorFinder.js";
 import { registerPodcastStats } from "./podcastStats.js";
 import { registerHosting, claimEpisodeAudio, claimEpisodeStill, podcastYouTubeAt } from "./hosting.js";
-import { registerBioPage, registerBioAgent, claimLivingSqueeze, subscribersFor } from "./bioPage.js";
+import { decideAdvance } from "../shared/showClock.js";
+import type { StageThanks } from "../shared/stageMeta.js";
+import { registerBioPage, registerBioAgent, claimLivingSqueeze, subscribersFor, publishedBioUrl } from "./bioPage.js";
 import { registerGuests, guestByToken, markGuestJoined, publicGuestsFor } from "./guests.js";
 import { registerCaptures, onCaptureWebhook } from "./captures.js";
 import { registerMail } from "./mail.js";
@@ -3832,6 +3834,12 @@ export function registerRoutes(app: Express): void {
       myEmail: email,
       /** True when they got in as crew rather than as someone on the lineup. */
       isCrew: crew,
+      /** A host, or the co-host holding the desk now or the next hour: they can add themselves to the stage. */
+      canSelfStage: Boolean(me) && (await (async () => {
+        const hs = await showHosts();
+        const soon = new Date(Date.now() + 10 * 60_000).toISOString();
+        return isHostAt(me!, hs, new Date().toISOString()) || isHostAt(me!, hs, soon);
+      })()),
       onStageCount: onStage.length,
       greenRoomCount: all.filter((p) => p.state === "Green room" && withPresence(p)).length,
     };
@@ -4854,6 +4862,37 @@ export function registerRoutes(app: Express): void {
     return member ? { name: member.name, photoUrl: member.photoUrl, email } : null;
   }
 
+  /**
+   * A desk hand-off between two shows: who to thank (the segment just before,
+   * with a QR code to their page), who holds the desk, and what's next. The
+   * co-host of the next show's hour takes the hand-off into it (Amy at 3:55
+   * for her 4 o'clock); with nobody that hour, whoever holds this one.
+   */
+  async function handoffFor(eventId: number, row: RunItemRow): Promise<{ desk: Awaited<ReturnType<typeof deskHostFor>>; thanks: StageThanks | null }> {
+    const rows = await storage.listRunOfShow(eventId);
+    const at = rows.findIndex((r) => r.id === row.id);
+    const prev = at > 0 ? rows.slice(0, at).reverse().find((r) => r.kind === "Segment") : undefined;
+    const next = at >= 0 ? rows.slice(at + 1).find((r) => r.kind === "Segment") : undefined;
+    const desk = (next ? await deskHostFor(eventId, next.startAtUtc) : null) ?? (await deskHostFor(eventId, row.startAtUtc));
+    const sg = prev?.signupId ? await storage.getSignupById(prev.signupId) : undefined;
+    if (!sg || sg.status === "cancelled" || !sg.hostName.trim()) return { desk, thanks: null };
+    const co = sg.coHostEmail ? await storage.getProfileByEmail(sg.coHostEmail.trim().toLowerCase()).catch(() => undefined) : undefined;
+    const nextSg = next?.signupId ? await storage.getSignupById(next.signupId) : undefined;
+    const time = (iso: string) => new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }).format(new Date(iso));
+    return {
+      desk,
+      thanks: {
+        name: [sg.hostName.trim(), co?.hostName?.trim()].filter(Boolean).join(" & "),
+        show: sg.podcastName.trim(),
+        photoUrl: sg.photoUrl,
+        qrUrl: (await publishedBioUrl(sg.email).catch(() => "")) || `${PUBLIC_ORIGIN}/agenda?slot=${sg.slotIndex}`,
+        deskName: desk?.name ?? "",
+        deskPhoto: desk?.photoUrl ?? "",
+        next: nextSg && nextSg.status !== "cancelled" && next ? `${time(next.startAtUtc)} ET · ${nextSg.podcastName.trim()} with ${nextSg.hostName.trim()}` : "",
+      },
+    };
+  }
+
   async function applyScene(sceneId: number): Promise<{ status: number; body: unknown }> {
     const scene = await storage.getScene(sceneId);
     if (!scene) return { status: 404, body: { message: "Not found" } };
@@ -4870,7 +4909,10 @@ export function registerRoutes(app: Express): void {
     if (scene.runItemId) {
       const row = await storage.getRunItem(scene.runItemId);
       if (row) {
-        const taken = await takeRunRow(studio, row, { keepPeople: scene.withPeople });
+        // A hand-off with a live co-host at the desk is a slide first: thanks to
+        // the speaker who just finished, and the co-host adds themselves to it.
+        const handoff = row.kind === "Handoff" ? await handoffFor(studio.eventId, row) : null;
+        const taken = await takeRunRow(studio, row, { keepPeople: scene.withPeople, hostsAddThemselves: Boolean(handoff?.desk && handoff.thanks) });
         const who = row.signupId ? await storage.getSignupById(row.signupId) : undefined;
         const sponsor = row.signupId ? (await sponsorsBySignup(studio.eventId)).get(row.signupId) : undefined;
         // A podcaster's segment names them at the bottom of the frame without
@@ -4884,9 +4926,10 @@ export function registerRoutes(app: Express): void {
         }
         // The desk scene: the card is whoever holds that hour as co-host,
         // so the stage says who is talking rather than nobody.
-        const desk = row.kind === "Handoff" && !who ? await deskHostFor(studio.eventId, row.startAtUtc) : null;
+        const desk = row.kind === "Handoff" && !who ? handoff?.desk ?? null : null;
         const withScene = await storage.updateStudio(studio.id, {
           currentSceneId: scene.id,
+          stageThanks: handoff?.thanks ? JSON.stringify(handoff.thanks) : "",
           stageCardName: who?.hostName ?? desk?.name ?? "",
           stageCardShow: who?.podcastName?.trim() ?? (desk ? "Co-host · at the desk" : ""),
           stageCardPhoto: who?.photoUrl ?? desk?.photoUrl ?? "",
@@ -4929,6 +4972,7 @@ export function registerRoutes(app: Express): void {
             stageCardPhoto: "",
             stageCardSponsor: "",
             stageCardSponsorLogo: "",
+            stageThanks: "",
             currentSceneId: scene.id,
             currentSceneTakenAtUtc: new Date().toISOString(),
             // Stored as the moment it hits zero, so every viewer counts down
@@ -4950,6 +4994,7 @@ export function registerRoutes(app: Express): void {
             stageCardPhoto: "",
             stageCardSponsor: "",
             stageCardSponsorLogo: "",
+            stageThanks: "",
             currentSceneId: scene.id,
             currentSceneTakenAtUtc: new Date().toISOString(),
             countdownEndsAtUtc: "",
@@ -4968,6 +5013,44 @@ export function registerRoutes(app: Express): void {
     res.status(r.status).json(r.body);
   });
 
+  /** The scene pair is a show's segment into a hand-off that a live co-host holds. */
+  async function liveHandoffAfter(studio: StudioRow, cur: SceneRow, next: SceneRow): Promise<{ row: RunItemRow; deskName: string } | null> {
+    if (!cur.runItemId || !next.runItemId) return null;
+    const [a, b] = await Promise.all([storage.getRunItem(cur.runItemId), storage.getRunItem(next.runItemId)]);
+    if (a?.kind !== "Segment" || b?.kind !== "Handoff") return null;
+    const { desk, thanks } = await handoffFor(studio.eventId, b);
+    return desk && thanks ? { row: b, deskName: desk.name } : null;
+  }
+
+  /**
+   * The console's heartbeat during the show: when a segment's time is up and
+   * the next scene is a hand-off a live co-host holds, take the thank-you
+   * slide. Never over somebody talking: it holds while the stage is speaking,
+   * and past three minutes over it tells the producer instead. A pre-recorded
+   * show switches when its file ends (the route above), not on the clock.
+   */
+  app.post("/api/admin/studio/auto-tick", requireAdmin, async (req, res) => {
+    noStore(res);
+    const { studio } = await adminStudio(req);
+    const list = await storage.listScenes(studio.id);
+    const i = list.findIndex((x) => x.id === studio.currentSceneId);
+    const cur = i >= 0 ? list[i] : undefined;
+    const next = i >= 0 ? list[i + 1] : undefined;
+    if (!cur || !next) return res.json({ action: "none" });
+    const live = await liveHandoffAfter(studio, cur, next);
+    if (!live) return res.json({ action: "none" });
+    if (cur.mediaUrl && studio.stageMediaPlaying) return res.json({ action: "wait", why: "the episode switches to the thank-you slide when it ends", deskName: live.deskName, at: live.row.startAtUtc });
+    const windowSeconds = Math.round((Date.parse(live.row.startAtUtc) - Date.now()) / 1000);
+    const d = decideAdvance({ windowSeconds, stageSpeaking: req.body?.stageSpeaking === true, nextHostReady: false, heldSeconds: Math.max(0, -windowSeconds) });
+    if (d.action === "take" || d.action === "take-early") {
+      const fresh = await storage.getStudioById(studio.id);
+      if (fresh?.currentSceneId !== cur.id) return res.json({ action: "none" });
+      const r = await applyScene(next.id);
+      return res.status(r.status).json({ action: "take", why: d.why, deskName: live.deskName, sceneId: next.id });
+    }
+    res.json({ action: d.action, why: d.why, deskName: live.deskName, at: live.row.startAtUtc });
+  });
+
   /**
    * A scene's clip finished on the producer's monitor. If the scene is set to
    * switch on by itself, take the next one. Safe to hear more than once — two
@@ -4978,10 +5061,13 @@ export function registerRoutes(app: Express): void {
     const scene = await storage.getScene(Number(req.params.id));
     const studio = scene ? await storage.getStudioById(scene.studioId) : null;
     if (!scene || !studio) return res.status(404).json({ message: "Not found" });
-    if (!scene.autoNext || studio.currentSceneId !== scene.id) return res.json({ advanced: false });
+    if (studio.currentSceneId !== scene.id) return res.json({ advanced: false });
     const list = await storage.listScenes(studio.id);
     const next = list[list.findIndex((s) => s.id === scene.id) + 1];
     if (!next) return res.json({ advanced: false });
+    // A pre-recorded show that ends into a hand-off with a co-host at the desk
+    // goes to the thank-you slide by itself, switch or no switch.
+    if (!scene.autoNext && !(await liveHandoffAfter(studio, scene, next))) return res.json({ advanced: false });
     const r = await applyScene(next.id);
     res.status(r.status).json({ advanced: true, sceneId: next.id });
   });
@@ -4993,7 +5079,11 @@ export function registerRoutes(app: Express): void {
     const target = await storage.getStudioParticipantById(Number(req.params.id));
     const studio = target ? await storage.getStudioById(target.studioId) : null;
     if (!target || !studio) return res.status(404).json({ message: "Not found" });
-    if (!(await isCrew(req, studio.eventId))) return res.status(403).json({ message: "Only the crew can move people on stage." });
+    // A host or desk co-host may put themselves on (or take themselves off):
+    // Amy adding herself to the hand-off slide. Anyone else is the crew's call.
+    const self = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    const mine = Boolean(self) && target.email.trim().toLowerCase() === self && isShowHost(target, await showHosts());
+    if (!mine && !(await isCrew(req, studio.eventId))) return res.status(403).json({ message: "Only the crew can move people on stage." });
     if (state === "On stage") {
       const onStage = (await storage.listStudioParticipants(studio.id)).filter((p) => p.state === "On stage" && p.id !== target.id);
       if (onStage.length >= studio.maxOnStage) return res.status(409).json({ message: `The stage is full at ${studio.maxOnStage}. Take someone off first.` });
@@ -5037,7 +5127,7 @@ export function registerRoutes(app: Express): void {
    * steps off unless the podcaster asked for an interviewer. Every other kind
    * of row is the host's — intro, handoff, sponsor read.
    */
-  async function takeRunRow(studio: StudioRow, row: RunItemRow, opts: { keepPeople?: boolean } = {}) {
+  async function takeRunRow(studio: StudioRow, row: RunItemRow, opts: { keepPeople?: boolean; hostsAddThemselves?: boolean } = {}) {
     const signup = row.signupId ? await storage.getSignupById(row.signupId) : undefined;
     const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
     const nameMatch = (a: string, b: string) => {
@@ -5064,7 +5154,8 @@ export function registerRoutes(app: Express): void {
       if (mediaScene) target = "Green room";
       // A co-host who is also a podcaster is the guest on their own show.
       else if (guestScene && belongs(p)) target = "On stage";
-      else if (isHost(p)) target = guestScene && !signup!.needsInterviewer ? "Green room" : "On stage";
+      // On a hand-off slide the hosts add themselves when they're ready.
+      else if (isHost(p)) target = opts.hostsAddThemselves || (guestScene && !signup!.needsInterviewer) ? "Green room" : "On stage";
       // A podcaster's guest comes on with them: anyone who joined through the
       // same signup link.
       else target = guestScene && belongs(p) ? "On stage" : "Green room";
