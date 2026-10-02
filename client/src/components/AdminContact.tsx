@@ -1,3 +1,4 @@
+import { BonusCreditsButton } from "@/components/BonusCredits";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDownLeft, ArrowUpRight, Bell, CalendarDays, Check, ExternalLink, Eye, Globe, Loader2, Mic2, MousePointerClick, PenSquare, Plus, StickyNote, Tag, Trash2, UserPlus, Users, X } from "lucide-react";
@@ -84,6 +85,7 @@ export function ContactProfile({ email, onClose }: { email: string; onClose: () 
               {!!d?.stats.waiting && <span className="rounded-full bg-[#F0A71F]/20 px-2 py-0.5 text-[11px] font-bold text-[#8a5a00] dark:text-[#F0A71F]">Waiting on a reply</span>}
             </div>
           </div>
+          <BonusCreditsButton email={email} name={d?.name || undefined} />
           <Button onClick={() => setTab("mail")} className="h-9 gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="profile-email"><PenSquare className="h-4 w-4" /> Email them</Button>
           <button type="button" onClick={onClose} className="rounded-full p-2 text-muted-foreground hover:bg-muted" aria-label="Close"><X className="h-5 w-5" /></button>
         </header>

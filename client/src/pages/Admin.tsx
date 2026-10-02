@@ -41,6 +41,7 @@ import { MagazineAdmin } from "@/components/MagazineAdmin";
 import Discover from "@/pages/Discover";
 import Directory from "@/pages/Directory";
 import { AdminHealth, HealthLight } from "@/components/AdminHealth";
+import { BonusCreditsButton } from "@/components/BonusCredits";
 import { SponsorLeads } from "@/components/SponsorLeads";
 import { SponsorFinder } from "@/components/SponsorFinder";
 import { ShowSponsorsCard } from "@/components/ShowSponsors";
@@ -865,6 +866,7 @@ function SignupsCard({ eventId }: { eventId: number }) {
                         </div>
                       </div>
                       <div className="flex shrink-0 gap-1 lg:absolute lg:right-3 lg:top-3">
+                        <BonusCreditsButton icon email={s.email} name={s.hostName || s.podcastName} />
                         <Button
                           variant="ghost"
                           size="icon"
