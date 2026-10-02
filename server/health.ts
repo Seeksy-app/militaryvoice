@@ -191,7 +191,19 @@ const DEFS: Def[] = [
     run: async () => (env("UPLOAD_POST_API_KEY") ? ping("https://api.upload-post.com/api/uploadposts/users", { headers: { Authorization: `Apikey ${env("UPLOAD_POST_API_KEY")}` } }) : { state: "off", detail: "Not set up (UPLOAD_POST_API_KEY)" }),
   },
   { key: "google", name: "YouTube (Google sign-in)", group: "Social and podcasts", powers: "Connect YouTube, going live to a channel", run: keyOnly(["GOOGLE_CLIENT_ID"], "OAuth app") },
-  { key: "zoom", name: "Zoom", group: "Social and podcasts", powers: "Zoom recordings into the Library", run: keyOnly(["ZOOM_CLIENT_ID"], "OAuth app") },
+  {
+    key: "zoom", name: "Zoom", group: "Social and podcasts", powers: "Zoom recordings into the Library",
+    // The Client ID isn't secret: it's in every Connect Zoom link. The development app only lets in
+    // Andrew's own Zoom account, so the production one has to be the one live.
+    run: async () => {
+      const id = env("ZOOM_CLIENT_ID");
+      if (!id) return { state: "off", detail: "Not set up (ZOOM_CLIENT_ID)" };
+      if (!env("ZOOM_CLIENT_SECRET") || !env("ZOOM_WEBHOOK_SECRET")) return { state: "down", detail: "The client secret or the webhook secret token is missing" };
+      if (id === "_TSk8NSeTVi0F49DvYLN8g") return { state: "ok", detail: "Production app (approved by Zoom), secret and webhook token set" };
+      if (id === "cexDlz0aTiS2L9byinKIsQ") return { state: "down", detail: "The development app's keys are live: only Andrew's own Zoom can connect. Switch Vercel to the production Client ID and secret" };
+      return { state: "ok", detail: "Key set (an app we don't recognise)" };
+    },
+  },
   { key: "listennotes", name: "Listen Notes", group: "Social and podcasts", powers: "Podcast search, Listen Notes listing", run: keyOnly(["LISTEN_API_KEY"], "requests are counted, so not spent on a check") },
   {
     key: "podchaser", name: "Podchaser", group: "Social and podcasts", powers: "Hosts & guests search",
