@@ -2781,8 +2781,9 @@ export function registerRoutes(app: Express): void {
       const lineup = new Map((await storage.listSignups(ev.id)).filter((x) => x.status !== "cancelled").map((x) => [x.email.trim().toLowerCase(), x.podcastName]));
       const accts = (await storage.listYoutubeAccounts()).filter((a) => a.channelId && lineup.has(a.email.trim().toLowerCase()));
       if (!accts.length) return { state: "off", detail: "No podcaster has connected a channel" };
-      const broken: string[] = [];
-      for (const a of accts) if (!(await youtubeToken(a.email.trim().toLowerCase()))) broken.push(lineup.get(a.email.trim().toLowerCase()) || a.channelTitle || a.email);
+      // All at once: one at a time ran past the check's ten seconds.
+      const results = await Promise.all(accts.map(async (a) => ({ a, ok: !!(await youtubeToken(a.email.trim().toLowerCase()).catch(() => null)) })));
+      const broken = results.filter((x) => !x.ok).map(({ a }) => lineup.get(a.email.trim().toLowerCase()) || a.channelTitle || a.email);
       return broken.length
         ? { state: "down", detail: `${accts.length - broken.length} of ${accts.length} sign in. Needs reconnecting: ${broken.join(", ")}` }
         : { state: "ok", detail: `All ${accts.length} connected channels sign in` };
