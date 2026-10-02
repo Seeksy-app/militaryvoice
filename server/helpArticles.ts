@@ -332,6 +332,90 @@ The small print: privacy policy and terms of service.
 Ready? It takes about a minute.
 Connect my Zoom
 
+=== MILITARYVOICES.AI PLATFORM · www.militaryvoices.ai/help/zoom-story ===
+All help Help · Zoom
+Your Zoom calls, turned into episodes and clips on their own
+Plenty of shows are already recorded on Zoom. Connect it once, and every cloud recording comes into your MilitaryVoices Library by itself. From there it's a few presses to clips with captions, a clean episode on your podcast, and posts on every app. No downloading, no uploading, no editing software.
+1 From meeting to everywhere
+Here's the whole journey. You do the talking; the rest happens on MilitaryVoices.
+Zoom
+You record to the cloud
+Record
+Library
+Comes in on its own
+Pōstify
+Clips and a clean episode
+Pōstify it
+Your podcast
+Social apps
+YouTube
+Clean episode
+One recording, and everything it becomes. The only steps you take are the presses in gold. Hours back each week
+No downloading the file, finding it, and uploading it again.
+Clips you'd pay an editor for
+Short vertical clips with captions, from every call.
+More people hear you
+The same talk on your podcast, YouTube, Instagram, TikTok, Facebook and LinkedIn.
+2 Connect once
+In your dashboard, open Integrations and press Connect Zoom on the Zoom card. Zoom asks you to approve; press Allow and you're back with the card saying Connected as and your Zoom email.
+Zoom
+Connected as host@yourshow.com
+Connected
+Bring each new cloud recording into my Library on its own
+Import past recordings Disconnect
+The Zoom card in Integrations once it's connected. That's the only setup. The switch, Bring each new cloud recording into my Library on its own, is on from the start. Want every screen step by step? See bringing your Zoom recordings into your Library.
+It works with Zoom cloud recordings. In your Zoom meeting, press Record, then Record to the cloud. Recordings saved on your computer can be uploaded to your Library yourself.
+3 It lands in your Library
+When Zoom finishes processing a recording (it emails you when it's ready), we copy it into your Library. It says Importing from Zoom… for a few minutes, then it's ready to play, and we email you that it's there.
+ZOOM
+The Ready Room · Oct 2
+Just now · 48 min
+Importing from Zoom…
+ZOOM
+The Ready Room · Sep 25
+1 week ago · 52 min
+Pōstify it
+A Zoom recording arriving in the Library, and ready a few minutes later. Connected after some calls you already had? Press Import past recordings on the Zoom card. You'll see the last 30 days, and Import brings in the ones you want.
+4 Pōstify does the editing
+On the recording in your Library, press ⋯ and choose Pōstify it. Pōstify, our SI editor, watches the whole call and gives you:
+Short clips of the best moments, each with a title and word-by-word captions, in vertical for Reels, TikTok and Shorts and wide for YouTube and LinkedIn.
+A clean episode with the ums and dead air taken out. Your original is never changed.
+Why I almost didn't enlist
+The Ready Room
+Best decision I made
+The call that changed my career
+The Ready Room
+Nobody tells you this
+What vets need to hear
+The Ready Room
+You are not alone
+Clips Pōstify cut from one Zoom call: a title band, your show's name and captions that follow the words. You can still trim, cut out a section, or add music, an intro and an outro. See Pōstify: edit and post.
+5 Make the captions yours
+Zoom calls often have names, slides or a shared screen at the bottom of the picture. If the captions sit on top of something, move them.
+Why I almost didn't enlist
+Best decision I made
+Name · title on the Zoom screen
+Edit text and captions
+Size 130%
+Where they sit
+Top Middle Lower third Bottom
+Back to the usual
+Edit text and captions: a bigger size, and the captions moved to the top. On a clip, press ⋯ and choose Edit text and captions. Make them bigger or smaller with Size, and under Where they sit pick Top, Middle, Lower third or Bottom, or slide them exactly where you want. Back to the usual puts them back.
+6 Out to your podcast and social
+Your podcast: press ⋯ on the episode and choose Add to my podcast. It goes to Apple Podcasts, Spotify and the rest through your feed.
+Social: press Post on a clip, tick your accounts (Instagram, TikTok, Facebook, LinkedIn, YouTube), and choose Now, Next open slot or Pick a time. Everything you've scheduled is on the Social calendar.
+Nothing goes out until you press the button.
+7 Your Zoom stays yours
+We only read your cloud recordings. We never change, move or delete anything in Zoom.
+We copy the meeting's video, nothing else: no chat, contacts or calendar.
+Press Disconnect on the Zoom card any time and the connection is deleted at once.
+The full detail is in what we access and store.
+8 Help and contact
+Email us: hello@militaryvoices.ai. A person reads every message and writes back.
+Search the help, or ask Alex: militaryvoices.ai/help.
+It takes a minute. Your next Zoom call comes in on its own.
+Connect Zoom
+
 === MILITARYVOICES.AI PLATFORM · www.militaryvoices.ai/help/smartlink ===
 All help Help · SmartLink
 Your SmartLink: the top of your page and your talking intro
