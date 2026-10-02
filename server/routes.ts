@@ -1409,7 +1409,9 @@ export function registerRoutes(app: Express): void {
     const lineupSlots = Math.floor((ev.durationHours * 60) / ev.slotMinutes);
     const signups = (await storage.listSignups(ev.id))
       .filter((sg) => sg.status !== "cancelled" && sg.slotIndex < lineupSlots)
-      .sort((a, b) => a.slotIndex - b.slotIndex);
+      .sort((a, b) => a.slotIndex - b.slotIndex)
+      // One face per person: Riccoh hosts the opening and the closing.
+      .filter((sg, i, all) => !sg.email || all.findIndex((x) => x.email?.trim().toLowerCase() === sg.email.trim().toLowerCase()) === i);
     const requested = String(req.query.size ?? "square");
     const size: CardSize = requested in CARD_SIZES ? (requested as CardSize) : "square";
     const dateLabel = new Intl.DateTimeFormat("en-US", {
