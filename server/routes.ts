@@ -1419,6 +1419,7 @@ export function registerRoutes(app: Express): void {
     const jpg = await buildLineupCard(
       {
         dateLabel,
+        badgeUrl: `${origin}/nmpd-logo.png`,
         shows: signups.map((sg) => ({
           podcastName: sg.podcastName,
           photoUrl: sg.photoUrl

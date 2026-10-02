@@ -201,7 +201,7 @@ export interface LineupShow {
  * exactly what the hand-made version of this did.
  */
 export async function buildLineupCard(
-  input: { shows: LineupShow[]; dateLabel: string; footer?: string },
+  input: { shows: LineupShow[]; dateLabel: string; footer?: string; badgeUrl?: string },
   size: CardSize = "square",
 ): Promise<Buffer> {
   const { w: W, h: H } = CARD_SIZES[size];
@@ -251,12 +251,43 @@ export async function buildLineupCard(
   // Columns that make the cells as square as the box allows, so the faces come
   // out the same size across the row and the block reads as a grid rather than
   // as leftovers. Bounded, because one row of thirty faces is a strip of dots.
-  const ideal = Math.sqrt((shows.length * gridW) / gridH);
   const maxCols = wide ? 9 : size === "story" ? 5 : 7;
-  const cols = Math.min(maxCols, Math.max(2, Math.round(ideal)));
-  const rows = Math.ceil(shows.length / cols);
+  // The National Military Podcast Day badge sits in the middle of the board,
+  // with the faces around it (Riccoh asked, 2 Oct 2026). It takes a b×b block
+  // of cells held open in the exact centre, which needs b to share its parity
+  // with the columns (and ideally the rows). Of the layouts that fit everyone with
+  // no empty row, take the biggest faces, then the biggest badge.
+  let plan = { cols: Math.min(maxCols, Math.max(2, Math.round(Math.sqrt((shows.length * gridW) / gridH)))), rows: 0, b: 0, cell: 0 };
+  plan.rows = Math.ceil(shows.length / plan.cols);
+  if (input.badgeUrl && shows.length >= 4) {
+    let best: typeof plan | null = null;
+    for (let cols = 3; cols <= maxCols; cols++) {
+      for (let b = 1; b <= 3; b++) {
+        if (b % 2 !== cols % 2 || b > cols - 2) continue;
+        let rows = b + 2;
+        while (rows * cols - b * b < shows.length) rows++;
+        if (rows * cols - b * b - shows.length >= cols) continue;
+        const cell = Math.min(gridW / cols, gridH / rows);
+        // A bigger badge is worth faces a little smaller: one cell reads as just another face.
+        // Off-parity rows put the badge half a row high, so they cost a little.
+        const score = (p: { cell: number; b: number; rows: number }) => p.cell * (1 + 0.15 * (p.b - 1)) * (p.rows % 2 === p.b % 2 ? 1 : 0.88);
+        if (!best || score({ cell, b, rows }) > score(best)) best = { cols, rows, b, cell };
+      }
+    }
+    if (best) plan = best;
+  }
+  const { cols, rows, b: hole } = plan;
   const cellH = gridH / rows;
   const cellW = gridW / cols;
+  const holeR0 = Math.floor((rows - hole) / 2);
+  const holeC0 = (cols - hole) / 2;
+  const inHole = (r: number, c: number) => hole > 0 && r >= holeR0 && r < holeR0 + hole && c >= holeC0 && c < holeC0 + hole;
+  // Every open cell, row by row; the last row is centred on its own.
+  const cells: { r: number; c: number }[] = [];
+  for (let r = 0; r < rows && cells.length < shows.length; r++) {
+    const open = Array.from({ length: cols }, (_, c) => c).filter((c) => !inHole(r, c));
+    for (const c of open) if (cells.length < shows.length) cells.push({ r, c });
+  }
 
   // The whole cell is the face now. 0.82 leaves room for the gold ring and a
   // little air between neighbours.
@@ -288,11 +319,27 @@ export async function buildLineupCard(
     textPath(title, { x: W / 2, y: yT, size: sT, weight: "bold", fill: "#ffffff", anchor: "middle" }),
   );
 
+  if (hole > 0 && input.badgeUrl) {
+    try {
+      const res = await fetch(input.badgeUrl);
+      if (res.ok) {
+        const bs = Math.round(Math.min(cellW, cellH) * hole * 0.94);
+        const badge = await sharp(Buffer.from(await res.arrayBuffer())).resize(bs, bs, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } }).png().toBuffer();
+        layers.push({ input: badge, top: Math.round(headH + (holeR0 + hole / 2) * cellH - bs / 2), left: Math.round(W / 2 - bs / 2) });
+      }
+    } catch {
+      // No badge is better than no poster.
+    }
+  }
+
+  const lastRow = cells.length ? cells[cells.length - 1].r : 0;
+  const lastCount = cells.filter((x) => x.r === lastRow).length;
   for (let i = 0; i < shows.length; i++) {
-    const col = i % cols;
-    const row = Math.floor(i / cols);
-    const inRow = Math.min(cols, shows.length - row * cols);
-    const rowW = inRow * cellW;
+    const { r: row, c } = cells[i];
+    // A short last row (never one with the hole in it) is centred on its own.
+    const short = row === lastRow && lastCount < cols && !inHole(row, holeC0);
+    const col = short ? cells.filter((x) => x.r === row).findIndex((x) => x.c === c) : c;
+    const rowW = (short ? lastCount : cols) * cellW;
     const cx = Math.round((W - rowW) / 2 + col * cellW + cellW / 2);
     // Centred in the cell, not hung from its top: with nothing below the face
     // there is no reason to bias it upwards, and a short last row now sits on
