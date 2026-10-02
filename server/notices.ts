@@ -34,7 +34,7 @@ export function registerNotices(app: Express, requireAdmin: RequestHandler, requ
       await setNotice(email, {
         kind: "bonus",
         credits,
-        title: `You have ${credits} bonus credits!`,
+        title: `You have ${credits} bonus ${credits === 1 ? "credit" : "credits"}!`,
         body: note || "A thank-you from the MilitaryVoices team. They're in your Pōstify balance now: use them on clips, clean episodes and edits.",
         at: new Date().toISOString(),
       });
