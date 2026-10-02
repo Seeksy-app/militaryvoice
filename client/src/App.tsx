@@ -19,6 +19,7 @@ import Faq from "@/pages/Faq";
 import HelpYoutube from "@/pages/HelpYoutube";
 import ReviewLogin from "@/pages/ReviewLogin";
 import HelpZoom from "@/pages/HelpZoom";
+import HelpZoomStory from "@/pages/HelpZoomStory";
 import HelpPodcast from "@/pages/HelpPodcast";
 import HelpIndex from "@/pages/HelpIndex";
 import HelpRooms from "@/pages/HelpRooms";
@@ -101,6 +102,7 @@ function AppRouter() {
       <Route path="/find">{() => { if (typeof window !== "undefined") window.location.replace("/discover?src=on-air"); return null; }}</Route>
       <Route path="/help/youtube">{() => <HelpYoutube />}</Route>
       <Route path="/help/zoom">{() => <HelpZoom />}</Route>
+      <Route path="/help/zoom-story">{() => <HelpZoomStory />}</Route>
       <Route path="/help/podcast">{() => <HelpPodcast />}</Route>
       <Route path="/help/rooms">{() => <HelpRooms />}</Route>
       <Route path="/help/library">{() => <HelpLibrary />}</Route>

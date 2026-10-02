@@ -71,6 +71,14 @@ export const HELP_INDEX: HelpEntry[] = [
     category: "youtube",
   },
   {
+    title: "What Zoom adds: your calls turned into episodes and clips",
+    summary: "Connect Zoom once and every cloud recording lands in your Library, ready for Pōstify's clips, a clean episode, your podcast and social.",
+    href: "/help/zoom-story",
+    keywords: "zoom why benefits what does it do meeting call recording clips captions episode podcast social automatic library postify pōstify",
+    audience: "podcasters",
+    category: "youtube",
+  },
+  {
     title: "Bring your Zoom recordings into your Library",
     summary: "Connect Zoom once in Integrations and your cloud recordings come into your Library, ready for Pōstify.",
     href: "/help/zoom",

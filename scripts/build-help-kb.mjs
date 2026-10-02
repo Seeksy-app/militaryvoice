@@ -10,7 +10,7 @@ const ORIGIN = (process.argv[2] || "https://www.militaryvoices.ai").replace(/\/+
 const CHROME = process.env.CHROME || "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome";
 const PAGES = [
   ["/help/rooms", "platform"], ["/help/library", "platform"], ["/help/postify", "platform"], ["/help/podcast", "platform"],
-  ["/help/youtube", "platform"], ["/help/zoom", "platform"], ["/help/smartlink", "platform"], ["/help/guests", "platform"],
+  ["/help/youtube", "platform"], ["/help/zoom", "platform"], ["/help/zoom-story", "platform"], ["/help/smartlink", "platform"], ["/help/guests", "platform"],
   ["/help/account", "platform"], ["/faq?all", "marathon"], ["/prepare", "marathon"],
 ];
 
