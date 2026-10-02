@@ -150,9 +150,10 @@ Pōstify picks the best moments and makes each clip in vertical, square and wide
 Press ⋯ on any clip (in Pōstify or your Library's Clips tab):
 Trim this clip
 Play it. Press Start here and End here at the right moments, or use the sliders. It has to be at least 5 seconds. Press Play the new version to check, then Trim the clip. Every shape is remade in about a minute.
-Edit the title and text
-Change the Title (the headline across the top; six words or so reads best) and the Subtitle (the smaller gold line). Stuck? Press Suggest titles for three ideas from what's said in the clip, and click one to use it. Then press Update clip.
-Your clip's music stays when it's remade after a trim or new text.
+Edit text and captions
+Change the Title (the headline across the top; six words or so reads best) and the Subtitle (the smaller gold line). Stuck? Press Suggest titles for three ideas from what's said in the clip, and click one to use it.
+Under Captions, drag Size to make the words bigger or smaller, and pick Where they sit: Top, Middle, Lower third (the usual) or Bottom, or drag the slider to place them exactly. The preview beside it shows the clip as it will look. Then press Update clip; every shape is remade in about a minute.
+Your clip's music stays when it's remade after a trim, new text or new captions.
 The same menu has downloads for each shape, Download subtitles (.srt), Copy the caption and Delete this clip.
 9 Posting
 Clips go anywhere: Instagram, TikTok, Facebook, LinkedIn, YouTube. Press Post on a clip, tick the accounts, pick the shape, write what to say, and choose Next open slot, Now or Pick a time.
@@ -463,7 +464,7 @@ General
 What is the Podcast Marathon?
 26.2 miles of live and ‘Best of MilVet’ podcasting for National Military Podcast Day—featuring back-to-back shows, special guests, and stories from the military and veteran community, streaming around the clock. Shows hand off to each other every 30 minutes, so someone is always on the air.
 When is it?
-It starts Mon, Oct 5 at 7:00 AM US Eastern and runs for 16 hours. Every time on this site is shown in your own time zone, and you can switch zones on the schedule and agenda.
+It starts Mon, Oct 5 at 4:00 AM US Pacific and runs for 16 hours. Every time on this site is shown in your own time zone, and you can switch zones on the schedule and agenda.
 Who is hosting?
 Riccoh Player. Thirty-three years in the Marine Corps, five combat tours, an Emmy, and a seat beside a global media executive. He anchors the day and hands off to each show as it goes live.
 Does it cost anything?
