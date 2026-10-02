@@ -2782,8 +2782,15 @@ export function registerRoutes(app: Express): void {
       const accts = (await storage.listYoutubeAccounts()).filter((a) => a.channelId && lineup.has(a.email.trim().toLowerCase()));
       if (!accts.length) return { state: "off", detail: "No podcaster has connected a channel" };
       // All at once: one at a time ran past the check's ten seconds.
-      const results = await Promise.all(accts.map(async (a) => ({ a, ok: !!(await youtubeToken(a.email.trim().toLowerCase()).catch(() => null)) })));
-      const broken = results.filter((x) => !x.ok).map(({ a }) => lineup.get(a.email.trim().toLowerCase()) || a.channelTitle || a.email);
+      // Five seconds each: one that hangs is reported, not allowed to stall the rest.
+      const results = await Promise.all(accts.map(async (a) => ({
+        a,
+        ok: await Promise.race([youtubeToken(a.email.trim().toLowerCase()).then((t) => (t ? "yes" : "no")).catch(() => "no"), new Promise<string>((r) => setTimeout(() => r("slow"), 5_000))]),
+      })));
+      const name = (a: (typeof accts)[number]) => lineup.get(a.email.trim().toLowerCase()) || a.channelTitle || a.email;
+      const broken = results.filter((x) => x.ok === "no").map(({ a }) => name(a));
+      const slow = results.filter((x) => x.ok === "slow").map(({ a }) => name(a));
+      if (!broken.length && slow.length) return { state: "ok", detail: `${accts.length - slow.length} of ${accts.length} sign in; Google was slow for ${slow.join(", ")}` };
       return broken.length
         ? { state: "down", detail: `${accts.length - broken.length} of ${accts.length} sign in. Needs reconnecting: ${broken.join(", ")}` }
         : { state: "ok", detail: `All ${accts.length} connected channels sign in` };
