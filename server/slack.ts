@@ -48,3 +48,24 @@ export async function slackInbound(o: {
     console.warn("Slack post failed:", (err as Error).message);
   }
 }
+
+/** A short heads-up to the team channel, with an optional button. Never throws. */
+export async function slackNote(text: string, button?: { label: string; url: string }): Promise<void> {
+  if (!isSlackInboxConfigured()) return;
+  try {
+    await fetch(process.env.SLACK_INBOX_WEBHOOK_URL ?? "", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        text,
+        blocks: [
+          { type: "section", text: { type: "mrkdwn", text: esc(text) } },
+          ...(button ? [{ type: "actions", elements: [{ type: "button", text: { type: "plain_text", text: button.label }, url: button.url.startsWith("http") ? button.url : `${ORIGIN}${button.url}` }] }] : []),
+        ],
+      }),
+      signal: AbortSignal.timeout(10_000),
+    });
+  } catch (err) {
+    console.warn("Slack post failed:", (err as Error).message);
+  }
+}

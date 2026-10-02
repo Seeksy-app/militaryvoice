@@ -117,7 +117,7 @@ import {
 import { renderBroadcastEmail, renderConfirmationEmail, renderNudge } from "./email.js";
 import { alexAnswer, type AlexTurn } from "./alex.js";
 import { emailShell, EMAIL_BANNERS } from "./email.js";
-import { slackInbound } from "./slack.js";
+import { slackInbound, slackNote } from "./slack.js";
 import { registerMagazine, planSegments, claimSegmentCut } from "./magazine.js";
 import { registerHealth, beat, addHealthCheck } from "./health.js";
 import { registerNotices } from "./notices.js";
@@ -8662,6 +8662,13 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  /** Tell the team a slot just opened: who, when it airs, and how. */
+  async function slotReleased(sg: { podcastName: string; hostName: string; email: string; slotIndex: number; eventId: number }, how: string) {
+    const ev = await storage.getEventById(sg.eventId).catch(() => undefined);
+    const when = ev ? new Intl.DateTimeFormat("en-US", { weekday: "short", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }).format(new Date(Date.parse(ev.startAtUtc) + sg.slotIndex * ev.slotMinutes * 60_000)) : `slot ${sg.slotIndex}`;
+    await slackNote(`:warning: Slot opened: ${when} ET. ${sg.hostName.trim()} (${sg.podcastName.trim()}, ${sg.email}) ${how}.`, { label: "Open the lineup", url: "/admin" });
+  }
+
   app.patch("/api/admin/signups/:id/cancel", requireAdmin, async (req, res) => {
     const id = Number(req.params.id);
     const updated = await storage.cancelSignup(id);
@@ -8669,6 +8676,7 @@ export function registerRoutes(app: Express): void {
       res.status(404).json({ message: "Signup not found" });
       return;
     }
+    void slotReleased(updated, `cancelled by ${getAdminEmail(req) ?? "an admin"}`);
     res.json(updated);
   });
 
@@ -9765,6 +9773,9 @@ The Podcast Marathon team`;
       return;
     }
     await storage.cancelSignup(id);
+    // A podcaster giving up their slot is news the day it happens, not when
+    // someone notices a gap in the running order. Justin's 2:30 went quietly.
+    void slotReleased(row, "released it from their dashboard");
     res.json({ ok: true });
   });
 
