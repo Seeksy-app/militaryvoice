@@ -119,6 +119,7 @@ import { alexAnswer, type AlexTurn } from "./alex.js";
 import { emailShell, EMAIL_BANNERS } from "./email.js";
 import { slackInbound } from "./slack.js";
 import { registerMagazine, planSegments, claimSegmentCut } from "./magazine.js";
+import { registerHealth, beat } from "./health.js";
 import { draftReply, matchBroadcast, isKnownSender, looksAutomatic, composeAck, firstNameFor, stripQuoted, alexSignatureHtml, threadKey } from "./inbox.js";
 import { adminChat, type ChatTurn } from "./adminChat.js";
 import { waitUntil } from "@vercel/functions";
@@ -5203,6 +5204,8 @@ export function registerRoutes(app: Express): void {
   app.get("/api/cron/studio-channels", async (req, res) => {
     const secret = process.env.CRON_SECRET;
     if (secret && (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "") !== secret) return res.status(401).json({ message: "Not authorised." });
+    // Every minute: Vercel's scheduler is running.
+    void beat("cron");
     const ev = await storage.getFeaturedEvent();
     const studio = await storage.getOrCreateStudio(ev.id);
     if (!studio.broadcastEgressId && studio.status !== "Live") return res.json({ added: 0, reason: "not on air" });
@@ -5762,6 +5765,7 @@ export function registerRoutes(app: Express): void {
   registerMyStudio(app, requireHostSession, { youtubeToken });
   registerCreatorCampaigns(app, requireHostSession);
   registerMagazine(app, requireAdmin, requireAgent);
+  registerHealth(app, requireAdmin);
   registerAutomations(app, requireAdmin, {
     unsubscribeUrl: (req, email) => unsubscribeUrl(req, email),
     resolveRecipients: (segment, eventId) => resolveBroadcastRecipients({ segment, eventId } as BroadcastRow),
@@ -5796,6 +5800,8 @@ export function registerRoutes(app: Express): void {
   });
 
   app.post("/api/agent/clip-jobs/claim", requireAgent, async (req, res) => {
+    // The worker asking for work is how System health knows it's alive.
+    void beat("worker");
     // "Edit text" first: a minute's work someone is watching the screen for.
     // Only to a worker that says it can: an older one would read the job as
     // "clip this whole recording" and remake every clip in it.

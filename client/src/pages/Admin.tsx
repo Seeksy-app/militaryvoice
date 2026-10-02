@@ -40,6 +40,7 @@ import { AdminNav, EVENT_GROUPS, TOP_GROUPS, EVENT_SECTION_KEYS, TOP_SECTION_KEY
 import { MagazineAdmin } from "@/components/MagazineAdmin";
 import Discover from "@/pages/Discover";
 import Directory from "@/pages/Directory";
+import { AdminHealth } from "@/components/AdminHealth";
 import { SponsorLeads } from "@/components/SponsorLeads";
 import { SponsorFinder } from "@/components/SponsorFinder";
 import { ShowSponsorsCard } from "@/components/ShowSponsors";
@@ -5011,6 +5012,9 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                   </TabsContent>
                   <TabsContent value="crm" className="mt-2 lg:mt-0">
                     <CrmPanel />
+                  </TabsContent>
+                  <TabsContent value="health" className="mt-2 lg:mt-0">
+                    <AdminHealth />
                   </TabsContent>
                   <TabsContent value="team" className="mt-2 lg:mt-0">
                     <TeamCard />

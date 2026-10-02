@@ -7,6 +7,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { Check, Download, Loader2, Video } from "lucide-react";
+import { IconTile } from "@/components/ui/icon-tile";
 
 interface ZoomState { configured: boolean; connected: boolean; zoomEmail: string; autoImport: boolean }
 interface ZoomRec { meetingId: string; uuid: string; topic: string; startTime: string; durationMin: number; sizeBytes: number; importable: boolean; imported: boolean }
@@ -63,7 +64,7 @@ export function ZoomConnect({ row = false }: { row?: boolean } = {}) {
       <div className="flex flex-wrap items-center gap-3.5">
         {/* Zoom's own blue, like the other brand marks in Integrations; the
             48px slot lines its name up with the rows around it. */}
-        <span className="flex w-12 shrink-0 justify-center"><span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#0B5CFF] text-white"><Video className="h-5 w-5" /></span></span>
+        <IconTile icon={Video} />
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-foreground">Zoom</p>
           <p className="text-sm text-muted-foreground">
