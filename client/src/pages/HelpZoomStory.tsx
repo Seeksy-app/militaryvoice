@@ -234,7 +234,7 @@ function ClipsPicture() {
     </div>
   );
   return (
-    <div className="grid grid-cols-3 gap-3 sm:gap-4">
+    <div className="mx-auto grid max-w-lg grid-cols-3 gap-3 sm:gap-4">
       {clip("Why I almost didn't enlist", ["Best decision", "I made"], "from-[#3a4a5c] to-[#1f2833]")}
       {clip("The call that changed my career", ["Nobody tells", "you this"], "from-[#4b3d33] to-[#231c17]")}
       {clip("What vets need to hear", ["You are not", "alone"], "from-[#2f4a42] to-[#16241f]")}
