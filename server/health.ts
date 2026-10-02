@@ -117,6 +117,33 @@ const DEFS: Def[] = [
     },
   },
   {
+    key: "queue", name: "Worker queue (Render)", group: "The platform", powers: "How much work is waiting for the clip worker, and whether any of it is stuck",
+    // Every queue the worker takes from, counted where it lives. Red when work piles up or a job
+    // has been "running" for over half an hour (the worker died holding it and hasn't handed it on).
+    run: async () => {
+      const n = async (q: ReturnType<typeof sql>) => Number(((await db.execute(q)) as unknown as { n: number | string }[])[0]?.n ?? 0);
+      const stale = new Date(Date.now() - 30 * 60_000).toISOString();
+      const [clipsWait, clipsRun, clipsStuck, imports, edits, music, suggest, cuts, audio, transcripts] = await Promise.all([
+        n(sql`select count(*)::int as n from recordings where clip_status = 'queued'`),
+        n(sql`select count(*)::int as n from recordings where clip_status = 'running'`),
+        n(sql`select count(*)::int as n from recordings where clip_status = 'running' and clip_claimed_at <> '' and clip_claimed_at < ${stale}`),
+        n(sql`select count(*)::int as n from recordings where status = 'Importing'`),
+        n(sql`select count(*)::int as n from recordings where episode_edit like '%"status":"queued"%' or episode_edit like '%"status":"running"%'`),
+        n(sql`select count(*)::int as n from recordings where music_mix like '%"status":"queued"%' or music_mix like '%"status":"running"%'`),
+        n(sql`select count(*)::int as n from recordings where edit_suggest like '%"status":"queued"%' or edit_suggest like '%"status":"running"%'`),
+        n(sql`select count(*)::int as n from segment_cuts where status in ('queued', 'claimed')`).catch(() => 0),
+        n(sql`select count(*)::int as n from hosted_episodes where audio_job in ('queued', 'copy', 'running', 'copying')`).catch(() => 0),
+        n(sql`select count(*)::int as n from show_transcripts where status in ('queued', 'running')`).catch(() => 0),
+      ]);
+      const parts = ([[clipsWait, "clips waiting"], [clipsRun, "clips running"], [imports, "imports"], [edits, "episode edits"], [music, "music mixes"], [suggest, "edit suggestions"], [cuts, "magazine segments"], [audio, "episode MP3s"], [transcripts, "transcripts for Ask my show"]] as const)
+        .filter(([c]) => c > 0).map(([c, label]) => `${c} ${label}`);
+      const total = clipsWait + clipsRun + imports + edits + music + suggest + cuts + audio + transcripts;
+      if (clipsStuck) return { state: "down", detail: `${clipsStuck} clip job${clipsStuck === 1 ? "" : "s"} stuck over 30 min${parts.length ? ` · ${parts.join(", ")}` : ""}` };
+      if (total >= 15) return { state: "down", detail: `Backing up: ${parts.join(", ")}` };
+      return { state: "ok", detail: total ? parts.join(", ") : "Empty, nothing waiting" };
+    },
+  },
+  {
     key: "cron", name: "Scheduled jobs (Vercel cron)", group: "The platform", powers: "Reminders, nudges, channel go-live, Listen Notes, reach",
     run: async () => {
       const t = await lastBeat("cron");
