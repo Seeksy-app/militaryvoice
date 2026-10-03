@@ -542,11 +542,44 @@ function icsEscape(text: string): string {
   return text.replace(/\\/g, "\\\\").replace(/,/g, "\\,").replace(/;/g, "\\;").replace(/\n/g, "\\n");
 }
 
+/** Studio hosts: the people given the whole studio console and nothing else in admin. */
+async function studioHostEmails(): Promise<string[]> {
+  return ((await storage.getSetting("studio_host_emails")) ?? "").split(/[,\s]+/).map((e) => e.trim().toLowerCase()).filter((e) => e.includes("@"));
+}
+async function studioHostEmail(req: Request): Promise<string | null> {
+  const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+  if (!email) return null;
+  return (await studioHostEmails()).includes(email) ? email : null;
+}
+/**
+ * What the studio console calls, and only that. Reading the lineup and the
+ * recordings list is allowed; changing them is not. Deleting a whole studio
+ * and connecting or removing YouTube accounts stay with the admins.
+ */
+const STUDIO_HOST_PATHS = /^\/api\/admin\/(studio|studios|scenes|run-of-show|media|destinations|ingress|lower-thirds|standby-build)(\/|$)/;
+const STUDIO_HOST_READS = /^\/api\/admin\/(signups|recordings|cohost-slots)(\/|$)/;
+function studioHostMay(req: Request): boolean {
+  const path = req.path;
+  if (req.method === "DELETE" && /^\/api\/admin\/studios\//.test(path)) return false;
+  if (STUDIO_HOST_PATHS.test(path)) return true;
+  return req.method === "GET" && STUDIO_HOST_READS.test(path);
+}
+
 async function requireAdmin(req: Request, res: Response, next: NextFunction) {
   // Preferred: a signed admin session from the email-code sign-in.
   const sessionEmail = getAdminEmail(req);
   if (sessionEmail && (await storage.isAdminEmail(sessionEmail))) {
     (req as any).adminEmail = sessionEmail;
+    next();
+    return;
+  }
+  // A studio host (Amy, Enrique): signed in as themselves, admin inside the
+  // studio and nowhere else. Scenes, video, people, going live; not the CRM,
+  // money or settings.
+  const studioHost = await studioHostEmail(req);
+  if (studioHost && studioHostMay(req)) {
+    (req as any).adminEmail = studioHost;
+    (req as any).studioHost = true;
     next();
     return;
   }
@@ -1986,9 +2019,45 @@ export function registerRoutes(app: Express): void {
   });
 
   // ---- Admin auth: one-time email code, no shared password ---------------------
+  /** May this visitor run the studio console? Admins, and studio hosts signed in as themselves. */
+  app.get("/api/host/studio-access", async (req, res) => {
+    noStore(res);
+    const admin = getAdminEmail(req);
+    const isAdmin = Boolean(admin && (await storage.isAdminEmail(admin)));
+    const host = await studioHostEmail(req);
+    const email = isAdmin ? admin! : host ?? (getSessionEmail(req) ?? "");
+    if (!isAdmin && !host) return res.json({ access: false, signedIn: Boolean(getSessionEmail(req)), email });
+    const person = await studioPerson(email);
+    res.json({ access: true, role: isAdmin ? "admin" : "studio-host", email, displayName: person.name, title: person.title, photoUrl: person.photoUrl });
+  });
+
+  /** Admin → Team: who are studio hosts. */
+  app.get("/api/admin/studio-hosts", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost) return res.status(403).json({ message: "Admins only." });
+    const emails = await studioHostEmails();
+    const signups = await storage.listSignups((await storage.getFeaturedEvent()).id);
+    res.json(await Promise.all(emails.map(async (email) => {
+      const sg = signups.find((x) => x.status !== "cancelled" && x.email.trim().toLowerCase() === email);
+      const prof = sg ? undefined : await storage.getProfileByEmail(email).catch(() => undefined);
+      return { email, name: sg?.hostName.trim() || prof?.hostName?.trim() || "" };
+    })));
+  });
+  app.put("/api/admin/studio-hosts", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost) return res.status(403).json({ message: "Admins only." });
+    const emails = Array.from(new Set((Array.isArray(req.body?.emails) ? req.body.emails : []).map((e: unknown) => String(e).trim().toLowerCase()).filter((e: string) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)))).slice(0, 50);
+    await storage.setSetting("studio_host_emails", emails.join(","));
+    res.json({ emails });
+  });
+
   app.get("/api/admin/me", async (req, res) => {
     const email = getAdminEmail(req);
     if (!email || !(await storage.isAdminEmail(email))) {
+      // A studio host's console asks this for the avatar: their own card.
+      const host = await studioHostEmail(req);
+      if (host) {
+        const person = await studioPerson(host);
+        return res.json({ email: host, name: person.name, isOwner: false, studioHost: true, displayName: person.name, title: person.title, photoUrl: person.photoUrl });
+      }
       res.status(401).json({ message: "Not signed in" });
       return;
     }
@@ -4216,7 +4285,7 @@ export function registerRoutes(app: Express): void {
     }
     const { studio } = await adminStudio(req);
     const room = roomName(studio.id);
-    const email = getAdminEmail(req) || "console";
+    const email = (req as any).adminEmail || getAdminEmail(req) || "console";
 
     // Watching the room and being in it are different jobs. A producer who
     // wants to appear needs a real participant row, so they show up in the
@@ -4842,6 +4911,7 @@ export function registerRoutes(app: Express): void {
     if (!host) return false;
     const listed = ((await storage.getSetting("studio_crew_emails")) ?? "").split(/[,\s]+/).map((e) => e.trim().toLowerCase()).filter(Boolean);
     if (listed.includes(host)) return true;
+    if ((await studioHostEmails()).includes(host)) return true;
     return (await storage.listEventTeam(eventId)).some((m) => m.email.trim().toLowerCase() === host);
   }
 

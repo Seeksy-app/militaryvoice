@@ -42,6 +42,7 @@ import Watchfloor from "@/pages/Watchfloor";
 import EventAbout from "@/pages/EventAbout";
 import Studio from "@/pages/Studio";
 import StudioComposite from "@/pages/StudioComposite";
+import StudioControl from "@/pages/StudioControl";
 import Watch from "@/pages/Watch";
 import Magazine from "@/pages/Magazine";
 import { PrivacyPolicy, TermsOfService } from "@/pages/Legal";
@@ -124,6 +125,7 @@ function AppRouter() {
       <Route path="/about">{() => <EventAbout />}</Route>
       <Route path="/event/:slug/about">{(params) => <EventAbout slug={params.slug} />}</Route>
       <Route path="/studio/composite">{() => <StudioComposite />}</Route>
+      <Route path="/studio/control">{() => <StudioControl />}</Route>
       <Route path="/watch">{() => <Watch />}</Route>
       <Route path="/magazine">{() => <Magazine />}</Route>
       <Route path="/magazine/:slug">{(p) => <Magazine slug={p.slug} />}</Route>

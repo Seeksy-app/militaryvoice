@@ -309,7 +309,7 @@ function SeatMenuItems({ current }: { current: string }) {
   );
 }
 
-function LoginCard({ pending }: { pending: PendingSlotSummary | null }) {
+export function LoginCard({ pending }: { pending: PendingSlotSummary | null }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [step, setStep] = useState<"email" | "code">("email");

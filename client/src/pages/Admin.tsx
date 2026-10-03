@@ -31,6 +31,7 @@ import { SocialCalendar } from "@/components/SocialCalendar";
 import { DiscoveryStats } from "@/components/DiscoveryStats";
 import { RunOfShow } from "@/components/RunOfShow";
 import { StudioConsole } from "@/components/StudioConsole";
+import { StudioHostsCard } from "@/components/StudioHostsCard";
 import { RiccohPosts } from "@/components/RiccohPosts";
 import { RiccohImages } from "@/components/RiccohImages";
 import type { AudienceSnapshot } from "@/components/AudienceReach";
@@ -4939,7 +4940,8 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                 <TabsContent value="run" className="mt-2 lg:mt-0">
                   <RunOfShow adminGet={adminGet} adminSend={adminSend} eventId={selectedEventId} />
                 </TabsContent>
-                <TabsContent value="team" className="mt-2 lg:mt-0">
+                <TabsContent value="team" className="mt-2 space-y-6 lg:mt-0">
+                  <StudioHostsCard />
                   <EventTeamPanel eventId={selectedEventId} />
                 </TabsContent>
                 <TabsContent value="magazine" className="mt-2 lg:mt-0">
