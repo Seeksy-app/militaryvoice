@@ -94,8 +94,14 @@ export function registerGreenRoomChat(app: Express, requireAdmin: RequestHandler
     try {
       for await (const piece of alexAnswer(turns, email)) {
         all += piece;
-        const cut = all.lastIndexOf("[");
-        const safe = cut >= 0 && HANDOFF_TAG.startsWith(all.slice(cut)) ? cut : all.length;
+        let safe = all.indexOf(HANDOFF_TAG);
+        if (safe < 0) {
+          // Hold back the longest tail that could still become the tag.
+          safe = all.length;
+          for (let k = Math.min(HANDOFF_TAG.length - 1, all.length); k > 0; k--) {
+            if (HANDOFF_TAG.startsWith(all.slice(-k))) { safe = all.length - k; break; }
+          }
+        }
         if (safe > sent) {
           res.write(all.slice(sent, safe));
           sent = safe;
