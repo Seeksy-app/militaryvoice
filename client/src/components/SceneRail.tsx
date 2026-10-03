@@ -511,7 +511,9 @@ export function SceneRail({
           // A hand-off's card wears the co-host who takes it, so they can find their own.
           const desk = !sg && sc.runItemId ? desks?.[sc.runItemId] : undefined;
           const mine = Boolean(desk && meEmail && desk.email.trim().toLowerCase() === meEmail.trim().toLowerCase());
-          const deskFirst = desk ? desk.name.trim().split(/\s+/)[0] : "";
+          // First name, but "Dr. Brown" rather than "Dr.".
+          const deskWords = desk ? desk.name.trim().split(/\s+/) : [];
+          const deskFirst = /^(dr|mr|mrs|ms|sgt)\.?$/i.test(deskWords[0] ?? "") ? `${deskWords[0]} ${deskWords[deskWords.length - 1].replace(/,$/, "")}` : deskWords[0] ?? "";
           const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
           const here = sg
             ? presentNames.some(
