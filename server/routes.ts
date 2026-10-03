@@ -5051,7 +5051,8 @@ export function registerRoutes(app: Express): void {
           stageMediaKind: mediaKind,
           stageMediaLabel: scene.mediaUrl ? scene.mediaLabel : "",
           stageMediaPlaying: Boolean(rowMedia),
-          stageMediaPeople: Boolean(scene.withPeople && rowMedia),
+          // A co-host still on stage sits beside the clip rather than under it.
+          stageMediaPeople: Boolean((scene.withPeople || taken.keptHosts > 0) && rowMedia),
           ...lookFor(scene),
           ...banner,
           // The sponsor rides on the lower third too, when there is one.
@@ -5067,6 +5068,11 @@ export function registerRoutes(app: Express): void {
       }
     }
 
+    // A host or co-host on stage keeps the stage: a clip or picture plays beside them.
+    const hostOnStage = await (async () => {
+      const hs = await showHosts();
+      return (await storage.listStudioParticipants(studio.id)).some((p) => p.state === "On stage" && withPresence(p) && isShowHost(p, hs));
+    })();
     const patch =
       scene.kind === "countdown"
         ? {
@@ -5093,7 +5099,7 @@ export function registerRoutes(app: Express): void {
             stageMediaLabel: scene.mediaUrl ? scene.mediaLabel : "",
             // A scene with no media and no picture is "back to the cameras".
             stageMediaPlaying: Boolean(mediaUrl),
-            stageMediaPeople: Boolean(scene.withPeople && mediaUrl),
+            stageMediaPeople: Boolean((scene.withPeople || hostOnStage) && mediaUrl),
             ...lookFor(scene),
             stageCardName: "",
             stageCardShow: "",
@@ -5291,9 +5297,15 @@ export function registerRoutes(app: Express): void {
     const moved: { id: number; to: string }[] = [];
     const present = (await storage.listStudioParticipants(studio.id)).filter(withPresence);
     let onStage = 0;
-    for (const p of present) {
+    let keptHosts = 0;
+    // Hosts who stay come first, so a full stage turns away a newcomer, never them.
+    const order = [...present].sort((a, b) => Number(b.state === "On stage" && isShowHost(b, hosts)) - Number(a.state === "On stage" && isShowHost(a, hosts)));
+    for (const p of order) {
       let target: "On stage" | "Green room";
-      if (mediaScene) target = "Green room";
+      // A host or co-host already on stage stays there whatever is taken:
+      // they take themselves off. Moving on mustn't cut them mid-sentence.
+      if (p.state === "On stage" && isShowHost(p, hosts)) { target = "On stage"; keptHosts += 1; }
+      else if (mediaScene) target = "Green room";
       // A co-host who is also a podcaster is the guest on their own show.
       else if (guestScene && belongs(p)) target = "On stage";
       // On a hand-off slide the hosts add themselves when they're ready.
@@ -5301,8 +5313,9 @@ export function registerRoutes(app: Express): void {
       // A podcaster's guest comes on with them: anyone who joined through the
       // same signup link.
       else target = guestScene && belongs(p) ? "On stage" : "Green room";
+      const kept = p.state === "On stage" && isShowHost(p, hosts);
       if (target === "On stage") {
-        if (onStage >= studio.maxOnStage) target = "Green room";
+        if (onStage >= studio.maxOnStage && !kept) target = "Green room";
         else onStage += 1;
       }
       if (p.state !== target) {
@@ -5329,7 +5342,7 @@ export function registerRoutes(app: Express): void {
     const sgEmail = (signup?.email ?? "").trim().toLowerCase();
     const hostsOwn = Boolean(signup) && (/ceremon/i.test(signup!.podcastName) || sgEmail === HOUSE_EMAIL || hosts.emails.has(sgEmail) || team.some((m) => m.email.trim().toLowerCase() === sgEmail));
     const missing = guestScene && !hostsOwn && !present.some((p) => belongs(p));
-    return { studio: updated, moved, missing: missing ? signup!.podcastName : null };
+    return { studio: updated, moved, missing: missing ? signup!.podcastName : null, keptHosts };
   }
 
   app.post("/api/admin/run-of-show/:id/take", requireAdmin, async (req, res) => {
