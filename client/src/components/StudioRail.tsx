@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { MediaLibrary, type MediaItem } from "@/components/MediaLibrary";
 import { LOGO_CORNERS, type StudioRow } from "@shared/schema";
-import { Captions, Image as ImageIcon, Layers, ScrollText, Upload, X, Check, Plus, Pencil, Trash2, PanelRightOpen, PanelRightClose, MessagesSquare } from "lucide-react";
+import { Captions, Image as ImageIcon, Layers, ScrollText, Upload, X, Check, Plus, Pencil, Trash2, PanelRightOpen, PanelRightClose } from "lucide-react";
 
 // The graphics rail, down the right-hand side of the stage.
 //
@@ -115,7 +115,9 @@ export function StudioRail({
   chatWaiting = 0,
 }: Props) {
   const [open, setOpen] = useState<RailPanel | null>(null);
-  const tabs = chat ? [...TABS, { key: "chat" as const, icon: MessagesSquare, label: "Michael" }] : TABS;
+  // The chat opens from the big Message Michael card only; no tab of its own here.
+  const tabs = TABS;
+  const panelLabel = open === "chat" ? "Michael" : tabs.find((t) => t.key === open)?.label;
   const logoFileRef = useRef<HTMLInputElement | null>(null);
   // Folded away by default: on the day everything is preset, and the stage
   // wants the width. Remembered per browser for whoever does use it.
@@ -198,7 +200,7 @@ export function StudioRail({
           </div>
           <div className="flex h-9 shrink-0 items-center justify-between border-b border-white/20 pl-3 pr-1.5">
             <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/60">
-              {tabs.find((t) => t.key === open)?.label}
+              {panelLabel}
             </span>
             <button
               type="button"

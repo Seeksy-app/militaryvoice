@@ -1466,6 +1466,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
             onUncover={() => patchStudio.mutate({ brbOn: false })}
             studioId={studioId ?? undefined}
             onChat={() => setChatOpen((n) => n + 1)}
+            chatWaiting={deskWaiting}
           />
         );
       })()}
@@ -1666,7 +1667,8 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                 <span className="hidden max-w-[12rem] truncate font-medium opacity-80 sm:inline">{timeLeft.remaining < 0 ? `over · ${timeLeft.label}` : `until ${timeLeft.label}`}</span>
               </div>
             )}
-            {me0 && !me0.studioHost && !isRoom && (
+            {/* With the big Message Michael card on screen, no second door to the same chat. */}
+            {me0 && !me0.studioHost && !isRoom && !simple && (
               <Button
                 variant="ghost"
                 className={`relative h-9 gap-1.5 rounded-full px-3 text-xs font-semibold ${deskWaiting ? "bg-[#F0A71F] text-[#000741] hover:bg-[#f5b94a]" : "text-white/70 hover:bg-white/10 hover:text-white"}`}

@@ -23,6 +23,7 @@ export function StudioHostBar({
   onUncover,
   studioId,
   onChat,
+  chatWaiting = 0,
 }: {
   meOnStage: boolean;
   stageBusy: boolean;
@@ -36,6 +37,8 @@ export function StudioHostBar({
   studioId?: number;
   /** Opens Michael's chat in the console's right rail. Without it the chat opens here, under the buttons. */
   onChat?: () => void;
+  /** Messages waiting on Michael, shown on the card. */
+  chatWaiting?: number;
 }) {
   const [chatOpen, setChatOpen] = useState(false);
   const openChat = () => (onChat ? onChat() : setChatOpen(true));
@@ -97,7 +100,7 @@ export function StudioHostBar({
           <MessageCircle className="h-8 w-8 shrink-0" />
           <span>
             <span className="block text-xl font-bold leading-tight">Message Michael</span>
-            <span className="block text-xs text-[#000741]/75">Opens the chat on the right</span>
+            <span className="block text-xs text-[#000741]/75">{chatWaiting > 0 ? `${chatWaiting} waiting · opens the chat` : "Opens the chat on the right"}</span>
           </span>
         </button>
       </div>
