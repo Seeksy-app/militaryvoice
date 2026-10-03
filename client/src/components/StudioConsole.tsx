@@ -904,6 +904,9 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
   const { data: scenes } = useQuery<SceneRow[]>({
     queryKey: ["/api/admin/scenes", studioId],
     queryFn: () => adminGet(`/api/admin/scenes${q}`),
+    // More than one console runs the day (Michael's, a studio host's): a
+    // scene added or removed in one reaches the others within half a minute.
+    refetchInterval: 30_000,
   });
 
   type PresSlide = { id: number; slideIndex: number; url: string };
@@ -966,7 +969,15 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
     // A scene off the agenda moves people too, so it gets the same warning a
     // taken row does when the podcaster hasn't turned up.
     onSuccess: afterTake,
-    onError: (e: Error) => toast({ title: "Couldn't take that scene", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => {
+      // Removed from another console since this list loaded: refresh it rather than leave a dead card.
+      if (/not found/i.test(e.message)) {
+        void queryClient.invalidateQueries({ queryKey: ["/api/admin/scenes", studioId] });
+        toast({ title: "That scene was removed", description: "The list has been refreshed. Press Next again." });
+        return;
+      }
+      toast({ title: "Couldn't take that scene", description: e.message, variant: "destructive" });
+    },
   });
 
   const invalidateScenes = () => queryClient.invalidateQueries({ queryKey: ["/api/admin/scenes", studioId] });
