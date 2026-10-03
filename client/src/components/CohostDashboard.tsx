@@ -62,7 +62,7 @@ export function CohostDashboard({ info, onBack }: { info: CohostInfo; onBack?: (
   const studioLink = info.studioHost ? "/studio/control" : greenRoom;
   const handoffRange = handoffs.length ? `${formatTimeInZone(new Date(handoffs[0].atUtc), ET)} to ${formatTimeInZone(new Date(handoffs[handoffs.length - 1].atUtc), ET)} ET` : "";
 
-  const Show = ({ s }: { s: CohostShow }) => (
+  const Show = ({ s, hideLine = false }: { s: CohostShow; hideLine?: boolean }) => (
     <div className="flex gap-3 rounded-xl border border-border bg-background p-3" data-testid={`cohost-show-${s.signupId}`}>
       {s.photoUrl ? <img src={resolveUploadUrl(s.photoUrl)} alt="" className="h-14 w-14 shrink-0 rounded-full object-cover ring-2 ring-[#F0A71F]/40" /> : <div className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-muted"><Mic2 className="h-5 w-5" /></div>}
       <div className="min-w-0 flex-1">
@@ -72,7 +72,7 @@ export function CohostDashboard({ info, onBack }: { info: CohostInfo; onBack?: (
         </div>
         <p className="truncate text-sm font-semibold">{s.podcastName.trim() || s.hostName}</p>
         <p className="truncate text-xs text-muted-foreground">with {s.hostName}</p>
-        {s.line && (
+        {s.line && !hideLine && (
           <p className="mt-2 rounded-lg bg-[#F0A71F]/10 px-3 py-2 text-sm leading-relaxed text-[#6b4600]"><span className="mr-1 text-[10px] font-bold uppercase tracking-wide">Say</span>{s.line}</p>
         )}
         {s.sponsor && (
@@ -150,7 +150,7 @@ export function CohostDashboard({ info, onBack }: { info: CohostInfo; onBack?: (
                     ) : (
                       <p className="mt-3 text-sm text-muted-foreground">Script coming soon.</p>
                     )}
-                    {h.next && <div className="mt-3"><p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Then bring on</p><Show s={h.next} /></div>}
+                    {h.next && <div className="mt-3"><p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Then bring on</p><Show s={h.next} hideLine={Boolean(h.script)} /></div>}
                   </li>
                 ))}
               </ol>
