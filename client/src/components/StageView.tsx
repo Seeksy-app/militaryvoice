@@ -871,7 +871,6 @@ function SpotFrame({ t0, beats }: { t0?: number; beats?: Record<string, number> 
       <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, #04102b 0%, rgba(4,16,43,.94) 42%, rgba(4,16,43,.62) 68%, rgba(4,16,43,.45) 100%)" }} />
     </div>
   );
-  const miles = Math.min(26.2, since("miles") * 13).toFixed(1);
   const gold = "#F0A71F";
   const eyebrow = (text: string) => (
     <p className="font-bold uppercase" style={{ color: gold, fontSize: "1.5cqw", letterSpacing: "0.22em" }}>{text}</p>
@@ -960,7 +959,8 @@ function SpotFrame({ t0, beats }: { t0?: number; beats?: Record<string, number> 
       </div>
 
       <div className={shot("miles")}>
-        <p className="font-bold leading-none tabular-nums tracking-tight" style={{ ...HEADLINE_FONT, fontSize: "15cqw", color: gold }}>{miles}</p>
+        {/* Always 26.2, never a count that could be caught at 20.3. It lands with a small push instead. */}
+        <p className="font-bold leading-none tabular-nums tracking-tight" style={{ ...HEADLINE_FONT, fontSize: "15cqw", color: gold, transform: `scale(${on("miles") ? 1 : 0.88})`, transformOrigin: "0% 50%", transition: "transform 900ms cubic-bezier(.2,.8,.2,1)" }}>26.2</p>
         <p className="mt-[1cqw] font-bold leading-tight" style={{ ...HEADLINE_FONT, fontSize: "4cqw" }}>miles of stories,<br />back to back</p>
       </div>
 
