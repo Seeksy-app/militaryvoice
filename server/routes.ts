@@ -11038,15 +11038,36 @@ Watch at militaryvoices.ai/agenda
     return Array.from(out.values());
   }
 
-  app.get("/api/admin/view-as", requireAdmin, async (_req, res) => {
+  /**
+   * The admin's own podcaster account, so View as always has a way back. A
+   * seat replaces the host sign-in, and without this the only road home was a
+   * fresh emailed code, which read as "keep me signed in" not working.
+   */
+  const homeKey = (req: Request) => `view_as_home:${(getAdminEmail(req) ?? "").trim().toLowerCase()}`;
+  async function seatsFor(req: Request) {
+    const seats = await viewAsSeats();
+    const home = ((await storage.getSetting(homeKey(req))) ?? "").trim().toLowerCase();
+    if (home && !seats.some((x) => x.email === home)) {
+      const prof = (await storage.listAllProfiles()).find((p) => p.email.trim().toLowerCase() === home);
+      const name = prof?.podcastName.trim() || prof?.hostName.trim() || "Your own account";
+      seats.unshift({ email: home, label: `${name} · You`, kind: "crew" });
+    }
+    return seats;
+  }
+
+  app.get("/api/admin/view-as", requireAdmin, async (req, res) => {
     noStore(res);
-    res.json(await viewAsSeats());
+    res.json(await seatsFor(req));
   });
 
   app.post("/api/admin/view-as", requireAdmin, async (req, res) => {
     const email = String(req.body?.email ?? "").trim().toLowerCase();
-    const seat = (await viewAsSeats()).find((x) => x.email === email);
+    const seats = await seatsFor(req);
+    const seat = seats.find((x) => x.email === email);
     if (!seat) return res.status(400).json({ message: "That isn't one of your seats." });
+    // Leaving your own account for a seat: remember it, so it's a seat too.
+    const current = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    if (current && current !== email && !seats.some((x) => x.email === current)) await storage.setSetting(homeKey(req), current);
     // The admin is already signed in for thirty days; viewing as someone else
     // must not quietly swap that for a twelve-hour cookie that dies with the
     // browser, which is what sent them back for a code every morning.

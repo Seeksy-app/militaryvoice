@@ -17,6 +17,8 @@ export const EMAIL_BANNERS = {
   podcasters: `${SITE}/email/podcasters.jpg`,
   studio: `${SITE}/email/studio.jpg`,
   conversation: `${SITE}/email/conversation.jpg`,
+  // The sign-in code: one podcaster at the mic, calm, nothing busy behind the code.
+  signin: `${SITE}/email/headphones.jpg`,
 } as const;
 
 /**
@@ -347,7 +349,7 @@ export async function sendLoginCodeEmail(input: LoginCodeEmailInput): Promise<bo
     to: input.to,
     subject: `Your sign-in code: ${input.code}`,
     html: emailShell({
-      banner: EMAIL_BANNERS.welcome,
+      banner: EMAIL_BANNERS.signin,
       bannerAlt: "MilitaryVoices.ai",
       eyebrow: "Sign-in",
       heading: "Your sign-in code",
