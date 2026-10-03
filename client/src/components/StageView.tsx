@@ -878,7 +878,7 @@ function SpotFrame({ t0, beats }: { t0?: number; beats?: Record<string, number> 
   );
   return (
     <div className="absolute inset-0 overflow-hidden bg-[#04102b] text-white" style={{ containerType: "inline-size", fontFamily: "'Inter', sans-serif" }} data-testid="stage-spot">
-      <style>{`@keyframes spot-drift{from{transform:translateY(0)}to{transform:translateY(-120cqw)}}`}</style>
+      <style>{`@keyframes spot-drift{from{transform:translateY(0)}to{transform:translateY(-120cqw)}}@keyframes spot-lineup{from{transform:translateX(0)}to{transform:translateX(-50%)}}`}</style>
       {/* The home page's own header photos: podcasters at the mic. */}
       {bg("welcome", "/hero-3.jpg", "70% 50%")}
       {bg("day", "/hero-12.jpg", "80% 50%")}
@@ -948,12 +948,20 @@ function SpotFrame({ t0, beats }: { t0?: number; beats?: Record<string, number> 
         </div>
       </div>
 
-      {/* The lineup fills the whole frame, every face, under the marathon. */}
+      {/* The lineup fills the whole frame, every face, rolling past in rows that run opposite ways. */}
       <div className={`absolute inset-0 transition-opacity duration-[900ms] ${on("shows") ? "opacity-100" : "opacity-0"}`} aria-hidden="true">
-        <div className="absolute inset-0 grid grid-cols-8 content-center" style={{ gap: "1cqw", padding: "1cqw" }}>
-          {people.faces.length > 0 && Array.from({ length: 32 }, (_, i) => people.faces[i % people.faces.length]).map((src, i) => (
-            <img key={i} src={src} alt="" className="aspect-square w-full rounded-full object-cover object-[50%_28%] transition-all duration-700" style={{ opacity: on("shows") ? 0.6 : 0, transform: `scale(${on("shows") ? 1 : 0.92})` }} />
-          ))}
+        <div className="absolute inset-0 flex flex-col justify-center overflow-hidden" style={{ gap: "1.6cqw" }}>
+          {people.faces.length > 0 && [0, 1, 2, 3].map((r) => {
+            const row = people.faces.map((_, i) => people.faces[(i + r * 7) % people.faces.length]);
+            return (
+              // Two copies end to end, moved by exactly one copy's width, so the loop never shows a seam.
+              <div key={r} className="flex w-max" style={{ animation: `spot-lineup ${44 + r * 6}s linear ${-r * 9}s infinite ${r % 2 ? "reverse" : "normal"}` }}>
+                {[...row, ...row].map((src, i) => (
+                  <img key={i} src={src} alt="" className="shrink-0 rounded-full object-cover object-[50%_28%]" style={{ width: "11.6cqw", height: "11.6cqw", marginRight: "1.6cqw", opacity: 0.62 }} />
+                ))}
+              </div>
+            );
+          })}
         </div>
         <div className="absolute inset-0" style={{ background: "radial-gradient(55% 60% at 30% 50%, rgba(4,16,43,.94) 0%, rgba(4,16,43,.7) 55%, rgba(4,16,43,.35) 100%)" }} />
       </div>
