@@ -9478,7 +9478,7 @@ The Podcast Marathon team`;
     const claims = (await storage.listCohostSlots(ev.id)).filter((c) => c.email.trim().toLowerCase() === email).sort((a, b) => a.blockIndex - b.blockIndex);
     const active = (await storage.listSignups(ev.id)).filter((s) => s.status !== "cancelled");
     const shared = active.filter((s) => (s.coHostEmail ?? "").trim().toLowerCase() === email);
-    if (claims.length === 0 && shared.length === 0) return res.json({ isCohost: false });
+    if (claims.length === 0 && shared.length === 0) return res.json({ isCohost: false, studioHost: (await studioHostEmails(ev.id)).includes(email) });
     const runItems = await storage.listRunOfShow(ev.id);
     const lines = await storage.listCohostLines(ev.id);
     const sponsors = await sponsorsBySignup(ev.id);

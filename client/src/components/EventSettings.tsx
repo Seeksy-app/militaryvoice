@@ -168,6 +168,15 @@ export function EventSettings({
     const t = setInterval(() => setNow(Date.now()), 30_000);
     return () => clearInterval(t);
   }, []);
+  // Their role on this event's day beyond their own show: co-host at the desk, or studio host.
+  const { data: role } = useQuery<{ isCohost: boolean; studioHost?: boolean; handoffs?: unknown[] }>({
+    queryKey: ["/api/host/cohost", open?.event.id],
+    queryFn: async () => (await apiRequest("GET", `/api/host/cohost?eventId=${open!.event.id}`)).json(),
+    enabled: !!open,
+  });
+  const isCohost = Boolean(role?.isCohost);
+  const isStudioHost = Boolean(role?.studioHost);
+  const handoffCount = role?.handoffs?.length ?? 0;
   const cohostOpenCount = (cohostBoard?.blocks ?? []).filter((b) => !b.takenBy && !b.mine && !b.yourShow).length;
   const cohostMine = (cohostBoard?.blocks ?? []).filter((b) => b.mine).length;
   // Once, the moment the show is first saved: offer the desk as a pop-up
@@ -352,6 +361,32 @@ export function EventSettings({
              what it is, when you're on, how long until — with the things to
              do as doors under it, not three tabs to guess between. */
           <div data-testid="event-dashboard">
+            {(isStudioHost || isCohost) && !over && (
+              /* The one thing a studio host or co-host needs from this page: the way in. */
+              <div className="mb-4 flex flex-col gap-4 rounded-2xl border-2 border-[#15834f] bg-[#15834f]/10 p-5 sm:flex-row sm:items-center" data-testid="event-role-banner">
+                <IconTile icon={isStudioHost ? Rocket : Users} />
+                <div className="min-w-0 flex-1">
+                  <p className="text-lg font-bold tracking-tight [text-wrap:balance]">{isStudioHost ? "You're a studio host for this event." : "You're a co-host for this event."}</p>
+                  <p className="mt-0.5 text-sm text-muted-foreground [text-wrap:pretty]">
+                    {isStudioHost
+                      ? `You run the studio on the day: put yourself on stage, take the next show, and the big red button if anything goes wrong.${handoffCount ? ` ${handoffCount} hand-offs are yours, each with its script.` : ""}`
+                      : `${handoffCount} hand-offs are yours, each with its script. Be in the green room 15 minutes before your first one.`}
+                  </p>
+                </div>
+                <div className="flex flex-wrap gap-2">
+                  {isStudioHost && (
+                    <a href="/studio/control" target="_blank" rel="noreferrer" data-testid="event-open-studio">
+                      <Button className="h-12 gap-2 rounded-full bg-[#15834f] px-6 text-base font-bold text-white hover:bg-[#126e42]">Open the studio <ArrowRight className="h-4 w-4" /></Button>
+                    </a>
+                  )}
+                  {isCohost && (
+                    <a href="/host/dashboard/cohost" data-testid="event-open-cohost">
+                      <Button variant={isStudioHost ? "outline" : "default"} className={`h-12 gap-2 rounded-full px-6 text-base font-bold ${isStudioHost ? "" : "bg-[#15834f] text-white hover:bg-[#126e42]"}`}>Your hand-offs and scripts</Button>
+                    </a>
+                  )}
+                </div>
+              </div>
+            )}
             <div className="relative overflow-hidden rounded-2xl bg-[#04102b] px-5 pb-16 pt-5 text-white sm:px-7 sm:pt-6">
               <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full border border-white/[0.07]" aria-hidden="true" />
               <div className="pointer-events-none absolute -right-8 -top-8 h-72 w-72 rounded-full border border-white/[0.07]" aria-hidden="true" />
@@ -425,24 +460,25 @@ export function EventSettings({
                 testId="event-door-promotion"
               />
               <Door
-                off={noTime}
-                onClick={noTime ? undefined : onOpenGreenRoom}
-                href={noTime || onOpenGreenRoom ? undefined : greenRoomHref}
+                off={noTime && !isCohost && !isStudioHost}
+                onClick={noTime && !isCohost && !isStudioHost ? undefined : onOpenGreenRoom}
+                href={(noTime && !isCohost && !isStudioHost) || onOpenGreenRoom ? undefined : greenRoomHref}
                 icon={<IconTile icon={Headphones} />}
                 title="Green room"
                 line="Check your camera and mic, then go live"
-                stat={shutOut ? "Lineup full" : noTime ? "After you take a time" : live ? "Go in now" : "Open any time"}
+                stat={isCohost || isStudioHost ? "Open any time" : shutOut ? "Lineup full" : noTime ? "After you take a time" : live ? "Go in now" : "Open any time"}
                 good={live}
                 testId="event-door-greenroom"
               />
               <Door
-                off={noTime || !(air && showReady)}
-                onClick={air && showReady ? () => setCohostOpen(true) : undefined}
+                off={!isCohost && (noTime || !(air && showReady))}
+                onClick={isCohost ? undefined : air && showReady ? () => setCohostOpen(true) : undefined}
+                href={isCohost ? "/host/dashboard/cohost" : undefined}
                 icon={<IconTile icon={Users} />}
                 title="Co-host"
-                line="Sit in at the desk with Alex or Riccoh"
-                stat={shutOut ? "Lineup full" : cohostMine > 0 ? `${cohostMine} hour${cohostMine === 1 ? "" : "s"} yours` : cohostBoard ? `${cohostOpenCount} open` : air && showReady ? "Take an hour" : "After your show's set"}
-                good={cohostMine > 0}
+                line={isCohost ? "Your hand-offs, each with its script" : "Sit in at the desk with Alex or Riccoh"}
+                stat={isCohost ? `${handoffCount} hand-off${handoffCount === 1 ? "" : "s"} yours` : shutOut ? "Lineup full" : cohostMine > 0 ? `${cohostMine} hour${cohostMine === 1 ? "" : "s"} yours` : cohostBoard ? `${cohostOpenCount} open` : air && showReady ? "Take an hour" : "After your show's set"}
+                good={isCohost || cohostMine > 0}
                 testId="event-door-cohost"
               />
             </div>
