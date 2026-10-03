@@ -879,8 +879,6 @@ function SpotFrame({ t0, beats }: { t0?: number; beats?: Record<string, number> 
         ))}
       </svg>
 
-      <img src="/logo-wave.png?v=2" alt="" className="absolute left-[7%] top-[7%]" style={{ height: "4cqw" }} />
-
       <div className={shot("welcome")}>
         <p className="font-semibold text-white/70" style={{ fontSize: "2.6cqw" }}>Welcome to</p>
         <p className="font-bold leading-[0.95] tracking-tight" style={{ ...HEADLINE_FONT, fontSize: "8cqw" }}>MilitaryVoices</p>
@@ -1147,7 +1145,7 @@ export function StageGrid({
       <>
         <SpotFrame t0={meta.spotT0} beats={meta.spotBeats} />
         {tiles[0] && (
-          <div className="absolute bottom-0 right-[2%] grid" style={{ width: "40%", height: "96%" }}>
+          <div className="absolute bottom-0 right-[3%] grid" style={{ width: "40%", height: "96%", transform: "scale(1.55)", transformOrigin: "50% 100%" }}>
             <Tile tile={tiles[0]} muted={muted} namePos="none" fit="full" bare />
           </div>
         )}
