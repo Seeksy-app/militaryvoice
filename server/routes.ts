@@ -5422,10 +5422,19 @@ export function registerRoutes(app: Express): void {
       return null;
     }
   }
+  /** What the scene on air puts on the stage by itself: its own file or slide, else the cameras. */
+  async function sceneStage(studio: StudioRow): Promise<{ stageMediaUrl?: string; stageMediaKind?: string; stageMediaLabel?: string; stageMediaPlaying: boolean } | null> {
+    const scene = studio.currentSceneId ? await storage.getScene(studio.currentSceneId) : undefined;
+    if (!scene) return null;
+    const u = scene.mediaUrl.trim();
+    if (scene.kind !== "media" || !u) return { stageMediaPlaying: false };
+    return { stageMediaUrl: u.startsWith("/") && !u.startsWith("//") ? `${PUBLIC_ORIGIN}${u}` : u, stageMediaKind: scene.mediaKind, stageMediaLabel: scene.mediaLabel, stageMediaPlaying: true };
+  }
   async function restoreStage(studio: StudioRow): Promise<StudioRow | undefined> {
     const b = await readStageBefore(studio);
     await storage.setSetting(beforeKey(studio.id), "");
-    const patch = b ? { stageMediaUrl: b.url, stageMediaKind: b.kind, stageMediaLabel: b.label, stageMediaPlaying: b.playing } : { stageMediaPlaying: false };
+    // The scene itself first (so a stage already left empty comes back too), then what was kept aside.
+    const patch = (await sceneStage(studio)) ?? (b ? { stageMediaUrl: b.url, stageMediaKind: b.kind, stageMediaLabel: b.label, stageMediaPlaying: b.playing } : { stageMediaPlaying: false });
     const updated = await storage.updateStudio(studio.id, patch);
     if (updated) {
       const ev = await storage.getEventById(studio.eventId);
