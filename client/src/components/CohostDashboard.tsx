@@ -177,7 +177,8 @@ export function CohostDashboard({ info, onBack }: { info: CohostInfo; onBack?: (
                 "When a show ends, the thank-you slide comes up on its own: their photo and a QR code to follow them.",
                 "Press Add me to the screen. The slide moves left and you're on the right.",
                 "Thank them, one talking point, the sponsor if shown, then bring the next show on.",
-                "Take the next scene: a live guest comes on, a recording starts playing. Then take yourself off.",
+                "Take the next scene: a live guest comes on, a recording starts playing.",
+                "Press Take me off stage once they're on. Nothing takes you off for you: you stay on screen until you do.",
                 "Five minutes is the whole hand-off. Running long? Keep it to the thank-you and the intro.",
               ].map((t) => <li key={t} className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#15834f]" /><span>{t}</span></li>)}
             </ul>
