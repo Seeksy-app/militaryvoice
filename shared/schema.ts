@@ -1089,9 +1089,8 @@ export const studios = pgTable("studios", {
    *  no show — the pre-show, a sponsor read, a clock. */
   stageCardName: text("stage_card_name").notNull().default(""),
   stageCardShow: text("stage_card_show").notNull().default(""),
+  /** The card's face, or two separated by a space: the host, then their co-host (Jane beside Riccoh). */
   stageCardPhoto: text("stage_card_photo").notNull().default(""),
-  /** The booking's co-host (Jane beside Riccoh), so the card shows both faces. */
-  stageCardPhoto2: text("stage_card_photo2").notNull().default(""),
   /** The show's sponsor, for the same card: "Presented by …" with a logo. */
   stageCardSponsor: text("stage_card_sponsor").notNull().default(""),
   stageCardSponsorLogo: text("stage_card_sponsor_logo").notNull().default(""),
