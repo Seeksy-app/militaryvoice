@@ -5317,7 +5317,12 @@ export function registerRoutes(app: Express): void {
       const ev = await storage.getEventById(studio.eventId);
       await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", updated, ev));
     }
-    const missing = guestScene && !present.some((p) => belongs(p));
+    // The ceremonies are the host's own (Riccoh runs them from the studio, not
+    // the green room), so nobody is "missing" when he isn't waiting there.
+    const team = signup ? await storage.listEventTeam(studio.eventId).catch(() => []) : [];
+    const sgEmail = (signup?.email ?? "").trim().toLowerCase();
+    const hostsOwn = Boolean(signup) && (/ceremon/i.test(signup!.podcastName) || sgEmail === HOUSE_EMAIL || hosts.emails.has(sgEmail) || team.some((m) => m.email.trim().toLowerCase() === sgEmail));
+    const missing = guestScene && !hostsOwn && !present.some((p) => belongs(p));
     return { studio: updated, moved, missing: missing ? signup!.podcastName : null };
   }
 
