@@ -3929,6 +3929,9 @@ export function registerRoutes(app: Express): void {
       isCrew: crew,
       /** A host, or the co-host holding the desk now or the next hour: they can add themselves to the stage. */
       canSelfStage: Boolean(me) && (await (async () => {
+        // A studio host runs this event's studio, so they can always put themselves on.
+        const hostsOfEvent = await studioHostEmails(event.id);
+        if ([me!.email, email].some((e) => e && hostsOfEvent.includes(e.trim().toLowerCase()))) return true;
         const hs = await showHosts();
         const soon = new Date(Date.now() + 10 * 60_000).toISOString();
         return isHostAt(me!, hs, new Date().toISOString()) || isHostAt(me!, hs, soon);
