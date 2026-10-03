@@ -882,7 +882,7 @@ function SpotFrame({ t0, beats }: { t0?: number; beats?: Record<string, number> 
       {bg("welcome", "/hero-3.jpg", "70% 50%")}
       {bg("day", "/hero-12.jpg", "80% 50%")}
       {bg("grow", "/hero-8.jpg", "85% 50%")}
-      {bg("watch", "/hero-11.jpg", "55% 40%")}
+      {bg("watch", "/hero-5.jpg", "50% 40%")}
       {/* Gold dust, always drifting up over everything. */}
       <div className="absolute inset-0" aria-hidden="true">
         {Array.from({ length: 30 }, (_, i) => (
