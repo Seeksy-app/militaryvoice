@@ -363,12 +363,19 @@ function HostSeats({
             <PopoverTrigger asChild>
               <button
                 type="button"
-                title={`${name}${p.displayTitle ? ` · ${p.displayTitle}` : ""} — ${on ? "on stage" : "off stage"}`}
+                title={`${name}${p.displayTitle ? ` · ${p.displayTitle}` : ""} — ${on ? "on stage" : "off stage, no audio on air"}`}
                 className={`relative h-9 w-9 shrink-0 overflow-hidden rounded-full ring-2 transition hover:scale-105 ${on ? "ring-emerald-400" : "ring-[#ED1C24]"}`}
                 data-testid={`host-seat-${p.id}`}
               >
                 <FeedThumb feed={feeds.get(`p-${p.id}`)} initials={name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase()} photo={p.photoUrl} fill />
-                {on && <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-[#000741]" />}
+                {on ? (
+                  <span className="absolute bottom-0 right-0 h-2.5 w-2.5 rounded-full bg-emerald-400 ring-2 ring-[#000741]" />
+                ) : (
+                  // Off stage: nothing of theirs reaches the broadcast, said on their face.
+                  <span className="absolute inset-0 flex items-end justify-center bg-black/45 pb-0.5" aria-label="No audio on air" data-testid={`host-seat-muted-${p.id}`}>
+                    <VolumeX className="h-3.5 w-3.5 text-white drop-shadow" />
+                  </span>
+                )}
               </button>
             </PopoverTrigger>
             <PopoverContent align="end" className="w-60 p-3">
