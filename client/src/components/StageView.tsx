@@ -344,6 +344,8 @@ function Tile({ tile, muted, namePos = "bottom", fit, contain = false, flat = fa
         onLoadedMetadata={(e) => setPortrait(e.currentTarget.videoHeight > e.currentTarget.videoWidth)}
         onResize={(e) => setPortrait(e.currentTarget.videoHeight > e.currentTarget.videoWidth)}
         className={`h-full w-full ${cover ? "object-cover object-[50%_22%]" : portrait || contain ? "object-contain" : "object-cover object-[50%_30%]"} ${tile.keyed ? "invisible absolute" : ""}`}
+        // A presenter framed small in their own feed (Alex's avatar) is brought in close.
+        style={cover ? { transform: "scale(1.9)", transformOrigin: "50% 30%" } : undefined}
       />
       {tile.keyed && <canvas ref={canvasRef} className="h-full w-full object-contain" />}
       <audio ref={audioRef} autoPlay muted={muted} />
