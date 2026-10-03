@@ -974,7 +974,7 @@ function SpotFrame({ t0, beats }: { t0?: number; beats?: Record<string, number> 
       <div className={shot("watch")}>
         <img src="/nmpd-logo.png" alt="" className="drop-shadow-[0_0_3cqw_rgba(240,167,31,0.5)]" style={{ width: "15cqw", height: "15cqw" }} />
         <p className="mt-[2cqw] font-semibold text-white/80" style={{ ...HEADLINE_FONT, fontSize: "2.6cqw" }}>Watch free, all day Monday</p>
-        <p className="font-bold tracking-tight" style={{ ...HEADLINE_FONT, fontSize: "5.4cqw", color: gold }}>militaryvoices.ai/watch</p>
+        <p className="whitespace-nowrap font-bold tracking-tight" style={{ ...HEADLINE_FONT, fontSize: "4.2cqw", color: gold }}>militaryvoices.ai/watch</p>
       </div>
 
       {/* The last word: who MilitaryVoices is. Full width; nobody is laid over it. */}
