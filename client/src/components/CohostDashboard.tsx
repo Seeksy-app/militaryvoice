@@ -174,11 +174,11 @@ export function CohostDashboard({ info, onBack }: { info: CohostInfo; onBack?: (
             <ul className="mt-3 flex flex-col gap-2.5 text-sm text-muted-foreground">
               {[
                 "Be in the studio 15 minutes before your first hand-off, camera and mic on, headphones in.",
-                "When a show ends, the thank-you slide comes up on its own: their photo and a QR code to follow them.",
-                "Press Add me to the screen. The slide moves left and you're on the right.",
-                "Thank them, one talking point, the sponsor if shown, then bring the next show on.",
-                "Take the next scene: a live guest comes on, a recording starts playing.",
-                "Press Take me off stage once they're on. Nothing takes you off for you: you stay on screen until you do.",
+                "1. The show ends: take the thank-you slide (it often comes up on its own).",
+                "2. Press Put me on stage. Thank them, one talking point, thank the sponsor if shown.",
+                "3. Take the Intro scene for the next show. Their Up next slide shows beside you: introduce them.",
+                "4. Press Take me off stage. Nothing takes you off for you.",
+                "5. Take the next scene: a recorded show plays, or a live show brings the podcaster on from the green room, with any guest who joined through their invite link.",
                 "Five minutes is the whole hand-off. Running long? Keep it to the thank-you and the intro.",
               ].map((t) => <li key={t} className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#15834f]" /><span>{t}</span></li>)}
             </ul>
