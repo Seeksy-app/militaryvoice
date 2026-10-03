@@ -5081,6 +5081,7 @@ export function registerRoutes(app: Express): void {
           const ev = await storage.getEventById(studio.eventId);
           await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", withScene, ev));
         }
+        await kickSegments(studio.id);
         return { status: 200, body: { ...withScene, moved: taken.moved, missing: taken.missing } };
       }
     }
@@ -5135,6 +5136,7 @@ export function registerRoutes(app: Express): void {
       const ev = await storage.getEventById(studio.eventId);
       await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", updated, ev));
     }
+    await kickSegments(studio.id);
     return { status: 200, body: updated };
   }
 
@@ -5612,11 +5614,31 @@ export function registerRoutes(app: Express): void {
    * running broadcast by the minute cron. Switched off under Streaming to: never.
    */
   const SEGMENT_LEAD_MS = 60_000;
+  /** Once per show, not once a minute. */
+  const segmentWarned = new Set<number>();
+  /** Right after a scene is taken: switch channels now rather than at the next minute. Never throws. */
+  async function kickSegments(studioId: number): Promise<void> {
+    try {
+      const st = await storage.getStudioById(studioId);
+      if (!st || (!st.broadcastEgressId && st.status !== "Live")) return;
+      const ev = await storage.getFeaturedEvent();
+      if (ev.id !== st.eventId) return;
+      await segmentChannels(ev, st);
+    } catch (err) {
+      console.error("Segment channels after a scene failed:", err);
+    }
+  }
   async function segmentChannels(ev: Awaited<ReturnType<typeof storage.getFeaturedEvent>>, studio: StudioRow): Promise<{ on: string[]; off: string[] }> {
     const on: string[] = [], off: string[] = [];
     const now = Date.now();
     const start = Date.parse(ev.startAtUtc);
     const signups = (await storage.listSignups(ev.id)).filter((x) => x.status !== "cancelled");
+    // The scene on air decides: a podcaster's intro or segment puts their
+    // channel on, anything else (the hand-off, a sponsor, the desk) takes it
+    // off. Only a scene made by hand, with no row behind it, falls back to the clock.
+    const scene = studio.currentSceneId ? await storage.getScene(studio.currentSceneId) : undefined;
+    const row = scene?.runItemId ? await storage.getRunItem(scene.runItemId) : undefined;
+    const onAirSignup: number | null | undefined = row ? row.signupId ?? null : undefined;
     const dests = await storage.listDestinations(ev.id);
     let egressId = studio.broadcastEgressId;
     for (const a of await storage.listYoutubeAccounts()) {
@@ -5625,23 +5647,31 @@ export function registerRoutes(app: Express): void {
       const sg = signups.find((x) => x.email.trim().toLowerCase() === email);
       if (!sg) continue;
       const slot = start + sg.slotIndex * ev.slotMinutes * 60_000;
-      const inWindow = now >= slot - SEGMENT_LEAD_MS && now < slot + ev.slotMinutes * 60_000;
-      const want = inWindow && a.enabled !== false;
+      // Never before 15 minutes ahead of their slot, however early their scene comes up.
+      const opened = now >= slot - CHANNEL_EARLY_MS;
+      const byClock = now >= slot - SEGMENT_LEAD_MS && now < slot + ev.slotMinutes * 60_000;
+      const theirs = onAirSignup === undefined ? byClock : onAirSignup === sg.id;
+      const want = opened && theirs && a.enabled !== false;
       let d = dests.find((x) => x.signupId === sg.id && x.platform === "youtube");
       try {
         // A broadcast opened for an earlier test has ended on YouTube (auto-stop);
         // its key won't go live again, so their real slot gets a fresh one.
-        if (want && d && !d.live && Date.parse(d.createdAt) < slot - 30 * 60_000) {
+        if (opened && d && !d.live && Date.parse(d.createdAt) < slot - 30 * 60_000) {
           await storage.deleteDestination(d.id);
           d = undefined;
         }
-        if (want && !d?.live) {
-          if (!d) {
-            const token = await youtubeToken(email);
-            if (!token) { void slackNote(`:warning: ${sg.podcastName.trim() || sg.hostName} is on now but their YouTube won't sign in, so their segment is on our watch page only.`); continue; }
-            const b = await createBroadcast(token, { title: sg.podcastName || sg.hostName, description: `Live from ${ev.name} on MilitaryVoices.ai.`, startAtIso: new Date().toISOString() });
-            d = await storage.createDestination(ev.id, sg.email, { platform: "youtube", label: `${sg.podcastName} · YouTube`, rtmpUrl: b.ingestAddress, streamKey: b.streamName, enabled: true, signupId: sg.id });
+        // Opened on YouTube ahead (from 15 minutes before), so taking their
+        // scene only has to add a pipe, not wait on three YouTube calls.
+        if (!d && opened && a.enabled !== false && now < slot + ev.slotMinutes * 60_000) {
+          const token = await youtubeToken(email);
+          if (!token) {
+            if (want && !segmentWarned.has(sg.id)) { segmentWarned.add(sg.id); void slackNote(`:warning: ${sg.podcastName.trim() || sg.hostName} is on now but their YouTube won't sign in, so their segment is on our watch page only.`); }
+            continue;
           }
+          const b = await createBroadcast(token, { title: sg.podcastName || sg.hostName, description: `Live from ${ev.name} on MilitaryVoices.ai.`, startAtIso: new Date(Math.max(now, slot)).toISOString() });
+          d = await storage.createDestination(ev.id, sg.email, { platform: "youtube", label: `${sg.podcastName} · YouTube`, rtmpUrl: b.ingestAddress, streamKey: b.streamName, enabled: true, signupId: sg.id });
+        }
+        if (want && d && !d.live) {
           if (!egressId) {
             egressId = await startBroadcast(roomName(studio.id), [{ url: ingestUrl(d), label: d.label }], PUBLIC_ORIGIN);
             await storage.updateStudio(studio.id, { broadcastEgressId: egressId });
