@@ -14,6 +14,8 @@ import type { StudioRow } from "./schema";
  */
 /** The desk hand-off slide: thanks to who just finished, who's at the desk, what's next. */
 export interface StageThanks {
+  /** "thanks" after a show (the default), or "upnext" introducing one. */
+  kind?: "thanks" | "upnext";
   name: string;
   show: string;
   photoUrl: string;
@@ -25,6 +27,8 @@ export interface StageThanks {
   deskPhoto: string;
   /** "4:00 PM · VET S.O.S. with Shawn Welsh" */
   next: string;
+  /** The label over `next` ("Up next", or "Presented by" on an intro). */
+  nextLabel?: string;
 }
 
 export function readThanks(raw: string | null | undefined): StageThanks | null {

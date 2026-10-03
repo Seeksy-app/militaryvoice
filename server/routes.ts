@@ -5031,7 +5031,24 @@ export function registerRoutes(app: Express): void {
         const rowMedia = handoff?.thanks && !scene.mediaUrl ? "" : mediaUrl;
         const withScene = await storage.updateStudio(studio.id, {
           currentSceneId: scene.id,
-          stageThanks: handoff?.thanks ? JSON.stringify(handoff.thanks) : "",
+          stageThanks: handoff?.thanks
+            ? JSON.stringify(handoff.thanks)
+            : row.kind === "Intro" && who && who.hostName.trim()
+              // An intro is a slide too: who's coming up, their face and QR, so
+              // a co-host introducing them has it beside them on stage.
+              ? JSON.stringify({
+                  kind: "upnext",
+                  name: [who.hostName.trim(), whoCo?.hostName?.trim()].filter(Boolean).join(" & "),
+                  show: who.podcastName.trim(),
+                  photoUrl: who.photoUrl,
+                  photo2Url: whoCo?.photoUrl ?? "",
+                  qrUrl: (await publishedBioUrl(who.email).catch(() => "")) || `${PUBLIC_ORIGIN}/agenda?slot=${who.slotIndex}`,
+                  deskName: "",
+                  deskPhoto: "",
+                  next: sponsor?.name ?? "",
+                  nextLabel: "Presented by",
+                } satisfies StageThanks)
+              : "",
           brbOn: false,
           stageCardName: who ? [who.hostName.trim(), whoCo?.hostName?.trim()].filter(Boolean).join(" & ") : desk?.name ?? "",
           stageCardShow: who?.podcastName?.trim() ?? (desk ? "Co-host · at the desk" : ""),

@@ -916,7 +916,7 @@ function ThanksSlide({ t, compact = false }: { t: StageThanks; compact?: boolean
       <div className="absolute -right-[10%] -top-[25%] h-[70%] w-[45%] rounded-full bg-white/[0.04]" aria-hidden="true" />
       <div className="absolute inset-x-0 top-[8%] bottom-[22%] flex items-center px-[7%]" style={{ gap: "5cqw" }}>
         <div className={`flex min-w-0 flex-1 ${compact ? "flex-col items-start" : "flex-col items-start"}`}>
-          <p className="font-bold uppercase text-[#F0A71F]" style={{ fontSize: z.eyebrow, letterSpacing: "0.3em" }}>Thank you</p>
+          <p className="font-bold uppercase text-[#F0A71F]" style={{ fontSize: z.eyebrow, letterSpacing: "0.3em" }}>{t.kind === "upnext" ? "Coming up next" : "Thank you"}</p>
           <div className={`mt-[3%] flex ${compact ? "flex-col items-start" : "items-center"}`} style={{ gap: compact ? "2.4cqw" : "2.6cqw" }}>
             {t.photoUrl && (
               <span className="flex shrink-0">
@@ -948,7 +948,7 @@ function ThanksSlide({ t, compact = false }: { t: StageThanks; compact?: boolean
         ) : null}
         {t.next && (
           <div className={`min-w-0 ${host ? "text-right" : "flex-1 text-left"}`}>
-            <p className="font-bold uppercase text-[#F0A71F]" style={{ fontSize: z.label, letterSpacing: "0.22em" }}>Up next</p>
+            <p className="font-bold uppercase text-[#F0A71F]" style={{ fontSize: z.label, letterSpacing: "0.22em" }}>{t.nextLabel || "Up next"}</p>
             <p className="truncate text-white/85" style={{ fontSize: compact ? "2.3cqw" : "1.6cqw" }}>{t.next}</p>
           </div>
         )}
