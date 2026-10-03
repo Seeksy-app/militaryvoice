@@ -855,8 +855,9 @@ function SpotFrame({ t0, beats }: { t0?: number; beats?: Record<string, number> 
     }).catch(() => {});
   }, []);
   const t = t0 ? (now - t0) / 1000 : -1;
-  const b = { welcome: 0, day: 4, hosts: 11, shows: 17, grow: 24, watch: 28, ...(beats ?? {}) };
-  const order = ["welcome", "day", "hosts", "shows", "grow", "watch"] as const;
+  // Sponsors only shows when a read gives it a beat.
+  const b = { welcome: 0, day: 4, hosts: 11, shows: 17, grow: 24, sponsors: 9999, watch: 28, ...(beats ?? {}) };
+  const order = ["welcome", "day", "hosts", "shows", "grow", "sponsors", "watch"] as const;
   type Beat = (typeof order)[number];
   const scene: Beat = t < 0 ? "welcome" : [...order].reverse().find((k) => t >= b[k]) ?? "welcome";
   const on = (k: Beat) => scene === k;
@@ -882,6 +883,7 @@ function SpotFrame({ t0, beats }: { t0?: number; beats?: Record<string, number> 
       {bg("welcome", "/hero-3.jpg", "70% 50%")}
       {bg("day", "/hero-12.jpg", "80% 50%")}
       {bg("grow", "/hero-8.jpg", "85% 50%")}
+      {bg("sponsors", "/hero-2.jpg", "60% 50%")}
       {bg("watch", "/hero-5.jpg", "50% 40%")}
       {/* Gold dust, always drifting up over everything. */}
       <div className="absolute inset-0" aria-hidden="true">
@@ -960,11 +962,20 @@ function SpotFrame({ t0, beats }: { t0?: number; beats?: Record<string, number> 
         <p className="mt-[1.8cqw] font-semibold" style={{ ...HEADLINE_FONT, fontSize: "3cqw", color: gold }}>Live, 7 AM to 11 PM Eastern</p>
       </div>
 
-      <div className={shot("grow")}>
-        <p className="font-semibold text-white/80" style={{ ...HEADLINE_FONT, fontSize: "2.6cqw" }}>MilitaryVoices is where military creators</p>
-        {["Record.", "Share.", "Grow."].map((w, i) => (
-          <p key={w} className="font-bold leading-[1.02] tracking-tight transition-all duration-500" style={{ ...HEADLINE_FONT, fontSize: "8cqw", opacity: since("grow") > 0.8 + i * 0.7 ? 1 : 0, transform: `translateX(${since("grow") > 0.8 + i * 0.7 ? 0 : -1.5}cqw)`, color: i === 2 ? gold : "white" }}>{w}</p>
-        ))}
+      {/* The bridge from the day to the service behind it. */}
+      <div className={shot("grow", true)}>
+        <p className="font-semibold text-white/80" style={{ ...HEADLINE_FONT, fontSize: "2.8cqw" }}>MilitaryVoices is the service behind it all</p>
+        <p className="mt-[1.2cqw] max-w-[78%] font-bold leading-[1.04] tracking-tight [text-wrap:balance] transition-all duration-700" style={{ ...HEADLINE_FONT, fontSize: "6.4cqw", opacity: since("grow") > 0.8 ? 1 : 0, transform: `translateY(${since("grow") > 0.8 ? 0 : 1}cqw)` }}>
+          Built for event planners and <span style={{ color: gold }}>organizations</span>
+        </p>
+      </div>
+
+      <div className={shot("sponsors", true)}>
+        {eyebrow("Sponsors")}
+        <p className="mt-[1cqw] font-bold leading-[1.04] tracking-tight [text-wrap:balance]" style={{ ...HEADLINE_FONT, fontSize: "6.4cqw" }}>Shows that pay their way</p>
+        <p className="mt-[1.8cqw] max-w-[62%] leading-snug text-white/85 [text-wrap:pretty]" style={{ fontSize: "2.4cqw" }}>
+          A media kit for every creator, and sponsor links that <span style={{ color: gold }}>count every click.</span>
+        </p>
       </div>
 
       {/* The close: an invitation to the day and where to watch it. */}
