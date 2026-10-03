@@ -1667,19 +1667,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                 <span className="hidden max-w-[12rem] truncate font-medium opacity-80 sm:inline">{timeLeft.remaining < 0 ? `over · ${timeLeft.label}` : `until ${timeLeft.label}`}</span>
               </div>
             )}
-            {/* With the big Message Michael card on screen, no second door to the same chat. */}
-            {me0 && !me0.studioHost && !isRoom && !simple && (
-              <Button
-                variant="ghost"
-                className={`relative h-9 gap-1.5 rounded-full px-3 text-xs font-semibold ${deskWaiting ? "bg-[#F0A71F] text-[#000741] hover:bg-[#f5b94a]" : "text-white/70 hover:bg-white/10 hover:text-white"}`}
-                onClick={() => setChatOpen((n) => n + 1)}
-                title="Green room chat"
-                data-testid="studio-desk-open"
-              >
-                <MessagesSquare className="h-4 w-4" />
-                <span className="hidden sm:inline">{deskWaiting ? `${deskWaiting} for Michael` : "Green room chat"}</span>
-              </Button>
-            )}
+            {/* No pill for Michael's chat: one door, the big card, and the producer works it from the green room. */}
             {autoNote && autoNote.action !== "take" && (
               <div
                 className={`flex h-9 max-w-[22rem] items-center gap-2 rounded-full px-3 text-xs font-semibold ${autoNote.action === "escalate" ? "bg-[#ED1C24] text-white" : autoNote.action === "hold" ? "bg-[#F0A71F]/20 text-[#F0A71F] ring-1 ring-[#F0A71F]/60" : "bg-white/10 text-white/80 ring-1 ring-white/15"}`}
