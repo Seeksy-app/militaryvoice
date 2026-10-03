@@ -684,6 +684,13 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
    * while the stage was live, which is the one mistake worth designing out.
    */
   const paused = Boolean(studio?.fallbackPlaying) && stageMuted;
+  // Pressed here, standby shows on the monitor even in rehearsal. Without
+  // this the off-air monitor kept showing the taken scene, so the button
+  // looked dead while the clip was in fact rolling for the audience.
+  const [standbyRolled, setStandbyRolled] = useState(false);
+  useEffect(() => {
+    if (!studio?.fallbackPlaying) setStandbyRolled(false);
+  }, [studio?.fallbackPlaying]);
   const present = (data?.participants ?? []).filter((p) => p.present);
   const onStage = present.filter((p) => p.state === "On stage");
   // The bar always shows everyone in the room, on stage or off — green ring
@@ -1726,7 +1733,11 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                       active={studio?.fallbackPlaying}
                       amber
                       disabled={!studio?.fallbackVideoUrl}
-                      onClick={() => patchStudio.mutate({ fallbackPlaying: !studio?.fallbackPlaying })}
+                      onClick={() => {
+                        const next = !studio?.fallbackPlaying;
+                        setStandbyRolled(next);
+                        patchStudio.mutate({ fallbackPlaying: next });
+                      }}
                       testId="button-deck-standby"
                     />
                     <DropdownMenu>
@@ -1946,6 +1957,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                     <DropdownMenuContent align="end" className="w-64">
                       <DropdownMenuItem
                         onClick={() => {
+                          setStandbyRolled(!paused);
                           patchStudio.mutate({ fallbackPlaying: !paused });
                           muteStage.mutate(!paused);
                         }}
@@ -2221,7 +2233,8 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                   // exactly as it would on air — the file rolls, the cameras
                   // grid — while the audience still sees standby. On air the
                   // monitor is the programme and standby outranks everything.
-                  ...(!broadcasting && studio?.currentSceneId ? { fallbackPlaying: false } : {}),
+                  // Unless the producer rolled standby from this console: then it shows.
+                  ...(!broadcasting && studio?.currentSceneId && !standbyRolled ? { fallbackPlaying: false } : {}),
                 }}
                 // Never muted. This carries other people's microphones and
                 // nothing else — StageView builds its tiles from
