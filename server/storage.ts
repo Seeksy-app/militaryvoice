@@ -699,6 +699,8 @@ export interface IStorage {
   countSponsorClicks(): Promise<Map<number, { total: number; bySource: Record<string, number> }>>;
   setYoutubeAccountEnabled(id: number, enabled: boolean): Promise<void>;
   listCohostLines(eventId: number): Promise<typeof cohostLines.$inferSelect[]>;
+  /** The desk host's script for one hand-off (kind "handoff", keyed by the Handoff row). */
+  saveHandoffScript(eventId: number, runItemId: number, text: string): Promise<void>;
   listSocialPosts(eventId: number): Promise<SocialPostRow[]>;
   getSocialPost(id: number): Promise<SocialPostRow | undefined>;
   createSocialPosts(rows: Array<{ eventId: number; signupId: number; scheduledAt: string; platforms: string; caption: string; imageUrl?: string }>): Promise<SocialPostRow[]>;
@@ -1199,6 +1201,13 @@ class DatabaseStorage implements IStorage {
       out.set(r.sponsorId, e);
     }
     return out;
+  }
+
+  async saveHandoffScript(eventId: number, runItemId: number, text: string): Promise<void> {
+    await ready();
+    const at = new Date().toISOString();
+    await db.insert(cohostLines).values({ eventId, runItemId, kind: "handoff", host: text, edited: true, approved: true, createdAt: at, updatedAt: at })
+      .onConflictDoUpdate({ target: [cohostLines.eventId, cohostLines.runItemId, cohostLines.kind], set: { host: text, edited: true, updatedAt: at } });
   }
 
   async listCohostLines(eventId: number): Promise<typeof cohostLines.$inferSelect[]> {

@@ -22,8 +22,19 @@ export interface CohostShow {
   onAirMinutes?: number;
 }
 const fmtRun = (secs: number) => { const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60), r = secs % 60; return h ? `${h}:${String(m).padStart(2, "0")}:${String(r).padStart(2, "0")}` : `${m}:${String(r).padStart(2, "0")}`; };
+export interface CohostHandoff {
+  runItemId: number;
+  atUtc: string;
+  thanks: { hostName: string; podcastName: string; photoUrl: string } | null;
+  next: CohostShow | null;
+  script: string;
+}
 export interface CohostInfo {
   isCohost: boolean;
+  /** Every hand-off they hold at the desk, in order, with its script. */
+  handoffs?: CohostHandoff[];
+  /** A studio host for this event: they run the console at /studio/control. */
+  studioHost?: boolean;
   name?: string;
   event?: { id: number; name: string; startAtUtc: string; slotMinutes: number; durationHours: number; slug: string };
   hours?: { blockIndex: number; startAtUtc: string; endAtUtc: string; shows: CohostShow[] }[];
@@ -46,7 +57,10 @@ export function CohostDashboard({ info, onBack }: { info: CohostInfo; onBack?: (
   const greenRoom = info.studioId ? `/studio?studioId=${info.studioId}` : "/studio";
   const first = (info.name || "").trim().split(/\s+/)[0] || "there";
   const range = hours.length ? `${formatTimeInZone(new Date(hours[0].startAtUtc), ET)} to ${formatTimeInZone(new Date(hours[hours.length - 1].endAtUtc), ET)} ET` : "";
-  const showCount = hours.reduce((n, h) => n + h.shows.length, 0);
+  const handoffs = info.handoffs ?? [];
+  const showCount = handoffs.length || hours.reduce((n, h) => n + h.shows.length, 0);
+  const studioLink = info.studioHost ? "/studio/control" : greenRoom;
+  const handoffRange = handoffs.length ? `${formatTimeInZone(new Date(handoffs[0].atUtc), ET)} to ${formatTimeInZone(new Date(handoffs[handoffs.length - 1].atUtc), ET)} ET` : "";
 
   const Show = ({ s }: { s: CohostShow }) => (
     <div className="flex gap-3 rounded-xl border border-border bg-background p-3" data-testid={`cohost-show-${s.signupId}`}>
@@ -90,10 +104,12 @@ export function CohostDashboard({ info, onBack }: { info: CohostInfo; onBack?: (
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#F0A71F]">Co-host · {ev.name}</p>
             <h2 className="mt-2 text-2xl font-bold tracking-tight sm:text-3xl" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>
-              {hours.length > 0 ? `${first}, the desk is yours ${range}.` : `${first}, you're at the desk with Riccoh.`}
+              {handoffs.length > 0 ? `${first}, the desk is yours from ${handoffRange}.` : hours.length > 0 ? `${first}, the desk is yours ${range}.` : `${first}, you're at the desk with Riccoh.`}
             </h2>
             <p className="mt-2 max-w-xl text-sm text-white/75">
-              {hours.length > 0
+              {handoffs.length > 0
+                ? `You're the host: thank each show, tell the audience why today matters, and bring the next one on. ${showCount} ${showCount === 1 ? "hand-off" : "hand-offs"}, each with its script below.`
+                : hours.length > 0
                 ? `Those are hours Riccoh can't be on. You're the host: bring each show on, do the handoff, keep the day moving. ${showCount} ${showCount === 1 ? "show" : "shows"} in your hours.`
                 : "You share the segment with him. Be in the green room fifteen minutes before it starts."}
             </p>
@@ -103,8 +119,8 @@ export function CohostDashboard({ info, onBack }: { info: CohostInfo; onBack?: (
               <p className="text-2xl font-bold tabular-nums">{daysToGo}</p>
               <p className="text-[10px] font-semibold uppercase tracking-wide text-white/70">days to go</p>
             </div>
-            <a href={greenRoom} target="_blank" rel="noreferrer" data-testid="cohost-green-room">
-              <Button className="h-12 gap-2 rounded-full bg-[#15834f] px-5 text-white hover:bg-[#126e42]"><StudioIcon className="h-6 w-6 rounded-md" tone="green" /> Green room</Button>
+            <a href={studioLink} target="_blank" rel="noreferrer" data-testid="cohost-green-room">
+              <Button className="h-12 gap-2 rounded-full bg-[#15834f] px-5 text-white hover:bg-[#126e42]"><StudioIcon className="h-6 w-6 rounded-md" tone="green" /> {info.studioHost ? "Open the studio" : "Green room"}</Button>
             </a>
           </div>
         </div>
@@ -118,7 +134,29 @@ export function CohostDashboard({ info, onBack }: { info: CohostInfo; onBack?: (
               <div className="mt-3 flex flex-col gap-3">{shared.map((s) => <Show key={s.signupId} s={s} />)}</div>
             </section>
           )}
-          {hours.map((h) => (
+          {handoffs.length > 0 && (
+            <section className="rounded-2xl border border-border bg-card p-5" data-testid="cohost-handoffs">
+              <h3 className="flex items-center gap-2 text-base font-bold"><Mic2 className="h-4 w-4 text-primary" /> Your hand-offs</h3>
+              <p className="mt-1 text-xs text-muted-foreground">Same shape every time: thank them, point to the QR code, one talking point, thank the sponsor if there is one, bring the next show on. Put it in your own words.</p>
+              <ol className="mt-4 flex flex-col gap-4">
+                {handoffs.map((h) => (
+                  <li key={h.runItemId} className="rounded-xl border border-border bg-background p-4" data-testid={`cohost-handoff-${h.runItemId}`}>
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="rounded-full bg-[#053877] px-2.5 py-0.5 text-xs font-bold tabular-nums text-white">{formatTimeInZone(new Date(h.atUtc), ET)} ET</span>
+                      {h.thanks && <span className="text-sm text-muted-foreground">after <span className="font-semibold text-foreground">{h.thanks.hostName.trim()}</span>, {h.thanks.podcastName.trim()}</span>}
+                    </div>
+                    {h.script ? (
+                      <p className="mt-3 whitespace-pre-line rounded-lg bg-[#F0A71F]/10 px-3 py-2.5 text-sm leading-relaxed text-[#4d3300] dark:text-[#f5d9a0]"><span className="mb-1 block text-[10px] font-bold uppercase tracking-wide">Say</span>{h.script}</p>
+                    ) : (
+                      <p className="mt-3 text-sm text-muted-foreground">Script coming soon.</p>
+                    )}
+                    {h.next && <div className="mt-3"><p className="mb-1.5 text-[10px] font-bold uppercase tracking-wide text-muted-foreground">Then bring on</p><Show s={h.next} /></div>}
+                  </li>
+                ))}
+              </ol>
+            </section>
+          )}
+          {handoffs.length === 0 && hours.map((h) => (
             <section key={h.blockIndex} className="rounded-2xl border border-border bg-card p-5" data-testid={`cohost-hour-${h.blockIndex}`}>
               <h3 className="flex items-center gap-2 text-base font-bold"><Clock className="h-4 w-4 text-primary" /> {formatTimeInZone(new Date(h.startAtUtc), ET)} – {formatTimeInZone(new Date(h.endAtUtc), ET)} ET <span className="text-xs font-normal text-muted-foreground">· {formatDateInZone(new Date(h.startAtUtc), ET)}</span></h3>
               {h.shows.length === 0 ? (
@@ -135,19 +173,19 @@ export function CohostDashboard({ info, onBack }: { info: CohostInfo; onBack?: (
             <h3 className="text-sm font-bold">What a host does</h3>
             <ul className="mt-3 flex flex-col gap-2.5 text-sm text-muted-foreground">
               {[
-                "Be in the green room 15 minutes before your first hour, camera and mic on.",
-                "Two minutes before each show: check the podcaster is in the green room.",
-                "On the top of the slot, bring them on with the line. Then it's theirs.",
-                "At the end: thank them, thank the sponsor if there is one, and tee up what's next.",
-                "If a recording is rolling, the producer takes it. You open and close it.",
-                "Running long? The clock wins. The producer will give you the wrap.",
+                "Be in the studio 15 minutes before your first hand-off, camera and mic on, headphones in.",
+                "When a show ends, the thank-you slide comes up on its own: their photo and a QR code to follow them.",
+                "Press Add me to the screen. The slide moves left and you're on the right.",
+                "Thank them, one talking point, the sponsor if shown, then bring the next show on.",
+                "Take the next scene: a live guest comes on, a recording starts playing. Then take yourself off.",
+                "Five minutes is the whole hand-off. Running long? Keep it to the thank-you and the intro.",
               ].map((t) => <li key={t} className="flex gap-2"><CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-[#15834f]" /><span>{t}</span></li>)}
             </ul>
           </section>
           <section className="rounded-2xl border border-[#F0A71F]/50 bg-[#F0A71F]/10 p-5" data-testid="cohost-house-read">
             <h3 className="text-sm font-bold">On the hour: the Discovery read</h3>
             <p className="mt-2 text-sm leading-relaxed text-foreground">
-              "Brands, podcasters, event planners: MilitaryVoices Discovery finds military and veteran creators to sponsor, guests to book and speakers for your stage. Everyone on today's lineup is in it, verified. It's free at militaryvoice dot A I slash find."
+              "Brands, podcasters, event planners: MilitaryVoices Discovery finds military and veteran creators to sponsor, guests to book and speakers for your stage. Everyone on today's lineup is in it, verified. It's free at military voices dot A I slash find."
             </p>
             <p className="mt-2 text-xs text-muted-foreground">Once an hour, at the first handoff after the top of the hour. About fifteen seconds.</p>
           </section>

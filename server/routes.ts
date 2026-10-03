@@ -4967,7 +4967,8 @@ export function registerRoutes(app: Express): void {
     const at = rows.findIndex((r) => r.id === row.id);
     const prev = at > 0 ? rows.slice(0, at).reverse().find((r) => r.kind === "Segment") : undefined;
     const next = at >= 0 ? rows.slice(at + 1).find((r) => r.kind === "Segment") : undefined;
-    const desk = (next ? await deskHostFor(eventId, next.startAtUtc) : null) ?? (await deskHostFor(eventId, row.startAtUtc));
+    // After the last show there's nothing to hand to: Riccoh closes the day himself.
+    const desk = next ? (await deskHostFor(eventId, next.startAtUtc)) ?? (await deskHostFor(eventId, row.startAtUtc)) : null;
     const sg = prev?.signupId ? await storage.getSignupById(prev.signupId) : undefined;
     if (!sg || sg.status === "cancelled" || !sg.hostName.trim()) return { desk, thanks: null };
     const co = sg.coHostEmail ? await storage.getProfileByEmail(sg.coHostEmail.trim().toLowerCase()).catch(() => undefined) : undefined;
@@ -9504,16 +9505,59 @@ The Podcast Marathon team`;
       const shows = await Promise.all(active.filter((sg) => { const t = start + sg.slotIndex * slotMs; return t >= s0 && t < e0; }).sort((a, b) => a.slotIndex - b.slotIndex).map(showOf));
       return { blockIndex: c.blockIndex, startAtUtc: new Date(s0).toISOString(), endAtUtc: new Date(e0).toISOString(), shows };
     }));
+    // Every hand-off this person holds, in order, with its script: the desk
+    // goes to the co-host of the next show's hour, else whoever holds this
+    // one (the same rule the studio uses), and none after the last show.
+    const allClaims = await storage.listCohostSlots(ev.id);
+    const holder = (iso: string) => allClaims.find((c) => c.blockIndex === Math.floor((Date.parse(iso) - start) / blockMs))?.email.trim().toLowerCase() ?? "";
+    const scripts = new Map(lines.filter((l) => l.kind === "handoff").map((l) => [l.runItemId, l.host]));
+    const byId = new Map(active.map((sg) => [sg.id, sg]));
+    const handoffs = [];
+    for (let i = 0; i < runItems.length; i++) {
+      const row = runItems[i];
+      if (row.kind !== "Handoff") continue;
+      const next = runItems.slice(i + 1).find((r) => r.kind === "Segment");
+      if (!next) continue;
+      if ((holder(next.startAtUtc) || holder(row.startAtUtc)) !== email) continue;
+      const prev = runItems.slice(0, i).reverse().find((r) => r.kind === "Segment");
+      const prevSg = prev?.signupId ? byId.get(prev.signupId) : undefined;
+      const nextSg = next.signupId ? byId.get(next.signupId) : undefined;
+      handoffs.push({
+        runItemId: row.id,
+        atUtc: row.startAtUtc,
+        thanks: prevSg ? { hostName: prevSg.hostName, podcastName: prevSg.podcastName, photoUrl: prevSg.photoUrl } : null,
+        next: nextSg ? await showOf(nextSg) : null,
+        script: scripts.get(row.id) ?? "",
+      });
+    }
     const studio = (await storage.listStudios(ev.id))[0];
     const profile = await storage.getProfileByEmail(email);
     res.json({
       isCohost: true,
+      handoffs,
+      studioHost: (await studioHostEmails(ev.id)).includes(email),
       name: profile?.hostName ?? "",
       event: { id: ev.id, name: ev.name, startAtUtc: ev.startAtUtc, slotMinutes: ev.slotMinutes, durationHours: ev.durationHours, slug: ev.slug },
       hours,
       shared: await Promise.all(shared.map(showOf)),
       studioId: studio?.id ?? null,
     });
+  });
+
+  /** Admin: the desk host's script for each hand-off, by the row's source key (handoff-7). */
+  app.put("/api/admin/handoff-scripts", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost) return res.status(403).json({ message: "Admins only." });
+    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    const given = (req.body?.scripts ?? {}) as Record<string, unknown>;
+    const rows = await storage.listRunOfShow(eventId);
+    const saved: string[] = [];
+    for (const [key, text] of Object.entries(given)) {
+      const row = rows.find((r) => r.sourceKey === key && r.kind === "Handoff");
+      if (!row) continue;
+      await storage.saveHandoffScript(eventId, row.id, String(text ?? "").slice(0, 6000));
+      saved.push(key);
+    }
+    res.json({ saved });
   });
 
   app.get("/api/host/cohost-slots/:eventId", requireHostSession, async (req, res) => {
