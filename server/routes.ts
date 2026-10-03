@@ -2047,7 +2047,7 @@ export function registerRoutes(app: Express): void {
     // The event whose studio opens: theirs (the featured one when they host several), or the featured one for an admin.
     const featured = (await storage.getFeaturedEvent()).id;
     const eventId = isAdmin ? featured : host!.events.includes(featured) ? featured : host!.events[0];
-    res.json({ access: true, role: isAdmin ? "admin" : "studio-host", email, eventId, displayName: person.name, title: person.title, photoUrl: person.photoUrl });
+    res.json({ access: true, role: isAdmin ? "admin" : "studio-host", email, hostEmail: (getSessionEmail(req) ?? "").trim().toLowerCase(), eventId, displayName: person.name, title: person.title, photoUrl: person.photoUrl });
   });
 
   /** Admin → Team: who are studio hosts. */
@@ -5109,6 +5109,33 @@ export function registerRoutes(app: Express): void {
   app.post("/api/admin/scenes/:id/apply", requireAdmin, async (req, res) => {
     const r = await applyScene(Number(req.params.id));
     res.status(r.status).json(r.body);
+  });
+
+  /** For the scene rail: who holds the desk at each hand-off, by run-of-show row. */
+  app.get("/api/admin/run-of-show/desks", requireAdmin, async (req, res) => {
+    noStore(res);
+    const allowed: number[] | undefined = (req as any).studioHost ? (req as any).studioHostEvents : undefined;
+    let eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
+    if (allowed && !allowed.includes(eventId)) eventId = allowed[0];
+    const ev = await storage.getEventById(eventId);
+    if (!ev) return res.json({});
+    const rows = await storage.listRunOfShow(eventId);
+    const byBlock = new Map<number, Awaited<ReturnType<typeof deskHostFor>>>();
+    const deskAt = async (iso: string) => {
+      const b = Math.floor((Date.parse(iso) - Date.parse(ev.startAtUtc)) / (COHOST_BLOCK_MINUTES * 60_000));
+      if (!byBlock.has(b)) byBlock.set(b, await deskHostFor(eventId, iso));
+      return byBlock.get(b) ?? null;
+    };
+    const out: Record<number, { name: string; photoUrl: string; email: string }> = {};
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (row.kind !== "Handoff") continue;
+      const next = rows.slice(i + 1).find((r) => r.kind === "Segment");
+      if (!next) continue;
+      const desk = (await deskAt(next.startAtUtc)) ?? (await deskAt(row.startAtUtc));
+      if (desk) out[row.id] = desk;
+    }
+    res.json(out);
   });
 
   /** The scene pair is a show's segment into a hand-off that a live co-host holds. */

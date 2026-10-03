@@ -157,7 +157,13 @@ export function SceneRail({
   onReorder,
   onGenerate,
   livePreview,
+  desks,
+  meEmail,
 }: {
+  /** Who holds the desk at each hand-off, by run-of-show row: the co-host's face on that card. */
+  desks?: Record<number, { name: string; photoUrl: string; email: string }>;
+  /** The person looking at the rail, so their own hand-offs say "That's you". */
+  meEmail?: string;
   /** The on-air camera scene's card shows this: a live picture of who's on stage. */
   livePreview?: ReactNode;
   scenes: SceneRow[];
@@ -502,6 +508,10 @@ export function SceneRail({
           const sceneVideo = k === "media" && !isImage(sc) && !youtubeId(sc.mediaUrl) ? sc.mediaUrl : null;
           const thumb = sc.thumbUrl || sceneImage || (sceneVideo ? null : sg?.photoUrl) || null;
           const isFace = !sc.thumbUrl && !sceneImage && !!thumb;
+          // A hand-off's card wears the co-host who takes it, so they can find their own.
+          const desk = !sg && sc.runItemId ? desks?.[sc.runItemId] : undefined;
+          const mine = Boolean(desk && meEmail && desk.email.trim().toLowerCase() === meEmail.trim().toLowerCase());
+          const deskFirst = desk ? desk.name.trim().split(/\s+/)[0] : "";
           const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
           const here = sg
             ? presentNames.some(
@@ -595,10 +605,28 @@ export function SceneRail({
                         </span>
                       ) : k === "media" ? (
                         <Film className="h-6 w-6 text-white/30" />
+                      ) : desk ? (
+                        <span className="flex items-center gap-2.5 rounded-full bg-black/35 py-1 pl-1 pr-3.5" data-testid={`scene-desk-${sc.id}`}>
+                          {desk.photoUrl ? (
+                            <img src={desk.photoUrl} alt="" className={`h-11 w-11 rounded-full object-cover object-[50%_28%] ring-2 ${mine ? "ring-[#F0A71F]" : "ring-white/40"}`} />
+                          ) : (
+                            <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-base font-bold text-white">{deskFirst.slice(0, 1)}</span>
+                          )}
+                          <span className="text-left leading-tight">
+                            <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#F0A71F]">Co-host</span>
+                            <span className="block text-sm font-bold text-white">{deskFirst}</span>
+                          </span>
+                        </span>
                       ) : (
                         <Video className="h-6 w-6 text-white/30" />
                       )}
                     </div>
+                  )}
+                  {mine && (
+                    <>
+                      <span className="pointer-events-none absolute inset-0 rounded-[inherit] ring-4 ring-inset ring-[#F0A71F]" aria-hidden="true" />
+                      {!on && <span className="absolute right-1.5 top-1.5 rounded bg-[#F0A71F] px-1.5 py-0.5 text-[10px] font-black uppercase leading-none text-[#1a1200]">That's you</span>}
+                    </>
                   )}
 
                   {/* Shortcut number, so the keys and the rail agree. */}

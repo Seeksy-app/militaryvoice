@@ -7,7 +7,7 @@ import { LoginCard } from "@/pages/HostDashboard";
 import { IconTile } from "@/components/ui/icon-tile";
 import { adminGet, adminSend } from "@/lib/adminApi";
 
-type Access = { access: boolean; signedIn?: boolean; role?: "admin" | "studio-host"; email?: string; eventId?: number; displayName?: string };
+type Access = { access: boolean; signedIn?: boolean; role?: "admin" | "studio-host"; email?: string; hostEmail?: string; eventId?: number; displayName?: string };
 
 /**
  * The studio console on its own page, for studio hosts (Amy, Enrique): the
@@ -50,7 +50,7 @@ export default function StudioControl() {
   }
   return (
     <div className="min-h-screen bg-[#04102b]">
-      <StudioConsole adminGet={adminGet} adminSend={adminSend} view="live" eventId={access.data.eventId} kind="event" simple onLeave={() => navigate("/host/dashboard")} />
+      <StudioConsole adminGet={adminGet} adminSend={adminSend} view="live" eventId={access.data.eventId} kind="event" simple viewerEmail={access.data.hostEmail || access.data.email} onLeave={() => navigate("/host/dashboard")} />
     </div>
   );
 }

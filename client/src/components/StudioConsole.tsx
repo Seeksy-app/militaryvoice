@@ -55,6 +55,8 @@ interface Props {
   onLeave?: () => void;
   /** The studio host's page: the four big buttons across the top. */
   simple?: boolean;
+  /** Who's looking (their own sign-in), so their hand-offs say "That's you". */
+  viewerEmail?: string;
   adminGet: <T>(path: string) => Promise<T>;
   adminSend: (method: string, path: string, body?: unknown) => Promise<Response>;
   /**
@@ -535,7 +537,7 @@ function StandbyFreshness({ adminGet, eventId }: { adminGet: <T>(path: string) =
   );
 }
 
-export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedStudioId, onLeave, simple = false }: Props) {
+export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedStudioId, onLeave, simple = false, viewerEmail }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const zone = useMemo(detectLocalTimeZone, []);
@@ -1009,7 +1011,12 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
   // Time left before the next scene is due, on the same clock the green
   // room and Alex read, so everybody at the desk sees one number.
   // The signed-in studio manager, for the avatar at the right of the bar.
-  const { data: me0 } = useQuery<{ displayName: string; title: string; photoUrl: string; studioHost?: boolean }>({
+  const { data: desks } = useQuery<Record<number, { name: string; photoUrl: string; email: string }>>({
+    queryKey: ["/api/admin/run-of-show/desks", eventId ?? "featured"],
+    queryFn: () => adminGet(`/api/admin/run-of-show/desks${eventId ? `?eventId=${eventId}` : ""}`),
+    staleTime: 60_000,
+  });
+  const { data: me0 } = useQuery<{ email?: string; displayName: string; title: string; photoUrl: string; studioHost?: boolean }>({
     queryKey: ["/api/admin/me"],
     queryFn: () => adminGet("/api/admin/me"),
     staleTime: 10 * 60_000,
@@ -2127,6 +2134,8 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                     zone={zone}
                     runItems={runItems ?? []}
                     signups={signups ?? []}
+                    desks={desks}
+                    meEmail={viewerEmail || me0?.email}
                     presentNames={present.map((p) => p.displayName || "")}
                     media={mediaItems ?? []}
                     searchable
