@@ -1,4 +1,6 @@
 import { AlexChat } from "@/components/AlexChat";
+import { ProducerChat } from "@/components/ProducerDesk";
+import { useAdminAuth } from "@/lib/admin-auth";
 import { StudioJoin } from "@/components/StudioJoin";
 import { GreenRoomButton } from "@/components/GreenRoomButton";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -450,6 +452,9 @@ function TimeLeftPill({ slug, studioId }: { slug?: string; studioId?: number }) 
 }
 
 export default function Studio({ slug }: { slug?: string }) {
+  // Admins only (studio hosts sign in to admin too, but the desk is Michael's).
+  const { admin: adminMe } = useAdminAuth();
+  const isAdmin = !!adminMe && !(adminMe as { studioHost?: boolean }).studioHost;
   const { toast } = useToast();
   // A link can name which room to walk into; without one you land in the
   // event's own studio, which is what every link issued so far means.
@@ -1097,7 +1102,8 @@ export default function Studio({ slug }: { slug?: string }) {
                 );
               })}
             </div>
-            {joined ? <AlexChat studioId={studioId} /> : <div />}
+            {/* Michael (an admin) works from here on the day: both rooms' chats in place of Alex's. */}
+            {joined ? (isAdmin ? <div className="rounded-2xl bg-background p-3 text-foreground"><ProducerChat /></div> : <AlexChat studioId={studioId} />) : <div />}
           </div>
           <div className="flex h-56 flex-col">
             {joined && <TimeLeftPill slug={slug} studioId={studioId} />}

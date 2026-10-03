@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from "react";
 import { AlertTriangle, ChevronRight, Loader2, MessageCircle, Radio, Send, X } from "lucide-react";
 
-type Role = "user" | "alex" | "producer";
-type Thread = { messages: { id: number; role: Role; content: string }[] };
+type Role = "user" | "peer" | "alex" | "producer";
+type Thread = { messages: { id: number; role: Role; content: string; name?: string }[] };
 
 /**
  * The studio host's controls, as big as buttons get, across the top of the
@@ -114,7 +114,7 @@ export function MichaelChat({ studioId, onClose, panel = false }: { studioId?: n
   const logRef = useRef<HTMLDivElement | null>(null);
   const load = async () => {
     try {
-      const r = await fetch(`/api/host/alex/thread${studioId ? `?studioId=${studioId}` : ""}`, { credentials: "include" });
+      const r = await fetch(`/api/host/alex/thread?feed=studio${studioId ? `&studioId=${studioId}` : ""}`, { credentials: "include" });
       if (r.ok) setThread((await r.json()) as Thread);
     } catch {
       // The next poll asks again.
@@ -139,7 +139,7 @@ export function MichaelChat({ studioId, onClose, panel = false }: { studioId?: n
     await load();
     setBusy(false);
   };
-  const who = (r: Role) => (r === "producer" ? "Michael" : r === "alex" ? "Alex" : "You");
+  const who = (r: Role, name?: string) => (r === "producer" ? "Michael" : r === "alex" ? "Alex" : r === "peer" ? name || "Co-host" : "You");
   const tone = (r: Role) => (r === "producer" ? "text-[#8ab4f8]" : r === "alex" ? "text-[#F0A71F]" : "text-white/60");
   // In the rail: the whole conversation, newest at the bottom, the box under it.
   if (panel) {
@@ -151,7 +151,7 @@ export function MichaelChat({ studioId, onClose, panel = false }: { studioId?: n
             <p className="text-white/60"><span className="font-semibold text-white">Michael</span> is watching. Tell him what's happening.</p>
           ) : all.map((m) => (
             <div key={m.id} className={`rounded-xl px-3 py-2 ${m.role === "user" ? "ml-6 bg-white/10" : "mr-6 bg-[#8ab4f8]/[0.1]"}`}>
-              <p className={`text-[11px] font-semibold ${tone(m.role)}`}>{who(m.role)}</p>
+              <p className={`text-[11px] font-semibold ${tone(m.role)}`}>{who(m.role, m.name)}</p>
               <p className="whitespace-pre-wrap text-white/90">{m.content}</p>
             </div>
           ))}
@@ -172,7 +172,7 @@ export function MichaelChat({ studioId, onClose, panel = false }: { studioId?: n
           <p className="text-white/60"><span className="font-semibold text-white">Michael</span> is watching. Tell him what's happening.</p>
         ) : msgs.map((m) => (
           <p key={m.id} className="truncate">
-            <span className={`font-semibold ${m.role === "producer" ? "text-[#8ab4f8]" : m.role === "alex" ? "text-[#F0A71F]" : "text-white/60"}`}>{m.role === "producer" ? "Michael" : m.role === "alex" ? "Alex" : "You"}:</span> <span className="text-white/85">{m.content}</span>
+            <span className={`font-semibold ${m.role === "producer" ? "text-[#8ab4f8]" : m.role === "alex" ? "text-[#F0A71F]" : "text-white/60"}`}>{m.role === "producer" ? "Michael" : m.role === "alex" ? "Alex" : m.role === "peer" ? m.name || "Co-host" : "You"}:</span> <span className="text-white/85">{m.content}</span>
           </p>
         ))}
       </div>

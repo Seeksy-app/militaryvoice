@@ -145,3 +145,136 @@ export function ProducerDesk({ eventId, compact = false, narrow = false }: { eve
     </div>
   );
 }
+
+type Line = { id: number; chatId: number; role: "user" | "alex" | "producer"; name: string; show: string; content: string; at: string };
+type Feed = { alexOn: boolean; studio: { lines: Line[]; waiting: number }; green: { lines: Line[]; waiting: number } };
+type Room = "studio" | "green";
+
+const seenKey = (room: Room) => `mv-chat-seen-${room}`;
+const readSeen = (room: Room) => { try { return Number(localStorage.getItem(seenKey(room))) || 0; } catch { return 0; } };
+
+/**
+ * Michael's chat, as two rooms: the Studio (the co-hosts running the show)
+ * and the Green Room (everyone waiting to go on, with Alex). Each is one
+ * conversation that scrolls; a number on the tab says what's new. In the
+ * studio everyone reads what he writes; in the green room it answers the
+ * person he tapped, or whoever wrote last.
+ */
+export function ProducerChat({ eventId, tall = false }: { eventId?: number; /** Fill a full column (the green room) rather than a panel. */ tall?: boolean }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const key = ["/api/admin/greenroom/feed", eventId ?? 0];
+  const feed = useQuery<Feed>({ queryKey: key, queryFn: () => adminGet(`/api/admin/greenroom/feed${eventId ? `?eventId=${eventId}` : ""}`), refetchInterval: 3000 });
+  const [room, setRoom] = useState<Room>(() => { try { return localStorage.getItem("mv-chat-room") === "studio" ? "studio" : "green"; } catch { return "green"; } });
+  const [seen, setSeen] = useState<Record<Room, number>>(() => ({ studio: readSeen("studio"), green: readSeen("green") }));
+  const [target, setTarget] = useState<Record<Room, number | null>>({ studio: null, green: null });
+  const [draft, setDraft] = useState("");
+  const [busy, setBusy] = useState(false);
+  const logRef = useRef<HTMLDivElement | null>(null);
+  const lines = feed.data?.[room].lines ?? [];
+  const lastId = lines.length ? lines[lines.length - 1].id : 0;
+
+  const unread = (r: Room) => (feed.data?.[r].lines ?? []).filter((l) => l.role === "user" && l.id > seen[r]).length;
+  // Reading a room marks it read (only while the page is actually in front of him).
+  useEffect(() => {
+    if (!lastId || document.visibilityState !== "visible" || lastId <= seen[room]) return;
+    setSeen((s) => ({ ...s, [room]: lastId }));
+    try { localStorage.setItem(seenKey(room), String(lastId)); } catch { /* private window */ }
+  }, [lastId, room, seen]);
+  useEffect(() => {
+    const el = logRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [lastId, room]);
+  const pick = (r: Room) => { setRoom(r); try { localStorage.setItem("mv-chat-room", r); } catch { /* private window */ } };
+
+  // Who a green room answer goes to: the line he tapped, else whoever wrote last.
+  const lastUser = [...lines].reverse().find((l) => l.role === "user");
+  const toId = target[room] ?? lastUser?.chatId ?? null;
+  const toName = lines.find((l) => l.chatId === toId && l.role === "user")?.name ?? lastUser?.name ?? "";
+
+  const send = async () => {
+    const text = draft.trim();
+    if (!text) return;
+    setBusy(true);
+    try {
+      const res = await adminSend("POST", "/api/admin/greenroom/say", { eventId, room, chatId: room === "green" ? toId : null, text });
+      if (!res.ok) throw new Error((await res.json().catch(() => ({})))?.message ?? "Couldn't send.");
+      setDraft("");
+      await qc.invalidateQueries({ queryKey: ["/api/admin/greenroom"] });
+      await qc.invalidateQueries({ queryKey: key });
+    } catch (e) {
+      toast({ title: "Couldn't send", description: (e as Error).message, variant: "destructive" });
+    } finally {
+      setBusy(false);
+    }
+  };
+  const setAlex = async (on: boolean) => {
+    await adminSend("PUT", "/api/admin/greenroom/alex", { eventId, on }).catch(() => null);
+    await qc.invalidateQueries({ queryKey: key });
+  };
+
+  const tab = (r: Room, label: string) => {
+    const n = unread(r) || feed.data?.[r].waiting || 0;
+    return (
+      <button
+        type="button"
+        onClick={() => pick(r)}
+        className={`relative flex flex-1 items-center justify-center gap-2 rounded-full px-3 py-2 text-sm font-semibold transition-colors ${room === r ? "bg-[#053877] text-white" : "text-foreground/70 hover:bg-muted"}`}
+        data-testid={`chat-room-${r}`}
+      >
+        {label}
+        {n > 0 && <span className="inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#F0A71F] px-1.5 text-[11px] font-bold text-[#1a1200]">{n}</span>}
+      </button>
+    );
+  };
+
+  return (
+    <div className={`flex flex-col gap-2 ${tall ? "h-full min-h-[28rem]" : "h-[min(70vh,40rem)]"}`} data-testid="producer-chat">
+      <div className="flex gap-1 rounded-full bg-muted p-1">
+        {tab("studio", "Studio")}
+        {tab("green", "Green Room")}
+      </div>
+      {room === "green" && (
+        <label className="flex items-center justify-between gap-2 px-1 text-xs text-muted-foreground">
+          <span>{feed.data?.alexOn ? "Alex answers first; anything she can't, comes to you." : "Alex is off: every question comes to you."}</span>
+          <span className="flex items-center gap-1.5 font-medium text-foreground"><Bot className="h-3.5 w-3.5" /> Alex <Switch checked={feed.data?.alexOn ?? true} onCheckedChange={(v) => void setAlex(v)} data-testid="chat-alex-switch" /></span>
+        </label>
+      )}
+      <div ref={logRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto rounded-xl border border-border bg-card p-3" data-testid={`chat-feed-${room}`}>
+        {lines.length === 0 ? (
+          <p className="py-8 text-center text-sm text-muted-foreground">{room === "studio" ? "Nothing from the studio yet. Anything Amy, Enrique or Riccoh sends lands here." : "Nobody in the green room has written yet."}</p>
+        ) : lines.map((l) => {
+          const mine = l.role === "producer";
+          const picked = room === "green" && l.role === "user" && l.chatId === toId;
+          return (
+            <div key={l.id} className={`flex ${mine ? "justify-end" : "justify-start"}`}>
+              <button
+                type="button"
+                disabled={l.role !== "user" || room !== "green"}
+                onClick={() => setTarget((t) => ({ ...t, [room]: l.chatId }))}
+                className={`max-w-[85%] rounded-2xl px-3 py-2 text-left text-sm leading-snug ${mine ? "bg-[#F0A71F]/20" : l.role === "alex" ? "bg-[#053877]/[0.07]" : "bg-muted"} ${picked ? "ring-2 ring-[#053877]/40" : ""} disabled:cursor-default`}
+                title={l.role === "user" && room === "green" ? `Answer ${l.name}` : undefined}
+              >
+                <span className="block text-[11px] font-semibold text-muted-foreground">
+                  {l.name}{l.show ? ` · ${l.show}` : ""} · {time(l.at)}
+                </span>
+                <span className="block whitespace-pre-wrap text-foreground">{l.content}</span>
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      <form onSubmit={(e) => { e.preventDefault(); void send(); }} className="flex flex-col gap-1">
+        <p className="px-1 text-[11px] text-muted-foreground">
+          {room === "studio" ? "Everyone in the studio sees this." : toName ? <>Answering <span className="font-semibold text-foreground">{toName}</span>. Tap a message to answer someone else.</> : "Tap a message to answer it."}
+        </p>
+        <div className="flex items-center gap-1.5">
+          <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={room === "studio" ? "Message the studio" : toName ? `Answer ${toName}` : "Answer"} maxLength={2000} className="h-10 min-w-0 flex-1 rounded-full border border-border bg-background px-4 text-sm focus:outline-none focus:ring-2 focus:ring-[#053877]/30" data-testid="chat-input" />
+          <Button type="submit" size="icon" disabled={busy || !draft.trim() || (room === "green" && !toId)} className="h-10 w-10 shrink-0 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" aria-label="Send">
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />}
+          </Button>
+        </div>
+      </form>
+    </div>
+  );
+}

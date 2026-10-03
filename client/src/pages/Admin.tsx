@@ -32,7 +32,7 @@ import { DiscoveryStats } from "@/components/DiscoveryStats";
 import { RunOfShow } from "@/components/RunOfShow";
 import { StudioConsole } from "@/components/StudioConsole";
 import { StudioHostsCard } from "@/components/StudioHostsCard";
-import { ProducerDesk } from "@/components/ProducerDesk";
+import { ProducerChat } from "@/components/ProducerDesk";
 import { RiccohPosts } from "@/components/RiccohPosts";
 import { RiccohImages } from "@/components/RiccohImages";
 import type { AudienceSnapshot } from "@/components/AudienceReach";
@@ -4939,7 +4939,7 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                   <AdminClips eventId={selectedEventId} adminGet={adminGet} adminSend={adminSend} />
                 </TabsContent>
                 <TabsContent value="greenroom" className="mt-2 lg:mt-0">
-                  <ProducerDesk eventId={selectedEventId} />
+                  <div className="max-w-3xl"><ProducerChat eventId={selectedEventId} /></div>
                 </TabsContent>
                 <TabsContent value="run" className="mt-2 lg:mt-0">
                   <RunOfShow adminGet={adminGet} adminSend={adminSend} eventId={selectedEventId} />

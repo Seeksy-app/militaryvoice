@@ -7,7 +7,7 @@
 // screen, and the thread is flagged for him and Slack hears. He can also switch
 // Alex off for the whole green room, and then every question comes to him.
 import type { Express, RequestHandler } from "express";
-import { and, asc, desc, eq } from "drizzle-orm";
+import { and, asc, desc, eq, inArray } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { greenRoomChats, greenRoomMessages, type GreenRoomChatRow } from "../shared/schema.js";
 import { alexAnswer, HANDOFF_TAG, type AlexTurn } from "./alex.js";
@@ -16,6 +16,8 @@ import { slackNote } from "./slack.js";
 const now = () => new Date().toISOString();
 const alexKey = (eventId: number) => `alex_greenroom:${eventId}`;
 export const PRODUCER_NAME = "Michael";
+/** Where Michael's own word to the studio goes when nobody has written yet. */
+const STUDIO_ROOM = "studio@room";
 
 async function alexOn(eventId: number): Promise<boolean> {
   return ((await storage.getSetting(alexKey(eventId))) ?? "on") !== "off";
@@ -57,7 +59,46 @@ async function say(chatId: number, role: "user" | "alex" | "producer", content: 
 
 const messagesOf = (chatId: number) => db.select().from(greenRoomMessages).where(eq(greenRoomMessages.chatId, chatId)).orderBy(asc(greenRoomMessages.id));
 
-export function registerGreenRoomChat(app: Express, requireAdmin: RequestHandler, requireHostSession: RequestHandler): void {
+type Line = { id: number; chatId: number; role: string; name: string; show: string; content: string; at: string };
+
+/**
+ * One scrolling conversation per room, merged from everyone's threads: the
+ * studio (the event's studio hosts and Michael) or the green room (everyone
+ * else, Alex and Michael). Names on each line; no list of people to pick from.
+ */
+async function feedOf(chats: GreenRoomChatRow[], limit = 300): Promise<Line[]> {
+  if (!chats.length) return [];
+  const by = new Map(chats.map((c) => [c.id, c]));
+  const rows = await db.select().from(greenRoomMessages).where(inArray(greenRoomMessages.chatId, chats.map((c) => c.id))).orderBy(desc(greenRoomMessages.id)).limit(limit);
+  return rows.reverse().map((m) => {
+    const c = by.get(m.chatId)!;
+    const name = m.role === "producer" ? PRODUCER_NAME : m.role === "alex" ? "Alex" : c.name || c.email;
+    return { id: m.id, chatId: m.chatId, role: m.role, name, show: m.role === "user" ? c.show : "", content: m.content, at: m.createdAt };
+  });
+}
+
+export function registerGreenRoomChat(app: Express, requireAdmin: RequestHandler, requireHostSession: RequestHandler, studioHosts: (eventId: number) => Promise<string[]>): void {
+  const split = async (eventId: number) => {
+    await schemaIsReady();
+    const hosts = new Set(await studioHosts(eventId));
+    const chats = await db.select().from(greenRoomChats).where(eq(greenRoomChats.eventId, eventId));
+    const inStudio = (c: GreenRoomChatRow) => hosts.has(c.email) || c.email === STUDIO_ROOM;
+    return { studio: chats.filter(inStudio), green: chats.filter((c) => !inStudio(c)), hosts };
+  };
+
+  /** Michael's two rooms, each one scrolling chat, with how many are waiting on him in each. */
+  app.get("/api/admin/greenroom/feed", requireAdmin, async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    if ((req as any).studioHost) return res.status(403).json({ message: "Admins only." });
+    const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
+    const { studio, green } = await split(eventId);
+    res.json({
+      alexOn: await alexOn(eventId),
+      studio: { lines: await feedOf(studio), waiting: studio.filter((c) => c.needsProducer).length },
+      green: { lines: await feedOf(green), waiting: green.filter((c) => c.needsProducer).length },
+    });
+  });
+
   /**
    * A podcaster writes. Kept, then answered by Alex as it's written (streamed
    * text), unless Michael has the thread or Alex is switched off: then it waits
@@ -131,6 +172,14 @@ export function registerGreenRoomChat(app: Express, requireAdmin: RequestHandler
     const email = String((req as unknown as { hostEmail?: string }).hostEmail ?? "");
     const eventId = await eventFor(req.query.studioId);
     await schemaIsReady();
+    if (req.query.feed === "studio") {
+      const { studio, hosts } = await split(eventId);
+      const me = email.trim().toLowerCase();
+      if (hosts.has(me)) {
+        const mine = studio.find((c) => c.email === me);
+        return res.json({ alexOn: false, mode: "producer", messages: (await feedOf(studio)).map((l) => ({ id: l.id, role: l.chatId === mine?.id && l.role === "user" ? "user" : l.role === "user" ? "peer" : l.role, name: l.name, content: l.content, at: l.at })) });
+      }
+    }
     const [chat] = await db.select().from(greenRoomChats).where(and(eq(greenRoomChats.eventId, eventId), eq(greenRoomChats.email, email.trim().toLowerCase()))).limit(1);
     const on = await alexOn(eventId);
     if (!chat) return res.json({ alexOn: on, mode: "alex", messages: [] });
@@ -164,6 +213,33 @@ export function registerGreenRoomChat(app: Express, requireAdmin: RequestHandler
     const [chat] = await db.select().from(greenRoomChats).where(eq(greenRoomChats.id, Number(req.params.id))).limit(1);
     if (!chat) return res.status(404).json({ message: "No such chat." });
     res.json({ chat, messages: await messagesOf(chat.id) });
+  });
+
+  /**
+   * Michael writes in a room. In the studio every host sees it; in the green
+   * room it answers the person he picked (or whoever wrote last).
+   */
+  app.post("/api/admin/greenroom/say", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost) return res.status(403).json({ message: "Admins only." });
+    const text = String(req.body?.text ?? "").trim().slice(0, 2000);
+    if (!text) return res.status(400).json({ message: "Write something first." });
+    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    const { studio, green } = await split(eventId);
+    const room = req.body?.room === "studio" ? studio : green;
+    let chatId = Number(req.body?.chatId) || 0;
+    if (chatId && !room.some((c) => c.id === chatId)) chatId = 0;
+    if (!chatId) {
+      const last = [...room].sort((a, b) => b.lastAt.localeCompare(a.lastAt))[0];
+      if (last) chatId = last.id;
+      else if (req.body?.room === "studio") chatId = (await threadFor(eventId, STUDIO_ROOM)).id;
+      else return res.status(409).json({ message: "Nobody in the green room has written yet." });
+    }
+    await say(chatId, "producer", text, PRODUCER_NAME);
+    // Answering in the studio clears every flag there: they all read it.
+    const clear = req.body?.room === "studio" ? studio.map((c) => c.id) : [chatId];
+    if (clear.length) await db.update(greenRoomChats).set({ needsProducer: false }).where(inArray(greenRoomChats.id, clear));
+    await db.update(greenRoomChats).set({ mode: "producer" }).where(eq(greenRoomChats.id, chatId));
+    res.json({ ok: true, chatId });
   });
 
   /** Michael answers. Answering takes the thread: Alex stays quiet in it until he hands it back. */

@@ -27,7 +27,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useProducerRoom, type ProducerFeed } from "@/hooks/use-producer-room";
 import { Destinations } from "@/components/Destinations";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
-import { ProducerDesk, useGreenRoomWaiting } from "@/components/ProducerDesk";
+import { ProducerChat, useGreenRoomWaiting } from "@/components/ProducerDesk";
 import { StudioHostBar, MichaelChat } from "@/components/StudioHostBar";
 import { StageGrid, youtubeId, clockText, type StageTile } from "@/components/StageView";
 import { MediaLibrary, type MediaItem } from "@/components/MediaLibrary";
@@ -2298,7 +2298,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
               adminGet={adminGet}
               adminSend={adminSend}
               studioId={studioId}
-              chat={!isRoom && me0 ? (me0.studioHost ? <MichaelChat studioId={studioId ?? undefined} panel /> : <div className="rounded-lg bg-background p-2.5 text-foreground"><ProducerDesk eventId={eventId} compact narrow /></div>) : undefined}
+              chat={!isRoom && me0 ? (me0.studioHost ? <MichaelChat studioId={studioId ?? undefined} panel /> : <div className="rounded-lg bg-background p-2.5 text-foreground"><ProducerChat eventId={eventId} /></div>) : undefined}
               chatOpen={chatOpen}
               chatWaiting={deskWaiting}
               onMediaChanged={() => {

@@ -6236,7 +6236,7 @@ export function registerRoutes(app: Express): void {
   registerMagazine(app, requireAdmin, requireAgent);
   registerHealth(app, requireAdmin);
   registerNotices(app, requireAdmin, requireHostSession);
-  registerGreenRoomChat(app, requireAdmin, requireHostSession);
+  registerGreenRoomChat(app, requireAdmin, requireHostSession, studioHostEmails);
   registerAutomations(app, requireAdmin, {
     unsubscribeUrl: (req, email) => unsubscribeUrl(req, email),
     resolveRecipients: (segment, eventId) => resolveBroadcastRecipients({ segment, eventId } as BroadcastRow),
