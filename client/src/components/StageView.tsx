@@ -67,6 +67,8 @@ export interface RoomMeta {
   /** The brand spot's clock: when the presenter starts speaking (epoch ms), and each scene's start in seconds after it. */
   spotT0?: number;
   spotBeats?: Record<string, number>;
+  /** Film the spot's background alone: the presenter is recorded separately and laid over it in the edit. */
+  spotHidePresenter?: boolean;
 }
 
 /**
@@ -1146,7 +1148,7 @@ export function StageGrid({
       // The brand spot: full-bleed, the presenter cut out and standing on it.
       <>
         <SpotFrame t0={meta.spotT0} beats={meta.spotBeats} />
-        {tiles[0] && (
+        {tiles[0] && !meta.spotHidePresenter && (
           <div className="absolute bottom-0 right-[3%] grid" style={{ width: "40%", height: "96%", transform: "scale(1.55)", transformOrigin: "50% 100%" }}>
             <Tile tile={tiles[0]} muted={muted} namePos="none" fit="full" bare />
           </div>
