@@ -922,22 +922,24 @@ function SpotFrame({ t0, beats }: { t0?: number; beats?: Record<string, number> 
             {eyebrow("Hosted by Emmy winner")}
             <p className="mt-[0.6cqw] font-bold leading-none tracking-tight" style={{ ...HEADLINE_FONT, fontSize: "5cqw" }}>Riccoh Player</p>
             <p className="mt-[0.4cqw] text-white/70" style={{ fontSize: "1.7cqw" }}>USMC, Retired</p>
-            <div className="mt-[1.6cqw] flex flex-wrap" style={{ columnGap: "2.2cqw", rowGap: "0.6cqw" }}>
+            <div className="mt-[1.6cqw] flex" style={{ columnGap: "1.8cqw" }}>
               {[["33", "years in the Corps"], ["5", "combat tours"], ["1", "Emmy"]].map(([n, l], i) => (
-                <p key={l} className="transition-all duration-500" style={{ opacity: since("hosts") > 0.6 + i * 0.5 ? 1 : 0 }}>
-                  <span className="font-bold" style={{ ...HEADLINE_FONT, fontSize: "3cqw", color: gold }}>{n}</span>{" "}
-                  <span className="text-white/80" style={{ fontSize: "1.5cqw" }}>{l}</span>
+                <p key={l} className="whitespace-nowrap transition-all duration-500" style={{ opacity: since("hosts") > 0.6 + i * 0.5 ? 1 : 0 }}>
+                  <span className="font-bold" style={{ ...HEADLINE_FONT, fontSize: "2.6cqw", color: gold }}>{n}</span>{" "}
+                  <span className="text-white/80" style={{ fontSize: "1.3cqw" }}>{l}</span>
                 </p>
               ))}
             </div>
-            <div className="mt-[2cqw] flex items-center transition-opacity duration-700" style={{ gap: "1.4cqw", opacity: since("hosts") > 2.6 ? 1 : 0 }}>
-              <p className="uppercase text-white/60" style={{ fontSize: "1.2cqw", letterSpacing: "0.18em" }}>With co-hosts</p>
-              {people.hosts.map((h) => (
-                <div key={h.name} className="flex items-center" style={{ gap: "0.8cqw" }}>
-                  {h.photo && <img src={h.photo} alt="" className="rounded-full object-cover object-[50%_28%]" style={{ width: "4.6cqw", height: "4.6cqw", boxShadow: `0 0 0 0.25cqw ${gold}` }} />}
-                  <span className="font-bold" style={{ ...HEADLINE_FONT, fontSize: "1.9cqw" }}>{h.name.split(" ")[0]}</span>
-                </div>
-              ))}
+            <div className="mt-[2cqw] transition-opacity duration-700" style={{ opacity: since("hosts") > 2.6 ? 1 : 0 }}>
+              <p className="font-bold uppercase" style={{ color: gold, fontSize: "1.2cqw", letterSpacing: "0.2em" }}>With co-hosts</p>
+              <div className="mt-[0.8cqw] flex items-center" style={{ gap: "2.4cqw" }}>
+                {people.hosts.map((h) => (
+                  <div key={h.name} className="flex items-center" style={{ gap: "0.9cqw" }}>
+                    {h.photo && <img src={h.photo} alt="" className="shrink-0 rounded-full object-cover object-[50%_28%]" style={{ width: "4.4cqw", height: "4.4cqw", boxShadow: `0 0 0 0.25cqw ${gold}` }} />}
+                    <span className="whitespace-nowrap font-bold" style={{ ...HEADLINE_FONT, fontSize: "1.9cqw" }}>{h.name.split(" ")[0]}</span>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         </div>
