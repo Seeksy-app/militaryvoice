@@ -158,6 +158,11 @@ const CO_HOSTS = [
     line: "Author and Veteran Advocate · U.S. Navy, Retired",
     photo: "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/signup-photos/1789581359972-53a24ac49334.jpg",
   },
+  {
+    name: "Enrique Acosta Gonzalez",
+    line: "Host, Developing The Leader Within · U.S. Navy, Retired",
+    photo: "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/signup-photos/1789952464394-0061500716ed.jpg",
+  },
 ];
 
 /** Lineup cards on the home page; the rest are one click away on the agenda. */
