@@ -654,7 +654,8 @@ function FullFrameMedia({
       ) : yt ? (
         <YouTubeFrame id={yt} title={label || "On stage"} muted={muted} loop={loop} onEnded={onEnded} />
       ) : (
-        <video src={url} autoPlay playsInline loop={loop} muted={muted} onEnded={onEnded} className="h-full w-full object-contain" />
+        // Keyed by its address: switching clips starts the new one from the top, every time.
+        <video key={url} src={url} autoPlay playsInline loop={loop} muted={muted} onEnded={onEnded} className="h-full w-full object-contain" />
       )}
       {/* No caption over a clip or picture on air: viewers see the content, not our name for the file. */}
     </div>

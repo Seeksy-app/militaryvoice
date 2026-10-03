@@ -5227,6 +5227,12 @@ export function registerRoutes(app: Express): void {
     const studio = scene ? await storage.getStudioById(scene.studioId) : null;
     if (!scene || !studio) return res.status(404).json({ message: "Not found" });
     if (studio.currentSceneId !== scene.id) return res.json({ advanced: false });
+    // A clip from Media ended, not the scene's own: back to the scene.
+    const before = await readStageBefore(studio);
+    if (before && before.url !== studio.stageMediaUrl) {
+      await restoreStage(studio);
+      return res.json({ advanced: false, restored: true });
+    }
     const list = await storage.listScenes(studio.id);
     const next = list[list.findIndex((s) => s.id === scene.id) + 1];
     if (!next) return res.json({ advanced: false });
@@ -5399,9 +5405,47 @@ export function registerRoutes(app: Express): void {
     res.json({ ok: true });
   });
 
+  /**
+   * A clip played from Media over a scene is an interruption, not a new scene.
+   * What the scene had on the stage is kept aside when the clip goes up, and
+   * put back when the clip ends or someone presses Back to the stage, instead
+   * of leaving the empty holding card. Kept in settings, not a studios column.
+   */
+  type StageBefore = { sceneId: number; takenAt: string; url: string; kind: string; label: string; playing: boolean };
+  const beforeKey = (studioId: number) => `stage_before:${studioId}`;
+  async function readStageBefore(studio: StudioRow): Promise<StageBefore | null> {
+    try {
+      const b = JSON.parse((await storage.getSetting(beforeKey(studio.id))) || "null") as StageBefore | null;
+      // Only for the scene it was taken from: a scene taken since owns the stage.
+      return b && b.sceneId === studio.currentSceneId && b.takenAt === (studio.currentSceneTakenAtUtc ?? "") ? b : null;
+    } catch {
+      return null;
+    }
+  }
+  async function restoreStage(studio: StudioRow): Promise<StudioRow | undefined> {
+    const b = await readStageBefore(studio);
+    await storage.setSetting(beforeKey(studio.id), "");
+    const patch = b ? { stageMediaUrl: b.url, stageMediaKind: b.kind, stageMediaLabel: b.label, stageMediaPlaying: b.playing } : { stageMediaPlaying: false };
+    const updated = await storage.updateStudio(studio.id, patch);
+    if (updated) {
+      const ev = await storage.getEventById(studio.eventId);
+      await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", updated, ev));
+    }
+    return updated;
+  }
+
   app.post("/api/admin/studio/media", requireAdmin, async (req, res) => {
     const { studio } = await adminStudio(req);
     const action = String(req.body?.action ?? "");
+    if (action === "stop") return res.json(await restoreStage(studio));
+    // Going up over a scene: keep what the scene had, unless a clip is already
+    // covering it (switching clips keeps the scene's, not the last clip's).
+    if (studio.currentSceneId && !(await readStageBefore(studio))) {
+      await storage.setSetting(beforeKey(studio.id), JSON.stringify({
+        sceneId: studio.currentSceneId, takenAt: studio.currentSceneTakenAtUtc ?? "",
+        url: studio.stageMediaUrl, kind: studio.stageMediaKind, label: studio.stageMediaLabel, playing: studio.stageMediaPlaying,
+      } satisfies StageBefore));
+    }
     const patch =
       action === "stop"
         ? { stageMediaPlaying: false }

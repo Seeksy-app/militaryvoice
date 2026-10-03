@@ -79,6 +79,9 @@ export function MediaLibrary({ adminGet, adminSend, studioId, playingUrl, isPlay
     );
   };
 
+  // The stage holds the whole address (https://…/api/studio/media/12); the list has the path.
+  const isLive = (url: string) => isPlaying && !!url && (playingUrl === url || playingUrl.endsWith(url));
+  const anyLive = (data ?? []).some((m) => isLive(m.url));
   const items = useMemo(() => {
     const all = (data ?? []).filter((m) => (only ? m.kind === only : true));
     const needle = q.trim().toLowerCase();
@@ -89,17 +92,18 @@ export function MediaLibrary({ adminGet, adminSend, studioId, playingUrl, isPlay
 
   return (
     <div className="flex flex-col gap-3">
-      {isPlaying && (
+      {/* Only over a clip from this list: the scene's own media isn't something to come "back" from. */}
+      {anyLive && (
         <div className="flex flex-wrap items-center gap-3 rounded-xl border-2 border-[#ED1C24] bg-[#ED1C24]/10 p-3">
           <Play className="h-4 w-4 shrink-0 text-[#ED1C24]" />
-          <p className="min-w-0 flex-1 text-sm font-medium">On the stage right now.</p>
+          <p className="min-w-0 flex-1 text-sm font-medium">A clip is on the stage. Pick another to switch, or go back to the scene.</p>
           <Button
             size="sm"
             className="gap-1.5 rounded-full bg-[#ED1C24] text-white hover:bg-[#c81820]"
             onClick={() => play.mutate({ action: "stop" })}
             data-testid="button-media-stop"
           >
-            <Square className="h-3.5 w-3.5" /> Back to the stage
+            <Square className="h-3.5 w-3.5" /> Back to the scene
           </Button>
         </div>
       )}
@@ -124,7 +128,7 @@ export function MediaLibrary({ adminGet, adminSend, studioId, playingUrl, isPlay
           </p>
         ) : (
           items.map((m) => {
-            const live = isPlaying && m.url === playingUrl;
+            const live = isLive(m.url);
             return (
               <div
                 key={m.id}
