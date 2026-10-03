@@ -57,6 +57,7 @@ export interface RoomMeta {
   stageCardName?: string;
   stageCardShow?: string;
   stageCardPhoto?: string;
+  stageCardPhoto2?: string;
   stageCardSponsor?: string;
   stageCardSponsorLogo?: string;
   /** The desk hand-off slide: thanks to who just finished, with a QR code to their page. */
@@ -812,6 +813,61 @@ function BackgroundLayer({ url }: { url: string }) {
   );
 }
 
+/** The stage plays our animated promo instead of a file when its media is this address. */
+export function isPromoUrl(url?: string): boolean {
+  return /\/promo\/nmpd\b/.test(url ?? "");
+}
+
+/**
+ * National Military Podcast Day, in 30 seconds: the badge, then the day's
+ * numbers landing one by one, timed to Alex's read. The clock starts when the
+ * presenter steps on stage, so the beats meet her lines whenever she arrives.
+ */
+function PromoFrame({ started }: { started: boolean }) {
+  const [t, setT] = useState(0);
+  useEffect(() => {
+    if (!started) { setT(0); return; }
+    const t0 = Date.now();
+    const id = setInterval(() => setT((Date.now() - t0) / 1000), 100);
+    return () => clearInterval(id);
+  }, [started]);
+  const at = (s: number) => (started ? t >= s : s === 0);
+  const pct = Math.round(Math.min(58, Math.max(0, (t - 16.5) * 40)));
+  const beat = (on: boolean) => `transition-all duration-700 ease-out ${on ? "translate-y-0 opacity-100" : "translate-y-[1.5cqw] opacity-0"}`;
+  return (
+    <div className="absolute inset-0 overflow-hidden bg-gradient-to-br from-[#000741] via-[#053877] to-[#06498f] text-white" style={{ containerType: "inline-size" }} data-testid="stage-promo">
+      <div className="absolute -right-[12%] -top-[30%] h-[80%] w-[50%] animate-pulse rounded-full bg-[#F0A71F]/[0.07]" aria-hidden="true" />
+      <div className="absolute -bottom-[35%] -left-[10%] h-[70%] w-[45%] rounded-full bg-white/[0.04]" aria-hidden="true" />
+      <div className="absolute inset-0 flex flex-col justify-center px-[7%]">
+        <div className={`flex items-center ${beat(at(0))}`} style={{ gap: "2.4cqw" }}>
+          <img src="/nmpd-logo.png" alt="" className={`shrink-0 transition-transform duration-1000 ${at(0.4) ? "rotate-0 scale-100" : "-rotate-12 scale-75"}`} style={{ width: "17cqw", height: "17cqw" }} />
+          <div className="min-w-0">
+            <p className="font-bold uppercase text-[#F0A71F]" style={{ fontSize: "1.7cqw", letterSpacing: "0.3em" }}>Monday · October 5</p>
+            <p className="mt-[0.6cqw] font-black uppercase leading-[0.95] tracking-tight [text-wrap:balance]" style={{ ...HEADLINE_FONT, fontSize: "5.6cqw" }}>National Military Podcast Day</p>
+          </div>
+        </div>
+        <div className="mt-[4cqw] grid grid-cols-3" style={{ gap: "2cqw" }}>
+          {[
+            { on: at(5), big: "26.2", small: "miles of stories" },
+            { on: at(10.5), big: "30", small: "military & veteran shows, back to back" },
+            { on: at(16), big: `${started ? pct : 58}%`, small: "of Americans listen to podcasts monthly" },
+          ].map((x) => (
+            <div key={x.small} className={`rounded-[1.4cqw] border border-white/15 bg-white/[0.07] px-[1.8cqw] py-[1.6cqw] ${beat(x.on)}`}>
+              <p className="font-black tabular-nums text-[#F0A71F]" style={{ ...HEADLINE_FONT, fontSize: "5cqw", lineHeight: 1 }}>{x.big}</p>
+              <p className="mt-[0.6cqw] text-white/80 [text-wrap:balance]" style={{ fontSize: "1.55cqw", lineHeight: 1.25 }}>{x.small}</p>
+            </div>
+          ))}
+        </div>
+        <div className={`mt-[3.4cqw] flex items-center ${beat(at(22))}`} style={{ gap: "1.6cqw" }}>
+          <span className="rounded-full bg-[#F0A71F] px-[2cqw] py-[0.9cqw] font-black uppercase text-[#000741]" style={{ fontSize: "1.9cqw", letterSpacing: "0.08em" }}>Free · Watch live</span>
+          <span className="font-bold" style={{ fontSize: "2.6cqw" }}>militaryvoices.ai/watch</span>
+        </div>
+      </div>
+      <p className="absolute bottom-[3%] right-[4%] text-white/45" style={{ fontSize: "1.1cqw" }}>Source: Edison Research, The Infinite Dial 2026</p>
+    </div>
+  );
+}
+
 /**
  * "We'll be right back": what the audience sees while a studio host sorts out
  * a problem (the OH SH#T! button). Today's badge and a line about the day, so
@@ -862,7 +918,12 @@ function ThanksSlide({ t, compact = false }: { t: StageThanks; compact?: boolean
         <div className={`flex min-w-0 flex-1 ${compact ? "flex-col items-start" : "flex-col items-start"}`}>
           <p className="font-bold uppercase text-[#F0A71F]" style={{ fontSize: z.eyebrow, letterSpacing: "0.3em" }}>Thank you</p>
           <div className={`mt-[3%] flex ${compact ? "flex-col items-start" : "items-center"}`} style={{ gap: compact ? "2.4cqw" : "2.6cqw" }}>
-            {t.photoUrl && <img src={t.photoUrl} alt="" className="shrink-0 rounded-full object-cover object-[50%_28%] ring-[0.45cqw] ring-[#F0A71F]/70" style={{ width: z.photo, height: z.photo }} />}
+            {t.photoUrl && (
+              <span className="flex shrink-0">
+                <img src={t.photoUrl} alt="" className="rounded-full object-cover object-[50%_28%] ring-[0.45cqw] ring-[#F0A71F]/70" style={{ width: z.photo, height: z.photo }} />
+                {t.photo2Url && <img src={t.photo2Url} alt="" className="rounded-full object-cover object-[50%_28%] ring-[0.45cqw] ring-[#F0A71F]/70" style={{ width: z.photo, height: z.photo, marginLeft: "-4cqw" }} />}
+              </span>
+            )}
             <div className="min-w-0">
               <p className="font-semibold leading-[1.05] [text-wrap:balance]" style={{ ...HEADLINE_FONT, fontSize: z.name }}>{t.name}</p>
               {t.show && <p className="mt-[0.5em] leading-snug text-white/75 [text-wrap:balance]" style={{ fontSize: z.show }}>{t.show}</p>}
@@ -955,6 +1016,22 @@ export function StageGrid({
       <BrbFrame />
     ) : Number.isFinite(countdownEnds) ? (
       <CountdownFrame endsAt={countdownEnds} label={meta.countdownLabel} />
+    ) : meta.stageMediaPlaying && isPromoUrl(meta.stageMediaUrl) ? (
+      // The National Military Podcast Day promo: animated, with whoever's
+      // presenting it (Alex) in a big frame beside it.
+      <>
+        <BackgroundLayer url={meta.backgroundUrl ?? ""} />
+        {tiles.length === 0 ? (
+          <PromoFrame started={false} />
+        ) : (
+          <>
+            <div className="absolute overflow-hidden rounded-xl" style={{ left: "1.5%", top: "6%", width: "62%", height: "88%" }}>
+              <PromoFrame started />
+            </div>
+            <HandoffPeople tiles={tiles} muted={muted} order={meta.stageOrder} />
+          </>
+        )}
+      </>
     ) : meta.stageMediaPlaying && meta.stageMediaUrl && meta.stageMediaPeople && tiles.length > 0 ? (
       // The clip and the people together, as Restream does it: the clip in a
       // big frame on the left, everyone on stage stacked down the right —
@@ -1007,7 +1084,10 @@ export function StageGrid({
           <>
             <p className="relative text-xs font-bold uppercase tracking-[0.3em] text-[#F0A71F]" data-testid="stage-coming-up">{meta.stageCardShow?.startsWith("Co-host") ? "At the desk" : "Coming up next"}</p>
             {meta.stageCardPhoto ? (
-              <img src={meta.stageCardPhoto} alt="" className="relative h-36 w-36 rounded-full object-cover object-[50%_28%] ring-4 ring-[#F0A71F]/60 sm:h-44 sm:w-44" />
+              <span className="relative flex">
+                <img src={meta.stageCardPhoto} alt="" className="h-36 w-36 rounded-full object-cover object-[50%_28%] ring-4 ring-[#F0A71F]/60 sm:h-44 sm:w-44" />
+                {meta.stageCardPhoto2 && <img src={meta.stageCardPhoto2} alt="" className="-ml-6 h-36 w-36 rounded-full object-cover object-[50%_28%] ring-4 ring-[#F0A71F]/60 sm:-ml-8 sm:h-44 sm:w-44" />}
+              </span>
             ) : (
               <img src="/logo-wave.png?v=2" alt="" className="relative h-20 w-auto opacity-90" />
             )}

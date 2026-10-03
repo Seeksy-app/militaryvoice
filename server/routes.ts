@@ -4983,6 +4983,7 @@ export function registerRoutes(app: Express): void {
         name: [sg.hostName.trim(), co?.hostName?.trim()].filter(Boolean).join(" & "),
         show: sg.podcastName.trim(),
         photoUrl: sg.photoUrl,
+        photo2Url: co?.photoUrl ?? "",
         qrUrl: (await publishedBioUrl(sg.email).catch(() => "")) || `${PUBLIC_ORIGIN}/agenda?slot=${sg.slotIndex}`,
         deskName: desk?.name ?? "",
         deskPhoto: desk?.photoUrl ?? "",
@@ -5025,12 +5026,15 @@ export function registerRoutes(app: Express): void {
         // The desk scene: the card is whoever holds that hour as co-host,
         // so the stage says who is talking rather than nobody.
         const desk = row.kind === "Handoff" && !who ? handoff?.desk ?? null : null;
+        // The booking's co-host on the card too: both names, both faces.
+        const whoCo = who?.coHostEmail ? await storage.getProfileByEmail(who.coHostEmail.trim().toLowerCase()).catch(() => undefined) : undefined;
         const rowMedia = handoff?.thanks && !scene.mediaUrl ? "" : mediaUrl;
         const withScene = await storage.updateStudio(studio.id, {
           currentSceneId: scene.id,
           stageThanks: handoff?.thanks ? JSON.stringify(handoff.thanks) : "",
           brbOn: false,
-          stageCardName: who?.hostName ?? desk?.name ?? "",
+          stageCardName: who ? [who.hostName.trim(), whoCo?.hostName?.trim()].filter(Boolean).join(" & ") : desk?.name ?? "",
+          stageCardPhoto2: whoCo?.photoUrl ?? "",
           stageCardShow: who?.podcastName?.trim() ?? (desk ? "Co-host · at the desk" : ""),
           stageCardPhoto: who?.photoUrl ?? desk?.photoUrl ?? "",
           stageCardSponsor: sponsor?.name ?? "",
@@ -5072,6 +5076,7 @@ export function registerRoutes(app: Express): void {
             stageCardName: "",
             stageCardShow: "",
             stageCardPhoto: "",
+            stageCardPhoto2: "",
             stageCardSponsor: "",
             stageCardSponsorLogo: "",
             stageThanks: "",
@@ -5095,6 +5100,7 @@ export function registerRoutes(app: Express): void {
             stageCardName: "",
             stageCardShow: "",
             stageCardPhoto: "",
+            stageCardPhoto2: "",
             stageCardSponsor: "",
             stageCardSponsorLogo: "",
             stageThanks: "",

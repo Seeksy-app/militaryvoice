@@ -1090,6 +1090,8 @@ export const studios = pgTable("studios", {
   stageCardName: text("stage_card_name").notNull().default(""),
   stageCardShow: text("stage_card_show").notNull().default(""),
   stageCardPhoto: text("stage_card_photo").notNull().default(""),
+  /** The booking's co-host (Jane beside Riccoh), so the card shows both faces. */
+  stageCardPhoto2: text("stage_card_photo2").notNull().default(""),
   /** The show's sponsor, for the same card: "Presented by …" with a logo. */
   stageCardSponsor: text("stage_card_sponsor").notNull().default(""),
   stageCardSponsorLogo: text("stage_card_sponsor_logo").notNull().default(""),
@@ -1893,6 +1895,7 @@ export const studioUpdateSchema = z.object({
   stageMediaKind: z.enum(["video", "image"]).optional(),
   stageMediaLabel: z.string().trim().max(120).optional(),
   stageMediaPlaying: z.boolean().optional(),
+  stageMediaPeople: z.boolean().optional(),
   logoUrl: z.string().trim().max(600).optional(),
   logoCorner: z.enum(LOGO_CORNERS).optional(),
   logoSize: z.number().int().min(40).max(320).optional(),

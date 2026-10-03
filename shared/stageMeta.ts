@@ -17,6 +17,8 @@ export interface StageThanks {
   name: string;
   show: string;
   photoUrl: string;
+  /** A co-host's face beside theirs (Jane beside Riccoh). */
+  photo2Url?: string;
   /** Their page, for the QR code. */
   qrUrl: string;
   deskName: string;
@@ -51,6 +53,7 @@ export function stageMetaFromStudio(st: StudioRow) {
     stageCardName: st.stageCardName,
     stageCardShow: st.stageCardShow,
     stageCardPhoto: st.stageCardPhoto,
+    stageCardPhoto2: st.stageCardPhoto2,
     stageCardSponsor: st.stageCardSponsor,
     stageCardSponsorLogo: st.stageCardSponsorLogo,
     stageThanks: readThanks(st.stageThanks),
