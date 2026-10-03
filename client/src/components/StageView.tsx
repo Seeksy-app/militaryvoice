@@ -861,7 +861,7 @@ function SpotFrame({ t0, beats }: { t0?: number; beats?: Record<string, number> 
   const scene: Beat = t < 0 ? "welcome" : [...order].reverse().find((k) => t >= b[k]) ?? "welcome";
   const on = (k: Beat) => scene === k;
   const since = (k: Beat) => Math.max(0, t - b[k]);
-  // Text sits in the left 60%; the presenter is laid over the right in the edit.
+  // Text sits in the left 60% where the presenter is laid over the right in the edit; wide scenes use the whole frame.
   const shot = (k: Beat, wide = false) =>
     `absolute inset-y-0 left-0 flex flex-col justify-center pl-[6%] ${wide ? "pr-[6%] w-full" : "w-[62%] pr-[2%]"} transition-all duration-[900ms] ease-out ${on(k) ? "opacity-100 translate-y-0" : "pointer-events-none opacity-0 translate-y-[1.5cqw]"}`;
   // Each scene has its own full-bleed photo, slowly pushing in, under a navy wash from the left.
@@ -910,32 +910,33 @@ function SpotFrame({ t0, beats }: { t0?: number; beats?: Record<string, number> 
         </p>
       </div>
 
-      <div className={shot("hosts")}>
-        <div className="flex items-center" style={{ gap: "3cqw" }}>
+      {/* The hosts fill the frame: Riccoh large on his gold plate, the co-hosts beside him at a size you can see. */}
+      <div className={shot("hosts", true)}>
+        <div className="flex items-center" style={{ gap: "4.5cqw" }}>
           {/* Riccoh as he is on the site: the Emmy portrait, tilted on a gold plate. */}
-          <div className="relative shrink-0" style={{ width: "19cqw", height: "24cqw" }}>
-            <div className="absolute inset-0 rounded-[1.6cqw]" style={{ background: gold, transform: "rotate(-3deg) translate(-0.6cqw, 0.4cqw)" }} />
-            <img src="/riccoh-player.jpg" alt="" className="absolute inset-0 h-full w-full rounded-[1.4cqw] object-cover object-[50%_20%] shadow-2xl" />
+          <div className="relative shrink-0" style={{ width: "25cqw", height: "31cqw" }}>
+            <div className="absolute inset-0 rounded-[1.8cqw]" style={{ background: gold, transform: "rotate(-3deg) translate(-0.7cqw, 0.5cqw)" }} />
+            <img src="/riccoh-player.jpg" alt="" className="absolute inset-0 h-full w-full rounded-[1.6cqw] object-cover object-[50%_20%] shadow-2xl" />
           </div>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             {eyebrow("Hosted by Emmy winner")}
-            <p className="mt-[0.6cqw] font-bold leading-none tracking-tight" style={{ ...HEADLINE_FONT, fontSize: "5cqw" }}>Riccoh Player</p>
-            <p className="mt-[0.4cqw] text-white/70" style={{ fontSize: "1.7cqw" }}>USMC, Retired</p>
-            <div className="mt-[1.6cqw] flex" style={{ columnGap: "1.8cqw" }}>
+            <p className="mt-[0.8cqw] font-bold leading-none tracking-tight" style={{ ...HEADLINE_FONT, fontSize: "7cqw" }}>Riccoh Player</p>
+            <p className="mt-[0.6cqw] text-white/70" style={{ fontSize: "2.1cqw" }}>USMC, Retired</p>
+            <div className="mt-[2cqw] flex" style={{ columnGap: "2.6cqw" }}>
               {[["33", "years in the Corps"], ["5", "combat tours"], ["1", "Emmy"]].map(([n, l], i) => (
                 <p key={l} className="whitespace-nowrap transition-all duration-500" style={{ opacity: since("hosts") > 0.6 + i * 0.5 ? 1 : 0 }}>
-                  <span className="font-bold" style={{ ...HEADLINE_FONT, fontSize: "2.6cqw", color: gold }}>{n}</span>{" "}
-                  <span className="text-white/80" style={{ fontSize: "1.3cqw" }}>{l}</span>
+                  <span className="font-bold" style={{ ...HEADLINE_FONT, fontSize: "3.6cqw", color: gold }}>{n}</span>{" "}
+                  <span className="text-white/80" style={{ fontSize: "1.7cqw" }}>{l}</span>
                 </p>
               ))}
             </div>
-            <div className="mt-[2cqw] transition-opacity duration-700" style={{ opacity: since("hosts") > 2.6 ? 1 : 0 }}>
-              <p className="font-bold uppercase" style={{ color: gold, fontSize: "1.2cqw", letterSpacing: "0.2em" }}>With co-hosts</p>
-              <div className="mt-[0.8cqw] flex items-center" style={{ gap: "2.4cqw" }}>
+            <div className="mt-[2.8cqw] transition-opacity duration-700" style={{ opacity: since("hosts") > 2.2 ? 1 : 0 }}>
+              <p className="font-bold uppercase" style={{ color: gold, fontSize: "1.5cqw", letterSpacing: "0.2em" }}>With co-hosts</p>
+              <div className="mt-[1.2cqw] flex items-center" style={{ gap: "3.6cqw" }}>
                 {people.hosts.map((h) => (
-                  <div key={h.name} className="flex items-center" style={{ gap: "0.9cqw" }}>
-                    {h.photo && <img src={h.photo} alt="" className="shrink-0 rounded-full object-cover object-[50%_28%]" style={{ width: "4.4cqw", height: "4.4cqw", boxShadow: `0 0 0 0.25cqw ${gold}` }} />}
-                    <span className="whitespace-nowrap font-bold" style={{ ...HEADLINE_FONT, fontSize: "1.9cqw" }}>{h.name.split(" ")[0]}</span>
+                  <div key={h.name} className="flex items-center" style={{ gap: "1.4cqw" }}>
+                    {h.photo && <img src={h.photo} alt="" className="shrink-0 rounded-full object-cover object-[50%_28%]" style={{ width: "8cqw", height: "8cqw", boxShadow: `0 0 0 0.35cqw ${gold}` }} />}
+                    <span className="font-bold leading-tight" style={{ ...HEADLINE_FONT, fontSize: "2.5cqw" }}>{h.name.split(" ")[0]}<br />{h.name.split(" ").slice(1).join(" ")}</span>
                   </div>
                 ))}
               </div>
@@ -944,24 +945,23 @@ function SpotFrame({ t0, beats }: { t0?: number; beats?: Record<string, number> 
         </div>
       </div>
 
-      {/* The lineup fills the left of the frame, every face, while the shows are named. */}
-      <div className={`absolute inset-y-0 left-0 w-[62%] transition-opacity duration-[900ms] ${on("shows") ? "opacity-100" : "opacity-0"}`} aria-hidden="true">
-        <div className="absolute inset-0 grid grid-cols-6 content-center" style={{ gap: "0.9cqw", padding: "3cqw 2cqw 3cqw 4cqw" }}>
-          {people.faces.slice(0, 30).map((src, i) => (
-            <img key={i} src={src} alt="" className="aspect-square w-full rounded-full object-cover object-[50%_28%] transition-all duration-500" style={{ opacity: since("shows") > i * 0.05 ? 0.55 : 0, transform: `scale(${since("shows") > i * 0.05 ? 1 : 0.8})` }} />
+      {/* The lineup fills the whole frame, every face, while the day is described. */}
+      <div className={`absolute inset-0 transition-opacity duration-[900ms] ${on("shows") ? "opacity-100" : "opacity-0"}`} aria-hidden="true">
+        <div className="absolute inset-0 grid grid-cols-8 content-center" style={{ gap: "1cqw", padding: "1cqw" }}>
+          {people.faces.length > 0 && Array.from({ length: 32 }, (_, i) => people.faces[i % people.faces.length]).map((src, i) => (
+            <img key={i} src={src} alt="" className="aspect-square w-full rounded-full object-cover object-[50%_28%] transition-all duration-700" style={{ opacity: on("shows") ? 0.6 : 0, transform: `scale(${on("shows") ? 1 : 0.92})` }} />
           ))}
         </div>
-        <div className="absolute inset-0" style={{ background: "radial-gradient(60% 55% at 45% 50%, rgba(4,16,43,.92) 0%, rgba(4,16,43,.55) 60%, rgba(4,16,43,.2) 100%)" }} />
+        <div className="absolute inset-0" style={{ background: "radial-gradient(55% 60% at 30% 50%, rgba(4,16,43,.94) 0%, rgba(4,16,43,.7) 55%, rgba(4,16,43,.35) 100%)" }} />
       </div>
       <div className={shot("shows")}>
-        <p className="font-bold leading-none tracking-tight" style={{ ...HEADLINE_FONT, fontSize: "10cqw" }}>30 shows</p>
+        <p className="font-bold leading-none tracking-tight" style={{ ...HEADLINE_FONT, fontSize: "9cqw" }}>Back to back</p>
         <p className="mt-[1.4cqw] font-semibold" style={{ ...HEADLINE_FONT, fontSize: "3cqw", color: gold }}>Live, 7 AM to 11 PM Eastern</p>
       </div>
 
-      <div className={shot("miles")}>
-        {/* Always 26.2, never a count that could be caught at 20.3. It lands with a small push instead. */}
-        <p className="font-bold leading-none tabular-nums tracking-tight" style={{ ...HEADLINE_FONT, fontSize: "15cqw", color: gold, transform: `scale(${on("miles") ? 1 : 0.88})`, transformOrigin: "0% 50%", transition: "transform 900ms cubic-bezier(.2,.8,.2,1)" }}>26.2</p>
-        <p className="mt-[1cqw] font-bold leading-tight" style={{ ...HEADLINE_FONT, fontSize: "4cqw" }}>miles of stories,<br />back to back</p>
+      <div className={shot("miles", true)}>
+        <p className="max-w-[80%] font-bold leading-[1.04] tracking-tight [text-wrap:balance]" style={{ ...HEADLINE_FONT, fontSize: "6.4cqw" }}>A marathon of podcasters, streaming all day</p>
+        <p className="mt-[2cqw] font-bold transition-all duration-700" style={{ ...HEADLINE_FONT, fontSize: "3.6cqw", color: gold, opacity: since("miles") > 1.2 ? 1 : 0, transform: `translateY(${since("miles") > 1.2 ? 0 : 1}cqw)` }}>26 shows to match the 26 miles</p>
       </div>
 
       <div className={shot("grow")}>
