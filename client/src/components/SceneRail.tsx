@@ -161,7 +161,7 @@ export function SceneRail({
   meEmail,
 }: {
   /** Who holds the desk at each hand-off, by run-of-show row: the co-host's face on that card. */
-  desks?: Record<number, { name: string; photoUrl: string; email: string }>;
+  desks?: Record<number, { name: string; photoUrl: string; email: string; role?: "cohost" | "producer" }>;
   /** The person looking at the rail, so their own hand-offs say "That's you". */
   meEmail?: string;
   /** The on-air camera scene's card shows this: a live picture of who's on stage. */
@@ -506,10 +506,11 @@ export function SceneRail({
           // episode, not the host's headshot, so the producer can tell a
           // pre-recorded segment from a live one at a glance.
           const sceneVideo = k === "media" && !isImage(sc) && !youtubeId(sc.mediaUrl) ? sc.mediaUrl : null;
-          const thumb = sc.thumbUrl || sceneImage || (sceneVideo ? null : sg?.photoUrl) || null;
+          // A hand-off's card is the person who takes it, not a picture: no background.
+          const desk = !sg && sc.runItemId ? desks?.[sc.runItemId] : undefined;
+          const thumb = desk ? null : sc.thumbUrl || sceneImage || (sceneVideo ? null : sg?.photoUrl) || null;
           const isFace = !sc.thumbUrl && !sceneImage && !!thumb;
           // A hand-off's card wears the co-host who takes it, so they can find their own.
-          const desk = !sg && sc.runItemId ? desks?.[sc.runItemId] : undefined;
           const mine = Boolean(desk && meEmail && desk.email.trim().toLowerCase() === meEmail.trim().toLowerCase());
           // First name, but "Dr. Brown" rather than "Dr.".
           const deskWords = desk ? desk.name.trim().split(/\s+/) : [];
@@ -607,13 +608,13 @@ export function SceneRail({
                         </span>
                       ) : k === "media" ? (
                         <Film className="h-6 w-6 text-white/30" />
-                      ) : (
+                      ) : desk ? null : (
                         <Video className="h-6 w-6 text-white/30" />
                       )}
                     </div>
                   )}
                   {desk && (
-                    <span className="absolute inset-0 flex items-center justify-center bg-black/30">
+                    <span className="absolute inset-0 flex items-center justify-center">
                         <span className="flex items-center gap-2.5 rounded-full bg-black/65 py-1 pl-1 pr-3.5" data-testid={`scene-desk-${sc.id}`}>
                           {desk.photoUrl ? (
                             <img src={desk.photoUrl} alt="" className={`h-11 w-11 rounded-full object-cover object-[50%_28%] ring-2 ${mine ? "ring-[#F0A71F]" : "ring-white/40"}`} />
@@ -621,7 +622,7 @@ export function SceneRail({
                             <span className="flex h-11 w-11 items-center justify-center rounded-full bg-white/15 text-base font-bold text-white">{deskFirst.slice(0, 1)}</span>
                           )}
                           <span className="text-left leading-tight">
-                            <span className="block text-[10px] font-bold uppercase tracking-[0.16em] text-[#F0A71F]">Co-host</span>
+                            <span className={`block text-[10px] font-bold uppercase tracking-[0.16em] ${desk.role === "producer" ? "text-[#8ab4f8]" : "text-[#F0A71F]"}`}>{desk.role === "producer" ? "Producer" : "Co-host"}</span>
                             <span className="block text-sm font-bold text-white">{deskFirst}</span>
                           </span>
                         </span>

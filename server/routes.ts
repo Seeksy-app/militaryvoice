@@ -5126,14 +5126,22 @@ export function registerRoutes(app: Express): void {
       if (!byBlock.has(b)) byBlock.set(b, await deskHostFor(eventId, iso));
       return byBlock.get(b) ?? null;
     };
-    const out: Record<number, { name: string; photoUrl: string; email: string }> = {};
+    // With no co-host at the desk, it's Michael's: the producer runs that hand-off.
+    const team = await storage.listEventTeam(eventId).catch(() => []);
+    const tm = team.find((m) => /michael/i.test(m.name));
+    const prodEmail = (tm?.email || "michael@militaryvoice.ai").trim().toLowerCase();
+    const prodProfile = tm?.photoUrl ? undefined : await storage.getProfileByEmail(prodEmail).catch(() => undefined);
+    const producer = { name: "Michael", photoUrl: tm?.photoUrl || prodProfile?.photoUrl || "", email: prodEmail, role: "producer" as const };
+    const out: Record<number, { name: string; photoUrl: string; email: string; role: "cohost" | "producer" }> = {};
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       if (row.kind !== "Handoff") continue;
       const next = rows.slice(i + 1).find((r) => r.kind === "Segment");
       if (!next) continue;
       const desk = (await deskAt(next.startAtUtc)) ?? (await deskAt(row.startAtUtc));
-      if (desk) out[row.id] = desk;
+      out[row.id] = !desk || desk.email.trim().toLowerCase() === prodEmail
+        ? { ...producer, photoUrl: producer.photoUrl || desk?.photoUrl || "" }
+        : { ...desk, role: "cohost" };
     }
     res.json(out);
   });

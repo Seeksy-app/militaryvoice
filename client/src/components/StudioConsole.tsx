@@ -1011,7 +1011,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
   // Time left before the next scene is due, on the same clock the green
   // room and Alex read, so everybody at the desk sees one number.
   // The signed-in studio manager, for the avatar at the right of the bar.
-  const { data: desks } = useQuery<Record<number, { name: string; photoUrl: string; email: string }>>({
+  const { data: desks } = useQuery<Record<number, { name: string; photoUrl: string; email: string; role?: "cohost" | "producer" }>>({
     queryKey: ["/api/admin/run-of-show/desks", eventId ?? "featured"],
     queryFn: () => adminGet(`/api/admin/run-of-show/desks${eventId ? `?eventId=${eventId}` : ""}`),
     staleTime: 60_000,
