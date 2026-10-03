@@ -95,14 +95,21 @@ export function HostNav({
         ...(cohostHours > 0 ? [{ key: "cohost" as const, label: "Co-host dashboard", hint: `The ${cohostHours} ${cohostHours === 1 ? "hour" : "hours"} you're co-hosting at the desk, and who's on with you`, icon: Mic2 }] : []),
       ],
     },
+    // Two short groups instead of one long one: where you make the show, and
+    // where its clips go out. "Content" with six items read as a wall.
     {
-      title: "Content",
+      title: "Record & host",
       items: [
-        { key: "studio", label: "Rooms", hint: "Quick, like Zoom: hop in with guests, record it or don't, and go live", icon: Video },
         { key: "pro", feature: "studio", label: "Studio", hint: "The full marathon studio for your own show: scenes, layouts, lower thirds and a producer console. Coming Oct 5th.", icon: MonitorPlay, tag: "Oct 5", soon: "Studio is coming Oct 5th" },
+        { key: "studio", label: "Rooms", hint: "Quick, like Zoom: hop in with guests, record it or don't, and go live. Coming Oct 5th.", icon: Video, tag: "Oct 5", soon: "Rooms open Oct 5th" },
+        { key: "podcast", label: "Podcast", hint: "Host your show: your RSS feed for Apple and Spotify, episodes, and downloads sponsors trust", icon: Podcast },
+      ],
+    },
+    {
+      title: "Clips & social",
+      items: [
         { key: "recordings", label: "Library", hint: "Every episode in one place: studio recordings, uploads, Zoom calls and cleaned-up versions", icon: Library },
         { key: "postify", label: "Pōstify", hint: "Create short clips from your video podcast, and clean up the full episode", icon: Wand2, tag: "Beta" },
-        { key: "podcast", label: "Podcast", hint: "Host your show: your RSS feed for Apple and Spotify, episodes, and downloads sponsors trust", icon: Podcast },
         { key: "social", label: "Social", hint: "Post and schedule your clips to all your social accounts from one calendar", icon: Share2 },
       ],
     },
@@ -156,16 +163,17 @@ export function HostNav({
         </Link>
       );
     }
-    const active = it.soon ? false : it.locked ? screen === "pro" && (feature ?? "campaigns") === it.feature : screen === it.key || (it.key === "events" && (screen === "promotion" || (screen === "greenroom" && !compact)));
+    const adminThrough = !!it.soon && isAdmin;
+    const active = it.soon && !adminThrough ? false : it.locked ? screen === "pro" && (feature ?? "campaigns") === it.feature : screen === it.key || (it.key === "events" && (screen === "promotion" || (screen === "greenroom" && !compact)));
     const inert = !!it.locked && !proOpen;
     return (
       <a
         key={`${it.key}-${it.feature ?? ""}`}
-        href={it.soon && it.feature === "studio" && isAdmin ? "/admin/studio" : inert || it.soon ? undefined : it.locked ? `${pathFor("pro")}#${it.feature}` : pathFor(it.key)}
+        href={adminThrough ? (it.feature === "studio" ? "/admin/studio" : pathFor(it.key)) : inert || it.soon ? undefined : it.locked ? `${pathFor("pro")}#${it.feature}` : pathFor(it.key)}
         aria-disabled={inert || undefined}
         onClick={(e) => {
-          if (it.soon && it.feature === "studio" && isAdmin) return;
-          if (it.soon) { e.preventDefault(); toast({ title: it.soon, description: "The full marathon studio for your own show. Until then, Rooms has you covered for recording and going live." }); return; }
+          if (adminThrough && it.feature === "studio") return;
+          if (it.soon && !adminThrough) { e.preventDefault(); toast({ title: it.soon, description: "Opening on National Military Podcast Day. Until then, you can still upload episodes to your Library and make clips in Pōstify." }); return; }
           if (inert) { e.preventDefault(); return; }
           if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
           e.preventDefault();
@@ -249,7 +257,7 @@ export function HostNav({
               const Icon = it.icon;
               const active = screen === it.key || (it.key === "events" && (screen === "promotion" || screen === "greenroom"));
               return (
-                <RailButton key={`r-${it.key}-${it.feature ?? ""}-${it.href ?? ""}`} tip={it.label} active={active} href={it.href} onClick={it.href ? undefined : () => onGo(it.key, it.feature)} testid={`nav-rail-${it.key}`}>
+                <RailButton key={`r-${it.key}-${it.feature ?? ""}-${it.href ?? ""}`} tip={it.label} active={active} href={it.href} onClick={it.href ? undefined : () => { if (it.soon && !isAdmin) { toast({ title: it.soon }); return; } if (it.soon && it.feature === "studio") { window.location.href = "/admin/studio"; return; } onGo(it.key, it.feature); }} testid={`nav-rail-${it.key}`}>
                   <Icon className="h-5 w-5" />
                 </RailButton>
               );
