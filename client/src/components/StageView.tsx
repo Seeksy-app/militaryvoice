@@ -855,8 +855,8 @@ function SpotFrame({ t0, beats }: { t0?: number; beats?: Record<string, number> 
     }).catch(() => {});
   }, []);
   const t = t0 ? (now - t0) / 1000 : -1;
-  const b = { welcome: 0, day: 4, hosts: 11, shows: 17, miles: 21, grow: 24, watch: 28, end: 34, ...(beats ?? {}) };
-  const order = ["welcome", "day", "hosts", "shows", "miles", "grow", "watch", "end"] as const;
+  const b = { welcome: 0, day: 4, hosts: 11, shows: 17, grow: 24, watch: 28, ...(beats ?? {}) };
+  const order = ["welcome", "day", "hosts", "shows", "grow", "watch"] as const;
   type Beat = (typeof order)[number];
   const scene: Beat = t < 0 ? "welcome" : [...order].reverse().find((k) => t >= b[k]) ?? "welcome";
   const on = (k: Beat) => scene === k;
@@ -878,10 +878,11 @@ function SpotFrame({ t0, beats }: { t0?: number; beats?: Record<string, number> 
   return (
     <div className="absolute inset-0 overflow-hidden bg-[#04102b] text-white" style={{ containerType: "inline-size", fontFamily: "'Inter', sans-serif" }} data-testid="stage-spot">
       <style>{`@keyframes spot-drift{from{transform:translateY(0)}to{transform:translateY(-120cqw)}}`}</style>
-      {bg("welcome", "/hero-6.jpg", "60% 50%")}
-      {bg("day", "/platform-hero.jpg", "50% 35%")}
-      {bg("miles", "/platform-hero.jpg", "50% 60%")}
-      {bg("grow", "/hero-6.jpg", "40% 50%")}
+      {/* The home page's own header photos: podcasters at the mic. */}
+      {bg("welcome", "/hero-3.jpg", "70% 50%")}
+      {bg("day", "/hero-12.jpg", "80% 50%")}
+      {bg("grow", "/hero-8.jpg", "85% 50%")}
+      {bg("watch", "/hero-11.jpg", "55% 40%")}
       {/* Gold dust, always drifting up over everything. */}
       <div className="absolute inset-0" aria-hidden="true">
         {Array.from({ length: 30 }, (_, i) => (
@@ -945,7 +946,7 @@ function SpotFrame({ t0, beats }: { t0?: number; beats?: Record<string, number> 
         </div>
       </div>
 
-      {/* The lineup fills the whole frame, every face, while the day is described. */}
+      {/* The lineup fills the whole frame, every face, under the marathon. */}
       <div className={`absolute inset-0 transition-opacity duration-[900ms] ${on("shows") ? "opacity-100" : "opacity-0"}`} aria-hidden="true">
         <div className="absolute inset-0 grid grid-cols-8 content-center" style={{ gap: "1cqw", padding: "1cqw" }}>
           {people.faces.length > 0 && Array.from({ length: 32 }, (_, i) => people.faces[i % people.faces.length]).map((src, i) => (
@@ -955,13 +956,8 @@ function SpotFrame({ t0, beats }: { t0?: number; beats?: Record<string, number> 
         <div className="absolute inset-0" style={{ background: "radial-gradient(55% 60% at 30% 50%, rgba(4,16,43,.94) 0%, rgba(4,16,43,.7) 55%, rgba(4,16,43,.35) 100%)" }} />
       </div>
       <div className={shot("shows")}>
-        <p className="font-bold leading-none tracking-tight" style={{ ...HEADLINE_FONT, fontSize: "9cqw" }}>Back to back</p>
-        <p className="mt-[1.4cqw] font-semibold" style={{ ...HEADLINE_FONT, fontSize: "3cqw", color: gold }}>Live, 7 AM to 11 PM Eastern</p>
-      </div>
-
-      <div className={shot("miles", true)}>
-        <p className="max-w-[80%] font-bold leading-[1.04] tracking-tight [text-wrap:balance]" style={{ ...HEADLINE_FONT, fontSize: "6.4cqw" }}>A marathon of podcasters, streaming all day</p>
-        <p className="mt-[2cqw] font-bold transition-all duration-700" style={{ ...HEADLINE_FONT, fontSize: "3.6cqw", color: gold, opacity: since("miles") > 1.2 ? 1 : 0, transform: `translateY(${since("miles") > 1.2 ? 0 : 1}cqw)` }}>26 shows to match the 26 miles</p>
+        <p className="font-bold leading-[1.04] tracking-tight [text-wrap:balance]" style={{ ...HEADLINE_FONT, fontSize: "6.4cqw" }}>A marathon of podcasters, streaming all day</p>
+        <p className="mt-[1.8cqw] font-semibold" style={{ ...HEADLINE_FONT, fontSize: "3cqw", color: gold }}>Live, 7 AM to 11 PM Eastern</p>
       </div>
 
       <div className={shot("grow")}>
@@ -971,27 +967,14 @@ function SpotFrame({ t0, beats }: { t0?: number; beats?: Record<string, number> 
         ))}
       </div>
 
+      {/* The close: an invitation to the day and where to watch it. */}
       <div className={shot("watch")}>
-        <img src="/nmpd-logo.png" alt="" className="drop-shadow-[0_0_3cqw_rgba(240,167,31,0.5)]" style={{ width: "15cqw", height: "15cqw" }} />
-        <p className="mt-[2cqw] font-semibold text-white/80" style={{ ...HEADLINE_FONT, fontSize: "2.6cqw" }}>Watch free, all day Monday</p>
+        <img src="/nmpd-logo.png" alt="" className="drop-shadow-[0_0_3cqw_rgba(240,167,31,0.5)]" style={{ width: "13cqw", height: "13cqw" }} />
+        <p className="mt-[1.8cqw] font-bold leading-[1.06] tracking-tight [text-wrap:balance]" style={{ ...HEADLINE_FONT, fontSize: "4.4cqw" }}>
+          Join us Monday, October 5, to celebrate
+        </p>
+        <p className="mt-[2cqw] font-semibold text-white/80" style={{ ...HEADLINE_FONT, fontSize: "2.4cqw" }}>Watch free at</p>
         <p className="whitespace-nowrap font-bold tracking-tight" style={{ ...HEADLINE_FONT, fontSize: "4.2cqw", color: gold }}>militaryvoices.ai/watch</p>
-      </div>
-
-      {/* The last word: who MilitaryVoices is. Full width; nobody is laid over it. */}
-      <div className={`absolute inset-0 transition-opacity duration-[1100ms] ${on("end") ? "opacity-100" : "opacity-0"}`} aria-hidden={!on("end")}>
-        <img src="/platform-hero.jpg" alt="" className="absolute inset-0 h-full w-full object-cover object-[50%_40%]" />
-        <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, #04102b 0%, rgba(4,16,43,.93) 48%, rgba(4,16,43,.55) 100%)" }} />
-      </div>
-      <div className={shot("end", true)}>
-        <img src="/logo-lockup-dark.png" alt="MilitaryVoices.AI" style={{ width: "20cqw" }} />
-        <p className="mt-[2.4cqw] font-bold uppercase" style={{ color: gold, fontSize: "1.5cqw", letterSpacing: "0.22em" }}>About MilitaryVoices</p>
-        <p className="mt-[1cqw] max-w-[62%] font-bold leading-[1.05] tracking-tight [text-wrap:balance]" style={{ ...HEADLINE_FONT, fontSize: "4.6cqw" }}>
-          The platform for military and veteran <span style={{ color: gold }}>voices.</span>
-        </p>
-        <p className="mt-[1.6cqw] max-w-[58%] leading-snug text-white/80 [text-wrap:pretty]" style={{ fontSize: "1.9cqw" }}>
-          Live events, podcasts and the creators worth putting on stage, all in one place.
-        </p>
-        <p className="mt-[2.4cqw] font-bold" style={{ ...HEADLINE_FONT, fontSize: "2.8cqw" }}>militaryvoices.ai</p>
       </div>
     </div>
   );
