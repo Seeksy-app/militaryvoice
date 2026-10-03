@@ -5029,6 +5029,7 @@ export function registerRoutes(app: Express): void {
         const withScene = await storage.updateStudio(studio.id, {
           currentSceneId: scene.id,
           stageThanks: handoff?.thanks ? JSON.stringify(handoff.thanks) : "",
+          brbOn: false,
           stageCardName: who?.hostName ?? desk?.name ?? "",
           stageCardShow: who?.podcastName?.trim() ?? (desk ? "Co-host · at the desk" : ""),
           stageCardPhoto: who?.photoUrl ?? desk?.photoUrl ?? "",
@@ -5074,6 +5075,7 @@ export function registerRoutes(app: Express): void {
             stageCardSponsor: "",
             stageCardSponsorLogo: "",
             stageThanks: "",
+            brbOn: false,
             currentSceneId: scene.id,
             currentSceneTakenAtUtc: new Date().toISOString(),
             // Stored as the moment it hits zero, so every viewer counts down
@@ -5096,6 +5098,7 @@ export function registerRoutes(app: Express): void {
             stageCardSponsor: "",
             stageCardSponsorLogo: "",
             stageThanks: "",
+            brbOn: false,
             currentSceneId: scene.id,
             currentSceneTakenAtUtc: new Date().toISOString(),
             countdownEndsAtUtc: "",

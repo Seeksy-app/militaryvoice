@@ -1435,9 +1435,9 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
             nextName={next?.name ?? ""}
             nextBusy={applyScene.isPending}
             onNext={() => next && applyScene.mutate(next.id)}
-            covered={Boolean(studio?.fallbackPlaying)}
-            onCover={() => patchStudio.mutate({ fallbackPlaying: true })}
-            onUncover={() => patchStudio.mutate({ fallbackPlaying: false })}
+            covered={Boolean(studio?.brbOn)}
+            onCover={() => patchStudio.mutate({ brbOn: true })}
+            onUncover={() => patchStudio.mutate({ brbOn: false })}
             studioId={studioId ?? undefined}
           />
         );

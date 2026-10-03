@@ -61,6 +61,8 @@ export interface RoomMeta {
   stageCardSponsorLogo?: string;
   /** The desk hand-off slide: thanks to who just finished, with a QR code to their page. */
   stageThanks?: StageThanks | null;
+  /** "We'll be right back": the studio host's emergency card. */
+  brbOn?: boolean;
 }
 
 /**
@@ -810,6 +812,24 @@ function BackgroundLayer({ url }: { url: string }) {
   );
 }
 
+/**
+ * "We'll be right back": what the audience sees while a studio host sorts out
+ * a problem (the OH SH#T! button). Today's badge and a line about the day, so
+ * the pause still says what this is. Covers the stage, so no microphone on it
+ * reaches the broadcast.
+ */
+function BrbFrame() {
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center overflow-hidden bg-gradient-to-br from-[#000741] via-[#053877] to-[#06498f] px-[6%] text-center text-white" style={{ containerType: "inline-size" }} data-testid="stage-brb">
+      <div className="absolute -right-[10%] -top-[25%] h-[70%] w-[45%] rounded-full bg-white/[0.04]" aria-hidden="true" />
+      <img src="/nmpd-logo.png" alt="National Military Podcast Day" className="relative" style={{ width: "18cqw", height: "18cqw" }} />
+      <p className="relative mt-[2.5cqw] font-black uppercase tracking-tight" style={{ ...HEADLINE_FONT, fontSize: "6.4cqw", lineHeight: 1 }}>We'll be right back</p>
+      <p className="relative mt-[1.6cqw] font-bold uppercase text-[#F0A71F]" style={{ fontSize: "1.9cqw", letterSpacing: "0.28em" }}>Today is National Military Podcast Day</p>
+      <p className="relative mt-[1.2cqw] max-w-[70%] text-white/75 [text-wrap:balance]" style={{ fontSize: "1.8cqw" }}>26.2 miles of military and veteran stories, back to back. Free to watch at militaryvoices.ai/watch</p>
+    </div>
+  );
+}
+
 /** A QR code drawn in the browser, so it works in the broadcast's headless page too. */
 function StageQr({ url, size }: { url: string; size: string }) {
   const [src, setSrc] = useState("");
@@ -931,6 +951,8 @@ export function StageGrid({
   const body =
     meta.fallbackPlaying && standby.url ? (
       <FullFrameMedia url={standby.url} kind="video" muted={muted} loop />
+    ) : meta.brbOn ? (
+      <BrbFrame />
     ) : Number.isFinite(countdownEnds) ? (
       <CountdownFrame endsAt={countdownEnds} label={meta.countdownLabel} />
     ) : meta.stageMediaPlaying && meta.stageMediaUrl && meta.stageMediaPeople && tiles.length > 0 ? (

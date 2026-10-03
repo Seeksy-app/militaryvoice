@@ -54,6 +54,7 @@ export function stageMetaFromStudio(st: StudioRow) {
     stageCardSponsor: st.stageCardSponsor,
     stageCardSponsorLogo: st.stageCardSponsorLogo,
     stageThanks: readThanks(st.stageThanks),
+    brbOn: st.brbOn,
     countdownEndsAtUtc: st.countdownEndsAtUtc,
     countdownLabel: st.countdownLabel,
     currentSceneId: st.currentSceneId,

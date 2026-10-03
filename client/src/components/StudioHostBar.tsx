@@ -84,7 +84,7 @@ export function StudioHostBar({
             <AlertTriangle className="h-8 w-8 shrink-0" />
             <span>
               <span className="block text-2xl font-black leading-tight tracking-tight">OH SH#T!</span>
-              <span className="block text-xs text-white/85">We'll be right back · calls Michael</span>
+              <span className="block text-xs text-white/85">Puts up "We'll be right back" · calls Michael</span>
             </span>
           </button>
         )}
@@ -135,27 +135,23 @@ function MichaelChat({ studioId, onClose }: { studioId?: number; onClose: () => 
     await load();
     setBusy(false);
   };
-  const msgs = thread?.messages ?? [];
+  // Slim on purpose: a strip under the buttons, the last word or two and a box to type in.
+  const msgs = (thread?.messages ?? []).slice(-2);
   return (
-    <div className="mt-3 overflow-hidden rounded-2xl border border-[#8ab4f8]/30 bg-[#8ab4f8]/[0.07] text-white" data-testid="michael-chat">
-      <div className="flex items-center gap-2 border-b border-white/10 px-4 py-2.5">
-        <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#053877] text-sm font-bold">M</span>
-        <span className="font-semibold">Michael</span>
-        <span className="text-xs text-white/60">Producer · watching now</span>
-        <button type="button" onClick={onClose} className="ml-auto rounded-md p-1 text-white/60 hover:bg-white/10 hover:text-white" aria-label="Close the chat"><X className="h-4 w-4" /></button>
-      </div>
-      <div ref={logRef} className="max-h-48 space-y-2 overflow-y-auto px-4 py-3 text-sm">
-        {msgs.length === 0 && <p className="text-white/55">Tell Michael what's happening. He answers right here.</p>}
-        {msgs.map((m) => (
-          <div key={m.id} className={`max-w-[85%] rounded-xl px-3 py-1.5 ${m.role === "user" ? "ml-auto bg-white/10" : m.role === "producer" ? "bg-[#8ab4f8]/20" : "bg-[#F0A71F]/15"}`}>
-            {m.role === "producer" && <span className="mb-0.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-[#8ab4f8]">Michael</span>}
-            {m.content}
-          </div>
+    <div className="mt-2 flex flex-col gap-1.5 rounded-xl border border-[#8ab4f8]/30 bg-[#8ab4f8]/[0.07] px-3 py-2 text-white sm:flex-row sm:items-center" data-testid="michael-chat">
+      <div ref={logRef} className="min-w-0 flex-1 space-y-0.5 text-xs leading-snug">
+        {msgs.length === 0 ? (
+          <p className="text-white/60"><span className="font-semibold text-white">Michael</span> is watching. Tell him what's happening.</p>
+        ) : msgs.map((m) => (
+          <p key={m.id} className="truncate">
+            <span className={`font-semibold ${m.role === "producer" ? "text-[#8ab4f8]" : m.role === "alex" ? "text-[#F0A71F]" : "text-white/60"}`}>{m.role === "producer" ? "Michael" : m.role === "alex" ? "Alex" : "You"}:</span> <span className="text-white/85">{m.content}</span>
+          </p>
         ))}
       </div>
-      <form onSubmit={(e) => { e.preventDefault(); void send(); }} className="flex gap-2 border-t border-white/10 p-3">
-        <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="What's wrong?" maxLength={500} className="h-11 min-w-0 flex-1 rounded-full bg-black/30 px-4 text-sm placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-[#8ab4f8]/50" data-testid="michael-chat-input" />
-        <button type="submit" disabled={busy || !draft.trim()} className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#F0A71F] text-[#000741] disabled:opacity-40" aria-label="Send"><Send className="h-4 w-4" /></button>
+      <form onSubmit={(e) => { e.preventDefault(); void send(); }} className="flex shrink-0 items-center gap-1.5 sm:w-[44%]">
+        <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Message Michael" maxLength={500} className="h-9 min-w-0 flex-1 rounded-full bg-black/30 px-3.5 text-sm placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-[#8ab4f8]/50" data-testid="michael-chat-input" autoFocus />
+        <button type="submit" disabled={busy || !draft.trim()} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#F0A71F] text-[#000741] disabled:opacity-40" aria-label="Send"><Send className="h-4 w-4" /></button>
+        <button type="button" onClick={onClose} className="rounded-md p-1 text-white/60 hover:bg-white/10 hover:text-white" aria-label="Close the chat"><X className="h-4 w-4" /></button>
       </form>
     </div>
   );

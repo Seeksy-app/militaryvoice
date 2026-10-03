@@ -1075,6 +1075,8 @@ export const studios = pgTable("studios", {
   preVideoUrl: text("pre_video_url").notNull().default(""),
   preLabel: text("pre_label").notNull().default(""),
   fallbackPlaying: boolean("fallback_playing").notNull().default(false),
+  /** "We'll be right back": the studio host's OH SH#T! card, over everything but standby. */
+  brbOn: boolean("brb_on").notNull().default(false),
   // Anything the producer puts on the stage itself: a podcaster's intro reel,
   // a sponsor card, a slide. Same mechanism as the standby clip, but chosen
   // deliberately rather than in an emergency — so standby always wins.
@@ -1886,6 +1888,7 @@ export const studioUpdateSchema = z.object({
   fallbackVideoUrl: z.string().trim().max(500).optional(),
   fallbackLabel: z.string().trim().max(120).optional(),
   fallbackPlaying: z.boolean().optional(),
+  brbOn: z.boolean().optional(),
   stageMediaUrl: z.string().trim().max(600).optional(),
   stageMediaKind: z.enum(["video", "image"]).optional(),
   stageMediaLabel: z.string().trim().max(120).optional(),
