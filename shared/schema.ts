@@ -1889,6 +1889,9 @@ export const studioUpdateSchema = z.object({
   fallbackVideoUrl: z.string().trim().max(500).optional(),
   fallbackLabel: z.string().trim().max(120).optional(),
   fallbackPlaying: z.boolean().optional(),
+  // The before-the-event card, settable to any clip already uploaded.
+  preVideoUrl: z.string().trim().max(500).optional(),
+  preLabel: z.string().trim().max(120).optional(),
   brbOn: z.boolean().optional(),
   stageMediaUrl: z.string().trim().max(600).optional(),
   stageMediaKind: z.enum(["video", "image"]).optional(),

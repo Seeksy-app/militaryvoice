@@ -821,6 +821,72 @@ function BackgroundLayer({ url }: { url: string }) {
   );
 }
 
+/** Every lineup podcaster's photo, in slot order (Riccoh is the host, not a show). */
+function useLineupFaces(): { hosts: SpotPerson[]; faces: string[] } {
+  const [people, setPeople] = useState<{ hosts: SpotPerson[]; faces: string[] }>({ hosts: [], faces: [] });
+  useEffect(() => {
+    void fetch("/api/signups").then((r) => r.json()).then((j) => {
+      const rows = (Array.isArray(j) ? j : j.signups ?? []) as { hostName: string; photoUrl: string; slotIndex: number }[];
+      const by = (re: RegExp) => rows.find((r) => re.test(r.hostName));
+      setPeople({
+        hosts: [
+          { name: "Amy Forsythe", photo: by(/amy forsythe/i)?.photoUrl ?? "" },
+          { name: "Enrique Acosta Gonzalez", photo: by(/enrique/i)?.photoUrl ?? "" },
+        ],
+        faces: rows.filter((r) => r.photoUrl && !/riccoh/i.test(r.hostName)).sort((x, y) => x.slotIndex - y.slotIndex).map((r) => r.photoUrl),
+      });
+    }).catch(() => {});
+  }, []);
+  return people;
+}
+
+/** Four rows of lineup faces rolling across the frame, alternate rows the other way. */
+function LineupRows({ faces, opacity = 0.62 }: { faces: string[]; opacity?: number }) {
+  return (
+    <div className="absolute inset-0 flex flex-col justify-center overflow-hidden" style={{ gap: "1.6cqw" }} aria-hidden="true">
+      <style>{`@keyframes spot-lineup{from{transform:translateX(0)}to{transform:translateX(-50%)}}`}</style>
+      {faces.length > 0 && [0, 1, 2, 3].map((r) => {
+        const row = faces.map((_, i) => faces[(i + r * 7) % faces.length]);
+        return (
+          // Two copies end to end, moved by exactly one copy's width, so the loop never shows a seam.
+          <div key={r} className="flex w-max" style={{ animation: `spot-lineup ${44 + r * 6}s linear ${-r * 9}s infinite ${r % 2 ? "reverse" : "normal"}` }}>
+            {[...row, ...row].map((src, i) => (
+              <img key={i} src={src} alt="" className="shrink-0 rounded-full object-cover object-[50%_28%]" style={{ width: "11.6cqw", height: "11.6cqw", marginRight: "1.6cqw", opacity }} />
+            ))}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/** The opening scene plays when the stage media is this address. */
+export function isStartingUrl(url?: string): boolean {
+  return /\/promo\/starting\b/.test(url ?? "");
+}
+
+/**
+ * The opening of the day: every podcaster's face rolling past, and the welcome
+ * over them. It holds as long as it is on air, so it can sit there while the
+ * room fills.
+ */
+function StartingFrame() {
+  const { faces } = useLineupFaces();
+  const gold = "#F0A71F";
+  return (
+    <div className="absolute inset-0 overflow-hidden bg-[#04102b] text-white" style={{ containerType: "inline-size", fontFamily: "'Inter', sans-serif" }} data-testid="stage-starting">
+      <LineupRows faces={faces} opacity={0.55} />
+      <div className="absolute inset-0" style={{ background: "radial-gradient(62% 70% at 50% 50%, rgba(4,16,43,.95) 0%, rgba(4,16,43,.78) 55%, rgba(4,16,43,.4) 100%)" }} />
+      <div className="absolute inset-0 flex flex-col items-center justify-center px-[6%] text-center">
+        <img src="/nmpd-logo.png" alt="" className="drop-shadow-[0_0_3cqw_rgba(240,167,31,0.5)]" style={{ width: "15cqw", height: "15cqw" }} />
+        <p className="mt-[2cqw] font-semibold text-white/85" style={{ ...HEADLINE_FONT, fontSize: "3cqw" }}>Welcome to</p>
+        <p className="mt-[0.4cqw] font-bold leading-[1.02] tracking-tight [text-wrap:balance]" style={{ ...HEADLINE_FONT, fontSize: "6.6cqw" }}>National Military Podcast Day</p>
+        <p className="mt-[1.6cqw] font-semibold" style={{ ...HEADLINE_FONT, fontSize: "2.6cqw", color: gold }}>The Podcast Marathon · Live, 7 AM to 11 PM Eastern</p>
+      </div>
+    </div>
+  );
+}
+
 /** The 30-second MilitaryVoices brand spot plays when the stage media is this address. */
 export function isSpotUrl(url?: string): boolean {
   return /\/promo\/spot\b/.test(url ?? "");
@@ -840,20 +906,7 @@ function SpotFrame({ t0, beats }: { t0?: number; beats?: Record<string, number> 
     const id = setInterval(() => setNow(Date.now()), 80);
     return () => clearInterval(id);
   }, []);
-  const [people, setPeople] = useState<{ hosts: SpotPerson[]; faces: string[] }>({ hosts: [], faces: [] });
-  useEffect(() => {
-    void fetch("/api/signups").then((r) => r.json()).then((j) => {
-      const rows = (Array.isArray(j) ? j : j.signups ?? []) as { hostName: string; photoUrl: string; slotIndex: number }[];
-      const by = (re: RegExp) => rows.find((r) => re.test(r.hostName));
-      setPeople({
-        hosts: [
-          { name: "Amy Forsythe", photo: by(/amy forsythe/i)?.photoUrl ?? "" },
-          { name: "Enrique Acosta Gonzalez", photo: by(/enrique/i)?.photoUrl ?? "" },
-        ],
-        faces: rows.filter((r) => r.photoUrl && !/riccoh/i.test(r.hostName)).sort((x, y) => x.slotIndex - y.slotIndex).map((r) => r.photoUrl),
-      });
-    }).catch(() => {});
-  }, []);
+  const people = useLineupFaces();
   const t = t0 ? (now - t0) / 1000 : -1;
   // Sponsors only shows when a read gives it a beat.
   const b = { welcome: 0, day: 4, hosts: 11, shows: 17, grow: 24, sponsors: 9999, watch: 28, ...(beats ?? {}) };
@@ -878,7 +931,7 @@ function SpotFrame({ t0, beats }: { t0?: number; beats?: Record<string, number> 
   );
   return (
     <div className="absolute inset-0 overflow-hidden bg-[#04102b] text-white" style={{ containerType: "inline-size", fontFamily: "'Inter', sans-serif" }} data-testid="stage-spot">
-      <style>{`@keyframes spot-drift{from{transform:translateY(0)}to{transform:translateY(-120cqw)}}@keyframes spot-lineup{from{transform:translateX(0)}to{transform:translateX(-50%)}}`}</style>
+      <style>{`@keyframes spot-drift{from{transform:translateY(0)}to{transform:translateY(-120cqw)}}`}</style>
       {/* The home page's own header photos: podcasters at the mic. */}
       {bg("welcome", "/hero-3.jpg", "70% 50%")}
       {bg("day", "/hero-7.jpg", "40% 50%")}
@@ -950,19 +1003,7 @@ function SpotFrame({ t0, beats }: { t0?: number; beats?: Record<string, number> 
 
       {/* The lineup fills the whole frame, every face, rolling past in rows that run opposite ways. */}
       <div className={`absolute inset-0 transition-opacity duration-[900ms] ${on("shows") ? "opacity-100" : "opacity-0"}`} aria-hidden="true">
-        <div className="absolute inset-0 flex flex-col justify-center overflow-hidden" style={{ gap: "1.6cqw" }}>
-          {people.faces.length > 0 && [0, 1, 2, 3].map((r) => {
-            const row = people.faces.map((_, i) => people.faces[(i + r * 7) % people.faces.length]);
-            return (
-              // Two copies end to end, moved by exactly one copy's width, so the loop never shows a seam.
-              <div key={r} className="flex w-max" style={{ animation: `spot-lineup ${44 + r * 6}s linear ${-r * 9}s infinite ${r % 2 ? "reverse" : "normal"}` }}>
-                {[...row, ...row].map((src, i) => (
-                  <img key={i} src={src} alt="" className="shrink-0 rounded-full object-cover object-[50%_28%]" style={{ width: "11.6cqw", height: "11.6cqw", marginRight: "1.6cqw", opacity: 0.62 }} />
-                ))}
-              </div>
-            );
-          })}
-        </div>
+        <LineupRows faces={people.faces} />
         <div className="absolute inset-0" style={{ background: "radial-gradient(55% 60% at 30% 50%, rgba(4,16,43,.94) 0%, rgba(4,16,43,.7) 55%, rgba(4,16,43,.35) 100%)" }} />
       </div>
       <div className={shot("shows")}>
@@ -1202,6 +1243,8 @@ export function StageGrid({
       <BrbFrame />
     ) : Number.isFinite(countdownEnds) ? (
       <CountdownFrame endsAt={countdownEnds} label={meta.countdownLabel} />
+    ) : meta.stageMediaPlaying && isStartingUrl(meta.stageMediaUrl) ? (
+      <StartingFrame />
     ) : meta.stageMediaPlaying && isSpotUrl(meta.stageMediaUrl) ? (
       // The brand spot: full-bleed, the presenter cut out and standing on it.
       <>
