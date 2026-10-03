@@ -5,6 +5,7 @@ import {
   IngressClient,
   IngressInput,
   EncodedFileType,
+  EncodingOptionsPreset,
   WebhookReceiver,
 } from "livekit-server-sdk";
 import type { EncodedFileOutput, StreamOutput } from "livekit-server-sdk";
@@ -221,7 +222,9 @@ export async function startBroadcast(
   const stream: StreamOutput | undefined = targets.length
     ? ({ protocol: 1 /* RTMP */, urls: targets.map((t) => t.url) } as StreamOutput)
     : undefined;
-  const info = await egress().startRoomCompositeEgress(room, { stream }, compositeOptions(templateBaseUrl));
+  // 1080p for the broadcast: partners pulling our feed (LiveOne/PodcastOne)
+  // and YouTube both take it, and the default was 720p.
+  const info = await egress().startRoomCompositeEgress(room, { stream }, { ...compositeOptions(templateBaseUrl), encodingOptions: EncodingOptionsPreset.H264_1080P_30 });
   return info.egressId;
 }
 
