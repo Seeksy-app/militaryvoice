@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useLocation } from "wouter";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { EventShowForm, type EventShow } from "@/components/EventShowForm";
@@ -174,6 +175,7 @@ export function EventSettings({
     queryFn: async () => (await apiRequest("GET", `/api/host/cohost?eventId=${open!.event.id}`)).json(),
     enabled: !!open,
   });
+  const [, navigate] = useLocation();
   const isCohost = Boolean(role?.isCohost);
   const isStudioHost = Boolean(role?.studioHost);
   const handoffCount = role?.handoffs?.length ?? 0;
@@ -380,9 +382,7 @@ export function EventSettings({
                     </a>
                   )}
                   {isCohost && (
-                    <a href="/host/dashboard/cohost" data-testid="event-open-cohost">
-                      <Button variant={isStudioHost ? "outline" : "default"} className={`h-12 gap-2 rounded-full px-6 text-base font-bold ${isStudioHost ? "" : "bg-[#15834f] text-white hover:bg-[#126e42]"}`}>Your hand-offs and scripts</Button>
-                    </a>
+                    <Button onClick={() => navigate("/host/dashboard/cohost")} variant={isStudioHost ? "outline" : "default"} className={`h-12 gap-2 rounded-full px-6 text-base font-bold ${isStudioHost ? "" : "bg-[#15834f] text-white hover:bg-[#126e42]"}`} data-testid="event-open-cohost">Your hand-offs and scripts</Button>
                   )}
                 </div>
               </div>
@@ -472,8 +472,7 @@ export function EventSettings({
               />
               <Door
                 off={!isCohost && (noTime || !(air && showReady))}
-                onClick={isCohost ? undefined : air && showReady ? () => setCohostOpen(true) : undefined}
-                href={isCohost ? "/host/dashboard/cohost" : undefined}
+                onClick={isCohost ? () => navigate("/host/dashboard/cohost") : air && showReady ? () => setCohostOpen(true) : undefined}
                 icon={<IconTile icon={Users} />}
                 title="Co-host"
                 line={isCohost ? "Your hand-offs, each with its script" : "Sit in at the desk with Alex or Riccoh"}
