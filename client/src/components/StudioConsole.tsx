@@ -28,6 +28,7 @@ import { useProducerRoom, type ProducerFeed } from "@/hooks/use-producer-room";
 import { Destinations } from "@/components/Destinations";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ProducerDesk, useGreenRoomWaiting } from "@/components/ProducerDesk";
+import { StudioHostBar } from "@/components/StudioHostBar";
 import { StageGrid, youtubeId, clockText, type StageTile } from "@/components/StageView";
 import { MediaLibrary, type MediaItem } from "@/components/MediaLibrary";
 import { SceneRail, type SceneSpec } from "@/components/SceneRail";
@@ -52,6 +53,8 @@ interface Props {
   fixedStudioId?: number;
   /** In a room: "Leave the room" takes you back to the list. */
   onLeave?: () => void;
+  /** The studio host's page: the four big buttons across the top. */
+  simple?: boolean;
   adminGet: <T>(path: string) => Promise<T>;
   adminSend: (method: string, path: string, body?: unknown) => Promise<Response>;
   /**
@@ -532,7 +535,7 @@ function StandbyFreshness({ adminGet, eventId }: { adminGet: <T>(path: string) =
   );
 }
 
-export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedStudioId, onLeave }: Props) {
+export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedStudioId, onLeave, simple = false }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const zone = useMemo(detectLocalTimeZone, []);
@@ -855,6 +858,22 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
     onSuccess: () => refresh(),
     onError: (e: Error) => toast({ title: "Couldn't move them", description: e.message, variant: "destructive" }),
   });
+
+  // "Put me on stage" from the big bar: turn the camera on, wait until you're
+  // in the room, then step onto the stage. One press, whatever state you're in.
+  const [wantStage, setWantStage] = useState(false);
+  useEffect(() => {
+    if (!wantStage || !me) return;
+    if (!camOn) void toggleCam();
+    setState.mutate({ id: me.id, state: "On stage" });
+    setWantStage(false);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [wantStage, me?.id]);
+  const toggleMeOnStage = () => {
+    if (meOnStage && me) { setState.mutate({ id: me.id, state: "Green room" }); return; }
+    if (!onCamera) setOnCamera(true);
+    setWantStage(true);
+  };
 
   const setTitle = useMutation({
     mutationFn: async ({ id, displayTitle }: { id: number; displayTitle: string }) =>
@@ -1396,6 +1415,26 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
           </Button>
         </div>
       )}
+
+      {simple && kind !== "room" && (() => {
+        const list = scenes ?? [];
+        const at = list.findIndex((x) => x.id === studio?.currentSceneId);
+        const next = at >= 0 ? list[at + 1] : list[0];
+        return (
+          <StudioHostBar
+            meOnStage={meOnStage}
+            stageBusy={wantStage || setState.isPending}
+            onStage={toggleMeOnStage}
+            nextName={next?.name ?? ""}
+            nextBusy={applyScene.isPending}
+            onNext={() => next && applyScene.mutate(next.id)}
+            covered={Boolean(studio?.fallbackPlaying)}
+            onCover={() => patchStudio.mutate({ fallbackPlaying: true })}
+            onUncover={() => patchStudio.mutate({ fallbackPlaying: false })}
+            studioId={studioId ?? undefined}
+          />
+        );
+      })()}
 
       {/* After the show: the recording's way to the cloud, then a link to it. */}
       {savingSince !== null && (() => {

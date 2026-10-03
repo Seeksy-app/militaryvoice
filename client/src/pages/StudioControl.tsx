@@ -50,7 +50,7 @@ export default function StudioControl() {
   }
   return (
     <div className="min-h-screen bg-[#04102b]">
-      <StudioConsole adminGet={adminGet} adminSend={adminSend} view="live" eventId={access.data.eventId} kind="event" onLeave={() => navigate("/host/dashboard")} />
+      <StudioConsole adminGet={adminGet} adminSend={adminSend} view="live" eventId={access.data.eventId} kind="event" simple onLeave={() => navigate("/host/dashboard")} />
     </div>
   );
 }

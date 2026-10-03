@@ -73,8 +73,11 @@ export function registerGreenRoomChat(app: Express, requireAdmin: RequestHandler
     const chat = await threadFor(eventId, email);
     await say(chat.id, "user", text);
 
-    if (chat.mode === "producer" || !(await alexOn(eventId))) {
-      await db.update(greenRoomChats).set({ needsProducer: true }).where(eq(greenRoomChats.id, chat.id));
+    // Straight to Michael: the studio host's button, or anything once he has the thread.
+    const direct = req.body?.toProducer === true;
+    if (direct || chat.mode === "producer" || !(await alexOn(eventId))) {
+      await db.update(greenRoomChats).set({ needsProducer: true, ...(direct ? { mode: "producer" } : {}) }).where(eq(greenRoomChats.id, chat.id));
+      if (direct) void slackNote(`${req.body?.urgent === true ? ":rotating_light: URGENT from the studio" : ":speech_balloon: Studio"}: ${chat.name || chat.email} needs ${PRODUCER_NAME}. "${text.slice(0, 200)}"`, { label: "Open the green room chat", url: "/admin/greenroom" });
       return res.json({ waiting: true });
     }
 
