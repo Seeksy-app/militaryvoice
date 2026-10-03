@@ -28,7 +28,7 @@ import { useProducerRoom, type ProducerFeed } from "@/hooks/use-producer-room";
 import { Destinations } from "@/components/Destinations";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ProducerDesk, useGreenRoomWaiting } from "@/components/ProducerDesk";
-import { StudioHostBar } from "@/components/StudioHostBar";
+import { StudioHostBar, MichaelChat } from "@/components/StudioHostBar";
 import { StageGrid, youtubeId, clockText, type StageTile } from "@/components/StageView";
 import { MediaLibrary, type MediaItem } from "@/components/MediaLibrary";
 import { SceneRail, type SceneSpec } from "@/components/SceneRail";
@@ -1347,7 +1347,8 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
   const speakingRef = useRef(stageSpeaking);
   speakingRef.current = stageSpeaking;
   // The green room chat, for admins only (Michael's desk); studio hosts run the stage, not the chat.
-  const [deskOpen, setDeskOpen] = useState(false);
+  // Bumped to open Michael's chat in the right rail, from the yellow pill or the big button.
+  const [chatOpen, setChatOpen] = useState(0);
   const deskWaiting = useGreenRoomWaiting(eventId, Boolean(me0) && !me0?.studioHost && !isRoom);
   const [autoNote, setAutoNote] = useState<{ action: string; why: string; deskName: string; at?: string } | null>(null);
   useEffect(() => {
@@ -1464,6 +1465,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
             onCover={() => patchStudio.mutate({ brbOn: true })}
             onUncover={() => patchStudio.mutate({ brbOn: false })}
             studioId={studioId ?? undefined}
+            onChat={() => setChatOpen((n) => n + 1)}
           />
         );
       })()}
@@ -1668,7 +1670,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
               <Button
                 variant="ghost"
                 className={`relative h-9 gap-1.5 rounded-full px-3 text-xs font-semibold ${deskWaiting ? "bg-[#F0A71F] text-[#000741] hover:bg-[#f5b94a]" : "text-white/70 hover:bg-white/10 hover:text-white"}`}
-                onClick={() => setDeskOpen(true)}
+                onClick={() => setChatOpen((n) => n + 1)}
                 title="Green room chat"
                 data-testid="studio-desk-open"
               >
@@ -1676,12 +1678,6 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                 <span className="hidden sm:inline">{deskWaiting ? `${deskWaiting} for Michael` : "Green room chat"}</span>
               </Button>
             )}
-            <Dialog open={deskOpen} onOpenChange={setDeskOpen}>
-              <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto">
-                <DialogTitle className="sr-only">Green room chat</DialogTitle>
-                <ProducerDesk eventId={eventId} compact />
-              </DialogContent>
-            </Dialog>
             {autoNote && autoNote.action !== "take" && (
               <div
                 className={`flex h-9 max-w-[22rem] items-center gap-2 rounded-full px-3 text-xs font-semibold ${autoNote.action === "escalate" ? "bg-[#ED1C24] text-white" : autoNote.action === "hold" ? "bg-[#F0A71F]/20 text-[#F0A71F] ring-1 ring-[#F0A71F]/60" : "bg-white/10 text-white/80 ring-1 ring-white/15"}`}
@@ -2302,6 +2298,9 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
               adminGet={adminGet}
               adminSend={adminSend}
               studioId={studioId}
+              chat={!isRoom && me0 ? (me0.studioHost ? <MichaelChat studioId={studioId ?? undefined} panel /> : <div className="rounded-lg bg-background p-2.5 text-foreground"><ProducerDesk eventId={eventId} compact narrow /></div>) : undefined}
+              chatOpen={chatOpen}
+              chatWaiting={deskWaiting}
               onMediaChanged={() => {
                 refresh();
                 // The rail's own list comes from the library, so an upload

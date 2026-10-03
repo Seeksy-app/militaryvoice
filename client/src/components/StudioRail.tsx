@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useToast } from "@/hooks/use-toast";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -8,7 +8,7 @@ import { Switch } from "@/components/ui/switch";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { MediaLibrary, type MediaItem } from "@/components/MediaLibrary";
 import { LOGO_CORNERS, type StudioRow } from "@shared/schema";
-import { Captions, Image as ImageIcon, Layers, ScrollText, Upload, X, Check, Plus, Pencil, Trash2, PanelRightOpen, PanelRightClose } from "lucide-react";
+import { Captions, Image as ImageIcon, Layers, ScrollText, Upload, X, Check, Plus, Pencil, Trash2, PanelRightOpen, PanelRightClose, MessagesSquare } from "lucide-react";
 
 // The graphics rail, down the right-hand side of the stage.
 //
@@ -59,7 +59,7 @@ interface SavedThird {
   subtitle: string;
 }
 
-export type RailPanel = "banner" | "ticker" | "background" | "logo" | "media";
+export type RailPanel = "banner" | "ticker" | "background" | "logo" | "media" | "chat";
 
 interface Props {
   studio: StudioRow | null;
@@ -73,6 +73,12 @@ interface Props {
   adminSend: (method: string, path: string, body?: unknown) => Promise<Response>;
   studioId: number | null;
   onMediaChanged: () => void;
+  /** Michael's chat, in the rail like everything else: the producer's desk, or a studio host's line to him. */
+  chat?: ReactNode;
+  /** Bumped by the console to open the chat panel (the yellow pill, the big button). */
+  chatOpen?: number;
+  /** Messages waiting, shown on the tab. */
+  chatWaiting?: number;
 }
 
 /** A tooltip that repeats the label teaches nobody anything. */
@@ -82,6 +88,7 @@ const HELP: Record<RailPanel, string> = {
   background: "An image behind the cameras, visible in the gaps around the tiles.",
   logo: "Your mark in a corner of the frame, burned into the recording and every destination.",
   media: "Clips, slides and sponsor cards you can put on the stage — and where you upload new ones.",
+  chat: "Michael, the producer: the green room chat, right beside the stage.",
 };
 
 const TABS: { key: RailPanel; icon: typeof Captions; label: string }[] = [
@@ -103,8 +110,12 @@ export function StudioRail({
   adminSend,
   studioId,
   onMediaChanged,
+  chat,
+  chatOpen = 0,
+  chatWaiting = 0,
 }: Props) {
   const [open, setOpen] = useState<RailPanel | null>(null);
+  const tabs = chat ? [...TABS, { key: "chat" as const, icon: MessagesSquare, label: "Michael" }] : TABS;
   const logoFileRef = useRef<HTMLInputElement | null>(null);
   // Folded away by default: on the day everything is preset, and the stage
   // wants the width. Remembered per browser for whoever does use it.
@@ -135,6 +146,10 @@ export function StudioRail({
     window.addEventListener("pointermove", move);
     window.addEventListener("pointerup", up);
   };
+  // Opened from outside: unfold the rail and show the chat.
+  useEffect(() => {
+    if (chatOpen > 0) { setShown(true); setOpen("chat"); }
+  }, [chatOpen]);
   const anyLive = Boolean(
     (studio?.bannerVisible && studio?.bannerTitle) || (studio?.tickerVisible && studio?.tickerText) ||
     (studio?.backgroundVisible && studio?.backgroundUrl) || (studio?.logoVisible && studio?.logoUrl) || studio?.stageMediaPlaying,
@@ -164,7 +179,7 @@ export function StudioRail({
       {open && (
         <aside
           className="relative flex shrink-0 flex-col border-l border-white/20 bg-[#04102b]"
-          style={{ width: panelW }}
+          style={{ width: open === "chat" ? Math.max(panelW, 400) : panelW }}
           data-testid={`rail-panel-${open}`}
         >
           {/* The pull: drag the left edge to make the panel wider or narrower.
@@ -183,7 +198,7 @@ export function StudioRail({
           </div>
           <div className="flex h-9 shrink-0 items-center justify-between border-b border-white/20 pl-3 pr-1.5">
             <span className="text-[11px] font-bold uppercase tracking-[0.12em] text-white/60">
-              {TABS.find((t) => t.key === open)?.label}
+              {tabs.find((t) => t.key === open)?.label}
             </span>
             <button
               type="button"
@@ -213,6 +228,7 @@ export function StudioRail({
             {open === "logo" && (
               <LogoPanel studio={studio} patch={patch} uploadLogo={uploadLogo} logoBusy={logoBusy} fileRef={logoFileRef} />
             )}
+            {open === "chat" && chat}
             {open === "media" && (
               // The library is a light surface on purpose: it is a list of
               // files to read, not a control you hit in the dark mid-take.
@@ -258,25 +274,26 @@ export function StudioRail({
         >
           <PanelRightClose className="h-4 w-4" />
         </button>
-        {TABS.map(({ key, icon: Icon, label }) => {
+        {tabs.map(({ key, icon: Icon, label }) => {
           const live =
             (key === "banner" && studio?.bannerVisible && studio?.bannerTitle) ||
             (key === "ticker" && studio?.tickerVisible && studio?.tickerText) ||
             (key === "background" && studio?.backgroundVisible && studio?.backgroundUrl) ||
             (key === "logo" && studio?.logoVisible && studio?.logoUrl) ||
             (key === "media" && studio?.stageMediaPlaying);
+          const waiting = key === "chat" && chatWaiting > 0;
           return (
             <Hint key={key} label={HELP[key]} side="left">
             <button
               type="button"
               onClick={() => setOpen((v) => (v === key ? null : key))}
               className={`relative flex w-[4.75rem] flex-col items-center gap-1.5 rounded-xl px-1 py-2.5 text-[11px] font-medium leading-[1.15] transition-colors ${
-                open === key ? "bg-white/15 text-white" : "text-white/60 hover:bg-white/10 hover:text-white"
+                open === key ? "bg-white/15 text-white" : waiting ? "bg-[#F0A71F] text-[#000741]" : "text-white/60 hover:bg-white/10 hover:text-white"
               }`}
               data-testid={`button-rail-${key}`}
             >
               <Icon className="h-5 w-5" />
-              <span className="w-full text-balance text-center">{label}</span>
+              <span className="w-full text-balance text-center">{waiting ? `${chatWaiting} for ${label}` : label}</span>
               {/* A dot, not a colour change: the producer needs to know what is
                   on air without opening anything. */}
               {live && (

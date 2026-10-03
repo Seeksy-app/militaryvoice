@@ -30,7 +30,7 @@ export function useGreenRoomWaiting(eventId?: number, enabled = true): number {
  * switches Alex off for the whole green room. The ones Alex passed to him, or
  * that wrote while he had them, float to the top in gold.
  */
-export function ProducerDesk({ eventId, compact = false }: { eventId?: number; compact?: boolean }) {
+export function ProducerDesk({ eventId, compact = false, narrow = false }: { eventId?: number; compact?: boolean; /** In the console's rail: one column, the list above the conversation. */ narrow?: boolean }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const listKey = ["/api/admin/greenroom/chats", eventId ?? 0];
@@ -83,7 +83,7 @@ export function ProducerDesk({ eventId, compact = false }: { eventId?: number; c
         </label>
       </div>
 
-      <div className={`grid gap-4 ${compact ? "md:grid-cols-[240px_minmax(0,1fr)]" : "lg:grid-cols-[300px_minmax(0,1fr)]"}`}>
+      <div className={`grid gap-4 ${narrow ? "" : compact ? "md:grid-cols-[240px_minmax(0,1fr)]" : "lg:grid-cols-[300px_minmax(0,1fr)]"}`}>
         <ul className="max-h-[60vh] divide-y divide-border overflow-y-auto rounded-2xl border border-border bg-card" data-testid="desk-list">
           {list.isLoading && <li className="p-4 text-sm text-muted-foreground"><Loader2 className="inline h-4 w-4 animate-spin" /></li>}
           {!list.isLoading && chats.length === 0 && <li className="p-4 text-sm text-muted-foreground">No one has written in the green room yet.</li>}

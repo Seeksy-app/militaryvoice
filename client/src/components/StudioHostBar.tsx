@@ -22,6 +22,7 @@ export function StudioHostBar({
   onCover,
   onUncover,
   studioId,
+  onChat,
 }: {
   meOnStage: boolean;
   stageBusy: boolean;
@@ -33,13 +34,16 @@ export function StudioHostBar({
   onCover: () => void;
   onUncover: () => void;
   studioId?: number;
+  /** Opens Michael's chat in the console's right rail. Without it the chat opens here, under the buttons. */
+  onChat?: () => void;
 }) {
   const [chatOpen, setChatOpen] = useState(false);
+  const openChat = () => (onChat ? onChat() : setChatOpen(true));
   const [alerted, setAlerted] = useState(false);
 
   const cover = async () => {
     onCover();
-    setChatOpen(true);
+    openChat();
     if (!alerted) {
       setAlerted(true);
       await fetch("/api/host/alex/chat", {
@@ -89,21 +93,21 @@ export function StudioHostBar({
           </button>
         )}
 
-        <button type="button" onClick={() => setChatOpen((o) => !o)} className={`${big} border border-white/20 bg-white/10 hover:bg-white/15 lg:max-w-[16rem]`} data-testid="host-bar-chat">
+        <button type="button" onClick={() => (onChat ? onChat() : setChatOpen((o) => !o))} className={`${big} bg-[#F0A71F] text-[#000741] hover:bg-[#f5b94a] lg:max-w-[16rem]`} data-testid="host-bar-chat">
           <MessageCircle className="h-8 w-8 shrink-0" />
           <span>
             <span className="block text-xl font-bold leading-tight">Message Michael</span>
-            <span className="block text-xs text-white/75">The producer, right here</span>
+            <span className="block text-xs text-[#000741]/75">Opens the chat on the right</span>
           </span>
         </button>
       </div>
-      {chatOpen && <MichaelChat studioId={studioId} onClose={() => setChatOpen(false)} />}
+      {chatOpen && !onChat && <MichaelChat studioId={studioId} onClose={() => setChatOpen(false)} />}
     </div>
   );
 }
 
 /** A direct line to Michael from inside the studio: same thread as the green room, never to Alex. */
-function MichaelChat({ studioId, onClose }: { studioId?: number; onClose: () => void }) {
+export function MichaelChat({ studioId, onClose, panel = false }: { studioId?: number; onClose?: () => void; panel?: boolean }) {
   const [thread, setThread] = useState<Thread | null>(null);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -135,6 +139,30 @@ function MichaelChat({ studioId, onClose }: { studioId?: number; onClose: () => 
     await load();
     setBusy(false);
   };
+  const who = (r: Role) => (r === "producer" ? "Michael" : r === "alex" ? "Alex" : "You");
+  const tone = (r: Role) => (r === "producer" ? "text-[#8ab4f8]" : r === "alex" ? "text-[#F0A71F]" : "text-white/60");
+  // In the rail: the whole conversation, newest at the bottom, the box under it.
+  if (panel) {
+    const all = thread?.messages ?? [];
+    return (
+      <div className="flex h-full min-h-[24rem] flex-col gap-2 text-white" data-testid="michael-chat-panel">
+        <div ref={logRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto text-sm leading-snug">
+          {all.length === 0 ? (
+            <p className="text-white/60"><span className="font-semibold text-white">Michael</span> is watching. Tell him what's happening.</p>
+          ) : all.map((m) => (
+            <div key={m.id} className={`rounded-xl px-3 py-2 ${m.role === "user" ? "ml-6 bg-white/10" : "mr-6 bg-[#8ab4f8]/[0.1]"}`}>
+              <p className={`text-[11px] font-semibold ${tone(m.role)}`}>{who(m.role)}</p>
+              <p className="whitespace-pre-wrap text-white/90">{m.content}</p>
+            </div>
+          ))}
+        </div>
+        <form onSubmit={(e) => { e.preventDefault(); void send(); }} className="flex shrink-0 items-center gap-1.5">
+          <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Message Michael" maxLength={500} className="h-10 min-w-0 flex-1 rounded-full bg-black/30 px-4 text-sm placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-[#8ab4f8]/50" data-testid="michael-chat-input" autoFocus />
+          <button type="submit" disabled={busy || !draft.trim()} className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#F0A71F] text-[#000741] disabled:opacity-40" aria-label="Send"><Send className="h-4 w-4" /></button>
+        </form>
+      </div>
+    );
+  }
   // Slim on purpose: a strip under the buttons, the last word or two and a box to type in.
   const msgs = (thread?.messages ?? []).slice(-2);
   return (
@@ -151,7 +179,7 @@ function MichaelChat({ studioId, onClose }: { studioId?: number; onClose: () => 
       <form onSubmit={(e) => { e.preventDefault(); void send(); }} className="flex shrink-0 items-center gap-1.5 sm:w-[44%]">
         <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder="Message Michael" maxLength={500} className="h-9 min-w-0 flex-1 rounded-full bg-black/30 px-3.5 text-sm placeholder:text-white/40 focus:outline-none focus:ring-2 focus:ring-[#8ab4f8]/50" data-testid="michael-chat-input" autoFocus />
         <button type="submit" disabled={busy || !draft.trim()} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#F0A71F] text-[#000741] disabled:opacity-40" aria-label="Send"><Send className="h-4 w-4" /></button>
-        <button type="button" onClick={onClose} className="rounded-md p-1 text-white/60 hover:bg-white/10 hover:text-white" aria-label="Close the chat"><X className="h-4 w-4" /></button>
+        <button type="button" onClick={() => onClose?.()} className="rounded-md p-1 text-white/60 hover:bg-white/10 hover:text-white" aria-label="Close the chat"><X className="h-4 w-4" /></button>
       </form>
     </div>
   );
