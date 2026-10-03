@@ -843,99 +843,153 @@ function SpotFrame({ t0, beats }: { t0?: number; beats?: Record<string, number> 
   const [people, setPeople] = useState<{ hosts: SpotPerson[]; faces: string[] }>({ hosts: [], faces: [] });
   useEffect(() => {
     void fetch("/api/signups").then((r) => r.json()).then((j) => {
-      const rows = (Array.isArray(j) ? j : j.signups ?? []) as { hostName: string; podcastName: string; photoUrl: string; slotIndex: number }[];
+      const rows = (Array.isArray(j) ? j : j.signups ?? []) as { hostName: string; photoUrl: string; slotIndex: number }[];
       const by = (re: RegExp) => rows.find((r) => re.test(r.hostName));
-      const host = by(/riccoh/i);
-      const hosts = [
-        { name: "Riccoh Player", photo: host?.photoUrl ?? "" },
-        { name: "Amy Forsythe", photo: by(/amy forsythe/i)?.photoUrl ?? "" },
-        { name: "Enrique Acosta Gonzalez", photo: by(/enrique/i)?.photoUrl ?? "" },
-      ];
-      const faces = rows.filter((r) => r.photoUrl && !/riccoh/i.test(r.hostName)).sort((a, b) => a.slotIndex - b.slotIndex).map((r) => r.photoUrl);
-      setPeople({ hosts, faces });
+      setPeople({
+        hosts: [
+          { name: "Amy Forsythe", photo: by(/amy forsythe/i)?.photoUrl ?? "" },
+          { name: "Enrique Acosta Gonzalez", photo: by(/enrique/i)?.photoUrl ?? "" },
+        ],
+        faces: rows.filter((r) => r.photoUrl && !/riccoh/i.test(r.hostName)).sort((x, y) => x.slotIndex - y.slotIndex).map((r) => r.photoUrl),
+      });
     }).catch(() => {});
   }, []);
   const t = t0 ? (now - t0) / 1000 : -1;
-  const b = { welcome: 0, day: 4, hosts: 11, shows: 17, miles: 21, grow: 24, watch: 27, ...(beats ?? {}) };
-  const order = ["welcome", "day", "hosts", "shows", "miles", "grow", "watch"] as const;
-  const scene = t < 0 ? "welcome" : [...order].reverse().find((k) => t >= b[k]) ?? "welcome";
-  const on = (k: (typeof order)[number]) => scene === k;
-  const shot = (k: (typeof order)[number]) =>
-    `absolute inset-0 flex flex-col justify-center pl-[7%] pr-[44%] transition-all duration-[900ms] ease-out ${on(k) ? "opacity-100 translate-y-0 blur-0" : "pointer-events-none opacity-0 translate-y-[2cqw] blur-[6px]"}`;
-  const since = (k: (typeof order)[number]) => Math.max(0, t - b[k]);
+  const b = { welcome: 0, day: 4, hosts: 11, shows: 17, miles: 21, grow: 24, watch: 28, end: 34, ...(beats ?? {}) };
+  const order = ["welcome", "day", "hosts", "shows", "miles", "grow", "watch", "end"] as const;
+  type Beat = (typeof order)[number];
+  const scene: Beat = t < 0 ? "welcome" : [...order].reverse().find((k) => t >= b[k]) ?? "welcome";
+  const on = (k: Beat) => scene === k;
+  const since = (k: Beat) => Math.max(0, t - b[k]);
+  // Text sits in the left 60%; the presenter is laid over the right in the edit.
+  const shot = (k: Beat, wide = false) =>
+    `absolute inset-y-0 left-0 flex flex-col justify-center pl-[6%] ${wide ? "pr-[6%] w-full" : "w-[62%] pr-[2%]"} transition-all duration-[900ms] ease-out ${on(k) ? "opacity-100 translate-y-0" : "pointer-events-none opacity-0 translate-y-[1.5cqw]"}`;
+  // Each scene has its own full-bleed photo, slowly pushing in, under a navy wash from the left.
+  const bg = (k: Beat, src: string, pos = "center") => (
+    <div key={k} className={`absolute inset-0 transition-opacity duration-[1100ms] ${on(k) ? "opacity-100" : "opacity-0"}`} aria-hidden="true">
+      <img src={src} alt="" className="absolute inset-0 h-full w-full object-cover" style={{ objectPosition: pos, transform: `scale(${1.04 + Math.min(0.08, since(k) * 0.012)})`, transition: "transform 120ms linear" }} />
+      <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, #04102b 0%, rgba(4,16,43,.94) 42%, rgba(4,16,43,.62) 68%, rgba(4,16,43,.45) 100%)" }} />
+    </div>
+  );
   const miles = Math.min(26.2, since("miles") * 13).toFixed(1);
-  const firstName = (n: string) => n.split(" ")[0];
+  const gold = "#F0A71F";
+  const eyebrow = (text: string) => (
+    <p className="font-bold uppercase" style={{ color: gold, fontSize: "1.5cqw", letterSpacing: "0.22em" }}>{text}</p>
+  );
   return (
-    <div className="absolute inset-0 overflow-hidden text-white" style={{ containerType: "inline-size", background: "radial-gradient(120% 90% at 28% 45%, #0b2a5c 0%, #061a3d 45%, #020a1f 100%)" }} data-testid="stage-spot">
-      <style>{`@keyframes spot-drift{from{transform:translateY(0)}to{transform:translateY(-120cqw)}}@keyframes spot-wave{from{transform:translateX(0)}to{transform:translateX(-50%)}}@keyframes spot-river{from{transform:translateX(0)}to{transform:translateX(-50%)}}@keyframes spot-glow{0%,100%{opacity:.55}50%{opacity:1}}`}</style>
-      {/* Warm light from the left, a soft vignette, gold dust drifting up. */}
-      <div className="absolute -left-[15%] top-[10%] h-[80%] w-[60%] rounded-full bg-[#F0A71F]/[0.10] blur-[8cqw]" style={{ animation: "spot-glow 6s ease-in-out infinite" }} aria-hidden="true" />
-      <div className="absolute inset-0" style={{ background: "radial-gradient(100% 100% at 50% 50%, transparent 55%, rgba(0,0,0,.55) 100%)" }} aria-hidden="true" />
+    <div className="absolute inset-0 overflow-hidden bg-[#04102b] text-white" style={{ containerType: "inline-size", fontFamily: "'Inter', sans-serif" }} data-testid="stage-spot">
+      <style>{`@keyframes spot-drift{from{transform:translateY(0)}to{transform:translateY(-120cqw)}}`}</style>
+      {bg("welcome", "/hero-6.jpg", "60% 50%")}
+      {bg("day", "/platform-hero.jpg", "50% 35%")}
+      {bg("miles", "/platform-hero.jpg", "50% 60%")}
+      {bg("grow", "/hero-6.jpg", "40% 50%")}
+      {/* Gold dust, always drifting up over everything. */}
       <div className="absolute inset-0" aria-hidden="true">
-        {Array.from({ length: 34 }, (_, i) => (
-          <span key={i} className="absolute rounded-full bg-[#F0A71F]" style={{ left: `${(i * 37) % 100}%`, top: `${100 + ((i * 53) % 60)}%`, width: `${0.15 + (i % 4) * 0.08}cqw`, height: `${0.15 + (i % 4) * 0.08}cqw`, opacity: 0.25 + (i % 5) * 0.1, animation: `spot-drift ${22 + (i % 7) * 4}s linear ${-(i * 1.7)}s infinite` }} />
+        {Array.from({ length: 30 }, (_, i) => (
+          <span key={i} className="absolute rounded-full" style={{ background: gold, left: `${(i * 37) % 100}%`, top: `${100 + ((i * 53) % 60)}%`, width: `${0.14 + (i % 4) * 0.07}cqw`, height: `${0.14 + (i % 4) * 0.07}cqw`, opacity: 0.2 + (i % 5) * 0.08, animation: `spot-drift ${22 + (i % 7) * 4}s linear ${-(i * 1.7)}s infinite` }} />
         ))}
       </div>
-      {/* Soundwave lines along the bottom, sliding slowly. */}
-      <svg className="absolute bottom-[6%] left-0 h-[18%] w-[200%]" viewBox="0 0 2000 100" preserveAspectRatio="none" style={{ animation: "spot-wave 40s linear infinite" }} aria-hidden="true">
-        {[0, 1, 2].map((k) => (
-          <path key={k} d={Array.from({ length: 41 }, (_, i) => `${i === 0 ? "M" : "L"}${i * 50},${50 + Math.sin(i * 0.9 + k) * (12 + k * 8)}`).join(" ")} fill="none" stroke="#F0A71F" strokeOpacity={0.18 - k * 0.04} strokeWidth="1.5" />
-        ))}
-      </svg>
 
       <div className={shot("welcome")}>
-        <p className="font-semibold text-white/70" style={{ fontSize: "2.6cqw" }}>Welcome to</p>
-        <p className="font-bold leading-[0.95] tracking-tight" style={{ ...HEADLINE_FONT, fontSize: "8cqw" }}>MilitaryVoices</p>
-        <span className="mt-[1.6cqw] block h-[0.25cqw] w-[10cqw] rounded-full bg-[#F0A71F]" />
-        <p className="mt-[1.6cqw] text-white/75" style={{ fontSize: "2.2cqw" }}>Home of military and veteran stories</p>
+        <img src="/logo-lockup-dark.png" alt="MilitaryVoices.AI" style={{ width: "22cqw" }} />
+        <p className="mt-[3cqw] font-bold leading-[1.02] tracking-tight" style={{ ...HEADLINE_FONT, fontSize: "6.2cqw" }}>
+          Welcome to<br />MilitaryVoices
+        </p>
+        <p className="mt-[1.4cqw] font-semibold leading-snug" style={{ ...HEADLINE_FONT, fontSize: "3cqw", color: gold }}>Home of military and veteran stories</p>
       </div>
 
       <div className={shot("day")}>
-        <img src="/nmpd-logo.png" alt="" className="drop-shadow-[0_0_3cqw_rgba(240,167,31,0.45)]" style={{ width: "15cqw", height: "15cqw", transform: `scale(${1 + Math.min(0.08, since("day") * 0.012)})`, transition: "transform 80ms linear" }} />
-        <p className="mt-[2cqw] font-semibold text-[#F0A71F]" style={{ fontSize: "2.3cqw", letterSpacing: "0.12em" }}>October 5</p>
-        <p className="mt-[0.4cqw] font-bold leading-[1.02] tracking-tight [text-wrap:balance]" style={{ ...HEADLINE_FONT, fontSize: "5.6cqw" }}>National Military Podcast Day</p>
+        <div className="flex items-center" style={{ gap: "3cqw" }}>
+          <img src="/nmpd-logo.png" alt="" className="shrink-0 drop-shadow-[0_0_3cqw_rgba(240,167,31,0.5)]" style={{ width: "17cqw", height: "17cqw" }} />
+          <div className="min-w-0">
+            {eyebrow("Monday · October 5")}
+            <p className="mt-[0.8cqw] font-bold leading-[1.0] tracking-tight [text-wrap:balance]" style={{ ...HEADLINE_FONT, fontSize: "5.4cqw" }}>National Military Podcast Day</p>
+          </div>
+        </div>
+        <p className="mt-[2.4cqw] max-w-[90%] leading-snug text-white/85 [text-wrap:balance]" style={{ fontSize: "2.3cqw" }}>
+          Honoring veterans and service members who share their stories, <span style={{ color: gold }}>in their own words.</span>
+        </p>
       </div>
 
       <div className={shot("hosts")}>
-        <div className="flex items-end" style={{ gap: "2.4cqw" }}>
-          {people.hosts.map((h, i) => (
-            <div key={h.name} className="flex flex-col items-center text-center transition-all duration-700" style={{ opacity: since("hosts") > i * 0.9 ? 1 : 0, transform: `translateY(${since("hosts") > i * 0.9 ? 0 : 2}cqw)` }}>
-              {h.photo && <img src={h.photo} alt="" className="rounded-full object-cover object-[50%_28%] shadow-[0_0_3cqw_rgba(240,167,31,0.35)] ring-[0.35cqw] ring-[#F0A71F]/80" style={{ width: i === 0 ? "14cqw" : "11cqw", height: i === 0 ? "14cqw" : "11cqw" }} />}
-              <p className="mt-[1cqw] font-semibold text-[#F0A71F]" style={{ fontSize: "1.3cqw", letterSpacing: "0.14em" }}>{i === 0 ? "Host" : "Co-host"}</p>
-              <p className="font-bold leading-tight" style={{ fontSize: "1.9cqw" }}>{i === 0 ? h.name : firstName(h.name)}</p>
+        <div className="flex items-center" style={{ gap: "3cqw" }}>
+          {/* Riccoh as he is on the site: the Emmy portrait, tilted on a gold plate. */}
+          <div className="relative shrink-0" style={{ width: "19cqw", height: "24cqw" }}>
+            <div className="absolute inset-0 rounded-[1.6cqw]" style={{ background: gold, transform: "rotate(-3deg) translate(-0.6cqw, 0.4cqw)" }} />
+            <img src="/riccoh-player.jpg" alt="" className="absolute inset-0 h-full w-full rounded-[1.4cqw] object-cover object-[50%_20%] shadow-2xl" />
+          </div>
+          <div className="min-w-0">
+            {eyebrow("Hosted by Emmy winner")}
+            <p className="mt-[0.6cqw] font-bold leading-none tracking-tight" style={{ ...HEADLINE_FONT, fontSize: "5cqw" }}>Riccoh Player</p>
+            <p className="mt-[0.4cqw] text-white/70" style={{ fontSize: "1.7cqw" }}>USMC, Retired</p>
+            <div className="mt-[1.6cqw] flex flex-wrap" style={{ columnGap: "2.2cqw", rowGap: "0.6cqw" }}>
+              {[["33", "years in the Corps"], ["5", "combat tours"], ["1", "Emmy"]].map(([n, l], i) => (
+                <p key={l} className="transition-all duration-500" style={{ opacity: since("hosts") > 0.6 + i * 0.5 ? 1 : 0 }}>
+                  <span className="font-bold" style={{ ...HEADLINE_FONT, fontSize: "3cqw", color: gold }}>{n}</span>{" "}
+                  <span className="text-white/80" style={{ fontSize: "1.5cqw" }}>{l}</span>
+                </p>
+              ))}
             </div>
-          ))}
+            <div className="mt-[2cqw] flex items-center transition-opacity duration-700" style={{ gap: "1.4cqw", opacity: since("hosts") > 2.6 ? 1 : 0 }}>
+              <p className="uppercase text-white/60" style={{ fontSize: "1.2cqw", letterSpacing: "0.18em" }}>With co-hosts</p>
+              {people.hosts.map((h) => (
+                <div key={h.name} className="flex items-center" style={{ gap: "0.8cqw" }}>
+                  {h.photo && <img src={h.photo} alt="" className="rounded-full object-cover object-[50%_28%]" style={{ width: "4.6cqw", height: "4.6cqw", boxShadow: `0 0 0 0.25cqw ${gold}` }} />}
+                  <span className="font-bold" style={{ ...HEADLINE_FONT, fontSize: "1.9cqw" }}>{h.name.split(" ")[0]}</span>
+                </div>
+              ))}
+            </div>
+          </div>
         </div>
       </div>
 
-      <div className={shot("shows")}>
-        <p className="font-bold leading-none tracking-tight" style={{ ...HEADLINE_FONT, fontSize: "9cqw" }}>30 shows</p>
-        <p className="mt-[1.2cqw] text-white/80" style={{ fontSize: "2.6cqw" }}>Live, 7 AM to 11 PM Eastern</p>
-      </div>
-      {/* The lineup drifting past along the bottom while the shows are on screen. */}
-      <div className={`absolute bottom-[8%] left-0 w-full overflow-hidden transition-opacity duration-700 ${on("shows") || on("miles") ? "opacity-100" : "opacity-0"}`} aria-hidden="true">
-        <div className="flex w-max" style={{ gap: "1.2cqw", animation: "spot-river 30s linear infinite" }}>
-          {[...people.faces, ...people.faces].map((src, i) => (
-            <img key={i} src={src} alt="" className="shrink-0 rounded-full object-cover object-[50%_28%] ring-[0.2cqw] ring-white/25" style={{ width: "6cqw", height: "6cqw" }} />
+      {/* The lineup fills the left of the frame, every face, while the shows are named. */}
+      <div className={`absolute inset-y-0 left-0 w-[62%] transition-opacity duration-[900ms] ${on("shows") ? "opacity-100" : "opacity-0"}`} aria-hidden="true">
+        <div className="absolute inset-0 grid grid-cols-6 content-center" style={{ gap: "0.9cqw", padding: "3cqw 2cqw 3cqw 4cqw" }}>
+          {people.faces.slice(0, 30).map((src, i) => (
+            <img key={i} src={src} alt="" className="aspect-square w-full rounded-full object-cover object-[50%_28%] transition-all duration-500" style={{ opacity: since("shows") > i * 0.05 ? 0.55 : 0, transform: `scale(${since("shows") > i * 0.05 ? 1 : 0.8})` }} />
           ))}
         </div>
+        <div className="absolute inset-0" style={{ background: "radial-gradient(60% 55% at 45% 50%, rgba(4,16,43,.92) 0%, rgba(4,16,43,.55) 60%, rgba(4,16,43,.2) 100%)" }} />
+      </div>
+      <div className={shot("shows")}>
+        <p className="font-bold leading-none tracking-tight" style={{ ...HEADLINE_FONT, fontSize: "10cqw" }}>30 shows</p>
+        <p className="mt-[1.4cqw] font-semibold" style={{ ...HEADLINE_FONT, fontSize: "3cqw", color: gold }}>Live, 7 AM to 11 PM Eastern</p>
       </div>
 
       <div className={shot("miles")}>
-        <p className="font-bold leading-none tabular-nums tracking-tight text-[#F0A71F]" style={{ ...HEADLINE_FONT, fontSize: "14cqw" }}>{miles}</p>
-        <p className="mt-[1cqw] font-semibold" style={{ fontSize: "3cqw" }}>miles of stories</p>
+        <p className="font-bold leading-none tabular-nums tracking-tight" style={{ ...HEADLINE_FONT, fontSize: "15cqw", color: gold }}>{miles}</p>
+        <p className="mt-[1cqw] font-bold leading-tight" style={{ ...HEADLINE_FONT, fontSize: "4cqw" }}>miles of stories,<br />back to back</p>
       </div>
 
       <div className={shot("grow")}>
+        <p className="font-semibold text-white/80" style={{ ...HEADLINE_FONT, fontSize: "2.6cqw" }}>MilitaryVoices is where military creators</p>
         {["Record.", "Share.", "Grow."].map((w, i) => (
-          <p key={w} className="font-bold leading-[1.05] tracking-tight transition-all duration-500" style={{ ...HEADLINE_FONT, fontSize: "7.5cqw", opacity: since("grow") > i * 0.8 ? 1 : 0, transform: `translateX(${since("grow") > i * 0.8 ? 0 : -1.5}cqw)`, color: i === 2 ? "#F0A71F" : "white" }}>{w}</p>
+          <p key={w} className="font-bold leading-[1.02] tracking-tight transition-all duration-500" style={{ ...HEADLINE_FONT, fontSize: "8cqw", opacity: since("grow") > 0.8 + i * 0.7 ? 1 : 0, transform: `translateX(${since("grow") > 0.8 + i * 0.7 ? 0 : -1.5}cqw)`, color: i === 2 ? gold : "white" }}>{w}</p>
         ))}
       </div>
 
       <div className={shot("watch")}>
-        <img src="/nmpd-logo.png" alt="" className="drop-shadow-[0_0_3cqw_rgba(240,167,31,0.5)]" style={{ width: "13cqw", height: "13cqw" }} />
-        <p className="mt-[2cqw] font-semibold text-white/75" style={{ fontSize: "2.2cqw" }}>Watch free, all day Monday</p>
-        <p className="font-bold tracking-tight" style={{ ...HEADLINE_FONT, fontSize: "4.6cqw" }}>militaryvoices.ai/watch</p>
+        <img src="/nmpd-logo.png" alt="" className="drop-shadow-[0_0_3cqw_rgba(240,167,31,0.5)]" style={{ width: "15cqw", height: "15cqw" }} />
+        <p className="mt-[2cqw] font-semibold text-white/80" style={{ ...HEADLINE_FONT, fontSize: "2.6cqw" }}>Watch free, all day Monday</p>
+        <p className="font-bold tracking-tight" style={{ ...HEADLINE_FONT, fontSize: "5.4cqw", color: gold }}>militaryvoices.ai/watch</p>
+      </div>
+
+      {/* The last word: who MilitaryVoices is. Full width; nobody is laid over it. */}
+      <div className={`absolute inset-0 transition-opacity duration-[1100ms] ${on("end") ? "opacity-100" : "opacity-0"}`} aria-hidden={!on("end")}>
+        <img src="/platform-hero.jpg" alt="" className="absolute inset-0 h-full w-full object-cover object-[50%_40%]" />
+        <div className="absolute inset-0" style={{ background: "linear-gradient(90deg, #04102b 0%, rgba(4,16,43,.93) 48%, rgba(4,16,43,.55) 100%)" }} />
+      </div>
+      <div className={shot("end", true)}>
+        <img src="/logo-lockup-dark.png" alt="MilitaryVoices.AI" style={{ width: "20cqw" }} />
+        <p className="mt-[2.4cqw] font-bold uppercase" style={{ color: gold, fontSize: "1.5cqw", letterSpacing: "0.22em" }}>About MilitaryVoices</p>
+        <p className="mt-[1cqw] max-w-[62%] font-bold leading-[1.05] tracking-tight [text-wrap:balance]" style={{ ...HEADLINE_FONT, fontSize: "4.6cqw" }}>
+          The platform for military and veteran <span style={{ color: gold }}>voices.</span>
+        </p>
+        <p className="mt-[1.6cqw] max-w-[58%] leading-snug text-white/80 [text-wrap:pretty]" style={{ fontSize: "1.9cqw" }}>
+          Live events, podcasts and the creators worth putting on stage, all in one place.
+        </p>
+        <p className="mt-[2.4cqw] font-bold" style={{ ...HEADLINE_FONT, fontSize: "2.8cqw" }}>militaryvoices.ai</p>
       </div>
     </div>
   );
