@@ -605,8 +605,14 @@ export function SceneRail({
                         </span>
                       ) : k === "media" ? (
                         <Film className="h-6 w-6 text-white/30" />
-                      ) : desk ? (
-                        <span className="flex items-center gap-2.5 rounded-full bg-black/35 py-1 pl-1 pr-3.5" data-testid={`scene-desk-${sc.id}`}>
+                      ) : (
+                        <Video className="h-6 w-6 text-white/30" />
+                      )}
+                    </div>
+                  )}
+                  {desk && (
+                    <span className="absolute inset-0 flex items-center justify-center bg-black/30">
+                        <span className="flex items-center gap-2.5 rounded-full bg-black/65 py-1 pl-1 pr-3.5" data-testid={`scene-desk-${sc.id}`}>
                           {desk.photoUrl ? (
                             <img src={desk.photoUrl} alt="" className={`h-11 w-11 rounded-full object-cover object-[50%_28%] ring-2 ${mine ? "ring-[#F0A71F]" : "ring-white/40"}`} />
                           ) : (
@@ -617,10 +623,7 @@ export function SceneRail({
                             <span className="block text-sm font-bold text-white">{deskFirst}</span>
                           </span>
                         </span>
-                      ) : (
-                        <Video className="h-6 w-6 text-white/30" />
-                      )}
-                    </div>
+                    </span>
                   )}
                   {mine && (
                     <>
