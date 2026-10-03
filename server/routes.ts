@@ -5025,6 +5025,7 @@ export function registerRoutes(app: Express): void {
         // The desk scene: the card is whoever holds that hour as co-host,
         // so the stage says who is talking rather than nobody.
         const desk = row.kind === "Handoff" && !who ? handoff?.desk ?? null : null;
+        const rowMedia = handoff?.thanks && !scene.mediaUrl ? "" : mediaUrl;
         const withScene = await storage.updateStudio(studio.id, {
           currentSceneId: scene.id,
           stageThanks: handoff?.thanks ? JSON.stringify(handoff.thanks) : "",
@@ -5040,17 +5041,19 @@ export function registerRoutes(app: Express): void {
           // returns before the patch below, so a pre-recorded segment used to
           // move everybody into place and then sit on the cameras with the
           // episode still in the library.
-          stageMediaUrl: mediaUrl,
+          // A hand-off is its thank-you slide: the card's picture is for the
+          // rail, and full screen it covered the slide. A real clip still plays.
+          stageMediaUrl: rowMedia,
           stageMediaKind: mediaKind,
           stageMediaLabel: scene.mediaUrl ? scene.mediaLabel : "",
-          stageMediaPlaying: Boolean(mediaUrl),
-          stageMediaPeople: Boolean(scene.withPeople && mediaUrl),
+          stageMediaPlaying: Boolean(rowMedia),
+          stageMediaPeople: Boolean(scene.withPeople && rowMedia),
           ...lookFor(scene),
           ...banner,
           // The sponsor rides on the lower third too, when there is one.
           ...(sponsor && banner.bannerTitle ? { bannerSubtitle: [banner.bannerSubtitle, `Presented by ${sponsor.name}`].filter(Boolean).join(" · ") } : {}),
           // At the desk the lower third is the co-host's name.
-          ...(desk && !banner.bannerTitle ? { bannerTitle: desk.name, bannerSubtitle: "Co-host · The Podcast Marathon", bannerVisible: true } : {}),
+          ...(desk && !banner.bannerTitle ? { bannerTitle: desk.name, bannerSubtitle: `${/^michael\b/i.test(desk.name) ? "Producer" : "Co-host"} · The Podcast Marathon`, bannerVisible: true } : {}),
         });
         if (withScene) {
           const ev = await storage.getEventById(studio.eventId);
