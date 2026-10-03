@@ -832,7 +832,7 @@ function PromoFrame({ started }: { started: boolean }) {
     return () => clearInterval(id);
   }, [started]);
   const at = (s: number) => (started ? t >= s : s === 0);
-  const pct = Math.round(Math.min(58, Math.max(0, (t - 16.5) * 40)));
+  const pct = Math.round(Math.min(58, Math.max(0, (t - 19.5) * 40)));
   const beat = (on: boolean) => `transition-all duration-700 ease-out ${on ? "translate-y-0 opacity-100" : "translate-y-[1.5cqw] opacity-0"}`;
   return (
     <div className="absolute inset-0 overflow-hidden bg-gradient-to-br from-[#000741] via-[#053877] to-[#06498f] text-white" style={{ containerType: "inline-size" }} data-testid="stage-promo">
@@ -848,9 +848,9 @@ function PromoFrame({ started }: { started: boolean }) {
         </div>
         <div className="mt-[4cqw] grid grid-cols-3" style={{ gap: "2cqw" }}>
           {[
-            { on: at(5), big: "26.2", small: "miles of stories" },
-            { on: at(10.5), big: "30", small: "military & veteran shows, back to back" },
-            { on: at(16), big: `${started ? pct : 58}%`, small: "of Americans listen to podcasts monthly" },
+            { on: at(8), big: "26.2", small: "miles of stories" },
+            { on: at(12), big: "30", small: "military & veteran shows, back to back" },
+            { on: at(19), big: `${started ? pct : 58}%`, small: "of Americans listen to podcasts monthly" },
           ].map((x) => (
             <div key={x.small} className={`rounded-[1.4cqw] border border-white/15 bg-white/[0.07] px-[1.8cqw] py-[1.6cqw] ${beat(x.on)}`}>
               <p className="font-black tabular-nums text-[#F0A71F]" style={{ ...HEADLINE_FONT, fontSize: "5cqw", lineHeight: 1 }}>{x.big}</p>
@@ -858,7 +858,7 @@ function PromoFrame({ started }: { started: boolean }) {
             </div>
           ))}
         </div>
-        <div className={`mt-[3.4cqw] flex items-center ${beat(at(22))}`} style={{ gap: "1.6cqw" }}>
+        <div className={`mt-[3.4cqw] flex items-center ${beat(at(26))}`} style={{ gap: "1.6cqw" }}>
           <span className="rounded-full bg-[#F0A71F] px-[2cqw] py-[0.9cqw] font-black uppercase text-[#000741]" style={{ fontSize: "1.9cqw", letterSpacing: "0.08em" }}>Free · Watch live</span>
           <span className="font-bold" style={{ fontSize: "2.6cqw" }}>militaryvoices.ai/watch</span>
         </div>
