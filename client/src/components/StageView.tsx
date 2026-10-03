@@ -292,7 +292,9 @@ function Tile({ tile, muted, namePos = "bottom", fit, contain = false, flat = fa
       if (!w || !h) return;
       // Half resolution: this runs every frame and she is one tile in a grid,
       // not the thing anyone is squinting at.
-      const cw = Math.min(w, bare ? 1280 : 640), ch = Math.round((cw / w) * h);
+      // 640 wide always: the recorder's browser has no graphics card, and a
+      // full-size key every frame made her picture trail her voice.
+      const cw = Math.min(w, 640), ch = Math.round((cw / w) * h);
       if (canvas.width !== cw) { canvas.width = cw; canvas.height = ch; }
       ctx.drawImage(video, 0, 0, cw, ch);
       const frame = ctx.getImageData(0, 0, cw, ch);
