@@ -881,7 +881,7 @@ function SpotFrame({ t0, beats }: { t0?: number; beats?: Record<string, number> 
       <style>{`@keyframes spot-drift{from{transform:translateY(0)}to{transform:translateY(-120cqw)}}@keyframes spot-lineup{from{transform:translateX(0)}to{transform:translateX(-50%)}}`}</style>
       {/* The home page's own header photos: podcasters at the mic. */}
       {bg("welcome", "/hero-3.jpg", "70% 50%")}
-      {bg("day", "/hero-12.jpg", "80% 50%")}
+      {bg("day", "/hero-7.jpg", "40% 50%")}
       {bg("grow", "/hero-8.jpg", "85% 50%")}
       {bg("sponsors", "/hero-2.jpg", "60% 50%")}
       {bg("watch", "/hero-5.jpg", "50% 40%")}
