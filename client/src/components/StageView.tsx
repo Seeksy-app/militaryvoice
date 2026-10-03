@@ -64,6 +64,9 @@ export interface RoomMeta {
   stageThanks?: StageThanks | null;
   /** "We'll be right back": the studio host's emergency card. */
   brbOn?: boolean;
+  /** The brand spot's clock: when the presenter starts speaking (epoch ms), and each scene's start in seconds after it. */
+  spotT0?: number;
+  spotBeats?: Record<string, number>;
 }
 
 /**
@@ -250,7 +253,7 @@ function fitBox(fit: string | undefined): CSSProperties {
   return { width: "min(100%, calc(100cqh * 16 / 9))", aspectRatio: "16 / 9" };
 }
 
-function Tile({ tile, muted, namePos = "bottom", fit, contain = false, flat = false, cover = false }: { tile: StageTile; muted: boolean; namePos?: "bottom" | "top" | "none"; fit?: string; contain?: boolean; flat?: boolean; cover?: boolean }) {
+function Tile({ tile, muted, namePos = "bottom", fit, contain = false, flat = false, cover = false, bare = false }: { tile: StageTile; muted: boolean; namePos?: "bottom" | "top" | "none"; fit?: string; contain?: boolean; flat?: boolean; cover?: boolean; bare?: boolean }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -289,7 +292,7 @@ function Tile({ tile, muted, namePos = "bottom", fit, contain = false, flat = fa
       if (!w || !h) return;
       // Half resolution: this runs every frame and she is one tile in a grid,
       // not the thing anyone is squinting at.
-      const cw = Math.min(w, 640), ch = Math.round((cw / w) * h);
+      const cw = Math.min(w, bare ? 1280 : 640), ch = Math.round((cw / w) * h);
       if (canvas.width !== cw) { canvas.width = cw; canvas.height = ch; }
       ctx.drawImage(video, 0, 0, cw, ch);
       const frame = ctx.getImageData(0, 0, cw, ch);
@@ -327,7 +330,7 @@ function Tile({ tile, muted, namePos = "bottom", fit, contain = false, flat = fa
     // by side at one size. The box sizes off the cell, not off the video.
     <div className="relative flex min-h-0 min-w-0 items-center justify-center [container-type:size]">
     <div
-      className={`relative overflow-hidden bg-[#04102b] ${flat ? "" : "rounded-xl"} ${
+      className={bare ? "relative overflow-hidden" : `relative overflow-hidden bg-[#04102b] ${flat ? "" : "rounded-xl"} ${
         tile.speaking ? "ring-4 ring-inset ring-[#F0A71F]" : flat ? "" : "ring-1 ring-white/10"
       }`}
       style={fitBox(fit)}
@@ -346,7 +349,7 @@ function Tile({ tile, muted, namePos = "bottom", fit, contain = false, flat = fa
         className={`h-full w-full ${cover ? "object-cover object-[50%_22%]" : portrait || contain ? "object-contain" : "object-cover object-[50%_30%]"} ${tile.keyed ? "invisible absolute" : ""}`}
 
       />
-      {tile.keyed && <canvas ref={canvasRef} className={`h-full w-full ${cover ? "object-cover object-[50%_18%]" : "object-contain"}`} />}
+      {tile.keyed && <canvas ref={canvasRef} className={`h-full w-full ${bare ? "object-contain object-bottom" : cover ? "object-cover object-[50%_18%]" : "object-contain"}`} />}
       <audio ref={audioRef} autoPlay muted={muted} />
 
       {/* Camera off: their picture, large and centred, over a soft wash of
@@ -814,6 +817,128 @@ function BackgroundLayer({ url }: { url: string }) {
   );
 }
 
+/** The 30-second MilitaryVoices brand spot plays when the stage media is this address. */
+export function isSpotUrl(url?: string): boolean {
+  return /\/promo\/spot\b/.test(url ?? "");
+}
+
+type SpotPerson = { name: string; photo: string };
+
+/**
+ * MilitaryVoices in 30 seconds, cinematic rather than a deck: full-bleed navy
+ * with a gold glow and drifting light, one idea at a time in big sentence-case
+ * type, nothing in a box. Scenes change on the beats of the read, measured
+ * from the voice itself and sent in the room's metadata.
+ */
+function SpotFrame({ t0, beats }: { t0?: number; beats?: Record<string, number> }) {
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 80);
+    return () => clearInterval(id);
+  }, []);
+  const [people, setPeople] = useState<{ hosts: SpotPerson[]; faces: string[] }>({ hosts: [], faces: [] });
+  useEffect(() => {
+    void fetch("/api/signups").then((r) => r.json()).then((j) => {
+      const rows = (Array.isArray(j) ? j : j.signups ?? []) as { hostName: string; podcastName: string; photoUrl: string; slotIndex: number }[];
+      const by = (re: RegExp) => rows.find((r) => re.test(r.hostName));
+      const host = by(/riccoh/i);
+      const hosts = [
+        { name: "Riccoh Player", photo: host?.photoUrl ?? "" },
+        { name: "Amy Forsythe", photo: by(/amy forsythe/i)?.photoUrl ?? "" },
+        { name: "Enrique Acosta Gonzalez", photo: by(/enrique/i)?.photoUrl ?? "" },
+      ];
+      const faces = rows.filter((r) => r.photoUrl && !/riccoh/i.test(r.hostName)).sort((a, b) => a.slotIndex - b.slotIndex).map((r) => r.photoUrl);
+      setPeople({ hosts, faces });
+    }).catch(() => {});
+  }, []);
+  const t = t0 ? (now - t0) / 1000 : -1;
+  const b = { welcome: 0, day: 4, hosts: 11, shows: 17, miles: 21, grow: 24, watch: 27, ...(beats ?? {}) };
+  const order = ["welcome", "day", "hosts", "shows", "miles", "grow", "watch"] as const;
+  const scene = t < 0 ? "welcome" : [...order].reverse().find((k) => t >= b[k]) ?? "welcome";
+  const on = (k: (typeof order)[number]) => scene === k;
+  const shot = (k: (typeof order)[number]) =>
+    `absolute inset-0 flex flex-col justify-center pl-[7%] pr-[44%] transition-all duration-[900ms] ease-out ${on(k) ? "opacity-100 translate-y-0 blur-0" : "pointer-events-none opacity-0 translate-y-[2cqw] blur-[6px]"}`;
+  const since = (k: (typeof order)[number]) => Math.max(0, t - b[k]);
+  const miles = Math.min(26.2, since("miles") * 13).toFixed(1);
+  const firstName = (n: string) => n.split(" ")[0];
+  return (
+    <div className="absolute inset-0 overflow-hidden text-white" style={{ containerType: "inline-size", background: "radial-gradient(120% 90% at 28% 45%, #0b2a5c 0%, #061a3d 45%, #020a1f 100%)" }} data-testid="stage-spot">
+      <style>{`@keyframes spot-drift{from{transform:translateY(0)}to{transform:translateY(-120cqw)}}@keyframes spot-wave{from{transform:translateX(0)}to{transform:translateX(-50%)}}@keyframes spot-river{from{transform:translateX(0)}to{transform:translateX(-50%)}}@keyframes spot-glow{0%,100%{opacity:.55}50%{opacity:1}}`}</style>
+      {/* Warm light from the left, a soft vignette, gold dust drifting up. */}
+      <div className="absolute -left-[15%] top-[10%] h-[80%] w-[60%] rounded-full bg-[#F0A71F]/[0.10] blur-[8cqw]" style={{ animation: "spot-glow 6s ease-in-out infinite" }} aria-hidden="true" />
+      <div className="absolute inset-0" style={{ background: "radial-gradient(100% 100% at 50% 50%, transparent 55%, rgba(0,0,0,.55) 100%)" }} aria-hidden="true" />
+      <div className="absolute inset-0" aria-hidden="true">
+        {Array.from({ length: 34 }, (_, i) => (
+          <span key={i} className="absolute rounded-full bg-[#F0A71F]" style={{ left: `${(i * 37) % 100}%`, top: `${100 + ((i * 53) % 60)}%`, width: `${0.15 + (i % 4) * 0.08}cqw`, height: `${0.15 + (i % 4) * 0.08}cqw`, opacity: 0.25 + (i % 5) * 0.1, animation: `spot-drift ${22 + (i % 7) * 4}s linear ${-(i * 1.7)}s infinite` }} />
+        ))}
+      </div>
+      {/* Soundwave lines along the bottom, sliding slowly. */}
+      <svg className="absolute bottom-[6%] left-0 h-[18%] w-[200%]" viewBox="0 0 2000 100" preserveAspectRatio="none" style={{ animation: "spot-wave 40s linear infinite" }} aria-hidden="true">
+        {[0, 1, 2].map((k) => (
+          <path key={k} d={Array.from({ length: 41 }, (_, i) => `${i === 0 ? "M" : "L"}${i * 50},${50 + Math.sin(i * 0.9 + k) * (12 + k * 8)}`).join(" ")} fill="none" stroke="#F0A71F" strokeOpacity={0.18 - k * 0.04} strokeWidth="1.5" />
+        ))}
+      </svg>
+
+      <img src="/logo-wave.png?v=2" alt="" className="absolute left-[7%] top-[7%]" style={{ height: "4cqw" }} />
+
+      <div className={shot("welcome")}>
+        <p className="font-semibold text-white/70" style={{ fontSize: "2.6cqw" }}>Welcome to</p>
+        <p className="font-bold leading-[0.95] tracking-tight" style={{ ...HEADLINE_FONT, fontSize: "8cqw" }}>MilitaryVoices</p>
+        <span className="mt-[1.6cqw] block h-[0.25cqw] w-[10cqw] rounded-full bg-[#F0A71F]" />
+        <p className="mt-[1.6cqw] text-white/75" style={{ fontSize: "2.2cqw" }}>Home of military and veteran stories</p>
+      </div>
+
+      <div className={shot("day")}>
+        <img src="/nmpd-logo.png" alt="" className="drop-shadow-[0_0_3cqw_rgba(240,167,31,0.45)]" style={{ width: "15cqw", height: "15cqw", transform: `scale(${1 + Math.min(0.08, since("day") * 0.012)})`, transition: "transform 80ms linear" }} />
+        <p className="mt-[2cqw] font-semibold text-[#F0A71F]" style={{ fontSize: "2.3cqw", letterSpacing: "0.12em" }}>October 5</p>
+        <p className="mt-[0.4cqw] font-bold leading-[1.02] tracking-tight [text-wrap:balance]" style={{ ...HEADLINE_FONT, fontSize: "5.6cqw" }}>National Military Podcast Day</p>
+      </div>
+
+      <div className={shot("hosts")}>
+        <div className="flex items-end" style={{ gap: "2.4cqw" }}>
+          {people.hosts.map((h, i) => (
+            <div key={h.name} className="flex flex-col items-center text-center transition-all duration-700" style={{ opacity: since("hosts") > i * 0.9 ? 1 : 0, transform: `translateY(${since("hosts") > i * 0.9 ? 0 : 2}cqw)` }}>
+              {h.photo && <img src={h.photo} alt="" className="rounded-full object-cover object-[50%_28%] shadow-[0_0_3cqw_rgba(240,167,31,0.35)] ring-[0.35cqw] ring-[#F0A71F]/80" style={{ width: i === 0 ? "14cqw" : "11cqw", height: i === 0 ? "14cqw" : "11cqw" }} />}
+              <p className="mt-[1cqw] font-semibold text-[#F0A71F]" style={{ fontSize: "1.3cqw", letterSpacing: "0.14em" }}>{i === 0 ? "Host" : "Co-host"}</p>
+              <p className="font-bold leading-tight" style={{ fontSize: "1.9cqw" }}>{i === 0 ? h.name : firstName(h.name)}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className={shot("shows")}>
+        <p className="font-bold leading-none tracking-tight" style={{ ...HEADLINE_FONT, fontSize: "9cqw" }}>30 shows</p>
+        <p className="mt-[1.2cqw] text-white/80" style={{ fontSize: "2.6cqw" }}>Live, 7 AM to 11 PM Eastern</p>
+      </div>
+      {/* The lineup drifting past along the bottom while the shows are on screen. */}
+      <div className={`absolute bottom-[8%] left-0 w-full overflow-hidden transition-opacity duration-700 ${on("shows") || on("miles") ? "opacity-100" : "opacity-0"}`} aria-hidden="true">
+        <div className="flex w-max" style={{ gap: "1.2cqw", animation: "spot-river 30s linear infinite" }}>
+          {[...people.faces, ...people.faces].map((src, i) => (
+            <img key={i} src={src} alt="" className="shrink-0 rounded-full object-cover object-[50%_28%] ring-[0.2cqw] ring-white/25" style={{ width: "6cqw", height: "6cqw" }} />
+          ))}
+        </div>
+      </div>
+
+      <div className={shot("miles")}>
+        <p className="font-bold leading-none tabular-nums tracking-tight text-[#F0A71F]" style={{ ...HEADLINE_FONT, fontSize: "14cqw" }}>{miles}</p>
+        <p className="mt-[1cqw] font-semibold" style={{ fontSize: "3cqw" }}>miles of stories</p>
+      </div>
+
+      <div className={shot("grow")}>
+        {["Record.", "Share.", "Grow."].map((w, i) => (
+          <p key={w} className="font-bold leading-[1.05] tracking-tight transition-all duration-500" style={{ ...HEADLINE_FONT, fontSize: "7.5cqw", opacity: since("grow") > i * 0.8 ? 1 : 0, transform: `translateX(${since("grow") > i * 0.8 ? 0 : -1.5}cqw)`, color: i === 2 ? "#F0A71F" : "white" }}>{w}</p>
+        ))}
+      </div>
+
+      <div className={shot("watch")}>
+        <img src="/nmpd-logo.png" alt="" className="drop-shadow-[0_0_3cqw_rgba(240,167,31,0.5)]" style={{ width: "13cqw", height: "13cqw" }} />
+        <p className="mt-[2cqw] font-semibold text-white/75" style={{ fontSize: "2.2cqw" }}>Watch free, all day Monday</p>
+        <p className="font-bold tracking-tight" style={{ ...HEADLINE_FONT, fontSize: "4.6cqw" }}>militaryvoices.ai/watch</p>
+      </div>
+    </div>
+  );
+}
+
 /** The stage plays our animated promo instead of a file when its media is this address. */
 export function isPromoUrl(url?: string): boolean {
   return /\/promo\/nmpd\b/.test(url ?? "");
@@ -1017,6 +1142,16 @@ export function StageGrid({
       <BrbFrame />
     ) : Number.isFinite(countdownEnds) ? (
       <CountdownFrame endsAt={countdownEnds} label={meta.countdownLabel} />
+    ) : meta.stageMediaPlaying && isSpotUrl(meta.stageMediaUrl) ? (
+      // The brand spot: full-bleed, the presenter cut out and standing on it.
+      <>
+        <SpotFrame t0={meta.spotT0} beats={meta.spotBeats} />
+        {tiles[0] && (
+          <div className="absolute bottom-0 right-[2%] grid" style={{ width: "40%", height: "96%" }}>
+            <Tile tile={tiles[0]} muted={muted} namePos="none" fit="full" bare />
+          </div>
+        )}
+      </>
     ) : meta.stageMediaPlaying && isPromoUrl(meta.stageMediaUrl) ? (
       // The National Military Podcast Day promo: animated, with whoever's
       // presenting it (Alex) in a big frame beside it.
