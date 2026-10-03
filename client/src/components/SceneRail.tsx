@@ -575,7 +575,7 @@ export function SceneRail({
                           className="absolute inset-0 h-full w-full object-cover"
                         />
                       )}
-                      <span className="absolute left-2 top-2 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">{on ? "▶ Video" : "Video"}</span>
+                      <span className="absolute left-9 top-1.5 rounded-md bg-black/70 px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide text-white">{on ? "▶ Video" : "Video"}</span>
                     </>
                   ) : thumb ? (
                     <>
@@ -592,7 +592,7 @@ export function SceneRail({
                         <div className="absolute inset-0 bg-gradient-to-t from-black/45 via-transparent to-black/25" />
                       )}
                       {isFace && k === "camera" && (
-                        <span className={`absolute left-2 top-2 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${here ? "bg-emerald-500 text-white" : "bg-black/70 text-white"}`}>
+                        <span className={`absolute left-9 top-1.5 rounded-md px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-wide ${here ? "bg-emerald-500 text-white" : "bg-black/70 text-white"}`}>
                           {here ? "Live · here" : "Live"}
                         </span>
                       )}
@@ -635,12 +635,11 @@ export function SceneRail({
                     </>
                   )}
 
-                  {/* Shortcut number, so the keys and the rail agree. */}
-                  {i < 9 && (
-                    <span className="absolute left-1.5 top-1.5 rounded bg-black/55 px-1.5 py-0.5 text-[10px] font-bold tabular-nums text-white/80">
-                      {i + 1}
-                    </span>
-                  )}
+                  {/* Every card's number, so a running order can be called out loud ("take 23");
+                      the keys still reach 1–9. */}
+                  <span className="absolute left-1.5 top-1.5 min-w-[1.6rem] rounded bg-black/70 px-1.5 py-0.5 text-center text-[11px] font-bold tabular-nums text-white">
+                    {i + 1}
+                  </span>
                   {on && (
                     <span className="absolute right-1.5 top-1.5 rounded bg-[#F0A71F] px-1.5 py-0.5 text-[9px] font-black uppercase leading-none text-[#1a1200]">
                       On air
