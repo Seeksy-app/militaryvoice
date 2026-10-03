@@ -7,7 +7,7 @@ import { LoginCard } from "@/pages/HostDashboard";
 import { IconTile } from "@/components/ui/icon-tile";
 import { adminGet, adminSend } from "@/lib/adminApi";
 
-type Access = { access: boolean; signedIn?: boolean; role?: "admin" | "studio-host"; email?: string; displayName?: string };
+type Access = { access: boolean; signedIn?: boolean; role?: "admin" | "studio-host"; email?: string; eventId?: number; displayName?: string };
 
 /**
  * The studio console on its own page, for studio hosts (Amy, Enrique): the
@@ -25,13 +25,7 @@ export default function StudioControl() {
     queryKey: ["/api/host/studio-access"],
     queryFn: async () => (await fetch("/api/host/studio-access", { credentials: "include" })).json(),
   });
-  const event = useQuery<{ id: number }>({
-    queryKey: ["/api/event"],
-    queryFn: async () => (await fetch("/api/event")).json(),
-    enabled: Boolean(access.data?.access),
-  });
-
-  if (access.isLoading || (access.data?.access && event.isLoading)) {
+  if (access.isLoading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#04102b] text-white/70">
         <Loader2 className="h-6 w-6 animate-spin" />
@@ -46,7 +40,7 @@ export default function StudioControl() {
           <h1 className="mt-4 text-2xl font-bold tracking-tight [text-wrap:balance]">The MilitaryVoices studio</h1>
           <p className="mt-2 text-sm text-muted-foreground [text-wrap:pretty]">
             {access.data?.signedIn
-              ? `You're signed in as ${access.data.email}, which isn't a studio host. Ask Andrew to add you, or sign in with the address he added.`
+              ? `You're signed in as ${access.data.email}, which isn't a studio host. Ask the event's organiser to add you, or sign in with the address he added.`
               : "Sign in with your email to run the studio."}
           </p>
         </div>
@@ -56,7 +50,7 @@ export default function StudioControl() {
   }
   return (
     <div className="min-h-screen bg-[#04102b]">
-      <StudioConsole adminGet={adminGet} adminSend={adminSend} view="live" eventId={event.data?.id} kind="event" onLeave={() => navigate("/host/dashboard")} />
+      <StudioConsole adminGet={adminGet} adminSend={adminSend} view="live" eventId={access.data.eventId} kind="event" onLeave={() => navigate("/host/dashboard")} />
     </div>
   );
 }

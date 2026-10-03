@@ -2105,6 +2105,45 @@ export const broadcasts = pgTable("broadcasts", {
 });
 export type BroadcastRow = typeof broadcasts.$inferSelect;
 
+/**
+ * The green room chat, one thread per person per event: what they asked,
+ * what Alex said, and what Michael (the producer, a person) said. Kept so the
+ * producer can watch every conversation and take one over mid-sentence.
+ */
+export const greenRoomChats = pgTable(
+  "green_room_chats",
+  {
+    id: serial("id").primaryKey(),
+    eventId: integer("event_id").notNull(),
+    email: text("email").notNull(),
+    name: text("name").notNull().default(""),
+    show: text("show").notNull().default(""),
+    /** "alex" answers, or "producer": Michael has it and Alex stays quiet. */
+    mode: text("mode").notNull().default("alex"),
+    /** Waiting on Michael: Alex passed it over, or they wrote while he had it. */
+    needsProducer: boolean("needs_producer").notNull().default(false),
+    lastAt: text("last_at").notNull().default(""),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => ({ byPerson: uniqueIndex("green_room_chats_person").on(t.eventId, t.email) }),
+);
+export type GreenRoomChatRow = typeof greenRoomChats.$inferSelect;
+
+export const greenRoomMessages = pgTable(
+  "green_room_messages",
+  {
+    id: serial("id").primaryKey(),
+    chatId: integer("chat_id").notNull(),
+    /** "user", "alex" or "producer". */
+    role: text("role").notNull(),
+    author: text("author").notNull().default(""),
+    content: text("content").notNull(),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => ({ byChat: index("green_room_messages_chat").on(t.chatId) }),
+);
+export type GreenRoomMessageRow = typeof greenRoomMessages.$inferSelect;
+
 export const eventTeam = pgTable("event_team", {
   id: serial("id").primaryKey(),
   eventId: integer("event_id").notNull(),

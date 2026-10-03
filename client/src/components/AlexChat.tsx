@@ -1,43 +1,77 @@
 import { useEffect, useRef, useState } from "react";
 import { Send } from "lucide-react";
 
-interface Msg { role: "user" | "assistant"; content: string }
+type Role = "user" | "alex" | "producer";
+interface Msg { id?: number; role: Role; content: string }
+type Thread = { alexOn: boolean; mode: "alex" | "producer"; messages: { id: number; role: Role; content: string }[] };
 
-const HELLO = "Hi — I'm Alex, the producer. Ask me anything about the day: your time, who's on before you, what happens when I bring you up.";
+const HELLO_ALEX = "Hi, I'm Alex, the co-host. Ask me anything about the day: your time, who's on before you, what happens when you're brought up. Michael, the producer, is here too.";
+const HELLO_MICHAEL = "Hi, it's Michael, the producer. Ask me anything about the day and I'll answer right here.";
 
 /**
- * Alex in the green room, by text.
+ * The green room chat: Alex, with Michael (the producer, a person) behind her.
  *
- * A still of her rather than the rendered face: the face took seven seconds
- * to answer, and what a podcaster waiting to go on wants is the answer.
- * Words appear as she writes them. The avatar keeps the main stage.
+ * Every message is kept on the server, so Michael sees the conversation live
+ * and can step in; his replies arrive by polling. Alex's answers stream in as
+ * she writes them. When Michael has the conversation, or Alex is switched off
+ * for the day, the card is his: his name on it, and messages wait for him.
  */
 export function AlexChat({ studioId }: { studioId?: number }) {
-  const [msgs, setMsgs] = useState<Msg[]>([{ role: "assistant", content: HELLO }]);
+  const [thread, setThread] = useState<Thread | null>(null);
+  const [streaming, setStreaming] = useState<string | null>(null);
+  const [pending, setPending] = useState<string | null>(null);
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const logRef = useRef<HTMLDivElement | null>(null);
 
+  const load = async () => {
+    try {
+      const r = await fetch(`/api/host/alex/thread${studioId ? `?studioId=${studioId}` : ""}`, { credentials: "include" });
+      if (r.ok) setThread((await r.json()) as Thread);
+    } catch {
+      // The next poll asks again.
+    }
+  };
+  useEffect(() => {
+    void load();
+    const id = setInterval(() => void load(), 4000);
+    return () => clearInterval(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [studioId]);
+
+  const michael = Boolean(thread && (!thread.alexOn || thread.mode === "producer"));
+  const msgs: Msg[] = [
+    { role: michael ? "producer" : "alex", content: michael ? HELLO_MICHAEL : HELLO_ALEX },
+    ...(thread?.messages ?? []),
+    ...(pending ? [{ role: "user" as const, content: pending }] : []),
+    ...(streaming !== null ? [{ role: "alex" as const, content: streaming }] : []),
+  ];
+
   useEffect(() => {
     const el = logRef.current;
     if (el) el.scrollTop = el.scrollHeight;
-  }, [msgs]);
+  }, [msgs.length, streaming]);
 
   async function send() {
     const text = draft.trim();
     if (!text || busy) return;
     setDraft("");
-    const next: Msg[] = [...msgs, { role: "user", content: text }, { role: "assistant", content: "" }];
-    setMsgs(next);
+    setPending(text);
     setBusy(true);
     try {
       const r = await fetch("/api/host/alex/chat", {
         method: "POST",
         headers: { "content-type": "application/json" },
         credentials: "include",
-        body: JSON.stringify({ studioId, messages: next.slice(1, -1) }),
+        body: JSON.stringify({ studioId, text }),
       });
-      if (!r.ok || !r.body) throw new Error("no answer");
+      if (!r.ok) throw new Error("no answer");
+      // Michael has it: the message is saved and waits for him.
+      if ((r.headers.get("content-type") ?? "").includes("application/json") || !r.body) {
+        await load();
+        return;
+      }
+      setStreaming("");
       const reader = r.body.getReader();
       const dec = new TextDecoder();
       let acc = "";
@@ -45,34 +79,46 @@ export function AlexChat({ studioId }: { studioId?: number }) {
         const { value, done } = await reader.read();
         if (done) break;
         acc += dec.decode(value, { stream: true });
-        const snapshot = acc;
-        setMsgs((m) => [...m.slice(0, -1), { role: "assistant", content: snapshot }]);
+        setStreaming(acc);
       }
-      if (!acc.trim()) setMsgs((m) => [...m.slice(0, -1), { role: "assistant", content: "I didn't catch that — ask me again?" }]);
+      await load();
     } catch {
-      setMsgs((m) => [...m.slice(0, -1), { role: "assistant", content: "I'm not answering right now — the producer will still bring you up on time." }]);
+      await load();
     } finally {
+      setPending(null);
+      setStreaming(null);
       setBusy(false);
     }
   }
 
   return (
-    <div className="flex h-56 items-stretch overflow-hidden rounded-2xl border border-[#F0A71F]/30 bg-[#F0A71F]/[0.06]" data-testid="alex-chat">
+    <div className={`flex h-56 items-stretch overflow-hidden rounded-2xl border ${michael ? "border-[#8ab4f8]/30 bg-[#8ab4f8]/[0.06]" : "border-[#F0A71F]/30 bg-[#F0A71F]/[0.06]"}`} data-testid="alex-chat">
       {/* Flush to the card's edges and its full height, as her live tile was. */}
       <div className="hidden w-40 shrink-0 self-stretch bg-black/40 sm:block">
-        <img src="/alex.webp" alt="Alex" className="h-full w-full object-cover object-top" />
+        {michael ? (
+          <div className="flex h-full w-full items-center justify-center bg-gradient-to-br from-[#053877] to-[#000741] text-5xl font-bold text-white/90" aria-hidden="true">M</div>
+        ) : (
+          <img src="/alex.webp" alt="Alex" className="h-full w-full object-cover object-top" />
+        )}
       </div>
       <div className="flex min-w-0 flex-1 flex-col">
         <div className="flex items-baseline gap-2 px-4 pt-3">
-          <span className="text-lg font-semibold leading-tight">Alex</span>
-          <span className="text-xs text-white/55">Producer · ask her anything</span>
+          <span className="text-lg font-semibold leading-tight">{michael ? "Michael" : "Alex"}</span>
+          <span className="text-xs text-white/55">{michael ? "Producer · ask him anything" : "Co-host · ask her anything"}</span>
         </div>
         <div ref={logRef} className="mt-2 flex-1 space-y-2 overflow-y-auto px-4 pb-1 text-[13px] leading-snug" data-testid="alex-log">
           {msgs.map((m, i) => (
-            <div key={i} className={`max-w-[92%] rounded-xl px-3 py-1.5 ${m.role === "user" ? "ml-auto bg-white/10 text-white" : "bg-[#F0A71F]/15 text-white/90"}`}>
+            <div
+              key={m.id ?? `l${i}`}
+              className={`max-w-[92%] rounded-xl px-3 py-1.5 ${m.role === "user" ? "ml-auto bg-white/10 text-white" : m.role === "producer" ? "bg-[#8ab4f8]/15 text-white/90" : "bg-[#F0A71F]/15 text-white/90"}`}
+            >
+              {m.role === "producer" && i > 0 && <span className="mb-0.5 block text-[10px] font-bold uppercase tracking-[0.14em] text-[#8ab4f8]">Michael · Producer</span>}
               {m.content || <span className="inline-block animate-pulse">…</span>}
             </div>
           ))}
+          {michael && !busy && thread?.messages.length && thread.messages[thread.messages.length - 1].role === "user" ? (
+            <p className="text-[11px] text-white/45">Michael has your message and will answer here.</p>
+          ) : null}
         </div>
         <form
           onSubmit={(e) => { e.preventDefault(); void send(); }}

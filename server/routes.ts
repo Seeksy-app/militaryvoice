@@ -115,12 +115,12 @@ import {
   bccFor,
 } from "./email.js";
 import { renderBroadcastEmail, renderConfirmationEmail, renderNudge } from "./email.js";
-import { alexAnswer, type AlexTurn } from "./alex.js";
 import { emailShell, EMAIL_BANNERS } from "./email.js";
 import { slackInbound, slackNote } from "./slack.js";
 import { registerMagazine, planSegments, claimSegmentCut } from "./magazine.js";
 import { registerHealth, beat, addHealthCheck } from "./health.js";
 import { registerNotices } from "./notices.js";
+import { registerGreenRoomChat } from "./greenRoomChat.js";
 import { draftReply, matchBroadcast, isKnownSender, looksAutomatic, composeAck, firstNameFor, stripQuoted, alexSignatureHtml, threadKey } from "./inbox.js";
 import { adminChat, type ChatTurn } from "./adminChat.js";
 import { waitUntil } from "@vercel/functions";
@@ -542,14 +542,29 @@ function icsEscape(text: string): string {
   return text.replace(/\\/g, "\\\\").replace(/,/g, "\\,").replace(/;/g, "\\;").replace(/\n/g, "\\n");
 }
 
-/** Studio hosts: the people given the whole studio console and nothing else in admin. */
-async function studioHostEmails(): Promise<string[]> {
-  return ((await storage.getSetting("studio_host_emails")) ?? "").split(/[,\s]+/).map((e) => e.trim().toLowerCase()).filter((e) => e.includes("@"));
+/**
+ * Studio hosts: given one event's studio console and nothing else in admin.
+ * Per event, assigned by whoever runs that event (Riccoh for the marathon),
+ * so a studio host on one event is nobody on the next. Kept as a setting per
+ * event: studio_host_emails:<eventId>.
+ */
+const studioHostKey = (eventId: number) => `studio_host_emails:${eventId}`;
+async function studioHostEmails(eventId: number): Promise<string[]> {
+  return ((await storage.getSetting(studioHostKey(eventId))) ?? "").split(/[,\s]+/).map((e) => e.trim().toLowerCase()).filter((e) => e.includes("@"));
 }
-async function studioHostEmail(req: Request): Promise<string | null> {
+/** The events this signed-in person is a studio host on. */
+async function studioHostEvents(email: string): Promise<number[]> {
+  const e = email.trim().toLowerCase();
+  if (!e) return [];
+  const out: number[] = [];
+  for (const ev of await storage.listEvents()) if ((await studioHostEmails(ev.id)).includes(e)) out.push(ev.id);
+  return out;
+}
+async function studioHostEmail(req: Request): Promise<{ email: string; events: number[] } | null> {
   const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
   if (!email) return null;
-  return (await studioHostEmails()).includes(email) ? email : null;
+  const events = await studioHostEvents(email);
+  return events.length ? { email, events } : null;
 }
 /**
  * What the studio console calls, and only that. Reading the lineup and the
@@ -578,8 +593,9 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
   // money or settings.
   const studioHost = await studioHostEmail(req);
   if (studioHost && studioHostMay(req)) {
-    (req as any).adminEmail = studioHost;
+    (req as any).adminEmail = studioHost.email;
     (req as any).studioHost = true;
+    (req as any).studioHostEvents = studioHost.events;
     next();
     return;
   }
@@ -2025,17 +2041,21 @@ export function registerRoutes(app: Express): void {
     const admin = getAdminEmail(req);
     const isAdmin = Boolean(admin && (await storage.isAdminEmail(admin)));
     const host = await studioHostEmail(req);
-    const email = isAdmin ? admin! : host ?? (getSessionEmail(req) ?? "");
+    const email = isAdmin ? admin! : host?.email ?? (getSessionEmail(req) ?? "");
     if (!isAdmin && !host) return res.json({ access: false, signedIn: Boolean(getSessionEmail(req)), email });
     const person = await studioPerson(email);
-    res.json({ access: true, role: isAdmin ? "admin" : "studio-host", email, displayName: person.name, title: person.title, photoUrl: person.photoUrl });
+    // The event whose studio opens: theirs (the featured one when they host several), or the featured one for an admin.
+    const featured = (await storage.getFeaturedEvent()).id;
+    const eventId = isAdmin ? featured : host!.events.includes(featured) ? featured : host!.events[0];
+    res.json({ access: true, role: isAdmin ? "admin" : "studio-host", email, eventId, displayName: person.name, title: person.title, photoUrl: person.photoUrl });
   });
 
   /** Admin → Team: who are studio hosts. */
   app.get("/api/admin/studio-hosts", requireAdmin, async (req, res) => {
     if ((req as any).studioHost) return res.status(403).json({ message: "Admins only." });
-    const emails = await studioHostEmails();
-    const signups = await storage.listSignups((await storage.getFeaturedEvent()).id);
+    const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
+    const emails = await studioHostEmails(eventId);
+    const signups = await storage.listSignups(eventId);
     res.json(await Promise.all(emails.map(async (email) => {
       const sg = signups.find((x) => x.status !== "cancelled" && x.email.trim().toLowerCase() === email);
       const prof = sg ? undefined : await storage.getProfileByEmail(email).catch(() => undefined);
@@ -2045,7 +2065,8 @@ export function registerRoutes(app: Express): void {
   app.put("/api/admin/studio-hosts", requireAdmin, async (req, res) => {
     if ((req as any).studioHost) return res.status(403).json({ message: "Admins only." });
     const emails = Array.from(new Set((Array.isArray(req.body?.emails) ? req.body.emails : []).map((e: unknown) => String(e).trim().toLowerCase()).filter((e: string) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)))).slice(0, 50);
-    await storage.setSetting("studio_host_emails", emails.join(","));
+    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    await storage.setSetting(studioHostKey(eventId), emails.join(","));
     res.json({ emails });
   });
 
@@ -2055,8 +2076,8 @@ export function registerRoutes(app: Express): void {
       // A studio host's console asks this for the avatar: their own card.
       const host = await studioHostEmail(req);
       if (host) {
-        const person = await studioPerson(host);
-        return res.json({ email: host, name: person.name, isOwner: false, studioHost: true, displayName: person.name, title: person.title, photoUrl: person.photoUrl });
+        const person = await studioPerson(host.email);
+        return res.json({ email: host.email, name: person.name, isOwner: false, studioHost: true, displayName: person.name, title: person.title, photoUrl: person.photoUrl });
       }
       res.status(401).json({ message: "Not signed in" });
       return;
@@ -3784,11 +3805,14 @@ export function registerRoutes(app: Express): void {
 
   /** The studio an admin request is talking about, defaulting to the event's own. */
   async function adminStudio(req: Request) {
-    const eventId = Number(req.query.eventId) || Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    // A studio host only ever reaches the studios of the events they host.
+    const allowed: number[] | undefined = (req as any).studioHost ? (req as any).studioHostEvents : undefined;
+    let eventId = Number(req.query.eventId) || Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    if (allowed && !allowed.includes(eventId)) eventId = allowed[0];
     const wanted = Number(req.query.studioId) || Number(req.body?.studioId) || 0;
     if (wanted) {
       const picked = await storage.getStudioById(wanted);
-      if (picked) return { eventId: picked.eventId, studio: picked };
+      if (picked && (!allowed || allowed.includes(picked.eventId))) return { eventId: picked.eventId, studio: picked };
     }
     return { eventId, studio: await storage.getOrCreateStudio(eventId) };
   }
@@ -4911,7 +4935,7 @@ export function registerRoutes(app: Express): void {
     if (!host) return false;
     const listed = ((await storage.getSetting("studio_crew_emails")) ?? "").split(/[,\s]+/).map((e) => e.trim().toLowerCase()).filter(Boolean);
     if (listed.includes(host)) return true;
-    if ((await studioHostEmails()).includes(host)) return true;
+    if ((await studioHostEmails(eventId)).includes(host)) return true;
     return (await storage.listEventTeam(eventId)).some((m) => m.email.trim().toLowerCase() === host);
   }
 
@@ -5984,6 +6008,7 @@ export function registerRoutes(app: Express): void {
   registerMagazine(app, requireAdmin, requireAgent);
   registerHealth(app, requireAdmin);
   registerNotices(app, requireAdmin, requireHostSession);
+  registerGreenRoomChat(app, requireAdmin, requireHostSession);
   registerAutomations(app, requireAdmin, {
     unsubscribeUrl: (req, email) => unsubscribeUrl(req, email),
     resolveRecipients: (segment, eventId) => resolveBroadcastRecipients({ segment, eventId } as BroadcastRow),
@@ -9385,34 +9410,7 @@ The Podcast Marathon team`;
     res.json({ ok: true });
   });
 
-  // ---- Host: Alex, by text ----------------------------------------------------
-
-  /**
-   * The green room's chat with Alex. Streams plain text as it is written,
-   * so the first words are on screen before the sentence is finished.
-   */
-  app.post("/api/host/alex/chat", requireHostSession, async (req, res) => {
-    const email = (req as any).hostEmail as string;
-    const raw = Array.isArray(req.body?.messages) ? (req.body.messages as unknown[]) : [];
-    const turns: AlexTurn[] = raw
-      .map((m: any) => ({ role: m?.role === "assistant" ? "assistant" as const : "user" as const, content: String(m?.content ?? "").slice(0, 2000) }))
-      .filter((m) => m.content.trim() !== "");
-    if (!turns.length || turns[turns.length - 1].role !== "user") {
-      return res.status(400).json({ message: "Say something first." });
-    }
-    noStore(res);
-    res.setHeader("content-type", "text/plain; charset=utf-8");
-    res.setHeader("x-accel-buffering", "no");
-    res.flushHeaders?.();
-    try {
-      for await (const piece of alexAnswer(turns, email)) res.write(piece);
-    } catch (err) {
-      console.error("Alex chat failed:", err);
-      if (!res.headersSent) return res.status(502).json({ message: "Alex is not answering right now." });
-      res.write("\n\n(Sorry — I lost my train of thought. Ask me again.)");
-    }
-    res.end();
-  });
+  // ---- Host: Alex, by text: server/greenRoomChat.ts --------------------------
 
   // ---- Host: co-hosting -------------------------------------------------------
 

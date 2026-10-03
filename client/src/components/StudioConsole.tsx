@@ -27,6 +27,7 @@ import { useToast } from "@/hooks/use-toast";
 import { useProducerRoom, type ProducerFeed } from "@/hooks/use-producer-room";
 import { Destinations } from "@/components/Destinations";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { ProducerDesk, useGreenRoomWaiting } from "@/components/ProducerDesk";
 import { StageGrid, youtubeId, clockText, type StageTile } from "@/components/StageView";
 import { MediaLibrary, type MediaItem } from "@/components/MediaLibrary";
 import { SceneRail, type SceneSpec } from "@/components/SceneRail";
@@ -35,7 +36,7 @@ import { stageMetaFromStudio } from "@shared/stageMeta";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { STUDIO_STATUSES, LOGO_CORNERS, type StudioRow, type StudioParticipantRow, type RunItemRow, type SignupRow, type SceneRow } from "@shared/schema";
 import { detectLocalTimeZone, formatTimeInZone } from "@/lib/schedule";
-import { MonitorPlay, Users, Headphones, Mic, MicOff, Video, VideoOff, ArrowUp, ArrowDown, X, PlayCircle, Radio, Copy, AlertTriangle, Clock, Disc, Pause, Play, Square, Signal, Cable, Trash2, Check, Upload, Volume2, VolumeX, Film, Image as ImageIcon, Clapperboard, ListOrdered, Plus, Maximize2, Minimize2, LogOut, ChevronDown, Settings2, Timer, Loader2, Sparkles } from "lucide-react";
+import { MonitorPlay, Users, Headphones, Mic, MicOff, Video, VideoOff, ArrowUp, ArrowDown, X, PlayCircle, Radio, Copy, AlertTriangle, Clock, Disc, Pause, Play, Square, Signal, Cable, Trash2, Check, Upload, Volume2, VolumeX, Film, Image as ImageIcon, Clapperboard, ListOrdered, Plus, Maximize2, Minimize2, LogOut, ChevronDown, Settings2, Timer, Loader2, Sparkles, MessagesSquare } from "lucide-react";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
@@ -989,7 +990,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
   // Time left before the next scene is due, on the same clock the green
   // room and Alex read, so everybody at the desk sees one number.
   // The signed-in studio manager, for the avatar at the right of the bar.
-  const { data: me0 } = useQuery<{ displayName: string; title: string; photoUrl: string }>({
+  const { data: me0 } = useQuery<{ displayName: string; title: string; photoUrl: string; studioHost?: boolean }>({
     queryKey: ["/api/admin/me"],
     queryFn: () => adminGet("/api/admin/me"),
     staleTime: 10 * 60_000,
@@ -1294,6 +1295,9 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
   const stageSpeaking = monitorTiles.some((t) => t.speaking);
   const speakingRef = useRef(stageSpeaking);
   speakingRef.current = stageSpeaking;
+  // The green room chat, for admins only (Michael's desk); studio hosts run the stage, not the chat.
+  const [deskOpen, setDeskOpen] = useState(false);
+  const deskWaiting = useGreenRoomWaiting(eventId, Boolean(me0) && !me0?.studioHost && !isRoom);
   const [autoNote, setAutoNote] = useState<{ action: string; why: string; deskName: string; at?: string } | null>(null);
   useEffect(() => {
     if (!broadcasting) { setAutoNote(null); return; }
@@ -1589,6 +1593,24 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                 <span className="hidden max-w-[12rem] truncate font-medium opacity-80 sm:inline">{timeLeft.remaining < 0 ? `over · ${timeLeft.label}` : `until ${timeLeft.label}`}</span>
               </div>
             )}
+            {me0 && !me0.studioHost && !isRoom && (
+              <Button
+                variant="ghost"
+                className={`relative h-9 gap-1.5 rounded-full px-3 text-xs font-semibold ${deskWaiting ? "bg-[#F0A71F] text-[#000741] hover:bg-[#f5b94a]" : "text-white/70 hover:bg-white/10 hover:text-white"}`}
+                onClick={() => setDeskOpen(true)}
+                title="Green room chat"
+                data-testid="studio-desk-open"
+              >
+                <MessagesSquare className="h-4 w-4" />
+                <span className="hidden sm:inline">{deskWaiting ? `${deskWaiting} for Michael` : "Green room chat"}</span>
+              </Button>
+            )}
+            <Dialog open={deskOpen} onOpenChange={setDeskOpen}>
+              <DialogContent className="max-h-[92vh] max-w-5xl overflow-y-auto">
+                <DialogTitle className="sr-only">Green room chat</DialogTitle>
+                <ProducerDesk eventId={eventId} compact />
+              </DialogContent>
+            </Dialog>
             {autoNote && autoNote.action !== "take" && (
               <div
                 className={`flex h-9 max-w-[22rem] items-center gap-2 rounded-full px-3 text-xs font-semibold ${autoNote.action === "escalate" ? "bg-[#ED1C24] text-white" : autoNote.action === "hold" ? "bg-[#F0A71F]/20 text-[#F0A71F] ring-1 ring-[#F0A71F]/60" : "bg-white/10 text-white/80 ring-1 ring-white/15"}`}

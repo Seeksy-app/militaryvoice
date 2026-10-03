@@ -10,22 +10,22 @@ import { adminGet, adminSend } from "@/lib/adminApi";
 const LINK = "https://www.militaryvoices.ai/studio/control";
 
 /**
- * Admin → Team: studio hosts. They get the whole studio console (scenes,
- * video, people, going live) at one link, signed in as themselves, and
- * nothing else in admin.
+ * Admin → (an event) → Team: that event's studio hosts. They get its studio
+ * console (scenes, video, people, going live) at one link, signed in as
+ * themselves; nothing else in admin, and nothing on any other event.
  */
-export function StudioHostsCard() {
+export function StudioHostsCard({ eventId }: { eventId: number }) {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const q = useQuery<{ email: string; name: string }[]>({ queryKey: ["/api/admin/studio-hosts"], queryFn: () => adminGet("/api/admin/studio-hosts") });
+  const q = useQuery<{ email: string; name: string }[]>({ queryKey: ["/api/admin/studio-hosts", eventId], queryFn: () => adminGet(`/api/admin/studio-hosts?eventId=${eventId}`) });
   const [email, setEmail] = useState("");
   const [busy, setBusy] = useState(false);
   const [copied, setCopied] = useState(false);
   const save = async (emails: string[]) => {
     setBusy(true);
     try {
-      await adminSend("PUT", "/api/admin/studio-hosts", { emails });
-      await qc.invalidateQueries({ queryKey: ["/api/admin/studio-hosts"] });
+      await adminSend("PUT", "/api/admin/studio-hosts", { eventId, emails });
+      await qc.invalidateQueries({ queryKey: ["/api/admin/studio-hosts", eventId] });
       setEmail("");
     } catch (e) {
       toast({ title: "Couldn't save", description: (e as Error).message, variant: "destructive" });
@@ -40,7 +40,7 @@ export function StudioHostsCard() {
         <IconTile icon={MonitorPlay} />
         <div className="min-w-0 flex-1">
           <h3 className="text-lg font-bold tracking-tight">Studio hosts</h3>
-          <p className="mt-0.5 text-sm text-muted-foreground [text-wrap:pretty]">The whole studio console: switch scenes, roll video, bring people on, go live. Nothing else in admin. They sign in with their own email at the link.</p>
+          <p className="mt-0.5 text-sm text-muted-foreground [text-wrap:pretty]">This event's studio console: switch scenes, roll video, bring people on, go live. Nothing else in admin, and no other event. They sign in with their own email at the link.</p>
         </div>
         <Button variant="outline" className="gap-1.5 rounded-full" onClick={() => { void navigator.clipboard.writeText(LINK); setCopied(true); setTimeout(() => setCopied(false), 1500); }} data-testid="studio-hosts-copy">
           {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />} {copied ? "Copied" : "Copy their link"}
