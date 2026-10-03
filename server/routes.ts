@@ -5586,6 +5586,9 @@ export function registerRoutes(app: Express): void {
     const ev = await storage.getFeaturedEvent();
     const studio = await storage.getOrCreateStudio(ev.id);
     if (!studio.broadcastEgressId && studio.status !== "Live") return res.json({ added: 0, reason: "not on air" });
+    const segments = await segmentChannels(ev, studio).catch((err) => { console.error("Segment channels failed:", err); return { on: [], off: [] as string[] }; });
+    const fresh = (await storage.getStudioById(studio.id)) ?? studio;
+    studio.broadcastEgressId = fresh.broadcastEgressId;
     const due: DestinationRow[] = [];
     for (const d of await storage.listDestinations(ev.id)) {
       if (d.ownerEmail && !d.signupId && d.enabled && !d.live && (await channelWindow(d)).open) due.push(d);
@@ -5598,8 +5601,67 @@ export function registerRoutes(app: Express): void {
       await updateBroadcastTargets(studio.broadcastEgressId, due.map((d) => ingestUrl(d)), []);
       for (const d of due) await storage.updateDestination(d.id, { live: true });
     }
-    res.json({ added: due.length });
+    res.json({ added: due.length, segments });
   });
+
+  /**
+   * A podcaster's own channel carries their segment and nothing else: on a
+   * minute before their slot, off when the slot ends. The YouTube broadcast is
+   * opened on their channel the first time (auto-start, auto-stop), kept as a
+   * destination row tied to their booking, and added to or dropped from the
+   * running broadcast by the minute cron. Switched off under Streaming to: never.
+   */
+  const SEGMENT_LEAD_MS = 60_000;
+  async function segmentChannels(ev: Awaited<ReturnType<typeof storage.getFeaturedEvent>>, studio: StudioRow): Promise<{ on: string[]; off: string[] }> {
+    const on: string[] = [], off: string[] = [];
+    const now = Date.now();
+    const start = Date.parse(ev.startAtUtc);
+    const signups = (await storage.listSignups(ev.id)).filter((x) => x.status !== "cancelled");
+    const dests = await storage.listDestinations(ev.id);
+    let egressId = studio.broadcastEgressId;
+    for (const a of await storage.listYoutubeAccounts()) {
+      if (a.scope !== "segment" || !a.channelId) continue;
+      const email = a.email.trim().toLowerCase();
+      const sg = signups.find((x) => x.email.trim().toLowerCase() === email);
+      if (!sg) continue;
+      const slot = start + sg.slotIndex * ev.slotMinutes * 60_000;
+      const inWindow = now >= slot - SEGMENT_LEAD_MS && now < slot + ev.slotMinutes * 60_000;
+      const want = inWindow && a.enabled !== false;
+      let d = dests.find((x) => x.signupId === sg.id && x.platform === "youtube");
+      try {
+        // A broadcast opened for an earlier test has ended on YouTube (auto-stop);
+        // its key won't go live again, so their real slot gets a fresh one.
+        if (want && d && !d.live && Date.parse(d.createdAt) < slot - 30 * 60_000) {
+          await storage.deleteDestination(d.id);
+          d = undefined;
+        }
+        if (want && !d?.live) {
+          if (!d) {
+            const token = await youtubeToken(email);
+            if (!token) { void slackNote(`:warning: ${sg.podcastName.trim() || sg.hostName} is on now but their YouTube won't sign in, so their segment is on our watch page only.`); continue; }
+            const b = await createBroadcast(token, { title: sg.podcastName || sg.hostName, description: `Live from ${ev.name} on MilitaryVoices.ai.`, startAtIso: new Date().toISOString() });
+            d = await storage.createDestination(ev.id, sg.email, { platform: "youtube", label: `${sg.podcastName} · YouTube`, rtmpUrl: b.ingestAddress, streamKey: b.streamName, enabled: true, signupId: sg.id });
+          }
+          if (!egressId) {
+            egressId = await startBroadcast(roomName(studio.id), [{ url: ingestUrl(d), label: d.label }], PUBLIC_ORIGIN);
+            await storage.updateStudio(studio.id, { broadcastEgressId: egressId });
+          } else {
+            await updateBroadcastTargets(egressId, [ingestUrl(d)], []);
+          }
+          await storage.updateDestination(d.id, { live: true });
+          on.push(sg.podcastName || sg.hostName);
+        } else if (!want && d?.live) {
+          if (egressId) await updateBroadcastTargets(egressId, [], [ingestUrl(d)]);
+          await storage.updateDestination(d.id, { live: false });
+          off.push(sg.podcastName || sg.hostName);
+        }
+      } catch (err) {
+        console.error(`Segment channel for ${email} failed:`, err);
+        void slackNote(`:warning: Couldn't ${want ? "start" : "stop"} ${sg.podcastName.trim() || sg.hostName}'s YouTube for their segment: ${(err as Error).message}`);
+      }
+    }
+    return { on, off };
+  }
 
   /** Add or drop one destination while the broadcast is already running. */
   app.patch("/api/admin/studio/broadcast", requireAdmin, async (req, res) => {
