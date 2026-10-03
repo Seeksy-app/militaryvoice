@@ -250,7 +250,7 @@ function fitBox(fit: string | undefined): CSSProperties {
   return { width: "min(100%, calc(100cqh * 16 / 9))", aspectRatio: "16 / 9" };
 }
 
-function Tile({ tile, muted, namePos = "bottom", fit, contain = false, flat = false }: { tile: StageTile; muted: boolean; namePos?: "bottom" | "top" | "none"; fit?: string; contain?: boolean; flat?: boolean }) {
+function Tile({ tile, muted, namePos = "bottom", fit, contain = false, flat = false, cover = false }: { tile: StageTile; muted: boolean; namePos?: "bottom" | "top" | "none"; fit?: string; contain?: boolean; flat?: boolean; cover?: boolean }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
 
@@ -343,7 +343,7 @@ function Tile({ tile, muted, namePos = "bottom", fit, contain = false, flat = fa
         muted
         onLoadedMetadata={(e) => setPortrait(e.currentTarget.videoHeight > e.currentTarget.videoWidth)}
         onResize={(e) => setPortrait(e.currentTarget.videoHeight > e.currentTarget.videoWidth)}
-        className={`h-full w-full ${portrait || contain ? "object-contain" : "object-cover object-[50%_30%]"} ${tile.keyed ? "invisible absolute" : ""}`}
+        className={`h-full w-full ${cover ? "object-cover object-[50%_22%]" : portrait || contain ? "object-contain" : "object-cover object-[50%_30%]"} ${tile.keyed ? "invisible absolute" : ""}`}
       />
       {tile.keyed && <canvas ref={canvasRef} className="h-full w-full object-contain" />}
       <audio ref={audioRef} autoPlay muted={muted} />
@@ -958,7 +958,7 @@ function ThanksSlide({ t, compact = false }: { t: StageThanks; compact?: boolean
 }
 
 /** Whoever is on with the hand-off slide, stacked down the right. One co-host gets a big frame. */
-function HandoffPeople({ tiles: raw, muted, order }: { tiles: StageTile[]; muted: boolean; order?: string }) {
+function HandoffPeople({ tiles: raw, muted, order, cover = false }: { tiles: StageTile[]; muted: boolean; order?: string; cover?: boolean }) {
   const pref = (order ?? "").split(",").filter(Boolean);
   const rank = (t: StageTile) => { const i = pref.indexOf(t.identity); return i < 0 ? 1e6 : i; };
   const shown = [...raw].sort((a, b) => rank(a) - rank(b) || a.identity.localeCompare(b.identity)).slice(0, 3);
@@ -968,7 +968,7 @@ function HandoffPeople({ tiles: raw, muted, order }: { tiles: StageTile[]; muted
     <>
       {shown.map((t, i) => (
         <div key={t.identity} className="absolute grid" style={{ left: "64.8%", width: "33.7%", top: `${6 + i * (h + gap)}%`, height: `${h}%` }}>
-          <Tile tile={t} muted={muted} namePos="bottom" fit="full" />
+          <Tile tile={t} muted={muted} namePos="bottom" fit="full" cover={cover} />
         </div>
       ))}
     </>
@@ -1028,7 +1028,8 @@ export function StageGrid({
             <div className="absolute overflow-hidden rounded-xl" style={{ left: "1.5%", top: "6%", width: "62%", height: "88%" }}>
               <PromoFrame started />
             </div>
-            <HandoffPeople tiles={tiles} muted={muted} order={meta.stageOrder} />
+            {/* The presenter fills their frame: Alex's feed is portrait, and letterboxed she was a figure in a dark box. */}
+            <HandoffPeople tiles={tiles} muted={muted} order={meta.stageOrder} cover />
           </>
         )}
       </>
