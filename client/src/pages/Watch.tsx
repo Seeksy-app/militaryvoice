@@ -29,6 +29,9 @@ interface WatchToken {
 export default function Watch({ slug }: { slug?: string }) {
   // Browsers refuse to autoplay audio, so everyone arrives muted and taps in.
   const [muted, setMuted] = useState(true);
+  // Alex's panel, open or folded to her face; remembered on this browser.
+  const [alexOpen, setAlexOpen] = useState(() => { try { return localStorage.getItem("mv-watch-alex") !== "0"; } catch { return true; } });
+  const setAlex = (v: boolean) => { setAlexOpen(v); try { localStorage.setItem("mv-watch-alex", v ? "1" : "0"); } catch { /* private window */ } };
 
   const [studioId] = useState<number | undefined>(() => {
     const v = Number(new URLSearchParams(window.location.search).get("studioId"));
@@ -110,7 +113,8 @@ export default function Watch({ slug }: { slug?: string }) {
     <div className={embed ? "bg-[#04102b] text-white overflow-hidden" : "min-h-screen bg-[#04102b] text-white"}>
       {!embed && <NavBar />}
 
-      <div className={embed ? "p-0" : "mx-auto max-w-6xl px-4 py-8 sm:px-6"}>
+      {/* Wide: the show uses the screen, not a column in the middle of it. */}
+      <div className={embed ? "p-0" : "mx-auto w-full max-w-[1800px] px-4 py-6 sm:px-8"}>
         {!embed && (
           <div className="flex flex-wrap items-end justify-between gap-3">
             <div>
@@ -152,7 +156,7 @@ export default function Watch({ slug }: { slug?: string }) {
         )}
 
         {/* The stage, with Alex beside it (below it on a phone). */}
-        <div className={embed ? "" : "mt-5 grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_17rem]"}>
+        <div className={embed ? "" : `mt-5 grid items-start gap-4 ${alexOpen ? "lg:grid-cols-[minmax(0,1fr)_20rem]" : ""}`}>
         <div className={`relative w-full overflow-hidden bg-[#000741] ${embed ? "h-full aspect-video" : "aspect-video rounded-2xl border border-white/12 shadow-2xl"}`}>
           {data && !data.configured ? (
             <div className="flex h-full w-full flex-col items-center justify-center gap-4 px-6 text-center">
@@ -181,7 +185,7 @@ export default function Watch({ slug }: { slug?: string }) {
             </button>
           )}
         </div>
-        {!embed && <WatchAlex />}
+        {!embed && <WatchAlex open={alexOpen} onOpen={() => setAlex(true)} onClose={() => setAlex(false)} />}
         </div>
         {/* Music under the welcome card before the show, never on the live stage. */}
         {preShowMusic && <audio ref={musicRef} src="/api/public/watch-music" autoPlay loop muted={muted} preload="none" />}
