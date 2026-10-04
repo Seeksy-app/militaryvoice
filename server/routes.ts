@@ -5322,12 +5322,22 @@ export function registerRoutes(app: Express): void {
     const next = list[list.findIndex((s) => s.id === scene.id) + 1];
     if (!next) return res.json({ advanced: false });
     // Alex's hand-off runs straight into the next intro when that show is close
-    // (John at 7:30 after the 7:25 clip). Further off on the day, the intro
-    // waits for its own time on the auto-tick, so recorded shows that run short
-    // never pull a live guest forward. An hour or more away is a rehearsal: go.
+    // (John at 7:30 after the 7:25 clip). Further off on the day, the standby
+    // spot loops and the intro waits for its own time on the auto-tick, so
+    // shows that run short never pull a live guest forward. An hour or more
+    // away is a rehearsal: go.
     const alex = await alexAfter(scene, next);
     const ahead = alex?.step === "intro" ? Date.parse(alex.row.startAtUtc) - Date.now() : 0;
-    if (ahead > 5 * 60_000 && ahead < 60 * 60_000) return res.json({ advanced: false, waitingUntil: alex!.row.startAtUtc });
+    if (ahead > 3 * 60_000 && ahead < 60 * 60_000) {
+      if (studio.fallbackVideoUrl) {
+        const updated = await storage.updateStudio(studio.id, { stageMediaUrl: studio.fallbackVideoUrl, stageMediaKind: "video", stageMediaLabel: `${studio.fallbackLabel || "Standby"} (loop)`, stageMediaPlaying: true });
+        if (updated) {
+          const ev = await storage.getEventById(studio.eventId);
+          await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", updated, ev));
+        }
+      }
+      return res.json({ advanced: false, waitingUntil: alex!.row.startAtUtc });
+    }
     // A pre-recorded show that ends into a hand-off with a co-host at the desk
     // goes to the thank-you slide by itself, switch or no switch.
     if (!scene.autoNext && !(await liveHandoffAfter(studio, scene, next)) && alex?.step !== "handoff") return res.json({ advanced: false });
