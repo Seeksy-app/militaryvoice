@@ -209,7 +209,9 @@ function buildText(input: ConfirmationEmailInput): string {
 
 /** Low-level Resend sender shared by every email type. Never throws — logs and
  *  returns false on failure so a flaky email provider never blocks a user flow. */
-async function sendRawEmail(opts: { to: string; subject: string; html: string; text: string; replyTo?: string; from?: string; headers?: Record<string, string>; bcc?: string[]; kind?: string }): Promise<string | null> {
+/** A file sent with the email: Resend fetches it from the address. */
+export type MailAttachment = { filename: string; path: string };
+async function sendRawEmail(opts: { to: string; subject: string; html: string; text: string; replyTo?: string; from?: string; headers?: Record<string, string>; bcc?: string[]; kind?: string; attachments?: MailAttachment[] }): Promise<string | null> {
   let id: string | null = null;
   let error = "";
   try {
@@ -228,7 +230,7 @@ let mailLogger: ((m: SentMail) => Promise<void>) | null = null;
 /** The server hands its database writer in here (this file keeps no database of its own). */
 export function setMailLogger(fn: (m: SentMail) => Promise<void>) { mailLogger = fn; }
 
-async function sendRawEmailNow(opts: { to: string; subject: string; html: string; text: string; replyTo?: string; from?: string; headers?: Record<string, string>; bcc?: string[] }): Promise<string | null> {
+async function sendRawEmailNow(opts: { to: string; subject: string; html: string; text: string; replyTo?: string; from?: string; headers?: Record<string, string>; bcc?: string[]; attachments?: MailAttachment[] }): Promise<string | null> {
   try {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (RESEND_API_KEY) {
@@ -248,6 +250,7 @@ async function sendRawEmailNow(opts: { to: string; subject: string; html: string
         ...(opts.replyTo ? { reply_to: opts.replyTo } : {}),
         ...(opts.bcc?.length ? { bcc: opts.bcc } : {}),
         ...(opts.headers && Object.keys(opts.headers).length ? { headers: opts.headers } : {}),
+        ...(opts.attachments?.length ? { attachments: opts.attachments } : {}),
       }),
     });
     if (!res.ok) {
@@ -294,6 +297,8 @@ export async function sendOneOffEmail(o: {
   bcc?: string[];
   /** What kind of email it is, for the mail log (a reply, an acknowledgement…). */
   kind?: string;
+  /** Files to send with it (a video to post, a flyer). */
+  attachments?: MailAttachment[];
 }): Promise<string | null> {
   return sendRawEmail({ ...o, kind: o.kind ?? "one-off" });
 }

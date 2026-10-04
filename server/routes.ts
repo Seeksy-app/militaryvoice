@@ -11001,6 +11001,53 @@ The ${eventName} team`;
   });
 
   /** The draft from the chat, sent. Alex signs as herself; the others as themselves. */
+  /**
+   * Put one video in every podcaster's Library (the lineup of the featured
+   * event): the same stored file, a row each, so it plays and downloads from
+   * their own account. Skips anyone who already has it.
+   */
+  app.post("/api/admin/library/share", requireAdmin, async (req, res) => {
+    const storageKey = String(req.body?.storageKey ?? "");
+    if (!/^studio\/[\w.-]+$/.test(storageKey)) return res.status(400).json({ message: "That isn't one of the studio's files." });
+    const title = String(req.body?.title ?? "").trim().slice(0, 140) || "From MilitaryVoices";
+    const ev = await storage.getFeaturedEvent();
+    const emails = Array.from(new Set((await storage.listSignups(ev.id)).filter((x) => x.status !== "cancelled").map((x) => x.email.trim().toLowerCase()).filter((e) => e.includes("@") && !/militaryvoices?\.ai$/.test(e))));
+    let added = 0;
+    for (const email of emails) {
+      if ((await storage.listRecordingsByEmail(email)).some((r) => r.url === storageKey)) continue;
+      await storage.createUploadedRecording({ email, title, storageKey, durationSec: Number(req.body?.durationSec) || 0, sizeBytes: Number(req.body?.sizeBytes) || 0, free: false, queue: false });
+      added++;
+    }
+    res.json({ added, podcasters: emails.length });
+  });
+
+  /** The watch page's music before the show: one of our licensed tracks (Rocket by Sonda, Uppbeat), signed for an hour. */
+  app.get("/api/public/watch-music", async (_req, res) => {
+    const tracks = await storage.listMusic();
+    const t = tracks.find((x) => x.url && /rocket/i.test(x.name)) ?? tracks.find((x) => x.url);
+    if (!t) return res.status(404).json({ message: "No music." });
+    res.set("Cache-Control", "no-store");
+    res.redirect(302, await signedRecordingUrl(t.url, 3600));
+  });
+
+  /** Thumbs up from the watch page: a running count for the day. */
+  const thumbsKey = "watch_thumbs";
+  app.get("/api/public/thumbs", async (_req, res) => {
+    res.set("Cache-Control", "no-store");
+    res.json({ count: Number((await storage.getSetting(thumbsKey)) ?? 0) || 0 });
+  });
+  const thumbsSeen = new Map<string, number>();
+  app.post("/api/public/thumbs", async (req, res) => {
+    // One a minute from any one address, so a held-down button doesn't count.
+    const ip = String(req.headers["x-forwarded-for"] ?? req.ip ?? "").split(",")[0].trim();
+    const last = thumbsSeen.get(ip) ?? 0;
+    const n = Number((await storage.getSetting(thumbsKey)) ?? 0) || 0;
+    if (Date.now() - last < 60_000) return res.json({ count: n });
+    thumbsSeen.set(ip, Date.now());
+    await storage.setSetting(thumbsKey, String(n + 1));
+    res.json({ count: n + 1 });
+  });
+
   app.post("/api/admin/chat/send", requireAdmin, async (req, res) => {
     const to = String(req.body?.to ?? "").trim().toLowerCase();
     const subject = String(req.body?.subject ?? "").trim().slice(0, 200);
@@ -11017,7 +11064,12 @@ The ${eventName} team`;
     const headers: Record<string, string> = {};
     if (latest?.messageId) { headers["In-Reply-To"] = latest.messageId; headers["References"] = latest.messageId; }
     // A group send (copy: false) doesn't copy the sender on every one: they're usually on the list themselves.
-    const id = await sendOneOffEmail({ kind: "chat-send", to, subject, html, text, headers, ...named, bcc: req.body?.copy === false ? undefined : bccFor(from, to) });
+    // A file with it: only from our own storage (the site, or its Supabase files), never any address.
+    const attachments = (Array.isArray(req.body?.attachments) ? req.body.attachments : [])
+      .map((a: { filename?: unknown; url?: unknown }) => ({ filename: String(a?.filename ?? "").replace(/[^\w .-]/g, "").slice(0, 120), path: String(a?.url ?? "") }))
+      .filter((a: { filename: string; path: string }) => a.filename && /^https:\/\/(www\.militaryvoices\.ai|npprvgnojjgfrvsbedkc\.supabase\.co)\//.test(a.path))
+      .slice(0, 3);
+    const id = await sendOneOffEmail({ kind: "chat-send", to, subject, html, text, headers, ...named, bcc: req.body?.copy === false ? undefined : bccFor(from, to), ...(attachments.length ? { attachments } : {}) });
     if (!id) return res.status(502).json({ message: "The mail provider didn't accept it." });
     const featured = await storage.getFeaturedEvent();
     const team = await storage.listEventTeam(featured.id);

@@ -1,9 +1,10 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { NavBar } from "@/components/NavBar";
 import { Button } from "@/components/ui/button";
 import { StageGrid, useStageRoom } from "@/components/StageView";
 import { WatchSchedule } from "@/components/WatchSchedule";
+import { WatchAlex } from "@/components/WatchAlex";
 import { apiRequest } from "@/lib/queryClient";
 import { Volume2, VolumeX, Radio, Users, CalendarDays } from "lucide-react";
 
@@ -91,6 +92,14 @@ export default function Watch({ slug }: { slug?: string }) {
     : afterEvent
       ? { ...meta, ...offAir, fallbackPlaying: true, stageMediaPlaying: false }
       : { ...meta, ...offAir, fallbackPlaying: false, stageMediaPlaying: true, stageMediaUrl: "/promo/starting", stageMediaKind: "image" };
+  const preShowMusic = !streaming && !afterEvent && !(data && !data.configured);
+  const musicRef = useRef<HTMLAudioElement | null>(null);
+  useEffect(() => {
+    const a = musicRef.current;
+    if (!a) return;
+    a.volume = 0.35;
+    if (!muted) void a.play().catch(() => {});
+  }, [muted, preShowMusic]);
   const onAir = shownTiles.length > 0 || Boolean(shownMeta.fallbackPlaying && (meta.preVideoUrl || meta.fallbackVideoUrl));
 
   useEffect(() => {
@@ -142,7 +151,9 @@ export default function Watch({ slug }: { slug?: string }) {
           </div>
         )}
 
-        <div className={`relative w-full overflow-hidden bg-[#000741] ${embed ? "h-full aspect-video" : "mt-5 aspect-video rounded-2xl border border-white/12 shadow-2xl"}`}>
+        {/* The stage, with Alex beside it (below it on a phone). */}
+        <div className={embed ? "" : "mt-5 grid items-start gap-4 lg:grid-cols-[minmax(0,1fr)_17rem]"}>
+        <div className={`relative w-full overflow-hidden bg-[#000741] ${embed ? "h-full aspect-video" : "aspect-video rounded-2xl border border-white/12 shadow-2xl"}`}>
           {data && !data.configured ? (
             <div className="flex h-full w-full flex-col items-center justify-center gap-4 px-6 text-center">
               <img src="/logo-wave.png?v=2" alt="" className="h-16 w-auto opacity-80" />
@@ -170,6 +181,10 @@ export default function Watch({ slug }: { slug?: string }) {
             </button>
           )}
         </div>
+        {!embed && <WatchAlex />}
+        </div>
+        {/* Music under the welcome card before the show, never on the live stage. */}
+        {preShowMusic && <audio ref={musicRef} src="/api/public/watch-music" autoPlay loop muted={muted} preload="none" />}
 
         <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-white/55">
           <span className="inline-flex items-center gap-1.5">
