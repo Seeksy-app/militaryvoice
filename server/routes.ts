@@ -5025,7 +5025,9 @@ export function registerRoutes(app: Express): void {
         }
         // The desk scene: the card is whoever holds that hour as co-host,
         // so the stage says who is talking rather than nobody.
-        const desk = row.kind === "Handoff" && !who ? handoff?.desk ?? null : null;
+        // A hand-off that plays Alex's recorded clip is hers, not Michael's: her name on the bar.
+        const deskRaw = row.kind === "Handoff" && !who ? handoff?.desk ?? null : null;
+        const desk = deskRaw && scene.mediaUrl && /^michael\b/i.test(deskRaw.name) ? { ...deskRaw, name: "Alex" } : deskRaw;
         // The booking's co-host on the card too: both names, both faces.
         const whoCo = who?.coHostEmail ? await storage.getProfileByEmail(who.coHostEmail.trim().toLowerCase()).catch(() => undefined) : undefined;
         const rowMedia = handoff?.thanks && !scene.mediaUrl ? "" : mediaUrl;
@@ -5167,15 +5169,21 @@ export function registerRoutes(app: Express): void {
     const prodProfile = tm?.photoUrl ? undefined : await storage.getProfileByEmail(prodEmail).catch(() => undefined);
     const producer = { name: "Michael", photoUrl: tm?.photoUrl || prodProfile?.photoUrl || "", email: prodEmail, role: "producer" as const };
     const out: Record<number, { name: string; photoUrl: string; email: string; role: "cohost" | "producer" }> = {};
+    // Hand-offs that play Alex's recorded clip show her, not Michael.
+    const st = await storage.getOrCreateStudio(eventId);
+    const alexRows = new Set((await storage.listScenes(st.id)).filter((x) => x.runItemId && x.mediaUrl).map((x) => x.runItemId));
     for (let i = 0; i < rows.length; i++) {
       const row = rows[i];
       if (row.kind !== "Handoff") continue;
       const next = rows.slice(i + 1).find((r) => r.kind === "Segment");
       if (!next) continue;
       const desk = (await deskAt(next.startAtUtc)) ?? (await deskAt(row.startAtUtc));
-      out[row.id] = !desk || desk.email.trim().toLowerCase() === prodEmail
-        ? { ...producer, photoUrl: producer.photoUrl || desk?.photoUrl || "" }
-        : { ...desk, role: "cohost" };
+      const mine = !desk || desk.email.trim().toLowerCase() === prodEmail;
+      out[row.id] = mine && alexRows.has(row.id)
+        ? { name: "Alex", photoUrl: "/alex.jpg", email: "", role: "cohost" }
+        : mine
+          ? { ...producer, photoUrl: producer.photoUrl || desk?.photoUrl || "" }
+          : { ...desk, role: "cohost" };
     }
     res.json(out);
   });
