@@ -674,6 +674,7 @@ export interface IStorage {
     email: string,
     patch: Partial<InsertProfile> & { photoUrl?: string; uploadPostUsername?: string; socialAccounts?: string },
   ): Promise<ProfileRow>;
+  setSignupPodcastName(id: number, podcastName: string): Promise<void>;
   updateSignupSocialAccountsByEmail(email: string, socialAccountsJson: string): Promise<void>;
   moveSignupSlots(eventId: number, moves: { id: number; slotIndex: number }[]): Promise<number>;
   syncSignupsFromProfile(email: string, profile: ProfileRow): Promise<number>;
@@ -3122,6 +3123,12 @@ class DatabaseStorage implements IStorage {
       .where(and(eq(signups.eventId, eventId), sqlExpr`lower(${signups.email}) = lower(${email})`, ne(signups.status, "cancelled")))
       .returning({ id: signups.id });
     return rows.length;
+  }
+
+  /** The show's name on a booking, set by the crew (Riccoh's "Closing Ceremonies"). */
+  async setSignupPodcastName(id: number, podcastName: string): Promise<void> {
+    await ready();
+    await db.update(signups).set({ podcastName }).where(eq(signups.id, id));
   }
 
   async updateSignupSocialAccountsByEmail(email: string, socialAccountsJson: string): Promise<void> {

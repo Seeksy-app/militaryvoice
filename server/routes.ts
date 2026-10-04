@@ -3779,6 +3779,12 @@ export function registerRoutes(app: Express): void {
       res.status(404).json({ message: "Not found" });
       return;
     }
+    // The show's own name lives on its booking: the lineup, the agenda and Alex's answers read it there.
+    const showName = typeof req.body?.showName === "string" ? req.body.showName.trim().slice(0, 140) : "";
+    if (showName && row.signupId) {
+      await storage.setSignupPodcastName(row.signupId, showName);
+      runningOrderCache = null;
+    }
     res.json(row);
   });
 
