@@ -8,7 +8,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { PostDialog } from "@/components/PostDialog";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import type { LibraryFolderRow, RecordingRow } from "@shared/schema";
-import { Check, Download, Folder, FolderInput, FolderOpen, FolderPlus, Library, Loader2, Mic2, MoreHorizontal, Pencil, Play, Share2, Trash2, Wand2, X } from "lucide-react";
+import { CalendarClock, Check, Download, Folder, FolderInput, FolderOpen, FolderPlus, Library, Loader2, Mic2, MoreHorizontal, Pencil, Play, Share2, Trash2, Wand2, X } from "lucide-react";
 
 // A podcaster's own sessions. The studio writes them; nothing here is uploaded
 // by hand. The bucket is private, so every download is a fresh signed link.
@@ -97,6 +97,7 @@ export function MyRecordings({
   showEmpty?: boolean;
 }) {
   const [publishing, setPublishing] = useState<RecordingRow | null>(null);
+  const [scheduling, setScheduling] = useState(false);
   // Their podcast shows, so a recording becomes an episode in one step (then its words, on the Podcast screen).
   const showsQ = useQuery<{ shows: { show: { id: number; title: string } }[] }>({ queryKey: ["/api/host/hosting"], queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json(), staleTime: 60_000 });
   const podShows = showsQ.data?.shows ?? [];
@@ -390,8 +391,11 @@ export function MyRecordings({
                         {makingEp ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic2 className="h-4 w-4" />} {podShows[0] ? "Add to my podcast" : "Start my podcast"}
                       </DropdownMenuItem>
                     )}
-                    <DropdownMenuItem onSelect={() => setPublishing(r)} className="gap-2" data-testid={`button-publish-recording-${r.id}`}>
-                      <Share2 className="h-4 w-4" /> Post it
+                    <DropdownMenuItem onSelect={() => { setScheduling(false); setPublishing(r); }} className="gap-2" data-testid={`button-publish-recording-${r.id}`}>
+                      <Share2 className="h-4 w-4" /> Post now
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => { setScheduling(true); setPublishing(r); }} className="gap-2" data-testid={`button-schedule-recording-${r.id}`}>
+                      <CalendarClock className="h-4 w-4" /> Schedule…
                     </DropdownMenuItem>
                     <DropdownMenuSub>
                       <DropdownMenuSubTrigger className="gap-2" data-testid={`button-move-recording-${main.id}`}>
@@ -439,7 +443,7 @@ export function MyRecordings({
         url={`/api/host/folders/${removingFolder?.id}`}
         onDeleted={() => { setOpenFolder(null); void qc.invalidateQueries({ queryKey: ["/api/host/folders"] }); }}
       />
-      <PostDialog target={publishing ? { kind: "recording", id: publishing.id, title: publishing.title, clipsFrom: sourceOf(publishing) ?? publishing.id } : null} onClose={() => setPublishing(null)} />
+      <PostDialog target={publishing ? { kind: "recording", id: publishing.id, title: publishing.title, clipsFrom: sourceOf(publishing) ?? publishing.id } : null} onClose={() => setPublishing(null)} schedule={scheduling} />
       <ConfirmDelete
         open={!!deleting}
         onOpenChange={(v) => !v && setDeleting(null)}

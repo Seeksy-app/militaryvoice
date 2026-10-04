@@ -128,7 +128,7 @@ function inAnHour(): string {
  * Library, Pōstify and the Social page, so posting works the same wherever
  * you start it. Scheduled posts are held by Upload-Post and go out then.
  */
-export function PostDialog({ target, onClose, at }: { target: PostTarget | null; onClose: () => void; /** A time already chosen (an open slot on the calendar): datetime-local. */ at?: string }) {
+export function PostDialog({ target, onClose, at, schedule = false }: { target: PostTarget | null; onClose: () => void; /** A time already chosen (an open slot on the calendar): datetime-local. */ at?: string; /** Opened from "Schedule…": the date and time are what's asked first. */ schedule?: boolean }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const social = useQuery<{ configured: boolean; accounts: { platform: SocialPlatform }[] }>({
@@ -160,11 +160,11 @@ export function PostDialog({ target, onClose, at }: { target: PostTarget | null;
     setTitle(target.title);
     setDescription(target.kind === "clip" ? target.caption ?? "" : "");
     setShape(target.kind === "clip" ? target.shapes[0] ?? "vertical" : "vertical");
-    setMode(at ? "later" : "queue");
+    setMode(at || schedule ? "later" : "queue");
     setWhen(at || inAnHour());
     setYt(blankYt);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [key]);
+  }, [key, schedule]);
   useEffect(() => setPicked(platforms), [platforms.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const send = useMutation({
@@ -264,7 +264,6 @@ export function PostDialog({ target, onClose, at }: { target: PostTarget | null;
                 </div>
               )}
             </div>
-            {target && picked.includes("youtube" as SocialPlatform) && <YouTubeFields key={key} target={target} yt={yt} onChange={setYt} />}
             <div>
               <p className="text-sm font-medium">When</p>
               <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -276,6 +275,7 @@ export function PostDialog({ target, onClose, at }: { target: PostTarget | null;
                 {later && <Input type="datetime-local" value={when} onChange={(e) => setWhen(e.target.value)} className="h-8 w-auto" data-testid="input-post-when" />}
               </div>
             </div>
+            {target && picked.includes("youtube" as SocialPlatform) && <YouTubeFields key={key} target={target} yt={yt} onChange={setYt} />}
           </div>
         )}
 

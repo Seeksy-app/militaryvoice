@@ -21,7 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/schema";
 import { Slider } from "@/components/ui/slider";
-import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2, Clapperboard, Plus, ArrowLeftToLine, ArrowRightToLine, MoreHorizontal, Blend, Brackets, Library, ArrowLeft } from "lucide-react";
+import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2, Clapperboard, Plus, ArrowLeftToLine, ArrowRightToLine, MoreHorizontal, Blend, Brackets, Library, ArrowLeft, CalendarClock } from "lucide-react";
 import { IconTile } from "@/components/ui/icon-tile";
 
 // Postify: one recording going from "the segment ended" to clips ready
@@ -1588,6 +1588,7 @@ export function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }
   const [editing, setEditing] = useState(false);
   const [trimmingClip, setTrimmingClip] = useState(false);
   const [posting, setPosting] = useState(false);
+  const [scheduling, setScheduling] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const updating = c.editStatus === "queued" || c.editStatus === "running";
   // A clip marked in the Viewer has no files until it's made.
@@ -1621,7 +1622,7 @@ export function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }
         {c.editStatus === "failed" && <p className="mt-1 text-xs text-destructive">Couldn't update the text. Try again.</p>}
         {/* One clear action, Post it; the rest are small icons with hover notes. */}
         <div className={`mt-auto flex items-center gap-1 pt-2 ${making ? "hidden" : ""}`}>
-          <Button size="sm" onClick={() => setPosting(true)} className="h-7 min-w-0 flex-1 gap-1 rounded-full bg-[#053877] px-2 text-xs text-white hover:bg-[#0a4a99]" data-testid={`clip-post-${c.id}`}>
+          <Button size="sm" onClick={() => { setScheduling(false); setPosting(true); }} className="h-7 min-w-0 flex-1 gap-1 rounded-full bg-[#053877] px-2 text-xs text-white hover:bg-[#0a4a99]" data-testid={`clip-post-${c.id}`}>
             <Send className="h-3 w-3" /> Post
           </Button>
           <DropdownMenu>
@@ -1634,6 +1635,9 @@ export function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }
               <TooltipContent side="top" className="text-xs">Download, copy the caption, edit the text, or delete</TooltipContent>
             </Tooltip>
             <DropdownMenuContent align="end" className="w-64">
+              <DropdownMenuItem className="gap-2" onSelect={() => { setScheduling(false); setPosting(true); }} data-testid={`clip-menu-post-${c.id}`}><Send className="h-3.5 w-3.5" /> Post now</DropdownMenuItem>
+              <DropdownMenuItem className="gap-2" onSelect={() => { setScheduling(true); setPosting(true); }} data-testid={`clip-menu-schedule-${c.id}`}><CalendarClock className="h-3.5 w-3.5" /> Schedule…</DropdownMenuItem>
+              <DropdownMenuSeparator />
               <DropdownMenuItem className="gap-2" onSelect={onPreview}><Play className="h-3.5 w-3.5" /> Preview {files.length > 1 ? "each size" : "it"}</DropdownMenuItem>
               <DropdownMenuSeparator />
               {files.map((f) => (
@@ -1677,6 +1681,7 @@ export function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }
     <PostDialog
       target={posting ? { kind: "clip", id: c.id, title: c.title, caption: c.caption, shapes: ([["vertical", c.verticalUrl], ["square", c.squareUrl], ["wide", c.url]] as const).filter(([, u]) => u).map(([s]) => s) } : null}
       onClose={() => setPosting(false)}
+      schedule={scheduling}
     />
     </>
   );
