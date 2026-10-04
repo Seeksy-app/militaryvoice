@@ -5089,7 +5089,8 @@ export function registerRoutes(app: Express): void {
         // so the stage says who is talking rather than nobody.
         // A hand-off that plays Alex's recorded clip is hers, not Michael's: her name on the bar.
         const deskRaw = row.kind === "Handoff" && !who ? handoff?.desk ?? null : null;
-        const desk = deskRaw && scene.mediaUrl && /^michael\b/i.test(deskRaw.name) ? { ...deskRaw, name: "Alex" } : deskRaw;
+        // Whoever holds the hour, a hand-off playing Alex's clip is Alex's (Amy's name was on the 10:25).
+        const desk = row.kind === "Handoff" && !who && scene.mediaUrl ? { name: "Alex", photoUrl: "/alex.jpg", email: "" } : deskRaw;
         // The booking's co-host on the card too: both names, both faces.
         const whoCo = who?.coHostEmail ? await storage.getProfileByEmail(who.coHostEmail.trim().toLowerCase()).catch(() => undefined) : undefined;
         const rowMedia = handoff?.thanks && !scene.mediaUrl ? "" : mediaUrl;
@@ -5241,7 +5242,7 @@ export function registerRoutes(app: Express): void {
       if (!next) continue;
       const desk = (await deskAt(next.startAtUtc)) ?? (await deskAt(row.startAtUtc));
       const mine = !desk || desk.email.trim().toLowerCase() === prodEmail;
-      out[row.id] = mine && alexRows.has(row.id)
+      out[row.id] = alexRows.has(row.id)
         ? { name: "Alex", photoUrl: "/alex.jpg", email: "", role: "cohost" }
         : mine
           ? { ...producer, photoUrl: producer.photoUrl || desk?.photoUrl || "" }
