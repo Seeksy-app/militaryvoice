@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { PLANS, CREDIT_PACKS, OVERAGE_CAP_CHOICES, episodeCredits, cents, type PlanKey } from "@shared/tokens";
+import { PLANS, CREDIT_PACKS, OVERAGE_CAP_CHOICES, episodeCredits, cents, SHORT_VIDEO_SEC, type PlanKey } from "@shared/tokens";
 import { CLIP_FORMATS, DEFAULT_CLIP_OPTIONS, parseClipOptions, parseMusicMix, parseEditSuggest, type ClipFormat, type ClipOptions, type EpisodeEdit, type EpisodeMusic, type EditSuggestion, type EditTransition } from "@shared/schema";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -567,6 +567,53 @@ function GenerateMore({ rec, beta, plan, count, captions }: { rec: Rec; beta?: B
         <span className="max-w-[14rem] text-balance text-xs text-muted-foreground">
           Different moments from this episode, in all three shapes.{" "}
           {beta?.unlimited ? "Included." : `${credits} credits${beta?.tokens != null ? ` · you have ${beta.tokens}` : ""}.`}
+        </span>
+      </button>
+      <PlanDialog open={open} onOpenChange={setOpen} beta={beta} plan={plan} />
+    </>
+  );
+}
+
+/**
+ * Clean it again: the ums, false starts and long pauses taken out once more,
+ * into a fresh clean copy in the Library. The clips aren't touched. 1 credit.
+ */
+function CleanAgain({ rec, beta, plan }: { rec: Rec; beta?: Beta; plan?: Plan | null }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const [open, setOpen] = useState(false);
+  let cleanStatus = "";
+  try { cleanStatus = rec.clean ? String(JSON.parse(rec.clean).status ?? "") : ""; } catch { cleanStatus = ""; }
+  const working = cleanStatus === "queued" || cleanStatus === "running";
+  const go = useMutation({
+    mutationFn: async () => {
+      const r = await fetch(`/api/host/recordings/${rec.id}/reclean`, { method: "POST", credentials: "include" });
+      if (r.status === 402) return { needPlan: true };
+      if (!r.ok) throw new Error((await r.json().catch(() => null))?.message || "Couldn't start that.");
+      return r.json();
+    },
+    onSuccess: (r: { needPlan?: boolean }) => {
+      if (r.needPlan) return setOpen(true);
+      void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] });
+      void qc.invalidateQueries({ queryKey: ["/api/host/features"] });
+      toast({ title: "Cleaning it again", description: "The ums, false starts and long pauses come out. The clean copy lands in your Library in a few minutes." });
+    },
+    onError: (e: Error) => toast({ title: "Couldn't clean it again", description: e.message, variant: "destructive" }),
+  });
+  return (
+    <>
+      <button
+        type="button"
+        onClick={() => go.mutate()}
+        disabled={go.isPending || working}
+        className="flex min-h-[14rem] flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#F0A71F]/40 bg-[#F0A71F]/[0.05] p-4 text-center transition-colors hover:border-[#F0A71F]/70 hover:bg-[#F0A71F]/[0.09] disabled:opacity-60"
+        data-testid="post-clean-again"
+      >
+        <IconTile icon={go.isPending || working ? Loader2 : Wand2} spin={go.isPending || working} />
+        <span className="text-sm font-semibold text-foreground">{working ? "Cleaning…" : "Clean it again"}</span>
+        <span className="max-w-[14rem] text-balance text-xs text-muted-foreground">
+          Takes out the ums, false starts and long pauses into a fresh clean copy.{" "}
+          {beta?.unlimited ? "Included." : `1 credit${beta?.tokens != null ? ` · you have ${beta.tokens}` : ""}.`}
         </span>
       </button>
       <PlanDialog open={open} onOpenChange={setOpen} beta={beta} plan={plan} />
@@ -2397,7 +2444,7 @@ export function PostStudio() {
       )}
 
       {/* Clips, filling in */}
-      {(mine.length > 0 || moments.length > 0) && (
+      {(done || mine.length > 0 || moments.length > 0) && (
         <div className="mt-4 rounded-2xl border border-border bg-card p-4">
           <p className="mb-3 flex items-center gap-2 text-sm font-semibold text-foreground">
             <Scissors className="h-4 w-4 text-[#053877]" /> {done ? "Your clips" : "Clips being cut"}
@@ -2409,7 +2456,9 @@ export function PostStudio() {
               ? [
                   // A clip plays in its own pop-up; the editor's player stays on the episode.
                   ...mine.map((c) => <ClipCard key={c.id} c={c} onPreview={() => setClipPlay(c)} />),
-                  <GenerateMore key="more" rec={rec} beta={beta} plan={plan} count={clipsN} captions={parseClipOptions(rec.clipOptions).captions} />,
+                  // A short video is already one clip of itself: no more moments to find in it.
+                  ...(rec.durationSec > SHORT_VIDEO_SEC ? [<GenerateMore key="more" rec={rec} beta={beta} plan={plan} count={clipsN} captions={parseClipOptions(rec.clipOptions).captions} />] : []),
+                  <CleanAgain key="clean" rec={rec} beta={beta} plan={plan} />,
                 ]
               : moments.map((m, i) => {
                   // A clip shows the moment it's saved, playable, while the rest are cut.

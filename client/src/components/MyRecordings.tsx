@@ -356,6 +356,16 @@ export function MyRecordings({
                   </div>
                 )}
               </div>
+              {/* Pōstify on the card itself, not only in the menu: storing an episode spends nothing; this is the button that does. */}
+              {r.status === "Ready" && !main.egressId.startsWith("CLEAN_") && (
+                <a
+                  href={`/host/dashboard/postify?rec=${main.id}${main.clipStatus === "none" || main.clipStatus === "failed" ? "&go=1" : ""}`}
+                  className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-semibold ${main.clipStatus === "none" || main.clipStatus === "failed" ? "bg-[#F0A71F] text-[#1a1200] hover:bg-[#f5b94a]" : "border border-border text-foreground hover:bg-muted"}`}
+                  data-testid={`button-postify-card-${main.id}`}
+                >
+                  <Wand2 className="h-3.5 w-3.5" /> {main.clipStatus === "none" || main.clipStatus === "failed" ? "Pōstify it" : main.clipStatus === "done" ? "Open in Pōstify" : "Pōstifying…"}
+                </a>
+              )}
               {(r.status === "Ready" || (r.status !== "Recording" && deletable(r))) && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>

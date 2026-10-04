@@ -1272,8 +1272,8 @@ async function uploadBig(file: string, contentType: string): Promise<string> {
  * late). Runs after the clips and never fails the job: a podcaster who gets
  * their clips and no clean episode has lost nothing they had.
  */
-async function cleanEpisode(job: Job, source: string, dir: string): Promise<void> {
-  if ((process.env.CLEAN_EPISODE ?? "1") === "0") return;
+async function cleanEpisode(job: Job, source: string, dir: string, keepVideo?: string): Promise<{ start: number; end: number }[] | null> {
+  if ((process.env.CLEAN_EPISODE ?? "1") === "0") return null;
   const report = (b: Record<string, unknown>) => api("POST", `/api/agent/clip-jobs/${job.recordingId}/clean`, b).catch(() => {});
   try {
     await report({ status: "running" });
@@ -1292,7 +1292,7 @@ async function cleanEpisode(job: Job, source: string, dir: string): Promise<void
     console.log(`[${job.recordingId}]   ${count("filler")} fillers, ${count("false-start")} false starts, ${count("silence")} pauses — ${Math.round(removed)}s off`);
     if (keeps.length < 2) {
       await report({ status: "done", fillers: 0, falseStarts: 0, pauses: 0, removedSec: 0, durationSec: duration });
-      return;
+      return null;
     }
 
     // Audio: one pass, only the sound.
@@ -1316,6 +1316,7 @@ async function cleanEpisode(job: Job, source: string, dir: string): Promise<void
       const mp4 = path.join(dir, `${job.recordingId}-clean.mp4`);
       await ffmpeg(["-i", source, "-filter_complex_script", graph, "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", process.env.CLEAN_PRESET || "superfast", "-crf", "23", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", mp4]);
       videoKey = await uploadBig(mp4, "video/mp4");
+      if (keepVideo) await fs.copyFile(mp4, keepVideo);
       await fs.rm(mp4, { force: true });
       console.log(`[${job.recordingId}]   clean video uploaded`);
     }
@@ -1324,10 +1325,23 @@ async function cleanEpisode(job: Job, source: string, dir: string): Promise<void
     const kept = keeps.map((k) => [Math.round(k.start * 100) / 100, Math.round(k.end * 100) / 100]);
     await report({ status: "done", audioKey, videoKey, fillers: count("filler"), falseStarts: count("false-start"), pauses: count("silence"), removedSec: Math.round(removed), durationSec: Math.round(duration), keeps: kept });
     console.log(`[${job.recordingId}] clean episode done`);
+    return keeps;
   } catch (err) {
     console.warn(`[${job.recordingId}] clean episode failed: ${(err as Error).message}`);
     await report({ status: "failed", error: (err as Error).message });
+    return null;
   }
+}
+
+/** Times in the original, placed in the cleaned video (a time inside a cut lands where the cut closed). */
+function intoClean(t: number, keeps: { start: number; end: number }[]): number {
+  let before = 0;
+  for (const k of keeps) {
+    if (t < k.start) return before;
+    if (t <= k.end) return before + (t - k.start);
+    before += k.end - k.start;
+  }
+  return before;
 }
 
 /**
@@ -2122,8 +2136,29 @@ async function handle(job: Job): Promise<void> {
     // transcript. Three separate runs have been killed during a quiet stretch
     // that was the worker working, so every stage that takes real time says so
     // before it starts rather than after it finishes.
+    // Two minutes or less: the whole video is the clip, cleaned first (ums,
+    // false starts and long pauses out), captioned, in all three shapes.
+    const short = !silent && !job.options?.more && job.durationSec > 0 && job.durationSec <= Number(process.env.SHORT_VIDEO_SEC || 120);
+    let cleanedAlready = false;
+    let wholeEnd = Math.floor(job.durationSec);
+    if (short) {
+      console.log(`[${job.recordingId}] short video — cleaning it, then one clip of the whole thing`);
+      const cleanFile = path.join(dir, "whole-clean.mp4");
+      const keeps = await cleanEpisode(job, source, dir, cleanFile);
+      cleanedAlready = true;
+      if (keeps && (await fs.stat(cleanFile).then(() => true, () => false))) {
+        await fs.copyFile(cleanFile, source);
+        lines = lines.map((l) => ({ ...l, startSec: intoClean(l.startSec, keeps), endSec: intoClean(l.endSec, keeps) })).filter((l) => l.endSec > l.startSec);
+        const d = Number((await run("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", source]).catch(() => "")).trim());
+        if (d > 0) wholeEnd = Math.floor(d * 100) / 100;
+      }
+    }
     console.log(`[${job.recordingId}] choosing moments…`);
-    const moments = silent ? silentMoments(job) : await pickMoments(job, lines);
+    const moments = silent
+      ? silentMoments(job)
+      : short
+        ? [{ title: (job.title || job.show || "Clip").slice(0, 60), caption: "", reason: "the whole video, cleaned", startSec: 0, endSec: wholeEnd }]
+        : await pickMoments(job, lines);
     console.log(`[${job.recordingId}] picked ${moments.length}`);
     progress(job.recordingId, { stage: "render", pct: 0, moments: moments.map((m) => ({ title: m.title, startSec: m.startSec, endSec: m.endSec })), finished: 0 });
     if (moments.length === 0) {
@@ -2231,7 +2266,7 @@ async function handle(job: Job): Promise<void> {
     holding.delete(job.recordingId);
     // A clean episode is cutting ums and dead air out of talk; with no talk there's nothing to cut.
     // "Generate more" is clips only: the clean episode is already made.
-    if (!silent && !job.options?.more) await cleanEpisode(job, source, dir);
+    if (!silent && !job.options?.more && !cleanedAlready) await cleanEpisode(job, source, dir);
   } finally {
     await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
   }

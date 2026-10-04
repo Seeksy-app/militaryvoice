@@ -28,6 +28,8 @@ export const OVERAGE_CAP_CHOICES = [0, 1000, 2000, 5000, 10000] as const;
 
 /** Clips Pōstify makes from an episode (the clipper's CLIP_COUNT). */
 export const CLIPS_PER_EPISODE = 4;
+/** A video this short is one clip: Pōstify cleans the whole thing, captions it and makes the three shapes, charged as one clip. */
+export const SHORT_VIDEO_SEC = 120;
 
 /**
  * What an episode costs in credits: a flat price for everything — every clip

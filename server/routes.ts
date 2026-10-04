@@ -149,7 +149,7 @@ import { registerCreatorCampaigns } from "./creatorCampaigns.js";
 import { registerContactProfile } from "./contactProfile.js";
 import { registerAskShow, claimTranscript } from "./askShow.js";
 import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, readSubscription, reportExtraCredits, billingPortal, createAddonCheckout, readAddonSession, addonStateFrom, type PlanState } from "./stripe.js";
-import { episodeCredits, planOf, PLANS, ADDONS, DEFAULT_OVERAGE_CAP_CENTS, OVERAGE_CAP_CHOICES, type PlanKey, type AddonKey } from "../shared/tokens.js";
+import { episodeCredits, SHORT_VIDEO_SEC, planOf, PLANS, ADDONS, DEFAULT_OVERAGE_CAP_CENTS, OVERAGE_CAP_CHOICES, type PlanKey, type AddonKey } from "../shared/tokens.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, getSession, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
 import {
   publishPhoto,
@@ -7650,7 +7650,7 @@ export function registerRoutes(app: Express): void {
     const free = allowance.unlimited || allowance.left > 0;
     const rec = await storage.createUploadedRecording({ email, title, storageKey, durationSec, sizeBytes: Number(req.body?.sizeBytes) || 0, free });
     if (!free) {
-      const paid = await payForEpisode(email, rec, allowance, episodeCredits(allShapes(parseClipOptions(req.body?.options)), await clipsFor(email)));
+      const paid = await payForEpisode(email, rec, allowance, episodeCredits(allShapes(parseClipOptions(req.body?.options)), durationSec > 0 && durationSec <= SHORT_VIDEO_SEC ? 1 : await clipsFor(email)));
       if (paid === "no" || paid === "limit") {
         // Kept in the Library, just not clipped: they can start it once they have credits.
         await storage.setClipStatus(rec.id, "none", "");
@@ -7742,7 +7742,7 @@ export function registerRoutes(app: Express): void {
       if (!allowance.unlimited && rec.durationSec > BETA_MAX_SEC()) return res.status(400).json({ message: `The beta takes episodes up to ${allowance.maxMinutes} minutes.` });
       let paid;
       try {
-        paid = await payForEpisode(email, rec, allowance, episodeCredits(options, await clipsFor(email)));
+        paid = await payForEpisode(email, rec, allowance, episodeCredits(options, rec.durationSec > 0 && rec.durationSec <= SHORT_VIDEO_SEC ? 1 : await clipsFor(email)));
       } catch (err: any) {
         console.error("Charging an episode failed:", err?.message);
         return res.status(502).json({ message: "We couldn't record the extra credits with Stripe just now. Try again in a moment." });
@@ -7783,6 +7783,34 @@ export function registerRoutes(app: Express): void {
     await storage.setClipOptions(rec.id, JSON.stringify({ ...opts, more: { count, avoid } }));
     await storage.setClipStatus(rec.id, "queued", "");
     res.json({ ok: true, count, credits });
+  });
+
+  /**
+   * The podcaster's "Clean it again": the ums, false starts and long pauses
+   * taken out once more (after an edit, or just to have it), clips untouched.
+   * One credit, like the clean episode in a first run.
+   */
+  app.post("/api/host/recordings/:id/reclean", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    if (!(await canPost(email))) return res.status(403).json({ message: "This isn't switched on for your account yet." });
+    const rec = await storage.getRecording(Number(req.params.id));
+    if (!rec || rec.email.trim().toLowerCase() !== email) return res.status(404).json({ message: "No such recording." });
+    if (rec.status !== "Ready" || rec.clipStatus !== "done") return res.status(409).json({ message: "Pōstify this one first." });
+    let prev: Record<string, unknown> = {};
+    try { prev = rec.clean ? JSON.parse(rec.clean) : {}; } catch { prev = {}; }
+    if (prev.status === "queued" || prev.status === "running") return res.json({ ok: true, already: true });
+    const allowance = await postifyAllowance(email);
+    let paid;
+    try {
+      paid = await chargeCredits(email, allowance, 1, `reclean:${rec.id}:${Date.now()}`, `Pōstify: clean ${rec.title || "an episode"} again`);
+    } catch (err: any) {
+      console.error("Charging a re-clean failed:", err?.message);
+      return res.status(502).json({ message: "We couldn't record the credit with Stripe just now. Try again in a moment." });
+    }
+    if (paid === "no") return res.status(402).json({ message: NEED_CREDITS });
+    if (paid === "limit") return res.status(402).json({ message: OVER_LIMIT });
+    await storage.setClean(rec.id, JSON.stringify({ ...prev, status: "queued", at: new Date().toISOString() }));
+    res.json({ ok: true });
   });
 
   /** Make the clean episode again, without touching the clips. */
