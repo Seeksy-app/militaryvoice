@@ -21,7 +21,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/schema";
 import { Slider } from "@/components/ui/slider";
-import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2, Clapperboard, Plus, ArrowLeftToLine, ArrowRightToLine, MoreHorizontal, Blend, Brackets, Library } from "lucide-react";
+import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2, Clapperboard, Plus, ArrowLeftToLine, ArrowRightToLine, MoreHorizontal, Blend, Brackets, Library, ArrowLeft } from "lucide-react";
 import { IconTile } from "@/components/ui/icon-tile";
 
 // Postify: one recording going from "the segment ended" to clips ready
@@ -1757,7 +1757,7 @@ function ChoosePlan({ beta, plan }: { beta?: Beta; plan?: Plan | null }) {
  * Play any track first; picking one mixes it into every clip (a few seconds
  * a clip, no credits). Skip leaves them as they are; either can be changed.
  */
-function PipelineMusic({ rec, onChange, tall }: { rec: Rec; onChange: () => void; tall?: boolean }) {
+function PipelineMusic({ rec, onChange, tall, onCancel }: { rec: Rec; onChange: () => void; tall?: boolean; /** Changing the music after it's chosen: a way back without choosing. */ onCancel?: () => void }) {
   const { toast } = useToast();
   const tracks = useQuery<{ key: string; name: string; mood: string; durationSec: number }[]>({ queryKey: ["/api/music"], queryFn: async () => (await apiRequest("GET", "/api/music")).json(), staleTime: 300_000 });
   const [playing, setPlaying] = useState<string | null>(null);
@@ -1789,6 +1789,13 @@ function PipelineMusic({ rec, onChange, tall }: { rec: Rec; onChange: () => void
   };
   return (
     <div className="mt-2 rounded-xl border border-[#F0A71F]/40 bg-[#F0A71F]/[0.06] p-2" data-testid="pipeline-music">
+      {onCancel && (
+        <div className="mb-1 flex justify-end">
+          <button type="button" onClick={() => { audio.current?.pause(); setPlaying(null); onCancel(); }} className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold text-muted-foreground hover:bg-background/70 hover:text-foreground" data-testid="music-cancel">
+            <X className="h-3.5 w-3.5" /> Keep it as it is
+          </button>
+        </div>
+      )}
       <ul className={`flex flex-col gap-0.5 overflow-y-auto ${tall ? "max-h-[min(52vh,26rem)]" : "max-h-64"}`}>
         {(tracks.data ?? []).map((t) => (
           <li key={t.key} className="flex items-center gap-2 rounded-lg px-1.5 py-1 hover:bg-background/70">
@@ -1815,6 +1822,7 @@ function PipelineMusic({ rec, onChange, tall }: { rec: Rec; onChange: () => void
 export function PostStudio() {
   const { toast } = useToast();
   const qc = useQueryClient();
+  const [, navTo] = useLocation();
   // ?rec=<id> from a Recordings row opens that recording here.
   const [selected, setSelected] = useState<number | null>(() => {
     const v = Number(new URLSearchParams(typeof window !== "undefined" ? window.location.search : "").get("rec"));
@@ -2192,7 +2200,7 @@ export function PostStudio() {
   // The track picker: inline in the side panel, or its own column in the wide window.
   const mixParsed = parseMusicMix(rec.musicMix);
   const askingMusic = done && (!mixParsed || mixParsed.status === "failed" || musicOpen) && !(mixParsed?.status === "queued" || mixParsed?.status === "running");
-  const musicPicker = askingMusic ? <PipelineMusic rec={rec} tall onChange={() => { setMusicOpen(false); void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] }); }} /> : null;
+  const musicPicker = askingMusic ? <PipelineMusic rec={rec} tall onChange={() => { setMusicOpen(false); void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] }); }} onCancel={musicOpen ? () => { setMusicOpen(false); setPipeDialog(false); } : undefined} /> : null;
   const pipeline = (inlineMusic: boolean) => (
         <div className="rounded-2xl border border-border bg-card p-4">
           <div className="flex items-center justify-between pb-1">
@@ -2267,6 +2275,10 @@ export function PostStudio() {
       {paidBanner}
       {/* The switcher sits above both columns, so the player and the side start level. */}
       <div className="mb-2 flex min-w-0 items-center gap-2">
+        {/* The way out: back to the Library, where every episode lives. */}
+        <button type="button" onClick={() => navTo("/host/dashboard/library")} className="inline-flex h-9 shrink-0 items-center gap-1.5 rounded-full border border-border bg-card px-3 text-sm font-semibold text-foreground hover:bg-muted" data-testid="post-back">
+          <ArrowLeft className="h-4 w-4" /> Library
+        </button>
         <div className="min-w-0 flex-1">
           <div className="flex min-w-0 items-center gap-2">
             {editing ? (
@@ -2346,7 +2358,7 @@ export function PostStudio() {
       )}
 
       {/* The pipeline and every number, from the panel's status line. */}
-      <Dialog open={pipeDialog} onOpenChange={setPipeDialog}>
+      <Dialog open={pipeDialog} onOpenChange={(o) => { setPipeDialog(o); if (!o) setMusicOpen(false); }}>
         <DialogContent className="max-h-[92vh] max-w-4xl overflow-y-auto">
           <DialogHeader>
             <DialogTitle>{pipelineDone ? "All done" : "Almost there"}</DialogTitle>
