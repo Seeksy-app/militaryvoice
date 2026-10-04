@@ -7,7 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { Switch } from "@/components/ui/switch";
 import { PlatformIcon, platformBackground } from "@/components/SocialIcons";
@@ -1709,43 +1709,6 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
               <>
                 <span className="mx-1 hidden h-7 w-px bg-white/15 sm:block" />
 
-                {/* Standby: roll or stop it, and which loop it plays. On the right with the
-                    other on-air controls, where the producer's hand already is. */}
-                {!isRoom && (
-                  <div className="flex items-center">
-                    <BarButton
-                      icon={PlayCircle}
-                      label={studio?.fallbackPlaying ? "Stop the standby clip" : studio?.fallbackVideoUrl ? `Roll the standby clip: ${studio?.fallbackLabel || "standby"}` : "Pick a standby clip first"}
-                      active={studio?.fallbackPlaying}
-                      amber
-                      disabled={!studio?.fallbackVideoUrl}
-                      onClick={() => {
-                        const next = !studio?.fallbackPlaying;
-                        setStandbyRolled(next);
-                        patchStudio.mutate({ fallbackPlaying: next });
-                      }}
-                      testId="button-deck-standby"
-                    />
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <button type="button" aria-label="Choose the standby clip" className="flex h-8 w-5 items-center justify-center rounded-md text-white/60 hover:bg-white/10 hover:text-white" data-testid="button-standby-pick">
-                          <ChevronDown className="h-3.5 w-3.5" />
-                        </button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-64">
-                        <DropdownMenuLabel className="text-xs text-muted-foreground">Standby plays</DropdownMenuLabel>
-                        {(standbyLoops.data?.loops ?? []).map((l) => (
-                          <DropdownMenuItem key={l.url} onClick={() => patchStudio.mutate({ fallbackVideoUrl: l.url, fallbackLabel: l.label })} data-testid="menu-standby-loop">
-                            <Check className={`mr-2 h-3.5 w-3.5 ${studio?.fallbackVideoUrl === l.url ? "opacity-100" : "opacity-0"}`} />
-                            {l.label}
-                          </DropdownMenuItem>
-                        ))}
-                        {standbyLoops.data && standbyLoops.data.loops.length === 0 && <p className="px-2 py-1.5 text-xs text-muted-foreground">No loops yet.</p>}
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
-                )}
-
                 {/* Where the stream goes. Icons for what's on; tap to switch any on or off. */}
                 {/* Only when there is somewhere else to send it. With no
                     external destinations this said "To our watch page" and
@@ -2461,6 +2424,49 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                   )}
                 </DropdownMenuContent>
               </DropdownMenu>
+
+              {/* Standby, down here with the other show controls rather than up
+                  beside the destinations and End stream: roll or stop it, and
+                  pick which clip it plays. */}
+              {isLive && !isRoom && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button
+                      type="button"
+                      title={studio?.fallbackPlaying ? "Standby clip is rolling" : "Standby clip"}
+                      className={`flex w-[4.75rem] flex-col items-center gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-none transition-colors ${studio?.fallbackPlaying ? "bg-[#F0A71F] text-[#1a1200]" : "text-white/70 hover:bg-white/10 hover:text-white"}`}
+                      data-testid="button-deck-standby"
+                    >
+                      <PlayCircle className="h-5 w-5" />
+                      <span className="w-full truncate text-center">{studio?.fallbackPlaying ? "Standby on" : "Standby"}</span>
+                    </button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="center" side="top" className="w-64">
+                    <DropdownMenuItem
+                      disabled={!studio?.fallbackVideoUrl}
+                      onSelect={() => {
+                        const next = !studio?.fallbackPlaying;
+                        setStandbyRolled(next);
+                        patchStudio.mutate({ fallbackPlaying: next });
+                      }}
+                      className="gap-2 font-semibold"
+                      data-testid="menu-standby-toggle"
+                    >
+                      <PlayCircle className="h-4 w-4" />
+                      {studio?.fallbackPlaying ? "Stop the standby clip" : studio?.fallbackVideoUrl ? `Roll it: ${studio?.fallbackLabel || "standby"}` : "Pick a standby clip first"}
+                    </DropdownMenuItem>
+                    <DropdownMenuSeparator />
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">Standby plays</DropdownMenuLabel>
+                    {(standbyLoops.data?.loops ?? []).map((l) => (
+                      <DropdownMenuItem key={l.url} onSelect={() => patchStudio.mutate({ fallbackVideoUrl: l.url, fallbackLabel: l.label })} data-testid="menu-standby-loop">
+                        <Check className={`mr-2 h-3.5 w-3.5 ${studio?.fallbackVideoUrl === l.url ? "opacity-100" : "opacity-0"}`} />
+                        {l.label}
+                      </DropdownMenuItem>
+                    ))}
+                    {standbyLoops.data && standbyLoops.data.loops.length === 0 && <p className="px-2 py-1.5 text-xs text-muted-foreground">No loops yet.</p>}
+                  </DropdownMenuContent>
+                </DropdownMenu>
+              )}
 
               {/* The handful of settings you might actually change mid-show.
                   Everything else stays on the Set tab, where there is room to
