@@ -295,7 +295,10 @@ export async function runningEgressIds(): Promise<Set<string>> {
 export async function egressOutcome(egressId: string): Promise<{ ok: boolean; filename: string; durationSec: number; size: string; error: string } | null> {
   const [e] = await egress().listEgress({ egressId });
   if (!e) return null;
-  const file = (e as unknown as { fileResults?: { filename?: string; duration?: bigint | number; size?: bigint | number }[] }).fileResults?.[0];
+  type F = { filename?: string; duration?: bigint | number; size?: bigint | number };
+  const x = e as unknown as { fileResults?: F[]; file?: F; result?: { case?: string; value?: F } };
+  // Newer servers fill fileResults; a composite's file can also come back in the older "file" field.
+  const file = x.fileResults?.[0] ?? x.file ?? (x.result?.case === "file" ? x.result.value : undefined);
   return {
     ok: Number(e.status) === 3,
     filename: file?.filename ? String(file.filename) : "",
