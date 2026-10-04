@@ -82,6 +82,7 @@ import {
   startSegmentRecording,
   stopEgressById,
   runningEgressIds,
+  egressOutcome,
   studioToken,
   syncParticipantState,
   syncRoomMetadata,
@@ -1345,6 +1346,19 @@ export function registerRoutes(app: Express): void {
    * Runs on the same sweep as the nudges, and never touches an egress LiveKit
    * still reports as running.
    */
+  /** Record how a recording really ended, from LiveKit itself; a saved one goes on to clipping like any other. */
+  async function settleRecording(egressId: string, fallbackUrl: string): Promise<string> {
+    const o = await egressOutcome(egressId).catch(() => null);
+    if (o?.ok) {
+      const finished = await storage.finishRecording(egressId, { status: "Ready", url: o.filename || fallbackUrl, durationSec: o.durationSec, sizeBytes: o.size, error: "" });
+      if (finished?.eventId) await planSegments(finished.eventId).catch((err) => console.error("Planning segments failed:", err));
+      if (finished?.id && agentToken()) await storage.setClipStatus(finished.id, "queued", "");
+      return "Ready";
+    }
+    await storage.finishRecording(egressId, { status: "Failed", error: o?.error || "Egress ended without a completion callback; reconciled from LiveKit." });
+    return "Failed";
+  }
+
   const reconcileEgressHandler: RequestHandler = async (req, res) => {
     // Only Vercel's cron (it sends CRON_SECRET): anyone else could run it, and the reach refresh spends paid look-ups.
     if (process.env.CRON_SECRET && (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "") !== process.env.CRON_SECRET) {
@@ -1378,14 +1392,18 @@ export function registerRoutes(app: Express): void {
     }
     for (const r of await storage.listUnfinishedRecordings()) {
       if (running.has(r.egressId)) continue;
-      await storage.finishRecording(r.egressId, {
-        status: "Failed",
-        error: "Egress ended without a completion callback; reconciled from LiveKit.",
-      });
+      // The callback can go missing while the file saved fine (a 33-minute
+      // studio recording on 3 Oct was marked Failed this way): ask LiveKit.
+      await settleRecording(r.egressId, r.url);
       cleared++;
     }
     res.json({ cleared, running: running.size });
   };
+  app.post("/api/admin/recordings/:id/recheck", requireAdmin, async (req, res) => {
+    const r = (await storage.listRecordings()).find((x) => x.id === Number(req.params.id));
+    if (!r?.egressId) return res.status(404).json({ message: "No such recording." });
+    res.json({ status: await settleRecording(r.egressId, r.url) });
+  });
   app.get("/api/cron/reconcile", reconcileEgressHandler);
   app.post("/api/cron/reconcile", reconcileEgressHandler);
 

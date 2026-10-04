@@ -291,6 +291,20 @@ export async function runningEgressIds(): Promise<Set<string>> {
   return out;
 }
 
+/** How an egress actually ended, asked of LiveKit: for when its "ended" callback never arrived. */
+export async function egressOutcome(egressId: string): Promise<{ ok: boolean; filename: string; durationSec: number; size: string; error: string } | null> {
+  const [e] = await egress().listEgress({ egressId });
+  if (!e) return null;
+  const file = (e as unknown as { fileResults?: { filename?: string; duration?: bigint | number; size?: bigint | number }[] }).fileResults?.[0];
+  return {
+    ok: Number(e.status) === 3,
+    filename: file?.filename ? String(file.filename) : "",
+    durationSec: file?.duration ? Math.round(Number(file.duration) / 1_000_000_000) : 0,
+    size: file?.size ? String(file.size) : "0",
+    error: String((e as unknown as { error?: string }).error ?? ""),
+  };
+}
+
 export async function stopEgressById(egressId: string): Promise<void> {
   await egress().stopEgress(egressId);
 }
