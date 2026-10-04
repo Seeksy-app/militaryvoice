@@ -83,9 +83,14 @@ export default function Watch({ slug }: { slug?: string }) {
   // no faces, no sound, no lower thirds.
   const streaming = (meta.status ?? data?.status) === "Live";
   const shownTiles = streaming ? tiles : [];
+  // Before Go live: the welcome over every podcaster's face, rolling (the
+  // studio's Starting scene), silent. After the day it's the standby clip again.
+  const offAir = { countdownEndsAtUtc: "", bannerTitle: "", bannerSubtitle: "", tickerText: "", stageCardName: "", stageThanks: null, brbOn: false };
   const shownMeta = streaming
     ? meta
-    : { ...meta, fallbackPlaying: true, stageMediaPlaying: false, countdownEndsAtUtc: "", bannerTitle: "", bannerSubtitle: "", tickerText: "", stageCardName: "" };
+    : afterEvent
+      ? { ...meta, ...offAir, fallbackPlaying: true, stageMediaPlaying: false }
+      : { ...meta, ...offAir, fallbackPlaying: false, stageMediaPlaying: true, stageMediaUrl: "/promo/starting", stageMediaKind: "image" };
   const onAir = shownTiles.length > 0 || Boolean(shownMeta.fallbackPlaying && (meta.preVideoUrl || meta.fallbackVideoUrl));
 
   useEffect(() => {
