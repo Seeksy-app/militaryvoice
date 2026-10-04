@@ -2117,8 +2117,17 @@ export function registerRoutes(app: Express): void {
     const team = ev ? await storage.listEventTeam(ev.id).catch(() => []) : [];
     const t = team.find((m) => (m.email ?? "").toLowerCase().trim() === e);
     const admin = (await storage.listAdmins()).find((a) => a.email === e);
+    // A studio host who isn't on the team list is still a person with a name:
+    // their booking or profile has it. The address was a last resort that put
+    // "Triadleadershipsolutions" under Enrique's face.
+    const sg = !t?.name && !admin?.name && ev ? (await storage.listSignups(ev.id)).find((x) => x.status !== "cancelled" && x.email.trim().toLowerCase() === e) : undefined;
+    const prof = !t?.name && !admin?.name ? await storage.getProfileByEmail(e).catch(() => undefined) : undefined;
     const fallback = e.split("@")[0].replace(/[._-]+/g, " ").replace(/\b\w/g, (c) => c.toUpperCase());
-    return { name: t?.name || admin?.name || fallback, title: t?.title || "Studio host", photoUrl: t?.photoUrl || admin?.photoUrl || "" };
+    return {
+      name: t?.name || admin?.name || sg?.hostName?.trim() || prof?.hostName?.trim() || fallback,
+      title: t?.title || "Studio host",
+      photoUrl: t?.photoUrl || admin?.photoUrl || prof?.photoUrl || sg?.photoUrl || "",
+    };
   }
 
   /**
@@ -3922,7 +3931,7 @@ export function registerRoutes(app: Express): void {
 
     return {
       /** The crew member's own name from the team card, so the green room does not ask a producer to type it. */
-      myName: teamMe?.name ?? "",
+      myName: teamMe?.name || (email ? (await storage.listSignups(event.id)).find((sg) => sg.status !== "cancelled" && sg.email.trim().toLowerCase() === email)?.hostName?.trim() : "") || "",
       producers,
       hosts,
       eventName: event.name,
@@ -5003,8 +5012,10 @@ export function registerRoutes(app: Express): void {
     if (!claim) return null;
     const email = claim.email.trim().toLowerCase();
     const sg = (await storage.listSignups(eventId)).find((x) => x.status !== "cancelled" && x.email.trim().toLowerCase() === email);
-    if (sg) return { name: sg.hostName, photoUrl: sg.photoUrl, email };
-    const prof = await storage.getProfileByEmail(email);
+    // The desk shows the person: their profile photo, not the show's artwork
+    // (Dr. Brown's booking photo is the Slow Drift logo).
+    const prof = await storage.getProfileByEmail(email).catch(() => undefined);
+    if (sg) return { name: sg.hostName, photoUrl: prof?.photoUrl || sg.photoUrl, email };
     if (prof) return { name: prof.hostName, photoUrl: prof.photoUrl, email };
     const member = (await storage.listEventTeam(eventId)).find((m) => m.email.trim().toLowerCase() === email);
     return member ? { name: member.name, photoUrl: member.photoUrl, email } : null;
@@ -5279,7 +5290,18 @@ export function registerRoutes(app: Express): void {
     if (!cur || !next) return res.json({ action: "none" });
     const live = await liveHandoffAfter(studio, cur, next);
     const alex = live ? null : await alexAfter(cur, next);
-    if (!live && !alex) return res.json({ action: "none" });
+    if (!live && !alex) {
+      // A clip that ended early into a later intro is holding on the standby
+      // loop (see /ended): the intro goes at its own time.
+      const nr = next.runItemId && cur.autoNext && studio.fallbackVideoUrl && studio.stageMediaUrl === studio.fallbackVideoUrl ? await storage.getRunItem(next.runItemId) : undefined;
+      if (nr?.kind === "Intro" && Date.parse(nr.startAtUtc) <= Date.now()) {
+        const fresh = await storage.getStudioById(studio.id);
+        if (fresh?.currentSceneId !== cur.id) return res.json({ action: "none" });
+        const r = await applyScene(next.id);
+        return res.status(r.status).json({ action: "take", why: "the next show's time", sceneId: next.id });
+      }
+      return res.json({ action: "none" });
+    }
     const row = live?.row ?? alex!.row;
     const deskName = live?.deskName ?? "Alex";
     // A pre-recorded episode switches when its file ends; Alex's own hand-off clip has ended by the intro's time.
@@ -5327,7 +5349,10 @@ export function registerRoutes(app: Express): void {
     // shows that run short never pull a live guest forward. An hour or more
     // away is a rehearsal: go.
     const alex = await alexAfter(scene, next);
-    const ahead = alex?.step === "intro" ? Date.parse(alex.row.startAtUtc) - Date.now() : 0;
+    // Any clip set to move on that ends well before the next show's intro
+    // (the Discovery promo after the 9:25 thank-you) waits the same way.
+    const introRow = alex?.step === "intro" ? alex.row : scene.autoNext && next.runItemId ? await storage.getRunItem(next.runItemId) : undefined;
+    const ahead = introRow?.kind === "Intro" ? Date.parse(introRow.startAtUtc) - Date.now() : 0;
     if (ahead > 3 * 60_000 && ahead < 60 * 60_000) {
       if (studio.fallbackVideoUrl) {
         const updated = await storage.updateStudio(studio.id, { stageMediaUrl: studio.fallbackVideoUrl, stageMediaKind: "video", stageMediaLabel: `${studio.fallbackLabel || "Standby"} (loop)`, stageMediaPlaying: true });
@@ -5336,7 +5361,7 @@ export function registerRoutes(app: Express): void {
           await syncRoomMetadata(roomName(studio.id), studioMeta(ev?.name ?? "", updated, ev));
         }
       }
-      return res.json({ advanced: false, waitingUntil: alex!.row.startAtUtc });
+      return res.json({ advanced: false, waitingUntil: introRow!.startAtUtc });
     }
     // A pre-recorded show that ends into a hand-off with a co-host at the desk
     // goes to the thank-you slide by itself, switch or no switch.
