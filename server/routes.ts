@@ -5492,7 +5492,27 @@ export function registerRoutes(app: Express): void {
    * destinations only, never their audience. House rows have no owner.
    */
   const CHANNEL_EARLY_MS = 15 * 60_000;
+  /**
+   * A destination that runs only between two times: a LinkedIn Live event
+   * lasts four hours at most, so the day goes out as four of them, each its
+   * own key. Kept in settings (dest_window:<id>), not a destinations column.
+   */
+  async function destWindow(id: number): Promise<{ start: number; end: number } | null> {
+    try {
+      const w = JSON.parse((await storage.getSetting(`dest_window:${id}`)) || "null") as { start: string; end: string } | null;
+      return w ? { start: Date.parse(w.start), end: Date.parse(w.end) } : null;
+    } catch {
+      return null;
+    }
+  }
+  /** LinkedIn's four-hour blocks from the event's start; ours starts feeding 5 minutes early so their preview has a picture. */
+  function linkedinBlock(ev: { startAtUtc: string }, i: number): { start: string; end: string } {
+    const t0 = Date.parse(ev.startAtUtc) + i * 4 * 3600_000;
+    return { start: new Date(t0 - 5 * 60_000).toISOString(), end: new Date(t0 + 4 * 3600_000).toISOString() };
+  }
   async function channelWindow(d: DestinationRow): Promise<{ open: boolean; opensAt: string }> {
+    const timed = await destWindow(d.id);
+    if (timed) { const now = Date.now(); return { open: now >= timed.start && now < timed.end, opensAt: new Date(timed.start).toISOString() }; }
     if (!d.ownerEmail) return { open: true, opensAt: "" };
     const ev = await storage.getEventById(d.eventId);
     if (!ev) return { open: false, opensAt: "" };
@@ -5589,6 +5609,7 @@ export function registerRoutes(app: Express): void {
     const studio = await storage.getOrCreateStudio(ev.id);
     if (!studio.broadcastEgressId && studio.status !== "Live") return res.json({ added: 0, reason: "not on air" });
     const segments = await segmentChannels(ev, studio).catch((err) => { console.error("Segment channels failed:", err); return { on: [], off: [] as string[] }; });
+    const timed = await timedDestinations(studio).catch((err) => { console.error("Timed destinations failed:", err); return { on: [] as string[], off: [] as string[] }; });
     const fresh = (await storage.getStudioById(studio.id)) ?? studio;
     studio.broadcastEgressId = fresh.broadcastEgressId;
     const due: DestinationRow[] = [];
@@ -5603,7 +5624,7 @@ export function registerRoutes(app: Express): void {
       await updateBroadcastTargets(studio.broadcastEgressId, due.map((d) => ingestUrl(d)), []);
       for (const d of due) await storage.updateDestination(d.id, { live: true });
     }
-    res.json({ added: due.length, segments });
+    res.json({ added: due.length, segments, timed });
   });
 
   /**
@@ -5613,6 +5634,38 @@ export function registerRoutes(app: Express): void {
    * destination row tied to their booking, and added to or dropped from the
    * running broadcast by the minute cron. Switched off under Streaming to: never.
    */
+  /** Timed destinations (the LinkedIn blocks): on inside their window, off outside it. */
+  async function timedDestinations(studio: StudioRow): Promise<{ on: string[]; off: string[] }> {
+    const on: string[] = [], off: string[] = [];
+    let egressId = (await storage.getStudioById(studio.id))?.broadcastEgressId ?? studio.broadcastEgressId;
+    const now = Date.now();
+    for (const d of await storage.listDestinations(studio.eventId)) {
+      const w = await destWindow(d.id);
+      if (!w) continue;
+      const want = d.enabled && now >= w.start && now < w.end;
+      try {
+        if (want && !d.live) {
+          if (!egressId) {
+            egressId = await startBroadcast(roomName(studio.id), [{ url: ingestUrl(d), label: d.label || d.platform }], PUBLIC_ORIGIN);
+            await storage.updateStudio(studio.id, { broadcastEgressId: egressId });
+          } else {
+            await updateBroadcastTargets(egressId, [ingestUrl(d)], []);
+          }
+          await storage.updateDestination(d.id, { live: true });
+          on.push(d.label || d.platform);
+        } else if (!want && d.live) {
+          if (egressId) await updateBroadcastTargets(egressId, [], [ingestUrl(d)]);
+          await storage.updateDestination(d.id, { live: false });
+          off.push(d.label || d.platform);
+        }
+      } catch (err) {
+        void slackNote(`:warning: Couldn't ${want ? "start" : "stop"} ${d.label || d.platform}: ${(err as Error).message}`);
+      }
+    }
+    if (on.length) void slackNote(`:large_blue_circle: Now streaming to ${on.join(", ")}.${on.some((n) => /linkedin/i.test(n)) ? " Press Go live in LinkedIn within 10 minutes." : ""}`);
+    return { on, off };
+  }
+
   const SEGMENT_LEAD_MS = 60_000;
   /** Once per show, not once a minute. */
   const segmentWarned = new Set<number>();
@@ -5775,6 +5828,11 @@ export function registerRoutes(app: Express): void {
     const ev = await storage.getEventById(eventId);
     const house = await Promise.all((await storage.listDestinations(eventId)).map(async (d) => {
       // A podcaster's whole-show channel says when it opens, so "on but not live" reads right.
+      const timed = await destWindow(d.id);
+      if (timed) {
+        const t = (ms: number) => new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }).format(new Date(ms));
+        return { ...publicDestination(d), kind: "house" as const, opensLabel: `Runs ${t(timed.start)}–${t(timed.end)} ET, by itself` };
+      }
       const w = d.ownerEmail ? await channelWindow(d) : null;
       return { ...publicDestination(d), kind: "house" as const, ...(w && !w.open && w.opensAt ? { opensLabel: `Opens ${etLabel(w.opensAt)}` } : {}) };
     }));
@@ -5811,7 +5869,13 @@ export function registerRoutes(app: Express): void {
       return;
     }
     const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
-    res.status(201).json(publicDestination(await storage.createDestination(eventId, "", parsed.data)));
+    const created = await storage.createDestination(eventId, "", parsed.data);
+    const block = Number(req.body?.linkedinBlock);
+    if (Number.isInteger(block) && block >= 0 && block < 6) {
+      const ev = await storage.getEventById(eventId);
+      if (ev) await storage.setSetting(`dest_window:${created.id}`, JSON.stringify(linkedinBlock(ev, block)));
+    }
+    res.status(201).json(publicDestination(created));
   });
 
   app.patch("/api/admin/destinations/:id", requireAdmin, async (req, res) => {

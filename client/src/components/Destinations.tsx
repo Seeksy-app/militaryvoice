@@ -33,7 +33,7 @@ const PLATFORMS = [
   { value: "youtube", label: "YouTube", hint: "rtmp://a.rtmp.youtube.com/live2" },
   { value: "x", label: "X", hint: "rtmp://va.pscp.tv:80/x" },
   { value: "twitch", label: "Twitch", hint: "rtmp://live.twitch.tv/app" },
-  { value: "linkedin", label: "LinkedIn", hint: "" },
+  { value: "linkedin", label: "LinkedIn Live", hint: "" },
   { value: "instagram", label: "Instagram", hint: "rtmps://live-upload.instagram.com:443/rtmp" },
   { value: "custom", label: "Other RTMP", hint: "" },
 ] as const;
@@ -199,6 +199,9 @@ export function Destinations({ adminGet, adminSend, broadcasting, signups }: Pro
   );
 }
 
+/** The Marathon's four LinkedIn Live events, Eastern. */
+const LINKEDIN_BLOCKS = ["7–11 AM ET", "11 AM–3 PM ET", "3–7 PM ET", "7–11 PM ET"];
+
 function AddForm({
   adminSend,
   onDone,
@@ -212,6 +215,8 @@ function AddForm({
   const [rtmpUrl, setRtmpUrl] = useState<string>(PLATFORMS[0].hint);
   const [streamKey, setStreamKey] = useState("");
   const [saving, setSaving] = useState(false);
+  // LinkedIn Live caps a stream at four hours, so the day is four events, each with its own key.
+  const [block, setBlock] = useState<string>("0");
   // YouTube, no key: a channel an admin connected with Google, and the studio opens the broadcast.
   const channels = useQuery<{ configured: boolean; channels: { id: number; title: string; email: string }[] }>({
     queryKey: ["/api/admin/studio/youtube-channels"],
@@ -242,7 +247,13 @@ function AddForm({
   async function save() {
     setSaving(true);
     try {
-      await adminSend("POST", "/api/admin/destinations", { platform, label, rtmpUrl, streamKey, enabled: true });
+      const li = platform === "linkedin" && block !== "none";
+      await adminSend("POST", "/api/admin/destinations", {
+        platform,
+        label: label.trim() || (li ? `LinkedIn · ${LINKEDIN_BLOCKS[Number(block)]}` : ""),
+        rtmpUrl, streamKey, enabled: true,
+        ...(li ? { linkedinBlock: Number(block) } : {}),
+      });
       onDone();
     } catch (err) {
       toast({ title: "Couldn't add that", description: (err as Error).message, variant: "destructive" });
@@ -309,6 +320,19 @@ function AddForm({
         </div>
       ) : (
       <>
+      {platform === "linkedin" && (
+        <div className="sm:col-span-2">
+          <Label>Which block</Label>
+          <Select value={block} onValueChange={setBlock}>
+            <SelectTrigger className="mt-1" data-testid="select-linkedin-block"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              {LINKEDIN_BLOCKS.map((b, i) => <SelectItem key={b} value={String(i)}>{b}</SelectItem>)}
+              <SelectItem value="none">No time limit</SelectItem>
+            </SelectContent>
+          </Select>
+          <p className="mt-1 text-xs text-muted-foreground">LinkedIn Live runs four hours at most, so the day is four LinkedIn events. Paste each one's Stream URL and key when LinkedIn shows them (an hour before). It switches itself on 5 minutes early and off at the end; press Go live in LinkedIn once our picture shows.</p>
+        </div>
+      )}
       <div>
         <Label htmlFor="dest-label">Name it</Label>
         <Input
