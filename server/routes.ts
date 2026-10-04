@@ -4962,6 +4962,39 @@ export function registerRoutes(app: Express): void {
 
   /** One click during the show: put the stage back the way this scene had it. */
   /** Who holds the desk at a moment: the co-host with that hour, by name and face. */
+  /**
+   * The day as Alex should know it: every show in order with its Eastern
+   * time, who's on, live or recorded, and who's at the desk each hour.
+   * Riccoh opens and closes; the desk between shows is the co-host of that
+   * hour (or Alex, recorded, when nobody holds it). Cached five minutes.
+   */
+  let runningOrderCache: { at: number; text: string } | null = null;
+  async function runningOrderText(ev: Awaited<ReturnType<typeof storage.getFeaturedEvent>>): Promise<string> {
+    if (runningOrderCache && Date.now() - runningOrderCache.at < 5 * 60_000) return runningOrderCache.text;
+    const et = (ms: number) => new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }).format(new Date(ms)) + " ET";
+    const start = Date.parse(ev.startAtUtc);
+    const rows = (await storage.listSignups(ev.id)).filter((x) => x.status !== "cancelled").sort((a, b) => a.slotIndex - b.slotIndex);
+    const lines: string[] = [];
+    for (const sg of rows) {
+      const t = start + sg.slotIndex * ev.slotMinutes * 60_000;
+      const co = sg.coHostEmail ? (await storage.getProfileByEmail(sg.coHostEmail.trim().toLowerCase()).catch(() => undefined))?.hostName?.trim() : "";
+      const who = [sg.hostName.trim(), co].filter(Boolean).join(" with ");
+      lines.push(`${et(t)}: ${sg.podcastName.trim()}${who && who !== sg.podcastName.trim() ? `, ${who}` : ""}${sg.branch && !/not applicable/i.test(sg.branch) ? ` (${sg.branch})` : ""}, ${sg.showFormat === "prerecorded" ? "recorded" : "live"}`);
+    }
+    const desks: string[] = [];
+    for (let h = 0; h < ev.durationHours; h++) {
+      const at = new Date(start + h * 3600_000).toISOString();
+      const d = await deskHostFor(ev.id, at).catch(() => null);
+      desks.push(`${et(start + h * 3600_000)} hour: ${d && !/^michael\b/i.test(d.name) ? d.name : "Alex (recorded hand-offs)"}`);
+    }
+    const open = rows.find((x) => /welcoming|opening/i.test(x.podcastName));
+    const close = rows.find((x) => /closing/i.test(x.podcastName));
+    const riccoh = `Host Riccoh Player (USMC, Retired) is on air for the opening${open ? ` (${open.podcastName.trim()}, ${et(start + open.slotIndex * ev.slotMinutes * 60_000)})` : ""} and the closing${close ? ` (${close.podcastName.trim()}, ${et(start + close.slotIndex * ev.slotMinutes * 60_000)})` : ""}. In between, the desk co-host of each hour thanks each show and introduces the next.`;
+    const text = `THE RUNNING ORDER (Monday; each show has ${ev.slotMinutes} minutes, about ${ev.onAirMinutes} on air then a hand-off; viewers see times in their own zone on /agenda):\n${lines.join("\n")}\n\n${riccoh}\nDesk co-host by hour:\n${desks.join("\n")}\nWatch free at /watch.`;
+    runningOrderCache = { at: Date.now(), text };
+    return text;
+  }
+
   async function deskHostFor(eventId: number, atUtc: string): Promise<{ name: string; photoUrl: string; email: string } | null> {
     const ev = await storage.getEventById(eventId);
     if (!ev || !atUtc) return null;
@@ -9298,7 +9331,7 @@ export function registerRoutes(app: Express): void {
       const event = await storage.getFeaturedEvent();
       const taken = (await storage.listSignups(event.id)).filter((x) => x.status !== "cancelled").length;
       const total = Math.floor((event.durationHours * 60) / event.slotMinutes);
-      const out = await answerHelp(turns, { event, taken, total });
+      const out = await answerHelp(turns, { event, taken, total, agenda: await runningOrderText(event) });
       res.json(out);
     } catch (err) {
       console.error("help chat failed:", (err as Error).message);
