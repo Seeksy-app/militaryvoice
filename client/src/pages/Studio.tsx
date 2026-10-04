@@ -451,6 +451,40 @@ function TimeLeftPill({ slug, studioId }: { slug?: string; studioId?: number }) 
   );
 }
 
+/**
+ * The last 90 seconds of whatever is on air, big enough to read mid-sentence,
+ * for the people on stage only (viewers never see it). At zero it says the
+ * hand-off is coming, so nobody is surprised when the stage moves on.
+ */
+function WrapUpClock({ slug, studioId }: { slug?: string; studioId?: number }) {
+  const { data } = useQuery<{ clock: { nextSceneName: string; nextStartAtUtc: string } | null }>({
+    queryKey: ["/api/studio/scenes", slug ?? "featured", studioId ?? 0, "clock"],
+    queryFn: async () => {
+      const q = new URLSearchParams();
+      if (slug) q.set("slug", slug);
+      if (studioId) q.set("studioId", String(studioId));
+      return (await apiRequest("GET", `/api/studio/scenes?${q}`)).json();
+    },
+    refetchInterval: 15_000,
+  });
+  const [tick, setTick] = useState(() => Date.now());
+  useEffect(() => { const id = setInterval(() => setTick(Date.now()), 500); return () => clearInterval(id); }, []);
+  const at = data?.clock?.nextStartAtUtc ? Date.parse(data.clock.nextStartAtUtc) : NaN;
+  if (!Number.isFinite(at)) return null;
+  const left = Math.ceil((at - tick) / 1000);
+  if (left > 90 || left < -60) return null;
+  const mm = Math.floor(Math.max(0, left) / 60), ss = String(Math.max(0, left) % 60).padStart(2, "0");
+  return (
+    <div className={`fixed inset-x-0 top-3 z-[90] mx-auto flex w-[min(92vw,34rem)] items-center gap-4 rounded-2xl px-5 py-3 text-white shadow-2xl ${left <= 0 ? "bg-[#ED1C24]" : left <= 30 ? "bg-[#ED1C24]/95" : "bg-[#b36b00]"}`} role="timer" aria-live="polite" data-testid="wrap-up-clock">
+      <span className={`font-bold tabular-nums leading-none ${left <= 10 && left > 0 ? "animate-pulse" : ""}`} style={{ fontSize: "2.6rem" }}>{left > 0 ? `${mm}:${ss}` : "0:00"}</span>
+      <span className="min-w-0 leading-tight">
+        <span className="block text-lg font-bold">{left > 0 ? "Time to wrap up" : "Thank you! Handing off now"}</span>
+        <span className="block truncate text-sm text-white/85">{left > 0 ? `Then ${data?.clock?.nextSceneName ?? "the hand-off"}` : "The stage moves to the next part of the show."}</span>
+      </span>
+    </div>
+  );
+}
+
 export default function Studio({ slug }: { slug?: string }) {
   // Admins only (studio hosts sign in to admin too, but the desk is Michael's).
   const { admin: adminMe } = useAdminAuth();
@@ -1107,6 +1141,7 @@ export default function Studio({ slug }: { slug?: string }) {
           </div>
           <div className="flex h-56 flex-col">
             {joined && <TimeLeftPill slug={slug} studioId={studioId} />}
+            {joined && onStage && <WrapUpClock slug={slug} studioId={studioId} />}
             <div className="min-h-0 flex-1">
               {joined && <UpNext slug={slug} studioId={studioId} compact fill />}
             </div>

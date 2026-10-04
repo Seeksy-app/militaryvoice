@@ -5228,7 +5228,11 @@ export function registerRoutes(app: Express): void {
     const windowSeconds = Math.round((Date.parse(row.startAtUtc) - Date.now()) / 1000);
     const d = decideAdvance({ windowSeconds, stageSpeaking: req.body?.stageSpeaking === true, nextHostReady: false, heldSeconds: Math.max(0, -windowSeconds) });
     // The intro waits for its own time: no early start for the next show.
-    const go = alex?.step === "intro" ? windowSeconds <= 0 && d.action !== "hold" && d.action !== "escalate" : d.action === "take" || d.action === "take-early";
+    // Alex's hours have nobody at the desk to wait for the speaker: they see a
+    // 90-second clock, get 30 seconds' grace past time, and then she takes it.
+    const go = alex?.step === "intro"
+      ? windowSeconds <= 0 && d.action !== "hold" && d.action !== "escalate"
+      : d.action === "take" || d.action === "take-early" || (alex?.step === "handoff" && windowSeconds <= -30);
     if (go) {
       const fresh = await storage.getStudioById(studio.id);
       if (fresh?.currentSceneId !== cur.id) return res.json({ action: "none" });
