@@ -5190,6 +5190,20 @@ export function registerRoutes(app: Express): void {
   }
 
   /**
+   * Alex at the desk, recorded: a hand-off scene that carries her clip (no
+   * co-host that hour), then the next show's intro scene with her intro clip.
+   * Segment → her hand-off at the hand-off time; her hand-off → her intro at
+   * the intro's time (the clip has long ended and is holding on its card).
+   */
+  async function alexAfter(cur: SceneRow, next: SceneRow): Promise<{ row: RunItemRow; step: "handoff" | "intro" } | null> {
+    if (!cur.runItemId || !next.runItemId || !next.mediaUrl) return null;
+    const [a, b] = await Promise.all([storage.getRunItem(cur.runItemId), storage.getRunItem(next.runItemId)]);
+    if (a?.kind === "Segment" && b?.kind === "Handoff") return { row: b, step: "handoff" };
+    if (a?.kind === "Handoff" && b?.kind === "Intro" && cur.mediaUrl) return { row: b, step: "intro" };
+    return null;
+  }
+
+  /**
    * The console's heartbeat during the show: when a segment's time is up and
    * the next scene is a hand-off a live co-host holds, take the thank-you
    * slide. Never over somebody talking: it holds while the stage is speaking,
@@ -5205,17 +5219,23 @@ export function registerRoutes(app: Express): void {
     const next = i >= 0 ? list[i + 1] : undefined;
     if (!cur || !next) return res.json({ action: "none" });
     const live = await liveHandoffAfter(studio, cur, next);
-    if (!live) return res.json({ action: "none" });
-    if (cur.mediaUrl && studio.stageMediaPlaying) return res.json({ action: "wait", why: "the episode switches to the thank-you slide when it ends", deskName: live.deskName, at: live.row.startAtUtc });
-    const windowSeconds = Math.round((Date.parse(live.row.startAtUtc) - Date.now()) / 1000);
+    const alex = live ? null : await alexAfter(cur, next);
+    if (!live && !alex) return res.json({ action: "none" });
+    const row = live?.row ?? alex!.row;
+    const deskName = live?.deskName ?? "Alex";
+    // A pre-recorded episode switches when its file ends; Alex's own hand-off clip has ended by the intro's time.
+    if (cur.mediaUrl && studio.stageMediaPlaying && alex?.step !== "intro") return res.json({ action: "wait", why: "the episode switches to the thank-you slide when it ends", deskName, at: row.startAtUtc });
+    const windowSeconds = Math.round((Date.parse(row.startAtUtc) - Date.now()) / 1000);
     const d = decideAdvance({ windowSeconds, stageSpeaking: req.body?.stageSpeaking === true, nextHostReady: false, heldSeconds: Math.max(0, -windowSeconds) });
-    if (d.action === "take" || d.action === "take-early") {
+    // The intro waits for its own time: no early start for the next show.
+    const go = alex?.step === "intro" ? windowSeconds <= 0 && d.action !== "hold" && d.action !== "escalate" : d.action === "take" || d.action === "take-early";
+    if (go) {
       const fresh = await storage.getStudioById(studio.id);
       if (fresh?.currentSceneId !== cur.id) return res.json({ action: "none" });
       const r = await applyScene(next.id);
-      return res.status(r.status).json({ action: "take", why: d.why, deskName: live.deskName, sceneId: next.id });
+      return res.status(r.status).json({ action: "take", why: d.why, deskName, sceneId: next.id });
     }
-    res.json({ action: d.action, why: d.why, deskName: live.deskName, at: live.row.startAtUtc });
+    res.json({ action: d.action, why: d.why, deskName, at: row.startAtUtc });
   });
 
   /**
@@ -5240,7 +5260,7 @@ export function registerRoutes(app: Express): void {
     if (!next) return res.json({ advanced: false });
     // A pre-recorded show that ends into a hand-off with a co-host at the desk
     // goes to the thank-you slide by itself, switch or no switch.
-    if (!scene.autoNext && !(await liveHandoffAfter(studio, scene, next))) return res.json({ advanced: false });
+    if (!scene.autoNext && !(await liveHandoffAfter(studio, scene, next)) && (await alexAfter(scene, next))?.step !== "handoff") return res.json({ advanced: false });
     const r = await applyScene(next.id);
     res.status(r.status).json({ advanced: true, sceneId: next.id });
   });
