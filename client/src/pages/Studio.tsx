@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import { useStudioRoom, type RoomPeer } from "@/hooks/use-studio-room";
 import { StageGrid, type RoomMeta } from "@/components/StageView";
-import { SceneRail } from "@/components/SceneRail";
+import { SceneRail, SHOW_ZONE } from "@/components/SceneRail";
 import { UpNext, PlaybackButton } from "@/components/GreenRoomTools";
 import { detectLocalTimeZone, formatTimeInZone } from "@/lib/schedule";
 import type { StudioParticipantRow, SceneRow } from "@shared/schema";
@@ -238,7 +238,7 @@ function clientKey(): string {
  * side to call.
  */
 function RunningOrder({ slug, studioId, searchable = false, canTake = false }: { slug?: string; studioId?: number; searchable?: boolean; canTake?: boolean }) {
-  const zone = useMemo(detectLocalTimeZone, []);
+  const zone = SHOW_ZONE;
   const queryClient = useQueryClient();
   const { toast } = useToast();
   // Crew take scenes from here — the same call the console makes, checked

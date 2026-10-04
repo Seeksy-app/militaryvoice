@@ -31,12 +31,12 @@ import { ProducerChat, useGreenRoomWaiting } from "@/components/ProducerDesk";
 import { StudioHostBar, MichaelChat } from "@/components/StudioHostBar";
 import { StageGrid, youtubeId, clockText, type StageTile } from "@/components/StageView";
 import { MediaLibrary, type MediaItem } from "@/components/MediaLibrary";
-import { SceneRail, type SceneSpec } from "@/components/SceneRail";
+import { SceneRail, SHOW_ZONE, type SceneSpec } from "@/components/SceneRail";
 import { StudioRail, Hint } from "@/components/StudioRail";
 import { stageMetaFromStudio } from "@shared/stageMeta";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { STUDIO_STATUSES, LOGO_CORNERS, type StudioRow, type StudioParticipantRow, type RunItemRow, type SignupRow, type SceneRow } from "@shared/schema";
-import { detectLocalTimeZone, formatTimeInZone } from "@/lib/schedule";
+import { formatTimeInZone } from "@/lib/schedule";
 import { MonitorPlay, Users, Headphones, Mic, MicOff, Video, VideoOff, ArrowUp, ArrowDown, X, PlayCircle, Radio, Copy, AlertTriangle, Clock, Disc, Pause, Play, Square, Signal, Cable, Trash2, Check, Upload, Volume2, VolumeX, Film, Image as ImageIcon, Clapperboard, ListOrdered, Plus, Maximize2, Minimize2, LogOut, ChevronDown, Settings2, Timer, Loader2, Sparkles, MessagesSquare } from "lucide-react";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
@@ -547,7 +547,9 @@ function StandbyFreshness({ adminGet, eventId }: { adminGet: <T>(path: string) =
 export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedStudioId, onLeave, simple = false, viewerEmail }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
-  const zone = useMemo(detectLocalTimeZone, []);
+  // Eastern, like the cards on air: a producer in Pacific read 9:55 next to
+  // "Up next 1:00 PM ET" and thought a show had gone missing.
+  const zone = SHOW_ZONE;
   const [fallbackUrl, setFallbackUrl] = useState<string | null>(null);
   const [fallbackLabel, setFallbackLabel] = useState<string | null>(null);
 
@@ -2109,7 +2111,6 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                     ) : undefined}
                     scenes={scenes ?? []}
                     currentSceneId={studio?.currentSceneId ?? 0}
-                    anchorToLive={broadcasting}
                     zone={zone}
                     runItems={runItems ?? []}
                     signups={signups ?? []}
@@ -2726,7 +2727,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                   <>
                     <div className="mt-1 text-sm font-semibold">{(item as RunItemRow).title}</div>
                     <div className="mt-0.5 tabular-nums text-xs text-muted-foreground">
-                      {formatTimeInZone(new Date((item as RunItemRow).startAtUtc), zone)}
+                      {formatTimeInZone(new Date((item as RunItemRow).startAtUtc), zone)} ET
                       {(item as RunItemRow).durationMinutes ? ` · ${(item as RunItemRow).durationMinutes}m` : ""}
                     </div>
                     {(item as RunItemRow).notes && (

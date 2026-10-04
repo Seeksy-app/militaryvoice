@@ -18,6 +18,9 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { formatTimeInZone } from "@/lib/schedule";
+
+/** The show runs on Eastern: the cards on air say ET, so the rail does too. */
+export const SHOW_ZONE = "America/New_York";
 import type { SceneRow, RunItemRow, SignupRow } from "@shared/schema";
 import {
   Video,
@@ -148,7 +151,6 @@ export function SceneRail({
   busy,
   readOnly = false,
   takeOnly = false,
-  anchorToLive = true,
   searchable = false,
   onApply,
   onAdd,
@@ -179,8 +181,6 @@ export function SceneRail({
   readOnly?: boolean;
   /** Crew in the green room: they can take, not edit. */
   takeOnly?: boolean;
-  /** Off air the rail reads from the top; on air it pins the live card. */
-  anchorToLive?: boolean;
   /** Producers get a filter. 146 scenes is not a list you scroll on a question. */
   searchable?: boolean;
   onApply: (id: number) => void;
@@ -232,6 +232,8 @@ export function SceneRail({
   // keeps the page itself still: `block: "start"` would drag the whole window
   // up to satisfy the request.
   const anchored = useRef(false);
+  /** When someone last scrolled the rail by hand. */
+  const userScrolled = useRef(0);
   // A scene just added lands at the top: show it there, lit for a moment,
   // instead of the rail jumping back to whatever is live.
   const knownIds = useRef<Set<number> | null>(null);
@@ -285,7 +287,10 @@ export function SceneRail({
       // and the rail reads from the top: scene one is what is coming first.
       // Anchoring to a live card that does not exist left it wherever the
       // last render put it.
-      if (liveIndex < 0 || !anchorToLive) {
+      // Someone scrolling the rail is reading it: going through the scenes in
+      // rehearsal, the rail kept snapping back under them.
+      if (Date.now() - userScrolled.current < 8000) return;
+      if (liveIndex < 0) {
         if (box.scrollTop > 0) box.scrollTo({ top: 0, behavior: anchored.current ? "smooth" : "auto" });
         anchored.current = true;
         return;
@@ -469,7 +474,15 @@ export function SceneRail({
         </div>
       )}
 
-      <div ref={railRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 pb-3" data-testid="scene-rail">
+      <div
+        ref={railRef}
+        onWheel={() => { userScrolled.current = Date.now(); }}
+        onTouchMove={() => { userScrolled.current = Date.now(); }}
+        onPointerDown={(e) => { if (e.target === e.currentTarget) userScrolled.current = Date.now(); }}
+        onKeyDown={(e) => { if (["ArrowUp", "ArrowDown", "PageUp", "PageDown", "Home", "End", " "].includes(e.key)) userScrolled.current = Date.now(); }}
+        className="min-h-0 flex-1 space-y-2 overflow-y-auto px-3 pb-3"
+        data-testid="scene-rail"
+      >
         {scenes.length === 0 && (
           <div className="rounded-xl border border-dashed border-white/15 p-4 text-center">
             <p className="text-xs text-white/60">No scenes yet.</p>
@@ -664,7 +677,7 @@ export function SceneRail({
                         <p className="flex items-center gap-1 truncate text-[11px] leading-tight text-white/60">
                           {sc.startAtUtc && (
                             <span className="tabular-nums text-[#F0A71F]">
-                              {formatTimeInZone(new Date(sc.startAtUtc), zone)}
+                              {formatTimeInZone(new Date(sc.startAtUtc), zone)}{zone === SHOW_ZONE ? " ET" : ""}
                             </span>
                           )}
                           {sc.startAtUtc && <span className="opacity-40">·</span>}
@@ -897,7 +910,7 @@ export function SceneRail({
               >
                 <span className="text-sm font-medium">{r.title}</span>
                 {r.startAtUtc && (
-                  <span className="text-xs text-muted-foreground">{formatTimeInZone(new Date(r.startAtUtc), zone)}</span>
+                  <span className="text-xs text-muted-foreground">{formatTimeInZone(new Date(r.startAtUtc), zone)}{zone === SHOW_ZONE ? " ET" : ""}</span>
                 )}
               </button>
             ))}
