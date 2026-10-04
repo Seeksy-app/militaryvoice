@@ -4990,7 +4990,7 @@ export function registerRoutes(app: Express): void {
     const open = rows.find((x) => /welcoming|opening/i.test(x.podcastName));
     const close = rows.find((x) => /closing/i.test(x.podcastName));
     const riccoh = `Host Riccoh Player (USMC, Retired) is on air for the opening${open ? ` (${open.podcastName.trim()}, ${et(start + open.slotIndex * ev.slotMinutes * 60_000)})` : ""} and the closing${close ? ` (${close.podcastName.trim()}, ${et(start + close.slotIndex * ev.slotMinutes * 60_000)})` : ""}. In between, the desk co-host of each hour thanks each show and introduces the next.`;
-    const text = `THE RUNNING ORDER (Monday; each show has ${ev.slotMinutes} minutes, about ${ev.onAirMinutes} on air then a hand-off; viewers see times in their own zone on /agenda):\n${lines.join("\n")}\n\n${riccoh}\nDesk co-host by hour:\n${desks.join("\n")}\nWatch free at /watch.`;
+    const text = `THE RUNNING ORDER (Monday; each show has ${ev.slotMinutes} minutes, about ${ev.onAirMinutes} on air then a hand-off;):\n${lines.join("\n")}\n\n${riccoh}\nDesk co-host by hour:\n${desks.join("\n")}\nWatch free at /watch.`;
     runningOrderCache = { at: Date.now(), text };
     return text;
   }
