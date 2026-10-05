@@ -392,7 +392,7 @@ function Tile({ tile, muted, namePos = "bottom", fit, contain = false, flat = fa
 
       />
       {tile.keyed && <canvas ref={canvasRef} className={`h-full w-full ${bare ? "object-contain object-bottom" : cover ? "object-cover object-[50%_18%]" : "object-contain"}`} />}
-      <audio ref={audioRef} autoPlay muted={muted} />
+      <audio ref={audioRef} autoPlay muted={muted || Boolean(broadcastLeveler())} />
 
       {/* Camera off: their picture, large and centred, over a soft wash of
           itself — never a black box. Initials when there is no picture. */}
