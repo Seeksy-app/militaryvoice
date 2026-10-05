@@ -5243,6 +5243,9 @@ export function registerRoutes(app: Express): void {
   }
 
   app.post("/api/admin/scenes/:id/apply", requireAdmin, async (req, res) => {
+    // Locked for the show: only the producer's own admin sign-in takes scenes,
+    // so a co-host's click can't reset who's on stage (5 Oct, twice).
+    if ((req as any).studioHost && (await scenesLocked())) return res.status(423).json({ message: "Scenes are run by the producer tonight. Message the team if you need a change." });
     const r = await applyScene(Number(req.params.id));
     res.status(r.status).json(r.body);
   });
@@ -5489,6 +5492,7 @@ export function registerRoutes(app: Express): void {
     const studio = scene ? await storage.getStudioById(scene.studioId) : null;
     if (!scene || !studio) return res.status(404).json({ message: "Not found" });
     if (!(await isCrew(req, studio.eventId))) return res.status(403).json({ message: "Only the crew can take scenes." });
+    if (await scenesLocked()) return res.status(423).json({ message: "Scenes are run by the producer tonight. Message the team if you need a change." });
     const r = await applyScene(scene.id);
     res.status(r.status).json(r.body);
   });
