@@ -275,6 +275,7 @@ function broadcastLeveler(): { ctx: AudioContext; input: AudioNode } | null {
     comp.connect(gain); gain.connect(limit); limit.connect(ctx.destination);
     void ctx.resume().catch(() => {});
     leveler = { ctx, input: comp };
+    (window as unknown as { __mvLeveler?: unknown }).__mvLeveler = { ctx, sources: 0 };
   } catch { leveler = null; }
   return leveler;
 }
@@ -358,7 +359,9 @@ function Tile({ tile, muted, namePos = "bottom", fit, contain = false, flat = fa
         src = lv.ctx.createMediaStreamSource(new MediaStream([tile.audio.mediaStreamTrack]));
         src.connect(lv.input);
         el.muted = true;
-      } catch { src = null; }
+        const dbg = (window as unknown as { __mvLeveler?: { sources: number } }).__mvLeveler;
+        if (dbg) dbg.sources += 1;
+      } catch (err) { src = null; (window as unknown as { __mvLevelerErr?: string }).__mvLevelerErr = String(err); }
     }
     return () => {
       try { src?.disconnect(); } catch { /* gone */ }
