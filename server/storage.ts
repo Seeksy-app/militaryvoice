@@ -2908,7 +2908,12 @@ class DatabaseStorage implements IStorage {
     await ready();
     const normalized = email.trim().toLowerCase();
     const [existing] = await db.select().from(adminUsers).where(eq(adminUsers.email, normalized));
-    if (existing) return existing;
+    // Adding someone who's already on the team renames them (the name shows in the studio).
+    if (existing) {
+      if (!name.trim() || name.trim() === existing.name) return existing;
+      const [renamed] = await db.update(adminUsers).set({ name: name.trim() }).where(eq(adminUsers.id, existing.id)).returning();
+      return renamed;
+    }
     const [created] = await db
       .insert(adminUsers)
       .values({ email: normalized, name: name.trim(), isOwner: false, createdAt: new Date().toISOString() })
