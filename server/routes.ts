@@ -5677,6 +5677,8 @@ export function registerRoutes(app: Express): void {
             stageMediaKind: req.body?.kind === "image" ? "image" : "video",
             stageMediaLabel: String(req.body?.label ?? "").trim().slice(0, 120),
             stageMediaPlaying: true,
+            // A clip played over a scene isn't that show: no name bar from it.
+            bannerVisible: false,
           };
     if (action !== "stop" && !/^https?:\/\//i.test(String(patch.stageMediaUrl ?? ""))) {
       res.status(400).json({ message: "That needs a full https:// link." });
