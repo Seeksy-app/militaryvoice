@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { Send } from "lucide-react";
+import { Send, X } from "lucide-react";
 
 type Role = "user" | "alex" | "producer";
 interface Msg { id?: number; role: Role; content: string }
@@ -23,6 +23,17 @@ export function AlexChat({ studioId }: { studioId?: number }) {
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const logRef = useRef<HTMLDivElement | null>(null);
+  // A bubble over the chat: once when they arrive, and again whenever Michael
+  // writes to them, so a message from the team can't go unseen (5 Oct).
+  const [nudge, setNudge] = useState<string | null>(() => {
+    try { if (sessionStorage.getItem("mv-chat-nudge")) return null; } catch { /* show it */ }
+    return "Hey! Check here for chats from the team, or if you have questions.";
+  });
+  const lastProducer = useRef<number | null>(null);
+  const closeNudge = () => {
+    setNudge(null);
+    try { sessionStorage.setItem("mv-chat-nudge", "1"); } catch { /* fine */ }
+  };
 
   const load = async () => {
     try {
@@ -38,6 +49,13 @@ export function AlexChat({ studioId }: { studioId?: number }) {
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [studioId]);
+
+  useEffect(() => {
+    const ids = (thread?.messages ?? []).filter((m) => m.role === "producer").map((m) => m.id);
+    const top = ids.length ? Math.max(...ids) : 0;
+    if (lastProducer.current !== null && top > lastProducer.current) setNudge("New message from Michael, the producer.");
+    if (thread) lastProducer.current = top;
+  }, [thread]);
 
   const michael = Boolean(thread && (!thread.alexOn || thread.mode === "producer"));
   const msgs: Msg[] = [
@@ -92,6 +110,16 @@ export function AlexChat({ studioId }: { studioId?: number }) {
   }
 
   return (
+    <div className="relative">
+    {nudge && (
+      <div className="absolute -top-3 left-1/2 z-30 w-[min(92%,26rem)] -translate-x-1/2 -translate-y-full animate-in fade-in slide-in-from-bottom-2" role="status" data-testid="chat-nudge">
+        <div className="relative flex items-start gap-3 rounded-2xl bg-[#F0A71F] px-4 py-3 text-[#1a1200] shadow-2xl">
+          <p className="flex-1 text-sm font-semibold leading-snug">{nudge}</p>
+          <button type="button" onClick={closeNudge} className="rounded-full p-1 hover:bg-black/10" aria-label="Close"><X className="h-4 w-4" /></button>
+          <span className="absolute -bottom-2 left-1/2 h-4 w-4 -translate-x-1/2 rotate-45 bg-[#F0A71F]" aria-hidden="true" />
+        </div>
+      </div>
+    )}
     <div className={`flex h-56 items-stretch overflow-hidden rounded-2xl border ${michael ? "border-[#8ab4f8]/30 bg-[#8ab4f8]/[0.06]" : "border-[#F0A71F]/30 bg-[#F0A71F]/[0.06]"}`} data-testid="alex-chat">
       {/* Flush to the card's edges and its full height, as her live tile was. */}
       <div className="hidden w-40 shrink-0 self-stretch bg-black/40 sm:block">
@@ -127,6 +155,7 @@ export function AlexChat({ studioId }: { studioId?: number }) {
           <input
             value={draft}
             onChange={(e) => setDraft(e.target.value)}
+            onFocus={closeNudge}
             placeholder="When am I on? Who's before me?"
             className="h-9 min-w-0 flex-1 rounded-full bg-black/30 px-3.5 text-sm text-white placeholder:text-white/35 focus:outline-none focus:ring-2 focus:ring-[#F0A71F]/50"
             maxLength={500}
@@ -143,6 +172,7 @@ export function AlexChat({ studioId }: { studioId?: number }) {
           </button>
         </form>
       </div>
+    </div>
     </div>
   );
 }
