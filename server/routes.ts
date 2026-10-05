@@ -5307,8 +5307,15 @@ export function registerRoutes(app: Express): void {
    * and past three minutes over it tells the producer instead. A pre-recorded
    * show switches when its file ends (the route above), not on the clock.
    */
+  /** Producer's switch: "off" stops the console taking any scene by itself (a show running long). */
+  app.post("/api/admin/studio/auto-take", requireAdmin, async (req, res) => {
+    await storage.setSetting("auto_take", req.body?.on === false ? "off" : "on");
+    res.json({ on: req.body?.on !== false });
+  });
+
   app.post("/api/admin/studio/auto-tick", requireAdmin, async (req, res) => {
     noStore(res);
+    if ((await storage.getSetting("auto_take")) === "off") return res.json({ action: "none" });
     const { studio } = await adminStudio(req);
     const list = await storage.listScenes(studio.id);
     const i = list.findIndex((x) => x.id === studio.currentSceneId);
