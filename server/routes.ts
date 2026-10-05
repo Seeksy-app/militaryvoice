@@ -4797,7 +4797,19 @@ export function registerRoutes(app: Express): void {
    * right now; otherwise it takes the card as described — a camera scene, a
    * piece of media, or a countdown.
    */
+  // Show day: the running order is fixed. No one drags, adds or deletes a
+  // scene (admins too) until it's unlocked here; files and names can still be fixed.
+  const scenesLocked = async () => (await storage.getSetting("scenes_locked")) !== "false";
+  const lockedNo = (res: Response) => res.status(423).json({ message: "The scenes are locked for the show. Nothing can be moved, added or deleted." });
+  app.get("/api/admin/scenes/lock", requireAdmin, async (_req, res) => { noStore(res); res.json({ locked: await scenesLocked() }); });
+  app.post("/api/admin/scenes/lock", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost) return res.status(403).json({ message: "Admins only." });
+    await storage.setSetting("scenes_locked", req.body?.locked === false ? "false" : "true");
+    res.json({ locked: await scenesLocked() });
+  });
+
   app.post("/api/admin/scenes", requireAdmin, async (req, res) => {
+    if (await scenesLocked()) return lockedNo(res);
     const { studio } = await adminStudio(req);
     const existing = await storage.listScenes(studio.id);
 
@@ -4862,12 +4874,14 @@ export function registerRoutes(app: Express): void {
 
   /** Drag-and-drop, or the up/down buttons: the rail sends the order it wants. */
   app.post("/api/admin/scenes/reorder", requireAdmin, async (req, res) => {
+    if (await scenesLocked()) return lockedNo(res);
     const { studio } = await adminStudio(req);
     const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).map(Number).filter(Number.isFinite);
     res.json(await storage.reorderScenes(studio.id, ids));
   });
 
   app.delete("/api/admin/scenes/:id", requireAdmin, async (req, res) => {
+    if (await scenesLocked()) return lockedNo(res);
     const id = Number(req.params.id);
     const scene = await storage.getScene(id);
     await storage.deleteScene(id);
@@ -4883,6 +4897,7 @@ export function registerRoutes(app: Express): void {
   /** Auto-generate one scene per run-of-show item. Idempotent: existing scenes
    *  with the same name are skipped, not duplicated. */
   app.post("/api/admin/scenes/generate", requireAdmin, async (req, res) => {
+    if (await scenesLocked()) return lockedNo(res);
     const { studio } = await adminStudio(req);
     const items = await storage.listRunOfShow(studio.eventId);
     const existing = await storage.listScenes(studio.id);
@@ -4911,6 +4926,7 @@ export function registerRoutes(app: Express): void {
 
   /** Create a scene from a specific run-of-show item. */
   app.post("/api/admin/scenes/from-agenda", requireAdmin, async (req, res) => {
+    if (await scenesLocked()) return lockedNo(res);
     const { studio } = await adminStudio(req);
     const runItemId = Number(req.body?.runItemId);
     const item = await storage.getRunItem(runItemId);

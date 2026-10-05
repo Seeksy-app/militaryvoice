@@ -584,6 +584,10 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
     enabled: savingSince !== null,
     refetchInterval: savingSince !== null ? 10_000 : false,
   });
+  const scenesLocked = useQuery<{ locked: boolean }>({
+    queryKey: ["/api/admin/scenes/lock"],
+    queryFn: () => adminGet("/api/admin/scenes/lock"),
+  });
   const standbyLoops = useQuery<{ current: string; loops: { label: string; url: string }[] }>({
     queryKey: ["/api/admin/studio/standby-loops", fixedStudioId ?? eventId ?? 0],
     queryFn: () => adminGet(`/api/admin/studio/standby-loops${fixedStudioId ? `?studioId=${fixedStudioId}` : ""}`),
@@ -2120,10 +2124,11 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                     media={mediaItems ?? []}
                     searchable
                     busy={applyScene.isPending}
+                    locked={scenesLocked.data?.locked !== false}
                     onApply={(id) => applyScene.mutate(id)}
-                    onAdd={(spec) => addScene.mutate(spec)}
+                    onAdd={(spec) => (scenesLocked.data?.locked !== false ? toast({ title: "Scenes are locked for the show", description: "Nothing can be moved, added or deleted today." }) : addScene.mutate(spec))}
                     onPatch={(id, patch) => patchScene.mutate({ id, patch })}
-                    onDelete={(id) => dropScene.mutate(id)}
+                    onDelete={(id) => (scenesLocked.data?.locked !== false ? toast({ title: "Scenes are locked for the show", description: "Nothing can be moved, added or deleted today." }) : dropScene.mutate(id))}
                     onReorder={(ids) => reorderScenes.mutate(ids)}
                     onGenerate={() => generateScenes.mutate()}
                   />

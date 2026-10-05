@@ -144,6 +144,7 @@ export function SceneRail({
   scenes,
   currentSceneId,
   zone,
+  locked = false,
   runItems,
   signups,
   presentNames,
@@ -171,6 +172,8 @@ export function SceneRail({
   scenes: SceneRow[];
   currentSceneId: number;
   zone: string;
+  /** Show day: the running order can't be dragged. */
+  locked?: boolean;
   runItems: RunItemRow[];
   signups: SignupRow[];
   /** Display names in the green room, for the "have they arrived" dot. */
@@ -540,7 +543,7 @@ export function SceneRail({
               key={sc.id}
               ref={on ? liveRef : undefined}
               data-scene-id={sc.id}
-              draggable={editable && renaming !== sc.id}
+              draggable={editable && !locked && renaming !== sc.id}
               onDragStart={(e) => { setDragId(sc.id); e.dataTransfer.effectAllowed = "move"; e.dataTransfer.setData("text/plain", String(sc.id)); }}
               onDragOver={(e) => { if (dragId == null) return; e.preventDefault(); e.dataTransfer.dropEffect = "move"; if (overId !== sc.id) setOverId(sc.id); }}
               onDragLeave={() => setOverId((o) => (o === sc.id ? null : o))}
