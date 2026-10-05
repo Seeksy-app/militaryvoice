@@ -1424,9 +1424,21 @@ async function renderWithCreatomate(
   }
 }
 
+/** When each held job last reported progress, for the watchdog in tick(). */
+const lastProgress = new Map<number, number>();
+
 function progress(id: number, p: Record<string, unknown>): void {
+  lastProgress.set(id, Date.now());
   api("POST", `/api/agent/clip-jobs/${id}/progress`, p).catch(() => {});
 }
+
+/**
+ * A job that has said nothing for this long is frozen, not slow: on 5 Oct both
+ * lanes sat at "clip 2 of 4" for forty minutes while the heartbeat kept them
+ * looking alive, and the queue behind them never moved. Whole episodes finish
+ * in under ten minutes.
+ */
+const STALL_MS = 25 * 60_000;
 
 /** A clean-episode-only job: fetch the recording and make the clean episode. */
 async function handleClean(job: Job): Promise<void> {
@@ -2328,13 +2340,24 @@ async function tick(): Promise<boolean> {
   if (job.episodeEdit) editing.add(job.recordingId);
   // "Still on it", every minute: a long quiet stretch (waiting on Creatomate)
   // must not look like a dead worker, or another lane claims the same job.
-  const beat = clipJob ? setInterval(() => { api("POST", `/api/agent/clip-jobs/${job.recordingId}/heartbeat`).catch(() => {}); }, 60_000) : undefined;
+  if (clipJob) lastProgress.set(job.recordingId, Date.now());
+  const beat = clipJob ? setInterval(() => {
+    // Frozen: hand every held job back and exit, and Render starts a fresh worker.
+    if (Date.now() - (lastProgress.get(job.recordingId) ?? Date.now()) > STALL_MS) {
+      console.error(`[${job.recordingId}] no progress for ${Math.round(STALL_MS / 60_000)} minutes — handing jobs back and restarting`);
+      void release().finally(() => process.exit(1));
+      return;
+    }
+    api("POST", `/api/agent/clip-jobs/${job.recordingId}/heartbeat`).catch(() => {});
+  }, 60_000) : undefined;
   try {
     await handle(job);
     clearInterval(beat);
     holding.delete(job.recordingId);
     editing.delete(job.recordingId);
+    lastProgress.delete(job.recordingId);
   } catch (err) {
+    lastProgress.delete(job.recordingId);
     clearInterval(beat);
     holding.delete(job.recordingId);
     editing.delete(job.recordingId);
