@@ -6185,7 +6185,8 @@ export function registerRoutes(app: Express): void {
     const action = String(req.body?.action ?? "");
 
     if (action === "stop") {
-      if (studio.recordingEgressId) await stopEgressById(studio.recordingEgressId);
+      // Already over on LiveKit's side (the 3-hour cap, 5 Oct): clear it anyway so a new one can start.
+      if (studio.recordingEgressId) await stopEgressById(studio.recordingEgressId).catch((err) => console.warn("Recording already stopped:", (err as Error).message));
       res.json(await storage.updateStudio(studio.id, { recordingEgressId: "", recordingSignupId: null }));
       return;
     }
