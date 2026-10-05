@@ -378,7 +378,7 @@ function Tile({ tile, muted, namePos = "bottom", fit, contain = false, flat = fa
           it. Sized to the frame, so it reads the same big or small. */}
       <div
         className={`absolute bottom-0 left-0 max-w-[85%] ${namePos === "none" ? "hidden" : ""}`}
-        style={{ padding: "0 0 clamp(5px, 3.5cqh, 22px) clamp(5px, 2.2cqw, 22px)", fontSize: "clamp(11px, 5cqh, 26px)" }}
+        style={{ padding: "0 0 clamp(4px, 2.6cqh, 16px) clamp(4px, 1.8cqw, 16px)", fontSize: "clamp(10px, 3.6cqh, 18px)" }}
       >
         <div className="flex items-stretch overflow-hidden rounded-md shadow-lg">
           <div className="w-[0.22em] shrink-0 bg-[#F0A71F]" />
