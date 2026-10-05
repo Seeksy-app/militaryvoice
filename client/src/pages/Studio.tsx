@@ -452,7 +452,7 @@ function TimeLeftPill({ slug, studioId }: { slug?: string; studioId?: number }) 
 }
 
 /** The producer's message, across the top until it's closed (one at a time; a new one shows again). */
-function StudioNotice({ email }: { email: string }) {
+export function StudioNotice({ email }: { email: string }) {
   const { data } = useQuery<{ notice: { id: number; text: string; to: string } | null }>({
     queryKey: ["/api/studio/notice"],
     queryFn: async () => (await apiRequest("GET", "/api/studio/notice")).json(),

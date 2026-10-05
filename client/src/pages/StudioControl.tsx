@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useLocation } from "wouter";
 import { Loader2, MonitorPlay } from "lucide-react";
 import { StudioConsole } from "@/components/StudioConsole";
+import { StudioNotice } from "@/pages/Studio";
 import { LoginCard } from "@/pages/HostDashboard";
 import { IconTile } from "@/components/ui/icon-tile";
 import { adminGet, adminSend } from "@/lib/adminApi";
@@ -50,6 +51,7 @@ export default function StudioControl() {
   }
   return (
     <div className="min-h-screen bg-[#04102b]">
+      <StudioNotice email={access.data.hostEmail || access.data.email || ""} />
       <StudioConsole adminGet={adminGet} adminSend={adminSend} view="live" eventId={access.data.eventId} kind="event" simple viewerEmail={access.data.hostEmail || access.data.email} onLeave={() => navigate("/host/dashboard")} />
     </div>
   );
