@@ -7366,9 +7366,14 @@ export function registerRoutes(app: Express): void {
     noStore(res);
     const featured = await storage.getFeaturedEvent();
     const eventId = Number(req.query.eventId) || featured.id;
-    const recordings = (await storage.listRecordings(eventId)).filter(
-      (r) => r.clipStatus !== "none" || r.status === "Ready",
-    );
+    const all = await storage.listRecordings();
+    // Each podcaster's own segment, cut from the day and put in their Library
+    // (admin "library/add": a studio file, no event) — first, so every show is here.
+    const segments = all.filter((r) => r.eventId === 0 && r.url.startsWith("studio/") && r.clipStatus !== "none");
+    const recordings = [
+      ...segments,
+      ...all.filter((r) => r.eventId === eventId && (r.clipStatus !== "none" || r.status === "Ready")),
+    ];
     const withClips = await Promise.all(
       recordings.map(async (r) => ({
         id: r.id,
@@ -7382,6 +7387,7 @@ export function registerRoutes(app: Express): void {
         clipStatus: r.clipStatus,
         clipError: r.clipError,
         clipClaimedAt: r.clipClaimedAt,
+        segment: r.eventId === 0,
         clips: await storage.listClips(r.id),
       })),
     );
@@ -7402,6 +7408,44 @@ export function registerRoutes(app: Express): void {
     // Clips cut from a podcaster's own episode live on their dashboard, not here
     // (Andrew, 30 Sep): admin shows the event's own recordings only. ?episodes=1 still lists them.
     res.json(req.query.episodes === "1" ? [...episodeRows, ...withClips] : withClips);
+  });
+
+  /**
+   * What Pōstify did, episode by episode: clips made, fillers, false starts and
+   * pauses taken out, minutes trimmed, how long it took. For marketing, so the
+   * totals are the headline and every row is there to back them up.
+   * "marathon" = the day's own recordings and the segments cut from them.
+   */
+  app.get("/api/admin/postify/stats", requireAdmin, async (_req, res) => {
+    noStore(res);
+    const eventId = (await storage.getFeaturedEvent()).id;
+    const counts = await storage.countClipsByRecording();
+    const rows = (await storage.listRecordings())
+      .filter((r) => r.clipStatus === "done")
+      .map((r) => {
+        let c: CleanResult | null = null;
+        let p: ClipProgress | null = null;
+        try { c = r.clean ? (JSON.parse(r.clean) as CleanResult) : null; } catch { c = null; }
+        try { p = r.clipProgress ? (JSON.parse(r.clipProgress) as ClipProgress) : null; } catch { p = null; }
+        const done = c?.status === "done";
+        const took = p?.stage === "done" && p.startedAt && p.at ? Math.max(0, (Date.parse(p.at) - Date.parse(p.startedAt)) / 1000) : 0;
+        return {
+          id: r.id,
+          title: r.title,
+          email: r.email,
+          at: r.startedAt,
+          marathon: r.eventId === eventId || (r.eventId === 0 && r.url.startsWith("studio/")),
+          durationSec: r.durationSec,
+          clips: counts.get(r.id) ?? 0,
+          cleaned: done,
+          fillers: done ? c?.fillers ?? 0 : 0,
+          falseStarts: done ? c?.falseStarts ?? 0 : 0,
+          pauses: done ? c?.pauses ?? 0 : 0,
+          removedSec: done ? c?.removedSec ?? 0 : 0,
+          tookSec: Math.round(took),
+        };
+      });
+    res.json(rows);
   });
 
   /**

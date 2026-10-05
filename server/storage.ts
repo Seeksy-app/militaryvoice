@@ -887,6 +887,8 @@ export interface IStorage {
   transcriptBetween(studioId: number, startMs: number, endMs: number): Promise<TranscriptLineRow[]>;
   listClips(recordingId: number): Promise<ClipRow[]>;
   listClipsByEmail(email: string): Promise<ClipRow[]>;
+  /** How many clips each recording has, for the Pōstify numbers. */
+  countClipsByRecording(): Promise<Map<number, number>>;
   getClip(id: number): Promise<ClipRow | undefined>;
   deleteClip(id: number): Promise<void>;
   /** A recording and the clips cut from it. */
@@ -2739,6 +2741,12 @@ class DatabaseStorage implements IStorage {
       )
       .returning();
     return row;
+  }
+
+  async countClipsByRecording(): Promise<Map<number, number>> {
+    await ready();
+    const rows = await db.select({ id: clips.recordingId, n: sqlExpr<number>`count(*)::int` }).from(clips).groupBy(clips.recordingId);
+    return new Map(rows.map((r) => [r.id, Number(r.n)]));
   }
 
   async listClipsByEmail(email: string): Promise<ClipRow[]> {

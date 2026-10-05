@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Film, RefreshCw, Download, Clock, AlertTriangle, Loader2, Play } from "lucide-react";
+import { Film, RefreshCw, Download, Clock, AlertTriangle, Loader2, Play, Sparkles } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 // What the clipper produced, where a producer can actually look at it.
@@ -38,7 +38,115 @@ interface RecordingWithClips {
   clipStatus: string;
   clipError: string;
   clipClaimedAt: string;
+  /** A podcaster's own segment, cut from the day and filed in their Library. */
+  segment?: boolean;
   clips: Clip[];
+}
+
+interface PostifyRow {
+  id: number;
+  title: string;
+  email: string;
+  at: string;
+  marathon: boolean;
+  durationSec: number;
+  clips: number;
+  cleaned: boolean;
+  fillers: number;
+  falseStarts: number;
+  pauses: number;
+  removedSec: number;
+  tookSec: number;
+}
+
+// The estimate, stated where it's shown: cleaning an hour of talk by hand
+// takes about three hours, and finding, cutting and captioning a clip in three
+// shapes about thirty minutes.
+const EDIT_HOURS_PER_HOUR = 3;
+const MIN_PER_CLIP = 30;
+const savedMin = (r: PostifyRow) => (r.cleaned ? (r.durationSec / 60) * EDIT_HOURS_PER_HOUR : 0) + r.clips * MIN_PER_CLIP;
+const hm = (min: number) => (min >= 60 ? `${Math.floor(min / 60)}h ${String(Math.round(min % 60)).padStart(2, "0")}m` : `${Math.round(min)}m`);
+
+/** What Pōstify did, as numbers worth putting in a post: the totals first, every episode under them. */
+function PostifyStats({ adminGet }: { adminGet: <T>(path: string) => Promise<T> }) {
+  const [scope, setScope] = useState<"marathon" | "all">("marathon");
+  const [open, setOpen] = useState(false);
+  const { data = [] } = useQuery<PostifyRow[]>({
+    queryKey: ["/api/admin/postify/stats"],
+    queryFn: () => adminGet<PostifyRow[]>("/api/admin/postify/stats"),
+    refetchInterval: 60_000,
+  });
+  const rows = data.filter((r) => scope === "all" || r.marathon);
+  const cleaned = rows.filter((r) => r.cleaned);
+  const sum = (list: PostifyRow[], f: (r: PostifyRow) => number) => list.reduce((n, r) => n + f(r), 0);
+  const hours = sum(rows, (r) => r.durationSec) / 3600;
+  const cleanedHours = sum(cleaned, (r) => r.durationSec) / 3600;
+  const fillers = sum(cleaned, (r) => r.fillers);
+  const timed = rows.filter((r) => r.tookSec > 0);
+  const tiles: [string, string, string][] = [
+    ["Episodes", String(rows.length), `${hours.toFixed(1)} hours of talk`],
+    ["Clips made", String(sum(rows, (r) => r.clips)), rows.length ? `${(sum(rows, (r) => r.clips) / rows.length).toFixed(1)} per episode` : ""],
+    ["Filler words out", fillers.toLocaleString(), cleanedHours ? `${Math.round(fillers / cleanedHours)} an hour` : "no clean episodes yet"],
+    ["False starts out", sum(cleaned, (r) => r.falseStarts).toLocaleString(), `${sum(cleaned, (r) => r.pauses).toLocaleString()} long pauses too`],
+    ["Minutes trimmed", hm(sum(cleaned, (r) => r.removedSec) / 60), cleaned.length ? `${(sum(cleaned, (r) => r.removedSec) / 60 / cleaned.length).toFixed(1)} min per episode` : ""],
+    ["Editing time saved", hm(sum(rows, savedMin)), rows.length ? `${hm(sum(rows, savedMin) / rows.length)} per episode (est.)` : ""],
+    ["Ready in", timed.length ? hm(sum(timed, (r) => r.tookSec) / 60 / timed.length) : "—", "average, start to finished clips"],
+  ];
+  return (
+    <div className="rounded-xl border border-border bg-card p-4" data-testid="postify-stats">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em]">
+          <Sparkles className="h-4 w-4 text-primary" /> What Pōstify did
+        </h3>
+        <div className="flex gap-1 rounded-full border border-border p-0.5 text-xs">
+          {(["marathon", "all"] as const).map((k) => (
+            <button key={k} type="button" onClick={() => setScope(k)} className={`rounded-full px-3 py-1 font-semibold ${scope === k ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} data-testid={`postify-scope-${k}`}>
+              {k === "marathon" ? "The Marathon" : "Everyone"}
+            </button>
+          ))}
+        </div>
+      </div>
+      <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-4 xl:grid-cols-7">
+        {tiles.map(([label, value, sub]) => (
+          <div key={label} className="rounded-lg bg-muted/50 px-3 py-2.5">
+            <div className="text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">{label}</div>
+            <div className="text-xl font-bold tabular-nums">{value}</div>
+            <div className="text-[11px] text-muted-foreground">{sub}</div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-2 text-[11px] text-muted-foreground">
+        Editing time saved is an estimate: about {EDIT_HOURS_PER_HOUR} hours to clean an hour of talk by hand, and {MIN_PER_CLIP} minutes to find, cut and caption each clip in three shapes. The clean-up numbers count episodes whose clean version has finished.
+      </p>
+      <button type="button" onClick={() => setOpen((o) => !o)} className="mt-2 text-xs font-semibold text-primary hover:underline" data-testid="postify-stats-toggle">
+        {open ? "Hide each episode" : `Show each episode (${rows.length})`}
+      </button>
+      {open && (
+        <div className="mt-2 overflow-x-auto">
+          <table className="w-full min-w-[760px] text-xs">
+            <thead className="text-left text-muted-foreground">
+              <tr>{["Episode", "Length", "Clips", "Fillers", "False starts", "Pauses", "Trimmed", "Ready in", "Saved (est.)"].map((h) => <th key={h} className="py-1.5 pr-3 font-semibold">{h}</th>)}</tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} className="border-t border-border">
+                  <td className="max-w-[280px] py-1.5 pr-3"><div className="truncate font-semibold" title={r.title}>{r.title || `Recording #${r.id}`}</div><div className="truncate text-muted-foreground">{r.email}</div></td>
+                  <td className="pr-3 tabular-nums">{mmss(r.durationSec)}</td>
+                  <td className="pr-3 tabular-nums">{r.clips}</td>
+                  <td className="pr-3 tabular-nums">{r.cleaned ? r.fillers : "—"}</td>
+                  <td className="pr-3 tabular-nums">{r.cleaned ? r.falseStarts : "—"}</td>
+                  <td className="pr-3 tabular-nums">{r.cleaned ? r.pauses : "—"}</td>
+                  <td className="pr-3 tabular-nums">{r.cleaned ? mmss(r.removedSec) : "—"}</td>
+                  <td className="pr-3 tabular-nums">{r.tookSec ? hm(r.tookSec / 60) : "—"}</td>
+                  <td className="pr-3 tabular-nums">{hm(savedMin(r))}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </div>
+  );
 }
 
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
@@ -111,6 +219,7 @@ export function AdminClips({
 
   return (
     <section className="flex flex-col gap-4" data-testid="section-admin-clips">
+      <PostifyStats adminGet={adminGet} />
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em]">
           <Film className="h-4 w-4 text-primary" /> Recordings &amp; clips
@@ -164,9 +273,10 @@ export function AdminClips({
                 <StatusBadge status={r.clipStatus} claimedAt={r.clipClaimedAt} />
               </div>
               <div className="text-xs text-muted-foreground">
+                {r.segment && <span className="mr-1 font-semibold text-foreground">Segment · in {r.email}'s Library ·</span>}
                 {r.id < 0
                   ? `${r.clips.length} clips · on ${r.email}'s dashboard`
-                  : <>{mmss(r.durationSec)} · {(Number(r.sizeBytes) / 1048576).toFixed(1)}MB · {new Date(r.startedAt).toLocaleString()}{r.email ? ` · ${r.email}` : ""}</>}
+                  : <>{mmss(r.durationSec)} · {(Number(r.sizeBytes) / 1048576).toFixed(1)}MB · {new Date(r.startedAt).toLocaleString()}{r.email && !r.segment ? ` · ${r.email}` : ""}</>}
               </div>
             </div>
             {r.id > 0 && <Button
