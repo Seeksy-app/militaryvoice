@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
-import { Film, RefreshCw, Download, Clock, AlertTriangle, Loader2, Play, Sparkles } from "lucide-react";
+import { Film, RefreshCw, Download, Clock, AlertTriangle, Loader2, Play, Sparkles, ChevronDown } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
 
 // What the clipper produced, where a producer can actually look at it.
@@ -184,6 +184,9 @@ export function AdminClips({
   const [busy, setBusy] = useState<number | null>(null);
   // The recording that's open in the player.
   const [watching, setWatching] = useState<{ id: number; title: string } | null>(null);
+  // Each recording is one compact row; its clips open under it on a click.
+  const [openIds, setOpenIds] = useState<Set<number>>(new Set());
+  const toggle = (id: number) => setOpenIds((s) => { const n = new Set(s); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const qKey = ["/api/admin/clips", eventId];
 
   const { data: rows = [], isLoading } = useQuery<RecordingWithClips[]>({
@@ -267,7 +270,7 @@ export function AdminClips({
                 </span>
               </button>
             )}
-            <div className="min-w-0 flex-1">
+            <button type="button" onClick={() => toggle(r.id)} className="min-w-0 flex-1 text-left" aria-expanded={openIds.has(r.id)} data-testid={`button-open-${r.id}`}>
               <div className="flex items-center gap-2">
                 <span className="truncate text-sm font-semibold">{r.title || `Recording #${r.id}`}</span>
                 <StatusBadge status={r.clipStatus} claimedAt={r.clipClaimedAt} />
@@ -278,7 +281,11 @@ export function AdminClips({
                   ? `${r.clips.length} clips · on ${r.email}'s dashboard`
                   : <>{mmss(r.durationSec)} · {(Number(r.sizeBytes) / 1048576).toFixed(1)}MB · {new Date(r.startedAt).toLocaleString()}{r.email && !r.segment ? ` · ${r.email}` : ""}</>}
               </div>
-            </div>
+            </button>
+            <button type="button" onClick={() => toggle(r.id)} className="inline-flex items-center gap-1 rounded-full px-2.5 py-1 text-xs font-semibold text-primary hover:bg-muted" data-testid={`button-clips-${r.id}`}>
+              {r.clips.length ? `${r.clips.length} clip${r.clips.length === 1 ? "" : "s"}` : "Clips"}
+              <ChevronDown className={`h-3.5 w-3.5 transition-transform ${openIds.has(r.id) ? "rotate-180" : ""}`} />
+            </button>
             {r.id > 0 && <Button
               size="sm"
               variant="outline"
@@ -299,7 +306,7 @@ export function AdminClips({
             <p className="border-b border-border bg-destructive/5 px-3 py-2 text-xs text-destructive">{r.clipError}</p>
           )}
 
-          {r.clips.length === 0 ? (
+          {!openIds.has(r.id) ? null : r.clips.length === 0 ? (
             <p className="px-3 py-3 text-xs text-muted-foreground">
               {r.clipStatus === "done" ? "Nothing in it stood alone — no clips." : "No clips yet."}
             </p>
