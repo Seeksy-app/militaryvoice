@@ -5331,6 +5331,26 @@ export function registerRoutes(app: Express): void {
     res.json(v ?? { cleared: true });
   });
 
+  /**
+   * A message from the producer that pops up across the top of every studio and
+   * green room screen until it's closed. `to` (an email) narrows it to one person.
+   * Guests missed emails all day on 5 Oct; this is the one place they look.
+   */
+  app.get("/api/studio/notice", async (_req, res) => {
+    noStore(res);
+    const raw = await storage.getSetting("studio_notice");
+    let notice: unknown = null;
+    try { notice = raw ? JSON.parse(raw) : null; } catch { notice = null; }
+    res.json({ notice });
+  });
+  app.post("/api/admin/studio/notice", requireAdmin, async (req, res) => {
+    const text = String(req.body?.text ?? "").trim().slice(0, 400);
+    const to = String(req.body?.to ?? "").trim().toLowerCase();
+    const v = text ? { id: Date.now(), text, to, at: new Date().toISOString() } : null;
+    await storage.setSetting("studio_notice", v ? JSON.stringify(v) : "");
+    res.json(v ?? { cleared: true });
+  });
+
   /** Producer's switch: "off" stops the console taking any scene by itself (a show running long). */
   app.post("/api/admin/studio/auto-take", requireAdmin, async (req, res) => {
     await storage.setSetting("auto_take", req.body?.on === false ? "off" : "on");

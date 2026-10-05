@@ -451,6 +451,34 @@ function TimeLeftPill({ slug, studioId }: { slug?: string; studioId?: number }) 
   );
 }
 
+/** The producer's message, across the top until it's closed (one at a time; a new one shows again). */
+function StudioNotice({ email }: { email: string }) {
+  const { data } = useQuery<{ notice: { id: number; text: string; to: string } | null }>({
+    queryKey: ["/api/studio/notice"],
+    queryFn: async () => (await apiRequest("GET", "/api/studio/notice")).json(),
+    refetchInterval: 8_000,
+  });
+  const n = data?.notice;
+  const seenKey = n ? `mv-notice-${n.id}` : "";
+  const [closed, setClosed] = useState<Set<string>>(() => new Set());
+  if (!n || closed.has(seenKey)) return null;
+  try { if (localStorage.getItem(seenKey)) return null; } catch { /* private window: show it */ }
+  if (n.to && n.to !== email.trim().toLowerCase()) return null;
+  const close = () => {
+    try { localStorage.setItem(seenKey, "1"); } catch { /* fine */ }
+    setClosed((s) => new Set(s).add(seenKey));
+  };
+  return (
+    <div className="fixed inset-x-0 top-3 z-[95] mx-auto w-[min(94vw,40rem)] rounded-2xl bg-[#F0A71F] px-5 py-4 text-[#1a1200] shadow-2xl ring-4 ring-[#F0A71F]/30" role="alertdialog" aria-live="assertive" data-testid="studio-notice">
+      <div className="text-xs font-bold uppercase tracking-[0.12em]">Message from the producer</div>
+      <p className="mt-1 text-lg font-semibold leading-snug">{n.text}</p>
+      <div className="mt-3 flex justify-end">
+        <button type="button" onClick={close} className="rounded-full bg-[#1a1200] px-5 py-2 text-sm font-bold text-white hover:bg-black" data-testid="studio-notice-ok">Got it</button>
+      </div>
+    </div>
+  );
+}
+
 /**
  * The last 90 seconds of whatever is on air, big enough to read mid-sentence,
  * for the people on stage only (viewers never see it). At zero it says the
@@ -1142,6 +1170,7 @@ export default function Studio({ slug }: { slug?: string }) {
           <div className="flex h-56 flex-col">
             {joined && <TimeLeftPill slug={slug} studioId={studioId} />}
             {joined && onStage && <WrapUpClock slug={slug} studioId={studioId} />}
+            {joined && <StudioNotice email={state?.myEmail ?? state?.me?.email ?? ""} />}
             <div className="min-h-0 flex-1">
               {joined && <UpNext slug={slug} studioId={studioId} compact fill />}
             </div>
