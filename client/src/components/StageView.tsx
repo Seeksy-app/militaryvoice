@@ -275,7 +275,7 @@ function broadcastLeveler(): { ctx: AudioContext; input: AudioNode } | null {
     comp.connect(gain); gain.connect(limit); limit.connect(ctx.destination);
     void ctx.resume().catch(() => {});
     leveler = { ctx, input: comp };
-    (window as unknown as { __mvLeveler?: unknown }).__mvLeveler = { ctx, sources: 0 };
+    (window as unknown as { __mvLeveler?: unknown }).__mvLeveler = { ctx, sources: 0, out: limit };
   } catch { leveler = null; }
   return leveler;
 }
