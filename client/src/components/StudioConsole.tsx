@@ -226,6 +226,9 @@ function GreenRoomStrip({
           const on = p.state === "On stage";
           return (
             <Popover key={p.id}>
+              <span className="group relative">
+              {/* Their name on hover, at once: the browser's own tooltip waits a second and sometimes never shows. */}
+              <span className="pointer-events-none absolute left-1/2 top-full z-50 mt-1.5 hidden -translate-x-1/2 whitespace-nowrap rounded-md bg-black/90 px-2 py-1 text-[11px] font-semibold text-white shadow-lg group-hover:block">{name}</span>
               <PopoverTrigger asChild>
                 <button
                   type="button"
@@ -238,6 +241,7 @@ function GreenRoomStrip({
                   <FeedThumb feed={feeds.get(`p-${p.id}`)} initials={name.slice(0, 2).toUpperCase()} photo={p.photoUrl} fill />
                 </button>
               </PopoverTrigger>
+              </span>
               <PopoverContent align="start" className="w-60 p-3">
                 <p className="truncate text-sm font-semibold">{name}</p>
                 <p className="mt-0.5 flex items-center gap-1.5 text-xs text-muted-foreground">
