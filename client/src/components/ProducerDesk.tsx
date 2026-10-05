@@ -147,8 +147,8 @@ export function ProducerDesk({ eventId, compact = false, narrow = false }: { eve
 }
 
 type Line = { id: number; chatId: number; role: "user" | "alex" | "producer"; name: string; show: string; content: string; at: string };
-type Feed = { alexOn: boolean; studio: { lines: Line[]; waiting: number }; green: { lines: Line[]; waiting: number } };
-type Room = "studio" | "green";
+type Feed = { alexOn: boolean; studio: { lines: Line[]; waiting: number }; green: { lines: Line[]; waiting: number }; watch?: { lines: Line[]; waiting: number } };
+type Room = "studio" | "green" | "watch";
 
 const seenKey = (room: Room) => `mv-chat-seen-${room}`;
 const readSeen = (room: Room) => { try { return Number(localStorage.getItem(seenKey(room))) || 0; } catch { return 0; } };
@@ -165,16 +165,16 @@ export function ProducerChat({ eventId, tall = false }: { eventId?: number; /** 
   const qc = useQueryClient();
   const key = ["/api/admin/greenroom/feed", eventId ?? 0];
   const feed = useQuery<Feed>({ queryKey: key, queryFn: () => adminGet(`/api/admin/greenroom/feed${eventId ? `?eventId=${eventId}` : ""}`), refetchInterval: 3000 });
-  const [room, setRoom] = useState<Room>(() => { try { return localStorage.getItem("mv-chat-room") === "studio" ? "studio" : "green"; } catch { return "green"; } });
-  const [seen, setSeen] = useState<Record<Room, number>>(() => ({ studio: readSeen("studio"), green: readSeen("green") }));
-  const [target, setTarget] = useState<Record<Room, number | null>>({ studio: null, green: null });
+  const [room, setRoom] = useState<Room>(() => { try { const r = localStorage.getItem("mv-chat-room"); return r === "studio" || r === "watch" ? r : "green"; } catch { return "green"; } });
+  const [seen, setSeen] = useState<Record<Room, number>>(() => ({ studio: readSeen("studio"), green: readSeen("green"), watch: readSeen("watch") }));
+  const [target, setTarget] = useState<Record<Room, number | null>>({ studio: null, green: null, watch: null });
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const logRef = useRef<HTMLDivElement | null>(null);
-  const lines = feed.data?.[room].lines ?? [];
+  const lines = feed.data?.[room]?.lines ?? [];
   const lastId = lines.length ? lines[lines.length - 1].id : 0;
 
-  const unread = (r: Room) => (feed.data?.[r].lines ?? []).filter((l) => l.role === "user" && l.id > seen[r]).length;
+  const unread = (r: Room) => (feed.data?.[r]?.lines ?? []).filter((l) => l.role === "user" && l.id > seen[r]).length;
   // Reading a room marks it read (only while the page is actually in front of him).
   useEffect(() => {
     if (!lastId || document.visibilityState !== "visible" || lastId <= seen[room]) return;
@@ -214,7 +214,7 @@ export function ProducerChat({ eventId, tall = false }: { eventId?: number; /** 
   };
 
   const tab = (r: Room, label: string) => {
-    const n = unread(r) || feed.data?.[r].waiting || 0;
+    const n = unread(r) || feed.data?.[r]?.waiting || 0;
     return (
       <button
         type="button"
@@ -233,13 +233,14 @@ export function ProducerChat({ eventId, tall = false }: { eventId?: number; /** 
       <div className="flex gap-1 rounded-full bg-muted p-1">
         {tab("studio", "Studio")}
         {tab("green", "Green Room")}
+        {tab("watch", "Watch")}
       </div>
       <a
         href={`/api/admin/greenroom/transcript?room=${room}${eventId ? `&eventId=${eventId}` : ""}`}
         className="self-end px-1 text-[11px] font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
         data-testid="chat-transcript"
       >
-        Download the {room === "studio" ? "Studio" : "Green Room"} transcript
+        Download the {room === "studio" ? "Studio" : room === "watch" ? "Watch page" : "Green Room"} transcript
       </a>
       {room === "green" && (
         <label className="flex items-center justify-between gap-2 px-1 text-xs text-muted-foreground">
@@ -271,6 +272,9 @@ export function ProducerChat({ eventId, tall = false }: { eventId?: number; /** 
           );
         })}
       </div>
+      {room === "watch" ? (
+        <p className="px-1 text-[11px] text-muted-foreground">What viewers ask Alex on the watch page, and her answers. Read only.</p>
+      ) : (
       <form onSubmit={(e) => { e.preventDefault(); void send(); }} className="flex flex-col gap-1">
         <p className="px-1 text-[11px] text-muted-foreground">
           {room === "studio" ? "Everyone in the studio sees this." : toName ? <>Answering <span className="font-semibold text-foreground">{toName}</span>. Tap a message to answer someone else.</> : "Tap a message to answer it."}
@@ -282,6 +286,7 @@ export function ProducerChat({ eventId, tall = false }: { eventId?: number; /** 
           </Button>
         </div>
       </form>
+      )}
     </div>
   );
 }

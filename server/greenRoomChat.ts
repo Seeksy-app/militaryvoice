@@ -18,6 +18,16 @@ const alexKey = (eventId: number) => `alex_greenroom:${eventId}`;
 export const PRODUCER_NAME = "Michael";
 /** Where Michael's own word to the studio goes when nobody has written yet. */
 const STUDIO_ROOM = "studio@room";
+/** Questions viewers ask Alex on the watch page, kept as one thread for Michael's Watch tab. */
+const WATCH_ROOM = "watch@room";
+
+/** Log a watch-page question and Alex's answer (called from the help chat). */
+export async function logWatchChat(question: string, answer: string): Promise<void> {
+  const eventId = (await storage.getFeaturedEvent()).id;
+  const chat = await threadFor(eventId, WATCH_ROOM);
+  if (question.trim()) await say(chat.id, "user", question.trim().slice(0, 2000));
+  if (answer.trim()) await say(chat.id, "alex", answer.trim().slice(0, 4000), "Alex");
+}
 
 async function alexOn(eventId: number): Promise<boolean> {
   return ((await storage.getSetting(alexKey(eventId))) ?? "on") !== "off";
@@ -72,7 +82,7 @@ async function feedOf(chats: GreenRoomChatRow[], limit = 300): Promise<Line[]> {
   const rows = await db.select().from(greenRoomMessages).where(inArray(greenRoomMessages.chatId, chats.map((c) => c.id))).orderBy(desc(greenRoomMessages.id)).limit(limit);
   return rows.reverse().map((m) => {
     const c = by.get(m.chatId)!;
-    const name = m.role === "producer" ? PRODUCER_NAME : m.role === "alex" ? "Alex" : c.name || c.email;
+    const name = m.role === "producer" ? PRODUCER_NAME : m.role === "alex" ? "Alex" : c.email === WATCH_ROOM ? "Viewer" : c.name || c.email;
     return { id: m.id, chatId: m.chatId, role: m.role, name, show: m.role === "user" ? c.show : "", content: m.content, at: m.createdAt };
   });
 }
@@ -83,7 +93,8 @@ export function registerGreenRoomChat(app: Express, requireAdmin: RequestHandler
     const hosts = new Set(await studioHosts(eventId));
     const chats = await db.select().from(greenRoomChats).where(eq(greenRoomChats.eventId, eventId));
     const inStudio = (c: GreenRoomChatRow) => hosts.has(c.email) || c.email === STUDIO_ROOM;
-    return { studio: chats.filter(inStudio), green: chats.filter((c) => !inStudio(c)), hosts };
+    const isWatch = (c: GreenRoomChatRow) => c.email === WATCH_ROOM;
+    return { studio: chats.filter(inStudio), green: chats.filter((c) => !inStudio(c) && !isWatch(c)), watch: chats.filter(isWatch), hosts };
   };
 
   /** Michael's two rooms, each one scrolling chat, with how many are waiting on him in each. */
@@ -91,9 +102,10 @@ export function registerGreenRoomChat(app: Express, requireAdmin: RequestHandler
     res.setHeader("Cache-Control", "no-store");
     if ((req as any).studioHost) return res.status(403).json({ message: "Admins only." });
     const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
-    const { studio, green } = await split(eventId);
+    const { studio, green, watch } = await split(eventId);
     res.json({
       alexOn: await alexOn(eventId),
+      watch: { lines: await feedOf(watch), waiting: 0 },
       studio: { lines: await feedOf(studio), waiting: studio.filter((c) => c.needsProducer).length },
       green: { lines: await feedOf(green), waiting: green.filter((c) => c.needsProducer).length },
     });
@@ -118,6 +130,23 @@ export function registerGreenRoomChat(app: Express, requireAdmin: RequestHandler
     const direct = req.body?.toProducer === true;
     if (direct || chat.mode === "producer" || !(await alexOn(eventId))) {
       await db.update(greenRoomChats).set({ needsProducer: true, ...(direct ? { mode: "producer" } : {}) }).where(eq(greenRoomChats.id, chat.id));
+      // Michael answers what he can at once (Andrew, show day): the producer's
+      // voice, from the same notes as Alex. Anything that needs a person, and
+      // every urgent press, stays flagged for him.
+      if (req.body?.urgent !== true) {
+        try {
+          const hist = (await messagesOf(chat.id)).slice(-12);
+          const t: AlexTurn[] = hist.map((m) => ({ role: m.role === "user" ? "user" : "assistant", content: m.content }));
+          t.unshift({ role: "user", content: `(Answer as ${PRODUCER_NAME}, the show's producer, not as Alex: one or two short, warm sentences. If it needs a person to act — something wrong on stage, a change to the schedule, anything you can't answer from the running order — end with the tag ${HANDOFF_TAG}.)` }, { role: "assistant", content: "Understood." });
+          let all = "";
+          for await (const piece of alexAnswer(t, email)) all += piece;
+          const clean = all.split(HANDOFF_TAG).join("").trim();
+          if (clean) await say(chat.id, "producer", clean, PRODUCER_NAME);
+          if (clean && !all.includes(HANDOFF_TAG)) await db.update(greenRoomChats).set({ needsProducer: false }).where(eq(greenRoomChats.id, chat.id));
+        } catch (err) {
+          console.error("Michael's first answer failed:", err);
+        }
+      }
       if (direct) void slackNote(`${req.body?.urgent === true ? ":rotating_light: URGENT from the studio" : ":speech_balloon: Studio"}: ${chat.name || chat.email} needs ${PRODUCER_NAME}. "${text.slice(0, 200)}"`, { label: "Open the green room chat", url: "/admin/greenroom" });
       return res.json({ waiting: true });
     }
@@ -247,12 +276,13 @@ export function registerGreenRoomChat(app: Express, requireAdmin: RequestHandler
   app.get("/api/admin/greenroom/transcript", requireAdmin, async (req, res) => {
     const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
     const { studio, green } = await split(eventId);
-    const room = req.query.room === "studio" ? "studio" : "green";
-    const lines = await feedOf(room === "studio" ? studio : green, 100_000);
+    const { watch } = await split(eventId);
+    const room = req.query.room === "studio" ? "studio" : req.query.room === "watch" ? "watch" : "green";
+    const lines = await feedOf(room === "studio" ? studio : room === "watch" ? watch : green, 100_000);
     const et = (iso: string) => new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit", timeZone: "America/New_York" }).format(new Date(iso));
     const text = lines.map((l) => `[${et(l.at)} ET] ${l.name}${l.show ? ` (${l.show})` : ""}: ${l.content}`).join("\n");
     res.setHeader("Content-Type", "text/plain; charset=utf-8");
-    res.setHeader("Content-Disposition", `attachment; filename="${room === "studio" ? "studio" : "green-room"}-chat-${new Date().toISOString().slice(0, 10)}.txt"`);
+    res.setHeader("Content-Disposition", `attachment; filename="${room === "studio" ? "studio" : room === "watch" ? "watch-page" : "green-room"}-chat-${new Date().toISOString().slice(0, 10)}.txt"`);
     res.send(text || "No messages yet.");
   });
 

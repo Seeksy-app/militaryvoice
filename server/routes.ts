@@ -121,7 +121,7 @@ import { slackInbound, slackNote } from "./slack.js";
 import { registerMagazine, planSegments, claimSegmentCut } from "./magazine.js";
 import { registerHealth, beat, addHealthCheck } from "./health.js";
 import { registerNotices } from "./notices.js";
-import { registerGreenRoomChat } from "./greenRoomChat.js";
+import { registerGreenRoomChat, logWatchChat } from "./greenRoomChat.js";
 import { draftReply, matchBroadcast, isKnownSender, looksAutomatic, composeAck, firstNameFor, stripQuoted, alexSignatureHtml, threadKey } from "./inbox.js";
 import { adminChat, type ChatTurn } from "./adminChat.js";
 import { waitUntil } from "@vercel/functions";
@@ -9402,6 +9402,8 @@ export function registerRoutes(app: Express): void {
       const total = Math.floor((event.durationHours * 60) / event.slotMinutes);
       const out = await answerHelp(turns, { event, taken, total, agenda: await runningOrderText(event) });
       res.json(out);
+      // Watch-page questions go to Michael's Watch tab, for the record.
+      if (req.body?.page === "/watch") void logWatchChat(turns[turns.length - 1].content, String((out as { text?: string }).text ?? "")).catch(() => {});
     } catch (err) {
       console.error("help chat failed:", (err as Error).message);
       res.json({ text: "I couldn't reach my notes just now. Want me to get a person for you?", handoff: true });
