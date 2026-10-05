@@ -255,6 +255,30 @@ function fitBox(fit: string | undefined): CSSProperties {
   return { width: "min(100%, calc(100cqh * 16 / 9))", aspectRatio: "16 / 9" };
 }
 
+/**
+ * One leveler for the broadcast (only on the recorder's page, which sets
+ * window.__mvBroadcast): evens the voices out, lifts them about 15 dB, and a
+ * limiter keeps the loud ones from clipping. Viewers' own pages play as is.
+ */
+let leveler: { ctx: AudioContext; input: AudioNode } | null | undefined;
+function broadcastLeveler(): { ctx: AudioContext; input: AudioNode } | null {
+  if (leveler !== undefined) return leveler;
+  if (typeof window === "undefined" || !(window as unknown as { __mvBroadcast?: boolean }).__mvBroadcast) return (leveler = null);
+  try {
+    const ctx = new AudioContext();
+    const comp = ctx.createDynamicsCompressor();
+    comp.threshold.value = -38; comp.knee.value = 12; comp.ratio.value = 4; comp.attack.value = 0.005; comp.release.value = 0.25;
+    const gain = ctx.createGain();
+    gain.gain.value = 5.6; // about +15 dB
+    const limit = ctx.createDynamicsCompressor();
+    limit.threshold.value = -3; limit.knee.value = 0; limit.ratio.value = 20; limit.attack.value = 0.001; limit.release.value = 0.1;
+    comp.connect(gain); gain.connect(limit); limit.connect(ctx.destination);
+    void ctx.resume().catch(() => {});
+    leveler = { ctx, input: comp };
+  } catch { leveler = null; }
+  return leveler;
+}
+
 function Tile({ tile, muted, namePos = "bottom", fit, contain = false, flat = false, cover = false, bare = false }: { tile: StageTile; muted: boolean; namePos?: "bottom" | "top" | "none"; fit?: string; contain?: boolean; flat?: boolean; cover?: boolean; bare?: boolean }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -323,7 +347,21 @@ function Tile({ tile, muted, namePos = "bottom", fit, contain = false, flat = fa
     const el = audioRef.current;
     if (!el || !tile.audio) return;
     tile.audio.attach(el);
+    // The broadcast's copy runs every voice through one leveler, so a quiet
+    // mic still reaches broadcast loudness (5 Oct: LiveOne measured -35 LU).
+    // The element stays attached but silent: Chrome only feeds a remote track
+    // into Web Audio while an element is playing it.
+    const lv = broadcastLeveler();
+    let src: MediaStreamAudioSourceNode | null = null;
+    if (lv && tile.audio.mediaStreamTrack) {
+      try {
+        src = lv.ctx.createMediaStreamSource(new MediaStream([tile.audio.mediaStreamTrack]));
+        src.connect(lv.input);
+        el.muted = true;
+      } catch { src = null; }
+    }
     return () => {
+      try { src?.disconnect(); } catch { /* gone */ }
       tile.audio?.detach(el);
     };
   }, [tile.audio]);

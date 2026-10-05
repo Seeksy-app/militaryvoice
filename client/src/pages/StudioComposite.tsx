@@ -12,6 +12,9 @@ import { StageGrid, useStageRoom } from "@/components/StageView";
 // first, and the file isn't finalised until the second.
 
 export default function StudioComposite() {
+  // The leveler in StageView applies only here, on the broadcast's own page
+  // (set on render, not on import, so no other page ever turns it on).
+  (window as unknown as { __mvBroadcast?: boolean }).__mvBroadcast = true;
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
   const url = params.get("url");
   const token = params.get("token");
