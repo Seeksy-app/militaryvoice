@@ -7005,6 +7005,8 @@ export function registerRoutes(app: Express): void {
     // and the only way back was the stale-claim timeout — so stopping the
     // worker to change something cost an hour before it could try again.
     if (req.body?.requeue) {
+      // Held by a producer meanwhile: it stays held, not back in the queue.
+      if (rec.clipStatus !== "running") { res.json({ ok: true, held: true }); return; }
       await storage.setClipStatus(rec.id, "queued", "");
       res.json({ ok: true, requeued: true });
       return;
@@ -7969,6 +7971,14 @@ export function registerRoutes(app: Express): void {
     let prev: Record<string, unknown> = {};
     try { prev = rec.clean ? JSON.parse(rec.clean) : {}; } catch { prev = {}; }
     await storage.setClean(rec.id, JSON.stringify({ ...prev, status: "queued", at: new Date().toISOString() }));
+    res.json({ ok: true });
+  });
+
+  /** Take a job out of the queue (one that keeps freezing and holds up the rest); "Clip again" puts it back. */
+  app.post("/api/admin/recordings/:id/hold", requireAdmin, async (req, res) => {
+    const rec = await storage.getRecording(Number(req.params.id));
+    if (!rec) return res.status(404).json({ message: "No such recording." });
+    await storage.setClipStatus(rec.id, "failed", "Held by the producer so the queue could move. Press Clip again to run it.");
     res.json({ ok: true });
   });
 
