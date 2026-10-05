@@ -269,9 +269,9 @@ function broadcastLeveler(): { ctx: AudioContext; input: AudioNode } | null {
     const comp = ctx.createDynamicsCompressor();
     comp.threshold.value = -38; comp.knee.value = 12; comp.ratio.value = 4; comp.attack.value = 0.005; comp.release.value = 0.25;
     const gain = ctx.createGain();
-    gain.gain.value = 5.6; // about +15 dB
+    gain.gain.value = 2.2; // about +7 dB after the compressor: measured -9 dBFS RMS at 5.6, too hot
     const limit = ctx.createDynamicsCompressor();
-    limit.threshold.value = -3; limit.knee.value = 0; limit.ratio.value = 20; limit.attack.value = 0.001; limit.release.value = 0.1;
+    limit.threshold.value = -6; limit.knee.value = 0; limit.ratio.value = 20; limit.attack.value = 0.001; limit.release.value = 0.1;
     comp.connect(gain); gain.connect(limit); limit.connect(ctx.destination);
     void ctx.resume().catch(() => {});
     leveler = { ctx, input: comp };
