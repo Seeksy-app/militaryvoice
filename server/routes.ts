@@ -5118,6 +5118,8 @@ export function registerRoutes(app: Express): void {
           const names = [who.hostName.trim(), co?.hostName?.trim()].filter(Boolean).join(" & ");
           banner = { bannerTitle: names, bannerSubtitle: who.podcastName.trim(), bannerVisible: true };
         }
+        // A pre-recorded episode plays with no name bar, so it reads as live (Andrew, 5 Oct).
+        if (row.kind === "Segment" && scene.mediaUrl) banner = { ...banner, bannerVisible: false };
         // The desk scene: the card is whoever holds that hour as co-host,
         // so the stage says who is talking rather than nobody.
         // A hand-off that plays Alex's recorded clip is hers, not Michael's: her name on the bar.
