@@ -736,7 +736,7 @@ export default function Studio({ slug }: { slug?: string }) {
         // "ideal", not "exact": a camera that has since been unplugged falls
         // back to the default instead of failing the whole request.
         video: videoId ? { deviceId: { ideal: videoId } } : true,
-        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: false, ...(audioId ? { deviceId: { ideal: audioId } } : {}) },
+        audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, ...(audioId ? { deviceId: { ideal: audioId } } : {}) },
       });
       streamRef.current = s;
       setStream(s);
