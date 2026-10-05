@@ -5485,6 +5485,9 @@ export function registerRoutes(app: Express): void {
       else if (mediaScene) target = "Green room";
       // A co-host who is also a podcaster is the guest on their own show.
       else if (guestScene && belongs(p)) target = "On stage";
+      // The admin's own console (the producer) never gets pulled on by a scene:
+      // on 5 Oct Andrew kept landing on air at every intro. They add themselves.
+      else if (p.clientKey.startsWith("admin:")) target = "Green room";
       // On a hand-off slide the hosts add themselves when they're ready.
       else if (isHost(p)) target = opts.hostsAddThemselves || (guestScene && !signup!.needsInterviewer) ? "Green room" : "On stage";
       // A podcaster's guest comes on with them: anyone who joined through the
