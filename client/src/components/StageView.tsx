@@ -530,16 +530,16 @@ function StageLayout({
     );
   }
   if (L === "ou1" || L === "ou2" || L === "ou3") {
-    // Over/under: the guest big on top, the others the same size in a row below
-    // (1 over 1, 1 over 2, 1 over 3).
+    // Over/under: one on top, the others in a row below (1 over 1, 1 over 2,
+    // 1 over 3). Every frame the same square, as big as two rows allow.
     const k = L === "ou1" ? 1 : L === "ou2" ? 2 : 3;
     const below = rest.slice(0, k);
-    const topShare = k === 1 ? 50 : k === 2 ? 58 : 62;
-    const cell = (t: StageTile) => <div key={t.identity} className={`relative grid min-h-0 min-w-0 ${dragCls(t)}`} {...dnd(t)}><Tile tile={t} muted={muted} namePos={tag} fit="wide" contain /></div>;
+    const side = `min(calc((100cqh - 44px) / 2), calc((100cqw - 32px - ${(k - 1) * 12}px) / ${k}))`;
+    const cell = (t: StageTile) => <div key={t.identity} className={`relative grid shrink-0 ${dragCls(t)}`} style={{ width: side, height: side }} {...dnd(t)}><Tile tile={t} muted={muted} namePos={tag} cover /></div>;
     return (
-      <div className="relative flex h-full w-full flex-col gap-3 p-4">
-        <div className="grid min-h-0" style={{ flex: `${topShare} 1 0%` }}>{main ? cell(main) : null}</div>
-        {below.length > 0 && <div className="grid min-h-0 gap-3" style={{ flex: `${100 - topShare} 1 0%`, gridTemplateColumns: `repeat(${k}, minmax(0, 1fr))` }}>{below.map(cell)}</div>}
+      <div className="relative flex h-full w-full flex-col items-center justify-center gap-3 p-4 [container-type:size]">
+        <div className="flex justify-center gap-3">{main ? cell(main) : null}</div>
+        {below.length > 0 && <div className="flex justify-center gap-3">{below.map(cell)}</div>}
         {rest.length > k && <div className="hidden">{rest.slice(k).map((t) => <Tile key={t.identity} tile={t} muted={muted} namePos="none" />)}</div>}
       </div>
     );
