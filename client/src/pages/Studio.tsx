@@ -453,30 +453,50 @@ function TimeLeftPill({ slug, studioId }: { slug?: string; studioId?: number }) 
 
 /** The producer's message, across the top until it's closed (one at a time; a new one shows again). */
 export function StudioNotice({ email, onStage = false }: { email: string; onStage?: boolean }) {
-  const { data } = useQuery<{ notice: { id: number; text: string; to: string; cue?: string } | null }>({
+  const { data } = useQuery<{ notice: { id: number; text: string; to: string; cue?: string; liveAt?: string } | null }>({
     queryKey: ["/api/studio/notice"],
     queryFn: async () => (await apiRequest("GET", "/api/studio/notice")).json(),
-    refetchInterval: 8_000,
+    refetchInterval: 3_000,
   });
   const n = data?.notice;
   const seenKey = n ? `mv-notice-${n.id}` : "";
   const [closed, setClosed] = useState<Set<string>>(() => new Set());
-  const forMe = Boolean(n) && (n!.to === "stage" ? onStage : !n!.to || n!.to === email.trim().toLowerCase());
+  const me = email.trim().toLowerCase();
+  const forMe = Boolean(n) && (n!.to === "stage" ? onStage : !n!.to || n!.to.split(",").includes(me));
   const played = useRef<number>(0);
-  // The go signal: Alex's voice in their ears, once, then the flash clears itself.
+  const [now, setNow] = useState(() => Date.now());
+  const liveAt = n?.cue ? Date.parse(n.liveAt ?? "") || 0 : 0;
+  const counting = Boolean(n?.cue && forMe && liveAt && now < liveAt);
   useEffect(() => {
-    if (!n?.cue || !forMe || played.current === n.id) return;
+    if (!n?.cue || !forMe) return;
+    const id = setInterval(() => setNow(Date.now()), 200);
+    return () => clearInterval(id);
+  }, [n?.id, n?.cue, forMe]);
+  // The go signal: a countdown on their screen, then Alex's voice in their
+  // ears at zero, once, and the flash clears itself.
+  useEffect(() => {
+    if (!n?.cue || !forMe || counting || played.current === n.id) return;
     played.current = n.id;
     try { void new Audio("/audio/youre-live.mp3").play(); } catch { /* the flash still shows */ }
-    const t = setTimeout(() => setClosed((s) => new Set(s).add(`mv-notice-${n.id}`)), 6000);
+    const t = setTimeout(() => setClosed((s) => new Set(s).add(`mv-notice-${n.id}`)), 7000);
     return () => clearTimeout(t);
-  }, [n?.id, n?.cue, forMe]);
+  }, [n?.id, n?.cue, forMe, counting]);
   if (!n || closed.has(seenKey) || !forMe) return null;
   if (n.cue) {
+    const secs = Math.ceil((liveAt - now) / 1000);
     return (
-      <div className="pointer-events-none fixed inset-x-0 top-6 z-[96] mx-auto w-[min(92vw,34rem)] animate-pulse rounded-3xl bg-emerald-600 px-6 py-5 text-center text-white shadow-2xl ring-8 ring-emerald-400/40" role="alert" data-testid="studio-cue-live">
-        <div className="text-4xl font-black tracking-wide">YOU'RE LIVE</div>
-        <div className="mt-1 text-base font-semibold opacity-90">Go, go, go!</div>
+      <div className={`pointer-events-none fixed inset-x-0 top-6 z-[96] mx-auto w-[min(92vw,36rem)] rounded-3xl px-6 py-6 text-center text-white shadow-2xl ring-8 ${counting ? "bg-[#b36b00] ring-[#F0A71F]/40" : "animate-pulse bg-emerald-600 ring-emerald-400/40"}`} role="alert" data-testid="studio-cue-live">
+        {counting ? (
+          <>
+            <div className="text-xl font-bold uppercase tracking-[0.14em]">You're live in</div>
+            <div className="mt-1 font-black tabular-nums leading-none" style={{ fontSize: "6rem" }}>{secs}</div>
+          </>
+        ) : (
+          <>
+            <div className="text-5xl font-black tracking-wide">YOU'RE LIVE</div>
+            <div className="mt-1 text-lg font-semibold opacity-90">Go, go, go!</div>
+          </>
+        )}
       </div>
     );
   }

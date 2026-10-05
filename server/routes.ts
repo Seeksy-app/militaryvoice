@@ -5348,9 +5348,18 @@ export function registerRoutes(app: Express): void {
   });
   app.post("/api/admin/studio/notice", requireAdmin, async (req, res) => {
     const text = String(req.body?.text ?? "").trim().slice(0, 400);
-    const to = String(req.body?.to ?? "").trim().toLowerCase();
+    let to = String(req.body?.to ?? "").trim().toLowerCase();
     const cue = req.body?.cue === "live" ? "live" : "";
-    const v = text ? { id: Date.now(), text, to, cue, at: new Date().toISOString() } : null;
+    // "stage" means whoever is on stage now, by email: a guest's page stops
+    // asking whether it's on stage once it has joined, so it can't decide itself.
+    if (to === "stage") {
+      const { studio } = await adminStudio(req);
+      to = (await storage.listStudioParticipants(studio.id)).filter((p) => p.state === "On stage" && withPresence(p) && p.email).map((p) => p.email.trim().toLowerCase()).join(",");
+    }
+    // The go signal counts down on their screen first: "You're live in 5, 4…".
+    const countdown = cue ? Math.max(0, Math.min(15, Number(req.body?.countdown ?? 5) || 0)) : 0;
+    const now = Date.now();
+    const v = text ? { id: now, text, to, cue, countdown, liveAt: new Date(now + countdown * 1000).toISOString(), at: new Date(now).toISOString() } : null;
     await storage.setSetting("studio_notice", v ? JSON.stringify(v) : "");
     res.json(v ?? { cleared: true });
   });
