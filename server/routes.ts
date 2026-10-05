@@ -5148,8 +5148,9 @@ export function registerRoutes(app: Express): void {
           ...banner,
           // The sponsor rides on the lower third too, when there is one.
           ...(sponsor && banner.bannerTitle ? { bannerSubtitle: [banner.bannerSubtitle, `Presented by ${sponsor.name}`].filter(Boolean).join(" · ") } : {}),
-          // At the desk the lower third is the co-host's name.
-          ...(desk && !banner.bannerTitle ? { bannerTitle: desk.name, bannerSubtitle: `${/^michael\b/i.test(desk.name) ? "Producer" : "Co-host"} · The Podcast Marathon`, bannerVisible: true } : {}),
+          // At the desk the lower third is the co-host's name. Not over Alex's
+          // own clips: she's on screen, and the bar covered the slides.
+          ...(desk && !banner.bannerTitle && !(row.kind === "Handoff" && scene.mediaUrl) ? { bannerTitle: desk.name, bannerSubtitle: `${/^michael\b/i.test(desk.name) ? "Producer" : "Co-host"} · The Podcast Marathon`, bannerVisible: true } : {}),
         });
         if (withScene) {
           const ev = await storage.getEventById(studio.eventId);
