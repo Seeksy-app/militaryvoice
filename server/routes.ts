@@ -7418,7 +7418,10 @@ export function registerRoutes(app: Express): void {
    */
   app.get("/api/admin/postify/stats", requireAdmin, async (_req, res) => {
     noStore(res);
-    const eventId = (await storage.getFeaturedEvent()).id;
+    const ev = await storage.getFeaturedEvent();
+    const eventId = ev.id;
+    // On the day only, from an hour before the start: rehearsals and test cuts aren't the Marathon.
+    const from = Date.parse(ev.startAtUtc) - 3600_000;
     const counts = await storage.countClipsByRecording();
     const rows = (await storage.listRecordings())
       .filter((r) => r.clipStatus === "done")
@@ -7434,7 +7437,7 @@ export function registerRoutes(app: Express): void {
           title: r.title,
           email: r.email,
           at: r.startedAt,
-          marathon: r.eventId === eventId || (r.eventId === 0 && r.url.startsWith("studio/")),
+          marathon: (r.eventId === eventId || (r.eventId === 0 && r.url.startsWith("studio/"))) && Date.parse(r.startedAt) >= from,
           durationSec: r.durationSec,
           clips: counts.get(r.id) ?? 0,
           cleaned: done,
