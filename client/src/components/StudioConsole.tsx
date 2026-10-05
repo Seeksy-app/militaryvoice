@@ -28,7 +28,7 @@ import { useProducerRoom, type ProducerFeed } from "@/hooks/use-producer-room";
 import { Destinations } from "@/components/Destinations";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { ProducerChat, useGreenRoomWaiting } from "@/components/ProducerDesk";
-import { StudioHostBar, MichaelChat } from "@/components/StudioHostBar";
+import { StudioHostBar, MichaelChat, useTeamUnread } from "@/components/StudioHostBar";
 import { StageGrid, youtubeId, clockText, type StageTile } from "@/components/StageView";
 import { MediaLibrary, type MediaItem } from "@/components/MediaLibrary";
 import { SceneRail, SHOW_ZONE, type SceneSpec } from "@/components/SceneRail";
@@ -1360,6 +1360,12 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
   // Bumped to open Michael's chat in the right rail, from the yellow pill or the big button.
   const [chatOpen, setChatOpen] = useState(0);
   const deskWaiting = useGreenRoomWaiting(eventId, Boolean(me0) && !me0?.studioHost && !isRoom);
+  // A studio host's unread messages from the team; the first one opens the chat by itself.
+  const teamUnread = useTeamUnread(studioId ?? undefined, Boolean(me0?.studioHost) && !isRoom);
+  const firstTeam = useRef(false);
+  useEffect(() => {
+    if (teamUnread.first && !firstTeam.current) { firstTeam.current = true; setChatOpen((n) => n + 1); }
+  }, [teamUnread.first]);
   const [autoNote, setAutoNote] = useState<{ action: string; why: string; deskName: string; at?: string } | null>(null);
   useEffect(() => {
     if (!broadcasting) { setAutoNote(null); return; }
@@ -2476,6 +2482,23 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                     {standbyLoops.data && standbyLoops.data.loops.length === 0 && <p className="px-2 py-1.5 text-xs text-muted-foreground">No loops yet.</p>}
                   </DropdownMenuContent>
                 </DropdownMenu>
+              )}
+
+              {/* A host's messages from the team, with how many they haven't read. */}
+              {me0?.studioHost && !isRoom && (
+                <button
+                  type="button"
+                  title="Messages from the team"
+                  onClick={() => { setChatOpen((n) => n + 1); teamUnread.markSeen(); }}
+                  className="relative flex w-[4.75rem] flex-col items-center gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-none text-white/70 transition-colors hover:bg-white/10 hover:text-white"
+                  data-testid="button-deck-chat"
+                >
+                  <MessagesSquare className="h-5 w-5" />
+                  <span className="w-full truncate text-center">Chat</span>
+                  {teamUnread.count > 0 && (
+                    <span className="absolute right-3 top-1 inline-flex h-5 min-w-5 items-center justify-center rounded-full bg-[#ED1C24] px-1.5 text-[11px] font-bold text-white" data-testid="badge-team-unread">{teamUnread.count}</span>
+                  )}
+                </button>
               )}
 
               {/* The handful of settings you might actually change mid-show.

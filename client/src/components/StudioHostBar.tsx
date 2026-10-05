@@ -110,6 +110,40 @@ export function StudioHostBar({
 }
 
 /** A direct line to Michael from inside the studio: same thread as the green room, never to Alex. */
+/** Where a host last read the team's messages to them, kept per studio in this browser. */
+const teamSeenKey = (studioId?: number) => `mv-team-seen-${studioId ?? 0}`;
+const readTeamSeen = (studioId?: number) => { try { return Number(localStorage.getItem(teamSeenKey(studioId)) || 0); } catch { return 0; } };
+const writeTeamSeen = (studioId: number | undefined, id: number) => { try { localStorage.setItem(teamSeenKey(studioId), String(id)); window.dispatchEvent(new Event("mv-team-seen")); } catch { /* private window */ } };
+
+/**
+ * Unread messages from the team (Michael) to this host, for the badge on the
+ * chat icon. "first" turns true once, the first time a message from the team
+ * arrives, so the console can open the chat and say what it is.
+ */
+export function useTeamUnread(studioId: number | undefined, enabled: boolean): { count: number; first: boolean; markSeen: () => void } {
+  const [lines, setLines] = useState<{ id: number; role: Role }[]>([]);
+  const [seen, setSeen] = useState(() => readTeamSeen(studioId));
+  useEffect(() => {
+    if (!enabled) return;
+    let stop = false;
+    const load = async () => {
+      try {
+        const r = await fetch(`/api/host/alex/thread?feed=studio${studioId ? `&studioId=${studioId}` : ""}`, { credentials: "include" });
+        if (r.ok && !stop) setLines(((await r.json()) as Thread).messages.map((m) => ({ id: m.id, role: m.role })));
+      } catch { /* next poll */ }
+    };
+    void load();
+    const id = setInterval(() => void load(), 4000);
+    const sync = () => setSeen(readTeamSeen(studioId));
+    window.addEventListener("mv-team-seen", sync);
+    return () => { stop = true; clearInterval(id); window.removeEventListener("mv-team-seen", sync); };
+  }, [studioId, enabled]);
+  const team = lines.filter((m) => m.role === "producer");
+  const count = team.filter((m) => m.id > seen).length;
+  const lastTeam = team.length ? team[team.length - 1].id : 0;
+  return { count, first: count > 0 && seen === 0, markSeen: () => { if (lastTeam) { writeTeamSeen(studioId, lastTeam); setSeen(lastTeam); } } };
+}
+
 export function MichaelChat({ studioId, onClose, panel = false }: { studioId?: number; onClose?: () => void; panel?: boolean }) {
   const [thread, setThread] = useState<Thread | null>(null);
   const [draft, setDraft] = useState("");
@@ -132,6 +166,11 @@ export function MichaelChat({ studioId, onClose, panel = false }: { studioId?: n
   useEffect(() => {
     const el = logRef.current;
     if (el) el.scrollTop = el.scrollHeight;
+    // Reading the panel is reading them: the badge on the chat icon clears.
+    if (panel) {
+      const team = (thread?.messages ?? []).filter((m) => m.role === "producer");
+      if (team.length) writeTeamSeen(studioId, team[team.length - 1].id);
+    }
   }, [thread?.messages.length]);
   const send = async () => {
     const text = draft.trim();
@@ -147,8 +186,10 @@ export function MichaelChat({ studioId, onClose, panel = false }: { studioId?: n
   // In the rail: the whole conversation, newest at the bottom, the box under it.
   if (panel) {
     const all = thread?.messages ?? [];
+    const fromTeam = all.some((m) => m.role === "producer");
     return (
       <div className="flex h-full min-h-[24rem] flex-col gap-2 text-white" data-testid="michael-chat-panel">
+        {fromTeam && <p className="shrink-0 rounded-lg bg-[#F0A71F]/15 px-3 py-2 text-xs font-semibold text-[#F0A71F]" data-testid="team-dm-note">Here are your direct messages from the team.</p>}
         <div ref={logRef} className="min-h-0 flex-1 space-y-2 overflow-y-auto text-sm leading-snug">
           {all.length === 0 ? (
             <p className="text-white/60"><span className="font-semibold text-white">Michael</span> is watching. Tell him what's happening.</p>
