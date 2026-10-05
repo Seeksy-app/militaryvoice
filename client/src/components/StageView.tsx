@@ -358,6 +358,9 @@ function Tile({ tile, muted, namePos = "bottom", fit, contain = false, flat = fa
       try {
         src = lv.ctx.createMediaStreamSource(new MediaStream([tile.audio.mediaStreamTrack]));
         src.connect(lv.input);
+        // Volume, not mute: the track's attach (and React's muted prop) can
+        // turn mute back off, and then every voice would play twice.
+        el.volume = 0;
         el.muted = true;
         const dbg = (window as unknown as { __mvLeveler?: { sources: number } }).__mvLeveler;
         if (dbg) dbg.sources += 1;
