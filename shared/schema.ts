@@ -1898,6 +1898,8 @@ export const studioUpdateSchema = z.object({
   stageMediaLabel: z.string().trim().max(120).optional(),
   stageMediaPlaying: z.boolean().optional(),
   stageMediaPeople: z.boolean().optional(),
+  // "" takes the desk's thank-you slide down (a producer clearing it by hand).
+  stageThanks: z.literal("").optional(),
   logoUrl: z.string().trim().max(600).optional(),
   logoCorner: z.enum(LOGO_CORNERS).optional(),
   logoSize: z.number().int().min(40).max(320).optional(),
