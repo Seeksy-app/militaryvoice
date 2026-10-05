@@ -235,11 +235,25 @@ export function registerGreenRoomChat(app: Express, requireAdmin: RequestHandler
       else return res.status(409).json({ message: "Nobody in the green room has written yet." });
     }
     await say(chatId, "producer", text, PRODUCER_NAME);
-    // Answering in the studio clears every flag there: they all read it.
-    const clear = req.body?.room === "studio" ? studio.map((c) => c.id) : [chatId];
+    // Answering a room clears every flag in it: they all read the same feed,
+    // and "3 waiting" under an answer Michael just gave read as ignored.
+    const clear = room.map((c) => c.id);
     if (clear.length) await db.update(greenRoomChats).set({ needsProducer: false }).where(inArray(greenRoomChats.id, clear));
     await db.update(greenRoomChats).set({ mode: "producer" }).where(eq(greenRoomChats.id, chatId));
     res.json({ ok: true, chatId });
+  });
+
+  /** The whole conversation of a room, kept for the record: a plain-text transcript to download. */
+  app.get("/api/admin/greenroom/transcript", requireAdmin, async (req, res) => {
+    const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
+    const { studio, green } = await split(eventId);
+    const room = req.query.room === "studio" ? "studio" : "green";
+    const lines = await feedOf(room === "studio" ? studio : green, 100_000);
+    const et = (iso: string) => new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", second: "2-digit", timeZone: "America/New_York" }).format(new Date(iso));
+    const text = lines.map((l) => `[${et(l.at)} ET] ${l.name}${l.show ? ` (${l.show})` : ""}: ${l.content}`).join("\n");
+    res.setHeader("Content-Type", "text/plain; charset=utf-8");
+    res.setHeader("Content-Disposition", `attachment; filename="${room === "studio" ? "studio" : "green-room"}-chat-${new Date().toISOString().slice(0, 10)}.txt"`);
+    res.send(text || "No messages yet.");
   });
 
   /** Michael answers. Answering takes the thread: Alex stays quiet in it until he hands it back. */

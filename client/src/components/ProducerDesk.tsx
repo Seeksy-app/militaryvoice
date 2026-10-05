@@ -234,6 +234,13 @@ export function ProducerChat({ eventId, tall = false }: { eventId?: number; /** 
         {tab("studio", "Studio")}
         {tab("green", "Green Room")}
       </div>
+      <a
+        href={`/api/admin/greenroom/transcript?room=${room}${eventId ? `&eventId=${eventId}` : ""}`}
+        className="self-end px-1 text-[11px] font-medium text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+        data-testid="chat-transcript"
+      >
+        Download the {room === "studio" ? "Studio" : "Green Room"} transcript
+      </a>
       {room === "green" && (
         <label className="flex items-center justify-between gap-2 px-1 text-xs text-muted-foreground">
           <span>{feed.data?.alexOn ? "Alex answers first; anything she can't, comes to you." : "Alex is off: every question comes to you."}</span>
