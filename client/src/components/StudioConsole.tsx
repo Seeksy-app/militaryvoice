@@ -1070,8 +1070,11 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
     // its line threw on every render once a scene was taken, and blanked the studio.)
     const onAir = kind !== "room" && (Boolean(studio?.broadcastEgressId) || studio?.status === "Live");
     if (!onAir && clock.windowSeconds > 3 * 3600) return null;
+    // A show given a new end time counts down to that instead.
+    const until = (studio as { clockUntil?: { sceneId: number; at: string; label: string } | null } | undefined)?.clockUntil;
+    if (until && until.sceneId === studio.currentSceneId) return { remaining: Math.round((Date.parse(until.at) - tick) / 1000), label: until.label, mode: "next" as const };
     return { remaining: clock.windowSeconds, label: clock.nextSceneName, mode: "next" as const };
-  }, [scenes, studio?.currentSceneId, studio?.currentSceneTakenAtUtc, studio?.broadcastEgressId, studio?.status, kind, tick]);
+  }, [studio, scenes, studio?.currentSceneId, studio?.currentSceneTakenAtUtc, studio?.broadcastEgressId, studio?.status, kind, tick]);
   const fmtLeft = (secs: number) => { const a = Math.abs(secs); const m = Math.floor(a / 60); const sN = a % 60; return `${m}:${String(sN).padStart(2, "0")}`; };
 
   const currentSceneBanner = useMemo(() => {

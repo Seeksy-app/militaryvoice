@@ -4036,11 +4036,16 @@ export function registerRoutes(app: Express): void {
       // producer and Alex are all reading one number rather than three
       // arrived at separately. Off air there is nothing to be late for.
       clock: live
-        ? showClock(
-            allScenes.map((sc) => ({ id: sc.id, name: sc.name, startAtUtc: sc.startAtUtc })),
-            found.studio.currentSceneId,
-            found.studio.currentSceneTakenAtUtc,
-          )
+        ? await (async () => {
+            const c = showClock(
+              allScenes.map((sc) => ({ id: sc.id, name: sc.name, startAtUtc: sc.startAtUtc })),
+              found.studio.currentSceneId,
+              found.studio.currentSceneTakenAtUtc,
+            );
+            const until = await clockUntil();
+            if (!c || !until || until.sceneId !== found.studio.currentSceneId) return c;
+            return { ...c, windowSeconds: Math.round((Date.parse(until.at) - Date.now()) / 1000), nextSceneName: until.label, nextStartAtUtc: until.at };
+          })()
         : null,
       scenes: await Promise.all(allScenes.map(async (sc) => ({ ...sc, mediaSeconds: sc.mediaUrl ? await mediaSecondsFor(sc.mediaUrl) : 0 }))),
       runItems: await storage.listRunOfShow(found.studio.eventId),
@@ -4332,7 +4337,7 @@ export function registerRoutes(app: Express): void {
     const hosts = await showHosts();
     const photos = await Promise.all(participants.map((p) => (withPresence(p) ? personPhoto(studio.eventId, p.email) : Promise.resolve(""))));
     res.json({
-      studio,
+      studio: { ...studio, clockUntil: await clockUntil() },
       participants: participants.map((p, i) => ({ ...p, present: withPresence(p), isHost: isShowHost(p, hosts), photoUrl: photos[i] })),
     });
   });
@@ -4799,6 +4804,9 @@ export function registerRoutes(app: Express): void {
    */
   // Show day: the running order is fixed. No one drags, adds or deletes a
   // scene (admins too) until it's unlocked here; files and names can still be fixed.
+  const clockUntil = async (): Promise<{ sceneId: number; at: string; label: string } | null> => {
+    try { const raw = await storage.getSetting("clock_until"); return raw ? JSON.parse(raw) : null; } catch { return null; }
+  };
   const scenesLocked = async () => (await storage.getSetting("scenes_locked")) !== "false";
   const lockedNo = (res: Response) => res.status(423).json({ message: "The scenes are locked for the show. Nothing can be moved, added or deleted." });
   app.get("/api/admin/scenes/lock", requireAdmin, async (_req, res) => { noStore(res); res.json({ locked: await scenesLocked() }); });
@@ -5307,6 +5315,20 @@ export function registerRoutes(app: Express): void {
    * and past three minutes over it tells the producer instead. A pre-recorded
    * show switches when its file ends (the route above), not on the clock.
    */
+  /**
+   * A show running to a new end time: the clocks (console, green room, the
+   * wrap-up banner) count down to it instead of to the next scene's planned
+   * start, for as long as that scene is on. {sceneId: 0} clears it.
+   */
+  app.post("/api/admin/studio/clock-until", requireAdmin, async (req, res) => {
+    const sceneId = Number(req.body?.sceneId) || 0;
+    const at = String(req.body?.at ?? "");
+    if (sceneId && !Number.isFinite(Date.parse(at))) return res.status(400).json({ message: "Need a time." });
+    const v = sceneId ? { sceneId, at: new Date(at).toISOString(), label: String(req.body?.label ?? "").trim().slice(0, 80) || "the wrap" } : null;
+    await storage.setSetting("clock_until", v ? JSON.stringify(v) : "");
+    res.json(v ?? { cleared: true });
+  });
+
   /** Producer's switch: "off" stops the console taking any scene by itself (a show running long). */
   app.post("/api/admin/studio/auto-take", requireAdmin, async (req, res) => {
     await storage.setSetting("auto_take", req.body?.on === false ? "off" : "on");
