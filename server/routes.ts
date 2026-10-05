@@ -9401,9 +9401,10 @@ export function registerRoutes(app: Express): void {
       const taken = (await storage.listSignups(event.id)).filter((x) => x.status !== "cancelled").length;
       const total = Math.floor((event.durationHours * 60) / event.slotMinutes);
       const out = await answerHelp(turns, { event, taken, total, agenda: await runningOrderText(event) });
+      // Watch-page questions go to Michael's Watch tab, for the record (saved
+      // before answering: a serverless function stops once it has replied).
+      if (req.body?.page === "/watch") await logWatchChat(turns[turns.length - 1].content, String((out as { text?: string }).text ?? "")).catch((e) => console.error("watch log:", e));
       res.json(out);
-      // Watch-page questions go to Michael's Watch tab, for the record.
-      if (req.body?.page === "/watch") void logWatchChat(turns[turns.length - 1].content, String((out as { text?: string }).text ?? "")).catch(() => {});
     } catch (err) {
       console.error("help chat failed:", (err as Error).message);
       res.json({ text: "I couldn't reach my notes just now. Want me to get a person for you?", handoff: true });
