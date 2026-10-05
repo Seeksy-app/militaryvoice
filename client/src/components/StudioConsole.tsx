@@ -291,6 +291,8 @@ const LAYOUTS: { key: string; label: string; icon: React.ReactNode }[] = [
   { key: "sidebar", label: "Sidebar", icon: <span className="flex h-full w-full gap-[3px] px-[8%] py-[14%]"><span className="flex-[3] rounded-[2px] bg-current" /><span className="flex-1 rounded-[2px] bg-current" /></span> },
   { key: "pip", label: "Picture-in-Picture", icon: <span className="relative block h-full w-full px-[8%] py-[14%]"><span className="block h-full w-full rounded-[2px] bg-current" /><span className="absolute bottom-[10%] right-[5%] h-[22%] w-[18%] rounded-[1px] bg-current ring-2 ring-[#1b2140]" /></span> },
   { key: "thumbnails", label: "Thumbnails", icon: <span className="flex h-full w-full items-center gap-[3px] px-[8%] py-[14%]"><span className="h-full flex-[5] rounded-[2px] bg-current" /><span className="h-[22%] flex-1 rounded-[1px] bg-current" /></span> },
+  { key: "row3", label: "Three across", icon: <span className="flex h-full w-full items-center gap-[2px] px-[6%]"><span className="h-[36%] flex-1 rounded-[2px] bg-current" /><span className="h-[36%] flex-1 rounded-[2px] bg-current" /><span className="h-[36%] flex-1 rounded-[2px] bg-current" /></span> },
+  { key: "grid4", label: "Four squares", icon: <span className="grid h-full w-full grid-cols-2 grid-rows-2 gap-[2px] px-[14%] py-[12%]"><span className="rounded-[1px] bg-current" /><span className="rounded-[1px] bg-current" /><span className="rounded-[1px] bg-current" /><span className="rounded-[1px] bg-current" /></span> },
 ];
 
 function LayoutBar({ layout, onLayout }: { layout: string; onLayout: (v: string) => void }) {
@@ -300,7 +302,7 @@ function LayoutBar({ layout, onLayout }: { layout: string; onLayout: (v: string)
       if (!e.shiftKey || e.metaKey || e.ctrlKey || e.altKey) return;
       const el = e.target as HTMLElement | null;
       if (el && (el.isContentEditable || ["INPUT", "TEXTAREA", "SELECT"].includes(el.tagName))) return;
-      const m = /^Digit([1-6])$/.exec(e.code);
+      const m = /^Digit([1-8])$/.exec(e.code);
       if (!m) return;
       e.preventDefault();
       onLayout(LAYOUTS[Number(m[1]) - 1].key);

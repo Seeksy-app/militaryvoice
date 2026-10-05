@@ -520,6 +520,24 @@ function StageLayout({
       </div>
     );
   }
+  if (L === "row3") {
+    // Three across, all the same size, in a row through the middle; a fourth
+    // or more start a second row.
+    return (
+      <div className="relative grid h-full w-full grid-cols-3 content-center gap-3 p-4">
+        {tiles.map((t) => <div key={t.identity} className={`relative grid aspect-video min-h-0 min-w-0 ${dragCls(t)}`} {...dnd(t)}><Tile tile={t} muted={muted} namePos={tag} fit="wide" contain /></div>)}
+      </div>
+    );
+  }
+  if (L === "grid4") {
+    // Four squares: a 2 by 2 grid, every box the same size (an empty one stays empty).
+    return (
+      <div className="relative grid h-full w-full grid-cols-2 grid-rows-2 gap-3 p-4">
+        {tiles.slice(0, 4).map((t) => <div key={t.identity} className={`relative grid min-h-0 min-w-0 ${dragCls(t)}`} {...dnd(t)}><Tile tile={t} muted={muted} namePos={tag} fit="wide" contain /></div>)}
+        {tiles.length > 4 && <div className="hidden">{tiles.slice(4).map((t) => <Tile key={t.identity} tile={t} muted={muted} namePos="none" />)}</div>}
+      </div>
+    );
+  }
   // Contain: side by side, each camera whole inside a 16:9 box, the background around them.
   return (
     <div className={`relative grid h-full w-full gap-3 p-4 ${gridFor(n)}`}>
