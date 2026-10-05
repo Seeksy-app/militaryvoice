@@ -87,6 +87,7 @@ import {
   syncParticipantState,
   syncRoomMetadata,
   updateBroadcastTargets,
+  egressIsActive,
   rooms,
   createRtmpIngress,
   deleteIngress,
@@ -5741,6 +5742,39 @@ export function registerRoutes(app: Express): void {
     return { open: now >= from && now <= to, opensAt: new Date(from).toISOString() };
   }
   const etLabel = (iso: string) => new Intl.DateTimeFormat("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }).format(new Date(iso)) + " ET";
+
+  /**
+   * A fresh broadcast without going off air. LiveKit ends a stream at 12 hours
+   * (the marathon runs 16), so each destination moves to a new egress one at a
+   * time: off the old, onto the new, a second or two each. The new one also
+   * loads the stage page fresh. The old one stops last.
+   */
+  app.post("/api/admin/studio/broadcast/renew", requireAdmin, async (req, res) => {
+    const { studio } = await adminStudio(req);
+    const old = studio.broadcastEgressId;
+    if (!old) return res.status(409).json({ message: "Not broadcasting." });
+    const live = (await storage.listDestinations(studio.eventId)).filter((d) => d.live);
+    if (!live.length) return res.status(409).json({ message: "No destinations are live." });
+    const [first, ...rest] = live;
+    await updateBroadcastTargets(old, [], [ingestUrl(first)]).catch(() => {});
+    const neu = await startBroadcast(roomName(studio.id), [{ url: ingestUrl(first), label: first.label || first.platform }], PUBLIC_ORIGIN);
+    await storage.updateStudio(studio.id, { broadcastEgressId: neu });
+    // Outputs can only be changed once it's pushing.
+    for (let i = 0; i < 40 && !(await egressIsActive(neu).catch(() => false)); i++) await new Promise((r) => setTimeout(r, 1000));
+    const moved: string[] = [first.label || first.platform];
+    const failed: string[] = [];
+    for (const d of rest) {
+      try {
+        await updateBroadcastTargets(old, [], [ingestUrl(d)]).catch(() => {});
+        await updateBroadcastTargets(neu, [ingestUrl(d)], []);
+        moved.push(d.label || d.platform);
+      } catch (err) {
+        failed.push(`${d.label || d.platform}: ${(err as Error).message}`);
+      }
+    }
+    if (!failed.length) await stopEgressById(old).catch((err) => console.warn("Old broadcast already stopped:", (err as Error).message));
+    res.json({ old, egressId: neu, moved, failed });
+  });
 
   app.post("/api/admin/studio/broadcast", requireAdmin, async (req, res) => {
     if (!isLiveKitConfigured()) {

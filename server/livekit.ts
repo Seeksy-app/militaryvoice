@@ -291,6 +291,13 @@ export async function runningEgressIds(): Promise<Set<string>> {
   return out;
 }
 
+/** Whether an egress has finished starting and is pushing (so its outputs can be changed). */
+export async function egressIsActive(egressId: string): Promise<boolean> {
+  const [e] = await egress().listEgress({ egressId });
+  const status = String(e?.status ?? "");
+  return status === "1" || /ACTIVE/i.test(status);
+}
+
 /** How an egress actually ended, asked of LiveKit: for when its "ended" callback never arrived. */
 export async function egressOutcome(egressId: string): Promise<{ ok: boolean; filename: string; durationSec: number; size: string; error: string } | null> {
   const [e] = await egress().listEgress({ egressId });
