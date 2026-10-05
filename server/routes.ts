@@ -5757,7 +5757,7 @@ export function registerRoutes(app: Express): void {
     if (!live.length) return res.status(409).json({ message: "No destinations are live." });
     const [first, ...rest] = live;
     await updateBroadcastTargets(old, [], [ingestUrl(first)]).catch(() => {});
-    const neu = await startBroadcast(roomName(studio.id), [{ url: ingestUrl(first), label: first.label || first.platform }], PUBLIC_ORIGIN);
+    const neu = await startBroadcast(roomName(studio.id), [{ url: ingestUrl(first), label: first.label || first.platform }], `${PUBLIC_ORIGIN}/studio/composite`);
     await storage.updateStudio(studio.id, { broadcastEgressId: neu });
     // Outputs can only be changed once it's pushing.
     for (let i = 0; i < 40 && !(await egressIsActive(neu).catch(() => false)); i++) await new Promise((r) => setTimeout(r, 1000));
@@ -5862,7 +5862,7 @@ export function registerRoutes(app: Express): void {
       if (d.ownerEmail && !d.signupId && d.enabled && !d.live && (await channelWindow(d)).open) due.push(d);
     }
     if (due.length && !studio.broadcastEgressId) {
-      const egressId = await startBroadcast(roomName(studio.id), due.map((d) => ({ url: ingestUrl(d), label: d.label || d.platform })), PUBLIC_ORIGIN);
+      const egressId = await startBroadcast(roomName(studio.id), due.map((d) => ({ url: ingestUrl(d), label: d.label || d.platform })), `${PUBLIC_ORIGIN}/studio/composite`);
       await storage.updateStudio(studio.id, { broadcastEgressId: egressId });
       for (const d of due) await storage.updateDestination(d.id, { live: true });
     } else if (due.length) {
@@ -5891,7 +5891,7 @@ export function registerRoutes(app: Express): void {
       try {
         if (want && !d.live) {
           if (!egressId) {
-            egressId = await startBroadcast(roomName(studio.id), [{ url: ingestUrl(d), label: d.label || d.platform }], PUBLIC_ORIGIN);
+            egressId = await startBroadcast(roomName(studio.id), [{ url: ingestUrl(d), label: d.label || d.platform }], `${PUBLIC_ORIGIN}/studio/composite`);
             await storage.updateStudio(studio.id, { broadcastEgressId: egressId });
           } else {
             await updateBroadcastTargets(egressId, [ingestUrl(d)], []);
@@ -5971,7 +5971,7 @@ export function registerRoutes(app: Express): void {
         }
         if (want && d && !d.live) {
           if (!egressId) {
-            egressId = await startBroadcast(roomName(studio.id), [{ url: ingestUrl(d), label: d.label }], PUBLIC_ORIGIN);
+            egressId = await startBroadcast(roomName(studio.id), [{ url: ingestUrl(d), label: d.label }], `${PUBLIC_ORIGIN}/studio/composite`);
             await storage.updateStudio(studio.id, { broadcastEgressId: egressId });
           } else {
             await updateBroadcastTargets(egressId, [ingestUrl(d)], []);
