@@ -2446,6 +2446,25 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                 </DropdownMenuContent>
               </DropdownMenu>
 
+              {/* "You're live": Alex's voice in the ears of everyone on stage, and a
+                  green flash on their screen. Never on air. The guests' go signal. */}
+              {isLive && !isRoom && (
+                <button
+                  type="button"
+                  title="Tell the people on stage they're live (they hear it, viewers don't)"
+                  onClick={() => {
+                    adminSend("POST", "/api/admin/studio/notice", { text: "You're live! Go, go, go!", to: "stage", cue: "live" })
+                      .then(() => toast({ title: "Cue sent", description: "Everyone on stage hears \"You're live and ready to go.\"" }))
+                      .catch((e: Error) => toast({ title: "Couldn't send the cue", description: e.message, variant: "destructive" }));
+                  }}
+                  className="flex w-[4.75rem] flex-col items-center gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-none text-emerald-300 transition-colors hover:bg-emerald-500/15 hover:text-emerald-200"
+                  data-testid="button-deck-cue-live"
+                >
+                  <Radio className="h-5 w-5" />
+                  <span className="w-full truncate text-center">Cue: live</span>
+                </button>
+              )}
+
               {/* Standby, down here with the other show controls rather than up
                   beside the destinations and End stream: roll or stop it, and
                   pick which clip it plays. */}

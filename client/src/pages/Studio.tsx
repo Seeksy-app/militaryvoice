@@ -452,8 +452,8 @@ function TimeLeftPill({ slug, studioId }: { slug?: string; studioId?: number }) 
 }
 
 /** The producer's message, across the top until it's closed (one at a time; a new one shows again). */
-export function StudioNotice({ email }: { email: string }) {
-  const { data } = useQuery<{ notice: { id: number; text: string; to: string } | null }>({
+export function StudioNotice({ email, onStage = false }: { email: string; onStage?: boolean }) {
+  const { data } = useQuery<{ notice: { id: number; text: string; to: string; cue?: string } | null }>({
     queryKey: ["/api/studio/notice"],
     queryFn: async () => (await apiRequest("GET", "/api/studio/notice")).json(),
     refetchInterval: 8_000,
@@ -461,9 +461,26 @@ export function StudioNotice({ email }: { email: string }) {
   const n = data?.notice;
   const seenKey = n ? `mv-notice-${n.id}` : "";
   const [closed, setClosed] = useState<Set<string>>(() => new Set());
-  if (!n || closed.has(seenKey)) return null;
+  const forMe = Boolean(n) && (n!.to === "stage" ? onStage : !n!.to || n!.to === email.trim().toLowerCase());
+  const played = useRef<number>(0);
+  // The go signal: Alex's voice in their ears, once, then the flash clears itself.
+  useEffect(() => {
+    if (!n?.cue || !forMe || played.current === n.id) return;
+    played.current = n.id;
+    try { void new Audio("/audio/youre-live.mp3").play(); } catch { /* the flash still shows */ }
+    const t = setTimeout(() => setClosed((s) => new Set(s).add(`mv-notice-${n.id}`)), 6000);
+    return () => clearTimeout(t);
+  }, [n?.id, n?.cue, forMe]);
+  if (!n || closed.has(seenKey) || !forMe) return null;
+  if (n.cue) {
+    return (
+      <div className="pointer-events-none fixed inset-x-0 top-6 z-[96] mx-auto w-[min(92vw,34rem)] animate-pulse rounded-3xl bg-emerald-600 px-6 py-5 text-center text-white shadow-2xl ring-8 ring-emerald-400/40" role="alert" data-testid="studio-cue-live">
+        <div className="text-4xl font-black tracking-wide">YOU'RE LIVE</div>
+        <div className="mt-1 text-base font-semibold opacity-90">Go, go, go!</div>
+      </div>
+    );
+  }
   try { if (localStorage.getItem(seenKey)) return null; } catch { /* private window: show it */ }
-  if (n.to && n.to !== email.trim().toLowerCase()) return null;
   const close = () => {
     try { localStorage.setItem(seenKey, "1"); } catch { /* fine */ }
     setClosed((s) => new Set(s).add(seenKey));
@@ -1170,7 +1187,7 @@ export default function Studio({ slug }: { slug?: string }) {
           <div className="flex h-56 flex-col">
             {joined && <TimeLeftPill slug={slug} studioId={studioId} />}
             {joined && onStage && <WrapUpClock slug={slug} studioId={studioId} />}
-            {joined && <StudioNotice email={state?.myEmail ?? state?.me?.email ?? ""} />}
+            {joined && <StudioNotice email={state?.myEmail ?? state?.me?.email ?? ""} onStage={onStage} />}
             <div className="min-h-0 flex-1">
               {joined && <UpNext slug={slug} studioId={studioId} compact fill />}
             </div>

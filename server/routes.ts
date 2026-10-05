@@ -5339,14 +5339,17 @@ export function registerRoutes(app: Express): void {
   app.get("/api/studio/notice", async (_req, res) => {
     noStore(res);
     const raw = await storage.getSetting("studio_notice");
-    let notice: unknown = null;
+    let notice: { cue?: string; at?: string } | null = null;
     try { notice = raw ? JSON.parse(raw) : null; } catch { notice = null; }
+    // A cue ("you're live") is for that moment only: nobody arriving later hears it.
+    if (notice?.cue && Date.now() - Date.parse(notice.at ?? "") > 45_000) notice = null;
     res.json({ notice });
   });
   app.post("/api/admin/studio/notice", requireAdmin, async (req, res) => {
     const text = String(req.body?.text ?? "").trim().slice(0, 400);
     const to = String(req.body?.to ?? "").trim().toLowerCase();
-    const v = text ? { id: Date.now(), text, to, at: new Date().toISOString() } : null;
+    const cue = req.body?.cue === "live" ? "live" : "";
+    const v = text ? { id: Date.now(), text, to, cue, at: new Date().toISOString() } : null;
     await storage.setSetting("studio_notice", v ? JSON.stringify(v) : "");
     res.json(v ?? { cleared: true });
   });
