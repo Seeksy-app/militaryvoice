@@ -549,6 +549,30 @@ function StageLayout({
       </div>
     );
   }
+  if (L === "sq") {
+    // Squares: everyone the same square in two rows (up to ten), as big as
+    // fits: 47% of the height until a row runs out of width, then smaller.
+    const all = tiles.slice(0, 10);
+    const n = all.length;
+    const topN = n <= 1 ? n : Math.floor(n / 2), botN = n - topN;
+    const cols = Math.max(topN, botN, 1);
+    const gapH = 2, gapW = (gapH * 9) / 16;
+    const maxW = 96, fitW = (maxW - (cols - 1) * gapW) / cols;
+    const sh = Math.min(n <= 1 ? 90 : 47, (fitW * 16) / 9), sw = (sh * 9) / 16;
+    const rows = n <= 1 ? 1 : 2;
+    const top0 = (100 - rows * sh - (rows - 1) * gapH) / 2;
+    const row = (list: StageTile[], y: number) => {
+      const total = list.length * sw + (list.length - 1) * gapW;
+      return list.map((t, i) => box({ left: `${50 - total / 2 + i * (sw + gapW)}%`, top: `${y}%`, width: `${sw}%`, height: `${sh}%` }, t));
+    };
+    return (
+      <div className="relative h-full w-full">
+        {row(all.slice(0, topN), top0)}
+        {botN > 0 && row(all.slice(topN), top0 + sh + gapH)}
+        {tiles.length > 10 && <div className="hidden">{tiles.slice(10).map((t) => <Tile key={t.identity} tile={t} muted={muted} namePos="none" />)}</div>}
+      </div>
+    );
+  }
   if (L === "grid4") {
     // Four squares: a 2 by 2 grid, every box the same size (an empty one stays empty).
     return (

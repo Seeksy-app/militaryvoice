@@ -1056,7 +1056,7 @@ export type ParticipantState = (typeof PARTICIPANT_STATES)[number];
 
 export const TILE_FITS = ["full", "wide", "square"] as const;
 // Restream's six, in Restream's order (Shift+1 to Shift+6 in the console).
-export const STAGE_LAYOUTS = ["showtime", "contain", "cover", "sidebar", "pip", "thumbnails", "row3", "grid4", "ou1", "ou2", "ou3"] as const;
+export const STAGE_LAYOUTS = ["showtime", "contain", "cover", "sidebar", "pip", "thumbnails", "row3", "grid4", "ou1", "ou2", "ou3", "sq"] as const;
 export type TileFit = (typeof TILE_FITS)[number];
 
 export const studios = pgTable("studios", {
