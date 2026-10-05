@@ -19,6 +19,7 @@ import {
 } from "@/components/ui/alert-dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, apiUpload } from "@/lib/queryClient";
+import { uploadToStorage } from "@/lib/upload";
 import { ASSET_KINDS, type ShowAssetRow, type ProfileRow } from "@shared/schema";
 import {
   Upload,
@@ -45,29 +46,6 @@ import {
  */
 const MAX_MB = 2048;
 
-/**
- * PUT a file to a signed storage URL, reporting progress.
- *
- * XHR rather than fetch, for the one reason XHR is still worth reaching for:
- * fetch cannot report upload progress. On a 400MB episode that is the
- * difference between a progress bar and a page that appears to have hung.
- */
-function putWithProgress(url: string, file: File, onProgress: (pct: number) => void): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const xhr = new XMLHttpRequest();
-    xhr.open("PUT", url);
-    xhr.setRequestHeader("content-type", file.type || "application/octet-stream");
-    xhr.upload.onprogress = (e) => {
-      if (e.lengthComputable) onProgress(Math.max(1, Math.round((e.loaded / e.total) * 100)));
-    };
-    xhr.onload = () =>
-      xhr.status >= 200 && xhr.status < 300
-        ? resolve()
-        : reject(new Error(xhr.status === 413 ? "That file is larger than storage will accept." : `Upload failed (${xhr.status}).`));
-    xhr.onerror = () => reject(new Error("The upload was interrupted. Check your connection and try again."));
-    xhr.send(file);
-  });
-}
 
 
 function prettySize(bytes: number): string {
@@ -145,26 +123,10 @@ export function ShowMaterials({
       // upload — not the storage behind it.
       if (file) {
         setProgress(1);
-        const signed = await apiRequest("POST", "/api/host/assets/upload-url", { fileName: file.name });
-        let { uploadUrl, storageKey } = (await signed.json()) as { uploadUrl: string; storageKey: string };
-        try {
-          await putWithProgress(uploadUrl, file, setProgress);
-        } catch (err) {
-          // The bucket's own door is shut to browsers. A file a function
-          // body can carry goes through us instead; an episode cannot, and
-          // says so rather than spinning.
-          if (file.size > 80 * 1024 * 1024) throw err;
-          setProgress(5);
-          const via = await fetch(`/api/host/assets/upload?fileName=${encodeURIComponent(file.name)}`, {
-            method: "POST",
-            headers: { "content-type": file.type || "application/octet-stream" },
-            credentials: "include",
-            body: file,
-          });
-          if (!via.ok) throw new Error("The upload didn't go through. Try again in a moment.");
-          storageKey = ((await via.json()) as { storageKey: string }).storageKey;
-          setProgress(100);
-        }
+        // In parts, resumable, with retries: one PUT of a whole episode over
+        // home Wi-Fi was where Shawn's upload died.
+        const storageKey = await uploadToStorage(file, setProgress);
+        setProgress(100);
         fd.append("storageKey", storageKey);
         fd.append("fileName", file.name);
         fd.append("sizeBytes", String(file.size));
