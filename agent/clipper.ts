@@ -2370,6 +2370,11 @@ async function tick(): Promise<boolean> {
 
 async function main(): Promise<void> {
   requireToken();
+  // Leftovers from a worker that was killed mid-job fill the disk, and a full
+  // disk stalls every render after it.
+  for (const f of await fs.readdir(os.tmpdir()).catch(() => [] as string[])) {
+    if (/^(clip|clean|edit|suggest|epedit|import|music|epaudio|living|epstill|tr|segment)-/.test(f)) await fs.rm(path.join(os.tmpdir(), f), { recursive: true, force: true }).catch(() => {});
+  }
   console.log(`Clipper watching ${API_BASE}, every ${Math.round(POLL_MS / 1000)}s`);
   if (!process.env.ANTHROPIC_API_KEY) {
     console.warn("No ANTHROPIC_API_KEY — falling back to speech density, which picks worse moments.");

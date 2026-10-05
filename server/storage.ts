@@ -2546,7 +2546,9 @@ class DatabaseStorage implements IStorage {
           WHERE status = 'Ready'
             AND (clip_status = 'queued'
                  OR (clip_status = 'running' AND clip_claimed_at < ${stale}))
-          ORDER BY id
+          -- A podcaster's own file (no event) before the studio's whole-day
+          -- recordings: on 5 Oct two 3GB studio files held the queue for hours.
+          ORDER BY (event_id = 0) DESC, id
           LIMIT 1
           FOR UPDATE SKIP LOCKED
         )`,
