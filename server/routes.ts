@@ -11111,6 +11111,22 @@ The ${eventName} team`;
    * event): the same stored file, a row each, so it plays and downloads from
    * their own account. Skips anyone who already has it.
    */
+  /**
+   * One podcaster's own segment, cut from the day's recording, into their
+   * Library with Pōstify queued (show day: on us).
+   */
+  app.post("/api/admin/library/add", requireAdmin, async (req, res) => {
+    const email = String(req.body?.email ?? "").trim().toLowerCase();
+    const storageKey = String(req.body?.storageKey ?? "");
+    if (!/^[^@\s]+@[^@\s]+$/.test(email)) return res.status(400).json({ message: "Whose Library?" });
+    if (!/^studio\/[\w.-]+$/.test(storageKey)) return res.status(400).json({ message: "That isn't one of the studio's files." });
+    const title = String(req.body?.title ?? "").trim().slice(0, 140) || "From The Podcast Marathon";
+    const have = (await storage.listRecordingsByEmail(email)).find((r) => r.url === storageKey);
+    if (have) return res.json({ id: have.id, existed: true });
+    const row = await storage.createUploadedRecording({ email, title, storageKey, durationSec: Number(req.body?.durationSec) || 0, sizeBytes: Number(req.body?.sizeBytes) || 0, free: true, queue: req.body?.queue !== false });
+    res.json({ id: row.id });
+  });
+
   app.post("/api/admin/library/share", requireAdmin, async (req, res) => {
     const storageKey = String(req.body?.storageKey ?? "");
     if (!/^studio\/[\w.-]+$/.test(storageKey)) return res.status(400).json({ message: "That isn't one of the studio's files." });
