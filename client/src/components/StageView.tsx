@@ -618,9 +618,15 @@ function AudioFrame({ url, name, show, photo, muted, onEnded }: { url: string; n
         )}
         {name && <p className="font-semibold leading-tight [text-wrap:balance]" style={{ ...HEADLINE_FONT, fontSize: "4.4cqw" }}>{name}</p>}
         {show && <p className="leading-snug text-white/75 [text-wrap:balance]" style={{ fontSize: "2.2cqw" }}>{show}</p>}
-        <div className="flex items-end" style={{ gap: "0.5cqw", height: "4cqw" }} aria-hidden="true">
-          {Array.from({ length: 9 }, (_, i) => (
-            <span key={i} className="block rounded-full bg-[#F0A71F] motion-safe:animate-pulse" style={{ width: "0.6cqw", height: `${30 + ((i * 37) % 70)}%`, animationDelay: `${i * 120}ms` }} />
+        {/* A live equalizer, not a gentle pulse: each bar on its own beat so the frame never looks frozen. */}
+        <style>{`@keyframes stage-eq{0%,100%{transform:scaleY(.18)}50%{transform:scaleY(1)}}`}</style>
+        <div className="flex items-center" style={{ gap: "0.45cqw", height: "7cqw" }} aria-hidden="true">
+          {Array.from({ length: 21 }, (_, i) => (
+            <span
+              key={i}
+              className="block h-full rounded-full bg-[#F0A71F]"
+              style={{ width: "0.55cqw", transformOrigin: "center", opacity: 0.55 + ((i * 13) % 45) / 100, animation: `stage-eq ${0.55 + ((i * 7) % 9) / 12}s ease-in-out ${-((i * 0.37) % 1.3)}s infinite` }}
+            />
           ))}
         </div>
       </div>
@@ -882,7 +888,7 @@ function StartingFrame() {
         <img src="/nmpd-logo.png" alt="" className="drop-shadow-[0_0_3cqw_rgba(240,167,31,0.5)]" style={{ width: "15cqw", height: "15cqw" }} />
         <p className="mt-[2cqw] font-semibold text-white/85" style={{ ...HEADLINE_FONT, fontSize: "3cqw" }}>Welcome to</p>
         <p className="mt-[0.4cqw] font-bold leading-[1.02] tracking-tight [text-wrap:balance]" style={{ ...HEADLINE_FONT, fontSize: "6.6cqw" }}>National Military Podcast Day</p>
-        <p className="mt-[1.6cqw] font-semibold" style={{ ...HEADLINE_FONT, fontSize: "2.6cqw", color: gold }}>The Podcast Marathon · Live, 7 AM to 11 PM Eastern</p>
+        <p className="mt-[1.6cqw] font-semibold" style={{ ...HEADLINE_FONT, fontSize: "2.6cqw", color: gold }}>The Podcast Marathon · Live · 7 AM to 11 PM Eastern</p>
       </div>
     </div>
   );
@@ -1009,7 +1015,7 @@ function SpotFrame({ t0, beats }: { t0?: number; beats?: Record<string, number> 
       </div>
       <div className={shot("shows")}>
         <p className="font-bold leading-[1.04] tracking-tight [text-wrap:balance]" style={{ ...HEADLINE_FONT, fontSize: "6.4cqw" }}>A marathon of podcasters, streaming all day</p>
-        <p className="mt-[1.8cqw] font-semibold" style={{ ...HEADLINE_FONT, fontSize: "3cqw", color: gold }}>Live, 7 AM to 11 PM Eastern</p>
+        <p className="mt-[1.8cqw] font-semibold" style={{ ...HEADLINE_FONT, fontSize: "3cqw", color: gold }}>Live · 7 AM to 11 PM Eastern</p>
       </div>
 
       {/* The bridge from the day to the service behind it. */}
