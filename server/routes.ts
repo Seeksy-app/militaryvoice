@@ -4991,12 +4991,13 @@ export function registerRoutes(app: Express): void {
     const et = (ms: number) => new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }).format(new Date(ms)) + " ET";
     const start = Date.parse(ev.startAtUtc);
     const rows = (await storage.listSignups(ev.id)).filter((x) => x.status !== "cancelled").sort((a, b) => a.slotIndex - b.slotIndex);
+    const sponsorOf = await sponsorsBySignup(ev.id).catch(() => new Map());
     const lines: string[] = [];
     for (const sg of rows) {
       const t = start + sg.slotIndex * ev.slotMinutes * 60_000;
       const co = sg.coHostEmail ? (await storage.getProfileByEmail(sg.coHostEmail.trim().toLowerCase()).catch(() => undefined))?.hostName?.trim() : "";
       const who = [sg.hostName.trim(), co].filter(Boolean).join(" with ");
-      lines.push(`${et(t)}: ${sg.podcastName.trim()}${who && who !== sg.podcastName.trim() ? `, ${who}` : ""}${sg.branch && !/not applicable/i.test(sg.branch) ? ` (${sg.branch})` : ""}, ${sg.showFormat === "prerecorded" ? "recorded" : "live"}`);
+      lines.push(`${et(t)}: ${sg.podcastName.trim()}${who && who !== sg.podcastName.trim() ? `, ${who}` : ""}${sg.branch && !/not applicable/i.test(sg.branch) ? ` (${sg.branch})` : ""}, ${sg.showFormat === "prerecorded" ? "recorded" : "live"}${sponsorOf.get(sg.id) ? `, presented by ${sponsorOf.get(sg.id)!.name}` : ""}`);
     }
     const desks: string[] = [];
     for (let h = 0; h < ev.durationHours; h++) {
@@ -5007,7 +5008,7 @@ export function registerRoutes(app: Express): void {
     const open = rows.find((x) => /welcoming|opening/i.test(x.podcastName));
     const close = rows.find((x) => /closing/i.test(x.podcastName));
     const riccoh = `Host Riccoh Player (USMC, Retired) is on air for the opening${open ? ` (${open.podcastName.trim()}, ${et(start + open.slotIndex * ev.slotMinutes * 60_000)})` : ""} and the closing${close ? ` (${close.podcastName.trim()}, ${et(start + close.slotIndex * ev.slotMinutes * 60_000)})` : ""}. In between, the desk co-host of each hour thanks each show and introduces the next.`;
-    const text = `THE RUNNING ORDER (Monday; each show has ${ev.slotMinutes} minutes, about ${ev.onAirMinutes} on air then a hand-off;):\n${lines.join("\n")}\n\n${riccoh}\nDesk co-host by hour:\n${desks.join("\n")}\nWatch free at /watch.`;
+    const text = `THE RUNNING ORDER (Monday; each show has ${ev.slotMinutes} minutes, about ${ev.onAirMinutes} on air then a hand-off;):\n${lines.join("\n")}\n\n${riccoh}\nDesk co-host by hour:\n${desks.join("\n")}\nShow sponsors: ${Array.from(new Set(Array.from(sponsorOf.values()).map((x) => x.name))).join(", ") || "none listed"}. Partner: streaming live on LiveOne too.\nWatch free at /watch.`;
     runningOrderCache = { at: Date.now(), text };
     return text;
   }

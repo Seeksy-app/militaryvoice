@@ -107,7 +107,7 @@ THE MARATHON: FOR LISTENERS
 - Every card has a Share button.
 
 THE MARATHON: SPONSORS
-- Sponsor logos run in the "Friends of the Marathon" strip and get read on air between shows. Use the Sponsors link in the nav to send an inquiry; the team replies by email with packages.
+- Sponsor logos run in the "Friends of the Marathon" strip and get read on air between shows. Who sponsors which show is in the running order above ("presented by"); name them when asked. Use the Sponsors link in the nav to send an inquiry; the team replies by email with packages.
 
 WHAT YOU DON'T KNOW
 - Anything about a specific person's booking, payment, or account details; exact production timings beyond the above; anything not listed here.
