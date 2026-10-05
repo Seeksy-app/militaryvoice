@@ -2491,8 +2491,10 @@ export function registerRoutes(app: Express): void {
    * so it can reach the four pre-recorded episodes and nothing a podcaster
    * uploaded to their own profile.
    */
+  // "/api/studio/media/12.mp3" too: the stage plays an address ending in an
+  // audio extension as an audio episode (the card and equalizer), not a black frame.
   app.get("/api/studio/media/:id", async (req, res) => {
-    const asset = await storage.getAsset(Number(req.params.id));
+    const asset = await storage.getAsset(parseInt(req.params.id, 10));
     if (!asset?.storageKey || asset.email !== HOUSE_EMAIL || !asset.storageKey.startsWith("studio/")) {
       res.status(404).json({ message: "No such file." });
       return;
