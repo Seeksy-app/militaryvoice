@@ -897,7 +897,9 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
           </div>
 
           {/* ----------------------------------------------------- sidebar */}
-          <aside className="flex flex-col gap-4 lg:sticky lg:top-24">
+          {/* On a phone the preview sat between the form and Save, and people
+              stopped scrolling there; during setup it's desktop-only. */}
+          <aside className={`${isSetup && !pendingSlot ? "hidden lg:flex" : "flex"} flex-col gap-4 lg:sticky lg:top-24`}>
             {pendingSlot && (
               <div className="overflow-hidden rounded-2xl border border-[#F0A71F]/50 bg-card shadow-sm" data-testid="card-pending-slot">
                 <div className="flex items-center gap-2 bg-[#F0A71F] px-4 py-2 text-xs font-semibold uppercase tracking-wide text-[#1a1200]">
