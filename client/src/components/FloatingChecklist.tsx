@@ -56,7 +56,8 @@ export function FloatingChecklist({ state, ...nav }: { state: StepState } & Step
     }
   }, [ticked]);
 
-  const steps = useMemo(() => buildSteps(state, nav), [state, nav.onGoEvents, nav.onGoIntegrations, nav.onGoPromotion]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  const steps = useMemo(() => buildSteps(state, nav), [JSON.stringify(state)]);
   // Verified beats ticked: something we can see is done stays done even if
   // they never touched it, and something they ticked reads as done until the
   // real answer arrives.
@@ -83,13 +84,13 @@ export function FloatingChecklist({ state, ...nav }: { state: StepState } & Step
   return (
     <aside
       className="fixed bottom-[calc(8.75rem+env(safe-area-inset-bottom))] right-4 z-40 w-[min(21rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-border bg-card shadow-2xl lg:bottom-24 lg:right-5"
-      aria-label="What's left before you're on air"
+      aria-label="Your next steps"
       data-testid="panel-checklist"
     >
       <div className="flex items-center justify-between gap-2 border-b border-border bg-[#053877] px-4 py-2.5 text-white">
         <span className="flex min-w-0 items-center gap-2 text-sm font-semibold">
           <ListChecks className="h-4 w-4 shrink-0 text-[#F0A71F]" />
-          <span className="truncate">{left} to do before you're on air</span>
+          <span className="truncate">{left} {left === 1 ? "step" : "steps"} to get set up</span>
         </span>
         <button
           type="button"

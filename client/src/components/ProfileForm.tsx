@@ -370,9 +370,6 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
 
   const mutation = useMutation({
     mutationFn: async (values: FormValues) => {
-      if (!photoFile && !existingPhotoUrl) {
-        throw new Error("A photo is required — give us the best one you've got.");
-      }
       const formData = new FormData();
       formData.append("podcastName", values.podcastName);
       formData.append("interests", values.interests ?? "");
@@ -428,12 +425,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
   });
 
   function handleSubmit(values: FormValues) {
-    if (!photoFile && !existingPhotoUrl) {
-      setPhotoError("A photo is required — give us the best one you've got.");
-      document.getElementById("section-show")?.scrollIntoView({ behavior: "smooth", block: "start" });
-      toast({ title: "Add a photo", description: "It's what listeners will see on the lineup.", variant: "destructive" });
-      return;
-    }
+    // A photo is asked for, not required: it's on the checklist after.
     mutation.mutate(values);
   }
 
@@ -506,7 +498,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
                   )}
                 </button>
                 <div className="flex flex-col gap-1.5">
-                  <div className="text-sm font-medium">Hi-res photo {shownPhoto ? "" : <span className="text-destructive">*</span>}</div>
+                  <div className="text-sm font-medium">Your photo {shownPhoto ? "" : <span className="font-normal text-muted-foreground">(you can add it later)</span>}</div>
                   <p className="text-xs text-muted-foreground">
                     Upload the biggest, sharpest photo you have: at least 1000 × 1000 pixels, the original from your phone or camera. It goes on the lineup, on the big screen during your show, and in print. You'll crop it to a circle next.
                   </p>

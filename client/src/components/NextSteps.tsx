@@ -16,6 +16,16 @@ export interface StepState {
   hasYouTube: boolean;
   /** False when the event is full, so there is nothing left to claim. */
   slotsOpen?: boolean;
+  // The Growth plan's first steps (6 Oct onboarding audit): the checklist
+  // used to be the Marathon's to-do list for everyone, after it had ended.
+  hasPhoto?: boolean;
+  hasSmartLink?: boolean;
+  hasPodcast?: boolean;
+  hasClips?: boolean;
+  /** What they said they came for on the way in (events, grow, discover, host). */
+  interests?: string;
+  /** An event is coming up that they can still be part of. Event steps only show then. */
+  eventOpen?: boolean;
 }
 
 /**
@@ -32,6 +42,11 @@ export const STEP_ANCHOR = {
   accounts: "section-social-accounts",
   youtube: "section-going-out-live",
   share: "section-share-slot",
+  photo: "section-about",
+  smartlink: "",
+  podcast: "",
+  discovery: "",
+  postify: "",
 } as const;
 
 export interface Step {
@@ -47,6 +62,11 @@ export interface StepNav {
   onGoEvents: () => void;
   onGoIntegrations: () => void;
   onGoPromotion: () => void;
+  onGoProfile?: () => void;
+  onGoPage?: () => void;
+  onGoPodcast?: () => void;
+  onGoDiscovery?: () => void;
+  onGoPostify?: () => void;
 }
 
 /**
@@ -81,63 +101,40 @@ export function goToStep(step: Step): void {
  * ended up reaching air without reaching the producer's own monitor.
  */
 export function buildSteps(state: StepState, nav: StepNav): Step[] {
-  const steps: Step[] = [
-    {
-      key: "show",
-      label: "Set your show up for the event",
-      detail: "Its name, whether you're live or playing a recording, and your artwork.",
-      done: state.hasShow,
-      cta: "Set up your show",
-      go: nav.onGoEvents,
-    },
-    // Only worth listing while there is something to claim. Telling somebody
-    // to pick a time on a full schedule is a to-do they cannot do, and it sits
-    // at the top of their list unticked for a fortnight.
-    ...(state.hasSlot || state.slotsOpen !== false
-      ? ([{
-          key: "slot",
-          label: "Claim your time slot",
-          detail: "Pick when you want to be on air. You can move it later.",
-          done: state.hasSlot,
-          cta: "Choose a time",
-          go: nav.onGoEvents,
-        }] as Step[])
+  const want = (state.interests ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+  const wants = (k: string) => want.length === 0 || want.includes(k);
+  const go = (f?: () => void) => f ?? nav.onGoIntegrations;
+
+  // The free plan, in the order that gets someone somewhere: who they are,
+  // one link for their bio, their show, their accounts, then the paid-for
+  // things they can try free.
+  const growth: Step[] = [
+    { key: "photo", label: "Add your photo", detail: "It goes on your SmartLink and your directory card.", done: Boolean(state.hasPhoto), cta: "Add a photo", go: go(nav.onGoProfile) },
+    { key: "smartlink", label: "Make your SmartLink", detail: "One link for every bio: your show, your videos, and a way to collect emails. Free.", done: Boolean(state.hasSmartLink), cta: "Make my SmartLink", go: go(nav.onGoPage) },
+    ...(wants("grow") || wants("events") || wants("host")
+      ? ([{ key: "podcast", label: "Host or bring over your podcast", detail: "Your feed on every app, free. Already hosted? Paste your feed and we copy it across.", done: Boolean(state.hasPodcast), cta: "Set up my podcast", go: go(nav.onGoPodcast) }] as Step[])
       : []),
-    {
-      key: "materials",
-      label: "Send us your media",
-      detail: "Intro, outro, slides — anything you want us to roll. All optional.",
-      done: state.hasMaterials,
-      cta: "Upload your media",
-      go: nav.onGoEvents,
-    },
-    {
-      key: "accounts",
-      label: "Connect your social accounts",
-      detail: "They become follow buttons on your card in the public lineup.",
-      done: state.hasAccounts,
-      cta: "Connect accounts",
-      go: nav.onGoIntegrations,
-    },
-    {
-      key: "youtube",
-      label: "Connect your YouTube to stream to",
-      detail: "We open a broadcast on your own channel when your slot starts. Optional — it airs here either way.",
-      done: state.hasYouTube,
-      cta: "Connect YouTube",
-      go: nav.onGoIntegrations,
-    },
-    {
-      key: "share",
-      label: "Share your slot",
-      detail: "Your link shows your artwork and your time wherever you post it.",
-      // Nobody can tell whether someone posted, so this one stays open as a
-      // prompt rather than pretending to know.
-      done: false,
-      cta: "Get your link",
-      go: nav.onGoPromotion,
-    },
+    { key: "accounts", label: "Connect your social accounts", detail: "They become follow buttons, and Pōstify can post your clips to them.", done: state.hasAccounts, cta: "Connect accounts", go: nav.onGoIntegrations },
+    ...(wants("grow") || wants("events") || wants("host")
+      ? ([{ key: "postify", label: "Make clips with Pōstify", detail: "Your first episode is free: short clips with captions, in every shape.", done: Boolean(state.hasClips), cta: "Try Pōstify", go: go(nav.onGoPostify) }] as Step[])
+      : []),
+    ...(want.includes("discover")
+      ? ([{ key: "discovery", label: "Find a guest in Discovery", detail: "Search a topic and see who's been on the most shows. 10 contact emails a month, free.", done: false, cta: "Open Discovery", go: go(nav.onGoDiscovery) }] as Step[])
+      : []),
   ];
-  // Sharing only makes sense once there's a time to share.
-  return steps.filter((s) => s.key !== "share" || state.hasSlot);
+
+  // An event's own to-do list, only while there's an event to do it for.
+  const eventSteps: Step[] = state.eventOpen && (state.hasSlot || want.includes("events"))
+    ? [
+        { key: "show", label: "Set your show up for the event", detail: "Its name, whether you're live or playing a recording, and your artwork.", done: state.hasShow, cta: "Set up your show", go: nav.onGoEvents },
+        ...(state.hasSlot || state.slotsOpen !== false
+          ? ([{ key: "slot", label: "Claim your time slot", detail: "Pick when you want to be on air. You can move it later.", done: state.hasSlot, cta: "Choose a time", go: nav.onGoEvents }] as Step[])
+          : []),
+        { key: "materials", label: "Send us your media", detail: "Intro, outro, slides — anything you want us to roll. All optional.", done: state.hasMaterials, cta: "Upload your media", go: nav.onGoEvents },
+        { key: "youtube", label: "Connect your YouTube to stream to", detail: "We open a broadcast on your own channel when your slot starts. Optional — it airs here either way.", done: state.hasYouTube, cta: "Connect YouTube", go: nav.onGoIntegrations },
+        ...(state.hasSlot ? ([{ key: "share", label: "Share your slot", detail: "Your link shows your artwork and your time wherever you post it.", done: false, cta: "Get your link", go: nav.onGoPromotion }] as Step[]) : []),
+      ]
+    : [];
+
+  return [...eventSteps, ...growth];
 }

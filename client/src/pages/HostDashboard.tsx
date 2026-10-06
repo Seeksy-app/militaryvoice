@@ -774,6 +774,27 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   // Public events list so the held slot can be described before sign-in.
   const { data: events } = useQuery<PublicEvent[]>({ queryKey: ["/api/events"] });
   const featured = (events ?? []).find((e) => e.isFeatured);
+  // For the checklist's free-plan steps: SmartLink up, a show hosted, any clips made.
+  const { data: bioMine } = useQuery<{ page?: { published?: boolean } }>({
+    queryKey: ["/api/host/bio"],
+    queryFn: async () => (await apiRequest("GET", "/api/host/bio")).json(),
+    enabled: !!data,
+    staleTime: 60_000,
+  });
+  const { data: hostingMine } = useQuery<{ shows?: unknown[] }>({
+    queryKey: ["/api/host/hosting"],
+    queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json(),
+    enabled: !!data,
+    staleTime: 60_000,
+  });
+  const { data: recsMine } = useQuery<{ clipStatus?: string }[]>({
+    queryKey: ["/api/host/recordings"],
+    queryFn: async () => (await apiRequest("GET", "/api/host/recordings")).json(),
+    enabled: !!data,
+    staleTime: 60_000,
+  });
+  // Still to come and still taking people: the only time an event's to-do list belongs on the checklist.
+  const eventOpen = !!featured && Date.parse(featured.startAtUtc) + featured.durationHours * 3600_000 > Date.now();
   const eventIsFull =
     !!featured &&
     (featuredSignups ?? []).filter((x) => x.status !== "cancelled").length >=
@@ -977,7 +998,9 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   // A profile is about the person, so a name and a photo are what make it
   // complete. The show name moved to the event, and testing for it here sent
   // anyone without one back through first-time setup forever.
-  const hasProfile = !!profile && !!profile.hostName && !!profile.photoUrl;
+  // A name is enough to get in; the photo is a checklist item after, not a
+  // wall before the dashboard (6 Oct onboarding audit).
+  const hasProfile = !!profile && !!profile.hostName;
 
   // Signed in with a finished profile and a held slot → jump to confirmation.
   useEffect(() => {
@@ -1707,10 +1730,21 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
             hasAccounts: (social?.accounts?.length ?? 0) > 0,
             hasMaterials: (hostAssets?.length ?? 0) > 0 || Boolean(profile?.mediaAnswered),
             hasYouTube: Boolean(youtube?.connected),
+            hasPhoto: Boolean(profile?.photoUrl),
+            hasSmartLink: Boolean(bioMine?.page?.published),
+            hasPodcast: (hostingMine?.shows?.length ?? 0) > 0,
+            hasClips: (recsMine ?? []).some((r) => r.clipStatus === "done"),
+            interests: profile?.interests ?? "",
+            eventOpen,
           }}
           onGoEvents={() => goTo("events")}
           onGoIntegrations={() => goTo("integrations")}
           onGoPromotion={() => goTo("promotion")}
+          onGoProfile={() => goTo("editProfile")}
+          onGoPage={() => goTo("page")}
+          onGoPodcast={() => goTo("podcast")}
+          onGoDiscovery={() => goTo("discovery")}
+          onGoPostify={() => goTo("postify")}
         />
       )}
 

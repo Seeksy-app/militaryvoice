@@ -9910,13 +9910,23 @@ export function registerRoutes(app: Express): void {
       notes: body.notes ?? "",
     };
 
+    // A field the caller didn't send keeps what's saved. Several screens save
+    // part of the profile (the consent switch, show materials); without this
+    // they wiped interests — turning a non-podcaster back into a podcaster
+    // who then couldn't save (6 Oct onboarding audit) — and the show notes.
+    const existing = await storage.getProfileByEmail(email);
+    if (existing) {
+      const keep = raw as Record<string, unknown>;
+      for (const k of Object.keys(keep)) {
+        if (!(k in body) && (existing as Record<string, unknown>)[k] !== undefined && (existing as Record<string, unknown>)[k] !== null) keep[k] = (existing as Record<string, unknown>)[k];
+      }
+    }
+
     const parsed = insertProfileSchema.safeParse(raw);
     if (!parsed.success) {
       res.status(400).json({ message: fromError(parsed.error).toString() });
       return;
     }
-
-    const existing = await storage.getProfileByEmail(email);
 
     let photoUrl: string | undefined;
     let photoOriginalUrl: string | undefined;
@@ -9929,10 +9939,9 @@ export function registerRoutes(app: Express): void {
         res.status(400).json({ message: "That photo couldn't be processed — try a different file." });
         return;
       }
-    } else if (!existing?.photoUrl) {
-      res.status(400).json({ message: "A photo is required — give us the best one you've got." });
-      return;
     }
+    // No photo is fine at sign-up: it's a checklist item after, not a wall
+    // before the dashboard. (The directory leaves out cards with no photo.)
 
     const updated = await storage.upsertProfile(email, {
       ...parsed.data,
