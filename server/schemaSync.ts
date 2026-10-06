@@ -109,6 +109,16 @@ export async function ensureSchema(sql: Sql): Promise<SchemaSyncReport> {
       report.columnsAdded.push(`${config.name}.${col.name}`);
     }
 
+    // Widened columns: integer → bigint (a file over 2.1 GB didn't fit in an
+    // int4 size, 5 Oct). Only when the database still has the narrow type.
+    for (const col of config.columns) {
+      if (!/^bigint/i.test(col.getSQLType())) continue;
+      const [t] = await sql.unsafe(`SELECT data_type FROM information_schema.columns WHERE table_name = '${config.name}' AND column_name = '${col.name}'`);
+      if ((t as { data_type?: string } | undefined)?.data_type === "integer") {
+        await sql.unsafe(`ALTER TABLE "${config.name}" ALTER COLUMN "${col.name}" TYPE bigint`);
+      }
+    }
+
     // A column-level .unique() produces a constraint, not an entry in
     // config.indexes. Without it, every ON CONFLICT (email) in the codebase
     // fails with "no unique or exclusion constraint matching".

@@ -1,4 +1,4 @@
-import { pgTable, text, integer, boolean, serial, uniqueIndex, index } from "drizzle-orm/pg-core";
+import { pgTable, text, integer, bigint, boolean, serial, uniqueIndex, index } from "drizzle-orm/pg-core";
 import { createInsertSchema } from "drizzle-zod";
 import { z } from "zod";
 
@@ -919,7 +919,7 @@ export const showAssets = pgTable("show_assets", {
   durationSeconds: integer("duration_seconds").notNull().default(0),
   linkUrl: text("link_url").notNull().default(""),
   fileName: text("file_name").notNull().default(""),
-  sizeBytes: integer("size_bytes").notNull().default(0),
+  sizeBytes: bigint("size_bytes", { mode: "number" }).notNull().default(0),
   /** Where it sits in the studio's media list; the producer drags to change it. 0 = unsorted. */
   sortOrder: integer("sort_order").notNull().default(0),
   createdAt: text("created_at").notNull(),
@@ -2736,7 +2736,7 @@ export const hostedEpisodes = pgTable("hosted_episodes", {
   /** …the file at the old host, for an episode that came with an imported show. */
   audioUrl: text("audio_url").notNull().default(""),
   mime: text("mime").notNull().default("audio/mpeg"),
-  sizeBytes: integer("size_bytes").notNull().default(0),
+  sizeBytes: bigint("size_bytes", { mode: "number" }).notNull().default(0),
   durationSec: integer("duration_sec").notNull().default(0),
   episodeNumber: integer("episode_number"),
   season: integer("season"),
