@@ -8,6 +8,9 @@ export interface AdminIdentity {
   email: string;
   name: string;
   isOwner: boolean;
+  /** An event admin: runs these events in admin and nothing of the platform. */
+  eventAdmin?: boolean;
+  events?: number[];
   /** Their picture, from the event team or their own admin record. */
   photoUrl?: string;
 }

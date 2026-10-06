@@ -4793,6 +4793,9 @@ export default function Admin({ tab, eventId: eventParam }: { tab?: string; even
     enabled: isAuthenticated,
   });
   const selectedEvent = adminEvents?.find((e) => e.id === selectedEventId) ?? null;
+  // An event admin (Riccoh) lives inside their event: no platform, no other events.
+  const eventOnly = !!admin?.eventAdmin;
+  const myEvents = admin?.events ?? [];
   // The URL is the source of truth for which section is open, so /admin/finances
   // can be bookmarked, linked in a note, and reached with the back button —
   // the same thing the podcasters' dashboard got.
@@ -4805,10 +4808,16 @@ export default function Admin({ tab, eventId: eventParam }: { tab?: string; even
     selectedEventId
       ? navigate(key === "overview" ? `/admin/e/${selectedEventId}` : `/admin/e/${selectedEventId}/${key}`)
       : navigate(key === "overview" ? "/admin" : `/admin/${key}`);
+  useEffect(() => {
+    if (!eventOnly || !myEvents.length) return;
+    if (selectedEventId && myEvents.includes(selectedEventId)) return;
+    const key = EVENT_SECTION_KEYS.has(slug) ? slug : "";
+    navigate(`/admin/e/${myEvents[0]}${key ? `/${key}` : ""}`, { replace: true });
+  }, [eventOnly, myEvents.join(","), selectedEventId, slug]);
   // Old links (/admin/studio, /admin/texts, from Slack and email) were the
   // featured event's sections: send them there.
   useEffect(() => {
-    if (selectedEventId || !slug || TOP_SECTION_KEYS.has(slug) || !adminEvents?.length) return;
+    if (eventOnly || selectedEventId || !slug || TOP_SECTION_KEYS.has(slug) || !adminEvents?.length) return;
     const key = slug === "podcasters" ? "signups" : slug;
     if (!EVENT_SECTION_KEYS.has(key)) return;
     const ev = adminEvents.find((e) => e.isFeatured) ?? adminEvents[0];
@@ -4911,11 +4920,11 @@ export default function Admin({ tab, eventId: eventParam }: { tab?: string; even
               <span className="hidden min-w-0 sm:block">
                 <span className="block truncate text-sm font-semibold">{admin?.name || admin?.email}</span>
                 <span className="block truncate text-xs text-muted-foreground">
-                  {admin?.isOwner ? "Owner" : "Admin"}
+                  {admin?.isOwner ? "Owner" : eventOnly ? "Event admin" : "Admin"}
                 </span>
               </span>
-              <HealthLight />
-              <ViewAs />
+              {!eventOnly && <HealthLight />}
+              {!eventOnly && <ViewAs />}
               <Button
                 variant="outline"
                 size="sm"
@@ -4934,7 +4943,7 @@ export default function Admin({ tab, eventId: eventParam }: { tab?: string; even
               <Tabs value={eventTab} onValueChange={setEventTab}>
                 <div className="flex flex-col gap-4 lg:flex-row lg:gap-7">
                   <AdminNav
-                    groups={EVENT_GROUPS}
+                    groups={eventOnly ? EVENT_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => i.key !== "crm" && i.key !== "health") })) : EVENT_GROUPS}
                     value={eventTab}
                     onChange={setEventTab}
                     isMobile={isMobile}
@@ -4948,14 +4957,14 @@ export default function Admin({ tab, eventId: eventParam }: { tab?: string; even
                   link a button rather than a raw address across the page. */}
               <div className="mb-6 flex flex-wrap items-end justify-between gap-4 pt-1" data-testid="event-header">
                 <div className="min-w-0">
-                  <button
+                  {!eventOnly && <button
                     type="button"
                     onClick={() => pickEvent(null)}
                     className="mb-1.5 inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground"
                     data-testid="button-all-events"
                   >
                     ← All events
-                  </button>
+                  </button>}
                   <h2 className="flex flex-wrap items-center gap-3 text-3xl font-bold tracking-tight" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>
                     <span className="min-w-0">{selectedEvent.name}</span>
                     {selectedEvent.isFeatured && selectedEvent.visible !== false && (
@@ -5038,6 +5047,7 @@ export default function Admin({ tab, eventId: eventParam }: { tab?: string; even
                   <RunOfShow adminGet={adminGet} adminSend={adminSend} eventId={selectedEventId} />
                 </TabsContent>
                 <TabsContent value="team" className="mt-2 space-y-6 lg:mt-0">
+                  {!eventOnly && <StudioHostsCard eventId={selectedEventId} kind="admin" />}
                   <StudioHostsCard eventId={selectedEventId} />
                   <EventTeamPanel eventId={selectedEventId} />
                 </TabsContent>

@@ -127,6 +127,7 @@ import { logSceneTake, registerSceneLog } from "./sceneLog.js";
 import { audienceRecipients, registerPeople } from "./people.js";
 import { registerOrganizer } from "./organizer.js";
 import { registerProjects } from "./projects.js";
+import { eventAdminEmails, eventAdminEvents, eventAdminKey, eventAdminMay } from "./eventAdmin.js";
 import { registerDeviceCheck } from "./deviceCheck.js";
 import { registerHealth, beat, addHealthCheck } from "./health.js";
 import { registerNotices } from "./notices.js";
@@ -601,6 +602,20 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
   if (sessionEmail && (await storage.isAdminEmail(sessionEmail))) {
     (req as any).adminEmail = sessionEmail;
     next();
+    return;
+  }
+  // An event admin (Riccoh): signed in to admin, but only inside their own event.
+  const adminOf = sessionEmail ? await eventAdminEvents(sessionEmail) : [];
+  if (adminOf.length) {
+    const featuredId = (await storage.getFeaturedEvent()).id;
+    if (eventAdminMay({ method: req.method, path: req.path, query: req.query as Record<string, unknown>, body: req.body, events: adminOf, featuredId })) {
+      (req as any).adminEmail = sessionEmail;
+      (req as any).eventAdmin = true;
+      (req as any).studioHostEvents = adminOf;
+      next();
+      return;
+    }
+    res.status(403).json({ message: "That's outside your event." });
     return;
   }
   // A studio host (Amy, Enrique): signed in as themselves, admin inside the
@@ -2112,14 +2127,15 @@ export function registerRoutes(app: Express): void {
   app.get("/api/host/studio-access", async (req, res) => {
     noStore(res);
     const admin = getAdminEmail(req);
-    const isAdmin = Boolean(admin && (await storage.isAdminEmail(admin)));
+    const adminOf = await eventAdminEvents(admin);
+    const isAdmin = Boolean(admin && ((await storage.isAdminEmail(admin)) || adminOf.length));
     const host = await studioHostEmail(req);
     const email = isAdmin ? admin! : host?.email ?? (getSessionEmail(req) ?? "");
     if (!isAdmin && !host) return res.json({ access: false, signedIn: Boolean(getSessionEmail(req)), email });
     const person = await studioPerson(email);
     // The event whose studio opens: theirs (the featured one when they host several), or the featured one for an admin.
     const featured = (await storage.getFeaturedEvent()).id;
-    const eventId = isAdmin ? featured : host!.events.includes(featured) ? featured : host!.events[0];
+    const eventId = isAdmin ? (adminOf.length && !adminOf.includes(featured) ? adminOf[0] : featured) : host!.events.includes(featured) ? featured : host!.events[0];
     res.json({ access: true, role: isAdmin ? "admin" : "studio-host", email, hostEmail: (getSessionEmail(req) ?? "").trim().toLowerCase(), eventId, displayName: person.name, title: person.title, photoUrl: person.photoUrl });
   });
 
@@ -2143,9 +2159,30 @@ export function registerRoutes(app: Express): void {
     res.json({ emails });
   });
 
+  /** An event's admins: they run that event in admin and see nothing of the platform. Platform admins manage the list. */
+  app.get("/api/admin/event-admins", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost || (req as any).eventAdmin) return res.status(403).json({ message: "Admins only." });
+    const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
+    const emails = await eventAdminEmails(eventId);
+    res.json(await Promise.all(emails.map(async (email) => ({ email, name: (await studioPerson(email)).name }))));
+  });
+  app.put("/api/admin/event-admins", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost || (req as any).eventAdmin) return res.status(403).json({ message: "Admins only." });
+    const emails = Array.from(new Set((Array.isArray(req.body?.emails) ? req.body.emails : []).map((e: unknown) => String(e).trim().toLowerCase()).filter((e: string) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e)))).slice(0, 20);
+    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    await storage.setSetting(eventAdminKey(eventId), emails.join(","));
+    res.json({ emails });
+  });
+
   app.get("/api/admin/me", async (req, res) => {
     const email = getAdminEmail(req);
     if (!email || !(await storage.isAdminEmail(email))) {
+      // An event admin: their own events, and nothing of the platform.
+      const adminOf = await eventAdminEvents(email);
+      if (email && adminOf.length) {
+        const person = await studioPerson(email);
+        return res.json({ email, name: person.name, isOwner: false, eventAdmin: true, events: adminOf, displayName: person.name, title: person.title, photoUrl: person.photoUrl });
+      }
       // A studio host's console asks this for the avatar: their own card.
       const host = await studioHostEmail(req);
       if (host) {
@@ -2259,7 +2296,7 @@ export function registerRoutes(app: Express): void {
       return;
     }
     // Always answer the same way so this can't be used to probe who's an admin.
-    if (await storage.isAdminEmail(email)) {
+    if ((await storage.isAdminEmail(email)) || (await eventAdminEvents(email)).length) {
       const code = crypto.randomInt(100000, 1000000).toString();
       const expiresAt = new Date(Date.now() + 15 * 60 * 1000).toISOString();
       await storage.supersedeLoginTokens(`admin:${email}`);
@@ -2282,7 +2319,7 @@ export function registerRoutes(app: Express): void {
       return;
     }
     const row = await storage.getLoginToken(`admin:${email}`, code);
-    if (!row || row.usedAt || new Date(row.expiresAt).getTime() < Date.now() || !(await storage.isAdminEmail(email))) {
+    if (!row || row.usedAt || new Date(row.expiresAt).getTime() < Date.now() || !((await storage.isAdminEmail(email)) || (await eventAdminEvents(email)).length)) {
       res.status(401).json({ message: "That code is invalid or expired. Request a new one." });
       return;
     }
@@ -3898,7 +3935,7 @@ export function registerRoutes(app: Express): void {
 
   async function adminStudio(req: Request) {
     // A studio host only ever reaches the studios of the events they host.
-    const allowed: number[] | undefined = (req as any).studioHost ? (req as any).studioHostEvents : undefined;
+    const allowed: number[] | undefined = (req as any).studioHost || (req as any).eventAdmin ? (req as any).studioHostEvents : undefined;
     let eventId = Number(req.query.eventId) || Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
     if (allowed && !allowed.includes(eventId)) eventId = allowed[0];
     const wanted = Number(req.query.studioId) || Number(req.body?.studioId) || 0;
@@ -5361,7 +5398,7 @@ export function registerRoutes(app: Express): void {
   /** For the scene rail: who holds the desk at each hand-off, by run-of-show row. */
   app.get("/api/admin/run-of-show/desks", requireAdmin, async (req, res) => {
     noStore(res);
-    const allowed: number[] | undefined = (req as any).studioHost ? (req as any).studioHostEvents : undefined;
+    const allowed: number[] | undefined = (req as any).studioHost || (req as any).eventAdmin ? (req as any).studioHostEvents : undefined;
     let eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
     if (allowed && !allowed.includes(eventId)) eventId = allowed[0];
     const ev = await storage.getEventById(eventId);
@@ -9487,9 +9524,10 @@ export function registerRoutes(app: Express): void {
   });
 
   // ---- Admin: all events (for the events management screen) ------------------
-  app.get("/api/admin/events", requireAdmin, async (_req, res) => {
+  app.get("/api/admin/events", requireAdmin, async (req, res) => {
     const rows = await storage.listEvents();
-    res.json(rows.map(toPublicEvent));
+    const only: number[] | undefined = (req as any).eventAdmin ? (req as any).studioHostEvents : undefined;
+    res.json(rows.filter((e) => !only || only.includes(e.id)).map(toPublicEvent));
   });
 
   app.post("/api/admin/events", requireAdmin, async (req, res) => {
