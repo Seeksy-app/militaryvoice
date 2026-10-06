@@ -123,6 +123,7 @@ import { registerMagazine, planSegments, claimSegmentCut } from "./magazine.js";
 import { registerSurvey } from "./survey.js";
 import { registerSms } from "./sms.js";
 import { logSceneTake, registerSceneLog } from "./sceneLog.js";
+import { audienceRecipients, registerPeople } from "./people.js";
 import { registerDeviceCheck } from "./deviceCheck.js";
 import { registerHealth, beat, addHealthCheck } from "./health.js";
 import { registerNotices } from "./notices.js";
@@ -674,6 +675,11 @@ async function resolveBroadcastRecipients(
   const deduped = new Map<string, { email: string; firstName: string; slotLabel?: string }>();
   const seg = broadcast.segment;
 
+  // The CRM's audiences ("aud:members", "aud:pro"…) and hand-picked people
+  // ("aud:pick:a@x|b@y"), on the platform or one event. Unsubscribed people
+  // are left out inside.
+  if (seg.startsWith("aud:")) return audienceRecipients(seg.slice(4), broadcast.eventId ?? null);
+
   if (seg === "signups" || seg === "all") {
     if (broadcast.eventId) {
       // Straight from the bookings rather than the contact list, because the
@@ -754,7 +760,10 @@ async function resolveBroadcastRecipients(
       deduped.set(r.email.toLowerCase(), r);
     }
   }
-  return Array.from(deduped.values());
+  // Nobody who has unsubscribed, whichever list they came in on (bookings
+  // and the audience-link list didn't check before).
+  const stopped = await storage.listUnsubscribedEmails();
+  return Array.from(deduped.values()).filter((r) => !stopped.has(r.email.trim().toLowerCase()));
 }
 
 /** "The Podcast Marathon · Oct 5, 2026" — the banner line on broadcast emails,
@@ -6704,6 +6713,7 @@ export function registerRoutes(app: Express): void {
   registerSurvey(app, requireAdmin);
   registerSms(app, requireAdmin);
   registerSceneLog(app, requireAdmin);
+  registerPeople(app, requireAdmin);
   registerDeviceCheck(app);
   registerGreenRoomChat(app, requireAdmin, requireHostSession, studioHostEmails);
   registerAutomations(app, requireAdmin, {
