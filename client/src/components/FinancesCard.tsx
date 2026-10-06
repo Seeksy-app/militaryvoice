@@ -427,22 +427,16 @@ export function ProductionCosts({ eventId }: { eventId: number }) {
 
 type Actual = { group: string; label: string; note: string; amount: number; status: "actual" | "estimate" | "enter" };
 
+// Only what this event itself cost: usage on the day and its own purchases.
+// The platform's monthly plans (Render, Upload-Post, LiveKit, Supabase,
+// Vercel, Resend) and its domains aren't the event's, so they aren't here.
 const STARTING_ACTUALS: Actual[] = [
-  { group: "Monthly plans", label: "Render worker (clips)", note: "4 CPU / 8 GB (4c-8g), cuts every clip", amount: 175, status: "actual" },
-  { group: "Monthly plans", label: "Upload-Post", note: "75 profiles: posting, scheduling, analytics", amount: 147, status: "actual" },
-  { group: "Monthly plans", label: "LiveKit Ship", note: "the plan; usage over the allowance is billed on top", amount: 50, status: "actual" },
-  { group: "Monthly plans", label: "Supabase Pro", note: "database and file storage", amount: 25, status: "actual" },
-  { group: "Monthly plans", label: "Vercel Pro", note: "the site and the API", amount: 20, status: "actual" },
-  { group: "Monthly plans", label: "Resend", note: "every email", amount: 20, status: "actual" },
-  { group: "Show-day usage and top-ups", label: "Anthropic API", note: "topped up on show day (clip picks, Alex)", amount: 60, status: "actual" },
-  { group: "Show-day usage and top-ups", label: "Vercel usage over the plan", note: "on show day, about $15 of usage beyond the plan", amount: 15, status: "estimate" },
-  { group: "Show-day usage and top-ups", label: "LiveKit usage over the plan", note: "connection minutes and egress for 16 hours: read it from LiveKit billing", amount: 0, status: "enter" },
-  { group: "Show-day usage and top-ups", label: "ElevenLabs top-up", note: "voices for Alex's intros and spots; topped up on show day", amount: 0, status: "enter" },
-  { group: "Show-day usage and top-ups", label: "LiveAvatar credits", note: "Alex's video avatar; ran out on show day", amount: 0, status: "enter" },
-  { group: "Show-day usage and top-ups", label: "Creatomate credits", note: "10,000 credits bought 25 Sep (before our own renderer)", amount: 0, status: "enter" },
-  { group: "Show-day usage and top-ups", label: "Cloudflare R2 storage", note: "about 45 GB: the day's recordings, the on-demand and every show's cut", amount: 0.7, status: "estimate" },
-  { group: "From the bank (Mercury)", label: "Telnyx", note: "15 Sep", amount: 10, status: "actual" },
-  { group: "From the bank (Mercury)", label: "GoDaddy", note: "25 Sep $13.19 and 30 Sep $2.19", amount: 15.38, status: "actual" },
+  { group: "Show-day usage", label: "Anthropic API", note: "topped up on show day (clip picks, Alex)", amount: 60, status: "actual" },
+  { group: "Show-day usage", label: "Vercel usage over the plan", note: "on show day, about $15 of usage beyond the plan", amount: 15, status: "estimate" },
+  { group: "Show-day usage", label: "LiveKit usage over the plan", note: "connection minutes and egress for 16 hours: read it from LiveKit billing", amount: 0, status: "enter" },
+  { group: "Show-day usage", label: "ElevenLabs top-up", note: "voices for Alex's intros and spots; topped up on show day", amount: 0, status: "enter" },
+  { group: "Show-day usage", label: "LiveAvatar credits", note: "Alex's video avatar; ran out on show day", amount: 0, status: "enter" },
+  { group: "Show-day usage", label: "Cloudflare R2 storage", note: "about 45 GB: the day's recordings, the on-demand and every show's cut", amount: 0.7, status: "estimate" },
   { group: "Awards", label: "Excellence in Storytelling plaque", note: "9×12 walnut-finish plaque, full-colour brass plate with the NMPD logo, engraved", amount: 65, status: "estimate" },
   { group: "Awards", label: "Plaque shipping", note: "insured UPS Ground or USPS Priority, anywhere in the US, 2–5 days", amount: 18, status: "estimate" },
 ];
@@ -493,7 +487,7 @@ function ActualCosts({ eventId, eventName }: { eventId: number; eventName: strin
         <Receipt className="h-4 w-4" /> What {eventName} actually cost
       </h3>
       <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-        Real charges and plans, show-day top-ups, and the award. Change any amount or mark it actual once the bill is in; red lines are bills we know about but haven't read yet.
+        Only this event's own costs: usage on the day and what was bought for it, like the award. The platform's monthly plans aren't included. Change any amount or mark it actual once the bill is in; red lines are bills we know about but haven't read yet.
       </p>
       <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-card">
         {isLoading ? <p className="p-5 text-sm text-muted-foreground">Loading…</p> : (
