@@ -1,5 +1,6 @@
-import { useEffect, useState } from "react";
-import { BadgeCheck, Wand2, Type as TypeIcon, AtSign, Search, SlidersHorizontal, Plus, Share2, Users, ChevronDown, Bookmark } from "lucide-react";
+import { useEffect, useRef, useState } from "react";
+import { motion, useInView, useReducedMotion } from "framer-motion";
+import { BadgeCheck, Wand2, Type as TypeIcon, AtSign, Search, SlidersHorizontal, Plus, Share2, Users, ChevronDown, Bookmark, Gauge, Globe2, Handshake, MousePointer2 } from "lucide-react";
 import { PlatformIcon } from "@/components/SocialIcons";
 import type { SocialPlatform } from "@shared/schema";
 import { CAST, type CastKey } from "./fakeCamera";
@@ -60,8 +61,9 @@ function useTyped(text: string) {
   return text.slice(0, n);
 }
 
-export function DiscoverySearchMock() {
-  const typed = useTyped(QUERY);
+export function DiscoverySearchMock({ typed: typedIn, results = true, picked = false }: { typed?: string; results?: boolean; picked?: boolean } = {}) {
+  const looped = useTyped(QUERY);
+  const typed = typedIn ?? looped;
   return (
     <div className="overflow-hidden rounded-2xl border border-border bg-card shadow-[0_40px_80px_-40px_rgba(5,56,119,0.45)]" aria-hidden="true">
       {/* Search bar */}
@@ -86,7 +88,7 @@ export function DiscoverySearchMock() {
             {typed}
             <span className="ml-px inline-block h-4 w-px translate-y-0.5 animate-pulse bg-foreground" />
           </span>
-          <span className="hidden rounded-lg bg-[#F0A71F] px-3 py-1.5 text-xs font-semibold text-[#1a1200] sm:inline">Search</span>
+          <span className={`hidden rounded-lg bg-[#F0A71F] px-3 py-1.5 text-xs font-semibold text-[#1a1200] transition-transform sm:inline ${typedIn !== undefined && typed.length === QUERY.length && !results ? "scale-95 ring-4 ring-[#F0A71F]/30" : ""}`}>Search</span>
         </div>
         <div className="mt-2.5 flex flex-wrap items-center gap-1.5 text-[11px]">
           <span className="inline-flex items-center gap-1 rounded-full border border-border px-2 py-0.5 text-muted-foreground"><SlidersHorizontal className="h-3 w-3" /> Filters</span>
@@ -99,7 +101,7 @@ export function DiscoverySearchMock() {
 
       {/* Results */}
       <div className="flex items-center justify-between px-4 py-2 text-xs text-muted-foreground lg:pr-12">
-        <span><span className="font-semibold text-foreground">1,284</span> creators match</span>
+        <span>{results ? <><span className="font-semibold text-foreground">1,284</span> creators match</> : "Searching…"}</span>
         <span className="inline-flex items-center gap-1 rounded-lg bg-[#2563eb] px-2 py-1 font-medium text-white"><Plus className="h-3 w-3" /> Add 3 to list</span>
       </div>
       <table className="w-full text-sm">
@@ -117,7 +119,7 @@ export function DiscoverySearchMock() {
           {ROWS.map((r, i) => {
             const p = CAST[r.key];
             return (
-              <tr key={r.key} className={i < 3 ? "bg-[#053877]/[0.035] dark:bg-white/[0.03]" : ""}>
+              <tr key={r.key} className={`transition-all duration-500 ${results ? "opacity-100" : "translate-y-1 opacity-0"} ${picked && i === 0 ? "bg-[#F0A71F]/15 outline outline-2 -outline-offset-2 outline-[#F0A71F]" : i < 3 ? "bg-[#053877]/[0.035] dark:bg-white/[0.03]" : ""}`} style={{ transitionDelay: results ? `${i * 70}ms` : "0ms" }}>
                 <td className="py-2.5 pl-4 pr-2">
                   <span className="flex min-w-0 items-center gap-2.5">
                     <img src={p.face} alt="" loading="lazy" className={`h-9 w-9 shrink-0 rounded-full object-cover ${r.verified ? "ring-2 ring-[#F0A71F] ring-offset-2 ring-offset-card" : ""}`} />
@@ -203,6 +205,78 @@ export function CreatorProfileMock() {
           <span className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1.5 text-xs"><Share2 className="h-3.5 w-3.5" /> Share</span>
           <span className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1.5 text-xs"><Users className="h-3.5 w-3.5" /> 12 lookalikes</span>
         </div>
+      </div>
+    </div>
+  );
+}
+
+
+const EXPLAIN = [
+  { icon: Gauge, title: "Credibility and real reach", body: "Not every follower is a person. See how many are real, and how many people a post actually reaches." },
+  { icon: Globe2, title: "Who's really listening", body: "Audience gender, age, country and city, so you know their people are your people." },
+  { icon: Handshake, title: "Brand history and lookalikes", body: "Who has already paid them, when, and the posts themselves, plus creators whose audience looks just like theirs." },
+];
+
+type Phase = "idle" | "typing" | "searching" | "results" | "picked" | "open" | "explain";
+const ORDER: Phase[] = ["idle", "typing", "searching", "results", "picked", "open", "explain"];
+
+/**
+ * Discovery, played once as you scroll to it: the question types, the results
+ * come in, the first creator is clicked, their profile opens out of the row,
+ * and three cards rise under it saying what the numbers mean.
+ */
+export function DiscoveryDemo() {
+  const ref = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, { once: true, margin: "-120px" });
+  const reduce = useReducedMotion();
+  const [phase, setPhase] = useState<Phase>("idle");
+  const [n, setN] = useState(0);
+  useEffect(() => {
+    if (reduce) { setN(QUERY.length); setPhase("explain"); return; }
+    if (!inView) return;
+    setPhase("typing");
+    const timers: ReturnType<typeof setTimeout>[] = [];
+    let i = 0;
+    const t = setInterval(() => {
+      i = Math.min(QUERY.length, i + 1);
+      setN(i);
+      if (i >= QUERY.length) {
+        clearInterval(t);
+        const at = (ms: number, p: Phase) => timers.push(setTimeout(() => setPhase(p), ms));
+        at(250, "searching");
+        at(750, "results");
+        at(1700, "picked");
+        at(2300, "open");
+        at(3200, "explain");
+      }
+    }, 22);
+    return () => { clearInterval(t); timers.forEach(clearTimeout); };
+  }, [inView, reduce]);
+  const past = (p: Phase) => ORDER.indexOf(phase) >= ORDER.indexOf(p);
+  return (
+    <div ref={ref}>
+      <div className="relative mx-auto max-w-6xl lg:pr-[17rem] xl:pr-[18.5rem]">
+        <DiscoverySearchMock typed={QUERY.slice(0, n)} results={past("results")} picked={past("picked")} />
+        {/* The click on the first row. */}
+        <motion.span aria-hidden className="pointer-events-none absolute left-[22%] top-[60%] z-20 hidden text-[#000741] drop-shadow lg:block"
+          initial={{ opacity: 0, x: 120, y: 60 }} animate={past("picked") && !past("open") ? { opacity: 1, x: 0, y: 0, scale: [1, 0.85, 1] } : { opacity: 0 }} transition={{ duration: 0.5 }}>
+          <MousePointer2 className="h-6 w-6 fill-white" />
+        </motion.span>
+        <motion.div className="mx-auto mt-5 max-w-sm lg:absolute lg:right-0 lg:top-36 lg:mt-0 lg:w-80 xl:w-[21rem]"
+          initial={false} animate={past("open") ? { opacity: 1, x: 0, scale: 1 } : { opacity: 0, x: -160, scale: 0.9 }}
+          transition={{ type: "spring", stiffness: 140, damping: 20 }} style={{ transformOrigin: "left center" }}>
+          <CreatorProfileMock />
+        </motion.div>
+      </div>
+      <div className="mx-auto mt-10 grid max-w-6xl gap-4 md:grid-cols-3 lg:mt-24">
+        {EXPLAIN.map(({ icon: Icon, title, body }, i) => (
+          <motion.div key={title} initial={false} animate={past("explain") ? { opacity: 1, y: 0 } : { opacity: 0, y: 24 }} transition={{ duration: 0.5, delay: i * 0.15 }}
+            className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#000741] text-[#F0A71F]"><Icon className="h-5 w-5" /></span>
+            <h3 className="mt-3 font-semibold text-foreground">{title}</h3>
+            <p className="mt-1 text-pretty text-sm text-muted-foreground">{body}</p>
+          </motion.div>
+        ))}
       </div>
     </div>
   );

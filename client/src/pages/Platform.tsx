@@ -6,7 +6,7 @@ import { PillarArt } from "@/components/platform/PillarArt";
 import { StudioConsoleMock } from "@/components/platform/StudioConsoleMock";
 import { RealTimePostMock } from "@/components/platform/RealTimePostMock";
 import { ReadyToJoinMock, WaitingRoomMock } from "@/components/platform/GreenRoomMock";
-import { DiscoverySearchMock, CreatorProfileMock } from "@/components/platform/DiscoveryMock";
+import { DiscoveryDemo } from "@/components/platform/DiscoveryMock";
 import { SoonPill } from "@/components/platform/stockVideo";
 import { ALL_PLATFORMS, PlatformIcon, platformColor } from "@/components/SocialIcons";
 import { Button } from "@/components/ui/button";
@@ -303,13 +303,10 @@ export default function Platform({ pitch = false }: { pitch?: boolean } = {}) {
           </div>
 
           {/* The product, with one profile opened over the results. */}
-          <motion.div {...reveal} className="relative mx-auto mt-14 max-w-6xl lg:pr-[17rem] xl:pr-[18.5rem]">
-            <DiscoverySearchMock />
-            <div className="mx-auto mt-5 max-w-sm lg:absolute lg:right-0 lg:top-36 lg:mt-0 lg:w-80 xl:w-[21rem]">
-              <CreatorProfileMock />
-            </div>
-          </motion.div>
-          <p className="mt-4 text-center text-xs text-muted-foreground lg:mt-20">Sample profiles and figures, for illustration.</p>
+          <div className="mt-14">
+            <DiscoveryDemo />
+          </div>
+          <p className="mt-4 text-center text-xs text-muted-foreground">Sample profiles and figures, for illustration.</p>
 
           {/* What it does */}
           <div className="mt-16 grid grid-cols-2 gap-x-5 gap-y-9 sm:mt-20 sm:gap-x-8 sm:gap-y-10 lg:grid-cols-4">
