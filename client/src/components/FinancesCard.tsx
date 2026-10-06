@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { adminGet, adminSend } from "@/lib/adminApi";
 import { Slider } from "@/components/ui/slider";
 import type { PublicEvent } from "@shared/schema";
+import { PLANS } from "@shared/tokens";
 import { Calculator, TrendingUp, AlertTriangle, Film, ChevronRight, Receipt, Plus, Trash2, Save } from "lucide-react";
 
 // What the event costs to run, and what to charge afterwards.
@@ -103,10 +104,39 @@ function model(viewers: number, hours: number, slotMin: number, prerecorded: num
   return { lines, total, fixed, variable: total - fixed, audience, flat: total - audience, slots, prerecGb };
 }
 
+// What one creator costs us a month, per plan (cost basis from Sep 2026
+// bills; see the pricing-model notes). Clips run on our own renderer, so an
+// episode's clips are ~$1.10 (4 clips) to ~$1.40 (6). The plan numbers come
+// from shared/tokens.ts, so this can't drift from what's on sale.
+const COST = {
+  episode4: 1.1, // transcribe, pick moments, render 4 clips in three shapes, clean episode
+  episode6: 1.4,
+  uploadPost: 1.96, // $147 a month across 75 profiles, once they connect socials
+  base: 1.0, // SmartLink, podcast hosting and storage, Ask my show's ~100 answers
+  stripe: (price: number) => price * 0.029 + 0.3,
+  studioHour: 1.7, // recording egress and calls
+  liveHour: 1.2, // streaming out on top
+};
+const scaleEpisodes = PLANS.creator.credits / 8; // 8 credits an animated 4-clip episode
+const proEpisodes = PLANS.pro.credits / 12; // 12 credits an animated 6-clip episode
 const TIERS = [
-  { name: "Keep the lights on", price: 19, cost: 8.09, bullets: ["2 hours live a month", "Your studio stays yours", "Archive and clips stay up", "1 destination"] },
-  { name: "Watchfloor", price: 49, cost: 30.19, pick: true, bullets: ["6 hours live a month", "Clips on every episode", "Guests get their own recording", "3 destinations · your logo"] },
-  { name: "Network", price: 349, cost: 187.38, bullets: ["25 hours, unlimited shows", "8 destinations · 5 seats", "Per-host dashboards", "Priority clip turnaround"] },
+  {
+    name: "Growth", price: 0, cost: COST.base + COST.uploadPost,
+    costNote: "free for good; the first Pōstify episode (~$1.10) once",
+    bullets: ["SmartLink, podcast hosting, Ask my show", "Discovery: 10 contact emails a month", "Events with an SI co-host", "First episode of clips free"],
+  },
+  {
+    name: PLANS.creator.name, price: PLANS.creator.cents / 100, pick: false,
+    cost: scaleEpisodes * COST.episode4 + COST.uploadPost + COST.base + COST.stripe(PLANS.creator.cents / 100),
+    costNote: `if all ${PLANS.creator.credits} credits are used (~${scaleEpisodes.toFixed(1)} episodes)`,
+    bullets: [`${PLANS.creator.credits} credits a month`, `${PLANS.creator.clipsPerEpisode} clips an episode, every shape`, "Clean episode, posting and scheduling", "No MilitaryVoices bar on the SmartLink"],
+  },
+  {
+    name: PLANS.pro.name, price: PLANS.pro.cents / 100, pick: true,
+    cost: proEpisodes * COST.episode6 + COST.uploadPost + COST.base + COST.stripe(PLANS.pro.cents / 100),
+    costNote: `if all ${PLANS.pro.credits} credits are used (~${proEpisodes.toFixed(1)} episodes)`,
+    bullets: [`${PLANS.pro.credits} credits a month`, `${PLANS.pro.clipsPerEpisode} clips an episode, every shape`, "Clean episode, posting and scheduling", "No MilitaryVoices bar on the SmartLink"],
+  },
 ];
 
 export function FinancesCard({ event }: { event: PublicEvent }) {
@@ -134,16 +164,16 @@ export function PlatformFinances() {
       {/* ---------------------------------------------------------- what to charge */}
       <section>
         <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
-          <TrendingUp className="h-4 w-4" /> What to charge for the rest of the year
+          <TrendingUp className="h-4 w-4" /> The plans, and what each one costs us
         </h3>
         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-          Priced in hours, because hours are what cost. "Unlimited streaming" is what the competition sells and these
-          rates don't support it honestly — a podcaster doing 25 hours a month costs $187 to serve.
+          The three plans on the pricing page, with what one creator costs us a month at the most. Growth is the way in and
+          costs a couple of dollars; the paid plans carry it. Monthly prices; yearly is two months free.
         </p>
 
         <div className="mt-4 grid gap-4 md:grid-cols-3">
           {TIERS.map((t) => {
-            const margin = Math.round(((t.price - t.cost) / t.price) * 100);
+            const margin = t.price ? Math.round(((t.price - t.cost) / t.price) * 100) : 0;
             return (
               <div
                 key={t.name}
@@ -151,8 +181,8 @@ export function PlatformFinances() {
               >
                 <div className="text-sm font-semibold">{t.name}</div>
                 <div className="mt-1 text-3xl font-bold tabular-nums">
-                  ${t.price}
-                  <span className="text-sm font-medium text-muted-foreground"> / month</span>
+                  {t.price ? `$${t.price}` : "Free"}
+                  {t.price ? <span className="text-sm font-medium text-muted-foreground"> / month</span> : null}
                 </div>
                 <ul className="mt-3 flex-1 space-y-1 text-sm text-muted-foreground">
                   {t.bullets.map((b) => (
@@ -160,17 +190,24 @@ export function PlatformFinances() {
                   ))}
                 </ul>
                 <div className="mt-4 border-t border-border pt-3 text-xs tabular-nums text-muted-foreground">
-                  costs {usd(t.cost)} · <span className="font-semibold text-emerald-700 dark:text-emerald-400">{margin}% margin</span>
+                  costs up to {usd(t.cost)}{t.price ? <> · <span className="font-semibold text-emerald-700 dark:text-emerald-400">{margin}% margin</span></> : null}
+                  <span className="mt-0.5 block">{t.costNote}</span>
                 </div>
               </div>
             );
           })}
         </div>
 
+        {/* The decision still open: Studio hours. The pricing notes put 4 hours in
+            Scale and 10 plus live streaming in Pro; at today's rates that's the
+            line that moves margin most, so it's shown before it's sold. */}
         <div className="mt-4 rounded-r-xl border-l-4 border-[#F0A71F] bg-[#F0A71F]/10 p-4 text-sm">
-          <span className="font-semibold">Half price for verified veteran-owned shows and registered nonprofits</span>,
-          permanently, stated on the pricing page rather than hidden behind a code. It is the only pricing decision here
-          that anyone will repeat to someone else.
+          <span className="font-semibold">Before Studio hours go into the plans:</span> 4 hours in Scale adds about{" "}
+          {usd(4 * COST.studioHour)} a month (margin to{" "}
+          {Math.round(((TIERS[1].price - TIERS[1].cost - 4 * COST.studioHour) / TIERS[1].price) * 100)}%), and 10 hours with
+          live streaming in Pro adds about {usd(10 * (COST.studioHour + COST.liveHour))} (margin to{" "}
+          {Math.round(((TIERS[2].price - TIERS[2].cost - 10 * (COST.studioHour + COST.liveHour)) / TIERS[2].price) * 100)}%).
+          Extra hours at $2 each cover their cost.
         </div>
 
         <div className="mt-6 overflow-x-auto rounded-2xl border border-border bg-card">
