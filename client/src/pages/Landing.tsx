@@ -75,6 +75,7 @@ const EVENT_FALLBACK: PublicEvent = {
   bufferPosition: "after",
   occasion: "National Military Podcast Day",
   about: "",
+  review: "",
   createdAt: "",
 };
 const HERO_IMAGES = [

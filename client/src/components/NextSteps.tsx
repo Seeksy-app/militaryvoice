@@ -1,3 +1,4 @@
+import { pathOf } from "@shared/schema";
 
 // What's left to do, worked out from what they've actually done rather than
 // asked as questions. A checklist that already knows the answer is worth
@@ -26,6 +27,8 @@ export interface StepState {
   interests?: string;
   /** An event is coming up that they can still be part of. Event steps only show then. */
   eventOpen?: boolean;
+  /** An event planner has created at least one event of their own. */
+  hasOwnEvent?: boolean;
 }
 
 /**
@@ -47,6 +50,7 @@ export const STEP_ANCHOR = {
   podcast: "",
   discovery: "",
   postify: "",
+  myevent: "",
 } as const;
 
 export interface Step {
@@ -67,6 +71,7 @@ export interface StepNav {
   onGoPodcast?: () => void;
   onGoDiscovery?: () => void;
   onGoPostify?: () => void;
+  onGoMyEvents?: () => void;
 }
 
 /**
@@ -102,6 +107,27 @@ export function goToStep(step: Step): void {
  */
 export function buildSteps(state: StepState, nav: StepNav): Step[] {
   const want = (state.interests ?? "").split(",").map((x) => x.trim()).filter(Boolean);
+  const path = pathOf(state.interests);
+  const goTo = (f?: () => void) => f ?? nav.onGoIntegrations;
+  // Each path's own first steps (6 Oct): an event planner's are about their
+  // event; a content creator's skip podcast hosting.
+  if (path === "planner") {
+    return [
+      { key: "myevent", label: "Create your event", detail: "Name it, pick the day and the slot length. It stays private until we approve it.", done: Boolean(state.hasOwnEvent), cta: "Create my event", go: goTo(nav.onGoMyEvents) },
+      { key: "photo", label: "Add your photo", detail: "It goes on your event page as the organizer.", done: Boolean(state.hasPhoto), cta: "Add a photo", go: goTo(nav.onGoProfile) },
+      { key: "discovery", label: "Find speakers in Discovery", detail: "Search military and veteran podcasters and creators by topic. 10 contact emails a month, free.", done: false, cta: "Open Discovery", go: goTo(nav.onGoDiscovery) },
+      { key: "accounts", label: "Connect your social accounts", detail: "So clips from your event can go out to them.", done: state.hasAccounts, cta: "Connect accounts", go: nav.onGoIntegrations },
+    ];
+  }
+  if (path === "creator") {
+    return [
+      { key: "photo", label: "Add your photo", detail: "It goes on your SmartLink and your directory card.", done: Boolean(state.hasPhoto), cta: "Add a photo", go: goTo(nav.onGoProfile) },
+      { key: "smartlink", label: "Make your SmartLink", detail: "One link for every bio: your videos, your links, and a way to collect emails. Free.", done: Boolean(state.hasSmartLink), cta: "Make my SmartLink", go: goTo(nav.onGoPage) },
+      { key: "accounts", label: "Connect your social accounts", detail: "Pōstify posts your clips to them, on a schedule.", done: state.hasAccounts, cta: "Connect accounts", go: nav.onGoIntegrations },
+      { key: "postify", label: "Turn a video into clips", detail: "Your first one is free: short clips with captions, in every shape.", done: Boolean(state.hasClips), cta: "Try Pōstify", go: goTo(nav.onGoPostify) },
+      { key: "discovery", label: "Find collaborators in Discovery", detail: "Creators and shows to work with. 10 contact emails a month, free.", done: false, cta: "Open Discovery", go: goTo(nav.onGoDiscovery) },
+    ];
+  }
   const wants = (k: string) => want.length === 0 || want.includes(k);
   const go = (f?: () => void) => f ?? nav.onGoIntegrations;
 

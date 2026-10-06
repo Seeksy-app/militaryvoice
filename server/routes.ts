@@ -15,6 +15,7 @@ import {
   insertEventSchema,
   updateEventSchema,
   insertProfileSchema,
+  INTERESTS,
   runItemInputSchema,
   platformInterestSchema,
   studioJoinSchema,
@@ -124,6 +125,7 @@ import { registerSurvey } from "./survey.js";
 import { registerSms } from "./sms.js";
 import { logSceneTake, registerSceneLog } from "./sceneLog.js";
 import { audienceRecipients, registerPeople } from "./people.js";
+import { registerOrganizer } from "./organizer.js";
 import { registerDeviceCheck } from "./deviceCheck.js";
 import { registerHealth, beat, addHealthCheck } from "./health.js";
 import { registerNotices } from "./notices.js";
@@ -269,7 +271,7 @@ async function enhanceAndSavePhoto(buffer: Buffer): Promise<{ url: string; origi
 }
 
 function toPublicEvent(event: EventRow): PublicEvent {
-  const { adminPassword, ...rest } = event;
+  const { adminPassword, ownerEmail, ...rest } = event;
   return rest;
 }
 
@@ -558,7 +560,11 @@ function icsEscape(text: string): string {
  */
 const studioHostKey = (eventId: number) => `studio_host_emails:${eventId}`;
 async function studioHostEmails(eventId: number): Promise<string[]> {
-  return ((await storage.getSetting(studioHostKey(eventId))) ?? "").split(/[,\s]+/).map((e) => e.trim().toLowerCase()).filter((e) => e.includes("@"));
+  const listed = ((await storage.getSetting(studioHostKey(eventId))) ?? "").split(/[,\s]+/).map((e) => e.trim().toLowerCase()).filter((e) => e.includes("@"));
+  // An event planner runs the studio for their own event once we've approved it.
+  const ev = await storage.getEventById(eventId);
+  const owner = ev?.review === "approved" ? ev.ownerEmail.trim().toLowerCase() : "";
+  return owner && !listed.includes(owner) ? [...listed, owner] : listed;
 }
 /** The events this signed-in person is a studio host on. */
 async function studioHostEvents(email: string): Promise<number[]> {
@@ -6716,6 +6722,7 @@ export function registerRoutes(app: Express): void {
   registerSms(app, requireAdmin);
   registerSceneLog(app, requireAdmin);
   registerPeople(app, requireAdmin);
+  registerOrganizer(app, requireHostSession, requireAdmin);
   registerDeviceCheck(app);
   registerGreenRoomChat(app, requireAdmin, requireHostSession, studioHostEmails);
   registerAutomations(app, requireAdmin, {
@@ -9938,7 +9945,7 @@ export function registerRoutes(app: Express): void {
     const raw = {
       podcastName: body.podcastName ?? "",
       hostName: body.hostName ?? "",
-      interests: String(body.interests ?? "").split(",").map((v) => v.trim()).filter((v) => ["events", "grow", "discover", "host"].includes(v)).join(","),
+      interests: String(body.interests ?? "").split(",").map((v) => v.trim()).filter((v) => (INTERESTS as readonly string[]).includes(v)).join(","),
       phone: body.phone ?? "",
       numPeople: Number(body.numPeople) || 1,
       hasVideoIntro: body.hasVideoIntro === "true",

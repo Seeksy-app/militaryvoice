@@ -1,6 +1,7 @@
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
-import { adminGet } from "@/lib/adminApi";
+import { adminGet, adminSend } from "@/lib/adminApi";
+import { Button } from "@/components/ui/button";
 import { Activity, ArrowRight, CalendarDays, Inbox, Sparkles, UserPlus, Users } from "lucide-react";
 import type { PublicEvent } from "@shared/schema";
 
@@ -28,6 +29,14 @@ export function PlatformOverview() {
   const people = useQuery<{ people: Person[]; audiences: Audience[] }>({ queryKey: ["/api/admin/people", 0], queryFn: () => adminGet("/api/admin/people") });
   const counts = useQuery<{ needs: number; unread: number; sentToday: number }>({ queryKey: ["/api/admin/mail/counts"], queryFn: () => adminGet("/api/admin/mail/counts") });
   const events = useQuery<PublicEvent[]>({ queryKey: ["/api/admin/events"], queryFn: () => adminGet("/api/admin/events") });
+  const qc = useQueryClient();
+  const planner = useQuery<{ id: number; name: string; startAtUtc: string; review: string; ownerEmail: string; pageUrl: string; description: string }[]>({ queryKey: ["/api/admin/planner-events"], queryFn: () => adminGet("/api/admin/planner-events") });
+  const waiting = (planner.data ?? []).filter((e) => e.review === "pending");
+  const decide = async (id: number, approve: boolean) => {
+    await adminSend("POST", `/api/admin/planner-events/${id}/approve`, { approve });
+    void qc.invalidateQueries({ queryKey: ["/api/admin/planner-events"] });
+    void qc.invalidateQueries({ queryKey: ["/api/admin/events"] });
+  };
   const health = useQuery<{ checks: { key: string; name: string; state: string; detail: string }[] }>({ queryKey: ["/api/admin/health"], queryFn: () => adminGet("/api/admin/health") });
 
   const aud = (k: string) => people.data?.audiences.find((a) => a.key === k)?.count ?? 0;
@@ -50,6 +59,28 @@ export function PlatformOverview() {
         <Stat icon={Sparkles} label="On a paid plan" value={paying} sub={`${aud("pro")} Pro · ${aud("scale")} Scale · ${aud("growth")} on Growth`} href="/admin/finances" />
         <Stat icon={Inbox} label="Needs a reply" value={counts.data?.needs ?? "…"} sub={`${counts.data?.sentToday ?? 0} emails sent today`} href="/admin/crm" />
       </div>
+
+      {/* Event planners' events sent to us: approving makes them public and opens their studio. */}
+      {waiting.length > 0 && (
+        <section className="rounded-2xl border-2 border-[#F0A71F]/60 bg-[#F0A71F]/10 p-5" data-testid="overview-approvals">
+          <h3 className="text-base font-semibold">Events waiting for your approval</h3>
+          <ul className="mt-3 space-y-3">
+            {waiting.map((e) => (
+              <li key={e.id} className="flex flex-wrap items-start justify-between gap-3 rounded-xl bg-card p-4">
+                <span className="min-w-0 flex-1">
+                  <span className="block font-semibold">{e.name}</span>
+                  <span className="block text-xs text-muted-foreground">{new Date(e.startAtUtc).toLocaleString("en-US", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })} · by {e.ownerEmail}</span>
+                  {e.description && <span className="mt-1 block text-sm text-foreground/80">{e.description.slice(0, 220)}{e.description.length > 220 ? "…" : ""}</span>}
+                </span>
+                <span className="flex shrink-0 gap-2">
+                  <Button size="sm" onClick={() => void decide(e.id, true)} data-testid={`approve-${e.id}`}>Approve</Button>
+                  <Button size="sm" variant="outline" onClick={() => void decide(e.id, false)}>Send back</Button>
+                </span>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.3fr)_minmax(0,1fr)]">
         <section className="rounded-2xl border border-border bg-card p-5">

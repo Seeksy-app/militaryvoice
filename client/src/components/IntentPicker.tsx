@@ -1,68 +1,61 @@
-import { useState } from "react";
-import { CalendarDays, TrendingUp, Compass, Flag, Check, ArrowRight } from "lucide-react";
-import { Button } from "@/components/ui/button";
+import { CalendarDays, Mic, Clapperboard, Check, ArrowRight } from "lucide-react";
 import type { Interest } from "@shared/schema";
 import { IconTile } from "@/components/ui/icon-tile";
 
 /**
- * "What brings you to MilitaryVoices?" — the first thing a new account sees.
+ * "Which one sounds like you?" — the first thing a new account sees.
  *
- * The account comes first now and events are one thing you can do with it,
- * so the way in can't assume a show. Somebody here for Discovery or their
- * analytics was being asked to "Set up your show" before anything else. This
- * asks, lets them pick more than one, and the answer decides which questions
- * the profile asks and where they land.
+ * Three paths (6 Oct): a podcaster, a content creator, or an event planner.
+ * One tap picks the path and carries on; it decides what the profile asks,
+ * where they land, and what the dashboard's checklist puts first. The two
+ * creator paths share most of the platform; the event planner goes to their
+ * own events.
  */
-const OPTIONS: { key: Interest; title: string; line: string; icon: typeof CalendarDays }[] = [
-  { key: "events", title: "Get booked on events", line: "Podcasters and speakers — take a slot on a live event like the Podcast Marathon.", icon: CalendarDays },
-  { key: "grow", title: "Grow my show", line: "Post clips to your channels, see your analytics, and bring your audience with you.", icon: TrendingUp },
-  { key: "discover", title: "Find guests, creators and sponsors", line: "Search military and veteran voices with Discovery.", icon: Compass },
-  { key: "host", title: "Run my own event", line: "Put on your own live day with our studio and your own lineup.", icon: Flag },
+const PATHS: { key: "podcaster" | "creator" | "planner"; interests: Interest[]; title: string; line: string; points: string[]; icon: typeof CalendarDays }[] = [
+  {
+    key: "podcaster", interests: ["grow", "events"], title: "I'm a podcaster", icon: Mic,
+    line: "Host your show, get clips from every episode, and get booked on live events.",
+    points: ["Podcast hosting on every app", "Pōstify clips, first episode free", "A SmartLink for your bio"],
+  },
+  {
+    key: "creator", interests: ["create"], title: "I'm a content creator", icon: Clapperboard,
+    line: "Turn your videos into clips, post everywhere, and grow an audience you own.",
+    points: ["Pōstify clips and posting", "A SmartLink that collects emails", "Discovery to find collaborators"],
+  },
+  {
+    key: "planner", interests: ["host"], title: "I'm an event planner", icon: CalendarDays,
+    line: "Run a live event with our studio, an SI co-host and your own lineup.",
+    points: ["Your own event page and booking", "A studio and run of show", "Speakers' clips the same day"],
+  },
 ];
 
 export function IntentPicker({ onDone }: { onDone: (interests: Interest[]) => void }) {
-  const [picked, setPicked] = useState<Interest[]>([]);
-  const toggle = (k: Interest) => setPicked((p) => (p.includes(k) ? p.filter((x) => x !== k) : [...p, k]));
   return (
-    <section className="mx-auto max-w-3xl" data-testid="intent-picker">
+    <section className="mx-auto max-w-4xl" data-testid="intent-picker">
       <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#F0A71F]">Welcome</p>
       <h1 className="mt-1 text-3xl font-bold tracking-tight text-foreground" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>
-        What brings you to MilitaryVoices?
+        Which one sounds like you?
       </h1>
-      <p className="mt-2 text-muted-foreground">Pick as many as fit. We'll set up your account around them — you can do the rest any time.</p>
+      <p className="mt-2 text-muted-foreground">We'll set your account up for it. Everything else on the platform is still yours to use.</p>
 
-      <div className="mt-6 grid gap-3 sm:grid-cols-2">
-        {OPTIONS.map((o) => {
-          const on = picked.includes(o.key);
-          return (
-            <button
-              key={o.key}
-              type="button"
-              onClick={() => toggle(o.key)}
-              aria-pressed={on}
-              className={`relative flex items-start gap-3.5 rounded-2xl border-2 p-4 text-left transition-colors ${
-                on ? "border-[#053877] bg-[#053877]/[0.05]" : "border-border bg-card hover:border-[#053877]/40"
-              }`}
-              data-testid={`intent-${o.key}`}
-            >
-              <IconTile icon={o.icon} />
-              <span className="min-w-0 flex-1">
-                <span className="block font-semibold text-foreground">{o.title}</span>
-                <span className="mt-0.5 block text-sm text-muted-foreground">{o.line}</span>
-              </span>
-              <span className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-full border-2 ${on ? "border-[#053877] bg-[#053877] text-white" : "border-border"}`}>
-                {on && <Check className="h-3 w-3" />}
-              </span>
-            </button>
-          );
-        })}
-      </div>
-
-      <div className="mt-6 flex items-center gap-3">
-        <Button size="lg" className="gap-2 rounded-full" disabled={picked.length === 0} onClick={() => onDone(picked)} data-testid="button-intent-continue">
-          Continue <ArrowRight className="h-4 w-4" />
-        </Button>
-        {picked.length === 0 && <span className="text-sm text-muted-foreground">Pick at least one.</span>}
+      <div className="mt-6 grid gap-4 md:grid-cols-3">
+        {PATHS.map((o) => (
+          <button
+            key={o.key}
+            type="button"
+            onClick={() => onDone(o.interests)}
+            className="group flex flex-col rounded-2xl border-2 border-border bg-card p-5 text-left transition hover:border-[#053877] hover:shadow-md focus-visible:border-[#053877] focus-visible:outline-none"
+            data-testid={`intent-${o.key}`}
+          >
+            <IconTile icon={o.icon} />
+            <span className="mt-3 block text-lg font-bold text-foreground">{o.title}</span>
+            <span className="mt-1 block text-sm text-muted-foreground">{o.line}</span>
+            <ul className="mt-3 flex-1 space-y-1 text-sm text-foreground/80">
+              {o.points.map((p) => <li key={p} className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" /> {p}</li>)}
+            </ul>
+            <span className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-[#053877] group-hover:gap-2.5 dark:text-[#9cc2ff]">That's me <ArrowRight className="h-4 w-4" /></span>
+          </button>
+        ))}
       </div>
     </section>
   );

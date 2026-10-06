@@ -11,7 +11,7 @@ import { NotificationsMenuItem } from "@/components/Notifications";
 import { Link } from "wouter";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
-export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "greenroom" | "recordings" | "contacts" | "pro" | "cohost" | "analytics" | "postify" | "social" | "discovery" | "verified" | "podcast" | "page" | "billing" | "trash" | "studio" | "fans";
+export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "greenroom" | "recordings" | "contacts" | "pro" | "cohost" | "analytics" | "postify" | "social" | "discovery" | "verified" | "podcast" | "page" | "billing" | "trash" | "studio" | "fans" | "myevents";
 
 interface Item {
   key: HostScreen;
@@ -54,6 +54,7 @@ export function HostNav({
   onToggle,
   credits,
   create,
+  path = "podcaster",
 }: {
   /** + Create, at the top of the column: wraps the trigger in the Dashboard's Create menu. */
   create?: (trigger: React.ReactElement) => ReactNode;
@@ -79,6 +80,8 @@ export function HostNav({
   /** Whether the Pro doors open at all. They are shown to everyone and open
    *  only for the organisers' own account until the previews are worth it. */
   proOpen?: boolean;
+  /** Which of the three paths they came in on: an event planner's events lead. */
+  path?: "podcaster" | "creator" | "planner";
 }) {
   const { toast } = useToast();
   // Admins get into the studio now (to run the Marathon and test it); everyone else sees Oct 5.
@@ -86,8 +89,12 @@ export function HostNav({
   const groups: { title: string; items: Item[] }[] = [
     // Most-used first. Promotion lives inside Events (it's about an event);
     // Profile lives in the account card at the foot; Integrations is in both.
+    // An event planner's own events lead their column; everyone else can run one too.
+    ...(path === "planner"
+      ? [{ title: "Your events", items: [{ key: "myevents" as const, label: "My events", hint: "Create your event, send it to us to approve, then share it and run it from the studio", icon: CalendarDays }] }]
+      : []),
     {
-      title: "Your show",
+      title: path === "planner" ? "Your profile" : path === "creator" ? "Your content" : "Your show",
       items: [
         { key: "dashboard", label: "Dashboard", hint: "Your home base: your events, your audience and what to do next", icon: LayoutDashboard },
         { key: "page", label: "SmartLink", hint: "Your SmartLink at militaryvoices.ai/you: your podcast, links, messages from listeners, and a media kit for brands", icon: Globe },
@@ -103,6 +110,7 @@ export function HostNav({
         { key: "pro", feature: "studio", label: "Studio", hint: "The full marathon studio for your own show: scenes, layouts, lower thirds and a producer console. Coming soon.", icon: MonitorPlay, tag: "Soon", soon: "Studio for your own show is coming soon" },
         { key: "studio", label: "Rooms", hint: "Quick, like Zoom: hop in with guests, record it or don't, and go live. Coming soon.", icon: Video, tag: "Soon", soon: "Rooms are coming soon" },
         { key: "podcast", label: "Podcast", hint: "Host your show: your RSS feed for Apple and Spotify, episodes, and downloads sponsors trust", icon: Podcast },
+        ...(path !== "planner" ? [{ key: "myevents" as const, label: "Run an event", hint: "Put on your own live event: your page, your lineup, our studio", icon: CalendarDays }] : []),
         { key: "recordings", label: "Library", hint: "Every episode in one place: studio recordings, uploads, Zoom calls and cleaned-up versions", icon: Library },
       ],
     },

@@ -44,6 +44,11 @@ export const events = pgTable("events", {
   // Public About page body. Blank paragraphs separate sections; a line
   // starting with "## " is a heading. Edited in Admin.
   about: text("about").notNull().default(""),
+  // An event an event planner created for themselves (6 Oct): whose it is, and
+  // where it stands — "draft" (theirs to edit, hidden), "pending" (sent to us
+  // to approve), "approved" (public, studio unlocked). Empty for events we run.
+  ownerEmail: text("owner_email").notNull().default(""),
+  review: text("review").notNull().default(""),
 });
 
 export const insertEventSchema = createInsertSchema(events)
@@ -64,7 +69,8 @@ export type UpdateEvent = z.infer<typeof updateEventSchema>;
 export type EventRow = typeof events.$inferSelect;
 
 // Public-safe event shape (never leak the admin password to the client)
-export type PublicEvent = Omit<EventRow, "adminPassword">;
+// An event planner's email never leaves the server in a public payload.
+export type PublicEvent = Omit<EventRow, "adminPassword" | "ownerEmail">;
 
 // ---------------------------------------------------------------------------
 // Signups — one podcaster/team claiming one slot
@@ -450,8 +456,17 @@ export const profileFieldsSchema = createInsertSchema(podcasterProfiles)
 // Refined version used for validation. Kept separate because a schema with a
 // refinement can no longer be `.extend()`ed.
 /** The four reasons someone opens an account, asked on the way in. */
-export const INTERESTS = ["events", "grow", "discover", "host"] as const;
+// The three paths in (6 Oct): podcaster = "grow,events", content creator =
+// "create", event planner = "host". "discover" stays for older accounts.
+export const INTERESTS = ["events", "grow", "discover", "host", "create"] as const;
 export type Interest = (typeof INTERESTS)[number];
+/** Which of the three paths an account is on, from what it said on the way in. */
+export function pathOf(interests: string | null | undefined): "podcaster" | "creator" | "planner" {
+  const v = (interests ?? "").trim();
+  if (/\bhost\b/.test(v) && !/\b(events|grow)\b/.test(v)) return "planner";
+  if (/\bcreate\b/.test(v) && !/\b(events|grow)\b/.test(v)) return "creator";
+  return "podcaster";
+}
 /** A podcaster: here to get booked or to grow a show — or signed up before we asked. */
 export function isPodcaster(interests: string | null | undefined): boolean {
   const v = (interests ?? "").trim();

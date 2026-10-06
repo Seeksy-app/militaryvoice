@@ -73,6 +73,7 @@ import { FanEmails } from "@/components/FanEmails";
 import { RecordingsScreen } from "@/components/RecordingsScreen";
 import { PostStudio, NavCredits } from "@/components/PostStudio";
 import { FloatingChecklist } from "@/components/FloatingChecklist";
+import { MyEvents } from "@/components/MyEvents";
 import { PromotionScreen } from "@/components/PromotionScreen";
 import { SocialScreen } from "@/components/SocialScreen";
 import { GreenRoomScreen } from "@/components/GreenRoomScreen";
@@ -86,7 +87,7 @@ import { PodcastChips, usePodcastSources, ListingChips, useListings } from "@/co
 import { PodcastHosting } from "@/components/PodcastHosting";
 import { BioBuilder } from "@/components/BioBuilder";
 import { GetTheApp, AppInstallCard } from "@/components/GetTheApp";
-import { isPodcaster } from "@shared/schema";
+import { isPodcaster, pathOf } from "@shared/schema";
 import { StudioIcon } from "@/components/GreenRoomButton";
 import { CrewDashboard, type CrewInfo } from "@/components/CrewDashboard";
 import { CohostDashboard, type CohostInfo } from "@/components/CohostDashboard";
@@ -617,12 +618,13 @@ function BackToEvent({ onGo }: { onGo: (s: "events") => void }) {
 }
 
 /** The screens the dashboard nav switches between, and their URLs. */
-const SCREENS = ["dashboard", "editProfile", "events", "promotion", "greenroom", "discovery", "verified", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social", "podcast", "page", "billing", "trash", "studio", "fans"] as const;
+const SCREENS = ["dashboard", "editProfile", "events", "promotion", "greenroom", "discovery", "verified", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social", "podcast", "page", "billing", "trash", "studio", "fans", "myevents"] as const;
 type Screen = (typeof SCREENS)[number];
 
 /** /host/dashboard/<slug> ⇄ screen. Home has no slug; the rest are lowercase. */
 const SCREEN_SLUG: Record<Screen, string> = {
   cohost: "cohost",
+  myevents: "my-events",
   analytics: "analytics",
   postify: "postify",
   billing: "billing",
@@ -804,6 +806,12 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   const { data: recsMine } = useQuery<{ clipStatus?: string }[]>({
     queryKey: ["/api/host/recordings"],
     queryFn: async () => (await apiRequest("GET", "/api/host/recordings")).json(),
+    enabled: !!data,
+    staleTime: 60_000,
+  });
+  const { data: myEventsList } = useQuery<unknown[]>({
+    queryKey: ["/api/host/my-events"],
+    queryFn: async () => (await apiRequest("GET", "/api/host/my-events")).json(),
     enabled: !!data,
     staleTime: 60_000,
   });
@@ -1211,6 +1219,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
         {data && hasProfile && !inSetup && (
           <div className="contents">
           <HostNav
+            path={pathOf(profile?.interests)}
             collapsed={navTucked}
             onToggle={toggleNav}
             screen={screen === "claim" ? "dashboard" : screen}
@@ -1307,7 +1316,10 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                 setProfileDirty(false);
                 try { localStorage.removeItem("mv_interests"); } catch { /* fine */ }
                 const want = profile?.interests || interests;
-                if (inSetup && !eventOpen) {
+                if (inSetup && pathOf(want) === "planner") {
+                  // An event planner's next step is their own event.
+                  setScreen("myevents");
+                } else if (inSetup && !eventOpen) {
                   // No event coming up: the button said "go to my dashboard", and
                   // its checklist (built from what they came for) is the next step.
                   setScreen("dashboard");
@@ -1358,6 +1370,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           <SocialScreen />
         ) : screen === "podcast" ? (
           <PodcastHosting />
+        ) : screen === "myevents" ? (
+          <MyEvents />
         ) : screen === "page" ? (
           <BioBuilder />
         ) : screen === "analytics" ? (
@@ -1756,6 +1770,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
             hasClips: (recsMine ?? []).some((r) => r.clipStatus === "done"),
             interests: profile?.interests ?? "",
             eventOpen,
+            hasOwnEvent: (myEventsList?.length ?? 0) > 0,
           }}
           onGoEvents={() => goTo("events")}
           onGoIntegrations={() => goTo("integrations")}
@@ -1765,6 +1780,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           onGoPodcast={() => goTo("podcast")}
           onGoDiscovery={() => goTo("discovery")}
           onGoPostify={() => goTo("postify")}
+          onGoMyEvents={() => goTo("myevents")}
         />
       )}
 
