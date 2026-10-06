@@ -3844,6 +3844,8 @@ export function registerRoutes(app: Express): void {
   }
 
   /** The studio an admin request is talking about, defaulting to the event's own. */
+  const readyKey = (eventId: number, email: string) => `ready:${eventId}:${email.trim().toLowerCase()}`;
+
   async function adminStudio(req: Request) {
     // A studio host only ever reaches the studios of the events they host.
     const allowed: number[] | undefined = (req as any).studioHost ? (req as any).studioHostEvents : undefined;
@@ -5538,7 +5540,13 @@ export function registerRoutes(app: Express): void {
     // Amy adding herself to the hand-off slide. Anyone else is the crew's call.
     const self = (getSessionEmail(req) ?? "").trim().toLowerCase();
     const mine = Boolean(self) && target.email.trim().toLowerCase() === self && isShowHost(target, await showHosts());
-    if (!mine && !(await isCrew(req, studio.eventId))) return res.status(403).json({ message: "Only the crew can move people on stage." });
+    const crew = await isCrew(req, studio.eventId);
+    if (!mine && !crew) return res.status(403).json({ message: "Only the crew can move people on stage." });
+    // No script, no air (6 Oct AAR): a host or co-host putting themselves on
+    // must have said they've read their script and the run of show.
+    if (state === "On stage" && mine && !crew && !(await storage.getSetting(readyKey(studio.eventId, self)))) {
+      return res.status(428).json({ message: "Read your script and the run of show first.", needsReady: true, eventId: studio.eventId });
+    }
     if (state === "On stage") {
       const onStage = (await storage.listStudioParticipants(studio.id)).filter((p) => p.state === "On stage" && p.id !== target.id);
       if (onStage.length >= studio.maxOnStage) return res.status(409).json({ message: `The stage is full at ${studio.maxOnStage}. Take someone off first.` });
@@ -10270,6 +10278,15 @@ The Podcast Marathon team`;
    * plus any segment they share with Riccoh. A podcaster who also co-hosts
    * gets this beside their show; a co-host with no show gets it instead.
    */
+  /** "I've read my script and the run of show" — what lets a host or co-host put themselves on air. */
+  app.post("/api/host/ready", requireHostSession, async (req, res) => {
+    const email = ((req as any).hostEmail as string).trim().toLowerCase();
+    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    const at = new Date().toISOString();
+    await storage.setSetting(readyKey(eventId, email), at);
+    res.json({ readyAt: at });
+  });
+
   app.get("/api/host/cohost", requireHostSession, async (req, res) => {
     noStore(res);
     const email = ((req as any).hostEmail as string).trim().toLowerCase();
@@ -10337,6 +10354,7 @@ The Podcast Marathon team`;
     const profile = await storage.getProfileByEmail(email);
     res.json({
       isCohost: true,
+      readyAt: (await storage.getSetting(readyKey(ev.id, email))) || "",
       handoffs,
       studioHost: (await studioHostEmails(ev.id)).includes(email),
       name: profile?.hostName ?? "",

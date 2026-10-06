@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/button";
 import { resolveUploadUrl } from "@/lib/queryClient";
 import { formatDateInZone, formatTimeInZone } from "@/lib/schedule";
 import { StudioIcon } from "@/components/GreenRoomButton";
+import { ReadyCard } from "@/components/ReadyCard";
 
 const ET = "America/New_York";
 
@@ -31,6 +32,7 @@ export interface CohostHandoff {
 }
 export interface CohostInfo {
   isCohost: boolean;
+  readyAt?: string;
   /** Every hand-off they hold at the desk, in order, with its script. */
   handoffs?: CohostHandoff[];
   /** A studio host for this event: they run the console at /studio/control. */
@@ -125,6 +127,8 @@ export function CohostDashboard({ info, onBack }: { info: CohostInfo; onBack?: (
           </div>
         </div>
       </section>
+
+      <div className="mt-6"><ReadyCard eventId={ev.id} slug={ev.slug} readyAt={info.readyAt} /></div>
 
       <div className="mt-6 grid gap-6 lg:grid-cols-[minmax(0,1fr)_300px]">
         <div className="flex flex-col gap-6">

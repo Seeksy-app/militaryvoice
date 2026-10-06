@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Badge } from "@/components/ui/badge";
+import { ReadyCard } from "@/components/ReadyCard";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import { useStudioRoom, type RoomPeer } from "@/hooks/use-studio-room";
@@ -181,18 +182,24 @@ function SelfStage({ participantId, onStage, slideUp, thanksName }: { participan
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [busy, setBusy] = useState(false);
+  // Set when the server says they haven't confirmed their script and run of show yet.
+  const [needsReady, setNeedsReady] = useState<{ eventId: number } | null>(null);
   const move = async () => {
     setBusy(true);
     try {
       await apiRequest("POST", `/api/host/studio/participants/${participantId}/state`, { state: onStage ? "Green room" : "On stage" });
+      setNeedsReady(null);
       await queryClient.invalidateQueries({ queryKey: ["/api/studio/state"] });
     } catch (e) {
-      toast({ title: onStage ? "Couldn't take you off" : "Couldn't add you", description: (e as Error).message, variant: "destructive" });
+      const err = e as Error & { status?: number; body?: { eventId?: number } };
+      if (err.status === 428) setNeedsReady({ eventId: Number(err.body?.eventId) || 0 });
+      else toast({ title: onStage ? "Couldn't take you off" : "Couldn't add you", description: err.message, variant: "destructive" });
     } finally {
       setBusy(false);
     }
   };
   const loud = slideUp && !onStage;
+  if (needsReady && !onStage) return <div className="mt-3"><ReadyCard dark eventId={needsReady.eventId} onReady={() => { setNeedsReady(null); void move(); }} /></div>;
   return (
     <div className={`mt-3 flex flex-wrap items-center justify-between gap-3 rounded-xl p-3 ${loud ? "bg-[#F0A71F]/15 ring-1 ring-[#F0A71F]/60" : "bg-white/[0.06] ring-1 ring-white/10"}`} data-testid="self-stage">
       <p className="min-w-0 flex-1 text-sm text-white/85">

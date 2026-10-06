@@ -10,16 +10,20 @@ async function throwIfResNotOk(res: Response) {
   // a login code should see "check the newest email", not
   // `401: {"message":"..."}`, which reads like a crash.
   let message = text;
+  let parsed: unknown;
   try {
     const body = JSON.parse(text);
+    parsed = body;
     if (body && typeof body.message === "string" && body.message.trim()) message = body.message;
   } catch {
     // Not JSON — an HTML error page or a bare string. Keep the status so the
     // failure is still diagnosable rather than silently blank.
     message = `${res.status}: ${text}`;
   }
-  const err = new Error(message) as Error & { status?: number };
+  const err = new Error(message) as Error & { status?: number; body?: unknown };
   err.status = res.status;
+  // The rest of what the server said, for callers that act on it.
+  err.body = parsed;
   throw err;
 }
 
