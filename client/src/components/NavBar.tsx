@@ -36,22 +36,12 @@ const LINKS: { href: string; label: string; anchor?: boolean }[] = [
   { href: "/platform", label: "About Us" },
 ];
 
-/**
- * Discovery is its own MilitaryVoices product, not a page of the event: on it
- * the bar carries the product's links, and "Sign in" is the Discovery account.
- */
-const DISCOVERY_LINKS: { href: string; label: string; anchor?: boolean }[] = [
-  // One platform now: the way back to the events sits beside the tools.
-  { href: "/events", label: "Events" },
-  { href: "/discover", label: "Discovery" },
-  { href: "/directory", label: "Directory" },
-  { href: "/platform", label: "About MilitaryVoices" },
-];
 
 export function NavBar({ product, account, tone = "light", bare = false }: { product?: "discovery"; account?: { label: string; onClick: () => void; icon?: "saved" | "signin" }; /** "dark": sits on a navy band (the homepage), white type, the dark logo. */ tone?: "light" | "dark"; /** Inside a band that already carries the logo: no logo, not sticky. */ bare?: boolean } = {}) {
   const dark = tone === "dark";
   const [location] = useLocation();
-  const links = product === "discovery" ? DISCOVERY_LINKS : LINKS;
+  // The same bar on every public page (6 Oct): Discovery only swaps in its own account button.
+  const links = LINKS;
   const { theme, toggle } = useTheme();
 
   // Signed-in podcasters see "Dashboard" instead of "Sign in". 401 → null.
@@ -93,11 +83,9 @@ export function NavBar({ product, account, tone = "light", bare = false }: { pro
               </Link>
             );
           })}
-          {product !== "discovery" && (
-            <Link href="/sponsor" className={linkCls(location === "/sponsor")} data-testid="link-nav-sponsors">
-              Sponsors
-            </Link>
-          )}
+          <Link href="/sponsor" className={linkCls(location === "/sponsor")} data-testid="link-nav-sponsors">
+            Sponsors
+          </Link>
         </nav>
 
         <div className="flex items-center gap-1.5">
@@ -159,17 +147,10 @@ export function NavBar({ product, account, tone = "light", bare = false }: { pro
                   </DropdownMenuItem>
                 ),
               )}
-              {product !== "discovery" && (
-                <>
-                  <DropdownMenuSeparator />
-                  <DropdownMenuItem asChild>
-                    <Link href="/sponsor">Sponsors</Link>
-                  </DropdownMenuItem>
-                  <DropdownMenuItem asChild>
-                    <Link href="/events">All events</Link>
-                  </DropdownMenuItem>
-                </>
-              )}
+              <DropdownMenuSeparator />
+              <DropdownMenuItem asChild>
+                <Link href="/sponsor">Sponsors</Link>
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
