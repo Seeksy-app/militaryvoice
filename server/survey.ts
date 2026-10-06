@@ -93,7 +93,7 @@ export function giftLines(p: ThanksPerson): { html: string[]; text: string[] } {
   return { html, text };
 }
 
-const PLAQUE = `${ORIGIN}/api/studio/media/317`;
+const PLAQUE = `${ORIGIN}/email/award-storytelling-2026.jpg`;
 
 /** Riccoh's thank-you to one person: their own gift, and the survey. */
 export function thanksEmail(p: ThanksPerson, surveyUrl: string): { subject: string; html: string; text: string } {
