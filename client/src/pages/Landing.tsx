@@ -679,63 +679,6 @@ export default function Landing({ slug }: Props) {
         </div>
       </section>
 
-      {/* ------------------------------------------------------------ HOST */}
-      <section className="border-b border-border">
-        <div className="mx-auto grid max-w-6xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[0.75fr_1.25fr] lg:items-center">
-          <Reveal className="relative mx-auto w-full max-w-sm">
-            <div className="absolute -inset-3 -rotate-2 rounded-[2rem] bg-[#F0A71F]/80" aria-hidden="true" />
-            <img
-              src="/riccoh-player.jpg"
-              alt="Riccoh Player in Marine Corps utilities holding his Emmy award"
-              className="relative aspect-[3/4] w-full rounded-[1.75rem] object-cover object-top shadow-2xl"
-              loading="lazy"
-              data-testid="img-host"
-            />
-          </Reveal>
-
-          <Reveal delay={0.1}>
-            <div className="text-base font-bold uppercase tracking-[0.18em] text-primary sm:text-lg" data-testid="text-hosted-by">Hosted by Emmy Winner</div>
-            <h2 className="mt-2 text-4xl font-bold tracking-tight sm:text-5xl" style={HEADLINE_FONT} data-testid="text-host-name">
-              Riccoh Player <span className="text-[0.5em] font-medium text-muted-foreground">(USMC, Retired)</span>
-            </h2>
-            <p className="mt-5 text-2xl leading-relaxed text-foreground">
-              Thirty-three years in the Marine Corps. Five combat tours. An Emmy, and a seat beside a global media executive.
-            </p>
-            <p className="mt-4 text-xl leading-relaxed text-muted-foreground">
-              He's made the transition you are in the middle of, and he wrote down what actually carried over.
-            </p>
-            <div className="mt-6 flex flex-wrap gap-2">
-              {[
-                ["33", "years in the Corps"],
-                ["5", "combat tours"],
-                ["1", "Emmy"],
-              ].map(([n, label]) => (
-                <div key={label} className="flex items-baseline gap-1.5 rounded-full border border-border bg-card px-4 py-2">
-                  <span className="tabular-nums text-lg font-bold text-primary">{n}</span>
-                  <span className="text-sm text-muted-foreground">{label}</span>
-                </div>
-              ))}
-            </div>
-
-            {/* The co-hosts, beside him: who shares the desk through the day. */}
-            <div className="mt-8 border-t border-border pt-6" data-testid="row-cohosts">
-              <div className="text-sm font-bold uppercase tracking-[0.18em] text-primary">{CO_HOSTS.length === 1 ? "With co-host" : "With co-hosts"}</div>
-              <div className="mt-4 flex flex-wrap gap-x-8 gap-y-4">
-                {CO_HOSTS.map((c) => (
-                  <div key={c.name} className="flex items-center gap-3" data-testid={`cohost-${c.name.split(" ")[0].toLowerCase()}`}>
-                    <img src={c.photo} alt={c.name} className="h-16 w-16 rounded-full object-cover ring-4 ring-[#F0A71F]/40 sm:h-20 sm:w-20" loading="lazy" />
-                    <div>
-                      <div className="text-lg font-bold leading-tight" style={HEADLINE_FONT}>{c.name}</div>
-                      <div className="text-sm text-muted-foreground">{c.line}</div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </Reveal>
-        </div>
-      </section>
-
       {/* ------------------------------------------------------ PODCASTERS */}
       <section id="podcasters" className={`relative scroll-mt-16 overflow-hidden ${NAVY}`}>
         <img

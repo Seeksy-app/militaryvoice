@@ -1,4 +1,6 @@
 import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
+import type { PublicSponsor } from "@shared/schema";
 import { motion } from "framer-motion";
 import { NavBar } from "@/components/NavBar";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -41,6 +43,35 @@ function Reveal({ children, delay = 0, className = "" }: { children: React.React
     <motion.div initial={{ opacity: 0, y: 18 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-60px" }} transition={{ duration: 0.55, delay }} className={className}>
       {children}
     </motion.div>
+  );
+}
+
+/** The day's sponsors, thanked where the replay lives: paid ones as logos, friends by name. */
+function EventSponsors() {
+  const { data: sponsors } = useQuery<PublicSponsor[]>({ queryKey: ["/api/sponsors"] });
+  const list = sponsors ?? [];
+  const paid = list.filter((s) => ["presenting", "official"].includes(s.tier || "friend"));
+  const friends = list.filter((s) => (s.tier || "friend") === "friend");
+  if (!list.length) return null;
+  const logo = (sp: PublicSponsor, cls: string) => {
+    const img = <img src={sp.logoUrl} alt={sp.name} title={sp.name} loading="lazy" className="h-full w-full object-contain" />;
+    return (
+      <div key={sp.id} className={`flex items-center justify-center rounded-2xl bg-[#000741] px-6 py-4 shadow-sm ${cls}`}>
+        {sp.url ? <a href={sp.url} target="_blank" rel="noopener noreferrer" aria-label={sp.name} className="flex h-full w-full items-center justify-center">{img}</a> : img}
+      </div>
+    );
+  };
+  return (
+    <div className="mt-10 text-center" data-testid="home-event-sponsors">
+      <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#053877]/70 dark:text-white/60">Thank you to our 2026 sponsors</p>
+      {paid.length > 0 && <div className="mt-6 flex flex-wrap items-center justify-center gap-6">{paid.map((sp) => logo(sp, "h-20 w-[240px] sm:h-24 sm:w-[280px]"))}</div>}
+      {friends.length > 0 && (
+        <>
+          <p className="mt-8 text-xs font-bold uppercase tracking-[0.25em] text-[#053877]/60 dark:text-white/50">Friends of the Marathon</p>
+          <div className="mt-4 flex flex-wrap items-center justify-center gap-4">{friends.map((sp) => logo(sp, "h-14 w-[160px]"))}</div>
+        </>
+      )}
+    </div>
   );
 }
 
@@ -148,6 +179,7 @@ export default function HomeCreators() {
               </div>
             </Reveal>
           </div>
+          <EventSponsors />
         </div>
       </section>
 
