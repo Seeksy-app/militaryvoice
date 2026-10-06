@@ -18,7 +18,7 @@ import { getAdminEmail } from "./session.js";
 import { emailShell, EMAIL_BANNERS, sendOneOffEmail, BULK_ADDRESS, REPLY_ADDRESS } from "./email.js";
 import { uploadPhoto } from "./photoStorage.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
-import { bioPages, clips, contacts, discoveryCache, hostedShows, magazineAds, magazinePages, podcasterProfiles, recordings, segmentCuts, signups, sponsors } from "../shared/schema.js";
+import { bioPages, clips, contacts, discoveryCache, hostedShows, magazineAds, magazinePages, podcasterProfiles, recordings, segmentCuts, signups, sponsors, transcriptLines } from "../shared/schema.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 const now = () => new Date().toISOString();
@@ -323,12 +323,35 @@ async function draftShow(ai: Anthropic, eventId: number, s: { signupId: number; 
 }
 
 /**
+ * The live captions from a show's actual time on air (the run of show's
+ * actuals), when no Library transcript was kept: Pōstify used these lines
+ * instead of transcribing again, so for some shows they're all there is.
+ */
+async function liveCaptions(eventId: number, signupId: number): Promise<string> {
+  const row = (await storage.listRunOfShow(eventId)).find((r) => r.kind === "Segment" && r.signupId === signupId);
+  if (!row?.actualStartAtUtc) return "";
+  const from = Date.parse(row.actualStartAtUtc);
+  const to = from + (row.actualMinutes || 25) * 60_000;
+  const lines = await db.select({ speaker: transcriptLines.speaker, text: transcriptLines.text, startMs: transcriptLines.startMs }).from(transcriptLines)
+    .where(and(eq(transcriptLines.eventId, eventId), sql`${transcriptLines.startMs}::bigint >= ${from}`, sql`${transcriptLines.startMs}::bigint <= ${to}`))
+    .orderBy(asc(sql`${transcriptLines.startMs}::bigint`));
+  const out: string[] = [];
+  for (const l of lines) {
+    const who = l.speaker || "Speaker";
+    const last = out[out.length - 1];
+    if (last && last.startsWith(`${who}: `)) out[out.length - 1] = `${last} ${l.text}`;
+    else out.push(`${who}: ${l.text}`);
+  }
+  return out.join("\n").slice(0, 60_000);
+}
+
+/**
  * A show's own words from the day: the transcript of the recording filed in
  * their Library after the Marathon (Pōstify transcribed it to cut the clips).
  * Matched by the host's (or co-host's) email; with several, the one whose
  * title names the show. Nothing rather than the wrong show.
  */
-async function dayTranscript(eventId: number, s: { email: string; coHostEmail?: string | null; podcastName: string }): Promise<string> {
+async function dayTranscript(eventId: number, s: { id: number; email: string; coHostEmail?: string | null; podcastName: string }): Promise<string> {
   const ev = await storage.getEventById(eventId);
   if (!ev) return "";
   const from = Date.parse(ev.startAtUtc) - 6 * 3600_000;
@@ -336,12 +359,12 @@ async function dayTranscript(eventId: number, s: { email: string; coHostEmail?: 
   const emails = [s.email, s.coHostEmail ?? ""].map((e) => e.trim().toLowerCase()).filter(Boolean);
   const rows = (await db.select({ title: recordings.title, startedAt: recordings.startedAt, t: recordings.transcriptJson, email: recordings.email }).from(recordings).where(ne(recordings.transcriptJson, "")))
     .filter((r) => emails.includes(r.email.trim().toLowerCase()) && Date.parse(r.startedAt) >= from && Date.parse(r.startedAt) <= to);
-  if (!rows.length) return "";
+  if (!rows.length) return liveCaptions(eventId, s.id);
   const words = norm(s.podcastName).split(" ").filter((w) => w.length > 3);
   const score = (title: string) => words.filter((w) => norm(title).includes(w)).length;
   const ranked = rows.map((r) => ({ r, n: score(r.title) })).sort((a, b) => b.n - a.n || b.r.t.length - a.r.t.length);
   const pick = ranked[0].n > 0 ? ranked[0].r : rows.length === 1 ? rows[0] : null;
-  if (!pick) return "";
+  if (!pick) return liveCaptions(eventId, s.id);
   try {
     const lines = JSON.parse(pick.t) as [number, number, string, string][];
     const out: string[] = [];
@@ -357,17 +380,25 @@ async function dayTranscript(eventId: number, s: { email: string; coHostEmail?: 
 }
 
 /** "On the day" and a quote, from their segment's transcript. The quote is checked word for word. */
+/** The JSON object in a model's reply, or null (a reply can come back as prose, or cut short). */
+function parseJsonReply<T>(text: string): T | null {
+  const a = text.indexOf("{"), b = text.lastIndexOf("}");
+  if (a < 0 || b <= a) return null;
+  try { return JSON.parse(text.slice(a, b + 1)) as T; } catch { return null; }
+}
+
 async function draftFromTheDay(ai: Anthropic, eventId: number, s: { signupId: number; podcastName: string; hostName: string }, transcript: string, keepQuote: string) {
   const out = await ai.messages.create({
     model: "claude-sonnet-5",
-    max_tokens: 900,
+    max_tokens: 2000,
     system: `You write for a keepsake magazine of The Podcast Marathon (National Military Podcast Day, 5 October 2026), where military and veteran podcasters went live back to back. You get the transcript of one show's live segment. Speakers are labelled by number; work out from context which one is the host. Return JSON only: {"onTheDay": "...", "quote": "..."}.
 "onTheDay": 55 to 85 words, past tense, third person: what the host (and any guest, named only if the transcript names them) talked about live that day, specific and warm, 8th-grade reading level. Use ONLY what is in the transcript. No hype words. Don't mention the transcript, the magazine or the marathon's logistics (sound checks, intros, technical problems).
 "quote": ONE sentence (at most 28 words) copied EXACTLY, word for word, from what the HOST said, that is true, striking and stands on its own. If you can't be sure the host said it, or nothing fits, return "".`,
-    messages: [{ role: "user", content: `Show: ${s.podcastName}\nHost: ${s.hostName}\n\nTranscript of their live segment:\n${transcript}` }],
+    messages: [{ role: "user", content: `Show: ${s.podcastName}\nHost: ${s.hostName}\n\nTranscript of their live segment:\n${transcript}\n\nReply with the JSON object only.` }],
   });
   const text = out.content.map((c) => ("text" in c ? c.text : "")).join("");
-  const j = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)) as { onTheDay?: string; quote?: string };
+  const j = parseJsonReply<{ onTheDay?: string; quote?: string }>(text);
+  if (!j) throw new Error(`no JSON in the reply (${out.stop_reason})`);
   let quote = clean(j.quote, 240).replace(/^["“]|["”]$/g, "");
   if (quote && !norm(transcript).includes(norm(quote))) quote = "";
   await saveWords(eventId, s.signupId, { onTheDay: clean(j.onTheDay, 700), ...(keepQuote ? {} : quote ? { quote } : {}) });
@@ -474,7 +505,8 @@ export function registerMagazine(app: Express, requireAdmin: RequestHandler, req
         const w = words.find((r) => r.signupId === x.id);
         const keep = req.body?.quotes === "replace" ? "" : (w?.quote ?? "");
         try {
-          const r = await draftFromTheDay(ai, eventId, { signupId: x.id, podcastName: x.podcastName, hostName: x.hostName }, t, keep);
+          const go = () => draftFromTheDay(ai, eventId, { signupId: x.id, podcastName: x.podcastName, hostName: x.hostName }, t, keep);
+          const r = await go().catch(() => go());
           done.push(`${x.podcastName}${r.quote ? " (with a quote)" : ""}`);
         } catch (err) {
           skipped.push({ show: x.podcastName, why: (err as Error).message.slice(0, 120) });
