@@ -122,6 +122,7 @@ import { slackInbound, slackNote } from "./slack.js";
 import { registerMagazine, planSegments, claimSegmentCut } from "./magazine.js";
 import { registerSurvey } from "./survey.js";
 import { registerSms } from "./sms.js";
+import { logSceneTake, registerSceneLog } from "./sceneLog.js";
 import { registerDeviceCheck } from "./deviceCheck.js";
 import { registerHealth, beat, addHealthCheck } from "./health.js";
 import { registerNotices } from "./notices.js";
@@ -5127,11 +5128,21 @@ export function registerRoutes(app: Express): void {
     const cur = list.find((x) => x.id === studio.currentSceneId);
     const next = list[list.findIndex((x) => x.id === studio.currentSceneId) + 1];
     if (!next || transitionOf(studio, cur) === "manual") return { done: true, advanced: false, by };
-    const r = await applyScene(next.id);
+    const r = await applyScene(next.id, "done");
     return { done: true, advanced: r.status === 200, sceneId: next.id, by };
   }
 
-  async function applyScene(sceneId: number): Promise<{ status: number; body: unknown }> {
+  /**
+   * Take a scene and write it down: the scene-take log, and the run of
+   * show's actual times (a segment's start when it goes on, its minutes when
+   * the next thing replaces it).
+   */
+  async function applyScene(sceneId: number, how = "press"): Promise<{ status: number; body: unknown }> {
+    const r = await applySceneNow(sceneId);
+    if (r.status === 200) await logSceneTake(sceneId, how).catch((err) => console.error("Scene-take log failed:", err));
+    return r;
+  }
+  async function applySceneNow(sceneId: number): Promise<{ status: number; body: unknown }> {
     const scene = await storage.getScene(sceneId);
     if (!scene) return { status: 404, body: { message: "Not found" } };
     const studio = await storage.getStudioById(scene.studioId);
@@ -5454,7 +5465,7 @@ export function registerRoutes(app: Express): void {
       if (nr?.kind === "Intro" && Date.parse(nr.startAtUtc) <= Date.now()) {
         const fresh = await storage.getStudioById(studio.id);
         if (fresh?.currentSceneId !== cur.id) return res.json({ action: "none" });
-        const r = await applyScene(next.id);
+        const r = await applyScene(next.id, "auto");
         return res.status(r.status).json({ action: "take", why: "the next show's time", sceneId: next.id });
       }
       return res.json({ action: "none" });
@@ -5474,7 +5485,7 @@ export function registerRoutes(app: Express): void {
     if (go) {
       const fresh = await storage.getStudioById(studio.id);
       if (fresh?.currentSceneId !== cur.id) return res.json({ action: "none" });
-      const r = await applyScene(next.id);
+      const r = await applyScene(next.id, "auto");
       return res.status(r.status).json({ action: "take", why: d.why, deskName, sceneId: next.id });
     }
     res.json({ action: d.action, why: d.why, deskName, at: row.startAtUtc });
@@ -5525,7 +5536,7 @@ export function registerRoutes(app: Express): void {
     // A pre-recorded show that ends into a hand-off with a co-host at the desk
     // goes to the thank-you slide by itself, switch or no switch.
     if (!scene.autoNext && !(await liveHandoffAfter(studio, scene, next)) && alex?.step !== "handoff") return res.json({ advanced: false });
-    const r = await applyScene(next.id);
+    const r = await applyScene(next.id, "clip");
     res.status(r.status).json({ advanced: true, sceneId: next.id });
   });
 
@@ -5564,7 +5575,7 @@ export function registerRoutes(app: Express): void {
     if (!scene || !studio) return res.status(404).json({ message: "Not found" });
     if (!(await isCrew(req, studio.eventId))) return res.status(403).json({ message: "Only the crew can take scenes." });
     if (await scenesLocked()) return res.status(423).json({ message: "Scenes are run by the producer tonight. Message the team if you need a change." });
-    const r = await applyScene(scene.id);
+    const r = await applyScene(scene.id, "crew");
     res.status(r.status).json(r.body);
   });
 
@@ -6655,6 +6666,7 @@ export function registerRoutes(app: Express): void {
   registerNotices(app, requireAdmin, requireHostSession);
   registerSurvey(app, requireAdmin);
   registerSms(app, requireAdmin);
+  registerSceneLog(app, requireAdmin);
   registerDeviceCheck(app);
   registerGreenRoomChat(app, requireAdmin, requireHostSession, studioHostEmails);
   registerAutomations(app, requireAdmin, {

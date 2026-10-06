@@ -25,6 +25,7 @@ import { RUN_ITEM_KINDS, type RunItemRow, type SignupRow, type ShowAssetRow, typ
 import { detectLocalTimeZone, formatDateInZone, formatTimeInZone, zoneLabel } from "@/lib/schedule";
 import {
   ListOrdered,
+  Copy,
   Wand2,
   Plus,
   Trash2,
@@ -419,6 +420,23 @@ export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
                 <Download className="h-3.5 w-3.5" /> CSV
               </Button>
             )}
+            {/* From the scene-take log: YouTube-style chapters for the replay, timed from the first scene on air. */}
+            <Button
+              variant="outline"
+              size="sm"
+              className="gap-1.5 rounded-full"
+              title="Chapters for the replay, from the log of every scene that went on air"
+              onClick={async () => {
+                const r = await fetch(`/api/admin/scene-takes?eventId=${eventId}&format=chapters`, { credentials: "include" });
+                const text = r.ok ? await r.text() : "";
+                if (!text.trim()) { toast({ title: "No chapters yet", description: "They're written as scenes go on air." }); return; }
+                await navigator.clipboard.writeText(text);
+                toast({ title: "Chapters copied", description: `${text.split("\n").length} chapters, timed from the first scene on air.` });
+              }}
+              data-testid="button-run-chapters"
+            >
+              <Copy className="h-3.5 w-3.5" /> Chapters
+            </Button>
             <Button variant="outline" size="sm" className="gap-1.5 rounded-full" onClick={() => addItem.mutate()} data-testid="button-run-add">
               <Plus className="h-3.5 w-3.5" /> Add row
             </Button>

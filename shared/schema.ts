@@ -1225,6 +1225,27 @@ export const scenes = pgTable("scenes", {
   createdAt: text("created_at").notNull(),
 });
 export type SceneRow = typeof scenes.$inferSelect;
+
+/**
+ * Every scene that went on air, when, and what moved it on. The record the
+ * Marathon didn't have (6 Oct AAR): the on-demand chapters, the magazine's
+ * segment cuts and the run of show's actual times all come from here now
+ * instead of being rebuilt by matching audio overnight.
+ */
+export const sceneTakes = pgTable("scene_takes", {
+  id: serial("id").primaryKey(),
+  studioId: integer("studio_id").notNull(),
+  eventId: integer("event_id").notNull().default(0),
+  sceneId: integer("scene_id").notNull(),
+  sceneName: text("scene_name").notNull().default(""),
+  runItemId: integer("run_item_id").notNull().default(0),
+  /** The run-of-show row's kind (Segment, Intro, Handoff…), or "" for a scene of its own. */
+  kind: text("kind").notNull().default(""),
+  /** What moved it: press, auto (SI-Auto), done ("We're done"), clip (a clip ended), crew. */
+  how: text("how").notNull().default("press"),
+  takenAt: text("taken_at").notNull(),
+}, (t) => [index("scene_takes_studio_idx").on(t.studioId, t.takenAt)]);
+export type SceneTakeRow = typeof sceneTakes.$inferSelect;
 /**
  * Saved lower thirds, kept per studio.
  *
