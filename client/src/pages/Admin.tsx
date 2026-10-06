@@ -41,6 +41,7 @@ import { AdminClips } from "@/components/AdminClips";
 import { AdminSurvey } from "@/components/AdminSurvey";
 import { AdminAar } from "@/components/AdminAar";
 import { AdminTexts } from "@/components/AdminTexts";
+import { PlatformOverview } from "@/components/PlatformOverview";
 import { People, type Audience as PeopleAudience } from "@/components/crm/People";
 import { AdminNav, EVENT_GROUPS, TOP_GROUPS, EVENT_SECTION_KEYS, TOP_SECTION_KEYS } from "@/components/AdminNav";
 import { MagazineAdmin } from "@/components/MagazineAdmin";
@@ -4775,20 +4776,16 @@ function CrmEventPanel({ eventId, event }: { eventId: number | null; event?: Pub
   );
 }
 
-export default function Admin({ tab }: { tab?: string } = {}) {
+export default function Admin({ tab, eventId: eventParam }: { tab?: string; eventId?: string } = {}) {
   const { isAuthenticated, isLoading, admin, logout } = useAdminAuth();
   const isMobile = useIsMobile();
-  // Which event's dashboard is open. Remembered so a refresh doesn't bounce
-  // you back to the list mid-show.
-  const [selectedEventId, setSelectedEventId] = useState<number | null>(() => {
-    const v = Number(localStorage.getItem("mv_admin_event"));
-    return Number.isFinite(v) && v > 0 ? v : null;
-  });
-  const pickEvent = (id: number | null) => {
-    setSelectedEventId(id);
-    if (id) localStorage.setItem("mv_admin_event", String(id));
-    else localStorage.removeItem("mv_admin_event");
-  };
+  // The address says where you are (6 Oct): /admin is the platform, /admin/e/1
+  // is an event. Admin used to reopen the last event you'd looked at, which
+  // made the event the front door and hid the platform behind "All events".
+  const selectedEventId = Number(eventParam) || null;
+  const [, navigate] = useLocation();
+  const pickEvent = (id: number | null) => navigate(id ? `/admin/e/${id}` : "/admin");
+  useEffect(() => { try { localStorage.removeItem("mv_admin_event"); } catch { /* fine */ } }, []);
   const { data: adminEvents } = useQuery<PublicEvent[]>({
     queryKey: ["/api/admin/events"],
     queryFn: () => adminGet<PublicEvent[]>("/api/admin/events"),
@@ -4798,14 +4795,24 @@ export default function Admin({ tab }: { tab?: string } = {}) {
   // The URL is the source of truth for which section is open, so /admin/finances
   // can be bookmarked, linked in a note, and reached with the back button —
   // the same thing the podcasters' dashboard got.
-  const [, navigate] = useLocation();
   const slug = (tab ?? "").toLowerCase();
   // Checked against the level you are actually on: the two levels share "crm"
   // and "team", and only one of them has "rooms".
   const eventTab = EVENT_SECTION_KEYS.has(slug) ? slug : "overview";
-  const topTab = TOP_SECTION_KEYS.has(slug) ? slug : "events";
+  const topTab = TOP_SECTION_KEYS.has(slug) ? slug : "overview";
   const setEventTab = (key: string) =>
-    navigate(key === "overview" || key === "events" ? "/admin" : `/admin/${key}`);
+    selectedEventId
+      ? navigate(key === "overview" ? `/admin/e/${selectedEventId}` : `/admin/e/${selectedEventId}/${key}`)
+      : navigate(key === "overview" ? "/admin" : `/admin/${key}`);
+  // Old links (/admin/studio, /admin/texts, from Slack and email) were the
+  // featured event's sections: send them there.
+  useEffect(() => {
+    if (selectedEventId || !slug || TOP_SECTION_KEYS.has(slug) || !adminEvents?.length) return;
+    const key = slug === "podcasters" ? "signups" : slug;
+    if (!EVENT_SECTION_KEYS.has(key)) return;
+    const ev = adminEvents.find((e) => e.isFeatured) ?? adminEvents[0];
+    navigate(`/admin/e/${ev.id}/${key}`, { replace: true });
+  }, [selectedEventId, slug, adminEvents]);
   const [openRoomId, setOpenRoomId] = useState<number | null>(null);
   const openRoom = (id: number | null) => {
     if (id) {
@@ -5096,8 +5103,11 @@ export default function Admin({ tab }: { tab?: string } = {}) {
               <div className="flex flex-col gap-4 lg:flex-row lg:gap-7">
                 <AdminNav groups={TOP_GROUPS} value={topTab} onChange={setEventTab} isMobile={isMobile} />
                 <div className="min-w-0 flex-1">
+                  <TabsContent value="overview" className="mt-2 lg:mt-0">
+                    <PlatformOverview />
+                  </TabsContent>
                   <TabsContent value="events" className="mt-2 flex flex-col gap-8 lg:mt-0">
-                    <EventPicker onOpen={(id) => { setEventTab("overview"); pickEvent(id); }} />
+                    <EventPicker onOpen={(id) => pickEvent(id)} />
                     <NewEventCard />
                   </TabsContent>
                   <TabsContent value="rooms" className="mt-2 lg:mt-0">

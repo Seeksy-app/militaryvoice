@@ -67,6 +67,7 @@ export const TOP_GROUPS: { title: string; items: AdminSection[] }[] = [
   {
     title: "",
     items: [
+      { key: "overview", label: "Overview", icon: LayoutDashboard },
       { key: "events", label: "Events", icon: CalendarDays },
       { key: "rooms", label: "Rooms", icon: DoorOpen },
       { key: "discovery", label: "Discovery", icon: Compass },

@@ -149,6 +149,8 @@ function AppRouter() {
       <Route path="/greenroom">{() => <Studio />}</Route>
       <Route path="/event/:slug/studio">{(params) => <Studio slug={params.slug} />}</Route>
       <Route path="/admin">{() => <Admin />}</Route>
+      <Route path="/admin/e/:id">{(p) => <Admin eventId={p.id} />}</Route>
+      <Route path="/admin/e/:id/:tab">{(p) => <Admin eventId={p.id} tab={p.tab} />}</Route>
       <Route path="/admin/:tab">{(p) => <Admin tab={p.tab} />}</Route>
       <Route path="/national-military-podcast-day">{() => <NationalMilitaryPodcastDay />}</Route>
       {/* Unlisted: a sponsorship proposal delivered by URL, not linked in nav. */}
