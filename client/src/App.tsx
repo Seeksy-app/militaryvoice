@@ -39,6 +39,7 @@ import Prepare from "@/pages/Prepare";
 import Platform from "@/pages/Platform";
 import Headshot from "@/pages/Headshot";
 import Keepsake from "@/pages/Keepsake";
+import Survey from "@/pages/Survey";
 import Watchfloor from "@/pages/Watchfloor";
 import EventAbout from "@/pages/EventAbout";
 import Studio from "@/pages/Studio";
@@ -129,6 +130,7 @@ function AppRouter() {
       <Route path="/studio/control">{() => <StudioControl />}</Route>
       <Route path="/watch">{() => <Watch />}</Route>
       <Route path="/keepsake">{() => <Keepsake />}</Route>
+      <Route path="/survey/:token">{(p) => <Survey token={p.token} />}</Route>
       <Route path="/magazine">{() => <Magazine />}</Route>
       <Route path="/magazine/:slug">{(p) => <Magazine slug={p.slug} />}</Route>
       <Route path="/event/:slug/watch">{(params) => <Watch slug={params.slug} />}</Route>

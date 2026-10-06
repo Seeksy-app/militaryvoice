@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LayoutDashboard, MonitorPlay, ListOrdered, Users, Handshake, Megaphone, Mail, Contact, DollarSign, Settings2, CalendarDays, DoorOpen, PanelLeftClose, PanelLeftOpen, Film, Compass, BookOpen, BadgeCheck, BookUser, Activity, MessagesSquare } from "lucide-react";
+import { LayoutDashboard, MonitorPlay, ListOrdered, Users, Handshake, Megaphone, Mail, Contact, DollarSign, Settings2, CalendarDays, DoorOpen, PanelLeftClose, PanelLeftOpen, Film, Compass, BookOpen, BadgeCheck, BookUser, Activity, MessagesSquare, ClipboardList } from "lucide-react";
 
 // The admin's nav, down the left.
 //
@@ -38,6 +38,7 @@ export const EVENT_GROUPS: { title: string; items: AdminSection[] }[] = [
       { key: "signups", label: "Podcasters", icon: Users },
       { key: "sponsors", label: "Sponsors", icon: Handshake },
       { key: "team", label: "Team", icon: Contact },
+      { key: "survey", label: "Survey", icon: ClipboardList },
     ],
   },
   {

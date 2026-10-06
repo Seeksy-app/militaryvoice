@@ -38,6 +38,7 @@ import { RiccohImages } from "@/components/RiccohImages";
 import type { AudienceSnapshot } from "@/components/AudienceReach";
 import { FinancesCard } from "@/components/FinancesCard";
 import { AdminClips } from "@/components/AdminClips";
+import { AdminSurvey } from "@/components/AdminSurvey";
 import { AdminNav, EVENT_GROUPS, TOP_GROUPS, EVENT_SECTION_KEYS, TOP_SECTION_KEYS } from "@/components/AdminNav";
 import { MagazineAdmin } from "@/components/MagazineAdmin";
 import Discover from "@/pages/Discover";
@@ -4937,6 +4938,9 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                 <TabsContent value="clips" className="mt-2 lg:mt-0">
                   <OutsideCapture />
                   <AdminClips eventId={selectedEventId} adminGet={adminGet} adminSend={adminSend} />
+                </TabsContent>
+                <TabsContent value="survey" className="mt-2 lg:mt-0">
+                  <AdminSurvey adminGet={adminGet} />
                 </TabsContent>
                 <TabsContent value="greenroom" className="mt-2 lg:mt-0">
                   <div className="max-w-3xl"><ProducerChat eventId={selectedEventId} /></div>

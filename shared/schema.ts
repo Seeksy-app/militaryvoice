@@ -2901,3 +2901,66 @@ export const segmentCuts = pgTable("segment_cuts", {
   claimedAt: text("claimed_at").notNull().default(""),
   updatedAt: text("updated_at").notNull().default(""),
 }, (t) => [uniqueIndex("segment_cuts_event_signup_idx").on(t.eventId, t.signupId)]);
+
+// ---------------------------------------------------------------------------
+// After-show survey, and the mail and credits that go out on a timer
+// ---------------------------------------------------------------------------
+
+/**
+ * One person's survey: a private link (the token) so it needs no sign-in, and
+ * their answers once they finish. Admin → Survey reads who answered and who
+ * hasn't, and the totals.
+ */
+export const surveyInvites = pgTable("survey_invites", {
+  id: serial("id").primaryKey(),
+  survey: text("survey").notNull().default("marathon-2026"),
+  token: text("token").notNull(),
+  email: text("email").notNull(),
+  name: text("name").notNull().default(""),
+  /** host | cohost | interviewee: what they did on the day. */
+  role: text("role").notNull().default("host"),
+  /** JSON: question key → answer (a string, or a list for pick-several). */
+  answers: text("answers").notNull().default(""),
+  openedAt: text("opened_at").notNull().default(""),
+  completedAt: text("completed_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+}, (t) => [uniqueIndex("survey_invites_token_idx").on(t.token), uniqueIndex("survey_invites_survey_email_idx").on(t.survey, t.email)]);
+export type SurveyInviteRow = typeof surveyInvites.$inferSelect;
+
+/**
+ * Email that goes out at a set time (the 7:30 AM thank-you), sent by the
+ * five-minute outbox cron. Cancel a row before then and it never goes.
+ */
+export const outboxMail = pgTable("outbox_mail", {
+  id: serial("id").primaryKey(),
+  to: text("to").notNull(),
+  subject: text("subject").notNull(),
+  html: text("html").notNull(),
+  text: text("text").notNull(),
+  /** "riccoh": blind-copied to Riccoh, as everything sent in his name is. */
+  sender: text("sender").notNull().default("team"),
+  kind: text("kind").notNull().default("outbox"),
+  sendAt: text("send_at").notNull(),
+  /** queued | sent | failed | cancelled */
+  status: text("status").notNull().default("queued"),
+  sentAt: text("sent_at").notNull().default(""),
+  error: text("error").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("outbox_mail_status_idx").on(t.status, t.sendAt)]);
+export type OutboxMailRow = typeof outboxMail.$inferSelect;
+
+/**
+ * Credits promised for later (a host's 50 on November 1 and December 1, a
+ * gifted Pro plan's monthly credits): the outbox cron gives each one on its
+ * day, once (the ledger ref is the row).
+ */
+export const scheduledGrants = pgTable("scheduled_grants", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  credits: integer("credits").notNull(),
+  note: text("note").notNull().default(""),
+  grantAt: text("grant_at").notNull(),
+  doneAt: text("done_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("scheduled_grants_due_idx").on(t.doneAt, t.grantAt)]);
+export type ScheduledGrantRow = typeof scheduledGrants.$inferSelect;
