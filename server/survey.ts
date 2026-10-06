@@ -50,6 +50,8 @@ async function inviteFor(email: string, name: string, role: string) {
 export type ThanksPerson = {
   email: string;
   name: string;
+  /** How to greet them, when it isn't their first name ("Mr. Whiskey"). */
+  greet?: string;
   /** The show they brought (hosts), or whose show they were on (interviewees). */
   show?: string;
   host?: boolean;
@@ -95,7 +97,7 @@ const PLAQUE = `${ORIGIN}/api/studio/media/317`;
 
 /** Riccoh's thank-you to one person: their own gift, and the survey. */
 export function thanksEmail(p: ThanksPerson, surveyUrl: string): { subject: string; html: string; text: string } {
-  const name = firstName(p.name);
+  const name = p.greet?.trim() || firstName(p.name);
   const gifts = giftLines(p);
   const what = p.interviewee && !p.host && !p.cohost
     ? `Thank you for joining us on National Military Podcast Day${p.show ? ` as a guest on ${esc(p.show)}` : ""}. Sharing your story, live, in front of everyone takes courage, and you did it with heart.`
@@ -151,7 +153,8 @@ export function registerSurvey(app: Express, requireAdmin: RequestHandler): void
     const [row] = await db.select().from(surveyInvites).where(eq(surveyInvites.token, String(req.params.token)));
     if (!row) return res.status(404).json({ message: "That survey link isn't right. Check the email it came in." });
     if (!row.openedAt) await db.update(surveyInvites).set({ openedAt: now() }).where(eq(surveyInvites.id, row.id));
-    res.json({ name: firstName(row.name), done: Boolean(row.completedAt) });
+    // "Mr. Whiskey" is a name in itself; anyone else is greeted by their first name.
+    res.json({ name: /^mr\.?\s+\S+$/i.test(row.name.trim()) ? row.name.trim() : firstName(row.name), done: Boolean(row.completedAt) });
   });
 
   app.post("/api/survey/:token", async (req, res) => {
@@ -204,7 +207,7 @@ export function registerSurvey(app: Express, requireAdmin: RequestHandler): void
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) continue;
       if (!p.host && !p.cohost && !p.interviewee && !p.award) continue;
       const role = p.cohost ? "cohost" : p.host ? "host" : "interviewee";
-      const inv = await inviteFor(email, String(p.name ?? ""), role);
+      const inv = await inviteFor(email, String(p.greet || p.name || ""), role);
       const mail = thanksEmail({ ...p, email }, `${ORIGIN}/survey/${inv.token}`);
       if (preview) { out.push({ email, ...mail }); continue; }
       const [already] = await db.select({ id: outboxMail.id }).from(outboxMail).where(and(eq(outboxMail.to, email), eq(outboxMail.kind, "marathon-thanks"), eq(outboxMail.status, "queued")));
