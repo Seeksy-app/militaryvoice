@@ -759,6 +759,11 @@ function SignupsCard({ eventId }: { eventId: number }) {
     }
     return m;
   }, [assets]);
+  // What each booking has had back since the day: episode, clips, survey.
+  const { data: followUp } = useQuery<Record<number, { episode: { id: number; title: string; clipStatus: string } | null; clips: number; survey: "answered" | "opened" | "sent" | "" }>>({
+    queryKey: ["/api/admin/signups/follow-up", eventId],
+    queryFn: () => adminGet(`/api/admin/signups/follow-up?eventId=${eventId}`),
+  });
   const zone = useMemo(detectLocalTimeZone, []);
   // A plain list (name and email) by default; the full cards are a click away.
   const [view, setView] = useState<"list" | "details">("list");
@@ -817,13 +822,31 @@ function SignupsCard({ eventId }: { eventId: number }) {
             <div className="max-h-[70vh] overflow-y-auto rounded-xl border border-border">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-muted text-left text-[11px] uppercase tracking-[0.1em] text-muted-foreground">
-                  <tr><th className="px-4 py-2 font-medium">Name</th><th className="px-4 py-2 font-medium">Email</th></tr>
+                  <tr><th className="px-4 py-2 font-medium">Name</th><th className="px-4 py-2 font-medium">Email</th><th className="px-4 py-2 font-medium">Episode</th><th className="px-4 py-2 text-right font-medium">Clips</th><th className="px-4 py-2 font-medium">Survey</th></tr>
                 </thead>
                 <tbody className="divide-y divide-border">
                   {[...active].sort((a, b) => a.hostName.localeCompare(b.hostName)).map((s) => (
                     <tr key={s.id}>
                       <td className="px-4 py-2 font-medium">{s.hostName.trim()}</td>
                       <td className="px-4 py-2"><a href={`mailto:${s.email}`} className="text-[#053877] hover:underline dark:text-[#9cc2ff]">{s.email}</a></td>
+                      {(() => {
+                        const f = followUp?.[s.id];
+                        const ep = f?.episode;
+                        const working = ep && ["queued", "running"].includes(ep.clipStatus);
+                        return (
+                          <>
+                            <td className="px-4 py-2" data-testid={`signup-episode-${s.id}`}>
+                              {!f ? <span className="text-muted-foreground">…</span> : ep ? <span className="inline-flex items-center gap-1.5" title={ep.title}><span className="h-2 w-2 rounded-full bg-emerald-500" /> In Library</span> : <span className="inline-flex items-center gap-1.5 text-muted-foreground"><span className="h-2 w-2 rounded-full bg-slate-300" /> Not yet</span>}
+                            </td>
+                            <td className="px-4 py-2 text-right tabular-nums" data-testid={`signup-clips-${s.id}`}>
+                              {!f ? "" : working ? <span className="text-[#b07800]">making…</span> : ep?.clipStatus === "failed" ? <span className="text-red-600">failed</span> : f.clips || <span className="text-muted-foreground">0</span>}
+                            </td>
+                            <td className="px-4 py-2" data-testid={`signup-survey-${s.id}`}>
+                              {!f ? "" : f.survey === "answered" ? <span className="font-medium text-emerald-700 dark:text-emerald-400">Answered</span> : f.survey === "opened" ? <span className="text-[#b07800]">Opened</span> : f.survey === "sent" ? <span className="text-muted-foreground">Sent</span> : <span className="text-muted-foreground">—</span>}
+                            </td>
+                          </>
+                        );
+                      })()}
                     </tr>
                   ))}
                 </tbody>

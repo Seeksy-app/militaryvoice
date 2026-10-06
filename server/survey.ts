@@ -7,10 +7,10 @@
 // who hasn't, and the totals.
 import type { Express, RequestHandler } from "express";
 import crypto from "node:crypto";
-import { and, asc, eq, like, lte } from "drizzle-orm";
+import { and, asc, eq, inArray, like, lte } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { emailShell, EMAIL_BANNERS, sendOneOffEmail, bccFor } from "./email.js";
-import { outboxMail, postifySubscriptions, scheduledGrants, surveyInvites } from "../shared/schema.js";
+import { clips, outboxMail, postifySubscriptions, recordings, scheduledGrants, surveyInvites } from "../shared/schema.js";
 import { SURVEY_QUESTIONS } from "../shared/survey.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
@@ -146,6 +146,42 @@ ${giftHtml}${plaque}
 }
 
 export function registerSurvey(app: Express, requireAdmin: RequestHandler): void {
+  /**
+   * For Admin → Podcasters: what each booking has had back since the day —
+   * their episode in their Library (and whether its clips are done), how many
+   * clips, and where they are with the survey. Keyed by signup id.
+   */
+  app.get("/api/admin/signups/follow-up", requireAdmin, async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    await schemaIsReady();
+    const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
+    const ev = await storage.getEventById(eventId);
+    if (!ev) return res.json({});
+    const since = Date.parse(ev.startAtUtc) - 6 * 3600_000;
+    const lineup = (await storage.listSignups(eventId)).filter((x) => x.status !== "cancelled");
+    const emails = Array.from(new Set(lineup.map((x) => x.email.trim().toLowerCase())));
+    const recs = emails.length ? (await db.select({ id: recordings.id, email: recordings.email, title: recordings.title, startedAt: recordings.startedAt, clipStatus: recordings.clipStatus, status: recordings.status }).from(recordings).where(inArray(recordings.email, emails)))
+      .filter((r) => Date.parse(r.startedAt) >= since) : [];
+    const clipRows = recs.length ? await db.select({ recordingId: clips.recordingId }).from(clips).where(inArray(clips.recordingId, recs.map((r) => r.id))) : [];
+    const invites = emails.length ? await db.select().from(surveyInvites).where(inArray(surveyInvites.email, emails)) : [];
+    const words = (t: string) => t.toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(/\s+/).filter((w) => w.length > 3);
+    const out: Record<number, { episode: { id: number; title: string; clipStatus: string } | null; clips: number; survey: "answered" | "opened" | "sent" | "" }> = {};
+    for (const x of lineup) {
+      const e = x.email.trim().toLowerCase();
+      const mine = recs.filter((r) => r.email.trim().toLowerCase() === e && r.status !== "Deleted");
+      // The one that names the show, else their only one from the day.
+      const show = words(x.podcastName);
+      const ep = mine.find((r) => words(r.title).some((w) => show.includes(w))) ?? (mine.length === 1 ? mine[0] : mine.sort((a, b) => b.startedAt.localeCompare(a.startedAt))[0]);
+      const inv = invites.find((i) => i.email.trim().toLowerCase() === e);
+      out[x.id] = {
+        episode: ep ? { id: ep.id, title: ep.title, clipStatus: ep.clipStatus } : null,
+        clips: ep ? clipRows.filter((c) => c.recordingId === ep.id).length : 0,
+        survey: !inv ? "" : inv.completedAt ? "answered" : inv.openedAt ? "opened" : "sent",
+      };
+    }
+    res.json(out);
+  });
+
   /** Their survey: who it's for (to greet them), and whether it's done. */
   app.get("/api/survey/:token", async (req, res) => {
     await schemaIsReady();
