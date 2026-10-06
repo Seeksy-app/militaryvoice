@@ -9,9 +9,10 @@ import { adminSend, adminUpload } from "@/lib/adminApi";
 import { fitForUpload } from "@/lib/cropImage";
 import { CoverCollage, type CoverStyle, type Face } from "@/pages/Magazine";
 
-type Show = { signupId: number; number: number; time: string; podcastName: string; hostName: string; headshot: string; printQuality: boolean; art: string; blurb: string; quote: string; link: string; audio?: string; about?: string; aboutOwn?: string; links?: { title: string; url: string }[] };
+type Show = { signupId: number; number: number; time: string; podcastName: string; hostName: string; headshot: string; printQuality: boolean; art: string; blurb: string; quote: string; onTheDay?: string; link: string; audio?: string; about?: string; aboutOwn?: string; links?: { title: string; url: string }[] };
 type Ad = { id: number; sponsorId: number; name: string; headline: string; body: string; site: string; logo: string; artwork: string };
-type Mag = { event: { name: string }; published: boolean; welcome: string; shows: Show[]; leftOut?: { signupId: number; podcastName: string; hostName: string }[]; cover?: { photo: string; style?: string }; ads?: Ad[]; segments?: { done: number; working: number; failed: number }; distributed?: { at: string; sent: number } | null };
+type Mag = { event: { name: string }; published: boolean; welcome: string; shows: Show[]; leftOut?: { signupId: number; podcastName: string; hostName: string }[]; cover?: { photo: string; style?: string }; ads?: Ad[]; segments?: { done: number; working: number; failed: number }; distributed?: { at: string; sent: number } | null; award?: Award | null };
+type Award = { signupId: number; title: string; name: string; show: string; citation: string; quote: string; photo: string; plaque: string };
 
 /**
  * The keepsake magazine, from admin: SI drafts every page, a person reads and
@@ -67,6 +68,19 @@ export function MagazineAdmin({ eventId, slug }: { eventId: number; slug: string
       setSaving(null);
     }
   };
+  // "On the day" and a quote for every show, from the transcript of their live segment.
+  const [filling, setFilling] = useState(false);
+  const fromTheDay = async () => {
+    setFilling(true);
+    try {
+      const r = (await (await adminSend("POST", `/api/admin/magazine/${eventId}/from-the-day`, {})).json()) as { done: string[]; skipped: { show: string; why: string }[] };
+      toast({ title: `${r.done.length} pages now say what they talked about on the day`, description: r.skipped.length ? `Not done: ${r.skipped.map((x) => `${x.show} (${x.why})`).join("; ")}` : "Read each one and change anything." });
+      refresh();
+    } catch (e) {
+      toast({ title: "Couldn't fill from the day", description: (e as Error).message, variant: "destructive" });
+    }
+    setFilling(false);
+  };
   const draft = async (all = false) => {
     setDrafting(true);
     try {
@@ -79,7 +93,7 @@ export function MagazineAdmin({ eventId, slug }: { eventId: number; slug: string
       setDrafting(false);
     }
   };
-  const save = async (signupId: number, patch: { blurb?: string; quote?: string; audio?: string; about?: string; links?: string }) => {
+  const save = async (signupId: number, patch: { blurb?: string; quote?: string; audio?: string; about?: string; links?: string; onTheDay?: string }) => {
     setSaving(signupId);
     try { await adminSend("PUT", `/api/admin/magazine/${eventId}/pages/${signupId}`, patch); await refresh(); }
     catch (e) { toast({ title: "Couldn't save", description: (e as Error).message, variant: "destructive" }); }
@@ -108,6 +122,9 @@ export function MagazineAdmin({ eventId, slug }: { eventId: number; slug: string
           <Button onClick={() => void draft(false)} disabled={drafting} className="gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="magazine-draft">
             {drafting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} {drafting ? "Writing…" : drafted ? "Draft the rest with SI" : "Draft every page with SI"}
           </Button>
+          <Button variant="outline" onClick={() => void fromTheDay()} disabled={filling} className="gap-1.5 rounded-full" data-testid="magazine-from-the-day">
+            {filling ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} {filling ? "Reading the day…" : "Fill from the day"}
+          </Button>
           <Button asChild variant="outline" className="gap-1.5 rounded-full"><a href={url} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open</a></Button>
           <Button asChild variant="outline" className="gap-1.5 rounded-full"><a href={`${url}?print=1`} target="_blank" rel="noreferrer"><Printer className="h-4 w-4" /> Print / PDF</a></Button>
           <DistributeButton eventId={eventId} distributed={m.distributed ?? null} onDone={refresh} />
@@ -121,6 +138,7 @@ export function MagazineAdmin({ eventId, slug }: { eventId: number; slug: string
       <SegmentsPanel eventId={eventId} seg={m.segments} total={m.shows.length} onChanged={refresh} />
       <CoverPanel eventId={eventId} photo={m.cover?.photo ?? ""} style={m.cover?.style || (m.cover?.photo ? "photo" : "glass")} slug={slug} faces={m.shows.map((x) => ({ id: x.signupId, src: x.headshot || x.art, who: x.hostName.trim().toLowerCase() })).filter((f, i, all) => f.src && all.findIndex((y) => y.src === f.src || y.who === f.who) === i)} onChanged={refresh} />
       <AdsPanel eventId={eventId} ads={m.ads ?? []} onChanged={refresh} />
+      <AwardPanel eventId={eventId} award={m.award ?? null} shows={m.shows} onChanged={refresh} />
 
       <section className="rounded-2xl border border-border bg-card p-5">
         <h3 className="font-semibold">Riccoh's welcome</h3>
@@ -147,6 +165,7 @@ export function MagazineAdmin({ eventId, slug }: { eventId: number; slug: string
               <Textarea defaultValue={s.aboutOwn || s.about || ""} key={`ab-${s.signupId}-${(s.aboutOwn || s.about || "").length}`} rows={2} placeholder="About them, in their words: their service, what they're known for. Empty uses their SmartLink bio." onBlur={(e) => { if (e.target.value.trim() !== (s.aboutOwn || s.about || "").trim()) void save(s.signupId, { about: e.target.value }); }} data-testid={`magazine-about-${s.signupId}`} />
               <Textarea defaultValue={(s.links ?? []).map((l) => `${l.title} | ${l.url}`).join("\n")} key={`l-${s.signupId}-${(s.links ?? []).length}`} rows={2} placeholder={"Watch and listen links, one a line: Title | https://… (up to 4). They replace the episodes from their feed."} className="text-sm" onBlur={(e) => { const now = (s.links ?? []).map((l) => `${l.title} | ${l.url}`).join("\n"); if (e.target.value.trim() !== now.trim()) void save(s.signupId, { links: e.target.value }); }} data-testid={`magazine-links-${s.signupId}`} />
               <input defaultValue={s.audio ?? ""} key={`a-${s.signupId}-${s.audio ?? ""}`} placeholder="Their segment from the day: a link to the audio (after Oct 5). Until then the page plays their latest episode." className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" onBlur={(e) => { if (e.target.value.trim() !== (s.audio ?? "")) void save(s.signupId, { audio: e.target.value.trim() }); }} data-testid={`magazine-audio-${s.signupId}`} />
+              <Textarea defaultValue={s.onTheDay ?? ""} key={`d-${s.signupId}-${(s.onTheDay ?? "").length}`} rows={2} placeholder="On the day: what they talked about live (Fill from the day writes this from their segment)." onBlur={(e) => { if (e.target.value.trim() !== (s.onTheDay ?? "").trim()) void save(s.signupId, { onTheDay: e.target.value }); }} data-testid={`magazine-onday-${s.signupId}`} />
               <input defaultValue={s.quote} key={`q-${s.signupId}-${s.quote.length}`} placeholder="Pull quote: their own words only, from an episode (optional)" className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" onBlur={(e) => { if (e.target.value !== s.quote) void save(s.signupId, { quote: e.target.value }); }} />
             </div>
             {s.blurb && <Check className="mt-1 h-4 w-4 shrink-0 text-emerald-600" aria-label="Written" />}
@@ -384,5 +403,48 @@ function DistributeButton({ eventId, distributed, onDone }: { eventId: number; d
         </div>
       )}
     </>
+  );
+}
+
+/** The award page: who won, the award, their photo, and the citation (SI drafts it from their segment; edit freely). */
+function AwardPanel({ eventId, award, shows, onChanged }: { eventId: number; award: Award | null; shows: Show[]; onChanged: () => void }) {
+  const { toast } = useToast();
+  const [signupId, setSignupId] = useState<number>(award?.signupId || shows.find((x) => /oswalt/i.test(x.hostName))?.signupId || 0);
+  const [title, setTitle] = useState(award?.title || "Excellence in Storytelling");
+  const [photo, setPhoto] = useState(award?.photo || "");
+  const [citation, setCitation] = useState(award?.citation || "");
+  const [quote, setQuote] = useState(award?.quote || "");
+  const [busy, setBusy] = useState(false);
+  const post = async (draft: boolean) => {
+    setBusy(true);
+    try {
+      const r = (await (await adminSend("POST", `/api/admin/magazine/${eventId}/award`, { signupId, title, photo, ...(draft ? {} : { citation, quote }) })).json()) as { citation: string; quote: string };
+      setCitation(r.citation); setQuote(r.quote);
+      toast({ title: draft ? "Citation drafted" : "Award page saved", description: draft ? "Read it and change anything, then Save." : undefined });
+      onChanged();
+    } catch (e) {
+      toast({ title: "Couldn't save the award page", description: (e as Error).message, variant: "destructive" });
+    }
+    setBusy(false);
+  };
+  return (
+    <section className="rounded-2xl border border-border bg-card p-5" data-testid="magazine-award">
+      <h3 className="text-base font-semibold">Award page</h3>
+      <p className="mt-1 text-sm text-muted-foreground">A page of its own, after the faces: their photo, the plaque, and why they won.</p>
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        <select value={signupId} onChange={(e) => setSignupId(Number(e.target.value))} className="h-9 rounded-md border border-input bg-background px-2 text-sm" data-testid="award-who">
+          <option value={0}>Who won?</option>
+          {shows.map((x) => <option key={x.signupId} value={x.signupId}>{x.hostName} · {x.podcastName}</option>)}
+        </select>
+        <input value={title} onChange={(e) => setTitle(e.target.value)} className="h-9 rounded-md border border-input bg-background px-3 text-sm" placeholder="Excellence in Storytelling" />
+        <input value={photo} onChange={(e) => setPhoto(e.target.value)} className="h-9 rounded-md border border-input bg-background px-3 text-sm sm:col-span-2" placeholder="Photo link (empty uses their magazine photo)" data-testid="award-photo" />
+        <Textarea value={citation} onChange={(e) => setCitation(e.target.value)} rows={4} className="sm:col-span-2" placeholder="Why they won. Press Draft to have SI write it from their segment." data-testid="award-citation" />
+        <input value={quote} onChange={(e) => setQuote(e.target.value)} className="h-9 rounded-md border border-input bg-background px-3 text-sm sm:col-span-2" placeholder="Their words (optional)" />
+      </div>
+      <div className="mt-3 flex gap-2">
+        <Button variant="outline" size="sm" className="gap-1.5 rounded-full" disabled={busy || !signupId} onClick={() => void post(true)} data-testid="award-draft"><Sparkles className="h-3.5 w-3.5" /> Draft with SI</Button>
+        <Button size="sm" className="rounded-full" disabled={busy || !signupId || !citation.trim()} onClick={() => void post(false)} data-testid="award-save">Save</Button>
+      </div>
+    </section>
   );
 }

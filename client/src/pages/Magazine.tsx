@@ -10,7 +10,7 @@ import { ExternalLink, Loader2, Pause, Play, Printer } from "lucide-react";
 
 type Show = {
   signupId: number; number: number; time: string; podcastName: string; hostName: string; branch: string; service: string;
-  headshot: string; printQuality: boolean; art: string; blurb: string; quote: string; link: string; about?: string; aboutOwn?: string; audio?: string; episodes?: Episode[]; links?: { title: string; url: string }[];
+  headshot: string; printQuality: boolean; art: string; blurb: string; quote: string; onTheDay?: string; link: string; about?: string; aboutOwn?: string; audio?: string; episodes?: Episode[]; links?: { title: string; url: string }[];
 };
 type Episode = { title: string; date: string; audioUrl: string };
 type Mag = {
@@ -20,6 +20,7 @@ type Mag = {
   shows: Show[]; sponsors: { name: string; logo: string; url: string }[];
   cover?: { photo: string; style?: string };
   ads?: Ad[];
+  award?: { signupId: number; title: string; name: string; show: string; citation: string; quote: string; photo: string; plaque: string } | null;
 };
 type Ad = { id: number; name: string; headline: string; body: string; site: string; link: string; logo: string; artwork: string };
 
@@ -275,6 +276,34 @@ function Listen({ s, ep, label, go }: { s: Show; ep: Episode | null; label: stri
   );
 }
 
+/** The award: their photo full height on the left, the plaque, and why they won. */
+function AwardPage({ a, photo, n, event }: { a: NonNullable<Mag["award"]>; photo: string; n: number; event: Mag["event"] }) {
+  return (
+    <Page n={n} bg={NAVY} color="#fff">
+      <div className="absolute inset-y-0 left-0 overflow-hidden" style={{ width: 360 }}>
+        {photo && <img src={photo} alt={a.name} className="h-full w-full object-cover" style={{ objectPosition: "50% 30%" }} />}
+        <div className="absolute inset-y-0 right-0 w-24" style={{ background: `linear-gradient(to right, transparent, ${NAVY})` }} />
+      </div>
+      <div className="absolute inset-y-0 right-0 flex flex-col px-12 pb-14 pt-16" style={{ left: 360 }}>
+        <p className="text-[12px] font-bold uppercase tracking-[0.3em]" style={{ color: GOLD }}>{event.occasion} · Award</p>
+        <h2 className="mt-4 text-[44px] font-bold leading-[1.02] tracking-tight" style={HEAD}>{a.title}</h2>
+        <p className="mt-5 text-[26px] font-semibold" style={{ ...HEAD, color: GOLD }}>{a.name}</p>
+        <p className="mt-1 text-[15px] text-white/70">{a.show}</p>
+        {a.citation && <p className="mt-7 text-[16px] leading-[1.65] text-white/90">{a.citation}</p>}
+        {a.quote && (
+          <blockquote className="mt-6 border-l-4 pl-5" style={{ borderColor: GOLD }}>
+            <p className="text-[19px] font-semibold italic leading-snug" style={HEAD}>“{a.quote}”</p>
+          </blockquote>
+        )}
+        <div className="mt-auto flex items-end justify-between gap-6">
+          <img src={a.plaque} alt="The award plaque" className="rounded-lg object-contain shadow-2xl" style={{ maxHeight: 250, maxWidth: 210 }} />
+          <p className="text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-white/50">{event.name}<br />{event.day}</p>
+        </div>
+      </div>
+    </Page>
+  );
+}
+
 function ShowPage({ s, n, event }: { s: Show; n: number; event: Mag["event"] }) {
   const who = [s.branch, s.service].filter(Boolean).join(" · ");
   const eps = s.episodes ?? [];
@@ -309,7 +338,13 @@ function ShowPage({ s, n, event }: { s: Show; n: number; event: Mag["event"] }) 
               <footer className="mt-1.5 text-[13px] font-semibold text-slate-500">{s.hostName}</footer>
             </blockquote>
           )}
-          {s.about && (
+          {s.onTheDay && (
+            <div>
+              <p className="text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: GOLD }}>On the day</p>
+              <p className="mt-2 text-[15px] leading-[1.6] text-slate-800">{s.onTheDay}</p>
+            </div>
+          )}
+          {s.about && !s.onTheDay && (
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: GOLD }}>{s.aboutOwn ? `About ${first}` : `About ${first}, in their words`}</p>
               <p className="mt-2 text-[14.5px] leading-[1.6] text-slate-700">{s.about}</p>
@@ -517,6 +552,7 @@ export default function Magazine({ slug }: { slug?: string }) {
         ))}
       </div>
     </Page>,
+    ...(m.award?.citation ? [<AwardPage key="award" a={m.award} n={++n} event={m.event} photo={m.award.photo || m.shows.find((x) => x.signupId === m.award!.signupId)?.headshot || ""} />] : []),
     ...m.shows.flatMap((s, i) => [
       <ShowPage key={s.signupId} s={s} n={++n} event={m.event} />,
       ...(after.get(i) ?? []).map((ad) => <AdPage key={`ad-${ad.id}`} ad={ad} n={++n} />),

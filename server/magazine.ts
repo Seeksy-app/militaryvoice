@@ -29,6 +29,8 @@ const WELCOME = 0;
 const DISTRIBUTED = -3;
 /** The cover photo, when one is set (in `art`); without it the cover is every podcaster's face. */
 const COVER = -2;
+/** The award page (blurb: the citation, quote: their words, art: the photo, about: JSON {signupId, title}). */
+const AWARD = -4;
 
 const clean = (s: unknown, n: number) => {
   const t = String(s ?? "").replace(/<[^>]+>/g, " ").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/\s+/g, " ").trim();
@@ -136,11 +138,21 @@ export async function planSegments(eventId: number): Promise<{ queued: number; k
     .map((r) => ({ id: r.id, from: Date.parse(r.startedAt), to: Date.parse(r.startedAt) + r.durationSec * 1000 }));
   const lineup = await db.select().from(signups).where(and(eq(signups.eventId, eventId), ne(signups.status, "cancelled")));
   const have = await db.select().from(segmentCuts).where(eq(segmentCuts.eventId, eventId));
+  // When the run of show carries what really happened, cut from that: on
+  // 5 Oct shows ran up to 30 minutes off their slots, and the slot times cut
+  // the wrong person's audio for the magazine.
+  const ros = (await storage.listRunOfShow(eventId)).filter((r) => r.kind === "Segment" && r.signupId);
+  const actuals = ros.some((r) => r.actualStartAtUtc);
   let queued = 0;
   let kept = 0;
   const notRecorded: string[] = [];
   for (const s of lineup) {
-    const w = onAir(ev as never, s.slotIndex);
+    const row = ros.find((r) => r.signupId === s.id);
+    // With actual times known, a show with none didn't air as its own segment.
+    if (actuals && !row?.actualStartAtUtc) { notRecorded.push(s.podcastName); continue; }
+    const w = row?.actualStartAtUtc
+      ? { start: Date.parse(row.actualStartAtUtc), end: Date.parse(row.actualStartAtUtc) + (row.actualMinutes || ev.onAirMinutes) * 60_000 }
+      : onAir(ev as never, s.slotIndex);
     const want = { from: w.start - MARGIN_MS, to: w.end + MARGIN_MS };
     // The recording that holds the most of it (a restart mid-day leaves two files).
     const best = recs
@@ -215,6 +227,7 @@ async function buildMagazine(eventId: number) {
       art: p?.artworkPrintUrl || w?.art || "",
       blurb: w?.blurb ?? "",
       quote: w?.quote ?? "",
+      onTheDay: w?.onTheDay ?? "",
       // In their own words: the bio on their SmartLink.
       about: w?.about ? w.about : clean(bio?.bio, 650),
       aboutOwn: w?.about ?? "",
@@ -243,6 +256,14 @@ async function buildMagazine(eventId: number) {
     leftOut: lineup.filter((s) => out.has(s.id)).map((s) => ({ signupId: s.id, podcastName: s.podcastName, hostName: s.hostName })),
     sponsors: sponsorRows.map((r) => ({ name: r.name, logo: r.logoUrl, url: r.url })),
     cover: { photo: words.find((x) => x.signupId === COVER)?.art ?? "", style: words.find((x) => x.signupId === COVER)?.quote ?? "" },
+    award: (() => {
+      const a = words.find((x) => x.signupId === AWARD);
+      if (!a) return null;
+      let meta: { signupId?: number; title?: string } = {};
+      try { meta = JSON.parse(a.about || "{}"); } catch { /* none */ }
+      const s = lineup.find((x) => x.id === meta.signupId);
+      return { signupId: meta.signupId ?? 0, title: meta.title || "Excellence in Storytelling", name: s?.hostName.trim() ?? "", show: s?.podcastName ?? "", citation: a.blurb, quote: a.quote, photo: a.art, plaque: `${ORIGIN}/email/award-storytelling-2026.jpg` };
+    })(),
     segments: { done: cuts.filter((c) => c.status === "done").length, working: cuts.filter((c) => c.status === "queued" || c.status === "claimed").length, failed: cuts.filter((c) => c.status === "failed").length },
     // A sponsor's QR goes through the counted link, so the magazine's scans show in their numbers.
     ads: adRows.map((a) => {
@@ -257,8 +278,8 @@ async function buildMagazine(eventId: number) {
   };
 }
 
-async function saveWords(eventId: number, signupId: number, patch: Partial<{ blurb: string; quote: string; art: string; edited: boolean; hidden: boolean; audio: string; about: string; links: string }>) {
-  await db.insert(magazinePages).values({ eventId, signupId, blurb: patch.blurb ?? "", quote: patch.quote ?? "", art: patch.art ?? "", edited: patch.edited ?? false, hidden: patch.hidden ?? false, audio: patch.audio ?? "", about: patch.about ?? "", links: patch.links ?? "", updatedAt: now() })
+async function saveWords(eventId: number, signupId: number, patch: Partial<{ blurb: string; quote: string; art: string; edited: boolean; hidden: boolean; audio: string; about: string; links: string; onTheDay: string }>) {
+  await db.insert(magazinePages).values({ eventId, signupId, blurb: patch.blurb ?? "", quote: patch.quote ?? "", art: patch.art ?? "", edited: patch.edited ?? false, hidden: patch.hidden ?? false, audio: patch.audio ?? "", about: patch.about ?? "", links: patch.links ?? "", onTheDay: patch.onTheDay ?? "", updatedAt: now() })
     .onConflictDoUpdate({ target: [magazinePages.eventId, magazinePages.signupId], set: { ...patch, updatedAt: now() } });
 }
 
@@ -299,6 +320,58 @@ async function draftShow(ai: Anthropic, eventId: number, s: { signupId: number; 
   // Their own words or nothing: the quote must appear in a transcript we hold.
   if (quote && !transcripts.some((t) => norm(t).includes(norm(quote)))) quote = "";
   await saveWords(eventId, s.signupId, { blurb: clean(j.blurb, 900), quote, art: feed.image });
+}
+
+/**
+ * A show's own words from the day: the transcript of the recording filed in
+ * their Library after the Marathon (Pōstify transcribed it to cut the clips).
+ * Matched by the host's (or co-host's) email; with several, the one whose
+ * title names the show. Nothing rather than the wrong show.
+ */
+async function dayTranscript(eventId: number, s: { email: string; coHostEmail?: string | null; podcastName: string }): Promise<string> {
+  const ev = await storage.getEventById(eventId);
+  if (!ev) return "";
+  const from = Date.parse(ev.startAtUtc) - 6 * 3600_000;
+  const to = Date.parse(ev.startAtUtc) + 72 * 3600_000;
+  const emails = [s.email, s.coHostEmail ?? ""].map((e) => e.trim().toLowerCase()).filter(Boolean);
+  const rows = (await db.select({ title: recordings.title, startedAt: recordings.startedAt, t: recordings.transcriptJson, email: recordings.email }).from(recordings).where(ne(recordings.transcriptJson, "")))
+    .filter((r) => emails.includes(r.email.trim().toLowerCase()) && Date.parse(r.startedAt) >= from && Date.parse(r.startedAt) <= to);
+  if (!rows.length) return "";
+  const words = norm(s.podcastName).split(" ").filter((w) => w.length > 3);
+  const score = (title: string) => words.filter((w) => norm(title).includes(w)).length;
+  const ranked = rows.map((r) => ({ r, n: score(r.title) })).sort((a, b) => b.n - a.n || b.r.t.length - a.r.t.length);
+  const pick = ranked[0].n > 0 ? ranked[0].r : rows.length === 1 ? rows[0] : null;
+  if (!pick) return "";
+  try {
+    const lines = JSON.parse(pick.t) as [number, number, string, string][];
+    const out: string[] = [];
+    for (const [, , who, text] of lines) {
+      const last = out[out.length - 1];
+      if (last && last.startsWith(`${who}: `)) out[out.length - 1] = `${last} ${text}`;
+      else out.push(`${who}: ${text}`);
+    }
+    return out.join("\n").slice(0, 60_000);
+  } catch {
+    return "";
+  }
+}
+
+/** "On the day" and a quote, from their segment's transcript. The quote is checked word for word. */
+async function draftFromTheDay(ai: Anthropic, eventId: number, s: { signupId: number; podcastName: string; hostName: string }, transcript: string, keepQuote: string) {
+  const out = await ai.messages.create({
+    model: "claude-sonnet-5",
+    max_tokens: 900,
+    system: `You write for a keepsake magazine of The Podcast Marathon (National Military Podcast Day, 5 October 2026), where military and veteran podcasters went live back to back. You get the transcript of one show's live segment. Speakers are labelled by number; work out from context which one is the host. Return JSON only: {"onTheDay": "...", "quote": "..."}.
+"onTheDay": 55 to 85 words, past tense, third person: what the host (and any guest, named only if the transcript names them) talked about live that day, specific and warm, 8th-grade reading level. Use ONLY what is in the transcript. No hype words. Don't mention the transcript, the magazine or the marathon's logistics (sound checks, intros, technical problems).
+"quote": ONE sentence (at most 28 words) copied EXACTLY, word for word, from what the HOST said, that is true, striking and stands on its own. If you can't be sure the host said it, or nothing fits, return "".`,
+    messages: [{ role: "user", content: `Show: ${s.podcastName}\nHost: ${s.hostName}\n\nTranscript of their live segment:\n${transcript}` }],
+  });
+  const text = out.content.map((c) => ("text" in c ? c.text : "")).join("");
+  const j = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)) as { onTheDay?: string; quote?: string };
+  let quote = clean(j.quote, 240).replace(/^["“]|["”]$/g, "");
+  if (quote && !norm(transcript).includes(norm(quote))) quote = "";
+  await saveWords(eventId, s.signupId, { onTheDay: clean(j.onTheDay, 700), ...(keepQuote ? {} : quote ? { quote } : {}) });
+  return { onTheDay: Boolean(j.onTheDay), quote: Boolean(quote) };
 }
 
 async function draftWelcome(ai: Anthropic, eventId: number, m: NonNullable<Awaited<ReturnType<typeof buildMagazine>>>) {
@@ -379,6 +452,70 @@ export function registerMagazine(app: Express, requireAdmin: RequestHandler, req
   });
 
   /** SI drafts every show page that has no words yet (or all, with ?all=1), and the welcome. */
+  /**
+   * Fill every show page from the day itself: "On the day" and a quote, from
+   * the transcript of their live segment. Quotes a person set by hand (or
+   * already there) are kept unless `quotes: "replace"`.
+   */
+  app.post("/api/admin/magazine/:eventId/from-the-day", requireAdmin, async (req, res) => {
+    const eventId = Number(req.params.eventId);
+    const only = Array.isArray(req.body?.signupIds) ? (req.body.signupIds as unknown[]).map(Number) : null;
+    const lineup = (await db.select().from(signups).where(and(eq(signups.eventId, eventId), ne(signups.status, "cancelled"))))
+      .filter((x) => !/ceremon/i.test(x.podcastName) && (!only || only.includes(x.id)));
+    const words = await db.select().from(magazinePages).where(eq(magazinePages.eventId, eventId));
+    const ai = new Anthropic();
+    const done: string[] = [];
+    const skipped: { show: string; why: string }[] = [];
+    const queue = [...lineup];
+    const work = async () => {
+      for (let x = queue.shift(); x; x = queue.shift()) {
+        const t = await dayTranscript(eventId, x);
+        if (t.length < 400) { skipped.push({ show: x.podcastName, why: "no transcript of their segment" }); continue; }
+        const w = words.find((r) => r.signupId === x.id);
+        const keep = req.body?.quotes === "replace" ? "" : (w?.quote ?? "");
+        try {
+          const r = await draftFromTheDay(ai, eventId, { signupId: x.id, podcastName: x.podcastName, hostName: x.hostName }, t, keep);
+          done.push(`${x.podcastName}${r.quote ? " (with a quote)" : ""}`);
+        } catch (err) {
+          skipped.push({ show: x.podcastName, why: (err as Error).message.slice(0, 120) });
+        }
+      }
+    };
+    await Promise.all([work(), work(), work(), work()]);
+    res.json({ done, skipped });
+  });
+
+  /** The award page: who, the award's name, and a citation drafted from their segment (editable after). */
+  app.post("/api/admin/magazine/:eventId/award", requireAdmin, async (req, res) => {
+    const eventId = Number(req.params.eventId);
+    const signupId = Number(req.body?.signupId);
+    const title = String(req.body?.title ?? "Excellence in Storytelling").trim().slice(0, 80);
+    const [x] = await db.select().from(signups).where(and(eq(signups.eventId, eventId), eq(signups.id, signupId)));
+    if (!x) return res.status(404).json({ message: "Who's the award for?" });
+    const photo = String(req.body?.photo ?? "").trim().slice(0, 600);
+    // Words set by hand win; otherwise SI drafts the citation from their segment.
+    let citation = String(req.body?.citation ?? "").trim().slice(0, 1200);
+    let quote = String(req.body?.quote ?? "").trim().slice(0, 300);
+    if (!citation) {
+      const t = await dayTranscript(eventId, x);
+      const out = await new Anthropic().messages.create({
+        model: "claude-sonnet-5",
+        max_tokens: 700,
+        system: `You write the citation for an award in a keepsake magazine: "${title}" at The Podcast Marathon, National Military Podcast Day, 5 October 2026. Return JSON only: {"citation": "...", "quote": "..."}.
+"citation": 70 to 110 words, warm and dignified, past tense, third person, saying why this host's segment stood out, using ONLY what is in the transcript and the facts given. No hype words, no invented details.
+"quote": ONE sentence (at most 28 words) copied EXACTLY from what the host said, or "".`,
+        messages: [{ role: "user", content: `Host: ${x.hostName}\nShow: ${x.podcastName}\n\nTranscript of their live segment:\n${t || "(none)"}` }],
+      });
+      const text = out.content.map((c) => ("text" in c ? c.text : "")).join("");
+      const j = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)) as { citation?: string; quote?: string };
+      citation = clean(j.citation, 1200);
+      const q = clean(j.quote, 240).replace(/^["“]|["”]$/g, "");
+      if (!quote && q && norm(t).includes(norm(q))) quote = q;
+    }
+    await saveWords(eventId, AWARD, { blurb: citation, quote, art: photo, about: JSON.stringify({ signupId, title }) });
+    res.json({ ok: true, citation, quote });
+  });
+
   app.post("/api/admin/magazine/:eventId/draft", requireAdmin, async (req, res) => {
     const eventId = Number(req.params.eventId);
     const m = await buildMagazine(eventId);
@@ -415,6 +552,7 @@ export function registerMagazine(app: Express, requireAdmin: RequestHandler, req
       ...(typeof req.body?.blurb === "string" ? { blurb: req.body.blurb.slice(0, 2500) } : {}),
       ...(typeof req.body?.quote === "string" ? { quote: req.body.quote.slice(0, 300) } : {}),
       ...(typeof req.body?.about === "string" ? { about: req.body.about.trim().slice(0, 900) } : {}),
+      ...(typeof req.body?.onTheDay === "string" ? { onTheDay: req.body.onTheDay.trim().slice(0, 900) } : {}),
       // "Title | link", one a line (a bare link is its own title).
       ...(typeof req.body?.links === "string" ? { links: JSON.stringify(req.body.links.split("\n").map((l: string) => {
         const m = /^(.*?)\s*\|\s*(https?:\/\/\S+)\s*$/.exec(l.trim()) ?? /^()(https?:\/\/\S+)$/.exec(l.trim());

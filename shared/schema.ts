@@ -2888,6 +2888,8 @@ export const magazinePages = pgTable("magazine_pages", {
   about: text("about").notNull().default(""),
   /** Their segment from the day (an audio or video link), played in the digital magazine instead of their latest episode. */
   audio: text("audio").notNull().default(""),
+  /** What they talked about live on the day, written from their segment's transcript. */
+  onTheDay: text("on_the_day").notNull().default(""),
   /** Left out of the magazine by an admin: no page, not in the lineup or on the cover. */
   hidden: boolean("hidden").notNull().default(false),
   updatedAt: text("updated_at").notNull().default(""),
