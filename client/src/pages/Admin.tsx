@@ -758,6 +758,8 @@ function SignupsCard({ eventId }: { eventId: number }) {
     return m;
   }, [assets]);
   const zone = useMemo(detectLocalTimeZone, []);
+  // A plain list (name and email) by default; the full cards are a click away.
+  const [view, setView] = useState<"list" | "details">("list");
 
   async function cancelSignup(id: number) {
     await adminSend("PATCH", `/api/admin/signups/${id}/cancel`);
@@ -789,14 +791,44 @@ function SignupsCard({ eventId }: { eventId: number }) {
             {prerecorded.length > 0 ? ` · ${prerecorded.length} pre-recorded` : ""} · times shown in {zoneLabel(zone)}
           </CardDescription>
         </div>
-        <a href={adminExportUrl()} target="_blank" rel="noopener noreferrer" data-testid="link-export-csv">
-          <Button variant="outline" size="sm" className="gap-1.5 shrink-0">
-            <Download className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Export CSV</span>
-          </Button>
-        </a>
+        <div className="flex shrink-0 items-center gap-2">
+          <div className="inline-flex rounded-lg border border-border p-0.5 text-xs font-medium" role="tablist" aria-label="How to show the list">
+            {(["list", "details"] as const).map((v) => (
+              <button key={v} type="button" role="tab" aria-selected={view === v} onClick={() => setView(v)} className={`rounded-md px-2.5 py-1 ${view === v ? "bg-foreground text-background" : "text-muted-foreground hover:text-foreground"}`} data-testid={`signups-view-${v}`}>{v === "list" ? "List" : "Details"}</button>
+            ))}
+          </div>
+          <a href={adminExportUrl()} target="_blank" rel="noopener noreferrer" data-testid="link-export-csv">
+            <Button variant="outline" size="sm" className="gap-1.5 shrink-0">
+              <Download className="h-3.5 w-3.5" /> <span className="hidden sm:inline">Export CSV</span>
+            </Button>
+          </a>
+        </div>
       </CardHeader>
       <CardContent>
-        {isLoading || !event ? (
+        {view === "list" && active.length > 0 ? (
+          <div data-testid="signups-list">
+            <div className="mb-2 flex justify-end">
+              <Button variant="outline" size="sm" className="gap-1.5" onClick={() => { void navigator.clipboard.writeText(Array.from(new Set(active.map((s) => s.email.trim().toLowerCase()))).join(", ")); toast({ title: "Emails copied" }); }} data-testid="button-copy-emails">
+                <Copy className="h-3.5 w-3.5" /> Copy all emails
+              </Button>
+            </div>
+            <div className="max-h-[70vh] overflow-y-auto rounded-xl border border-border">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0 bg-muted text-left text-[11px] uppercase tracking-[0.1em] text-muted-foreground">
+                  <tr><th className="px-4 py-2 font-medium">Name</th><th className="px-4 py-2 font-medium">Email</th></tr>
+                </thead>
+                <tbody className="divide-y divide-border">
+                  {[...active].sort((a, b) => a.hostName.localeCompare(b.hostName)).map((s) => (
+                    <tr key={s.id}>
+                      <td className="px-4 py-2 font-medium">{s.hostName.trim()}</td>
+                      <td className="px-4 py-2"><a href={`mailto:${s.email}`} className="text-[#053877] hover:underline dark:text-[#9cc2ff]">{s.email}</a></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : isLoading || !event ? (
           <div className="space-y-2">
             <Skeleton className="h-16 w-full" />
             <Skeleton className="h-16 w-full" />
