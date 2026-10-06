@@ -84,7 +84,7 @@ export function SiteFooter({ slug, note }: { slug?: string; /** A small line abo
 
         <div className="mt-10 flex flex-col gap-3 border-t border-white/15 pt-6 text-xs text-white/50 sm:flex-row sm:items-center sm:justify-between">
           <div>
-            <p>© {new Date().getFullYear()} MilitaryVoices.ai. All rights reserved.</p>
+            <p>© {new Date().getFullYear()} Applied Growth Technologies LLC, the company behind MilitaryVoices.ai. All rights reserved.</p>
             {note && <p className="mt-1 text-white/40">{note}</p>}
           </div>
           <nav className="flex flex-wrap gap-x-5 gap-y-2">

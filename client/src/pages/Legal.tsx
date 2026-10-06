@@ -56,7 +56,8 @@ export function PrivacyPolicy() {
   return (
     <Shell title="Privacy policy">
       <p className="text-base text-foreground">
-        MilitaryVoices.ai is a platform for running live, multi-speaker podcast events. This explains what we hold
+        MilitaryVoices.ai is a platform for running live, multi-speaker podcast events, operated by Applied Growth
+        Technologies LLC, a Wyoming limited liability company ("we"). This explains what we hold
         about you, why, and how to get rid of it. It is written to be read, not to protect us.
       </p>
 
@@ -280,7 +281,9 @@ export function TermsOfService() {
   return (
     <Shell title="Terms of service">
       <p className="text-base text-foreground">
-        These are the terms for using MilitaryVoices.ai. Booking a slot or signing in means you accept them.
+        These are the terms for using MilitaryVoices.ai, which is operated by Applied Growth Technologies LLC, a Wyoming
+        limited liability company ("we"). Booking a slot or signing in means you accept them. Questions:
+        hello@militaryvoices.ai.
       </p>
 
       <Section heading="What the service is">
