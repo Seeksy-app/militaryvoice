@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 
 // Cloudflare's Turnstile widget. Invisible for nearly everyone; the token it
@@ -52,7 +52,15 @@ export function Turnstile({
   const host = useRef<HTMLDivElement>(null);
   const widget = useRef<string | null>(null);
   const latest = useRef(onToken);
-  latest.current = onToken;
+  // No token after a while usually means a blocker ate the check, and the
+  // button just sits grey with no reason given (6 Oct onboarding audit).
+  const [slow, setSlow] = useState(false);
+  const gotToken = useRef(false);
+  latest.current = (t: string | null) => { if (t) { gotToken.current = true; setSlow(false); } onToken(t); };
+  useEffect(() => {
+    const id = setTimeout(() => { if (!gotToken.current) setSlow(true); }, 8000);
+    return () => clearTimeout(id);
+  }, [siteKey, resetSignal]);
 
   useEffect(() => {
     let cancelled = false;
@@ -81,5 +89,14 @@ export function Turnstile({
     }
   }, [resetSignal]);
 
-  return <div ref={host} className="min-h-[65px]" data-testid="turnstile" />;
+  return (
+    <div>
+      <div ref={host} className="min-h-[65px]" data-testid="turnstile" />
+      {slow && (
+        <p className="mt-1 text-xs text-muted-foreground" data-testid="turnstile-slow">
+          The security check hasn't loaded. If you use an ad or privacy blocker, pause it for this page, or try another browser.
+        </p>
+      )}
+    </div>
+  );
 }

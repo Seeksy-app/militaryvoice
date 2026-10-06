@@ -101,6 +101,8 @@ interface Props {
   variant?: "setup" | "profile";
   /** What they said they're here for, on the way in (comma-separated). */
   interests?: string;
+  /** An event is coming up to set a show up for; without one, setup goes straight to the dashboard. */
+  eventOpen?: boolean;
 }
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
@@ -154,7 +156,7 @@ function SectionCard({
   );
 }
 
-export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, variant = "setup", onDirtyChange, interests: interestsProp }: Props) {
+export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, variant = "setup", onDirtyChange, interests: interestsProp, eventOpen = true }: Props) {
   const { toast } = useToast();
   // Show questions only for people with a show. Anyone who came through a
   // time on the schedule is booking one, whatever they ticked.
@@ -1004,7 +1006,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
               {/* Saving the profile is only half of getting on air, so setup's
                   primary action carries on to the event rather than leaving
                   someone on a dashboard with nothing obvious to do next. */}
-              {isSetup && !pendingSlot && podcaster && (
+              {isSetup && !pendingSlot && podcaster && eventOpen && (
                 <Button
                   type="button"
                   variant="outline"
@@ -1039,13 +1041,13 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
                   <>
                     <Users className="h-4 w-4" /> Save &amp; claim my slot
                   </>
-                ) : isSetup && podcaster ? (
+                ) : isSetup && podcaster && eventOpen ? (
                   <>
                     <Save className="h-4 w-4" /> Save &amp; continue to Event settings
                   </>
                 ) : isSetup ? (
                   <>
-                    <Save className="h-4 w-4" /> Save &amp; continue
+                    <Save className="h-4 w-4" /> Save &amp; go to my dashboard
                   </>
                 ) : (
                   <>

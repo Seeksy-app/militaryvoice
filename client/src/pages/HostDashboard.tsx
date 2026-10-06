@@ -459,10 +459,13 @@ export function LoginCard({ pending, start = false }: { pending: PendingSlotSumm
               <Input
                 id="host-code"
                 inputMode="numeric"
+                autoComplete="one-time-code"
                 autoFocus
                 placeholder="123456"
+                maxLength={12}
                 value={code}
-                onChange={(e) => setCode(e.target.value)}
+                // A pasted "123 456" or "Code: 123456" still works: digits only.
+                onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                 data-testid="input-host-code"
               />
               <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-border p-3">
@@ -493,6 +496,17 @@ export function LoginCard({ pending, start = false }: { pending: PendingSlotSumm
                 data-testid="button-host-use-different-email"
               >
                 Use a different email
+              </button>
+              {/* The code lasts 15 minutes and email can be slow: a way to ask again without starting over. */}
+              {siteKey && <Turnstile siteKey={siteKey} onToken={setHuman} resetSignal={humanReset} />}
+              <button
+                type="button"
+                className="text-xs text-muted-foreground underline-offset-2 hover:underline disabled:opacity-50"
+                disabled={requestCode.isPending || (needsHuman && !human)}
+                onClick={() => requestCode.mutate()}
+                data-testid="button-host-resend-code"
+              >
+                {requestCode.isPending ? "Sending a new code…" : needsHuman && !human ? "Checking you're human…" : "Didn't get it? Send a new code"}
               </button>
             </form>
           )}
@@ -1292,7 +1306,11 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                 setProfileDirty(false);
                 try { localStorage.removeItem("mv_interests"); } catch { /* fine */ }
                 const want = profile?.interests || interests;
-                if (inSetup && want && !/\bevents\b/.test(want)) {
+                if (inSetup && !eventOpen) {
+                  // No event coming up: the button said "go to my dashboard", and
+                  // its checklist (built from what they came for) is the next step.
+                  setScreen("dashboard");
+                } else if (inSetup && want && !/\bevents\b/.test(want)) {
                   // Land where they said they were going.
                   if (/\bgrow\b/.test(want)) setScreen("integrations");
                   else if (/\bdiscover\b/.test(want)) navigate("/discover");
@@ -1309,6 +1327,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                 }
               }}
               onCancel={hasProfile ? () => setScreen("dashboard") : undefined}
+              eventOpen={eventOpen}
             />
           </section>
         ) : screen === "recordings" ? (
