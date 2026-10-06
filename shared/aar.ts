@@ -88,7 +88,7 @@ export const SI_PRODUCER_EVENT_AAR: AarReport = {
       items: [
         "On air at 6:58 AM, off at about 10:24 PM. 29 shows aired; the run of show now carries each one's actual time.",
         "The morning ran 0–8 minutes late per show and absorbed it in the hand-offs.",
-        "Around noon one booked show did not air as its own segment; the next interview ran an hour (12:07–1:08). Two shows after it swapped order.",
+        "Around noon one booked host could not get in — the link kept landing him on the watch page — and came on only briefly, a couple of times. The next interview ran an hour (12:07–1:08) to cover, and the two shows after it swapped order.",
         "Mid-afternoon a 26-minute gap (3:00–3:26) was filled from the desk and the video bank.",
         "At 4:47 PM the stage recording hit its 3-hour file cap; about 10 minutes (4:47–4:57) are missing from the master. The on-demand version carries a card there.",
         "9:16–9:28 PM was filled with videos while the last live pair reached the green room.",
