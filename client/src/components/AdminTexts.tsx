@@ -84,6 +84,7 @@ export function AdminTexts({ eventId }: { eventId: number }) {
             </p>
           </div>
         )}
+        {data.configured && <TestText />}
         {data.configured && (
           <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
             <span>Sending from {data.from}{data.provider ? ` on ${data.provider}` : ""}</span>
@@ -172,5 +173,32 @@ export function AdminTexts({ eventId }: { eventId: number }) {
       </div>
       <p className="flex items-center gap-1.5 text-xs text-muted-foreground"><Smartphone className="h-3.5 w-3.5" /> Numbers come from each person's profile or booking. Ask anyone missing one to add their mobile in Profile.</p>
     </div>
+  );
+}
+
+/** Send one test text to your own phone, to check the line end to end. */
+function TestText() {
+  const { toast } = useToast();
+  const [phone, setPhone] = useState("");
+  const [busy, setBusy] = useState(false);
+  return (
+    <form
+      className="mt-4 flex flex-wrap items-center gap-2"
+      onSubmit={async (e) => {
+        e.preventDefault();
+        setBusy(true);
+        try {
+          await adminSend("POST", "/api/admin/sms/test", { phone });
+          toast({ title: "Test text sent", description: "It should arrive in a few seconds." });
+        } catch (err) {
+          toast({ title: "The test didn't send", description: (err as Error).message, variant: "destructive" });
+        }
+        setBusy(false);
+      }}
+      data-testid="texts-test"
+    >
+      <input type="tel" inputMode="tel" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Your mobile, for a test" className="h-9 w-56 rounded-md border border-input bg-background px-3 text-sm" />
+      <Button type="submit" size="sm" variant="outline" disabled={busy || !phone.trim()}>{busy ? "Sending…" : "Send a test text"}</Button>
+    </form>
   );
 }

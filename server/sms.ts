@@ -227,6 +227,14 @@ export function registerSms(app: Express, requireAdmin: RequestHandler) {
     res.json(rows);
   });
 
+  /** A test text to any number (the admin's own phone), to check the line works end to end. */
+  app.post("/api/admin/sms/test", requireAdmin, adminOnly, async (req, res) => {
+    const phone = toE164(String(req.body?.phone ?? ""));
+    if (!phone) return res.status(400).json({ message: "Enter a US mobile number." });
+    const r = await sendSms({ phone, body: "This is a test from Admin → Texts. If you can read this, show-day texts work.", name: "Test", sentBy: getAdminEmail(req) ?? "" });
+    res.status(r.ok ? 200 : 502).json(r.ok ? { ok: true } : { message: r.error || "It didn't send." });
+  });
+
   /** Text a list of people the same line. `{name}` and `{link}` fill in per person. */
   app.post("/api/admin/sms/send", requireAdmin, adminOnly, async (req, res) => {
     const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
