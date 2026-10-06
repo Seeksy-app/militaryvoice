@@ -12,13 +12,13 @@ import Anthropic from "@anthropic-ai/sdk";
 import multer from "multer";
 import sharp from "sharp";
 import crypto from "node:crypto";
-import { and, asc, eq, inArray, ne } from "drizzle-orm";
+import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { getAdminEmail } from "./session.js";
 import { emailShell, EMAIL_BANNERS, sendOneOffEmail } from "./email.js";
 import { uploadPhoto } from "./photoStorage.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
-import { bioPages, clips, discoveryCache, hostedShows, magazineAds, magazinePages, podcasterProfiles, recordings, segmentCuts, signups, sponsors } from "../shared/schema.js";
+import { bioPages, clips, contacts, discoveryCache, hostedShows, magazineAds, magazinePages, podcasterProfiles, recordings, segmentCuts, signups, sponsors } from "../shared/schema.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 const now = () => new Date().toISOString();
@@ -320,6 +320,32 @@ export function registerMagazine(app: Express, requireAdmin: RequestHandler, req
     if (!c?.audioKey) return res.status(404).end();
     res.setHeader("Cache-Control", "no-store");
     res.redirect(302, await signedRecordingUrl(c.audioKey, 6 * 3600));
+  });
+
+  /**
+   * "Send me a digital copy" (the QR code on the show's magazine slide): their
+   * Contacts row gets the magazine-copy tag, so the send on release day can
+   * find everyone who asked. No sign-in; a hidden field and a per-address
+   * limit keep the bots out.
+   */
+  const asked = new Map<string, number[]>();
+  app.post("/api/magazine/copy", async (req, res) => {
+    await schemaIsReady();
+    if (String(req.body?.website ?? "")) return res.json({ ok: true });
+    const ip = String(req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "").split(",")[0].trim();
+    const recent = (asked.get(ip) ?? []).filter((t) => Date.now() - t < 10 * 60_000);
+    if (recent.length >= 5) return res.status(429).json({ message: "That's a few already. Try again in a few minutes." });
+    asked.set(ip, [...recent, Date.now()]);
+    const email = String(req.body?.email ?? "").trim().toLowerCase().slice(0, 200);
+    const firstName = String(req.body?.firstName ?? "").trim().slice(0, 60);
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ message: "That email doesn't look right." });
+    const [row] = await db.select({ id: contacts.id, tags: contacts.tags, firstName: contacts.firstName }).from(contacts).where(eq(sql`lower(${contacts.email})`, email)).limit(1);
+    let tags: string[] = [];
+    try { tags = JSON.parse(row?.tags || "[]"); } catch { tags = []; }
+    if (!tags.includes("magazine-copy")) tags.push("magazine-copy");
+    if (row) await db.update(contacts).set({ tags: JSON.stringify(tags), ...(!row.firstName && firstName ? { firstName } : {}) }).where(eq(contacts.id, row.id));
+    else await db.insert(contacts).values({ email, firstName, source: "magazine-copy", importedAt: now(), tags: JSON.stringify(tags) });
+    res.json({ ok: true });
   });
 
   /** Cut every show's segment from the day's recording (it also runs by itself when a recording finishes). */
