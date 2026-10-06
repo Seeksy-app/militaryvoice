@@ -408,7 +408,7 @@ export function LoginCard({ pending, start = false }: { pending: PendingSlotSumm
               ? pending
                 ? "No password needed. We'll email you a one-time code, then you'll set up your show once."
                 : start
-                  ? "No password, no card. We'll email you a 6-digit code, then you'll tell us what you're here for and add your name and photo. About two minutes."
+                  ? "No password, no card. We'll email you a 6-digit code, then you'll tell us what you're here for and add your name. About two minutes."
                   : "Enter your email and we'll send you a one-time code. New here? This creates your free account."
               : `Enter the 6-digit code we sent to ${email}.`}
           </CardDescription>
