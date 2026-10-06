@@ -331,7 +331,7 @@ export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
   });
 
   function exportCsv() {
-    const rows = [["Time", "Type", "Title", "Duration (min)", "Notes", "Podcaster", "Interviewer", "Materials"]];
+    const rows = [["Time", "Type", "Title", "Duration (min)", "Actual", "Actual (min)", "Notes", "Podcaster", "Interviewer", "Materials"]];
     for (const it of items ?? []) {
       const s = it.signupId ? signupById.get(it.signupId) : undefined;
       const mats = s ? (assetsByEmail.get(s.email.toLowerCase()) ?? []).map((a) => `${a.kind}: ${a.fileUrl || a.linkUrl}`).join(" | ") : "";
@@ -340,6 +340,8 @@ export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
         it.kind,
         it.title,
         String(it.durationMinutes),
+        it.actualStartAtUtc ? formatTimeInZone(new Date(it.actualStartAtUtc), zone) : "",
+        it.actualMinutes ? String(it.actualMinutes) : "",
         it.notes.replace(/\n/g, " "),
         s ? `${s.podcastName} (${s.hostName})` : "",
         s?.needsInterviewer ? "Needs interviewer" : "",
@@ -615,6 +617,16 @@ export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
                       {when ? formatDateInZone(when, zone) : ""}
                       {it.durationMinutes ? ` · ${it.durationMinutes}m` : ""}
                     </div>
+                    {it.actualStartAtUtc && (
+                      <div
+                        className="mt-1 rounded-md bg-emerald-50 px-1.5 py-0.5 text-[12px] font-semibold tabular-nums text-emerald-800 dark:bg-emerald-950/40 dark:text-emerald-300"
+                        title={it.actualNote || "When it really went on air"}
+                        data-testid={`run-actual-${it.id}`}
+                      >
+                        Actual {formatTimeInZone(new Date(it.actualStartAtUtc), zone)}
+                        {it.actualMinutes ? ` · ${it.actualMinutes}m` : ""}
+                      </div>
+                    )}
                   </div>
 
                   <div className="flex shrink-0 flex-col items-start gap-1">
@@ -650,6 +662,7 @@ export function RunOfShow({ adminGet, adminSend, eventId }: Props) {
                       )}
                     </div>
                     {it.notes && <div className="mt-0.5 whitespace-pre-line text-xs text-muted-foreground">{it.notes}</div>}
+                    {it.actualNote && <div className="mt-0.5 text-xs font-medium text-emerald-800 dark:text-emerald-300">On the day: {it.actualNote}</div>}
 
                     {s?.showFormat === "prerecorded" && (
                       it.mediaUrl.trim() ? (

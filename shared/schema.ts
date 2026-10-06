@@ -952,6 +952,11 @@ export const runOfShow = pgTable("run_of_show", {
   mediaLabel: text("media_label").notNull().default(""),
   // Set once an admin changes the wording; rebuild then leaves those fields be.
   edited: boolean("edited").notNull().default(false),
+  // What really happened, filled in after the day from the recording. Empty
+  // until then; the plan above stays as it was so the two can be compared.
+  actualStartAtUtc: text("actual_start_at_utc").notNull().default(""),
+  actualMinutes: integer("actual_minutes").notNull().default(0),
+  actualNote: text("actual_note").notNull().default(""),
   createdAt: text("created_at").notNull(),
 });
 export type RunItemRow = typeof runOfShow.$inferSelect;
@@ -966,6 +971,9 @@ export const runItemInputSchema = z.object({
   startAtUtc: z.string().trim(),
   durationMinutes: z.number().int().min(0).max(1440),
   signupId: z.number().int().positive().nullable().optional(),
+  actualStartAtUtc: z.string().trim().max(40).optional(),
+  actualMinutes: z.number().int().min(0).max(1440).optional(),
+  actualNote: z.string().trim().max(300).optional(),
 });
 export type RunItemInput = z.infer<typeof runItemInputSchema>;
 export type GeneratedRunItem = RunItemInput & { sourceKey: string };

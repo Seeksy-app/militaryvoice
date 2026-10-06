@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LayoutDashboard, MonitorPlay, ListOrdered, Users, Handshake, Megaphone, Mail, Contact, DollarSign, Settings2, CalendarDays, DoorOpen, PanelLeftClose, PanelLeftOpen, Film, Compass, BookOpen, BadgeCheck, BookUser, Activity, MessagesSquare, ClipboardList } from "lucide-react";
+import { LayoutDashboard, MonitorPlay, ListOrdered, Users, Handshake, Megaphone, Mail, Contact, DollarSign, Settings2, CalendarDays, DoorOpen, PanelLeftClose, PanelLeftOpen, Film, Compass, BookOpen, BadgeCheck, BookUser, Activity, MessagesSquare, ClipboardList, NotebookPen } from "lucide-react";
 
 // The admin's nav, down the left.
 //
@@ -54,6 +54,7 @@ export const EVENT_GROUPS: { title: string; items: AdminSection[] }[] = [
     title: "The event itself",
     items: [
       { key: "finances", label: "Finances", icon: DollarSign },
+      { key: "aar", label: "AAR", icon: NotebookPen },
       { key: "setup", label: "Event details", icon: Settings2 },
       // Not the event's, but needed from wherever you are.
       { key: "health", label: "System health", icon: Activity },
@@ -72,6 +73,7 @@ export const TOP_GROUPS: { title: string; items: AdminSection[] }[] = [
       { key: "directory", label: "Member Directory", icon: BookUser },
       // Contacts live in the event's CRM now — one CRM, not one per level.
       { key: "team", label: "Team", icon: Contact },
+      { key: "aar", label: "AAR", icon: NotebookPen },
       { key: "health", label: "System health", icon: Activity },
     ],
   },

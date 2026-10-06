@@ -174,6 +174,7 @@ import {
   type PublishResult,
 } from "./uploadPost.js";
 import type { HostPostRow, PostResult, PostMetrics } from "../shared/schema.js";
+import { PLATFORM_AAR, SI_PRODUCER_EVENT_AAR, MARATHON_EVENT_ID, aarTemplate } from "../shared/aar.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -7593,6 +7594,54 @@ export function registerRoutes(app: Express): void {
     }));
     await storage.setSetting(`finance_actuals:${eventId}`, JSON.stringify(lines));
     res.json({ lines });
+  });
+
+  // After-action reports. `scope` is "event:<id>" or "platform"; each author
+  // has their own copy. Until someone saves, the written starting text (or an
+  // empty template) is what comes back.
+  const aarKey = (scope: string, author: string) => `aar:${scope}:${author}`;
+  const aarScopeOk = (scope: string) => scope === "platform" || /^event:\d+$/.test(scope);
+  const aarDefault = (scope: string, author: string): unknown => {
+    if (scope === "platform") return author === "claude" ? PLATFORM_AAR : { ...aarTemplate("Michael", "Platform owner"), actions: [] };
+    if (author === "claude") return scope === `event:${MARATHON_EVENT_ID}` ? SI_PRODUCER_EVENT_AAR : aarTemplate("Claude", "SI producer");
+    return aarTemplate("Michael", "Event team");
+  };
+  app.get("/api/admin/aar", requireAdmin, async (req, res) => {
+    noStore(res);
+    if ((req as any).studioHost) return res.status(403).json({ message: "Admins only." });
+    const scope = String(req.query.scope ?? "");
+    const author = String(req.query.author ?? "") === "michael" ? "michael" : "claude";
+    if (!aarScopeOk(scope)) return res.status(400).json({ message: "Bad scope" });
+    const raw = await storage.getSetting(aarKey(scope, author));
+    let saved: unknown = null;
+    try { saved = raw ? JSON.parse(raw) : null; } catch { saved = null; }
+    res.json({ report: saved ?? aarDefault(scope, author), saved: !!saved });
+  });
+  app.put("/api/admin/aar", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost) return res.status(403).json({ message: "Admins only." });
+    const scope = String(req.body?.scope ?? "");
+    const author = String(req.body?.author ?? "") === "michael" ? "michael" : "claude";
+    if (!aarScopeOk(scope)) return res.status(400).json({ message: "Bad scope" });
+    const r = req.body?.report ?? {};
+    const str = (v: unknown, n: number) => String(v ?? "").slice(0, n);
+    const report = {
+      author: str(r.author, 80),
+      role: str(r.role, 80),
+      written: str(r.written, 40),
+      summary: str(r.summary, 3000),
+      sections: (Array.isArray(r.sections) ? r.sections : []).slice(0, 30).map((sec: any) => ({
+        id: str(sec?.id, 40),
+        heading: str(sec?.heading, 160),
+        prompt: str(sec?.prompt, 300),
+        ...(sec?.perspective ? { perspective: str(sec.perspective, 60) } : {}),
+        items: (Array.isArray(sec?.items) ? sec.items : []).slice(0, 60).map((i: unknown) => str(i, 1200)).filter(Boolean),
+      })),
+      ...(Array.isArray(r.actions)
+        ? { actions: r.actions.slice(0, 60).map((a: any) => ({ what: str(a?.what, 300), owner: str(a?.owner, 80), when: str(a?.when, 80) })).filter((a: any) => a.what) }
+        : {}),
+    };
+    await storage.setSetting(aarKey(scope, author), JSON.stringify(report));
+    res.json({ report, saved: true });
   });
 
   app.get("/api/admin/production-costs", requireAdmin, async (req, res) => {

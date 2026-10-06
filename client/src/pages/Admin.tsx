@@ -39,6 +39,7 @@ import type { AudienceSnapshot } from "@/components/AudienceReach";
 import { FinancesCard } from "@/components/FinancesCard";
 import { AdminClips } from "@/components/AdminClips";
 import { AdminSurvey } from "@/components/AdminSurvey";
+import { AdminAar } from "@/components/AdminAar";
 import { AdminNav, EVENT_GROUPS, TOP_GROUPS, EVENT_SECTION_KEYS, TOP_SECTION_KEYS } from "@/components/AdminNav";
 import { MagazineAdmin } from "@/components/MagazineAdmin";
 import Discover from "@/pages/Discover";
@@ -4995,6 +4996,13 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                 <TabsContent value="finances" className="mt-2 lg:mt-0">
                   <FinancesCard event={selectedEvent} />
                 </TabsContent>
+                <TabsContent value="aar" className="mt-2 lg:mt-0">
+                  <AdminAar
+                    scope={`event:${selectedEventId}`}
+                    title={selectedEvent.name}
+                    intro="How the event went, through the eyes of the people in it: the podcasters and guests, the co-hosts, the SI producer and the event team."
+                  />
+                </TabsContent>
                 <TabsContent value="health" className="mt-2 lg:mt-0">
                   <AdminHealth />
                 </TabsContent>
@@ -5066,6 +5074,13 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                   </TabsContent>
                   <TabsContent value="team" className="mt-2 lg:mt-0">
                     <TeamCard />
+                  </TabsContent>
+                  <TabsContent value="aar" className="mt-2 lg:mt-0">
+                    <AdminAar
+                      scope="platform"
+                      title="Running the platform: what 50 events at once will take"
+                      intro="The owner's view, not any one event's. What the Marathon taught us about running four times the shows and 50 events at the same time, with SI providing the service end to end."
+                    />
                   </TabsContent>
                 </div>
               </div>
