@@ -452,10 +452,13 @@ function TimeLeftPill({ slug, studioId }: { slug?: string; studioId?: number }) 
 }
 
 /** The producer's message, across the top until it's closed (one at a time; a new one shows again). */
-export function StudioNotice({ email, onStage = false }: { email: string; onStage?: boolean }) {
-  const { data } = useQuery<{ notice: { id: number; text: string; to: string; cue?: string; liveAt?: string } | null }>({
-    queryKey: ["/api/studio/notice"],
-    queryFn: async () => (await apiRequest("GET", "/api/studio/notice")).json(),
+export function StudioNotice({ email, onStage = false, slug, studioId }: { email: string; onStage?: boolean; slug?: string; studioId?: number }) {
+  const { data } = useQuery<{ notice: { id: number; text: string; to: string; cue?: string; liveAt?: string; from?: string } | null }>({
+    queryKey: ["/api/studio/notice", slug ?? "", studioId ?? 0],
+    queryFn: async () => {
+      const q = new URLSearchParams({ ...(slug ? { slug } : {}), ...(studioId ? { studioId: String(studioId) } : {}) });
+      return (await apiRequest("GET", `/api/studio/notice${q.toString() ? `?${q}` : ""}`)).json();
+    },
     refetchInterval: 3_000,
   });
   const n = data?.notice;
@@ -481,6 +484,21 @@ export function StudioNotice({ email, onStage = false }: { email: string; onStag
     const t = setTimeout(() => setClosed((s) => new Set(s).add(`mv-notice-${n.id}`)), 7000);
     return () => clearTimeout(t);
   }, [n?.id, n?.cue, forMe, counting]);
+  // A message makes a sound and, if this tab is in the background, a system
+  // notification: a pop-up nobody is looking at is just another chat.
+  const chimed = useRef<number>(0);
+  useEffect(() => {
+    if (!n || n.cue || !forMe || chimed.current === n.id) return;
+    try { if (localStorage.getItem(`mv-notice-${n.id}`)) return; } catch { /* show it */ }
+    chimed.current = n.id;
+    chime();
+    try {
+      if (document.visibilityState !== "visible" && "Notification" in window && Notification.permission === "granted") new Notification(`Message from ${n.from || "the producer"}`, { body: n.text });
+    } catch { /* the pop-up still shows */ }
+  }, [n?.id, n?.cue, forMe]);
+  useEffect(() => {
+    try { if ("Notification" in window && Notification.permission === "default") void Notification.requestPermission(); } catch { /* fine */ }
+  }, []);
   if (!n || closed.has(seenKey) || !forMe) return null;
   if (n.cue) {
     const secs = Math.ceil((liveAt - now) / 1000);
@@ -507,7 +525,7 @@ export function StudioNotice({ email, onStage = false }: { email: string; onStag
   };
   return (
     <div className="fixed inset-x-0 top-3 z-[95] mx-auto w-[min(94vw,40rem)] rounded-2xl bg-[#F0A71F] px-5 py-4 text-[#1a1200] shadow-2xl ring-4 ring-[#F0A71F]/30" role="alertdialog" aria-live="assertive" data-testid="studio-notice">
-      <div className="text-xs font-bold uppercase tracking-[0.12em]">Message from the producer</div>
+      <div className="text-xs font-bold uppercase tracking-[0.12em]">Message from {n.from || "the producer"}</div>
       <p className="mt-1 text-lg font-semibold leading-snug">{n.text}</p>
       <div className="mt-3 flex justify-end">
         <button type="button" onClick={close} className="rounded-full bg-[#1a1200] px-5 py-2 text-sm font-bold text-white hover:bg-black" data-testid="studio-notice-ok">Got it</button>
@@ -1207,7 +1225,7 @@ export default function Studio({ slug }: { slug?: string }) {
           <div className="flex h-56 flex-col">
             {joined && <TimeLeftPill slug={slug} studioId={studioId} />}
             {joined && onStage && <WrapUpClock slug={slug} studioId={studioId} />}
-            {joined && <StudioNotice email={state?.myEmail ?? state?.me?.email ?? ""} onStage={onStage} />}
+            {joined && <StudioNotice email={state?.myEmail ?? state?.me?.email ?? ""} onStage={onStage} slug={slug} studioId={studioId} />}
             <div className="min-h-0 flex-1">
               {joined && <UpNext slug={slug} studioId={studioId} compact fill />}
             </div>
@@ -1412,6 +1430,9 @@ export default function Studio({ slug }: { slug?: string }) {
                     </div>
                   )}
                 </div>
+
+                {/* The one way a live segment ends by itself: the people on it say so. */}
+                {onStage && !isAdmin && <DoneButton clientKey={key} slug={slug} studioId={studioId} />}
 
                 {/* Your controls and your checks, directly under your own face. */}
                 <div className="mt-2 flex flex-wrap items-center gap-1.5">
@@ -1771,5 +1792,58 @@ export default function Studio({ slug }: { slug?: string }) {
         )}
       </div>
     </div>
+  );
+}
+
+/** Two soft notes, made in the browser: no file to load, works the first time. */
+function chime() {
+  try {
+    const Ctx = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+    const ctx = new Ctx();
+    [0, 0.18].forEach((t, i) => {
+      const o = ctx.createOscillator();
+      const g = ctx.createGain();
+      o.frequency.value = i ? 1046 : 784;
+      g.gain.setValueAtTime(0.0001, ctx.currentTime + t);
+      g.gain.exponentialRampToValueAtTime(0.25, ctx.currentTime + t + 0.02);
+      g.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + t + 0.35);
+      o.connect(g).connect(ctx.destination);
+      o.start(ctx.currentTime + t);
+      o.stop(ctx.currentTime + t + 0.4);
+    });
+    setTimeout(() => void ctx.close(), 1000);
+  } catch { /* no sound, the pop-up still shows */ }
+}
+
+/**
+ * "We're done": two taps, so a brush of the hand never ends a show. The
+ * producer's console hears it; in SI-Auto the next scene is taken at once.
+ */
+function DoneButton({ clientKey, slug, studioId }: { clientKey: string; slug?: string; studioId?: number }) {
+  const [armed, setArmed] = useState(false);
+  const [sent, setSent] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const t = setTimeout(() => setArmed(false), 4000);
+    return () => clearTimeout(t);
+  }, [armed]);
+  const press = async () => {
+    if (!armed) { setArmed(true); return; }
+    setArmed(false);
+    try {
+      await apiRequest("POST", "/api/studio/done", { clientKey, slug, studioId });
+      setSent(true);
+      setTimeout(() => setSent(false), 8000);
+    } catch { /* the producer can still move it on */ }
+  };
+  return (
+    <button
+      type="button"
+      onClick={() => void press()}
+      className={`mt-2 flex w-full items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-bold transition ${sent ? "bg-emerald-600 text-white" : armed ? "bg-[#ED1C24] text-white" : "bg-white/10 text-white ring-1 ring-white/25 hover:bg-white/20"}`}
+      data-testid="button-studio-done"
+    >
+      {sent ? "Thanks — the team knows you're done" : armed ? "Tap again to finish your segment" : "We're done"}
+    </button>
   );
 }

@@ -4281,6 +4281,25 @@ export function registerRoutes(app: Express): void {
     res.json({ ok: true });
   });
 
+  /**
+   * "We're done": the people on stage say their segment is over. In SI-Auto
+   * the next scene is taken at once; in Manual the producer is told. This is
+   * the only thing that moves a live segment on by itself (6 Oct AAR: three
+   * shows were cut into on the clock or on a queued instruction).
+   */
+  app.post("/api/studio/done", async (req, res) => {
+    const found = await studioForSlug(typeof req.body?.slug === "string" ? req.body.slug : undefined, numParam(req.body?.studioId), req);
+    const key = typeof req.body?.clientKey === "string" ? req.body.clientKey : "";
+    if (!found || !key) return res.status(404).json({ message: "No studio" });
+    const me = (await storage.listStudioParticipants(found.studio.id)).find((p) => p.clientKey === key);
+    if (!me || me.state !== "On stage") return res.status(403).json({ message: "Only the people on stage can say they're done." });
+    res.json(await markDone(found.studio.id, me.displayName));
+  });
+  app.post("/api/admin/studio/done", requireAdmin, async (req, res) => {
+    const { studio } = await adminStudio(req);
+    res.json(await markDone(studio.id, "The producer"));
+  });
+
   // ---- Studio: the control room -------------------------------------------------
   /** Every studio for the event. The first is the event's own; the rest are
    *  side rooms — a rehearsal, a test, a second stage running in parallel. */
@@ -5091,6 +5110,24 @@ export function registerRoutes(app: Express): void {
     };
   }
 
+  /** How this scene moves on: its own setting, else the studio's. */
+  const transitionOf = (studio: StudioRow, scene?: SceneRow | null) => (scene?.transition || studio.transitionMode || "auto") as "auto" | "manual";
+  /** Anyone live on stage who isn't the producer's own console. */
+  async function liveOnStage(studioId: number) {
+    return (await storage.listStudioParticipants(studioId)).filter((p) => p.state === "On stage" && withPresence(p) && !p.clientKey.startsWith("admin:"));
+  }
+  async function markDone(studioId: number, by: string) {
+    const studio = await storage.getStudioById(studioId);
+    if (!studio?.currentSceneId) return { done: true, advanced: false };
+    await storage.updateStudio(studio.id, { doneSceneId: studio.currentSceneId });
+    const list = await storage.listScenes(studio.id);
+    const cur = list.find((x) => x.id === studio.currentSceneId);
+    const next = list[list.findIndex((x) => x.id === studio.currentSceneId) + 1];
+    if (!next || transitionOf(studio, cur) === "manual") return { done: true, advanced: false, by };
+    const r = await applyScene(next.id);
+    return { done: true, advanced: r.status === 200, sceneId: next.id, by };
+  }
+
   async function applyScene(sceneId: number): Promise<{ status: number; body: unknown }> {
     const scene = await storage.getScene(sceneId);
     if (!scene) return { status: 404, body: { message: "Not found" } };
@@ -5110,7 +5147,9 @@ export function registerRoutes(app: Express): void {
         // A hand-off with a live co-host at the desk is a slide first: thanks to
         // the speaker who just finished, and the co-host adds themselves to it.
         const handoff = row.kind === "Handoff" ? await handoffFor(studio.eventId, row) : null;
-        const taken = await takeRunRow(studio, row, { keepPeople: scene.withPeople, hostsAddThemselves: Boolean(handoff?.desk && handoff.thanks) });
+        const rule = scene.stageOnTake || studio.stageOnTake || "smart";
+        const taken = await takeRunRow(studio, row, { keepPeople: scene.withPeople || rule === "keep", hostsAddThemselves: Boolean(handoff?.desk && handoff.thanks) });
+        await bringScenePeople(studio, scene, rule === "clear");
         const who = row.signupId ? await storage.getSignupById(row.signupId) : undefined;
         const sponsor = row.signupId ? (await sponsorsBySignup(studio.eventId)).get(row.signupId) : undefined;
         // A podcaster's segment names them at the bottom of the frame without
@@ -5191,6 +5230,9 @@ export function registerRoutes(app: Express): void {
       }
     }
 
+    // The stage rule: clear sends everyone back to the green room first;
+    // either way the scene's own people come on with it.
+    await bringScenePeople(studio, scene, (scene.stageOnTake || studio.stageOnTake) === "clear");
     // A host or co-host on stage keeps the stage: a clip or picture plays beside them.
     const hostOnStage = await (async () => {
       const hs = await showHosts();
@@ -5343,9 +5385,13 @@ export function registerRoutes(app: Express): void {
    * green room screen until it's closed. `to` (an email) narrows it to one person.
    * Guests missed emails all day on 5 Oct; this is the one place they look.
    */
-  app.get("/api/studio/notice", async (_req, res) => {
+  // One notice per studio, so two events running at once never see each
+  // other's messages. (The old global key is still read as a fallback.)
+  const noticeKey = (studioId: number) => `studio_notice:${studioId}`;
+  app.get("/api/studio/notice", async (req, res) => {
     noStore(res);
-    const raw = await storage.getSetting("studio_notice");
+    const found = await studioForSlug(typeof req.query.slug === "string" ? req.query.slug : undefined, numParam(req.query.studioId), req).catch(() => null);
+    const raw = (found ? await storage.getSetting(noticeKey(found.studio.id)) : "") || (await storage.getSetting("studio_notice"));
     let notice: { cue?: string; at?: string } | null = null;
     try { notice = raw ? JSON.parse(raw) : null; } catch { notice = null; }
     // A cue ("you're live") is for that moment only: nobody arriving later hears it.
@@ -5356,38 +5402,49 @@ export function registerRoutes(app: Express): void {
     const text = String(req.body?.text ?? "").trim().slice(0, 400);
     let to = String(req.body?.to ?? "").trim().toLowerCase();
     const cue = req.body?.cue === "live" ? "live" : "";
-    // "stage" means whoever is on stage now, by email: a guest's page stops
-    // asking whether it's on stage once it has joined, so it can't decide itself.
-    if (to === "stage") {
-      const { studio } = await adminStudio(req);
-      to = (await storage.listStudioParticipants(studio.id)).filter((p) => p.state === "On stage" && withPresence(p) && p.email).map((p) => p.email.trim().toLowerCase()).join(",");
+    const { studio } = await adminStudio(req);
+    // "stage" and "greenroom" mean whoever is there now, by email: a guest's
+    // page can't tell which room the producer meant once it has joined.
+    const audience = to === "stage" ? "On stage" : to === "greenroom" ? "Green room" : "";
+    if (audience) {
+      to = (await storage.listStudioParticipants(studio.id)).filter((p) => p.state === audience && withPresence(p) && p.email && !p.clientKey.startsWith("admin:")).map((p) => p.email.trim().toLowerCase()).join(",");
+      if (!to) return res.status(409).json({ message: audience === "On stage" ? "Nobody is on stage." : "Nobody is in the green room." });
     }
     // The go signal counts down on their screen first: "You're live in 5, 4…".
     const countdown = cue ? Math.max(0, Math.min(15, Number(req.body?.countdown ?? 5) || 0)) : 0;
     const now = Date.now();
-    const v = text ? { id: now, text, to, cue, countdown, liveAt: new Date(now + countdown * 1000).toISOString(), at: new Date(now).toISOString() } : null;
-    await storage.setSetting("studio_notice", v ? JSON.stringify(v) : "");
+    const from = String(req.body?.from ?? "").trim().slice(0, 40) || "the producer";
+    const v = text ? { id: now, text, to, cue, countdown, from, liveAt: new Date(now + countdown * 1000).toISOString(), at: new Date(now).toISOString() } : null;
+    await storage.setSetting(noticeKey(studio.id), v ? JSON.stringify(v) : "");
+    await storage.setSetting("studio_notice", "");
     res.json(v ?? { cleared: true });
   });
 
   /** Producer's switch: "off" stops the console taking any scene by itself (a show running long). */
+  // Kept for the console's old switch: now this studio's own transition mode,
+  // so turning it off for one event never turns it off for another.
   app.post("/api/admin/studio/auto-take", requireAdmin, async (req, res) => {
-    await storage.setSetting("auto_take", req.body?.on === false ? "off" : "on");
+    const { studio } = await adminStudio(req);
+    await storage.updateStudio(studio.id, { transitionMode: req.body?.on === false ? "manual" : "auto" });
     res.json({ on: req.body?.on !== false });
   });
 
   app.post("/api/admin/studio/auto-tick", requireAdmin, async (req, res) => {
     noStore(res);
-    if ((await storage.getSetting("auto_take")) === "off") return res.json({ action: "none" });
     const { studio } = await adminStudio(req);
     const list = await storage.listScenes(studio.id);
     const i = list.findIndex((x) => x.id === studio.currentSceneId);
     const cur = i >= 0 ? list[i] : undefined;
     const next = i >= 0 ? list[i + 1] : undefined;
     if (!cur || !next) return res.json({ action: "none" });
-    const live = await liveHandoffAfter(studio, cur, next);
-    const alex = live ? null : await alexAfter(cur, next);
-    if (!live && !alex) {
+    if (transitionOf(studio, cur) === "manual") return res.json({ action: "none" });
+    // Nothing moves on the clock while anyone live is on stage: only their
+    // "We're done" (or the producer's press) does. The console says so.
+    const live = (await liveOnStage(studio.id)).length;
+    if (live && studio.doneSceneId !== cur.id) return res.json({ action: "wait-done", why: `${live === 1 ? "The person" : `The ${live} people`} on stage move on when they press "We're done"`, deskName: "" });
+    const handoffLive = await liveHandoffAfter(studio, cur, next);
+    const alex = handoffLive ? null : await alexAfter(cur, next);
+    if (!handoffLive && !alex) {
       // A clip that ended early into a later intro is holding on the standby
       // loop (see /ended): the intro goes at its own time.
       const nr = next.runItemId && cur.autoNext && studio.fallbackVideoUrl && studio.stageMediaUrl === studio.fallbackVideoUrl ? await storage.getRunItem(next.runItemId) : undefined;
@@ -5399,8 +5456,8 @@ export function registerRoutes(app: Express): void {
       }
       return res.json({ action: "none" });
     }
-    const row = live?.row ?? alex!.row;
-    const deskName = live?.deskName ?? "Alex";
+    const row = handoffLive?.row ?? alex!.row;
+    const deskName = handoffLive?.deskName ?? "Alex";
     // A pre-recorded episode switches when its file ends; Alex's own hand-off clip has ended by the intro's time.
     if (cur.mediaUrl && studio.stageMediaPlaying && alex?.step !== "intro") return res.json({ action: "wait", why: "the episode switches to the thank-you slide when it ends", deskName, at: row.startAtUtc });
     const windowSeconds = Math.round((Date.parse(row.startAtUtc) - Date.now()) / 1000);
@@ -5440,6 +5497,8 @@ export function registerRoutes(app: Express): void {
     const list = await storage.listScenes(studio.id);
     const next = list[list.findIndex((s) => s.id === scene.id) + 1];
     if (!next) return res.json({ advanced: false });
+    // Manual: the clip ends and the stage waits for a press.
+    if (transitionOf(studio, scene) === "manual") return res.json({ advanced: false, manual: true });
     // Alex's hand-off runs straight into the next intro when that show is close
     // (John at 7:30 after the 7:25 clip). Further off on the day, the standby
     // spot loops and the intro waits for its own time on the auto-tick, so
@@ -5523,6 +5582,29 @@ export function registerRoutes(app: Express): void {
    * steps off unless the podcaster asked for an interviewer. Every other kind
    * of row is the host's — intro, handoff, sponsor read.
    */
+  /**
+   * A scene's named people come on stage with it ("Awards slide + the host"),
+   * if they're in the room. With `clear`, everyone else goes back to the
+   * green room first — except the producer's own console, which nobody moves.
+   */
+  async function bringScenePeople(studio: StudioRow, scene: SceneRow, clear: boolean) {
+    const want = new Set(scene.stagePeople.split(",").map((e) => e.trim().toLowerCase()).filter(Boolean));
+    if (!want.size && !clear) return;
+    const present = (await storage.listStudioParticipants(studio.id)).filter(withPresence);
+    let onStage = present.filter((p) => p.state === "On stage").length;
+    for (const p of present) {
+      const mine = want.has(p.email.trim().toLowerCase());
+      let target = p.state as "On stage" | "Green room";
+      if (mine) target = "On stage";
+      else if (clear && !p.clientKey.startsWith("admin:")) target = "Green room";
+      if (target === p.state) continue;
+      if (target === "On stage" && onStage >= studio.maxOnStage) continue;
+      onStage += target === "On stage" ? 1 : -1;
+      await storage.setParticipantState(p.id, target);
+      await syncParticipantState(roomName(studio.id), `p-${p.id}`, target);
+    }
+  }
+
   async function takeRunRow(studio: StudioRow, row: RunItemRow, opts: { keepPeople?: boolean; hostsAddThemselves?: boolean } = {}) {
     const signup = row.signupId ? await storage.getSignupById(row.signupId) : undefined;
     const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();

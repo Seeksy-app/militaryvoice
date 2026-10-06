@@ -1156,6 +1156,17 @@ export const studios = pgTable("studios", {
   // it to. The difference between the two is the show clock: it is what tells
   // Alex whether she has ninety seconds to fill or none at all.
   currentSceneTakenAtUtc: text("current_scene_taken_at_utc").notNull().default(""),
+  // How this studio moves between scenes (6 Oct AAR). "auto": SI moves on —
+  // when a clip ends, or when the people on stage say "We're done" — and never
+  // on the clock while anyone live is on stage. "manual": only a press moves it.
+  transitionMode: text("transition_mode").notNull().default("auto"),
+  // What taking a scene does to the people on stage. "smart": a show's
+  // segment brings its people on and the rest off, a slide or clip leaves the
+  // stage alone (how the Marathon ran); "keep": nobody is moved; "clear":
+  // everyone goes back to the green room except the scene's own people.
+  stageOnTake: text("stage_on_take").notNull().default("smart"),
+  // The scene the stage said "We're done" on. A take moves past it.
+  doneSceneId: integer("done_scene_id").notNull().default(0),
   // A running countdown, as the instant it reaches zero. The clock is drawn by
   // every viewer against their own time, so it stays in step without a tick
   // being pushed to anyone.
@@ -1204,6 +1215,13 @@ export const scenes = pgTable("scenes", {
    *  clears it). Empty means "leave whatever is up". */
   stageLayout: text("stage_layout").notNull().default(""),
   backgroundUrl: text("background_url").notNull().default(""),
+  /** This scene's own way of moving on ("auto" | "manual"); empty follows the studio. */
+  transition: text("transition").notNull().default(""),
+  /** This scene's own stage rule ("keep" | "clear"); empty follows the studio. */
+  stageOnTake: text("stage_on_take").notNull().default(""),
+  /** People this scene brings on stage with it, by email, comma-separated:
+   *  "Awards slide + the host" is a scene, not two presses. */
+  stagePeople: text("stage_people").notNull().default(""),
   createdAt: text("created_at").notNull(),
 });
 export type SceneRow = typeof scenes.$inferSelect;
@@ -1924,6 +1942,8 @@ export const studioUpdateSchema = z.object({
   bannerVisible: z.boolean().optional(),
   tickerText: z.string().trim().max(600).optional(),
   tickerVisible: z.boolean().optional(),
+  transitionMode: z.enum(["auto", "manual"]).optional(),
+  stageOnTake: z.enum(["smart", "keep", "clear"]).optional(),
 });
 
 
@@ -1945,6 +1965,9 @@ export const sceneInputSchema = z.object({
   withPeople: z.boolean().optional(),
   stageLayout: z.union([z.enum(STAGE_LAYOUTS), z.literal("")]).optional(),
   backgroundUrl: z.string().trim().max(600).optional(),
+  transition: z.enum(["", "auto", "manual"]).optional(),
+  stageOnTake: z.enum(["", "keep", "clear"]).optional(),
+  stagePeople: z.string().trim().max(1000).optional(),
 });
 export const scenePatchSchema = sceneInputSchema.partial();
 

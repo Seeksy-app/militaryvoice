@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
 import { PlatformIcon, platformBackground } from "@/components/SocialIcons";
 import type { PublicDestination, SocialPlatform } from "@shared/schema";
@@ -1693,7 +1694,23 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
               </div>
             )}
             {/* No pill for Michael's chat: one door, the big card, and the producer works it from the green room. */}
-            {autoNote && autoNote.action !== "take" && (
+            {autoNote?.action === "wait-done" && (
+              <button
+                type="button"
+                onClick={() => {
+                  adminSend("POST", "/api/admin/studio/done", { studioId })
+                    .then(() => { setAutoNote(null); void queryClient.invalidateQueries(); })
+                    .catch((e: Error) => toast({ title: "Couldn't move on", description: e.message, variant: "destructive" }));
+                }}
+                className="flex h-9 max-w-[24rem] items-center gap-2 rounded-full bg-white/10 px-3 text-xs font-semibold text-white/85 ring-1 ring-white/15 hover:bg-white/15"
+                title={`${autoNote.why}. Press when they've finished to take the next scene.`}
+                data-testid="studio-wait-done"
+              >
+                <Sparkles className="h-3.5 w-3.5 shrink-0" />
+                <span className="truncate">Waiting for "We're done" · they're done →</span>
+              </button>
+            )}
+            {autoNote && autoNote.action !== "take" && autoNote.action !== "wait-done" && (
               <div
                 className={`flex h-9 max-w-[22rem] items-center gap-2 rounded-full px-3 text-xs font-semibold ${autoNote.action === "escalate" ? "bg-[#ED1C24] text-white" : autoNote.action === "hold" ? "bg-[#F0A71F]/20 text-[#F0A71F] ring-1 ring-[#F0A71F]/60" : "bg-white/10 text-white/80 ring-1 ring-white/15"}`}
                 title={autoNote.why}
@@ -2469,6 +2486,11 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                 </button>
               )}
 
+              {/* A pop-up, Zoom-style: to everyone, the stage, the green room
+                  or one person. It covers the top of their screen with a sound
+                  until they press Got it — chat alone was missed all day. */}
+              {!isRoom && <PopupComposer adminSend={adminSend} studioId={studioId ?? undefined} people={present.filter((p) => p.email && !p.clientKey.startsWith("admin:")).map((p) => ({ email: p.email, name: p.displayName, state: p.state }))} />}
+
               {/* Standby, down here with the other show controls rather than up
                   beside the destinations and End stream: roll or stop it, and
                   pick which clip it plays. */}
@@ -2555,6 +2577,33 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                   </button>
                 </PopoverTrigger>
                 <PopoverContent align="center" side="top" className="w-72 space-y-3">
+                  {/* The event planner's two choices (6 Oct AAR): how the show
+                      moves between scenes, and what taking a scene does to the
+                      people on stage. A scene can override either. */}
+                  <div>
+                    <Label className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">Moving between scenes</Label>
+                    <Select value={studio?.transitionMode ?? "auto"} onValueChange={(v) => patchStudio.mutate({ transitionMode: v })}>
+                      <SelectTrigger className="mt-1 h-9" data-testid="select-deck-transition"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="auto">SI-Auto: on "We're done" or when a clip ends</SelectItem>
+                        <SelectItem value="manual">Manual: only when you press</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="mt-1 text-[11px] text-muted-foreground">Never on the clock while someone live is on stage.</p>
+                  </div>
+                  <div>
+                    <Label className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">When a scene is taken</Label>
+                    <Select value={studio?.stageOnTake ?? "smart"} onValueChange={(v) => patchStudio.mutate({ stageOnTake: v })}>
+                      <SelectTrigger className="mt-1 h-9" data-testid="select-deck-stage-on-take"><SelectValue /></SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="smart">Smart: a show brings its own people</SelectItem>
+                        <SelectItem value="keep">Keep everyone on stage</SelectItem>
+                        <SelectItem value="clear">Clear the stage</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <p className="mt-1 text-[11px] text-muted-foreground">A scene's own people always come on with it.</p>
+                  </div>
+                  <div className="border-t border-border" />
                   {/* Which microphone, speaker and camera. The browser used to
                       pick silently, so every audio problem started as a guess:
                       wrong device, wrong output, or a real fault, and no way
@@ -3239,5 +3288,56 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
       </CardContent>
       )}
     </Card>
+  );
+}
+
+/** The console's pop-up sender: who, what, send. */
+function PopupComposer({ studioId, people, adminSend }: { studioId?: number; people: { email: string; name: string; state: string }[]; adminSend: Props["adminSend"] }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [to, setTo] = useState("");
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const send = async () => {
+    setBusy(true);
+    try {
+      await adminSend("POST", "/api/admin/studio/notice", { studioId, to, text });
+      toast({ title: "Pop-up sent", description: to === "" ? "Everyone in the studio sees it." : to === "stage" ? "Everyone on stage sees it." : to === "greenroom" ? "Everyone in the green room sees it." : `${people.find((p) => p.email === to)?.name ?? to} sees it.` });
+      setText("");
+      setOpen(false);
+    } catch (e) {
+      toast({ title: "Couldn't send the pop-up", description: (e as Error).message, variant: "destructive" });
+    }
+    setBusy(false);
+  };
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <button type="button" title="Send a pop-up message" className="flex w-[4.75rem] flex-col items-center gap-1 rounded-xl px-1 py-2 text-[11px] font-medium leading-none text-[#F0A71F] transition-colors hover:bg-[#F0A71F]/15" data-testid="button-deck-popup">
+          <MessagesSquare className="h-5 w-5" />
+          <span className="w-full truncate text-center">Pop-up</span>
+        </button>
+      </PopoverTrigger>
+      <PopoverContent align="center" side="top" className="w-80 space-y-3">
+        <div>
+          <Label className="text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">To</Label>
+          <Select value={to || "everyone"} onValueChange={(v) => setTo(v === "everyone" ? "" : v)}>
+            <SelectTrigger className="mt-1 h-9" data-testid="select-popup-to"><SelectValue /></SelectTrigger>
+            <SelectContent>
+              <SelectItem value="everyone">Everyone</SelectItem>
+              <SelectItem value="stage">Everyone on stage</SelectItem>
+              <SelectItem value="greenroom">Everyone in the green room</SelectItem>
+              {people.map((p) => (
+                <SelectItem key={p.email} value={p.email}>{p.name} · {p.state === "On stage" ? "on stage" : "green room"}</SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <Textarea rows={3} maxLength={400} value={text} onChange={(e) => setText(e.target.value)} placeholder="You're on in 2 minutes." data-testid="input-popup-text" />
+        <Button className="w-full" disabled={busy || !text.trim()} onClick={() => void send()} data-testid="button-popup-send">
+          {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Send pop-up
+        </Button>
+      </PopoverContent>
+    </Popover>
   );
 }
