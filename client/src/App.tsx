@@ -40,6 +40,7 @@ import Platform from "@/pages/Platform";
 import Headshot from "@/pages/Headshot";
 import Keepsake from "@/pages/Keepsake";
 import Survey from "@/pages/Survey";
+import HomeCreators from "@/pages/HomeCreators";
 import Watchfloor from "@/pages/Watchfloor";
 import EventAbout from "@/pages/EventAbout";
 import Studio from "@/pages/Studio";
@@ -89,7 +90,8 @@ function AppRouter() {
     <Switch>
       {/* "/" is the featured event's landing page while there's one event;
           it becomes the events hub once there are several. */}
-      <Route path="/">{() => <Landing />}</Route>
+      <Route path="/">{() => <HomeCreators />}</Route>
+      <Route path="/marathon">{() => <Landing />}</Route>
       <Route path="/event/:slug/agenda">{(params) => <Agenda slug={params.slug} />}</Route>
       <Route path="/event/:slug/schedule">{(params) => <Home slug={params.slug} />}</Route>
       <Route path="/event/:slug">{(params) => <Landing slug={params.slug} />}</Route>

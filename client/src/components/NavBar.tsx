@@ -26,10 +26,8 @@ function scrollToAnchor(e: React.MouseEvent<HTMLAnchorElement>, href: string) {
   // else: fall through to native navigation (different page)
 }
 
-// Section anchors live on the landing page.
+// The platform's front door; the Marathon has its own page now (/marathon).
 const LINKS: { href: string; label: string; anchor?: boolean }[] = [
-  { href: "/#podcasters", label: "Podcasters", anchor: true },
-  { href: "/#listeners", label: "Listeners", anchor: true },
   { href: "/events", label: "Events" },
   { href: "/discover", label: "Discovery" },
   { href: "/directory", label: "Directory" },

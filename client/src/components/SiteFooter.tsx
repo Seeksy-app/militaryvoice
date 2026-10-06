@@ -25,8 +25,9 @@ export function SiteFooter({ slug, note }: { slug?: string; /** A small line abo
     {
       title: "The Podcast Marathon",
       links: [
-        { href: "/#podcasters", label: "Podcasters", external: true },
-        { href: "/#listeners", label: "Listeners", external: true },
+        { href: "/marathon", label: "Replay and lineup" },
+        { href: "/marathon#podcasters", label: "Podcasters", external: true },
+        { href: "/keepsake", label: "Keepsake magazine" },
         { href: scheduleHref, label: "Schedule" },
         { href: agendaHref, label: "Agenda" },
         { href: "/prepare", label: "Podcaster guide" },
