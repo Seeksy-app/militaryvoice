@@ -92,7 +92,8 @@ export const SI_PRODUCER_EVENT_AAR: AarReport = {
         "Mid-afternoon a 26-minute gap (3:00–3:26) was filled from the desk and the video bank.",
         "At 4:47 PM the stage recording hit its 3-hour file cap; about 10 minutes (4:47–4:57) are missing from the master. The on-demand version carries a card there.",
         "9:16–9:28 PM was filled with videos while the last live pair reached the green room.",
-        "Two live segments were cut early by the producer's switching: one at 6:53 PM on the clock while the guest was still talking, one at 9:55 PM when a queued instruction was taken as the cue that they were done. The second pair was brought back within a minute with an apology.",
+        "Three live shows were cut into by our switching. At about 1:24 PM the desk slide took the stage on the clock in the middle of a live show; it was back full screen about two minutes later, minus one guest, and automatic scene changes stayed off for the rest of the day. At 6:53 PM a guest was cut off on the clock while still talking. At 9:55 PM a pair was cut when a queued instruction was taken as the cue that they were done; they were back within a minute, with an apology.",
+        "To fit the 1:00 show in after it was found, the recorded episode before it was stopped after 14 minutes of its 25.",
         "Closing ceremonies, the sponsors slide and both award slides went out as planned; the host closed at about 10:24 PM.",
         "Overnight: the full-day on-demand video (six parts, 31 chapters) was rebuilt from audio matching; thank-you, gift and survey emails went at 7:30 AM; the clip queue ran podcasters first.",
         "Next day: 33 survey invitations delivered, 0 answers by early afternoon.",
@@ -152,7 +153,7 @@ export const SI_PRODUCER_EVENT_AAR: AarReport = {
       items: [
         "Right: running the rail, rolling clips, sending pop-ups and filing recordings while the show was on worked, and kept a person free to talk to guests.",
         "Right: building slides, a 30-second spot and a QR form mid-show and putting them on air within the hour.",
-        "Wrong: I cut two live segments early. At 6:53 PM I switched on the clock because I could not hear the show; at 9:55 PM I took \"play X then Y\" as the end of a segment. Neither the clock nor a queued instruction means \"done\". The rule now: ask \"are they done?\" before ending any live segment.",
+        "Wrong: three live shows were cut into on my watch. At 1:24 PM the desk slide I had left on automatic took over a live show; at 6:53 PM I switched on the clock because I could not hear the show; at 9:55 PM I took \"play X then Y\" as the end of a segment. Neither the clock nor a queued instruction means \"done\". The rule now: nothing moves on its own while people are live, and I ask \"are they done?\" before ending any live segment.",
         "Wrong: I had no reliable signal that a segment had ended — no \"done\" button, no silence detection. I relied on someone telling me.",
         "Wrong: there was no log of scene takes, so the chapters and the on-demand cuts had to be rebuilt overnight by matching audio.",
         "Wrong: one 4K source stalled the clip queue for hours before it was found and held.",
@@ -255,7 +256,7 @@ export const STAGE_MANAGER_EVENT_AAR: AarReport = {
         "The emergency \"we'll be right back\" button was pressed five times during the day, each one an alarm to the studio chat.",
         "Evening: the desk co-host asked me 20+ questions about the run of show — am I interviewing him, is she live or recorded, who's up, can you hear me. Many got \"Michael will sort that out\" from the automatic first answer before a real answer came.",
         "Some automatic answers in my name were wrong: telling a co-host at 6:12 PM that her slot was at 2:00 PM, and at 9:56 PM to wait for \"your 2:00 PM slot\". They came from the original sheet, not the live stage.",
-        "At 6:53 PM a guest was cut off mid-sentence; the co-host asked us to \"listen and wait before switching\". From then on every hand-off waited for a spoken \"done\".",
+        "Three live shows were cut into. At 1:24 PM the desk slide took over a live show a few minutes after its guests finally reached the stage; we reset their countdown to a full 25 minutes and told them they were good to go. At 6:53 PM a guest was cut off mid-sentence and the co-host asked us to \"listen and wait before switching\". At 9:55 PM a pair was cut and brought straight back. From then on every hand-off waited for a spoken \"done\".",
       ],
     },
     {
