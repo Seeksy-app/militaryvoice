@@ -37,6 +37,7 @@ import {
   SquarePen,
   Menu,
   CircleHelp,
+  Check,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -74,13 +75,14 @@ import { RecordingsScreen } from "@/components/RecordingsScreen";
 import { PostStudio, NavCredits } from "@/components/PostStudio";
 import { FloatingChecklist } from "@/components/FloatingChecklist";
 import { MyEvents } from "@/components/MyEvents";
+import { buildSteps, goToStep } from "@/components/NextSteps";
 import { PromotionScreen } from "@/components/PromotionScreen";
 import { SocialScreen } from "@/components/SocialScreen";
 import { GreenRoomScreen } from "@/components/GreenRoomScreen";
 import { ZoomConnect } from "@/components/ZoomConnect";
 import Discover from "@/pages/Discover";
 import { ContactsScreen } from "@/components/ContactsScreen";
-import { CommandCenter, TodoStrip } from "@/components/CommandCenter";
+import { CommandCenter } from "@/components/CommandCenter";
 import { IntentPicker } from "@/components/IntentPicker";
 import { MyAnalytics } from "@/components/MyAnalytics";
 import { PodcastChips, usePodcastSources, ListingChips, useListings } from "@/components/PodcastStats";
@@ -1099,6 +1101,34 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   // The public nav is for people deciding whether to take part; somebody who
   // has already taken a slot just loses a band of screen to it.
   const workspace = !!data && hasProfile && !inSetup;
+  // Which path they came in on (podcaster, creator, planner): the dashboard follows it.
+  const path = pathOf(profile?.interests);
+  const checklistState = {
+    hasShow: !!hostEvents?.some((e) => !!e.show?.showName),
+    hasSlot: (data?.mySignups.length ?? 0) > 0,
+    slotsOpen: !eventIsFull,
+    hasAccounts: (social?.accounts?.length ?? 0) > 0,
+    hasMaterials: (hostAssets?.length ?? 0) > 0 || Boolean(profile?.mediaAnswered),
+    hasYouTube: Boolean(youtube?.connected),
+    hasPhoto: Boolean(profile?.photoUrl),
+    hasSmartLink: Boolean(bioMine?.page?.published),
+    hasPodcast: (hostingMine?.shows?.length ?? 0) > 0,
+    hasClips: (recsMine ?? []).some((r) => r.clipStatus === "done"),
+    interests: profile?.interests ?? "",
+    eventOpen,
+    hasOwnEvent: (myEventsList?.length ?? 0) > 0,
+  };
+  const checklistNav = {
+    onGoEvents: () => goTo("events"),
+    onGoIntegrations: () => goTo("integrations"),
+    onGoPromotion: () => goTo("promotion"),
+    onGoProfile: () => goTo("editProfile"),
+    onGoPage: () => goTo("page"),
+    onGoPodcast: () => goTo("podcast"),
+    onGoDiscovery: () => goTo("discovery"),
+    onGoPostify: () => goTo("postify"),
+    onGoMyEvents: () => goTo("myevents"),
+  };
 
   return (
     <div className="min-h-screen">
@@ -1582,11 +1612,16 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                     </CreateMenu>
                     {[
                       // Short names on a phone, where the long ones were cut ("Your anal…").
+                      // The row follows their path: a planner's events first, a creator's SmartLink.
+                      ...(path === "planner" ? [{ key: "myevents", label: "My events", short: "Events", hint: "Create and run yours", icon: CalendarDays, go: () => goTo("myevents") }] : []),
                       { key: "analytics", label: "Your analytics", short: "Analytics", hint: "Reach and listens", icon: BarChart3, go: () => goTo("analytics") },
-                      { key: "discovery", label: "Discovery", short: "Discovery", hint: "Guests and sponsors", icon: Compass, go: () => goTo("discovery") },
+                      { key: "discovery", label: "Discovery", short: "Discovery", hint: path === "planner" ? "Find speakers" : "Guests and sponsors", icon: Compass, go: () => goTo("discovery") },
                       // On a phone Library is a tab at the bottom already.
                       { key: "recordings", label: "Library", short: "Library", hint: "Recordings and clips", icon: Film, go: () => goTo("recordings"), desktopOnly: true },
-                      { key: "promotion", label: "Promote your show", short: "Promote", hint: "Share cards and posts", icon: Megaphone, go: () => goTo("promotion") },
+                      // Promoting a slot only means something while an event is coming up.
+                      ...(path !== "planner" ? [eventOpen && data.mySignups.length > 0
+                        ? { key: "promotion", label: "Promote your show", short: "Promote", hint: "Share cards and posts", icon: Megaphone, go: () => goTo("promotion") }
+                        : { key: "page", label: "Your SmartLink", short: "SmartLink", hint: "One link for every bio", icon: Globe, go: () => goTo("page") }] : []),
                     ].map((d) => (
                       <button key={d.key} type="button" onClick={d.go} className={`${d.desktopOnly ? "hidden lg:flex" : "flex"} items-center gap-3 rounded-2xl border border-border bg-card p-3 text-left transition-colors hover:border-[#053877]/40 hover:bg-[#053877]/[0.04]`} data-testid={`door-${d.key}`}>
                         <IconTile icon={d.icon} />
@@ -1598,7 +1633,22 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                     ))}
                   </div>
                   {/* Your podcast, from wherever it lives (hosted here first): the show, its latest episode and its downloads. */}
-                  {podcastSources.length > 0 ? (() => {
+                  {path === "planner" ? (
+                    <div className="mt-6 flex flex-wrap items-center gap-4 rounded-2xl border border-border bg-card p-5" data-testid="dashboard-planner">
+                      <IconTile icon={CalendarDays} />
+                      <div className="min-w-0 flex-1">
+                        <p className="font-semibold text-foreground">{(myEventsList?.length ?? 0) > 0 ? `Your events · ${myEventsList!.length}` : "Run your first event"}</p>
+                        <p className="text-sm text-muted-foreground">{(myEventsList?.length ?? 0) > 0 ? "Shape them, send them to us to approve, share the booking link and run the day from the studio." : "Name it, pick the day and the slot length. It stays private until we approve it."}</p>
+                      </div>
+                      <Button onClick={() => goTo("myevents")} className="rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="dashboard-planner-go">{(myEventsList?.length ?? 0) > 0 ? "My events" : "Create my event"}</Button>
+                    </div>
+                  ) : path === "creator" && podcastSources.length === 0 ? (
+                    <div className="mt-6 flex flex-wrap items-center gap-4 rounded-2xl border border-dashed border-border bg-card p-5" data-testid="dashboard-creator">
+                      <IconTile icon={Film} />
+                      <div className="min-w-0 flex-1"><p className="font-semibold text-foreground">Turn a video into clips</p><p className="text-sm text-muted-foreground">Upload one and Pōstify cuts the best moments with captions, in every shape, and posts them for you. Your first one is free.</p></div>
+                      <Button onClick={() => goTo("postify")} className="rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]">Try Pōstify</Button>
+                    </div>
+                  ) : podcastSources.length > 0 ? (() => {
                     const p = podcastSources[0];
                     const d = p.data!;
                     const latest = [...d.episodes].sort((x, y) => y.published.localeCompare(x.published))[0];
@@ -1647,7 +1697,21 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                         <p className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Your events</p>
                         <button type="button" onClick={() => goTo("events")} className="text-xs font-medium text-[#053877] hover:underline dark:text-[#8ab4f8]" data-testid="link-all-events">All events</button>
                       </div>
-                      {mySlot || greenRoomHref ? (
+                      {(mySlot || greenRoomHref) && !eventOpen ? (
+                        // Over: what they have from it now is their episode and clips.
+                        <div className="rounded-xl border border-border bg-muted/30 p-3.5" data-testid="event-past">
+                          <p className="font-semibold text-foreground">{data.event.name.trim()}</p>
+                          <p className="mt-0.5 text-sm text-foreground/80">{mySlot ? `You were on · ${formatDateInZone(mySlot.start, zone)}` : `On the team · ${formatDateInZone(new Date(data.event.startAtUtc), zone)}`}</p>
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            <button type="button" onClick={() => goTo("recordings")} className="inline-flex items-center gap-1.5 rounded-full border border-[#053877] bg-[#053877]/[0.06] px-3 py-1.5 text-sm font-medium text-foreground hover:bg-[#053877]/[0.12]" data-testid="button-past-episode">
+                              <Film className="h-3.5 w-3.5" /> Your episode and clips
+                            </button>
+                            <button type="button" onClick={() => goTo("myevents")} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:border-[#053877]/40">
+                              Run an event of your own <ArrowRight className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
+                        </div>
+                      ) : mySlot || greenRoomHref ? (
                         <div className="rounded-xl border border-[#053877]/20 bg-[#053877]/[0.035] p-3.5">
                           <p className="font-semibold text-foreground">{data.event.name.trim()}</p>
                           <p className="mt-0.5 text-sm tabular-nums text-foreground/80">
@@ -1722,21 +1786,27 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                       })()}
                     </div>
 
-                    <TodoStrip
-                      title="Next steps"
-                      todos={(() => {
-                const t: { key: string; label: string; screen: "editProfile" | "promotion" | "integrations" | "events"; optional?: boolean }[] = [];
-                const show = hostEvents?.find((e) => e.slotIndex != null)?.show ?? hostEvents?.[0]?.show ?? null;
-                if (data.mySignups.length > 0 && !show?.showName) t.push({ key: "show", label: "Set up your show", screen: "events" });
-                if (show?.showFormat === "prerecorded" && !show.recordingUrl) t.push({ key: "file", label: "Send us your recorded episode", screen: "events" });
-                if (!profile?.photoOriginalUrl) t.push({ key: "headshot", label: "Add a print-quality headshot", screen: "editProfile" });
-                if ((social?.accounts?.length ?? 0) === 0) t.push({ key: "accounts", label: "Connect your social accounts", screen: "integrations" });
-                if (data.mySignups.length > 0 && (hostAssets?.length ?? 0) === 0 && !profile?.mediaAnswered) t.push({ key: "materials", label: "Upload an intro, outro or images", screen: "events" });
-                if (data.mySignups.length > 0 && !youtube?.connected) t.push({ key: "youtube", label: "Send your slot to your own YouTube", screen: "integrations", optional: true });
-                return t;
-              })()}
-                      onGo={(sc) => goTo(sc)}
-                    />
+                    {/* The same steps as the floating checklist, built from their path: one list, not two. */}
+                    {(() => {
+                      const steps = buildSteps(checklistState, checklistNav);
+                      const left = steps.filter((x) => !x.done);
+                      return (
+                        <div className="h-full rounded-2xl border border-border bg-card p-5" data-testid="todo-strip">
+                          {left.length === 0 ? (
+                            <p className="inline-flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400"><Check className="h-4 w-4" /> You're all set up.</p>
+                          ) : (
+                            <p className="text-sm font-semibold text-foreground">Next steps <span className="ml-1.5 font-normal text-foreground/80">· {left.length} to do</span></p>
+                          )}
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {left.map((x) => (
+                              <button key={x.key} type="button" onClick={() => goToStep(x)} title={x.detail} className="inline-flex items-center gap-1.5 rounded-full border border-[#053877] bg-[#053877]/[0.06] px-3.5 py-1.5 text-sm text-foreground transition-colors hover:bg-[#053877]/[0.12]" data-testid={`todo-${x.key}`}>
+                                {x.label} <ArrowRight className="h-3.5 w-3.5 opacity-70" />
+                              </button>
+                            ))}
+                          </div>
+                        </div>
+                      );
+                    })()}
                   </div>
                   {/* How to put the app on their phone, until they have. */}
                   <div className="mt-6"><AppInstallCard /></div>
@@ -1756,32 +1826,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           never again — which is how most of the lineup reached three weeks
           out with no link, no media and no YouTube. */}
       {workspace && (
-        <FloatingChecklist
-          state={{
-            hasShow: !!hostEvents?.some((e) => !!e.show?.showName),
-            hasSlot: (data?.mySignups.length ?? 0) > 0,
-            slotsOpen: !eventIsFull,
-            hasAccounts: (social?.accounts?.length ?? 0) > 0,
-            hasMaterials: (hostAssets?.length ?? 0) > 0 || Boolean(profile?.mediaAnswered),
-            hasYouTube: Boolean(youtube?.connected),
-            hasPhoto: Boolean(profile?.photoUrl),
-            hasSmartLink: Boolean(bioMine?.page?.published),
-            hasPodcast: (hostingMine?.shows?.length ?? 0) > 0,
-            hasClips: (recsMine ?? []).some((r) => r.clipStatus === "done"),
-            interests: profile?.interests ?? "",
-            eventOpen,
-            hasOwnEvent: (myEventsList?.length ?? 0) > 0,
-          }}
-          onGoEvents={() => goTo("events")}
-          onGoIntegrations={() => goTo("integrations")}
-          onGoPromotion={() => goTo("promotion")}
-          onGoProfile={() => goTo("editProfile")}
-          onGoPage={() => goTo("page")}
-          onGoPodcast={() => goTo("podcast")}
-          onGoDiscovery={() => goTo("discovery")}
-          onGoPostify={() => goTo("postify")}
-          onGoMyEvents={() => goTo("myevents")}
-        />
+        <FloatingChecklist state={checklistState} {...checklistNav} />
       )}
 
       {/* Half-finished is the failure mode here: a profile and no show means
