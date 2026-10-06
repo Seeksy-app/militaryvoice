@@ -80,6 +80,25 @@ export function PrivacyPolicy() {
         </p>
       </Section>
 
+      {/* The carriers read this when they approve our texting (A2P 10DLC):
+          keep the no-sharing sentence and the STOP/HELP wording. */}
+      <Section heading="Text messages">
+        <p>
+          If you give us your mobile number, we use it only to text you about an event you're taking part in: when
+          you're on, the green room link, and changes to the schedule. Message frequency varies, usually a few texts
+          around your slot. Message and data rates may apply.
+        </p>
+        <p>
+          Reply STOP at any time to stop, and HELP for help. You can also remove your number from your profile.
+        </p>
+        <p>
+          <strong className="text-foreground">We do not sell, rent or share your mobile number or your consent to receive
+          texts with any third party or affiliate for marketing purposes.</strong> Text messaging originator opt-in data
+          and consent are never shared with anyone. The only company that handles your number is our texting provider,
+          SimpleTexting, to deliver the messages.
+        </p>
+      </Section>
+
       <Section heading="If you connect your YouTube channel">
         <p>
           Connecting is optional and exists for one purpose: so your segment can go out to your own channel as well as
@@ -283,6 +302,16 @@ export function TermsOfService() {
         <p>
           You keep the recording of your own segment and can do whatever you like with it. We may use short excerpts to
           promote the event.
+        </p>
+      </Section>
+
+      <Section heading="Text messages">
+        <p>
+          MilitaryVoices.ai show-day texts: if you add your mobile number to your profile or booking, you agree to
+          receive texts about events you're taking part in, such as when you're on and the green room link. Message
+          frequency varies. Message and data rates may apply. Reply STOP to opt out at any time, or HELP for help, or
+          email hello@militaryvoices.ai. Carriers are not liable for delayed or undelivered messages. See our privacy
+          policy for how we handle your number.
         </p>
       </Section>
 
