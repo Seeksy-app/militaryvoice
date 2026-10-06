@@ -156,6 +156,13 @@ function SectionCard({
   );
 }
 
+/** Plain names for the fields an error can name ("hostName" means nothing to a person). */
+const FIELD_LABEL: Record<string, string> = {
+  hostName: "your name", podcastName: "your show's name", phone: "your mobile number", socialLinks: "your social link",
+  rssUrl: "your RSS feed link", youtubeUrl: "your YouTube link", recordingUrl: "a link to your recorded episode",
+  branch: "your branch", serviceStatus: "your status", interests: "what you're here for",
+};
+
 export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, variant = "setup", onDirtyChange, interests: interestsProp, eventOpen = true }: Props) {
   const { toast } = useToast();
   // Show questions only for people with a show. Anyone who came through a
@@ -416,8 +423,12 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
       toast({
         title: isSetup ? "You're set up" : "Profile saved",
         description: isSetup
-          ? "Your show details are saved. They'll follow you if you move to a different time."
-          : "Your changes apply to the slot you hold.",
+          ? podcaster
+            ? "Your show details are saved. They'll follow you to any event you join."
+            : "Your profile is saved. The checklist on your dashboard shows what's next."
+          : pendingSlot || profile?.podcastName
+            ? "Your changes apply to the slot you hold."
+            : "Your changes are saved.",
       });
       onSaved(nextAfterSave.current);
     },
@@ -448,7 +459,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
           toast({
             title: "Check the form",
             description: names.length
-              ? `Still needed: ${names.slice(0, 4).join(", ")}${names.length > 4 ? "…" : ""}.`
+              ? `Still needed: ${names.slice(0, 4).map((n) => FIELD_LABEL[n] ?? n).join(", ")}${names.length > 4 ? "…" : ""}.`
               : "A few fields still need your attention.",
             variant: "destructive",
           });

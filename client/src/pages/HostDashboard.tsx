@@ -400,7 +400,7 @@ export function LoginCard({ pending, start = false }: { pending: PendingSlotSumm
               screen read as progress, not a wall. */}
           {start && !pending && (
             <p className="text-xs font-semibold uppercase tracking-wider text-[#8a5a00]" data-testid="text-start-step">
-              Step {step === "email" ? 1 : 2} of 3 · {step === "email" ? "Your email" : "Your code"}
+              Step {step === "email" ? 1 : 2} of 4 · {step === "email" ? "Your email" : "Your code"}
             </p>
           )}
           <CardDescription>
@@ -1173,13 +1173,14 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                     ? "Co-host"
                     : inSetup
                       ? !pending && !profile?.interests && !interests
-                        ? "Welcome"
+                        ? "Your account"
                         : pending || isPodcaster(profile?.interests || interests) ? "Set up your show" : "Set up your profile"
                       : "Your dashboard"}
               </h1>
               {data && (
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {inSetup ? "Step 3 of 3 · " : ""}
+                  {/* Four steps, counted the same on every screen: email, code, what you're here for, your name. */}
+                  {inSetup ? (!pending && !profile?.interests && !interests ? "Step 3 of 4 · " : "Step 4 of 4 · ") : ""}
                   Signed in as {data.email}
                 </p>
               )}
