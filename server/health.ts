@@ -231,7 +231,16 @@ const DEFS: Def[] = [
   // Money and safety
   {
     key: "stripe", name: "Stripe", group: "Payments and safety", powers: "Pōstify plans and tokens",
-    run: async () => (env("STRIPE_SECRET_KEY") ? ping("https://api.stripe.com/v1/balance", { headers: { Authorization: `Bearer ${env("STRIPE_SECRET_KEY")}` } }) : { state: "off", detail: "Not set up (STRIPE_SECRET_KEY)" }),
+    // Says live or test too: a test key takes no real money, which is the
+    // first thing to know before opening paid plans.
+    run: async () => {
+      const k = env("STRIPE_SECRET_KEY");
+      if (!k) return { state: "off", detail: "Not set up (STRIPE_SECRET_KEY)" };
+      const r = await ping("https://api.stripe.com/v1/balance", { headers: { Authorization: `Bearer ${k}` } });
+      const mode = /^(sk|rk)_live_/.test(k) ? "live mode" : /^(sk|rk)_test_/.test(k) ? "TEST mode (no real charges)" : "";
+      const hook = env("STRIPE_WEBHOOK_SECRET") ? "webhook set" : "no webhook secret";
+      return r.state === "ok" ? { ...r, detail: [r.detail, mode, hook].filter(Boolean).join(" · ") } : r;
+    },
   },
   { key: "turnstile", name: "Cloudflare Turnstile", group: "Payments and safety", powers: "The \"are you human\" check on public forms", run: keyOnly(["TURNSTILE_SECRET_KEY"], "site key pair") },
 ];
