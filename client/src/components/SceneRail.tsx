@@ -78,6 +78,12 @@ export interface SceneSpec {
   /** The look the scene brings: a layout, and a background ("none" clears it). */
   stageLayout?: string;
   backgroundUrl?: string;
+  /** How this scene moves on; "" follows the studio. */
+  transition?: "" | "auto" | "manual";
+  /** What taking it does to the stage; "" follows the studio. */
+  stageOnTake?: "" | "keep" | "clear";
+  /** The people it brings on stage with it, by email. */
+  stagePeople?: string;
 }
 
 /** The scene clipboard, kept in the browser so a copy survives a reload or crosses tabs. */
@@ -97,6 +103,9 @@ function specOf(sc: SceneRow): SceneSpec {
     withPeople: sc.withPeople,
     stageLayout: sc.stageLayout || undefined,
     backgroundUrl: sc.backgroundUrl || undefined,
+    transition: (sc.transition as SceneSpec["transition"]) || undefined,
+    stageOnTake: (sc.stageOnTake as SceneSpec["stageOnTake"]) || undefined,
+    stagePeople: sc.stagePeople || undefined,
   };
 }
 function readClip(): SceneSpec | null {
@@ -148,6 +157,7 @@ export function SceneRail({
   runItems,
   signups,
   presentNames,
+  people = [],
   media,
   busy,
   readOnly = false,
@@ -178,6 +188,8 @@ export function SceneRail({
   signups: SignupRow[];
   /** Display names in the green room, for the "have they arrived" dot. */
   presentNames: string[];
+  /** People in the room with an email, for "bring on with this scene". */
+  people?: { email: string; name: string }[];
   media: MediaChoice[];
   busy?: boolean;
   /** Podcasters see the rail; only a producer changes it. */
@@ -748,6 +760,30 @@ export function SceneRail({
                     <MenuRow icon={ClipboardPaste} label="Paste" keys={[MOD, "V"]} disabled={!clip} onSelect={() => pasteAfter(sc)} />
                     <MenuRow icon={CopyPlus} label="Duplicate" keys={[MOD, "D"]} onSelect={() => duplicateScene(sc)} />
                     <MenuRow icon={Trash2} label="Delete" keys={["⌫"]} danger onSelect={() => deleteScene(sc)} />
+                    {/* How this scene moves on, and who comes with it: the
+                        event planner's defaults are in Settings; a scene can
+                        differ (6 Oct AAR). */}
+                    <DropdownMenuSeparator />
+                    <ChoiceRow
+                      label="Moves on"
+                      value={sc.transition || ""}
+                      options={[["", "Default"], ["auto", "SI-Auto"], ["manual", "Manual"]]}
+                      onChange={(v) => onPatch(sc.id, { transition: v as SceneSpec["transition"] })}
+                      testId={`scene-transition-${sc.id}`}
+                    />
+                    <ChoiceRow
+                      label="Stage"
+                      value={sc.stageOnTake || ""}
+                      options={[["", "Default"], ["keep", "Keep"], ["clear", "Clear"]]}
+                      onChange={(v) => onPatch(sc.id, { stageOnTake: v as SceneSpec["stageOnTake"] })}
+                      testId={`scene-stage-${sc.id}`}
+                    />
+                    <PeoplePicker
+                      people={people}
+                      value={sc.stagePeople || ""}
+                      onChange={(v) => onPatch(sc.id, { stagePeople: v })}
+                      testId={`scene-people-${sc.id}`}
+                    />
                     {kindOf(sc) === "media" && (
                       <>
                         <DropdownMenuSeparator />
@@ -965,6 +1001,49 @@ function MenuRow({
         </span>
       )}
     </DropdownMenuItem>
+  );
+}
+
+/** Three small choices in a row, inside the menu, without closing it. */
+function ChoiceRow({ label, value, options, onChange, testId }: { label: string; value: string; options: [string, string][]; onChange: (v: string) => void; testId: string }) {
+  return (
+    <div className="flex items-center gap-2 px-2 py-1.5 text-sm" data-testid={testId}>
+      <span className="w-16 shrink-0 text-xs text-muted-foreground">{label}</span>
+      <div className="flex flex-1 rounded-md bg-muted p-0.5">
+        {options.map(([v, l]) => (
+          <button key={v} type="button" onClick={() => onChange(v)} className={`flex-1 rounded px-1.5 py-1 text-[11px] font-medium ${value === v ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+            {l}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/** Who comes on stage with this scene: tick people in the room. Names already set but not here stay ticked. */
+function PeoplePicker({ people, value, onChange, testId }: { people: { email: string; name: string }[]; value: string; onChange: (v: string) => void; testId: string }) {
+  const chosen = value.split(",").map((e) => e.trim().toLowerCase()).filter(Boolean);
+  const absent = chosen.filter((e) => !people.some((p) => p.email.toLowerCase() === e));
+  const toggle = (email: string) => {
+    const e = email.toLowerCase();
+    onChange((chosen.includes(e) ? chosen.filter((x) => x !== e) : [...chosen, e]).join(","));
+  };
+  return (
+    <div className="px-2 py-1.5" data-testid={testId}>
+      <div className="flex items-center gap-2 text-xs text-muted-foreground"><Users className="h-3.5 w-3.5" /> Bring on with this scene</div>
+      {people.length === 0 && absent.length === 0 ? (
+        <p className="mt-1 text-[11px] text-muted-foreground">Nobody with an email is in the room yet.</p>
+      ) : (
+        <div className="mt-1 max-h-40 space-y-0.5 overflow-y-auto">
+          {[...people.map((p) => ({ email: p.email.toLowerCase(), name: p.name })), ...absent.map((e) => ({ email: e, name: `${e} (not here)` }))].map((p) => (
+            <label key={p.email} className="flex cursor-pointer items-center gap-2 rounded px-1 py-1 text-sm hover:bg-accent">
+              <input type="checkbox" className="h-3.5 w-3.5" checked={chosen.includes(p.email)} onChange={() => toggle(p.email)} />
+              <span className="truncate">{p.name}</span>
+            </label>
+          ))}
+        </div>
+      )}
+    </div>
   );
 }
 

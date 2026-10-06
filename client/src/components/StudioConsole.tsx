@@ -2157,6 +2157,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                     desks={desks}
                     meEmail={viewerEmail || me0?.email}
                     presentNames={present.map((p) => p.displayName || "")}
+                    people={present.filter((p) => p.email && !p.clientKey.startsWith("admin:")).map((p) => ({ email: p.email, name: p.displayName || p.email }))}
                     media={mediaItems ?? []}
                     searchable
                     busy={applyScene.isPending}
