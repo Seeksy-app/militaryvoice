@@ -41,6 +41,7 @@ import { AdminClips } from "@/components/AdminClips";
 import { AdminSurvey } from "@/components/AdminSurvey";
 import { AdminAar } from "@/components/AdminAar";
 import { AdminTexts } from "@/components/AdminTexts";
+import { People, type Audience as PeopleAudience } from "@/components/crm/People";
 import { AdminNav, EVENT_GROUPS, TOP_GROUPS, EVENT_SECTION_KEYS, TOP_SECTION_KEYS } from "@/components/AdminNav";
 import { MagazineAdmin } from "@/components/MagazineAdmin";
 import Discover from "@/pages/Discover";
@@ -1298,13 +1299,13 @@ function SponsorPackagesCard({ eventId }: { eventId: number }) {
  */
 function SegmentPreview({ segment, eventId, label, onClose }: {
   segment: string | null;
-  eventId: number;
+  eventId: number | null;
   label: string;
   onClose: () => void;
 }) {
   const { data, isLoading } = useQuery<{ count: number; people: { email: string; firstName: string }[] }>({
     queryKey: ["/api/admin/segment-preview", segment, eventId],
-    queryFn: () => adminGet(`/api/admin/segment-preview?segment=${encodeURIComponent(segment!)}&eventId=${eventId}`),
+    queryFn: () => adminGet(`/api/admin/segment-preview?segment=${encodeURIComponent(segment!)}&eventId=${eventId ?? ""}`),
     enabled: !!segment,
   });
   if (!segment) return null;
@@ -2828,7 +2829,7 @@ function ContactDrawer({ contact, onClose, broadcastList, eventId }: {
 type BroadcastStats = { sent: number; delivered: number; opened: number; clicked: number; bounced: number };
 
 function BroadcastCard({ b, eventId, dimmed, bBusy, recipientCount, onEdit, onConfirm, onDelete, onViewEngagement, onDuplicate, onSetSource, onSetSegment, onPreview, segmentOptions }: {
-  b: BroadcastRow; eventId: number; dimmed: boolean; bBusy: boolean;
+  b: BroadcastRow; eventId: number | null; dimmed: boolean; bBusy: boolean;
   recipientCount: (seg: string) => number;
   onEdit: (b: BroadcastRow) => void;
   onConfirm: (b: BroadcastRow) => void;
@@ -3192,7 +3193,7 @@ function ActivityLog({
   /** To Replies, where a waiting one is sent. */
   onReplies?: () => void;
   broadcasts: BroadcastRow[];
-  eventId: number;
+  eventId: number | null;
   onViewEngagement: (broadcastId: number, type: "delivered" | "opened" | "clicked" | "bounced" | "unopened", label: string) => void;
   onSelectContact: (c: EngagementRecipient) => void;
 }) {
@@ -3242,6 +3243,7 @@ function ActivityLog({
   const { data: team = [] } = useQuery<{ id: number; name: string; title: string }[]>({
     queryKey: ["/api/admin/events", eventId, "team"],
     queryFn: () => adminGet<{ id: number; name: string; title: string }[]>(`/api/admin/events/${eventId}/team`),
+    enabled: eventId != null,
     staleTime: 300_000,
   });
   const senderName = (sender: string | null) => {
@@ -3411,12 +3413,12 @@ function ActivityLog({
  * The log by email answers "did the sponsor offer go out"; this answers "what
  * has Enrique had from us", which is the question when somebody replies.
  */
-function RecipientList({ eventId, onSelect }: { eventId: number; onSelect: (c: EngagementRecipient) => void }) {
+function RecipientList({ eventId, onSelect }: { eventId: number | null; onSelect: (c: EngagementRecipient) => void }) {
   type Recipient = { email: string; name: string; sends: number; lastAt: string };
   const [q, setQ] = useState("");
   const { data: recipients = [], isLoading } = useQuery<Recipient[]>({
     queryKey: ["/api/admin/emails/recipients", eventId],
-    queryFn: () => adminGet<Recipient[]>(`/api/admin/emails/recipients?eventId=${eventId}`),
+    queryFn: () => adminGet<Recipient[]>(`/api/admin/emails/recipients?eventId=${eventId ?? ""}`),
     staleTime: 60_000,
   });
   const needle = q.trim().toLowerCase();
@@ -3738,7 +3740,6 @@ function CadenceList({
 function BroadcastSubNav({ view, setView }: { view: CrmView; setView: (v: CrmView) => void }) {
   const tabs: { key: CrmView; label: string }[] = [
     { key: "campaigns", label: "Campaigns" },
-    { key: "automation", label: "Automation" },
     { key: "templates", label: "Templates" },
   ];
   return (
@@ -3913,7 +3914,7 @@ function AllContacts({ eventId, contacts, onSelect }: { eventId: number; contact
   );
 }
 
-function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEvent | null }) {
+function CrmEventPanel({ eventId, event }: { eventId: number | null; event?: PublicEvent | null }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
 
@@ -3932,6 +3933,7 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
   const { data: signupContacts = [], isLoading: loadingSignups } = useQuery<{ email: string; firstName: string }[]>({
     queryKey: ["/api/admin/signups-contacts", eventId],
     queryFn: () => adminGet<{ email: string; firstName: string }[]>(`/api/admin/events/${eventId}/signup-contacts`),
+    enabled: eventId != null,
   });
 
   const { data: inboundRows = [] } = useQuery<InboundEmailRow[]>({
@@ -3949,7 +3951,7 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
 
   const { data: broadcastList = [], isLoading: loadingBroadcasts } = useQuery<BroadcastRow[]>({
     queryKey: ["/api/admin/broadcasts", eventId],
-    queryFn: () => adminGet<BroadcastRow[]>(`/api/admin/broadcasts?eventId=${eventId}`),
+    queryFn: () => adminGet<BroadcastRow[]>(`/api/admin/broadcasts?eventId=${eventId ?? ""}`),
       refetchInterval: 60_000,
   });
 
@@ -4008,6 +4010,7 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
   const { data: teamMembers = [] } = useQuery<TeamMember[]>({
     queryKey: ["/api/admin/events", eventId, "team"],
     queryFn: () => adminGet<TeamMember[]>(`/api/admin/events/${eventId}/team`),
+    enabled: eventId != null,
   });
 
   const { data: importLog = [] } = useQuery<ContactImport[]>({
@@ -4116,9 +4119,17 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
     [activeContacts, signedUpEmails],
   );
 
+  // The CRM's audiences (members, podcasters, plans…), counted on the server.
+  const { data: peopleData } = useQuery<{ audiences: PeopleAudience[] }>({
+    queryKey: ["/api/admin/people", eventId ?? 0],
+    queryFn: () => adminGet(`/api/admin/people${eventId ? `?eventId=${eventId}` : ""}`),
+  });
   /** The audiences a broadcast can go to, with live counts beside each. */
   const segmentOptions = useMemo(
     () => [
+      ...(peopleData?.audiences ?? []).map((a) => ({ value: `aud:${a.key}`, label: a.label, count: a.reachable })),
+      ...(bSegment.startsWith("aud:pick:") ? [{ value: bSegment, label: `Hand-picked (${bSegment.slice(9).split("|").length})`, count: bSegment.slice(9).split("|").length }] : []),
+      ...(eventId == null ? [] : [
       { value: "signups", label: "Signed-up podcasters", count: signupContacts.length },
       { value: "contacts", label: "Imported contacts", count: activeContacts.length },
       { value: "not-signed-up", label: "On the list, no slot yet", count: notSignedUpCount },
@@ -4126,9 +4137,10 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
       // "ask when you send" rather than a number this page could only guess.
       { value: "no-audience-link", label: "Booked, but no social link on file", count: -1 },
       { value: "all", label: "Both", count: signupContacts.length + activeContacts.length },
+      ]),
       ...customSegments.map((sg) => ({ value: `segment:${sg.id}`, label: sg.name, count: -1 })),
     ],
-    [signupContacts.length, activeContacts.length, notSignedUpCount, customSegments],
+    [signupContacts.length, activeContacts.length, notSignedUpCount, customSegments, peopleData, bSegment, eventId],
   );
 
   /** Which segment's recipient list is open, if any. */
@@ -4177,6 +4189,8 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
   }
 
   function recipientCount(seg: string) {
+    if (seg.startsWith("aud:pick:")) return seg.slice(9).split("|").length;
+    if (seg.startsWith("aud:")) return peopleData?.audiences.find((a) => `aud:${a.key}` === seg)?.reachable ?? -1;
     if (seg === "signups") return signupContacts.length;
     if (seg === "contacts") return activeContacts.length;
     if (seg === "not-signed-up") return notSignedUpCount;
@@ -4187,6 +4201,8 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
 
   function segmentLabel(seg: string) {
     if (SEGMENT_LABELS[seg]) return SEGMENT_LABELS[seg];
+    if (seg.startsWith("aud:pick:")) return `${seg.slice(9).split("|").length} hand-picked people`;
+    if (seg.startsWith("aud:")) return peopleData?.audiences.find((a) => `aud:${a.key}` === seg)?.label ?? seg.slice(4);
     if (seg.startsWith("engagement:")) {
       const [, bId, type] = seg.split(":");
       const b = broadcastList.find((x) => x.id === Number(bId));
@@ -4232,16 +4248,19 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
   // what happened. Campaigns keeps its own second row for automation and
   // templates; everything else is one level deep.
   // Mail first: what came in, what went out, and what needs an answer, like a mail app.
+  // Five doors, each one job: what came in, who we know, what we send once,
+  // what sends itself, and what happened.
   const navItems: { id: CrmView; label: string; badge?: number }[] = [
-    { id: "mail", label: "Mail", badge: repliesWaiting || undefined },
-    { id: "contacts", label: "Contacts" },
+    { id: "mail", label: "Inbox", badge: repliesWaiting || undefined },
+    { id: "contacts", label: "People" },
     { id: "campaigns", label: "Campaigns" },
+    { id: "automation", label: "Automations" },
     { id: "activity", label: "Activity" },
-    { id: "chat", label: "Chat with Alex" },
+    { id: "chat", label: "Ask Alex" },
   ];
   // Lists are a way of looking at contacts, so they sit under that door.
   const activeNav = view === "lists" || view === "list-signups" || view === "list-contacts" || view === "list-engagement" || view === "list-segment" ? "contacts"
-    : view === "compose" || view === "automation" || view === "templates" ? "campaigns"
+    : view === "compose" || view === "templates" ? "campaigns"
     : view;
 
   return (
@@ -4271,11 +4290,7 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
       {/* ── CONTACTS: everyone ── */}
       {view === "contacts" && (
         <div className="flex flex-col gap-4">
-          <div className="inline-flex self-start rounded-lg bg-muted p-1">
-            <button type="button" className="rounded-md bg-background px-3 py-1.5 text-sm font-medium shadow-sm">Everyone</button>
-            <button type="button" onClick={() => setView("lists")} className="rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground" data-testid="crm-to-lists">Lists</button>
-          </div>
-          <AllContacts eventId={eventId} contacts={contactList} onSelect={setSelectedContact} />
+          <People eventId={eventId} onSelect={(p) => setSelectedContact(p as never)} onEmail={(segment) => openCompose(segment)} />
         </div>
       )}
 
@@ -4615,7 +4630,6 @@ function CrmEventPanel({ eventId, event }: { eventId: number; event?: PublicEven
       {/* ── BROADCASTS: list ── */}
       {view === "automation" && (
         <div className="flex flex-col gap-4">
-          <BroadcastSubNav view={view} setView={setView} />
           <AutomationsPanel eventId={eventId} teamMembers={teamMembers} segmentOptions={segmentOptions}>
           <section className="flex flex-col gap-3">
           <div>
@@ -5094,7 +5108,7 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                     <Directory embedded />
                   </TabsContent>
                   <TabsContent value="crm" className="mt-2 lg:mt-0">
-                    <CrmPanel />
+                    <CrmEventPanel eventId={null} />
                   </TabsContent>
                   <TabsContent value="health" className="mt-2 lg:mt-0">
                     <AdminHealth />

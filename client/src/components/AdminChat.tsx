@@ -21,7 +21,7 @@ const FROM_LABEL: Record<Draft["from"], string> = { alex: "Alex", team: "the tea
  * button. Nothing goes out until that button. She answers questions about
  * the day too, from the same facts the help desk uses.
  */
-export function AdminChat({ eventId }: { eventId: number }) {
+export function AdminChat({ eventId }: { eventId: number | null }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [msgs, setMsgs] = useState<Msg[]>([

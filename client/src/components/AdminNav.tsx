@@ -72,7 +72,8 @@ export const TOP_GROUPS: { title: string; items: AdminSection[] }[] = [
       { key: "discovery", label: "Discovery", icon: Compass },
       { key: "verified", label: "Verified", icon: BadgeCheck },
       { key: "directory", label: "Member Directory", icon: BookUser },
-      // Contacts live in the event's CRM now — one CRM, not one per level.
+      // The platform's CRM: every member and everyone tied to us; each event keeps its own too.
+      { key: "crm", label: "CRM", icon: Mail },
       { key: "team", label: "Team", icon: Contact },
       { key: "finances", label: "Finances", icon: DollarSign },
       { key: "aar", label: "AAR", icon: NotebookPen },

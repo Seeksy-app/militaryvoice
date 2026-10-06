@@ -768,9 +768,11 @@ async function resolveBroadcastRecipients(
 
 /** "The Podcast Marathon · Oct 5, 2026" — the banner line on broadcast emails,
  *  read from the event so it can never contradict the schedule. */
-async function broadcastBannerTitle(): Promise<string> {
+async function broadcastBannerTitle(eventId?: number | null): Promise<string> {
+  // A platform campaign (no event) is the platform's mail, not the Marathon's.
+  if (eventId === null) return "MilitaryVoices.ai";
   try {
-    const ev = await storage.getFeaturedEvent();
+    const ev = (eventId ? await storage.getEventById(eventId) : undefined) ?? (await storage.getFeaturedEvent());
     const when = new Intl.DateTimeFormat("en-US", {
       month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York",
     }).format(new Date(ev.startAtUtc));
@@ -1185,7 +1187,7 @@ export function registerRoutes(app: Express): void {
       sender: b.sender,
       banner: b.banner,
       senderMember,
-      bannerTitle: await broadcastBannerTitle(),
+      bannerTitle: await broadcastBannerTitle(b.eventId ?? null),
     });
     res.type("html").send(rendered.html);
   });
@@ -1245,7 +1247,7 @@ export function registerRoutes(app: Express): void {
             sender: broadcast.sender ?? "team",
             banner: broadcast.banner ?? "welcome",
             senderMember: senderMember ?? undefined,
-            bannerTitle: await broadcastBannerTitle(),
+            bannerTitle: await broadcastBannerTitle(broadcast.eventId ?? null),
           });
           if (resendId) {
             sent++;
@@ -1301,7 +1303,7 @@ export function registerRoutes(app: Express): void {
           sender: broadcast.sender ?? "team",
           banner: broadcast.banner ?? "welcome",
           senderMember: senderMember ?? undefined,
-          bannerTitle: await broadcastBannerTitle(),
+          bannerTitle: await broadcastBannerTitle(broadcast.eventId ?? null),
         });
         if (resendId) {
           sent++;
@@ -11077,7 +11079,7 @@ The Podcast Marathon team`;
 
     const origin = `${req.protocol}://${req.get("host")}`;
     const senderMember = await resolveTeamSender(broadcast.sender ?? "team");
-    const bannerTitle = await broadcastBannerTitle();
+    const bannerTitle = await broadcastBannerTitle(broadcast.eventId ?? null);
     const firstBooking = broadcast.eventId
       ? (await storage.listSignups(broadcast.eventId)).find((x) => x.status !== "cancelled")
       : undefined;
@@ -11192,7 +11194,7 @@ The Podcast Marathon team`;
       sender,
       banner,
       senderMember,
-      bannerTitle: await broadcastBannerTitle(),
+      bannerTitle: await broadcastBannerTitle(Number(req.body?.eventId) || null),
       preheader,
     });
     res.type("html").send(rendered.html);

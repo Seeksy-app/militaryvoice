@@ -159,7 +159,7 @@ export type StepMode = { back: string; onSave: (d: StepDraft) => Promise<void>; 
 export type CreatorMode = { showName: string; audience: number; sample: { email: string; name: string }[] };
 
 export function CampaignBuilder({ eventId, initial, source, initialSegment, segmentOptions, teamMembers, onClose, step, creator }: {
-  eventId: number;
+  eventId: number | null;
   initial: BroadcastRow | null;
   source?: string;
   initialSegment?: string;
@@ -189,11 +189,11 @@ export function CampaignBuilder({ eventId, initial, source, initialSegment, segm
   const started = blocks.length > 0 || !!initial;
 
   const tags = useQuery<{ tag: string; count: number }[]>({ enabled: !creator, queryKey: ["/api/admin/contact-tags"], queryFn: () => adminGet("/api/admin/contact-tags") });
-  const templates = useQuery<BroadcastRow[]>({ enabled: !creator, queryKey: ["/api/admin/broadcasts", eventId], queryFn: () => adminGet(`/api/admin/broadcasts?eventId=${eventId}`) });
+  const templates = useQuery<BroadcastRow[]>({ enabled: !creator, queryKey: ["/api/admin/broadcasts", eventId], queryFn: () => adminGet(`/api/admin/broadcasts?eventId=${eventId ?? ""}`) });
   const segmentAudience = useQuery<{ count: number; people: { email: string; firstName: string }[] }>({
     enabled: !step && !creator,
     queryKey: ["/api/admin/segment-preview", segment, eventId],
-    queryFn: () => adminGet(`/api/admin/segment-preview?segment=${encodeURIComponent(segment)}&eventId=${eventId}`),
+    queryFn: () => adminGet(`/api/admin/segment-preview?segment=${encodeURIComponent(segment)}&eventId=${eventId ?? ""}`),
   });
 
   const audience = creator ? { data: { count: creator.audience, people: creator.sample.map((x) => ({ email: x.email, firstName: x.name })) }, isFetching: false } : segmentAudience;
@@ -204,7 +204,7 @@ export function CampaignBuilder({ eventId, initial, source, initialSegment, segm
     let off = false;
     const t = window.setTimeout(async () => {
       try {
-        const r = await call("POST", creator ? "/api/host/campaigns/preview" : "/api/admin/broadcasts/preview", { subject, bodyText: body || " ", sender, banner, preheader });
+        const r = await call("POST", creator ? "/api/host/campaigns/preview" : "/api/admin/broadcasts/preview", { subject, bodyText: body || " ", sender, banner, preheader, eventId });
         const h = await r.text();
         if (!off) setHtml(h);
       } catch { /* keeps the last good preview */ }
@@ -282,7 +282,7 @@ export function CampaignBuilder({ eventId, initial, source, initialSegment, segm
     if (!row) return;
     const r: { ok: boolean; to: string } = step
       ? await step.onTest({ subject: subject.trim(), preheader, sender, banner, bodyText: body })
-      : await call("POST", creator ? `/api/host/campaigns/${row.id}/test` : `/api/admin/broadcasts/${row.id}/test?eventId=${eventId}`).then((x) => x.json());
+      : await call("POST", creator ? `/api/host/campaigns/${row.id}/test` : `/api/admin/broadcasts/${row.id}/test?eventId=${eventId ?? ""}`).then((x) => x.json());
     toast(r.ok ? { title: "Test sent", description: `Check ${r.to}.` } : { title: "Test not sent", description: `The mail provider refused it. Nothing reached ${r.to}.`, variant: "destructive" });
   });
 
@@ -508,7 +508,7 @@ export function CampaignBuilder({ eventId, initial, source, initialSegment, segm
             onClose();
             return;
           }
-          const r: { sent: number; failed: number } = await adminSend("POST", `/api/admin/broadcasts/${row.id}/send?eventId=${eventId}`).then((x) => x.json());
+          const r: { sent: number; failed: number } = await adminSend("POST", `/api/admin/broadcasts/${row.id}/send?eventId=${eventId ?? ""}`).then((x) => x.json());
           await qc.invalidateQueries({ queryKey: ["/api/admin/broadcasts", eventId] });
           toast({ title: `Sent to ${r.sent}`, description: r.failed ? `${r.failed} didn't go.` : "Opens and clicks show on the campaign as they come in." });
           setReview(false);

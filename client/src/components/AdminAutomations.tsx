@@ -51,7 +51,7 @@ const RECIPES = [
 const pct = (n: number, of: number) => (of ? `${Math.round((n / of) * 100)}%` : "–");
 const when = (iso: string) => (iso && iso < "9999" ? new Date(iso).toLocaleString([], { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "");
 
-export function AutomationsPanel({ eventId, teamMembers, segmentOptions, children }: { eventId: number; teamMembers: Member[]; segmentOptions: SegmentOption[]; children?: ReactNode }) {
+export function AutomationsPanel({ eventId, teamMembers, segmentOptions, children }: { eventId: number | null; teamMembers: Member[]; segmentOptions: SegmentOption[]; children?: ReactNode }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [open, setOpen] = useState<number | null>(null);
@@ -132,7 +132,7 @@ export function AutomationsPanel({ eventId, teamMembers, segmentOptions, childre
   );
 }
 
-function AutomationEditor({ id, eventId, teamMembers, segmentOptions, onBack }: { id: number; eventId: number; teamMembers: Member[]; segmentOptions: SegmentOption[]; onBack: () => void }) {
+function AutomationEditor({ id, eventId, teamMembers, segmentOptions, onBack }: { id: number; eventId: number | null; teamMembers: Member[]; segmentOptions: SegmentOption[]; onBack: () => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const key = ["/api/admin/automations", id];
