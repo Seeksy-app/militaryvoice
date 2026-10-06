@@ -3007,6 +3007,21 @@ export const smsMessages = pgTable("sms_messages", {
 }, (t) => [index("sms_messages_phone_idx").on(t.phone), index("sms_messages_provider_idx").on(t.providerId)]);
 export type SmsMessageRow = typeof smsMessages.$inferSelect;
 
+/**
+ * Opt-ins from the public text-alerts page: who, the number, and the exact
+ * words they agreed to, kept as the record carriers ask for.
+ */
+export const smsOptIns = pgTable("sms_opt_ins", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  name: text("name").notNull().default(""),
+  phone: text("phone").notNull(),
+  consentText: text("consent_text").notNull(),
+  source: text("source").notNull().default("text-alerts page"),
+  ip: text("ip").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("sms_opt_ins_email_idx").on(t.email)]);
+
 /** Numbers that replied STOP. Nothing is ever texted to them again until they reply START. */
 export const smsOptOuts = pgTable("sms_opt_outs", {
   phone: text("phone").primaryKey(),

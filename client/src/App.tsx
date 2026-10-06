@@ -39,6 +39,7 @@ import Prepare from "@/pages/Prepare";
 import Platform from "@/pages/Platform";
 import Headshot from "@/pages/Headshot";
 import Keepsake from "@/pages/Keepsake";
+import TextAlerts from "@/pages/TextAlerts";
 import Survey from "@/pages/Survey";
 import Watchfloor from "@/pages/Watchfloor";
 import EventAbout from "@/pages/EventAbout";
@@ -131,6 +132,7 @@ function AppRouter() {
       <Route path="/studio/control">{() => <StudioControl />}</Route>
       <Route path="/watch">{() => <Watch />}</Route>
       <Route path="/keepsake">{() => <Keepsake />}</Route>
+      <Route path="/text-alerts">{() => <TextAlerts />}</Route>
       <Route path="/survey/:token">{(p) => <Survey token={p.token} />}</Route>
       <Route path="/magazine">{() => <Magazine />}</Route>
       <Route path="/magazine/:slug">{(p) => <Magazine slug={p.slug} />}</Route>

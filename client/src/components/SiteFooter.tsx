@@ -50,6 +50,7 @@ export function SiteFooter({ slug, note }: { slug?: string; /** A small line abo
       links: [
         { href: "/faq", label: "FAQ" },
         { href: "/help", label: "Help centre" },
+        { href: "/text-alerts", label: "Text alerts" },
         { href: "mailto:hello@militaryvoices.ai", label: "Contact", external: true },
         { href: "/host/dashboard", label: "Sign in" },
       ],

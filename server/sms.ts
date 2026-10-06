@@ -18,7 +18,8 @@ import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { getAdminEmail } from "./session.js";
 import { slackNote } from "./slack.js";
-import { smsMessages, smsOptOuts } from "../shared/schema.js";
+import { smsMessages, smsOptIns, smsOptOuts } from "../shared/schema.js";
+import { SMS_CONSENT } from "../shared/sms.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 const now = () => new Date().toISOString();
@@ -145,12 +146,12 @@ async function peopleFor(eventId: number) {
   for (const s of signups) {
     const slotAt = Number.isFinite(start) && event ? new Date(start + s.slotIndex * event.slotMinutes * 60000).toISOString() : "";
     const host = await storage.getProfileByEmail(s.email);
-    const phone = s.phone || host?.phone || "";
+    const phone = s.phone || host?.phone || (await optInPhone(s.email));
     out.push({ key: `h-${s.id}`, signupId: s.id, role: "host", name: s.hostName, email: s.email, show: s.podcastName, slotIndex: s.slotIndex, slotAt, phone, textable: !!toE164(phone) });
     const co = (s as { coHostEmail?: string | null }).coHostEmail?.trim();
     if (co) {
       const p = await storage.getProfileByEmail(co);
-      const cphone = p?.phone || "";
+      const cphone = p?.phone || (await optInPhone(co));
       out.push({ key: `c-${s.id}`, signupId: s.id, role: "cohost", name: p?.hostName || co, email: co, show: s.podcastName, slotIndex: s.slotIndex, slotAt, phone: cphone, textable: !!toE164(cphone) });
     }
   }
@@ -166,7 +167,36 @@ async function logReply(phone: string, text: string, providerId: string) {
   else await slackNote(`:iphone: Text from ${last?.name || phone}: "${text.slice(0, 300)}"`, { label: "Open Texts", url: `${ORIGIN}/admin/texts` }).catch(() => {});
 }
 
+/** The newest number someone gave on the text-alerts page. */
+async function optInPhone(email: string): Promise<string> {
+  const [r] = await db.select({ phone: smsOptIns.phone }).from(smsOptIns).where(eq(smsOptIns.email, email.trim().toLowerCase())).orderBy(desc(smsOptIns.id)).limit(1);
+  return r?.phone ?? "";
+}
+
+const optInHits = new Map<string, number[]>();
+
 export function registerSms(app: Express, requireAdmin: RequestHandler) {
+  /**
+   * The public opt-in (/text-alerts): name, email, mobile and a box they tick
+   * themselves. Kept with the exact consent words; START undoes an old STOP.
+   */
+  app.post("/api/sms/opt-in", async (req, res) => {
+    const ip = String(req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "").split(",")[0].trim();
+    const recent = (optInHits.get(ip) ?? []).filter((t) => Date.now() - t < 3600_000);
+    if (recent.length >= 5) return res.status(429).json({ message: "Too many tries. Try again in an hour." });
+    optInHits.set(ip, [...recent, Date.now()]);
+    const email = String(req.body?.email ?? "").trim().toLowerCase().slice(0, 200);
+    const name = String(req.body?.name ?? "").trim().slice(0, 100);
+    const phone = toE164(String(req.body?.phone ?? ""));
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ message: "Enter the email you booked with." });
+    if (!phone) return res.status(400).json({ message: "Enter a US mobile number." });
+    if (req.body?.consent !== true) return res.status(400).json({ message: "Tick the box to agree to the texts." });
+    await schemaIsReady();
+    await db.insert(smsOptIns).values({ email, name, phone, consentText: SMS_CONSENT, ip, createdAt: now() });
+    await db.delete(smsOptOuts).where(eq(smsOptOuts.phone, phone));
+    res.json({ ok: true });
+  });
+
   const adminOnly: RequestHandler = (req, res, next) => ((req as { studioHost?: unknown }).studioHost ? res.status(403).json({ message: "Admins only." }) : next());
 
   app.get("/api/admin/sms/people", requireAdmin, adminOnly, async (req, res) => {

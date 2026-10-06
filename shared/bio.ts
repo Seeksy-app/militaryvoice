@@ -504,7 +504,7 @@ export const RESERVED_HANDLES = new Set([
   "about", "admin", "agenda", "api", "assets", "directory", "discover", "e", "event", "events", "faq", "feed", "find", "go", "green-room", "greenroom",
   "headshot", "help", "host", "icons", "login", "logout", "national-military-podcast-day", "og", "platform", "podcast", "podcast-one-pitch", "podcasts",
   "policy", "prepare", "pricing", "privacy", "promo", "review", "s", "schedule", "settings", "signup", "sponsor", "sponsors", "studio", "studio-platform",
-  "terms", "vfw", "watch", "watchfloor", "militaryvoices", "support", "contact", "blog", "app", "www", "static", "robots.txt", "sitemap.xml", "manifest.json",
+  "terms", "text-alerts", "sms", "keepsake", "magazine", "marathon", "survey", "vfw", "watch", "watchfloor", "militaryvoices", "support", "contact", "blog", "app", "www", "static", "robots.txt", "sitemap.xml", "manifest.json",
 ]);
 
 export const handleOk = (h: string) => /^[a-z0-9][a-z0-9._-]{2,29}$/.test(h) && !RESERVED_HANDLES.has(h);
