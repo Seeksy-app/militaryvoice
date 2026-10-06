@@ -271,6 +271,39 @@ export function registerSurvey(app: Express, requireAdmin: RequestHandler): void
     res.json(row);
   });
 
+  /**
+   * Our sending domains in Resend, and adding one (news.militaryvoices.ai, for
+   * bulk mail, so a newsletter can't hurt the sign-in codes). Returns the DNS
+   * records to add at GoDaddy; `verify` asks Resend to check them.
+   */
+  const resend = async (path: string, init?: RequestInit) => {
+    const key = process.env.RESEND_API_KEY;
+    const proxy = process.env.CUSTOM_CRED_API_RESEND_COM_TOKEN;
+    const base = process.env.CUSTOM_CRED_API_RESEND_COM_URL || "https://api.resend.com";
+    const headers: Record<string, string> = { "Content-Type": "application/json" };
+    if (key) headers.Authorization = `Bearer ${key}`; else if (proxy) headers["x-api-key"] = proxy;
+    const r = await fetch(`${base}${path}`, { ...init, headers });
+    return { status: r.status, body: await r.json().catch(() => null) };
+  };
+  app.get("/api/admin/resend/domains", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost) return res.status(403).json({ message: "Admins only." });
+    const list = await resend("/domains");
+    const id = String(req.query.id ?? "");
+    res.status(list.status < 400 ? 200 : list.status).json(id ? await resend(`/domains/${encodeURIComponent(id)}`) : list);
+  });
+  app.post("/api/admin/resend/domains", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost) return res.status(403).json({ message: "Admins only." });
+    const name = String(req.body?.name ?? "").trim().toLowerCase();
+    if (!/^[a-z0-9-]+\.militaryvoices\.ai$/.test(name)) return res.status(400).json({ message: "A subdomain of militaryvoices.ai, please." });
+    const r = await resend("/domains", { method: "POST", body: JSON.stringify({ name, region: "us-east-1" }) });
+    res.status(r.status).json(r.body);
+  });
+  app.post("/api/admin/resend/domains/:id/verify", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost) return res.status(403).json({ message: "Admins only." });
+    const r = await resend(`/domains/${encodeURIComponent(String(req.params.id))}/verify`, { method: "POST" });
+    res.status(r.status).json(r.body);
+  });
+
   /** Every five minutes: send what's due, give what's due, end gifted plans that have run out. */
   const outboxCron: RequestHandler = async (req, res) => {
     const secret = process.env.CRON_SECRET;
