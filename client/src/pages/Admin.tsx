@@ -40,6 +40,7 @@ import { FinancesCard } from "@/components/FinancesCard";
 import { AdminClips } from "@/components/AdminClips";
 import { AdminSurvey } from "@/components/AdminSurvey";
 import { AdminAar } from "@/components/AdminAar";
+import { AdminTexts } from "@/components/AdminTexts";
 import { AdminNav, EVENT_GROUPS, TOP_GROUPS, EVENT_SECTION_KEYS, TOP_SECTION_KEYS } from "@/components/AdminNav";
 import { MagazineAdmin } from "@/components/MagazineAdmin";
 import Discover from "@/pages/Discover";
@@ -4971,6 +4972,9 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                 <TabsContent value="clips" className="mt-2 lg:mt-0">
                   <OutsideCapture />
                   <AdminClips eventId={selectedEventId} adminGet={adminGet} adminSend={adminSend} />
+                </TabsContent>
+                <TabsContent value="texts" className="mt-2 lg:mt-0">
+                  <AdminTexts eventId={selectedEventId} />
                 </TabsContent>
                 <TabsContent value="survey" className="mt-2 lg:mt-0">
                   <AdminSurvey adminGet={adminGet} />

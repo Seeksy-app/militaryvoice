@@ -595,11 +595,14 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
                 name="phone"
                 render={({ field }) => (
                   <FormItem className="sm:max-w-xs">
-                    <FormLabel>Phone (optional)</FormLabel>
+                    <FormLabel>Mobile (optional)</FormLabel>
                     <FormControl>
-                      <Input placeholder="(555) 555-5555" {...field} data-testid="input-phone" />
+                      <Input type="tel" inputMode="tel" placeholder="(555) 555-5555" {...field} data-testid="input-phone" />
                     </FormControl>
-                    <FormDescription>Only used if we need to reach you fast on show day.</FormDescription>
+                    {/* This sentence is the opt-in the carriers ask to see for
+                        toll-free texting. Change it and the verification needs
+                        to know. */}
+                    <FormDescription>For show-day texts only, like "you're on in 10" and the green room link. Message and data rates may apply. Reply STOP to opt out.</FormDescription>
                     <FormMessage />
                   </FormItem>
                 )}

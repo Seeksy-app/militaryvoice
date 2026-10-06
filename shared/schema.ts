@@ -2960,6 +2960,35 @@ export const outboxMail = pgTable("outbox_mail", {
 export type OutboxMailRow = typeof outboxMail.$inferSelect;
 
 /**
+ * Text messages, both ways: show-day texts we send (a cue, the green room
+ * link) and replies that come back. One row per message; `providerId` is
+ * Telnyx's, so a delivery report can find its row.
+ */
+export const smsMessages = pgTable("sms_messages", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id"),
+  /** out | in */
+  direction: text("direction").notNull().default("out"),
+  phone: text("phone").notNull(),
+  name: text("name").notNull().default(""),
+  email: text("email").notNull().default(""),
+  body: text("body").notNull(),
+  /** queued | sent | delivered | failed | received | blocked */
+  status: text("status").notNull().default("queued"),
+  providerId: text("provider_id").notNull().default(""),
+  error: text("error").notNull().default(""),
+  sentBy: text("sent_by").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("sms_messages_phone_idx").on(t.phone), index("sms_messages_provider_idx").on(t.providerId)]);
+export type SmsMessageRow = typeof smsMessages.$inferSelect;
+
+/** Numbers that replied STOP. Nothing is ever texted to them again until they reply START. */
+export const smsOptOuts = pgTable("sms_opt_outs", {
+  phone: text("phone").primaryKey(),
+  createdAt: text("created_at").notNull(),
+});
+
+/**
  * Credits promised for later (a host's 50 on November 1 and December 1, a
  * gifted Pro plan's monthly credits): the outbox cron gives each one on its
  * day, once (the ledger ref is the row).
