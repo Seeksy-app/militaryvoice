@@ -5,18 +5,18 @@ import { NavBar } from "@/components/NavBar";
 import { SiteFooter } from "@/components/SiteFooter";
 import { PreviewStack } from "@/pages/Discover";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, BookOpen, Clapperboard, Handshake, Megaphone, PlayCircle, Sparkles, Users } from "lucide-react";
+import { ArrowRight, CalendarDays, Clapperboard, Handshake, Home as HomeIcon, Megaphone, MonitorPlay, Share2, Sparkles, Users } from "lucide-react";
 
 // The front door: MilitaryVoices is a platform for military and veteran
 // creators (podcasts are one thing they make, beside video, social, events
-// and brand work), not a page for one event. The Marathon moved to /marathon
-// and comes back here as proof: real people, live on our stage, on the day.
+// and brand work), not a page for one event. The Marathon has its own page,
+// /marathon; this page is about what we offer every creator, every day.
 
 const HEAD = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 const NAVY = "#000741";
 const GOLD = "#F0A71F";
 
-// Andrew's four pillars (4 Oct 2026): every moment a creator has is an opportunity.
+// The four pillars (4 Oct 2026): every moment a creator has is an opportunity.
 const PILLARS = [
   { icon: Clapperboard, title: "Create", body: "An episode, video or live stream doesn't end when it's published. We find the moments that become clips, posts, newsletter content, sponsor inventory and speaking topics.", today: "Pōstify · Social" },
   { icon: Users, title: "Connect", body: "Find another creator for a guest swap, an expert for an episode, a collaborator, or get discovered by organizations looking for military and veteran voices.", today: "Discovery · Directory · Verified" },
@@ -29,6 +29,14 @@ const MORNING = [
   "Two podcasts are looking for guests with your expertise.",
   "Your audience engagement suggests a follow-up episode.",
   "You have an unused sponsorship slot next week.",
+];
+const OFFER = [
+  { icon: MonitorPlay, title: "A studio that connects to Zoom", body: "Record or go live with your guests, a green room so they arrive ready, and layouts that look like TV." },
+  { icon: Clapperboard, title: "Clips in minutes with Pōstify", body: "Your best moments, captioned and cut in every shape, ready to post." },
+  { icon: Share2, title: "Post everywhere from one place", body: "One calendar for every channel, and one view of what's working." },
+  { icon: CalendarDays, title: "Events, run for you", body: "From a one-hour panel to an all-day marathon: run of show, simulcast and replays." },
+  { icon: HomeIcon, title: "Your page, hosting and media kit", body: "Free podcast hosting, your SmartLink page, and a media kit brands can read in a minute." },
+  { icon: Sparkles, title: "An SI co-host in every studio", body: "Alex checks guests in, keeps the run of show and answers questions, so you can focus on the conversation." },
 ];
 const FLOW = ["Moment", "Intelligence", "Match", "Action", "Revenue and reach"];
 
@@ -84,21 +92,11 @@ export default function HomeCreators() {
               <Link href="/host/dashboard">
                 <Button size="lg" className="h-12 bg-[#F0A71F] px-7 text-base font-bold text-[#1a1200] hover:bg-[#e09a10]" data-testid="button-start-free">Start free</Button>
               </Link>
-              <Link href="/marathon" className="inline-flex items-center gap-2 font-semibold text-white/90 hover:text-white" data-testid="link-hero-replay">
-                <PlayCircle className="h-5 w-5" /> Watch the Marathon replay
-              </Link>
             </div>
           </motion.div>
           <div className="hidden lg:block">
             <PreviewStack verified={[]} onOpen={() => go("/discover")} />
           </div>
-        </div>
-        <div className="border-t border-white/10 bg-black/15">
-          <ul className="mx-auto grid max-w-6xl grid-cols-2 gap-y-4 px-4 py-6 text-center sm:px-6 md:grid-cols-4">
-            {[["29", "shows, back to back"], ["16 hours", "live in one day"], ["LiveOne", "and PodcastOne simulcast"], ["Minutes", "from conversation to clips"]].map(([v, l]) => (
-              <li key={v}><div className="text-2xl font-bold" style={HEAD}>{v}</div><div className="text-sm text-white/65">{l}</div></li>
-            ))}
-          </ul>
         </div>
       </section>
 
@@ -123,37 +121,25 @@ export default function HomeCreators() {
         </div>
       </section>
 
-      {/* ------------------------------------------------------- past events */}
-      <section className="border-b border-border bg-[#eef2fa] dark:bg-[#07112e]" id="events">
-        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
-          <Reveal>
-            <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#8a5a00]">Past events</p>
-            <h2 className="mt-3 text-balance text-3xl font-bold text-foreground sm:text-4xl" style={HEAD}>National Military Podcast Day 2026</h2>
-            <p className="mt-3 max-w-2xl text-pretty text-lg text-muted-foreground">Twenty-nine military and veteran shows, back to back, live for sixteen hours on October 5. Every show got its own clips by the next morning.</p>
+      {/* ------------------------------------------------------- what we offer */}
+      <section className="border-b border-border bg-[#eef2fa] dark:bg-[#07112e]" id="offer">
+        <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-16 sm:px-6 lg:grid-cols-[1.1fr_1fr]">
+          <Reveal className="relative">
+            <img src="/hero-2.jpg" alt="Two people recording a conversation in a podcast studio" className="aspect-[4/3] w-full rounded-2xl object-cover shadow-xl" loading="lazy" />
+            <img src="/hero-5.jpg" alt="" aria-hidden="true" className="absolute -bottom-6 -right-4 hidden w-2/5 rounded-xl border-4 border-white object-cover shadow-xl dark:border-[#07112e] sm:block" loading="lazy" />
           </Reveal>
-          <div className="mt-8 grid gap-6 md:grid-cols-[1.4fr_1fr]">
-            <Reveal className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/5 dark:bg-[#0d1838]">
-              <img src="/home/replay-console.jpg" alt="The MilitaryVoices studio console live on National Military Podcast Day, with VET S.O.S. on stage" className="aspect-[1668/991] w-full object-cover object-top" loading="lazy" />
-              <div className="flex flex-wrap items-center justify-between gap-3 p-5">
-                <div>
-                  <p className="font-semibold text-foreground">The Podcast Marathon, hosted by Riccoh Player</p>
-                  <p className="text-sm text-muted-foreground">Monday, October 5, 2026 · 7 AM to 10:30 PM Eastern</p>
-                </div>
-                <Link href="/marathon"><Button className="bg-[#000741] text-white hover:bg-[#053877]" data-testid="button-watch-replay"><PlayCircle className="mr-2 h-4 w-4" />Watch the replay</Button></Link>
-              </div>
-            </Reveal>
-            <Reveal delay={0.08} className="flex flex-col overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/5 dark:bg-[#0d1838]">
-              <div className="flex flex-1 items-center justify-center bg-[#000741] p-6">
-                <img src="/home/voices-cover.jpg" alt="VOICES of the Military, the keepsake magazine cover" className="max-h-72 w-auto -rotate-2 rounded-md shadow-2xl" loading="lazy" />
-              </div>
-              <div className="p-5">
-                <p className="font-semibold text-foreground">VOICES of the Military, the keepsake magazine</p>
-                <p className="text-sm text-muted-foreground">Every show from the day in one edition. Out this Friday.</p>
-                <Link href="/keepsake"><Button variant="outline" className="mt-3 w-full" data-testid="button-get-keepsake"><BookOpen className="mr-2 h-4 w-4" />Get your free digital copy</Button></Link>
-              </div>
-            </Reveal>
-          </div>
-
+          <Reveal delay={0.08}>
+            <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#8a5a00]">What we offer</p>
+            <h2 className="mt-3 text-balance text-3xl font-bold text-foreground sm:text-4xl" style={HEAD}>One home for everything you make</h2>
+            <ul className="mt-6 space-y-4">
+              {OFFER.map((o) => (
+                <li key={o.title} className="flex gap-4">
+                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#000741] text-[#F0A71F]"><o.icon className="h-5 w-5" /></span>
+                  <span><span className="block font-semibold text-foreground">{o.title}</span><span className="block text-pretty text-sm text-muted-foreground">{o.body}</span></span>
+                </li>
+              ))}
+            </ul>
+          </Reveal>
         </div>
       </section>
 
@@ -185,7 +171,7 @@ export default function HomeCreators() {
             {/* The idea working as software: a creator's morning. */}
             <Reveal delay={0.1} className="rounded-2xl bg-[#000741] p-6 text-white shadow-xl">
               <p className="text-xs font-bold uppercase tracking-[0.25em]" style={{ color: GOLD }}>Your dashboard</p>
-              <p className="mt-3 text-2xl font-bold" style={HEAD}>Good morning, Andrew.</p>
+              <p className="mt-3 text-2xl font-bold" style={HEAD}>Good morning.</p>
               <p className="text-white/70">Here are your opportunities today.</p>
               <ul className="mt-5 space-y-3">
                 {MORNING.map((m) => (
