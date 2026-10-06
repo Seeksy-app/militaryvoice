@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LayoutDashboard, MonitorPlay, ListOrdered, Users, Handshake, Megaphone, Mail, Contact, DollarSign, Settings2, CalendarDays, DoorOpen, PanelLeftClose, PanelLeftOpen, Film, Compass, BookOpen, BadgeCheck, BookUser, Activity, MessagesSquare, ClipboardList, NotebookPen, Smartphone } from "lucide-react";
+import { LayoutDashboard, MonitorPlay, ListOrdered, Users, Handshake, Megaphone, Mail, Contact, DollarSign, Settings2, CalendarDays, DoorOpen, PanelLeftClose, PanelLeftOpen, Film, Compass, BookOpen, BadgeCheck, BookUser, Activity, MessagesSquare, ClipboardList, NotebookPen, Smartphone, KanbanSquare } from "lucide-react";
 
 // The admin's nav, down the left.
 //
@@ -77,6 +77,7 @@ export const TOP_GROUPS: { title: string; items: AdminSection[] }[] = [
       { key: "crm", label: "CRM", icon: Mail },
       { key: "team", label: "Team", icon: Contact },
       { key: "finances", label: "Finances", icon: DollarSign },
+      { key: "projects", label: "Projects", icon: KanbanSquare },
       { key: "aar", label: "AAR", icon: NotebookPen },
       { key: "health", label: "System health", icon: Activity },
     ],

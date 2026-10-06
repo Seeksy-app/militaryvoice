@@ -3079,3 +3079,38 @@ export const scheduledGrants = pgTable("scheduled_grants", {
   createdAt: text("created_at").notNull(),
 }, (t) => [index("scheduled_grants_due_idx").on(t.doneAt, t.grantAt)]);
 export type ScheduledGrantRow = typeof scheduledGrants.$inferSelect;
+
+/**
+ * Project management in platform admin (6 Oct 2026): the owner and Claude plan
+ * the platform's bigger builds together. A project has phases; each task has a
+ * status, who's doing it, and a thread of notes.
+ */
+export const pmProjects = pgTable("pm_projects", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  goal: text("goal").notNull().default(""),
+  archived: boolean("archived").notNull().default(false),
+  createdAt: text("created_at").notNull(),
+});
+export const pmItems = pgTable("pm_items", {
+  id: serial("id").primaryKey(),
+  projectId: integer("project_id").notNull(),
+  phase: text("phase").notNull().default(""),
+  title: text("title").notNull(),
+  detail: text("detail").notNull().default(""),
+  /** todo | doing | decide | done */
+  status: text("status").notNull().default("todo"),
+  /** claude | owner | team */
+  owner: text("owner").notNull().default("claude"),
+  position: integer("position").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+  doneAt: text("done_at").notNull().default(""),
+}, (t) => [index("pm_items_project_idx").on(t.projectId)]);
+export const pmNotes = pgTable("pm_notes", {
+  id: serial("id").primaryKey(),
+  itemId: integer("item_id").notNull(),
+  author: text("author").notNull().default(""),
+  text: text("text").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("pm_notes_item_idx").on(t.itemId)]);

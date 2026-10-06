@@ -126,6 +126,7 @@ import { registerSms } from "./sms.js";
 import { logSceneTake, registerSceneLog } from "./sceneLog.js";
 import { audienceRecipients, registerPeople } from "./people.js";
 import { registerOrganizer } from "./organizer.js";
+import { registerProjects } from "./projects.js";
 import { registerDeviceCheck } from "./deviceCheck.js";
 import { registerHealth, beat, addHealthCheck } from "./health.js";
 import { registerNotices } from "./notices.js";
@@ -6723,6 +6724,7 @@ export function registerRoutes(app: Express): void {
   registerSceneLog(app, requireAdmin);
   registerPeople(app, requireAdmin);
   registerOrganizer(app, requireHostSession, requireAdmin);
+  registerProjects(app, requireAdmin);
   registerDeviceCheck(app);
   registerGreenRoomChat(app, requireAdmin, requireHostSession, studioHostEmails);
   registerAutomations(app, requireAdmin, {

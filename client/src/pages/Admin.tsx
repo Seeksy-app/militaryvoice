@@ -55,6 +55,7 @@ import { ShowSponsorsCard } from "@/components/ShowSponsors";
 import { AdminChat } from "@/components/AdminChat";
 import { AdminMail } from "@/components/AdminMail";
 import { ContactProfile } from "@/components/AdminContact";
+import { AdminProjects } from "@/components/AdminProjects";
 import { CampaignBuilder } from "@/components/CampaignBuilder";
 import { AutomationsPanel } from "@/components/AdminAutomations";
 import { AudienceFigures } from "@/components/AudienceFigures";
@@ -5135,6 +5136,9 @@ export default function Admin({ tab, eventId: eventParam }: { tab?: string; even
                   </TabsContent>
                   <TabsContent value="finances" className="mt-2 lg:mt-0">
                     <PlatformFinances />
+                  </TabsContent>
+                  <TabsContent value="projects" className="mt-2 lg:mt-0">
+                    <AdminProjects />
                   </TabsContent>
                   <TabsContent value="aar" className="mt-2 lg:mt-0">
                     <AdminAar
