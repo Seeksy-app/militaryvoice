@@ -1,4 +1,4 @@
-// Show-day texts, on Telnyx.
+// Show-day texts, on SimpleTexting (Telnyx as a fallback).
 //
 // Email was our only way to reach a guest on the day, and it was missed all
 // day (5 Oct AAR): "you're on in 10" sat unread in inboxes while the slot ran.
@@ -6,9 +6,12 @@
 // or writes a line, and it goes. Every text says who it's from, the first one
 // to a number says how to stop them, and a STOP reply is honoured for good.
 //
-// Needs TELNYX_API_KEY and TELNYX_FROM_NUMBER (a verified toll-free number);
-// TELNYX_PUBLIC_KEY lets the delivery and reply webhook be checked. Without
-// the first two the admin says texting isn't set up, and nothing is sent.
+// SimpleTexting needs SIMPLETEXTING_API_TOKEN (and SIMPLETEXTING_ACCOUNT_PHONE
+// when the account has more than one number); SIMPLETEXTING_WEBHOOK_SECRET
+// guards the reply/STOP webhook, which carries no signature of its own.
+// Telnyx (TELNYX_API_KEY + TELNYX_FROM_NUMBER) is used only if SimpleTexting
+// isn't set. With neither, the admin says texting isn't set up, and nothing
+// is sent. (Telnyx suspended our account on 6 Oct 2026.)
 import type { Express, RequestHandler, Request } from "express";
 import crypto from "node:crypto";
 import { and, desc, eq, inArray, isNull, or } from "drizzle-orm";
@@ -35,8 +38,36 @@ export function toE164(raw: string): string {
   return "";
 }
 
+const simpleTexting = () => Boolean(process.env.SIMPLETEXTING_API_TOKEN);
+const telnyx = () => Boolean(process.env.TELNYX_API_KEY && toE164(process.env.TELNYX_FROM_NUMBER || ""));
 export function smsConfigured(): boolean {
-  return Boolean(process.env.TELNYX_API_KEY && toE164(process.env.TELNYX_FROM_NUMBER || ""));
+  return simpleTexting() || telnyx();
+}
+/** The number texts come from, for the admin to show. */
+function fromNumber(): string {
+  if (simpleTexting()) return toE164(process.env.SIMPLETEXTING_ACCOUNT_PHONE || "") || "your SimpleTexting number";
+  return toE164(process.env.TELNYX_FROM_NUMBER || "");
+}
+/** SimpleTexting wants US numbers as ten digits. */
+const tenDigits = (e164: string) => e164.replace(/^\+1/, "").replace(/\D/g, "");
+
+const ST_BASE = "https://api-app2.simpletexting.com/v2/api";
+async function simpleTextingSend(to: string, text: string): Promise<{ ok: boolean; id: string; error: string }> {
+  try {
+    const body: Record<string, string> = { contactPhone: tenDigits(to), mode: "AUTO", text };
+    const acct = toE164(process.env.SIMPLETEXTING_ACCOUNT_PHONE || "");
+    if (acct) body.accountPhone = tenDigits(acct);
+    const r = await fetch(`${ST_BASE}/messages`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${process.env.SIMPLETEXTING_API_TOKEN}`, "content-type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const j = (await r.json().catch(() => ({}))) as { id?: string; message?: string; error?: string; details?: string };
+    if (!r.ok) return { ok: false, id: "", error: j.message || j.details || j.error || `SimpleTexting said ${r.status}` };
+    return { ok: true, id: j.id ?? "", error: "" };
+  } catch (err) {
+    return { ok: false, id: "", error: err instanceof Error ? err.message : String(err) };
+  }
 }
 
 /** One text, through Telnyx. Never throws: the result says what happened. */
@@ -82,7 +113,7 @@ export async function sendSms(o: { phone: string; body: string; name?: string; e
     await db.insert(smsMessages).values({ ...base, phone, body: text, status: "failed", error: "Texting isn't set up yet" });
     return { ok: false, status: "failed", error: "Texting isn't set up yet" };
   }
-  const r = await telnyxSend(phone, text);
+  const r = simpleTexting() ? await simpleTextingSend(phone, text) : await telnyxSend(phone, text);
   await db.insert(smsMessages).values({ ...base, phone, body: text, status: r.ok ? "sent" : "failed", providerId: r.id, error: r.error });
   return { ok: r.ok, status: r.ok ? "sent" : "failed", error: r.error };
 }
@@ -126,6 +157,15 @@ async function peopleFor(eventId: number) {
   return out.sort((a, b) => a.slotIndex - b.slotIndex || (a.role === "host" ? -1 : 1));
 }
 
+/** A text back from someone: kept against whoever we last texted at that number; STOP/START honoured; anything else to Slack. */
+async function logReply(phone: string, text: string, providerId: string) {
+  const [last] = await db.select().from(smsMessages).where(and(eq(smsMessages.phone, phone), eq(smsMessages.direction, "out"))).orderBy(desc(smsMessages.id)).limit(1);
+  await db.insert(smsMessages).values({ eventId: last?.eventId ?? null, direction: "in", phone, name: last?.name ?? "", email: last?.email ?? "", body: text, status: "received", providerId, createdAt: now() });
+  if (STOP_WORDS.test(text)) await db.insert(smsOptOuts).values({ phone, createdAt: now() }).onConflictDoNothing();
+  else if (START_WORDS.test(text)) await db.delete(smsOptOuts).where(eq(smsOptOuts.phone, phone));
+  else await slackNote(`:iphone: Text from ${last?.name || phone}: "${text.slice(0, 300)}"`, { label: "Open Texts", url: `${ORIGIN}/admin/texts` }).catch(() => {});
+}
+
 export function registerSms(app: Express, requireAdmin: RequestHandler) {
   const adminOnly: RequestHandler = (req, res, next) => ((req as { studioHost?: unknown }).studioHost ? res.status(403).json({ message: "Admins only." }) : next());
 
@@ -137,7 +177,8 @@ export function registerSms(app: Express, requireAdmin: RequestHandler) {
     const people = (await peopleFor(eventId)).map((p) => ({ ...p, optedOut: opted.has(toE164(p.phone)) }));
     res.json({
       configured: smsConfigured(),
-      from: smsConfigured() ? toE164(process.env.TELNYX_FROM_NUMBER || "") : "",
+      from: smsConfigured() ? fromNumber() : "",
+      provider: simpleTexting() ? "SimpleTexting" : telnyx() ? "Telnyx" : "",
       studioLink: `${ORIGIN}/event/${event?.slug ?? ""}/studio`.replace("/event//studio", "/studio"),
       people,
     });
@@ -178,6 +219,44 @@ export function registerSms(app: Express, requireAdmin: RequestHandler) {
   });
 
   /**
+   * SimpleTexting: replies, delivery reports and unsubscribes. Their webhooks
+   * aren't signed, so the URL carries our secret.
+   */
+  app.post("/api/webhooks/simpletexting", async (req, res) => {
+    const secret = process.env.SIMPLETEXTING_WEBHOOK_SECRET;
+    if (!secret || String(req.query.key ?? "") !== secret) return res.status(401).json({ message: "No" });
+    await schemaIsReady();
+    const type = String(req.body?.type ?? "");
+    const v = (req.body?.values ?? {}) as Record<string, any>;
+    if (type === "UNSUBSCRIBE_REPORT") {
+      const phone = toE164(String(v.phone ?? v.contactPhone ?? ""));
+      if (phone) await db.insert(smsOptOuts).values({ phone, createdAt: now() }).onConflictDoNothing();
+    } else if (type === "DELIVERY_REPORT" || type === "NON_DELIVERED_REPORT") {
+      const id = String(v.messageId ?? v.id ?? "");
+      if (id) await db.update(smsMessages).set({ status: type === "DELIVERY_REPORT" ? "delivered" : "failed", ...(type === "NON_DELIVERED_REPORT" ? { error: String(v.reason ?? v.errorDescription ?? "Not delivered") } : {}) }).where(eq(smsMessages.providerId, id));
+    } else if (type === "INCOMING_MESSAGE") {
+      const phone = toE164(String(v.contactPhone ?? ""));
+      const text = String(v.text ?? "").slice(0, 1600);
+      if (phone) await logReply(phone, text, String(v.messageId ?? ""));
+    }
+    res.json({ ok: true });
+  });
+
+  /** Point SimpleTexting's replies, delivery reports and STOPs at us. One press, once. */
+  app.post("/api/admin/sms/connect-webhook", requireAdmin, adminOnly, async (_req, res) => {
+    if (!simpleTexting()) return res.status(400).json({ message: "Add SIMPLETEXTING_API_TOKEN first." });
+    const secret = process.env.SIMPLETEXTING_WEBHOOK_SECRET;
+    if (!secret) return res.status(400).json({ message: "Add SIMPLETEXTING_WEBHOOK_SECRET first." });
+    const r = await fetch(`${ST_BASE}/webhooks`, {
+      method: "POST",
+      headers: { authorization: `Bearer ${process.env.SIMPLETEXTING_API_TOKEN}`, "content-type": "application/json" },
+      body: JSON.stringify({ url: `${ORIGIN}/api/webhooks/simpletexting?key=${encodeURIComponent(secret)}`, triggers: ["INCOMING_MESSAGE", "DELIVERY_REPORT", "NON_DELIVERED_REPORT", "UNSUBSCRIBE_REPORT"], requestPerSecLimit: 10 }),
+    });
+    const j = await r.json().catch(() => ({}));
+    res.status(r.ok ? 200 : 502).json(r.ok ? { ok: true } : { message: (j as { message?: string }).message || `SimpleTexting said ${r.status}` });
+  });
+
+  /**
    * Telnyx: delivery reports and replies. A reply of STOP is honoured at once;
    * anything else a person writes back goes to the log and to Slack, so a
    * guest texting "I can't get in" reaches someone.
@@ -194,14 +273,7 @@ export function registerSms(app: Express, requireAdmin: RequestHandler) {
       if (p.id) await db.update(smsMessages).set({ status: mapped, ...(err ? { error: String(err) } : {}) }).where(eq(smsMessages.providerId, String(p.id)));
     } else if (ev?.event_type === "message.received") {
       const phone = toE164(String(p.from?.phone_number ?? ""));
-      const text = String(p.text ?? "").slice(0, 1600);
-      if (phone) {
-        const [last] = await db.select().from(smsMessages).where(and(eq(smsMessages.phone, phone), eq(smsMessages.direction, "out"))).orderBy(desc(smsMessages.id)).limit(1);
-        await db.insert(smsMessages).values({ eventId: last?.eventId ?? null, direction: "in", phone, name: last?.name ?? "", email: last?.email ?? "", body: text, status: "received", providerId: String(p.id ?? ""), createdAt: now() });
-        if (STOP_WORDS.test(text)) await db.insert(smsOptOuts).values({ phone, createdAt: now() }).onConflictDoNothing();
-        else if (START_WORDS.test(text)) await db.delete(smsOptOuts).where(eq(smsOptOuts.phone, phone));
-        else await slackNote(`:iphone: Text from ${last?.name || phone}: "${text.slice(0, 300)}"`, { label: "Open Texts", url: `${ORIGIN}/admin/texts` }).catch(() => {});
-      }
+      if (phone) await logReply(phone, String(p.text ?? "").slice(0, 1600), String(p.id ?? ""));
     }
     res.json({ ok: true });
   });

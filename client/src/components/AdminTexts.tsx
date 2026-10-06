@@ -12,7 +12,7 @@ import { ArrowDownLeft, ArrowUpRight, Loader2, Send, Smartphone, TriangleAlert }
 // and wasn't read (AAR).
 
 type Person = { key: string; role: "host" | "cohost"; name: string; email: string; show: string; slotAt: string; phone: string; textable: boolean; optedOut: boolean };
-type People = { configured: boolean; from: string; studioLink: string; people: Person[] };
+type People = { configured: boolean; from: string; provider?: string; studioLink: string; people: Person[] };
 type Msg = { id: number; direction: "out" | "in"; phone: string; name: string; body: string; status: string; error: string; createdAt: string };
 
 const PRESETS = [
@@ -80,11 +80,28 @@ export function AdminTexts({ eventId }: { eventId: number }) {
           <div className="mt-4 flex gap-3 rounded-xl border border-[#F0A71F]/50 bg-[#F0A71F]/10 p-4 text-sm" data-testid="texts-not-configured">
             <TriangleAlert className="mt-0.5 h-4 w-4 shrink-0 text-[#b07800]" />
             <p>
-              <span className="font-semibold">Texting isn't switched on yet.</span> It needs a verified toll-free number on Telnyx and its keys in Vercel. You can line up texts here; nothing goes out until it's on.
+              <span className="font-semibold">Texting isn't switched on yet.</span> It needs our SimpleTexting API token in Vercel. You can line up texts here; nothing goes out until it's on.
             </p>
           </div>
         )}
-        {data.configured && <p className="mt-3 text-xs text-muted-foreground">Sending from {data.from}</p>}
+        {data.configured && (
+          <div className="mt-3 flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
+            <span>Sending from {data.from}{data.provider ? ` on ${data.provider}` : ""}</span>
+            {data.provider === "SimpleTexting" && (
+              <button
+                type="button"
+                className="underline underline-offset-2 hover:text-foreground"
+                onClick={async () => {
+                  try { await adminSend("POST", "/api/admin/sms/connect-webhook"); toast({ title: "Replies connected", description: "Replies, delivery and STOPs now come back here." }); }
+                  catch (e) { toast({ title: "Couldn't connect replies", description: (e as Error).message, variant: "destructive" }); }
+                }}
+                data-testid="texts-connect-webhook"
+              >
+                Connect replies and STOPs
+              </button>
+            )}
+          </div>
+        )}
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.1fr)]">
