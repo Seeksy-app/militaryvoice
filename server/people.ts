@@ -38,17 +38,17 @@ export type Person = {
 /** The audiences people can be filtered into, and campaigns sent to. */
 export const AUDIENCES: { key: string; label: string; scope: "platform" | "event" | "both"; test: (p: Person) => boolean }[] = [
   { key: "everyone", label: "Everyone", scope: "both", test: () => true },
-  { key: "members", label: "Members (have an account)", scope: "both", test: (p) => p.roles.includes("Member") },
+  { key: "members", label: "Members", scope: "both", test: (p) => p.roles.includes("Member") },
   { key: "podcasters", label: "Podcasters", scope: "both", test: (p) => p.roles.includes("Podcaster") || p.roles.includes("Co-host") },
   { key: "pro", label: "On Pro", scope: "platform", test: (p) => p.plan === PLANS.pro.name },
   { key: "scale", label: "On Scale", scope: "platform", test: (p) => p.plan === PLANS.creator.name },
-  { key: "growth", label: "On Growth (free)", scope: "platform", test: (p) => p.plan === "Growth" },
-  { key: "discovery", label: "Discovery users", scope: "platform", test: (p) => p.roles.includes("Discovery") },
+  { key: "growth", label: "On Growth", scope: "platform", test: (p) => p.plan === "Growth" },
+  { key: "discovery", label: "Discovery", scope: "platform", test: (p) => p.roles.includes("Discovery") },
   { key: "sponsors", label: "Sponsors", scope: "both", test: (p) => p.roles.includes("Sponsor") },
   { key: "team", label: "Event team", scope: "both", test: (p) => p.roles.includes("Team") },
   { key: "listeners", label: "Listeners", scope: "both", test: (p) => p.roles.includes("Listener") },
-  { key: "imported", label: "Imported contacts", scope: "platform", test: (p) => p.roles.includes("Imported") },
-  { key: "no-smartlink", label: "Members without a SmartLink", scope: "platform", test: (p) => p.roles.includes("Member") && !p.smartlink },
+  { key: "imported", label: "Imported", scope: "platform", test: (p) => p.roles.includes("Imported") },
+  { key: "no-smartlink", label: "No SmartLink yet", scope: "platform", test: (p) => p.roles.includes("Member") && !p.smartlink },
 ];
 
 const norm = (e: string | null | undefined) => (e ?? "").trim().toLowerCase();

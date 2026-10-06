@@ -3994,15 +3994,15 @@ function CrmEventPanel({ eventId, event }: { eventId: number | null; event?: Pub
   );
 
   const orderedBroadcasts = useMemo(() => {
-    const rank = (b: BroadcastRow) => (b.status === "sent" ? 0 : b.status === "scheduled" ? 1 : 2);
+    // What needs you first: drafts (newest first), then what's scheduled
+    // (soonest first), then what went (latest first).
+    const rank = (b: BroadcastRow) => (b.status === "sent" ? 2 : b.status === "scheduled" ? 1 : 0);
     const when = (b: BroadcastRow) => Date.parse(b.sentAt ?? b.scheduledFor ?? b.createdAt) || 0;
     return [...broadcastList].sort((a, b) => {
       const ra = rank(a);
       const rb = rank(b);
       if (ra !== rb) return ra - rb;
-      // Sent and scheduled read forwards in time; drafts read newest-first,
-      // because an unsent draft is a to-do, not a record.
-      return ra === 2 ? when(b) - when(a) : when(a) - when(b);
+      return ra === 1 ? when(a) - when(b) : when(b) - when(a);
     });
   }, [broadcastList]);
 
@@ -4727,7 +4727,13 @@ function CrmEventPanel({ eventId, event }: { eventId: number | null; event?: Pub
                   because an unsent draft is a to-do and not a record. */}
               {orderedBroadcasts
                 .filter((b) => (view === "templates" ? b.isTemplate : !b.isTemplate && b.source === "manual"))
-                .map((b) => (
+                .map((b, i, list) => (
+                <React.Fragment key={b.id}>
+                {view !== "templates" && (i === 0 || (list[i - 1].status === "sent") !== (b.status === "sent") || (list[i - 1].status === "scheduled") !== (b.status === "scheduled")) && (
+                  <p className="mt-3 text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground first:mt-0">
+                    {b.status === "sent" ? "Sent" : b.status === "scheduled" ? "Scheduled" : "Drafts"}
+                  </p>
+                )}
                 <BroadcastCard
                   key={b.id}
                   b={b}
@@ -4745,6 +4751,7 @@ function CrmEventPanel({ eventId, event }: { eventId: number | null; event?: Pub
                   onDelete={deleteBroadcast}
                   onViewEngagement={openEngagementView}
                 />
+                </React.Fragment>
                 ))}
             </div>
           )}
