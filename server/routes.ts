@@ -7567,6 +7567,34 @@ export function registerRoutes(app: Express): void {
    * picks, the fade point, rendering and storage. Estimated from each file's
    * length and size, at the rates below; the section says so.
    */
+  /**
+   * What an event actually cost: a ledger the admin keeps (plans, top-ups,
+   * charges, physical things like the award plaque), each line marked actual
+   * or estimate. Saved whole, as one JSON list per event.
+   */
+  app.get("/api/admin/finance-actuals", requireAdmin, async (req, res) => {
+    noStore(res);
+    if ((req as any).studioHost) return res.status(403).json({ message: "Admins only." });
+    const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
+    const raw = await storage.getSetting(`finance_actuals:${eventId}`);
+    let lines: unknown = null;
+    try { lines = raw ? JSON.parse(raw) : null; } catch { lines = null; }
+    res.json({ lines });
+  });
+  app.put("/api/admin/finance-actuals", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost) return res.status(403).json({ message: "Admins only." });
+    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    const lines = (Array.isArray(req.body?.lines) ? req.body.lines : []).slice(0, 200).map((l: any) => ({
+      group: String(l?.group ?? "").slice(0, 60),
+      label: String(l?.label ?? "").slice(0, 120),
+      note: String(l?.note ?? "").slice(0, 300),
+      amount: Math.round((Number(l?.amount) || 0) * 100) / 100,
+      status: ["actual", "estimate", "enter"].includes(l?.status) ? l.status : "estimate",
+    }));
+    await storage.setSetting(`finance_actuals:${eventId}`, JSON.stringify(lines));
+    res.json({ lines });
+  });
+
   app.get("/api/admin/production-costs", requireAdmin, async (req, res) => {
     noStore(res);
     const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;

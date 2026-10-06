@@ -1,9 +1,9 @@
-import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { adminGet } from "@/lib/adminApi";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { adminGet, adminSend } from "@/lib/adminApi";
 import { Slider } from "@/components/ui/slider";
 import type { PublicEvent } from "@shared/schema";
-import { Calculator, TrendingUp, AlertTriangle, Film, ChevronRight } from "lucide-react";
+import { Calculator, TrendingUp, AlertTriangle, Film, ChevronRight, Receipt, Plus, Trash2, Save } from "lucide-react";
 
 // What the event costs to run, and what to charge afterwards.
 //
@@ -125,6 +125,8 @@ export function FinancesCard({ event }: { event: PublicEvent }) {
 
   return (
     <div className="flex flex-col gap-8">
+      <ActualCosts eventId={event.id} eventName={event.name} />
+
       {/* ------------------------------------------------------------ the model */}
       <section>
         <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
@@ -412,6 +414,134 @@ export function ProductionCosts({ eventId }: { eventId: number }) {
       <p className="mt-2 text-xs text-muted-foreground">
         Estimated from each file's length and size: Scribe at $0.40 an hour of audio, Claude Opus 5 at $5 / $25 per million tokens, Sonnet 5 at $2 / $10, R2 at $0.015 a GB a month. Rendering runs on the VPS we already pay for.
       </p>
+    </section>
+  );
+}
+
+
+// ---------------------------------------------------------------------------
+// What the event actually cost: a ledger kept by hand, each line marked as a
+// real charge, an estimate, or "enter" (a bill we know exists but haven't
+// read the amount of). Starts from what we know as of 6 Oct 2026.
+// ---------------------------------------------------------------------------
+
+type Actual = { group: string; label: string; note: string; amount: number; status: "actual" | "estimate" | "enter" };
+
+const STARTING_ACTUALS: Actual[] = [
+  { group: "Monthly plans", label: "Render worker (clips)", note: "4 CPU / 8 GB (4c-8g), cuts every clip", amount: 175, status: "actual" },
+  { group: "Monthly plans", label: "Upload-Post", note: "75 profiles: posting, scheduling, analytics", amount: 147, status: "actual" },
+  { group: "Monthly plans", label: "LiveKit Ship", note: "the plan; usage over the allowance is billed on top", amount: 50, status: "actual" },
+  { group: "Monthly plans", label: "Supabase Pro", note: "database and file storage", amount: 25, status: "actual" },
+  { group: "Monthly plans", label: "Vercel Pro", note: "the site and the API", amount: 20, status: "actual" },
+  { group: "Monthly plans", label: "Resend", note: "every email", amount: 20, status: "actual" },
+  { group: "Show-day usage and top-ups", label: "Anthropic API", note: "topped up on show day (clip picks, Alex)", amount: 60, status: "actual" },
+  { group: "Show-day usage and top-ups", label: "Vercel usage over the plan", note: "on show day, about $15 of usage beyond the plan", amount: 15, status: "estimate" },
+  { group: "Show-day usage and top-ups", label: "LiveKit usage over the plan", note: "connection minutes and egress for 16 hours: read it from LiveKit billing", amount: 0, status: "enter" },
+  { group: "Show-day usage and top-ups", label: "ElevenLabs top-up", note: "voices for Alex's intros and spots; topped up on show day", amount: 0, status: "enter" },
+  { group: "Show-day usage and top-ups", label: "LiveAvatar credits", note: "Alex's video avatar; ran out on show day", amount: 0, status: "enter" },
+  { group: "Show-day usage and top-ups", label: "Creatomate credits", note: "10,000 credits bought 25 Sep (before our own renderer)", amount: 0, status: "enter" },
+  { group: "Show-day usage and top-ups", label: "Cloudflare R2 storage", note: "about 45 GB: the day's recordings, the on-demand and every show's cut", amount: 0.7, status: "estimate" },
+  { group: "From the bank (Mercury)", label: "Telnyx", note: "15 Sep", amount: 10, status: "actual" },
+  { group: "From the bank (Mercury)", label: "GoDaddy", note: "25 Sep $13.19 and 30 Sep $2.19", amount: 15.38, status: "actual" },
+  { group: "Awards", label: "Excellence in Storytelling plaque", note: "9×12 walnut-finish plaque, full-colour brass plate with the NMPD logo, engraved", amount: 65, status: "estimate" },
+  { group: "Awards", label: "Plaque shipping", note: "insured UPS Ground or USPS Priority, anywhere in the US, 2–5 days", amount: 18, status: "estimate" },
+];
+
+const STATUS_STYLE: Record<Actual["status"], string> = {
+  actual: "border-emerald-600/40 bg-emerald-50 text-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300",
+  estimate: "border-[#F0A71F]/60 bg-[#F0A71F]/10 text-[#8a5f00] dark:text-[#F0A71F]",
+  enter: "border-destructive/40 bg-destructive/10 text-destructive",
+};
+const STATUS_LABEL: Record<Actual["status"], string> = { actual: "Actual", estimate: "Estimate", enter: "Enter amount" };
+
+function ActualCosts({ eventId, eventName }: { eventId: number; eventName: string }) {
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery<{ lines: Actual[] | null }>({
+    queryKey: ["/api/admin/finance-actuals", eventId],
+    queryFn: () => adminGet(`/api/admin/finance-actuals?eventId=${eventId}`),
+  });
+  const [lines, setLines] = useState<Actual[]>([]);
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => {
+    if (!data) return;
+    setLines(data.lines && data.lines.length ? data.lines : STARTING_ACTUALS);
+    setDirty(!(data.lines && data.lines.length));
+  }, [data]);
+
+  const edit = (i: number, patch: Partial<Actual>) => { setLines((ls) => ls.map((l, k) => (k === i ? { ...l, ...patch } : l))); setDirty(true); };
+  const remove = (i: number) => { setLines((ls) => ls.filter((_, k) => k !== i)); setDirty(true); };
+  const add = () => { setLines((ls) => [...ls, { group: "Other", label: "", note: "", amount: 0, status: "actual" }]); setDirty(true); };
+  const save = async () => {
+    setSaving(true);
+    await adminSend("PUT", "/api/admin/finance-actuals", { eventId, lines });
+    await qc.invalidateQueries({ queryKey: ["/api/admin/finance-actuals", eventId] });
+    setSaving(false);
+    setDirty(false);
+  };
+
+  const sum = (f: (l: Actual) => boolean) => lines.filter(f).reduce((n, l) => n + (Number(l.amount) || 0), 0);
+  const total = sum(() => true);
+  const actual = sum((l) => l.status === "actual");
+  const estimate = sum((l) => l.status === "estimate");
+  const missing = lines.filter((l) => l.status === "enter").length;
+  const groups = Array.from(new Set(lines.map((l) => l.group)));
+
+  return (
+    <section data-testid="finance-actuals">
+      <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
+        <Receipt className="h-4 w-4" /> What {eventName} actually cost
+      </h3>
+      <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+        Real charges and plans, show-day top-ups, and the award. Change any amount or mark it actual once the bill is in; red lines are bills we know about but haven't read yet.
+      </p>
+      <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-card">
+        {isLoading ? <p className="p-5 text-sm text-muted-foreground">Loading…</p> : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <tbody>
+                {groups.map((g) => (
+                  <Fragment key={g}>
+                    <tr className="bg-muted/40"><td colSpan={4} className="px-5 py-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">{g}</td></tr>
+                    {lines.map((l, i) => l.group !== g ? null : (
+                      <tr key={i} className="border-b border-border last:border-0">
+                        <td className="w-full px-5 py-2">
+                          <input value={l.label} onChange={(e) => edit(i, { label: e.target.value })} placeholder="What" className="w-full bg-transparent font-medium outline-none" />
+                          <input value={l.note} onChange={(e) => edit(i, { note: e.target.value })} placeholder="Note" className="w-full bg-transparent text-xs text-muted-foreground outline-none" />
+                        </td>
+                        <td className="px-2 py-2">
+                          <select value={l.status} onChange={(e) => edit(i, { status: e.target.value as Actual["status"] })} className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${STATUS_STYLE[l.status]}`} aria-label="Actual or estimate">
+                            {(["actual", "estimate", "enter"] as const).map((st) => <option key={st} value={st}>{STATUS_LABEL[st]}</option>)}
+                          </select>
+                        </td>
+                        <td className="px-2 py-2 text-right">
+                          <span className="inline-flex items-center rounded-lg border border-border px-2 py-1 tabular-nums">$<input type="number" step="0.01" min="0" value={l.amount} onChange={(e) => edit(i, { amount: Number(e.target.value) })} className="w-20 bg-transparent text-right outline-none" aria-label={`Amount for ${l.label}`} /></span>
+                        </td>
+                        <td className="pr-4"><button type="button" onClick={() => remove(i)} className="text-muted-foreground hover:text-destructive" aria-label={`Remove ${l.label}`}><Trash2 className="h-4 w-4" /></button></td>
+                      </tr>
+                    ))}
+                  </Fragment>
+                ))}
+                <tr className="border-t-2 border-foreground">
+                  <td className="px-5 py-3 font-semibold">Total so far</td>
+                  <td />
+                  <td className="px-2 py-3 text-right text-base font-semibold tabular-nums" data-testid="finance-actual-total">{usd(total)}</td>
+                  <td />
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+        <div className="grid gap-px border-t border-border bg-border sm:grid-cols-3">
+          {[["Actual", usd(actual), "real charges and plan prices"], ["Estimates", usd(estimate), "until the bills come in"], ["Still to enter", String(missing), missing === 1 ? "bill to read" : "bills to read"]].map(([k, v, n]) => (
+            <div key={k} className="bg-card p-4"><div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">{k}</div><div className="mt-0.5 text-xl font-bold tabular-nums">{v}</div><div className="text-xs text-muted-foreground">{n}</div></div>
+          ))}
+        </div>
+        <div className="flex items-center justify-between gap-3 border-t border-border p-4">
+          <button type="button" onClick={add} className="inline-flex items-center gap-1.5 text-sm font-medium text-[#053877] hover:underline dark:text-[#9cc2ff]"><Plus className="h-4 w-4" /> Add a line</button>
+          <button type="button" onClick={() => void save()} disabled={!dirty || saving} className="inline-flex items-center gap-1.5 rounded-lg bg-[#000741] px-4 py-2 text-sm font-semibold text-white disabled:opacity-40" data-testid="button-save-actuals"><Save className="h-4 w-4" />{saving ? "Saving…" : dirty ? "Save" : "Saved"}</button>
+        </div>
+      </div>
     </section>
   );
 }
