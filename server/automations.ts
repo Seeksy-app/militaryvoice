@@ -10,7 +10,7 @@ import { getAdminEmail } from "./session.js";
 import { sendBroadcastEmail } from "./email.js";
 import {
   automations, automationSteps, automationRuns, automationSends, bioPages, broadcastEvents, contacts, discoveryMembers,
-  hostedShows, inboundEmails, podcasterProfiles, signups,
+  hostedShows, inboundEmails, loginTokens, podcasterProfiles, signups,
   type AutomationRow, type AutomationStepRow,
 } from "../shared/schema.js";
 
@@ -78,6 +78,20 @@ export const RECIPES: Record<string, { name: string; trigger: string; steps: Ste
       },
     ],
   },
+  // For the people who sign in and stop before saving a profile (Daniel, 5 Oct):
+  // a day later, one plain note with the two fields left. Off until switched on.
+  finishSetup: {
+    name: "Finish setting up",
+    trigger: "unfinished",
+    steps: [
+      {
+        delayHours: 0, banner: "welcome",
+        subject: "Two fields and you're in",
+        preheader: "Your name, and what you're here for. Your photo can wait",
+        bodyText: "Hi there,\n\nYou started a free MilitaryVoices.ai account yesterday but didn't quite get in. It's two fields: your name, and what you're here for. Your photo can wait.\n\nOnce you're in, the free Growth plan gives you a SmartLink for your bio, podcast hosting on every app, and your first episode of Pōstify clips free.\n\n[[Finish setting up]](https://www.militaryvoices.ai/host/dashboard)\n\nIf something stopped you, reply and tell us. A real person reads every one.",
+      },
+    ],
+  },
   discovery: {
     name: "Discovery welcome",
     trigger: "discovery",
@@ -111,6 +125,15 @@ async function startersSince(trigger: string, since: string): Promise<{ email: s
     case "slot":
       return (await db.select({ email: signups.email, name: signups.hostName }).from(signups).where(and(gte(signups.createdAt, since), eq(signups.status, "confirmed"))))
         .map((r) => ({ email: r.email, firstName: firstWord(r.name) }));
+    case "unfinished": {
+      // Signed in with a code at least a day ago, and still no name saved.
+      const dayAgo = new Date(Date.now() - 24 * 3600_000).toISOString();
+      const signedIn = await db.select({ email: loginTokens.email }).from(loginTokens).where(and(gte(loginTokens.usedAt, since), lte(loginTokens.usedAt, dayAgo)));
+      const emails = Array.from(new Set(signedIn.map((r) => norm(r.email))));
+      if (!emails.length) return [];
+      const done = new Set((await db.select({ email: podcasterProfiles.email, name: podcasterProfiles.hostName }).from(podcasterProfiles).where(inArray(podcasterProfiles.email, emails))).filter((r) => r.name.trim()).map((r) => norm(r.email)));
+      return emails.filter((e) => !done.has(e)).map((email) => ({ email, firstName: "" }));
+    }
     case "contact":
       return (await db.select({ email: contacts.email, name: contacts.firstName }).from(contacts).where(and(gte(contacts.importedAt, since), eq(contacts.status, "active"))))
         .map((r) => ({ email: r.email, firstName: r.name }));
@@ -200,6 +223,11 @@ async function runOnce(req: Request, deps: Deps): Promise<{ enrolled: number; se
     const end = async (reason: string) => { await db.update(automationRuns).set({ status: reason === "finished" ? "done" : "stopped", endReason: reason, endedAt: now(), nextAt: "" }).where(eq(automationRuns.id, run.id)); };
     if (await isUnsubscribed(run.email)) { await end("unsubscribed"); stopped++; continue; }
     if (a.stopOnReply && (await repliedSince(run.email, run.enrolledAt))) { await end("replied"); stopped++; continue; }
+    // "Finish setting up" stops the moment they do.
+    if (a.trigger === "unfinished") {
+      const [p] = await db.select({ name: podcasterProfiles.hostName }).from(podcasterProfiles).where(eq(podcasterProfiles.email, norm(run.email))).limit(1);
+      if (p?.name.trim()) { await end("finished setup"); stopped++; continue; }
+    }
     if (!stepCache.has(a.id)) stepCache.set(a.id, await stepsOf(a.id));
     const steps = stepCache.get(a.id)!;
     let i = run.stepIndex;
@@ -312,7 +340,7 @@ export function registerAutomations(app: Express, requireAdmin: RequestHandler, 
     const id = Number(req.params.id);
     const patch: Partial<AutomationRow> = { updatedAt: now() };
     if (typeof req.body?.name === "string") patch.name = req.body.name.trim().slice(0, 120) || "Automation";
-    if (typeof req.body?.trigger === "string" && /^(account|smartlink|podcast|discovery|slot|contact|manual|tag:[a-z0-9 ._-]{1,30})$/.test(req.body.trigger)) patch.trigger = req.body.trigger;
+    if (typeof req.body?.trigger === "string" && /^(account|unfinished|smartlink|podcast|discovery|slot|contact|manual|tag:[a-z0-9 ._-]{1,30})$/.test(req.body.trigger)) patch.trigger = req.body.trigger;
     if (typeof req.body?.stopOnReply === "boolean") patch.stopOnReply = req.body.stopOnReply;
     const [a] = await db.update(automations).set(patch).where(eq(automations.id, id)).returning();
     if (!a) return res.status(404).json({ message: "Not found." });

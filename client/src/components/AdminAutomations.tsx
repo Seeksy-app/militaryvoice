@@ -29,6 +29,7 @@ type SegmentOption = { value: string; label: string; count: number };
 
 const TRIGGERS: { value: string; label: string }[] = [
   { value: "account", label: "They finish setting up an account" },
+  { value: "unfinished", label: "They sign in but don't finish setting up (a day later)" },
   { value: "smartlink", label: "They make a SmartLink" },
   { value: "podcast", label: "They add a podcast for us to host" },
   { value: "discovery", label: "They join Discovery" },
@@ -42,6 +43,7 @@ const triggerLabel = (t: string) => (t.startsWith("tag:") ? `They get the tag ‚Ä
 const RECIPES = [
   { key: "welcome", label: "Welcome series", blurb: "4 emails over 9 days when someone makes an account: SmartLink, hosting, P≈çstify." },
   { key: "smartlink", label: "New SmartLink tips", blurb: "2 emails after someone makes a SmartLink: where to share it, and collecting emails." },
+  { key: "finishSetup", label: "Finish setting up", blurb: "1 email a day after someone signs in but never saves a profile: two fields and you're in." },
   { key: "discovery", label: "Discovery welcome", blurb: "1 email when someone joins Discovery: booking guests and being one." },
   { key: "blank", label: "Start blank", blurb: "Choose what starts it and write your own emails." },
 ];
