@@ -234,15 +234,15 @@ export default function Platform({ pitch = false }: { pitch?: boolean } = {}) {
         <HeroBackdrop />
 
         <div className="relative mx-auto grid max-w-7xl items-center gap-10 px-4 pb-16 pt-14 sm:px-6 lg:min-h-[660px] lg:pb-24 lg:pt-20">
-          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="text-center lg:max-w-[31rem] lg:text-left xl:max-w-[34rem]">
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="text-center lg:max-w-[44rem] lg:text-left xl:max-w-[48rem]">
             <div className="mb-6 inline-flex items-center gap-2 rounded-full border border-[#F0A71F]/30 bg-[#F0A71F]/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-[#F0A71F]">
               <Sparkles className="h-3.5 w-3.5" /> Every Moment Is an Opportunity™
             </div>
             <h1 className="text-[2.4rem] font-semibold leading-[1.04] tracking-[-0.02em] sm:text-5xl xl:text-[3.3rem]" style={HEADLINE_FONT}>
               Built for military and veteran
-              <span className="block text-[#F0A71F]">podcasters and creators.</span>
+              <span className="block text-[#F0A71F]">podcasters, creators and event planners.</span>
             </h1>
-            <p className="mx-auto mt-6 max-w-xl text-lg leading-relaxed text-white/75 lg:mx-0">
+            <p className="mx-auto mt-6 max-w-2xl text-lg leading-relaxed text-white/75 lg:mx-0">
               Record and go live with your guests, get clips in minutes, and run events with an SI co-host beside you. Then find and verify the people worth putting on your show.
             </p>
             <div className="mt-9 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center lg:justify-start">
