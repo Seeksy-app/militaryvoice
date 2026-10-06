@@ -1365,6 +1365,36 @@ export function registerRoutes(app: Express): void {
     return "Failed";
   }
 
+  /**
+   * A recording never reaches LiveKit's 3-hour cap (5 Oct: it ended a file at
+   * 4:47 PM and about 10 minutes weren't recorded). Past 2 hours, a new file
+   * starts alongside the running one; the old one stops on the next pass, so
+   * the two overlap by up to a quarter hour and nothing is lost.
+   */
+  async function rollLongRecordings(req: Request, running: Set<string>): Promise<number> {
+    let rolled = 0;
+    const open = await storage.listUnfinishedRecordings();
+    for (const st of await storage.listAllStudios()) {
+      // Last pass's old file, now that its successor has been running a while.
+      const retiring = await storage.getSetting(`retire_egress:${st.id}`);
+      if (retiring && retiring !== st.recordingEgressId) {
+        await stopEgressById(retiring).catch((err) => console.warn("Old recording already stopped:", (err as Error).message));
+        await storage.setSetting(`retire_egress:${st.id}`, "");
+      }
+      if (!st.recordingEgressId || !running.has(st.recordingEgressId) || retiring) continue;
+      const rec = open.find((r) => r.egressId === st.recordingEgressId);
+      if (!rec || Date.now() - Date.parse(rec.startedAt) < 2 * 3600_000) continue;
+      const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+      const filepath = `event-${st.eventId}/${stamp}-continued.mp4`;
+      const egressId = await startSegmentRecording(roomName(st.id), filepath, templateBaseUrl(req) ?? `${PUBLIC_ORIGIN}/studio/composite`);
+      await storage.createRecording({ eventId: st.eventId, studioId: st.id, signupId: rec.signupId ?? null, email: rec.email, title: `${rec.title.replace(/ \(continued\)$/, "")} (continued)`, egressId, filepath });
+      await storage.updateStudio(st.id, { recordingEgressId: egressId });
+      await storage.setSetting(`retire_egress:${st.id}`, rec.egressId);
+      rolled++;
+    }
+    return rolled;
+  }
+
   const reconcileEgressHandler: RequestHandler = async (req, res) => {
     // Only Vercel's cron (it sends CRON_SECRET): anyone else could run it, and the reach refresh spends paid look-ups.
     if (process.env.CRON_SECRET && (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "") !== process.env.CRON_SECRET) {
@@ -1403,7 +1433,8 @@ export function registerRoutes(app: Express): void {
       await settleRecording(r.egressId, r.url);
       cleared++;
     }
-    res.json({ cleared, running: running.size });
+    const rolled = await rollLongRecordings(req, running).catch((err) => { console.error("Rolling recordings failed:", err); return 0; });
+    res.json({ cleared, rolled, running: running.size });
   };
   app.post("/api/admin/recordings/:id/recheck", requireAdmin, async (req, res) => {
     const r = (await storage.listRecordings()).find((x) => x.id === Number(req.params.id));
@@ -6339,6 +6370,12 @@ export function registerRoutes(app: Express): void {
     if (action === "stop") {
       // Already over on LiveKit's side (the 3-hour cap, 5 Oct): clear it anyway so a new one can start.
       if (studio.recordingEgressId) await stopEgressById(studio.recordingEgressId).catch((err) => console.warn("Recording already stopped:", (err as Error).message));
+      // The overlapping file from a roll-over stops with it.
+      const retiring = await storage.getSetting(`retire_egress:${studio.id}`);
+      if (retiring) {
+        await stopEgressById(retiring).catch(() => {});
+        await storage.setSetting(`retire_egress:${studio.id}`, "");
+      }
       res.json(await storage.updateStudio(studio.id, { recordingEgressId: "", recordingSignupId: null }));
       return;
     }
