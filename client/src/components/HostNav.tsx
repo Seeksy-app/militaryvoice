@@ -100,8 +100,8 @@ export function HostNav({
     {
       title: "Record & host",
       items: [
-        { key: "pro", feature: "studio", label: "Studio", hint: "The full marathon studio for your own show: scenes, layouts, lower thirds and a producer console. Coming Oct 5th.", icon: MonitorPlay, tag: "Oct 5", soon: "Studio is coming Oct 5th" },
-        { key: "studio", label: "Rooms", hint: "Quick, like Zoom: hop in with guests, record it or don't, and go live. Coming Oct 5th.", icon: Video, tag: "Oct 5", soon: "Rooms open Oct 5th" },
+        { key: "pro", feature: "studio", label: "Studio", hint: "The full marathon studio for your own show: scenes, layouts, lower thirds and a producer console. Coming soon.", icon: MonitorPlay, tag: "Soon", soon: "Studio for your own show is coming soon" },
+        { key: "studio", label: "Rooms", hint: "Quick, like Zoom: hop in with guests, record it or don't, and go live. Coming soon.", icon: Video, tag: "Soon", soon: "Rooms are coming soon" },
         { key: "podcast", label: "Podcast", hint: "Host your show: your RSS feed for Apple and Spotify, episodes, and downloads sponsors trust", icon: Podcast },
         { key: "recordings", label: "Library", hint: "Every episode in one place: studio recordings, uploads, Zoom calls and cleaned-up versions", icon: Library },
       ],
@@ -128,7 +128,7 @@ export function HostNav({
     {
       title: "Coming soon",
       // One quiet line: what's coming shouldn't take the space of what's here.
-      items: [{ key: "pro", label: "Pro tools", hint: "Email campaigns, a contacts CRM and your own studio, coming after the Marathon", icon: Lock, locked: true, feature: "campaigns", tag: "Soon" }],
+      items: [{ key: "pro", label: "Pro tools", hint: "Email campaigns, a contacts CRM and your own studio, coming soon", icon: Lock, locked: true, feature: "campaigns", tag: "Soon" }],
     },
     {
       title: "Help",

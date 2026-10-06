@@ -101,9 +101,9 @@ export function emailShell(o: {
         <tr><td style="background:#053877;padding:20px 32px;">
           <img src="${SITE}/logo-wave.png" width="54" alt="" style="display:block;border:0;margin:0 0 8px;">
           <p style="margin:0;color:#ffffff;font-size:14px;font-weight:700;">MilitaryVoices.ai</p>
-          <p style="margin:2px 0 0;color:#c8d8ee;font-size:12px;line-height:1.6;">The Podcast Marathon for National Military Podcast Day ·
-            <a href="${SITE}/agenda" style="color:#F0A71F;text-decoration:none;">Agenda</a> ·
-            <a href="${SITE}/host/dashboard" style="color:#F0A71F;text-decoration:none;">Your dashboard</a></p>
+          <p style="margin:2px 0 0;color:#c8d8ee;font-size:12px;line-height:1.6;">The platform for military and veteran creators ·
+            <a href="${SITE}/host/dashboard" style="color:#F0A71F;text-decoration:none;">Your dashboard</a> ·
+            <a href="${SITE}/events" style="color:#F0A71F;text-decoration:none;">Events</a></p>
         </td></tr>
       </table>
     </td></tr>
@@ -1192,7 +1192,8 @@ export function renderBroadcastEmail(opts: BroadcastEmailOptions): { subject: st
   const memberSignature = member ? memberSignatureHtml(member) : "";
   const bodyHtml = `${textToHtml(resolvedBodyText)}${isRico ? RICO_SIGNATURE : memberSignature}`;
   const bannerUrl = BROADCAST_BANNERS[opts.banner ?? "welcome"] ?? BROADCAST_BANNERS.welcome;
-  const eyebrow = opts.bannerTitle?.trim() || "The Podcast Marathon";
+  // The platform's mail, not one event's: an event's broadcast names itself in bannerTitle.
+  const eyebrow = opts.bannerTitle?.trim() || "MilitaryVoices.ai";
   const fromName = member ? `${member.name} | MilitaryVoices.ai` : isRico ? "Riccoh Player | MilitaryVoices.ai" : "MilitaryVoices.ai";
 
   return {
