@@ -9,7 +9,9 @@
  * credit costs us at most ~50¢, and the plans sell them at 50–66¢.
  */
 export const PLANS = {
-  creator: { key: "creator", name: "Creator", cents: 1995, yearCents: 19900, credits: 30, clipsPerEpisode: 4, overageCents: 60, blurb: "About 3 episodes a month with animated captions, or 6 with Classic." },
+  // Plan names (6 Oct 2026): Growth (free) → Scale → Pro. The key stays
+  // "creator" so existing subscriptions and Stripe prices keep matching.
+  creator: { key: "creator", name: "Scale", cents: 1995, yearCents: 19900, credits: 30, clipsPerEpisode: 4, overageCents: 60, blurb: "About 3 episodes a month with animated captions, or 6 with Classic." },
   // Pro: 6 clips an episode (12 credits animated, 7 Classic).
   pro: { key: "pro", name: "Pro", cents: 4900, yearCents: 49000, credits: 90, clipsPerEpisode: 6, overageCents: 50, blurb: "6 clips an episode instead of 4: about 7 episodes a month with animated captions, or 12 with Classic.", popular: true },
 } as const;

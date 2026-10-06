@@ -90,7 +90,7 @@ RECENTLY DELETED (account menu: press your photo, top right; help at /help/accou
 
 PLAN & BILLING (account menu; help at /help/account)
 - Free always: SmartLink, podcast hosting, Ask my show, and Discovery with 10 contact emails a month. The first Pōstify episode is free.
-- Pōstify plans: Creator $19.95/month (30 credits a month, 4 clips an episode) and Pro $49/month (90 credits, 6 clips an episode); both take the MilitaryVoices.ai bar off the SmartLink. "Upgrade to Creator" / "Upgrade to Pro"; yearly (two months free) is in Pōstify's "Pick a plan". On a plan: "Manage billing" opens Stripe's billing page (card, invoices, cancel).
+- Plans: Growth is free (SmartLink, podcast hosting, Ask my show, events, first Pōstify episode free). Pōstify plans: Scale $19.95/month (30 credits a month, 4 clips an episode) and Pro $49/month (90 credits, 6 clips an episode); both take the MilitaryVoices.ai bar off the SmartLink. "Upgrade to Scale" / "Upgrade to Pro"; yearly (two months free) is in Pōstify's "Pick a plan". On a plan: "Manage billing" opens Stripe's billing page (card, invoices, cancel).
 - Credits: an episode is 8 credits (12 on Pro) with animated captions, 5 (7 on Pro) with Classic; music and text edits included. Contact emails in Discovery past the monthly ones (10 free, 100 with Discovery Pro) cost 1 credit each, and a paid contact is free to see again. "Buy 50 credits · $35". On a monthly plan, extra credits go on the next bill up to a limit they set.
 - Discovery Pro: $29/month, 100 contact emails and 1,000 profile look-ups a month (free: 10 and 200). "Add Discovery Pro"; "Manage" once on. No Pōstify plan needed.
 

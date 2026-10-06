@@ -497,15 +497,15 @@ Open my Podcast screen
 All help Help · Your account
 Your plan, credits, and what you deleted
 Two things live in your account menu (press your photo, top right): Plan & billing and Recently deleted.
-1 What's free
-Your SmartLink, podcast hosting and Ask my show are free, always. So is Discovery, with 10 contact emails a month. Your first Pōstify episode is free too.
+1 Growth: what's free
+Growth is the free plan. Your SmartLink, podcast hosting and Ask my show are free, always. So is Discovery, with 10 contact emails a month. Your first Pōstify episode is free too.
 2 Pōstify plans
 A plan gives you credits every month for clips and clean episodes.
-Creator, $19.95 a month: 30 credits a month, 4 clips an episode.
+Scale, $19.95 a month: 30 credits a month, 4 clips an episode.
 Pro, $49 a month: 90 credits a month, 6 clips an episode.
 Both take the MilitaryVoices.ai bar off your SmartLink.
 a Open the account menu and press Plan & billing.
-b Press Upgrade to Creator or Upgrade to Pro. Checkout is secure, by Stripe.
+b Press Upgrade to Scale or Upgrade to Pro. Checkout is secure, by Stripe.
 Paying yearly gets two months free: choose Yearly in Pōstify's Pick a plan window. Cancel any time.
 3 Credits
 Credits pay for clips, clean episodes, and contact emails past your monthly ones. Credits you buy don't run out.

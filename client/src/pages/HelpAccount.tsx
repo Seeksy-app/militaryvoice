@@ -25,10 +25,10 @@ export default function HelpAccount() {
         eyebrow="Help · Your account"
         title="Your plan, credits, and what you deleted"
         lead={<>Two things live in your account menu (press your photo, top right): <strong>Plan &amp; billing</strong> and <strong>Recently deleted</strong>.</>}
-        toc={[["#free", "What's free"], ["#plans", "Pōstify plans"], ["#credits", "Credits"], ["#discovery", "Discovery Pro"], ["#manage", "Manage billing"], ["#deleted", "Recently deleted"], ["#support", "Help and contact"]]}
+        toc={[["#free", "Growth: what's free"], ["#plans", "Pōstify plans"], ["#credits", "Credits"], ["#discovery", "Discovery Pro"], ["#manage", "Manage billing"], ["#deleted", "Recently deleted"], ["#support", "Help and contact"]]}
       >
-        <HelpSection n={1} id="free" title="What's free">
-          <p>Your SmartLink, podcast hosting and Ask my show are free, always. So is Discovery, with {FREE_DISCOVERY.reveals} contact emails a month. Your first Pōstify episode is free too.</p>
+        <HelpSection n={1} id="free" title="Growth: what's free">
+          <p>Growth is the free plan. Your SmartLink, podcast hosting and Ask my show are free, always. So is Discovery, with {FREE_DISCOVERY.reveals} contact emails a month. Your first Pōstify episode is free too.</p>
         </HelpSection>
 
         <HelpSection n={2} id="plans" title="Pōstify plans">

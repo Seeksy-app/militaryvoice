@@ -1,3 +1,4 @@
+import { Link } from "wouter";
 import { useState } from "react";
 import { NavBar } from "@/components/NavBar";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -54,7 +55,7 @@ function Comparison() {
               <th className="p-4 font-semibold text-muted-foreground" />
               <th className="p-4 font-semibold text-muted-foreground">OpusClip Starter</th>
               <th className="p-4 font-semibold text-muted-foreground">OpusClip Pro</th>
-              <th className="bg-[#053877]/[0.05] p-4 font-bold text-foreground">Pōstify Creator</th>
+              <th className="bg-[#053877]/[0.05] p-4 font-bold text-foreground">Pōstify Scale</th>
               <th className="bg-[#053877]/[0.05] p-4 font-bold text-foreground">Pōstify Pro</th>
             </tr>
           </thead>
@@ -113,7 +114,24 @@ export default function Pricing() {
             </button>
           </div>
         </div>
-        <div className="mx-auto grid max-w-3xl gap-5 md:grid-cols-2">
+        <div className="mx-auto grid max-w-5xl gap-5 md:grid-cols-3">
+          {/* Growth: everything that costs us pennies, free for good. The
+              name is the point — people want Growth, and it happens to be free. */}
+          <div className="relative flex flex-col rounded-3xl border border-border bg-card p-6 shadow-sm" data-testid="plan-card-growth">
+            <p className="flex items-center gap-2 text-sm font-semibold text-muted-foreground"><Coins className="h-4 w-4 text-emerald-600" /> Growth</p>
+            <p className="mt-3 text-4xl font-bold tracking-tight text-foreground" style={HEADLINE_FONT}>Free<span className="text-base font-medium text-muted-foreground"> forever</span></p>
+            <p className="mt-1 text-sm font-semibold text-foreground">Your first episode of clips on us</p>
+            <ul className="mt-3 flex-1 space-y-1.5 text-sm text-foreground/80">
+              <li>Your SmartLink: one link for every bio</li>
+              <li>Podcast hosting, on every app</li>
+              <li>Ask my show: listeners ask, SI answers from your episodes</li>
+              <li>Discovery, with 10 contact emails a month</li>
+              <li>Book and join events, with an SI co-host</li>
+            </ul>
+            <Link href="/host/dashboard?start">
+              <Button variant="outline" className="mt-5 w-full gap-2 rounded-full" data-testid="plan-growth-start">Start with Growth</Button>
+            </Link>
+          </div>
           {Object.values(PLANS).map((p) => {
             const popular = "popular" in p && p.popular;
             return (
