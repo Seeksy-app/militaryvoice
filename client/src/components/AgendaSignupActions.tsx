@@ -1,3 +1,4 @@
+import { SmsConsent } from "@/components/SmsConsent";
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -141,6 +142,7 @@ export function AgendaSignupActions({ signup, shareText }: Props) {
                   className="mt-1 h-9"
                   data-testid={`input-reminder-phone-${signup.id}`}
                 />
+                {phone.trim() && <SmsConsent className="mt-1" what="a reminder text before this show" />}
               </div>
             </div>
             {siteKey && <Turnstile siteKey={siteKey} onToken={setHuman} resetSignal={humanReset} />}

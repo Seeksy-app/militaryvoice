@@ -1,3 +1,4 @@
+import { SmsConsent } from "@/components/SmsConsent";
 import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
@@ -602,7 +603,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
                     {/* This sentence is the opt-in the carriers ask to see for
                         toll-free texting. Change it and the verification needs
                         to know. */}
-                    <FormDescription>For show-day texts only, like "you're on in 10" and the green room link. Message and data rates may apply. Reply STOP to opt out.</FormDescription>
+                    <SmsConsent />
                     <FormMessage />
                   </FormItem>
                 )}
