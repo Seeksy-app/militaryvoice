@@ -10,12 +10,13 @@
 // The same list, narrowed to one event, is that event's CRM.
 import type { Express, RequestHandler } from "express";
 import { inArray, sql } from "drizzle-orm";
-import { db, schemaIsReady } from "./storage.js";
+import { db, schemaIsReady, storage } from "./storage.js";
+import { PLANS } from "../shared/tokens.js";
+import { BUILT_IN_AUDIENCES, matchesFilter, type AudienceFilter, type SavedAudience } from "../shared/crm.js";
 import {
   bioPages, contacts, discoveryMembers, eventTeam, events, hostedShows, inboundEmails, mailLog,
-  podcasterProfiles, postifySubscriptions, reminders, signups, sponsorInquiries, sponsorLeads,
+  podcasterProfiles, postifySubscriptions, pathOf, reminders, signups, sponsorInquiries, sponsorLeads,
 } from "../shared/schema.js";
-import { PLANS } from "../shared/tokens.js";
 
 export type Role = "Member" | "Podcaster" | "Co-host" | "Discovery" | "Sponsor" | "Team" | "Listener" | "Imported";
 export type Person = {
@@ -24,6 +25,8 @@ export type Person = {
   roles: Role[];
   /** Growth (free), Scale or Pro — members only. */
   plan: string;
+  /** podcaster | creator | planner — members only. */
+  path: string;
   shows: string[];
   events: { id: number; name: string }[];
   smartlink: string;
@@ -35,21 +38,15 @@ export type Person = {
   lastActivityAt: string;
 };
 
-/** The audiences people can be filtered into, and campaigns sent to. */
-export const AUDIENCES: { key: string; label: string; scope: "platform" | "event" | "both"; test: (p: Person) => boolean }[] = [
-  { key: "everyone", label: "Everyone", scope: "both", test: () => true },
-  { key: "members", label: "Members", scope: "both", test: (p) => p.roles.includes("Member") },
-  { key: "podcasters", label: "Podcasters", scope: "both", test: (p) => p.roles.includes("Podcaster") || p.roles.includes("Co-host") },
-  { key: "pro", label: "On Pro", scope: "platform", test: (p) => p.plan === PLANS.pro.name },
-  { key: "scale", label: "On Scale", scope: "platform", test: (p) => p.plan === PLANS.creator.name },
-  { key: "growth", label: "On Growth", scope: "platform", test: (p) => p.plan === "Growth" },
-  { key: "discovery", label: "Discovery", scope: "platform", test: (p) => p.roles.includes("Discovery") },
-  { key: "sponsors", label: "Sponsors", scope: "both", test: (p) => p.roles.includes("Sponsor") },
-  { key: "team", label: "Event team", scope: "both", test: (p) => p.roles.includes("Team") },
-  { key: "listeners", label: "Listeners", scope: "both", test: (p) => p.roles.includes("Listener") },
-  { key: "imported", label: "Imported", scope: "platform", test: (p) => p.roles.includes("Imported") },
-  { key: "no-smartlink", label: "No SmartLink yet", scope: "platform", test: (p) => p.roles.includes("Member") && !p.smartlink },
-];
+/** The audiences people can be filtered into, and campaigns sent to (shared with the page). */
+export const AUDIENCES = BUILT_IN_AUDIENCES;
+
+// Audiences the team makes from filters ("Members on Growth who joined this month").
+const SAVED_KEY = "crm_audiences";
+export async function savedAudiences(): Promise<SavedAudience[]> {
+  try { const v = JSON.parse((await storage.getSetting(SAVED_KEY)) || "[]"); return Array.isArray(v) ? v : []; } catch { return []; }
+}
+const saveAudiences = (list: SavedAudience[]) => storage.setSetting(SAVED_KEY, JSON.stringify(list));
 
 const norm = (e: string | null | undefined) => (e ?? "").trim().toLowerCase();
 const valid = (e: string) => /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e);
@@ -64,7 +61,7 @@ export async function listPeople(eventId: number | null): Promise<Person[]> {
     if (!valid(e) || HOUSE.has(e)) return null;
     let p = map.get(e);
     if (!p) {
-      p = { email: e, name: "", roles: [], plan: "", shows: [], events: [], smartlink: "", hosted: false, unsubscribed: false, stage: "", tags: [], joinedAt: "", lastActivityAt: "" };
+      p = { email: e, name: "", roles: [], plan: "", path: "", shows: [], events: [], smartlink: "", hosted: false, unsubscribed: false, stage: "", tags: [], joinedAt: "", lastActivityAt: "" };
       map.set(e, p);
     }
     if (!p.name && name.trim()) p.name = name.trim();
@@ -111,9 +108,10 @@ export async function listPeople(eventId: number | null): Promise<Person[]> {
   // Platform-wide sources: in an event's CRM they only add detail to people already there.
   const platform = eventId == null;
   const only = (e: string) => platform || map.has(norm(e));
-  for (const pr of await db.select({ email: podcasterProfiles.email, name: podcasterProfiles.hostName, show: podcasterProfiles.podcastName, createdAt: podcasterProfiles.createdAt }).from(podcasterProfiles)) {
+  for (const pr of await db.select({ email: podcasterProfiles.email, name: podcasterProfiles.hostName, show: podcasterProfiles.podcastName, interests: podcasterProfiles.interests, createdAt: podcasterProfiles.createdAt }).from(podcasterProfiles)) {
     if (!only(pr.email)) continue;
     const p = get(pr.email, pr.name); role(p, "Member"); joined(p, pr.createdAt);
+    if (p) p.path = pathOf(pr.interests);
     if (p && pr.show && !p.shows.includes(pr.show)) p.shows.push(pr.show);
   }
   for (const d of await db.select({ email: discoveryMembers.email, createdAt: discoveryMembers.createdAt }).from(discoveryMembers)) {
@@ -171,6 +169,10 @@ export async function audienceRecipients(key: string, eventId: number | null): P
     const want = new Set(key.slice(5).split("|").map(norm));
     return people.filter((p) => want.has(p.email) && !p.unsubscribed).map(first);
   }
+  if (key.startsWith("saved:")) {
+    const a = (await savedAudiences()).find((x) => x.id === key.slice(6));
+    return a ? people.filter((p) => !p.unsubscribed && matchesFilter(p, a.filter)).map(first) : [];
+  }
   const a = AUDIENCES.find((x) => x.key === key);
   if (!a) return [];
   return people.filter((p) => !p.unsubscribed && a.test(p)).map(first);
@@ -188,6 +190,38 @@ export function registerPeople(app: Express, requireAdmin: RequestHandler) {
     const audiences = AUDIENCES.filter((a) => a.scope === "both" || a.scope === scope).map((a) => ({
       key: a.key, label: a.label, count: people.filter((p) => a.test(p)).length, reachable: people.filter((p) => a.test(p) && !p.unsubscribed).length,
     }));
-    res.json({ people, audiences });
+    const saved = await savedAudiences();
+    for (const a of saved) {
+      const inIt = people.filter((p) => matchesFilter(p, a.filter));
+      audiences.push({ key: `saved:${a.id}`, label: a.name, count: inIt.length, reachable: inIt.filter((p) => !p.unsubscribed).length });
+    }
+    res.json({ people, audiences, saved });
+  });
+
+  /** Save the filter on screen as an audience of its own; it shows in the list and as a campaign audience. */
+  app.post("/api/admin/people/audiences", requireAdmin, async (req, res) => {
+    if ((req as { studioHost?: unknown }).studioHost) return res.status(403).json({ message: "Admins only." });
+    const name = String(req.body?.name ?? "").trim().slice(0, 60);
+    if (!name) return res.status(400).json({ message: "Give it a name." });
+    const f = (req.body?.filter ?? {}) as AudienceFilter;
+    const strs = (v: unknown) => (Array.isArray(v) ? v.map((x) => String(x).slice(0, 60)).slice(0, 30) : undefined);
+    const filter: AudienceFilter = {
+      base: typeof f.base === "string" ? f.base.slice(0, 40) : undefined,
+      roles: strs(f.roles), plans: strs(f.plans), paths: strs(f.paths), tags: strs(f.tags),
+      eventIds: Array.isArray(f.eventIds) ? f.eventIds.map(Number).filter(Number.isFinite).slice(0, 30) : undefined,
+      joinedDays: Number(f.joinedDays) > 0 ? Math.round(Number(f.joinedDays)) : undefined,
+      quietDays: Number(f.quietDays) > 0 ? Math.round(Number(f.quietDays)) : undefined,
+      smartlink: f.smartlink === "yes" || f.smartlink === "no" ? f.smartlink : undefined,
+    };
+    const list = await savedAudiences();
+    if (list.length >= 50) return res.status(400).json({ message: "That's 50 saved audiences. Remove one first." });
+    const a: SavedAudience = { id: Math.random().toString(36).slice(2, 10), name, filter, createdAt: new Date().toISOString() };
+    await saveAudiences([...list, a]);
+    res.status(201).json(a);
+  });
+  app.delete("/api/admin/people/audiences/:id", requireAdmin, async (req, res) => {
+    if ((req as { studioHost?: unknown }).studioHost) return res.status(403).json({ message: "Admins only." });
+    await saveAudiences((await savedAudiences()).filter((a) => a.id !== req.params.id));
+    res.json({ ok: true });
   });
 }

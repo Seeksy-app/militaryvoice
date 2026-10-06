@@ -6,7 +6,10 @@ import { and, desc, eq, inArray, sql } from "drizzle-orm";
 import { db, schemaIsReady } from "./storage.js";
 import { getAdminEmail } from "./session.js";
 import { enrollByTrigger } from "./automations.js";
-import { bioPages, bioSubscribers, broadcastEvents, contactNotes, contacts, events, hostedEpisodes, hostedShows, inboundEmails, mailLog, podcasterProfiles, reminders, signups } from "../shared/schema.js";
+import { bioPages, bioSubscribers, broadcastEvents, contactNotes, contacts, events, hostedEpisodes, hostedShows, inboundEmails, mailLog, pathOf, podcasterProfiles, postifySubscriptions, reminders, signups, smsMessages, smsOptIns, smsOptOuts } from "../shared/schema.js";
+import { PLANS } from "../shared/tokens.js";
+import { PATH_LABEL } from "../shared/crm.js";
+import { toE164 } from "./sms.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 const now = () => new Date().toISOString();
@@ -24,7 +27,7 @@ function slotTime(ev: { startAtUtc: string; slotMinutes: number } | undefined, s
 }
 
 type Fate = { delivered: boolean; opened: boolean; clicked: boolean; bounced: boolean };
-type Moment = { at: string; kind: "email-out" | "email-in" | "booking" | "cohost" | "signup" | "reminder" | "note" | "joined"; title: string; detail?: string; fate?: Fate; ok?: boolean; label?: string };
+type Moment = { at: string; kind: "email-out" | "email-in" | "booking" | "cohost" | "signup" | "reminder" | "note" | "joined" | "text-out" | "text-in" | "event"; title: string; detail?: string; fate?: Fate; ok?: boolean; label?: string };
 
 export function registerContactProfile(app: Express, requireAdmin: RequestHandler) {
   app.get("/api/admin/contact-profile", requireAdmin, async (req, res) => {
@@ -58,6 +61,18 @@ export function registerContactProfile(app: Express, requireAdmin: RequestHandle
       if (e.type === "bounced") f.bounced = true;
       fate.set(e.id, f);
     }
+    // Their plan, their own events (event planners), and every text both ways.
+    const [subsPaid, ownEvents, optIns] = await Promise.all([
+      db.select().from(postifySubscriptions).where(eq(lower(postifySubscriptions.email), email)),
+      db.select().from(events).where(eq(lower(events.ownerEmail), email)).orderBy(desc(events.id)),
+      db.select().from(smsOptIns).where(eq(lower(smsOptIns.email), email)),
+    ]);
+    const live = subsPaid.find((x) => ["active", "trialing", "past_due"].includes(x.status));
+    const plan = live ? (live.plan === "pro" ? PLANS.pro.name : PLANS.creator.name) : host ? "Growth" : "";
+    const phones = Array.from(new Set([host?.phone, ...optIns.map((o) => o.phone)].map((x) => toE164(x || "")).filter(Boolean)));
+    const texts = await db.select().from(smsMessages).where(phones.length ? sql`lower(${smsMessages.email}) = ${email} or ${inArray(smsMessages.phone, phones)}` : eq(lower(smsMessages.email), email)).orderBy(desc(smsMessages.createdAt)).limit(200);
+    const stopped = phones.length ? await db.select().from(smsOptOuts).where(inArray(smsOptOuts.phone, phones)) : [];
+
     const evIds = Array.from(new Set([...books, ...cohosts].map((b) => b.eventId).filter((x): x is number => x != null)));
     const evRows = evIds.length ? await db.select().from(events).where(inArray(events.id, evIds)) : [];
     const evById = new Map(evRows.map((e) => [e.id, e]));
@@ -74,12 +89,16 @@ export function registerContactProfile(app: Express, requireAdmin: RequestHandle
       ...cohosting.map((b): Moment => ({ at: b.at, kind: "cohost", title: `Co-host on ${b.podcast}`, detail: [b.when, b.status].filter(Boolean).join(" · ") })),
       ...subs.map((s): Moment => ({ at: s.at, kind: "signup", title: `Signed up on ${s.name || s.handle}'s SmartLink` })),
       ...rems.map((r): Moment => ({ at: r.at, kind: "reminder", title: `Asked for a reminder${r.podcast ? ` of ${r.podcast}` : ""}` })),
+      ...texts.map((t): Moment => ({ at: t.createdAt, kind: t.direction === "in" ? "text-in" : "text-out", title: clip(t.body, 160), detail: t.direction === "in" ? "" : t.status, ok: t.status !== "failed" && t.status !== "blocked" })),
+      ...ownEvents.map((e): Moment => ({ at: e.createdAt, kind: "event", title: `Created the event ${e.name}`, detail: e.review === "approved" ? "Approved" : e.review === "pending" ? "Waiting for approval" : "Draft" })),
+      ...(host ? [{ at: host.createdAt, kind: "joined" as const, title: "Made an account" }] : []),
+      ...optIns.map((o): Moment => ({ at: o.createdAt, kind: "joined", title: "Said yes to text messages", detail: o.source })),
       ...notes.map((n): Moment => ({ at: n.createdAt, kind: "note", title: n.text, detail: n.author })),
       ...(contact ? [{ at: contact.importedAt, kind: "joined" as const, title: `Added to Contacts (${contact.source})` }] : []),
     ].filter((m) => m.at).sort((a, b) => b.at.localeCompare(a.at));
 
     // Who they are to us, in a word or two.
-    const roles = [host || books.length ? "Podcaster" : "", cohosts.length ? "Co-host" : "", subs.length || rems.length ? "Listener" : "", got.some((g) => g.category === "sponsor") ? "Sponsor" : ""].filter(Boolean);
+    const roles = [host ? "Member" : "", ownEvents.length ? "Event planner" : "", books.length || (host?.podcastName && pathOf(host.interests) === "podcaster") ? "Podcaster" : "", cohosts.length ? "Co-host" : "", subs.length || rems.length ? "Listener" : "", got.some((g) => g.category === "sponsor") ? "Sponsor" : ""].filter(Boolean);
     res.json({
       email, name, roles,
       contact: contact ? { id: contact.id, status: contact.status, stage: contact.lifecycleStage, source: contact.source, since: contact.importedAt, lastEngagedAt: contact.lastEngagedAt } : null,
@@ -91,6 +110,10 @@ export function registerContactProfile(app: Express, requireAdmin: RequestHandle
         bounced: sent.filter((m) => fate.get(m.resendId)?.bounced).length, lastEmailedAt: sent[0]?.sentAt ?? "", lastOpenedAt: lastOpened, lastWroteAt: got[0]?.receivedAt ?? "",
         waiting: got.filter((g) => g.status === "new" || g.status === "drafted").length,
       },
+      plan, path: host ? PATH_LABEL[pathOf(host.interests)] : "", memberSince: host?.createdAt ?? "",
+      phone: phones[0] ?? "", textsOk: optIns.length > 0 && stopped.length === 0, textsStopped: stopped.length > 0,
+      textCount: texts.length,
+      ownEvents: ownEvents.map((e) => ({ id: e.id, name: e.name, startAtUtc: e.startAtUtc, review: e.review || "draft", url: `${ORIGIN}/event/${e.slug}` })),
       host: host ? { podcast: host.podcastName, hostName: host.hostName, branch: host.branch, serviceStatus: host.serviceStatus } : null,
       smartlink: page ? { handle: page.handle, url: `${ORIGIN}/${page.handle}`, name: page.displayName } : null,
       shows: shows.map((s) => ({ id: s.id, title: s.title, url: `${ORIGIN}/podcast/${s.slug}`, episodes: epCounts.find((c) => c.show === s.id)?.n ?? 0 })),

@@ -3,7 +3,8 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { adminGet, adminSend } from "@/lib/adminApi";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { Check, Mail, Search, Upload, Users, X } from "lucide-react";
+import { Bookmark, Check, ListFilter, Mail, Search, Trash2, Upload, Users, X } from "lucide-react";
+import { BUILT_IN_AUDIENCES, PATH_LABEL, filterIsActive, matchesFilter, type AudienceFilter, type SavedAudience } from "@shared/crm";
 
 // People: the CRM's front door. Everyone we have a relationship with, one
 // row each — members, podcasters on any event, Discovery users, sponsors,
@@ -12,11 +13,30 @@ import { Check, Mail, Search, Upload, Users, X } from "lucide-react";
 // The same screen, narrowed to one event, is that event's CRM.
 
 export type Person = {
-  email: string; name: string; roles: string[]; plan: string; shows: string[]; events: { id: number; name: string }[];
+  email: string; name: string; roles: string[]; plan: string; path: string; shows: string[]; events: { id: number; name: string }[];
   smartlink: string; hosted: boolean; unsubscribed: boolean; stage: string; tags: string[]; joinedAt: string; lastActivityAt: string;
 };
 export type Audience = { key: string; label: string; count: number; reachable: number };
-type Data = { people: Person[]; audiences: Audience[] };
+type Data = { people: Person[]; audiences: Audience[]; saved: SavedAudience[] };
+
+const ROLES = ["Member", "Podcaster", "Co-host", "Discovery", "Sponsor", "Team", "Listener", "Imported"];
+const PLAN_NAMES = ["Growth", "Scale", "Pro"];
+
+/** One row of the filter: a label and its choices, any of which can be on. */
+function Chips<T extends string | number>({ label, options, on, toggle }: { label: string; options: { value: T; label: string }[]; on: (v: T) => boolean; toggle: (v: T) => void }) {
+  if (!options.length) return null;
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      <span className="w-20 shrink-0 text-xs font-semibold text-muted-foreground">{label}</span>
+      {options.map((o) => (
+        <button key={String(o.value)} type="button" onClick={() => toggle(o.value)} aria-pressed={on(o.value)}
+          className={`rounded-full border px-2.5 py-1 text-xs transition ${on(o.value) ? "border-[#053877] bg-[#053877] font-semibold text-white" : "border-border bg-background text-foreground hover:border-[#053877]/40"}`}>
+          {o.label}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 const ROLE_TONE: Record<string, string> = {
   Member: "bg-[#053877]/10 text-[#053877] dark:bg-[#9cc2ff]/15 dark:text-[#9cc2ff]",
@@ -52,32 +72,52 @@ export function People({ eventId, onSelect, onEmail }: {
   const [aud, setAud] = useState("everyone");
   const [q, setQ] = useState("");
   const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [filter, setFilter] = useState<AudienceFilter>({});
+  const [filtering, setFiltering] = useState(false);
+  const [naming, setNaming] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
   const audiences = data?.audiences ?? [];
   const current = audiences.find((a) => a.key === aud) ?? audiences[0];
   const tests = useMemo(() => {
-    // The server owns who's in each audience; the page mirrors it from the rows it has.
-    const t: Record<string, (p: Person) => boolean> = {
-      everyone: () => true,
-      members: (p) => p.roles.includes("Member"),
-      podcasters: (p) => p.roles.includes("Podcaster") || p.roles.includes("Co-host"),
-      pro: (p) => p.plan === "Pro",
-      scale: (p) => p.plan === "Scale",
-      growth: (p) => p.plan === "Growth",
-      discovery: (p) => p.roles.includes("Discovery"),
-      sponsors: (p) => p.roles.includes("Sponsor"),
-      team: (p) => p.roles.includes("Team"),
-      listeners: (p) => p.roles.includes("Listener"),
-      imported: (p) => p.roles.includes("Imported"),
-      "no-smartlink": (p) => p.roles.includes("Member") && !p.smartlink,
-    };
+    // The same tests the server uses to send, so the count here is who a campaign reaches.
+    const t: Record<string, (p: Person) => boolean> = {};
+    for (const a of BUILT_IN_AUDIENCES) t[a.key] = a.test;
+    for (const a of data?.saved ?? []) t[`saved:${a.id}`] = (p) => matchesFilter(p, a.filter);
     return t;
-  }, []);
+  }, [data?.saved]);
+  const active = filterIsActive(filter);
   const rows = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return (data?.people ?? []).filter((p) => (tests[aud] ?? (() => true))(p) && (!needle || `${p.name} ${p.email} ${p.shows.join(" ")} ${p.tags.join(" ")}`.toLowerCase().includes(needle)));
-  }, [data?.people, aud, q, tests]);
+    return (data?.people ?? []).filter((p) => (tests[aud] ?? (() => true))(p) && (!active || matchesFilter(p, filter)) && (!needle || `${p.name} ${p.email} ${p.shows.join(" ")} ${p.tags.join(" ")}`.toLowerCase().includes(needle)));
+  }, [data?.people, aud, q, tests, active, filter]);
+  const reachable = rows.filter((r) => !r.unsubscribed);
+  // What the filter can offer, from the people we have.
+  const tagOptions = useMemo(() => Array.from(new Set((data?.people ?? []).flatMap((p) => p.tags))).sort().slice(0, 24), [data?.people]);
+  const eventOptions = useMemo(() => {
+    const m = new Map<number, string>();
+    for (const p of data?.people ?? []) for (const e of p.events) m.set(e.id, e.name);
+    return Array.from(m.entries()).map(([value, label]) => ({ value, label }));
+  }, [data?.people]);
+  const flip = (k: "roles" | "plans" | "paths" | "tags", v: string) => setFilter((f) => { const cur: string[] = f[k] ?? []; return { ...f, [k]: cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v] }; });
+  const flipEvent = (v: number) => setFilter((f) => { const cur = f.eventIds ?? []; return { ...f, eventIds: cur.includes(v) ? cur.filter((x) => x !== v) : [...cur, v] }; });
+  const one = <K extends "joinedDays" | "quietDays" | "smartlink">(k: K, v: AudienceFilter[K]) => setFilter((f) => ({ ...f, [k]: f[k] === v ? undefined : v }));
+
+  const saveAudience = async (name: string) => {
+    try {
+      const a = (await (await adminSend("POST", "/api/admin/people/audiences", { name, filter: { ...filter, base: aud.startsWith("saved:") ? undefined : aud } })).json()) as SavedAudience;
+      await qc.invalidateQueries({ queryKey: ["/api/admin/people"] });
+      setNaming(null); setFilter({}); setFiltering(false); setAud(`saved:${a.id}`);
+      toast({ title: `Saved "${a.name}"`, description: "It's in your audiences, and you can send a campaign to it." });
+    } catch (err) {
+      toast({ title: "Not saved", description: (err as Error).message, variant: "destructive" });
+    }
+  };
+  const removeAudience = async (key: string) => {
+    await adminSend("DELETE", `/api/admin/people/audiences/${key.slice(6)}`).catch(() => {});
+    setAud("everyone");
+    void qc.invalidateQueries({ queryKey: ["/api/admin/people"] });
+  };
   const toggle = (e: string) => setPicked((s) => { const n = new Set(s); if (n.has(e)) n.delete(e); else n.add(e); return n; });
   const allOnScreen = rows.length > 0 && rows.every((r) => picked.has(r.email));
 
@@ -95,9 +135,10 @@ export function People({ eventId, onSelect, onEmail }: {
     <div className="grid gap-5 lg:grid-cols-[230px_minmax(0,1fr)]" data-testid="crm-people">
       {/* Audiences: who you can look at, and email, in one press. */}
       <nav className="flex gap-1.5 overflow-x-auto pb-1 lg:flex-col lg:overflow-visible" aria-label="Audiences">
-        {audiences.map((a) => (
+        {audiences.map((a, i) => (
+          <div key={a.key} className="contents">
+          {a.key.startsWith("saved:") && !audiences[i - 1]?.key.startsWith("saved:") && <p className="hidden px-3 pt-3 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground lg:block">Saved</p>}
           <button
-            key={a.key}
             type="button"
             onClick={() => { setAud(a.key); setPicked(new Set()); }}
             className={`flex shrink-0 items-center justify-between gap-3 rounded-lg px-3 py-2 text-left text-sm transition ${aud === a.key ? "bg-[#053877] font-semibold text-white" : "text-foreground hover:bg-muted"}`}
@@ -106,6 +147,7 @@ export function People({ eventId, onSelect, onEmail }: {
             <span className="truncate">{a.label}</span>
             <span className={`tabular-nums text-xs ${aud === a.key ? "text-white/80" : "text-muted-foreground"}`}>{a.count}</span>
           </button>
+          </div>
         ))}
       </nav>
 
@@ -115,7 +157,14 @@ export function People({ eventId, onSelect, onEmail }: {
             <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
             <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name, email, show or tag" className="h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm" data-testid="crm-people-search" />
           </div>
-          {current && (
+          <Button variant={filtering || active ? "default" : "outline"} className={`gap-1.5 ${filtering || active ? "bg-[#053877] text-white hover:bg-[#0a4a99]" : ""}`} onClick={() => setFiltering((v) => !v)} aria-expanded={filtering} data-testid="crm-filter">
+            <ListFilter className="h-4 w-4" /> Filter{active ? " · on" : ""}
+          </Button>
+          {active ? (
+            <Button className="gap-1.5" disabled={!reachable.length} onClick={() => onEmail(`aud:pick:${reachable.map((r) => r.email).join("|")}`, `${reachable.length} filtered`)} data-testid="crm-email-filtered">
+              <Mail className="h-4 w-4" /> Email these ({reachable.length})
+            </Button>
+          ) : current && (
             <Button className="gap-1.5" disabled={!current.reachable} onClick={() => onEmail(`aud:${current.key}`, current.label)} data-testid="crm-email-audience">
               <Mail className="h-4 w-4" /> Email {current.key === "everyone" ? "everyone" : current.label.toLowerCase()} ({current.reachable})
             </Button>
@@ -129,7 +178,36 @@ export function People({ eventId, onSelect, onEmail }: {
             </>
           )}
         </div>
-        {current && current.count !== current.reachable && (
+        {filtering && (
+          <div className="mt-3 space-y-2.5 rounded-xl border border-border bg-card p-4" data-testid="crm-filter-panel">
+            <Chips label="Who" options={ROLES.map((r) => ({ value: r, label: r }))} on={(v) => !!filter.roles?.includes(v)} toggle={(v) => flip("roles", v)} />
+            {!eventId && <Chips label="Plan" options={PLAN_NAMES.map((r) => ({ value: r, label: r }))} on={(v) => !!filter.plans?.includes(v)} toggle={(v) => flip("plans", v)} />}
+            {!eventId && <Chips label="Came for" options={Object.entries(PATH_LABEL).map(([value, label]) => ({ value, label }))} on={(v) => !!filter.paths?.includes(v)} toggle={(v) => flip("paths", v)} />}
+            <Chips label="Joined" options={[{ value: 7, label: "This week" }, { value: 30, label: "Last 30 days" }, { value: 90, label: "Last 90 days" }]} on={(v) => filter.joinedDays === v} toggle={(v) => one("joinedDays", v)} />
+            <Chips label="Gone quiet" options={[{ value: 30, label: "30+ days" }, { value: 90, label: "90+ days" }]} on={(v) => filter.quietDays === v} toggle={(v) => one("quietDays", v)} />
+            {!eventId && <Chips label="SmartLink" options={[{ value: "yes", label: "Has one" }, { value: "no", label: "Not yet" }]} on={(v) => filter.smartlink === v} toggle={(v) => one("smartlink", v as "yes" | "no")} />}
+            {!eventId && <Chips label="Event" options={eventOptions} on={(v) => !!filter.eventIds?.includes(v)} toggle={flipEvent} />}
+            <Chips label="Tag" options={tagOptions.map((t) => ({ value: t, label: t }))} on={(v) => !!filter.tags?.includes(v)} toggle={(v) => flip("tags", v)} />
+            <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
+              <span className="text-sm"><span className="font-semibold tabular-nums">{rows.length}</span> {rows.length === 1 ? "person" : "people"}{current && current.key !== "everyone" ? ` in ${current.label}` : ""}</span>
+              {active && (naming === null ? (
+                <Button size="sm" variant="outline" className="ml-auto gap-1.5" onClick={() => setNaming("")} data-testid="crm-save-audience"><Bookmark className="h-4 w-4" /> Save as audience</Button>
+              ) : (
+                <form className="ml-auto flex gap-1.5" onSubmit={(e) => { e.preventDefault(); if (naming.trim()) void saveAudience(naming.trim()); }}>
+                  <input autoFocus value={naming} onChange={(e) => setNaming(e.target.value)} placeholder="Name it: New on Growth" className="h-8 w-52 rounded-lg border border-input bg-background px-2.5 text-sm" data-testid="crm-audience-name" />
+                  <Button size="sm" type="submit" disabled={!naming.trim()}>Save</Button>
+                </form>
+              ))}
+              {active && <Button size="sm" variant="ghost" onClick={() => { setFilter({}); setNaming(null); }}>Clear</Button>}
+            </div>
+          </div>
+        )}
+        {aud.startsWith("saved:") && (
+          <p className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">A saved audience: it updates itself as people join and change.
+            <button type="button" onClick={() => void removeAudience(aud)} className="inline-flex items-center gap-1 font-semibold text-red-600 hover:underline"><Trash2 className="h-3 w-3" /> Remove it</button>
+          </p>
+        )}
+        {current && !active && current.count !== current.reachable && (
           <p className="mt-2 text-xs text-muted-foreground">{current.count - current.reachable} of these unsubscribed and won't be emailed.</p>
         )}
 

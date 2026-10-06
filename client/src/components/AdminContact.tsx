@@ -1,7 +1,7 @@
 import { BonusCreditsButton } from "@/components/BonusCredits";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDownLeft, ArrowUpRight, Bell, CalendarDays, Check, ExternalLink, Eye, Globe, Loader2, Mic2, MousePointerClick, PenSquare, Plus, StickyNote, Tag, Trash2, UserPlus, Users, X } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Bell, CalendarDays, CalendarPlus, Check, MessageSquare, Sparkles, ExternalLink, Eye, Globe, Loader2, Mic2, MousePointerClick, PenSquare, Plus, StickyNote, Tag, Trash2, UserPlus, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -16,9 +16,12 @@ import { ThreadView } from "@/components/AdminMail";
  */
 
 type Fate = { delivered: boolean; opened: boolean; clicked: boolean; bounced: boolean };
-type Moment = { at: string; kind: "email-out" | "email-in" | "booking" | "cohost" | "signup" | "reminder" | "note" | "joined"; title: string; detail?: string; fate?: Fate; ok?: boolean; label?: string };
+type Moment = { at: string; kind: "email-out" | "email-in" | "booking" | "cohost" | "signup" | "reminder" | "note" | "joined" | "text-out" | "text-in" | "event"; title: string; detail?: string; fate?: Fate; ok?: boolean; label?: string };
 type Profile = {
   email: string; name: string; roles: string[];
+  plan: string; path: string; memberSince: string;
+  phone: string; textsOk: boolean; textsStopped: boolean; textCount: number;
+  ownEvents: { id: number; name: string; startAtUtc: string; review: string; url: string }[];
   contact: { id: number; status: string; stage: string; source: string; since: string; lastEngagedAt: string } | null;
   tags: string[]; notes: { id: number; text: string; author: string; at: string }[];
   stats: { sent: number; received: number; opened: number; clicked: number; bounced: number; lastEmailedAt: string; lastOpenedAt: string; lastWroteAt: string; waiting: number };
@@ -77,6 +80,9 @@ export function ContactProfile({ email, onClose }: { email: string; onClose: () 
             <p className="truncate text-sm text-muted-foreground">{email}</p>
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               {d?.roles.map((r) => <span key={r} className="rounded-full bg-[#053877]/10 px-2 py-0.5 text-[11px] font-semibold text-[#053877] dark:text-[#8fb5e8]">{r}</span>)}
+              {d?.plan && <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${d.plan === "Growth" ? "bg-muted text-muted-foreground" : "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]"}`}>{d.plan !== "Growth" && <Sparkles className="h-3 w-3" />}{d.plan}</span>}
+              {d?.path && <span className="rounded-full border border-border px-2 py-0.5 text-[11px] text-muted-foreground" title="The path they picked at sign-up">{d.path}</span>}
+              {d?.memberSince && <span className="text-[11px] text-muted-foreground">Member since {new Date(d.memberSince).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}</span>}
               {d?.contact ? (
                 <select value={d.contact.stage} onChange={(e) => void setStage(e.target.value)} className="h-6 rounded-full border border-border bg-background px-2 text-[11px] font-semibold" aria-label="Stage">
                   {STAGES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
@@ -131,6 +137,24 @@ export function ContactProfile({ email, onClose }: { email: string; onClose: () 
                   {d.shows.map((s) => <a key={s.id} href={s.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 font-medium text-[#053877] hover:underline dark:text-[#8fb5e8]">{s.title} · {s.episodes} ep <ExternalLink className="h-3 w-3" /></a>)}
                 </section>
               )}
+              {d.ownEvents.length > 0 && (
+                <section className="rounded-xl border p-3 text-sm">
+                  <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><CalendarPlus className="h-3.5 w-3.5" /> Their events</p>
+                  <ul className="space-y-1.5">{d.ownEvents.map((e) => (
+                    <li key={e.id}>
+                      <a href={`/admin/e/${e.id}`} className="font-medium text-[#053877] hover:underline dark:text-[#8fb5e8]">{e.name}</a>
+                      <p className="text-xs text-muted-foreground">{new Date(e.startAtUtc).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })} · {e.review === "approved" ? "Approved" : e.review === "pending" ? "Waiting for your approval" : "Draft"}</p>
+                    </li>
+                  ))}</ul>
+                </section>
+              )}
+              {(d.phone || d.textCount > 0) && (
+                <section className="rounded-xl border p-3 text-sm">
+                  <p className="mb-1 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><MessageSquare className="h-3.5 w-3.5" /> Texts</p>
+                  {d.phone && <p className="font-medium tabular-nums">{d.phone}</p>}
+                  <p className="text-xs text-muted-foreground">{d.textsStopped ? "Replied STOP: no texts until they reply START." : d.textsOk ? "Said yes to texts." : "Hasn't said yes to texts yet."}{d.textCount ? ` · ${d.textCount} in the timeline` : ""}</p>
+                </section>
+              )}
               {d.bookings.length > 0 && (
                 <section className="rounded-xl border p-3 text-sm">
                   <p className="mb-1.5 flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><CalendarDays className="h-3.5 w-3.5" /> Bookings</p>
@@ -149,12 +173,12 @@ export function ContactProfile({ email, onClose }: { email: string; onClose: () 
               {tab === "timeline" && (
                 <ol className="relative space-y-3 border-l-2 border-border pl-5" data-testid="profile-timeline">
                   {d.timeline.map((m, i) => {
-                    const Icon = m.kind === "email-out" ? ArrowUpRight : m.kind === "email-in" ? ArrowDownLeft : m.kind === "booking" ? CalendarDays : m.kind === "cohost" ? Users : m.kind === "signup" ? UserPlus : m.kind === "reminder" ? Bell : m.kind === "note" ? StickyNote : Check;
+                    const Icon = m.kind === "email-out" ? ArrowUpRight : m.kind === "email-in" ? ArrowDownLeft : m.kind === "booking" ? CalendarDays : m.kind === "cohost" ? Users : m.kind === "signup" ? UserPlus : m.kind === "reminder" ? Bell : m.kind === "note" ? StickyNote : m.kind === "text-out" || m.kind === "text-in" ? MessageSquare : m.kind === "event" ? CalendarPlus : Check;
                     return (
                       <li key={i} className="relative">
-                        <span className={`absolute -left-[31px] top-0.5 flex h-5 w-5 items-center justify-center rounded-full ring-4 ring-background ${m.kind === "email-in" ? "bg-[#F0A71F] text-[#1a1200]" : m.kind === "note" ? "bg-violet-500 text-white" : m.kind === "email-out" ? "bg-[#053877] text-white" : "bg-emerald-600 text-white"}`}><Icon className="h-3 w-3" /></span>
+                        <span className={`absolute -left-[31px] top-0.5 flex h-5 w-5 items-center justify-center rounded-full ring-4 ring-background ${m.kind === "email-in" || m.kind === "text-in" ? "bg-[#F0A71F] text-[#1a1200]" : m.kind === "text-out" ? "bg-sky-600 text-white" : m.kind === "note" ? "bg-violet-500 text-white" : m.kind === "email-out" ? "bg-[#053877] text-white" : "bg-emerald-600 text-white"}`}><Icon className="h-3 w-3" /></span>
                         <div className="flex flex-wrap items-baseline gap-x-2">
-                          <p className="text-sm font-medium">{m.kind === "email-in" ? `They wrote: ${m.title}` : m.kind === "note" ? "Note" : m.title}</p>
+                          <p className="text-sm font-medium">{m.kind === "email-in" ? `They wrote: ${m.title}` : m.kind === "text-in" ? `They texted: ${m.title}` : m.kind === "text-out" ? `Text: ${m.title}` : m.kind === "note" ? "Note" : m.title}</p>
                           <span className="text-[11px] text-muted-foreground">{full(m.at)}</span>
                           {m.kind === "email-out" && (m.ok === false ? <span className="text-[11px] font-semibold text-destructive">Didn't send</span> : m.fate?.bounced ? <span className="text-[11px] font-semibold text-destructive">Bounced</span> : m.fate?.clicked ? <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-emerald-600"><MousePointerClick className="h-3 w-3" /> Clicked</span> : m.fate?.opened ? <span className="inline-flex items-center gap-0.5 text-[11px] font-semibold text-emerald-600"><Eye className="h-3 w-3" /> Opened</span> : m.fate?.delivered ? <span className="text-[11px] font-semibold text-[#053877] dark:text-[#8fb5e8]">Delivered</span> : null)}
                         </div>
