@@ -8,6 +8,7 @@ import { RealTimePostMock } from "@/components/platform/RealTimePostMock";
 import { ReadyToJoinMock, WaitingRoomMock } from "@/components/platform/GreenRoomMock";
 import { DiscoverySearchMock, CreatorProfileMock } from "@/components/platform/DiscoveryMock";
 import { SoonPill } from "@/components/platform/stockVideo";
+import { ALL_PLATFORMS, PlatformIcon, platformColor } from "@/components/SocialIcons";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import {
@@ -341,47 +342,6 @@ export default function Platform({ pitch = false }: { pitch?: boolean } = {}) {
         </div>
       </section>
 
-      {/* ------------------------------------------------------ four pillars */}
-      <section className="border-b border-border">
-        <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6">
-          <div className="max-w-2xl">
-            <Kicker>What it is</Kicker>
-            <h2 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">One platform, from the first speaker to the last clip</h2>
-            <p className="mt-4 text-base leading-relaxed text-muted-foreground">
-              Most events are held together by a spreadsheet, a group chat and somebody's memory. Here the event, the show and the people in it live in one place, and the work that used to eat the week is done for you.
-            </p>
-          </div>
-          <div className="mt-12 grid gap-5 md:grid-cols-2">
-            {PILLARS.map(({ icon: Icon, kicker, title, body, points }, i) => (
-              <motion.div
-                key={kicker}
-                initial={{ opacity: 0, y: 16 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-60px" }}
-                transition={{ duration: 0.45, delay: i * 0.07 }}
-                className="group relative flex flex-col overflow-hidden rounded-3xl border border-border bg-card p-7 shadow-sm transition-shadow hover:shadow-lg"
-              >
-                <PillarArt kicker={kicker} />
-                <div className="flex items-center gap-3">
-                  <IconTile icon={Icon} />
-                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{String(i + 1).padStart(2, "0")} · {kicker}</span>
-                </div>
-                <h3 className="mt-5 text-xl font-semibold tracking-tight">{title}</h3>
-                <p className="mt-3 flex-1 text-[15px] leading-relaxed text-muted-foreground">{body}</p>
-                <ul className="mt-5 flex flex-col gap-2 border-t border-border pt-4">
-                  {points.map((pt) => (
-                    <li key={pt} className="flex items-start gap-2 text-sm">
-                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#F0A71F]" />
-                      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">{pt.replace(/\*$/, "")}{pt.endsWith("*") && <SoonPill tone="light" />}</span>
-                    </li>
-                  ))}
-                </ul>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
       {/* --------------------------------------------------------- the studio */}
       <section className="relative isolate overflow-hidden border-b border-border bg-[#030b1f] text-white">
         <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 opacity-40" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.05) 1px, transparent 1px)", backgroundSize: "44px 44px", maskImage: "radial-gradient(ellipse 70% 60% at 50% 40%, black, transparent 80%)", WebkitMaskImage: "radial-gradient(ellipse 70% 60% at 50% 40%, black, transparent 80%)" }} />
@@ -427,15 +387,56 @@ export default function Platform({ pitch = false }: { pitch?: boolean } = {}) {
         </div>
       </section>
 
+      {/* ------------------------------------------------------ four pillars */}
+      <section className="border-b border-border">
+        <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6">
+          <div className="max-w-2xl">
+            <Kicker>What it is</Kicker>
+            <h2 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">One platform, from the first speaker to the last clip</h2>
+            <p className="mt-4 text-base leading-relaxed text-muted-foreground">
+              Most shows and events are held together by a spreadsheet, a group chat and somebody's memory. Here the show, the event, the clips and the people in it live in one place, and the work that used to eat the week is done for you.
+            </p>
+          </div>
+          <div className="mt-12 grid gap-5 md:grid-cols-2">
+            {PILLARS.map(({ icon: Icon, kicker, title, body, points }, i) => (
+              <motion.div
+                key={kicker}
+                initial={{ opacity: 0, y: 16 }}
+                whileInView={{ opacity: 1, y: 0 }}
+                viewport={{ once: true, margin: "-60px" }}
+                transition={{ duration: 0.45, delay: i * 0.07 }}
+                className="group relative flex flex-col overflow-hidden rounded-3xl border border-border bg-card p-7 shadow-sm transition-shadow hover:shadow-lg"
+              >
+                <PillarArt kicker={kicker} />
+                <div className="flex items-center gap-3">
+                  <IconTile icon={Icon} />
+                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{String(i + 1).padStart(2, "0")} · {kicker}</span>
+                </div>
+                <h3 className="mt-5 text-xl font-semibold tracking-tight">{title}</h3>
+                <p className="mt-3 flex-1 text-[15px] leading-relaxed text-muted-foreground">{body}</p>
+                <ul className="mt-5 flex flex-col gap-2 border-t border-border pt-4">
+                  {points.map((pt) => (
+                    <li key={pt} className="flex items-start gap-2 text-sm">
+                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#F0A71F]" />
+                      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">{pt.replace(/\*$/, "")}{pt.endsWith("*") && <SoonPill tone="light" />}</span>
+                    </li>
+                  ))}
+                </ul>
+              </motion.div>
+            ))}
+          </div>
+        </div>
+      </section>
+
       {/* ---------------------------------------------------- real-time post */}
       <section id="real-time-post" className="border-b border-border bg-background">
         <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:py-24">
           <div className="grid gap-8 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:items-end lg:gap-16">
             <div>
               <Kicker>Pōstify</Kicker>
-              <h2 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Post-production, in real time</h2>
+              <h2 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Real-time edits and clips</h2>
               <p className="mt-4 text-base leading-relaxed text-muted-foreground">
-                The recording stops and the clips are already on their way. Every word was transcribed live while the show went out, so there is no upload and no queue: SI reads the segment, picks the moments that stand on their own, and cuts each one in the shapes the networks take, captions burned in.
+                The recording stops and the clips are already on their way. Every word was transcribed live while the show went out, so there is no upload and no queue: SI reads the segment, picks the moments that stand on their own, and cuts each one in the shapes the networks take, captions burned in. Want a change? Trim a clip, fix a word or move the captions in the editor, and it's ready again in minutes.
               </p>
             </div>
             <ul className="grid gap-3 text-sm sm:grid-cols-2">
@@ -444,6 +445,7 @@ export default function Platform({ pitch = false }: { pitch?: boolean } = {}) {
                 ["Moments picked by SI", "Each one starts on a thought and stands alone."],
                 ["Three shapes", "16:9, 9:16 and 1:1, plus a caption file."],
                 ["A clean episode", "The ums, false starts and long pauses taken out, as audio and video."],
+                ["Edit in minutes", "Trim, fix a caption, change the font or placement; it re-renders while you wait."],
               ].map(([t, b]) => (
                 <li key={t} className="flex gap-3">
                   <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#F0A71F]" />
@@ -458,6 +460,56 @@ export default function Platform({ pitch = false }: { pitch?: boolean } = {}) {
           <motion.div {...reveal} className="mt-12">
             <RealTimePostMock />
           </motion.div>
+        </div>
+      </section>
+
+      {/* ------------------------------------------------------------ social */}
+      <section id="social" className="border-b border-border bg-background">
+        <div className="mx-auto grid max-w-6xl items-center gap-12 px-4 py-20 sm:px-6 lg:grid-cols-2">
+          <motion.div {...reveal} className="order-2 lg:order-1">
+            <div className="rounded-2xl bg-white p-5 shadow-xl ring-1 ring-black/5 dark:bg-[#0d1838]" aria-hidden>
+              <div className="flex items-center justify-between">
+                <p className="text-sm font-semibold text-foreground">This week</p>
+                <div className="flex gap-1.5">
+                  {ALL_PLATFORMS.slice(0, 6).map((pl) => (
+                    <span key={pl} className="flex h-7 w-7 items-center justify-center rounded-full text-white" style={{ background: platformColor(pl) }}><PlatformIcon platform={pl} className="h-3.5 w-3.5" /></span>
+                  ))}
+                </div>
+              </div>
+              <div className="mt-4 grid grid-cols-5 gap-2 text-xs">
+                {["Mon", "Tue", "Wed", "Thu", "Fri"].map((d, i) => (
+                  <div key={d} className="rounded-xl bg-[#eef2fa] p-2 dark:bg-white/5">
+                    <p className="font-semibold text-muted-foreground">{d}</p>
+                    {[ALL_PLATFORMS[i % 6], ALL_PLATFORMS[(i + 2) % 6]].slice(0, i % 2 ? 1 : 2).map((pl) => (
+                      <div key={pl} className="mt-2 flex items-center gap-1.5 rounded-lg bg-white px-1.5 py-1.5 shadow-sm dark:bg-[#132150]">
+                        <span className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-white" style={{ background: platformColor(pl) }}><PlatformIcon platform={pl} className="h-2.5 w-2.5" /></span>
+                        <span className="truncate text-[10px] text-foreground">Clip {i + 1}</span>
+                      </div>
+                    ))}
+                  </div>
+                ))}
+              </div>
+              <div className="mt-4 grid grid-cols-3 gap-2">
+                {[["Views", "48.2K"], ["Engagement", "6.1%"], ["New followers", "+812"]].map(([k, v]) => (
+                  <div key={k} className="rounded-xl bg-[#000741] p-3 text-white"><p className="text-[10px] uppercase tracking-wider text-white/60">{k}</p><p className="text-lg font-semibold">{v}</p></div>
+                ))}
+              </div>
+            </div>
+          </motion.div>
+          <div className="order-1 lg:order-2">
+            <Kicker>Social</Kicker>
+            <h2 className="mt-2 text-3xl font-semibold tracking-tight sm:text-4xl">Post everywhere from one place</h2>
+            <p className="mt-4 text-lg leading-relaxed text-muted-foreground">Your clips go straight from Pōstify to every channel you run. One calendar for the week, one view of what's working, and no copying files between apps.</p>
+            <ul className="mt-6 space-y-3">
+              {[
+                ["Every network", "YouTube, Instagram, TikTok, LinkedIn, X, Facebook and Threads."],
+                ["One calendar", "Schedule a week of clips in one sitting."],
+                ["What's working", "Views, engagement and followers, across every channel."],
+              ].map(([t, b]) => (
+                <li key={t} className="flex gap-3"><Check className="mt-0.5 h-5 w-5 shrink-0 text-[#F0A71F]" /><span><span className="block font-semibold text-foreground">{t}</span><span className="block text-sm text-muted-foreground">{b}</span></span></li>
+              ))}
+            </ul>
+          </div>
         </div>
       </section>
 
