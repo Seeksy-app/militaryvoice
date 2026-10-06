@@ -1,10 +1,11 @@
 import { Link } from "wouter";
-import { useEffect, useState } from "react";
+import { useLocation } from "wouter";
 import { motion } from "framer-motion";
 import { NavBar } from "@/components/NavBar";
 import { SiteFooter } from "@/components/SiteFooter";
+import { PreviewStack } from "@/pages/Discover";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, BookOpen, Briefcase, CalendarDays, Clapperboard, Home as HomeIcon, MonitorPlay, PlayCircle, Share2, Sparkles } from "lucide-react";
+import { ArrowRight, BookOpen, Clapperboard, Handshake, Megaphone, PlayCircle, Sparkles, Users } from "lucide-react";
 
 // The front door: MilitaryVoices is a platform for military and veteran
 // creators (podcasts are one thing they make, beside video, social, events
@@ -15,24 +16,21 @@ const HEAD = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 const NAVY = "#000741";
 const GOLD = "#F0A71F";
 
-// The studio photos the site has always opened on, one after another.
-const HERO_IMAGES = Array.from({ length: 12 }, (_, i) => `/hero-${i + 1}.jpg`);
-const HERO_ROTATE_MS = 6000;
-
-const OFFER = [
-  { icon: MonitorPlay, title: "A studio that connects to Zoom", body: "Go live or record with your guests. A green room so they arrive ready, layouts that look like TV, and every session recorded." },
-  { icon: Clapperboard, title: "Clips in minutes with Pōstify", body: "Your best moments, captioned and cut in all three shapes, ready before the conversation is cold." },
-  { icon: Share2, title: "Post everywhere from one place", body: "Schedule to every channel from one calendar, and see what's working in one view." },
-  { icon: CalendarDays, title: "Events, run for you", body: "From a one-hour panel to a sixteen-hour marathon: hosts, run of show, simulcast and replays." },
-  { icon: Briefcase, title: "Brands and sponsors", body: "A media kit that builds itself, and help finding the brands that want to reach the military community." },
-  { icon: HomeIcon, title: "One home for everything you make", body: "Free podcast hosting, your SmartLink page, and Ask my show, so fans can find any moment you've recorded." },
+// Andrew's four pillars (4 Oct 2026): every moment a creator has is an opportunity.
+const PILLARS = [
+  { icon: Clapperboard, title: "Create", body: "An episode, video or live stream doesn't end when it's published. We find the moments that become clips, posts, newsletter content, sponsor inventory and speaking topics.", today: "Pōstify · Social" },
+  { icon: Users, title: "Connect", body: "Find another creator for a guest swap, an expert for an episode, a collaborator, or get discovered by organizations looking for military and veteran voices.", today: "Discovery · Directory · Verified" },
+  { icon: Megaphone, title: "Audience", body: "Own your audience and earn from it: email, followers, community, events, courses and affiliate offers.", today: "SmartLink · media kit · analytics" },
+  { icon: Handshake, title: "Earn", body: "An Opportunity Marketplace, not an ad marketplace: sponsorships, paid UGC, ambassador campaigns, speaking, guest spots and event appearances.", today: "Sponsors · counted links" },
 ];
-
-const STEPS = [
-  { n: "1", title: "Record", body: "In your studio, on Zoom, or upload what you already have." },
-  { n: "2", title: "Pōstify", body: "Clips, captions and a clean episode, made for you in minutes." },
-  { n: "3", title: "Share and grow", body: "Post everywhere, track it, and turn your audience into sponsors." },
+const MORNING = [
+  "Your latest episode has 4 strong social clips.",
+  "A brand is looking for veteran creators in your category.",
+  "Two podcasts are looking for guests with your expertise.",
+  "Your audience engagement suggests a follow-up episode.",
+  "You have an unused sponsorship slot next week.",
 ];
+const FLOW = ["Moment", "Intelligence", "Match", "Action", "Revenue and reach"];
 
 function Reveal({ children, delay = 0, className = "" }: { children: React.ReactNode; delay?: number; className?: string }) {
   return (
@@ -43,11 +41,7 @@ function Reveal({ children, delay = 0, className = "" }: { children: React.React
 }
 
 export default function HomeCreators() {
-  const [heroIdx, setHeroIdx] = useState(0);
-  useEffect(() => {
-    const t = setInterval(() => setHeroIdx((i) => (i + 1) % HERO_IMAGES.length), HERO_ROTATE_MS);
-    return () => clearInterval(t);
-  }, []);
+  const [, go] = useLocation();
   return (
     <div className="min-h-screen overflow-x-clip bg-background">
       {/* The day that just happened, one line above everything. */}
@@ -61,21 +55,31 @@ export default function HomeCreators() {
       <NavBar />
 
       {/* ------------------------------------------------------------- hero */}
-      <section className="relative isolate overflow-hidden bg-[#000741] text-white">
-        {HERO_IMAGES.map((src, i) => (
-          <img key={src} src={src} alt="" aria-hidden="true" fetchPriority={i === 0 ? "high" : "low"}
-            className={`absolute inset-0 -z-10 h-full w-full object-cover object-[70%_center] transition-opacity duration-[1600ms] ease-in-out ${i === heroIdx ? "opacity-90" : "opacity-0"}`} />
-        ))}
-        <div aria-hidden="true" className="absolute inset-0 -z-10 bg-[linear-gradient(90deg,rgba(0,7,65,0.93)_0%,rgba(0,7,65,0.80)_38%,rgba(5,56,119,0.45)_66%,rgba(5,56,119,0.2)_100%)]" />
-        <div className="mx-auto flex min-h-[72vh] max-w-6xl items-center px-4 py-16 sm:px-6 md:py-24">
-          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="max-w-2xl">
-            <p className="text-xs font-bold uppercase tracking-[0.25em]" style={{ color: GOLD }}>For military and veteran creators</p>
-            <h1 className="mt-4 text-balance text-4xl font-bold leading-[1.05] sm:text-5xl lg:text-6xl" style={HEAD}>
-              Where military and veteran voices grow.
-            </h1>
-            <p className="mt-5 max-w-xl text-pretty text-lg text-white/85">
-              Podcasts, video, social, events and brand partnerships, all in one place. A studio that connects to Zoom, clips in minutes, and an SI co-host in every studio. You only pay for what you need.
+      {/* Discovery's hero, made the front door: a real creator's card, measured. */}
+      <section className="relative isolate text-white" style={{ background: "#030b1f" }}>
+        <div aria-hidden className="pointer-events-none absolute inset-0 -z-10 overflow-hidden">
+          <div className="absolute inset-0 opacity-[0.55]" style={{ backgroundImage: "linear-gradient(rgba(255,255,255,0.06) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.06) 1px, transparent 1px)", backgroundSize: "44px 44px", maskImage: "radial-gradient(ellipse 80% 70% at 70% 30%, black 20%, transparent 75%)", WebkitMaskImage: "radial-gradient(ellipse 80% 70% at 70% 30%, black 20%, transparent 75%)" }} />
+          <div className="absolute -top-48 right-[-10%] h-[40rem] w-[40rem] rounded-full opacity-25 blur-[120px]" style={{ background: GOLD }} />
+          <div className="absolute -bottom-64 -left-40 h-[36rem] w-[36rem] rounded-full bg-[#1d5cc4] opacity-30 blur-[120px]" />
+        </div>
+        <div className="mx-auto grid w-full max-w-[88rem] items-center gap-12 px-4 pb-16 pt-14 sm:px-6 sm:pt-20 lg:grid-cols-[minmax(0,1fr)_minmax(0,1fr)] lg:pb-20 lg:pt-20">
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="min-w-0">
+            <p className="inline-flex items-center gap-2 rounded-full border border-[#F0A71F]/30 bg-[#F0A71F]/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#F0A71F]">
+              <Sparkles className="h-3.5 w-3.5" /> For military and veteran creators
             </p>
+            <h1 className="mt-6 text-5xl font-semibold leading-[1.02] tracking-[-0.02em] sm:text-[4.25rem] lg:text-[3.9rem] xl:text-[4.25rem]">
+              <span className="whitespace-nowrap">Military creators,</span>
+              <br />
+              <span className="bg-gradient-to-r from-[#F0A71F] via-[#ffd27a] to-[#F0A71F] bg-clip-text text-transparent">measured.</span>
+            </h1>
+            <p className="mt-6 max-w-xl text-pretty text-xl leading-relaxed text-white/75">
+              <span className="font-semibold text-white">Every Moment Is an Opportunity™.</span> We help military and veteran creators find it, in every episode, post, relationship and audience you already have.
+            </p>
+            <ul className="mt-7 flex flex-wrap gap-2" aria-label="What we help you do">
+              {PILLARS.map((p) => (
+                <li key={p.title} className="inline-flex items-center gap-2 rounded-xl border border-white/10 bg-white/[0.05] px-3.5 py-2 text-sm font-medium text-white/85"><p.icon className="h-4 w-4 text-[#F0A71F]" />{p.title} <ArrowRight className="h-3.5 w-3.5 text-white/40" /> Opportunity</li>
+              ))}
+            </ul>
             <div className="mt-8 flex flex-wrap items-center gap-4">
               <Link href="/host/dashboard">
                 <Button size="lg" className="h-12 bg-[#F0A71F] px-7 text-base font-bold text-[#1a1200] hover:bg-[#e09a10]" data-testid="button-start-free">Start free</Button>
@@ -85,6 +89,9 @@ export default function HomeCreators() {
               </Link>
             </div>
           </motion.div>
+          <div className="hidden lg:block">
+            <PreviewStack verified={[]} onOpen={() => go("/discover")} />
+          </div>
         </div>
         <div className="border-t border-white/10 bg-black/15">
           <ul className="mx-auto grid max-w-6xl grid-cols-2 gap-y-4 px-4 py-6 text-center sm:px-6 md:grid-cols-4">
@@ -150,38 +157,43 @@ export default function HomeCreators() {
         </div>
       </section>
 
-      {/* ---------------------------------------------------------- the offer */}
-      <section className="border-b border-border">
+      {/* ------------------------------------------------- opportunity engine */}
+      <section className="border-b border-border" id="opportunity">
         <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
           <Reveal>
-            <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#8a5a00]">What you get</p>
-            <h2 className="mt-3 text-balance text-3xl font-bold text-foreground sm:text-4xl" style={HEAD}>Everything a creator needs, in one place</h2>
+            <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#8a5a00]">The Opportunity Engine</p>
+            <h2 className="mt-3 max-w-3xl text-balance text-3xl font-bold text-foreground sm:text-4xl" style={HEAD}>Not just tools to make content. Technology that finds what it becomes next.</h2>
+            <ol className="mt-6 flex flex-wrap items-center gap-2 text-sm font-semibold text-[#053877] dark:text-white/80" aria-label="How a moment becomes an opportunity">
+              {FLOW.map((f, i) => (
+                <li key={f} className="inline-flex items-center gap-2"><span className="rounded-full bg-[#eef2fa] px-3 py-1 dark:bg-white/10">{f}</span>{i < FLOW.length - 1 && <ArrowRight className="h-4 w-4 text-[#F0A71F]" />}</li>
+              ))}
+            </ol>
           </Reveal>
-          <div className="mt-8 grid gap-5 sm:grid-cols-2 lg:grid-cols-3">
-            {OFFER.map((o, i) => (
-              <Reveal key={o.title} delay={(i % 3) * 0.06} className="rounded-2xl border border-border bg-card p-6">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-[#000741] text-[#F0A71F]"><o.icon className="h-5 w-5" /></div>
-                <h3 className="mt-4 text-lg font-semibold text-foreground">{o.title}</h3>
-                <p className="mt-2 text-pretty text-sm text-muted-foreground">{o.body}</p>
-              </Reveal>
-            ))}
+          <div className="mt-10 grid gap-8 lg:grid-cols-[1.25fr_1fr] lg:items-start">
+            <div className="grid gap-5 sm:grid-cols-2">
+              {PILLARS.map((p, i) => (
+                <Reveal key={p.title} delay={(i % 2) * 0.06} className="rounded-2xl border border-border bg-card p-6">
+                  <div className="flex items-center gap-3">
+                    <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[#000741] text-[#F0A71F]"><p.icon className="h-5 w-5" /></div>
+                    <h3 className="text-lg font-semibold text-foreground">{p.title} <span className="text-[#F0A71F]">→</span> Opportunity</h3>
+                  </div>
+                  <p className="mt-3 text-pretty text-sm text-muted-foreground">{p.body}</p>
+                  <p className="mt-3 text-xs font-semibold uppercase tracking-wider text-[#053877]/70 dark:text-white/50">Today: {p.today}</p>
+                </Reveal>
+              ))}
+            </div>
+            {/* The idea working as software: a creator's morning. */}
+            <Reveal delay={0.1} className="rounded-2xl bg-[#000741] p-6 text-white shadow-xl">
+              <p className="text-xs font-bold uppercase tracking-[0.25em]" style={{ color: GOLD }}>Your dashboard</p>
+              <p className="mt-3 text-2xl font-bold" style={HEAD}>Good morning, Andrew.</p>
+              <p className="text-white/70">Here are your opportunities today.</p>
+              <ul className="mt-5 space-y-3">
+                {MORNING.map((m) => (
+                  <li key={m} className="flex gap-3 rounded-xl bg-white/[0.06] p-3 text-sm"><Sparkles className="mt-0.5 h-4 w-4 shrink-0 text-[#F0A71F]" />{m}</li>
+                ))}
+              </ul>
+            </Reveal>
           </div>
-        </div>
-      </section>
-
-      {/* -------------------------------------------------------- how it works */}
-      <section className="border-b border-border bg-[#eef2fa] dark:bg-[#07112e]">
-        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
-          <Reveal><h2 className="text-balance text-3xl font-bold text-foreground sm:text-4xl" style={HEAD}>How it works</h2></Reveal>
-          <ol className="mt-8 grid gap-5 md:grid-cols-3">
-            {STEPS.map((s, i) => (
-              <Reveal key={s.n} delay={i * 0.06} className="rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5 dark:bg-[#0d1838]">
-                <span className="flex h-9 w-9 items-center justify-center rounded-full bg-[#F0A71F] font-bold text-[#1a1200]">{s.n}</span>
-                <h3 className="mt-4 text-lg font-semibold text-foreground">{s.title}</h3>
-                <p className="mt-1 text-pretty text-sm text-muted-foreground">{s.body}</p>
-              </Reveal>
-            ))}
-          </ol>
         </div>
       </section>
 
