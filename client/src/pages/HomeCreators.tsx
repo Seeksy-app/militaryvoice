@@ -1,7 +1,5 @@
 import { Link } from "wouter";
 import { useEffect, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import type { PublicSponsor } from "@shared/schema";
 import { motion } from "framer-motion";
 import { NavBar } from "@/components/NavBar";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -41,35 +39,6 @@ function Reveal({ children, delay = 0, className = "" }: { children: React.React
     <motion.div initial={{ opacity: 0, y: 18 }} whileInView={{ opacity: 1, y: 0 }} viewport={{ once: true, margin: "-60px" }} transition={{ duration: 0.55, delay }} className={className}>
       {children}
     </motion.div>
-  );
-}
-
-/** The day's sponsors, thanked where the replay lives: paid ones as logos, friends by name. */
-function EventSponsors() {
-  const { data: sponsors } = useQuery<PublicSponsor[]>({ queryKey: ["/api/sponsors"] });
-  const list = sponsors ?? [];
-  const paid = list.filter((s) => ["presenting", "official"].includes(s.tier || "friend"));
-  const friends = list.filter((s) => (s.tier || "friend") === "friend");
-  if (!list.length) return null;
-  const logo = (sp: PublicSponsor, cls: string) => {
-    const img = <img src={sp.logoUrl} alt={sp.name} title={sp.name} loading="lazy" className="h-full w-full object-contain" />;
-    return (
-      <div key={sp.id} className={`flex items-center justify-center rounded-2xl bg-[#000741] px-6 py-4 shadow-sm ${cls}`}>
-        {sp.url ? <a href={sp.url} target="_blank" rel="noopener noreferrer" aria-label={sp.name} className="flex h-full w-full items-center justify-center">{img}</a> : img}
-      </div>
-    );
-  };
-  return (
-    <div className="mt-10 text-center" data-testid="home-event-sponsors">
-      <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#053877]/70 dark:text-white/60">Thank you to our 2026 sponsors</p>
-      {paid.length > 0 && <div className="mt-6 flex flex-wrap items-center justify-center gap-6">{paid.map((sp) => logo(sp, "h-20 w-[220px] sm:h-24 sm:w-[245px]"))}</div>}
-      {friends.length > 0 && (
-        <>
-          <p className="mt-8 text-xs font-bold uppercase tracking-[0.25em] text-[#053877]/60 dark:text-white/50">Friends of the Marathon</p>
-          <div className="mt-4 flex flex-wrap items-center justify-center gap-4">{friends.map((sp) => logo(sp, "h-14 w-[160px]"))}</div>
-        </>
-      )}
-    </div>
   );
 }
 
@@ -177,21 +146,7 @@ export default function HomeCreators() {
               </div>
             </Reveal>
           </div>
-          {/* This year's award, beside the replay it was given in. */}
-          <Reveal className="mt-6 overflow-hidden rounded-2xl bg-[#000741] text-white shadow-sm ring-1 ring-black/5" data-testid="home-award">
-            <div className="grid items-center gap-0 md:grid-cols-[1.1fr_1.2fr_0.7fr]">
-              <img src="/home/onair-rachel.jpg" alt="Rachel Oswalt, live on National Military Podcast Day" className="h-full w-full object-cover md:aspect-auto aspect-video" loading="lazy" />
-              <div className="p-6 md:p-8">
-                <p className="text-xs font-bold uppercase tracking-[0.25em]" style={{ color: GOLD }}>2026 Excellence in Storytelling</p>
-                <h3 className="mt-3 text-balance text-2xl font-bold sm:text-3xl" style={HEAD}>Rachel Oswalt</h3>
-                <p className="mt-2 text-pretty text-white/80">Host of <span className="font-semibold text-white">Your Story Doesn't End Here</span>, the military mental health podcast. Chosen out of every show on National Military Podcast Day 2026.</p>
-              </div>
-              <div className="flex justify-center bg-[#0b1650] p-5">
-                <img src="/email/award-storytelling-2026.jpg" alt="The 2026 Excellence in Storytelling plaque, presented to Rachel Oswalt" className="max-h-60 w-auto rounded-md shadow-xl" loading="lazy" />
-              </div>
-            </div>
-          </Reveal>
-          <EventSponsors />
+
         </div>
       </section>
 

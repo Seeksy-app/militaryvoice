@@ -5,6 +5,7 @@ import { Link } from "wouter";
 import { NavBar } from "@/components/NavBar";
 import { LogoLockup } from "@/components/Logo";
 import { SiteFooter } from "@/components/SiteFooter";
+import { MarathonRecap } from "@/components/MarathonRecap";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
 import { SocialIconRow, PlatformIcon, platformLabel, parseSocialAccounts } from "@/components/SocialIcons";
@@ -678,6 +679,8 @@ export default function Landing({ slug }: Props) {
           <style>{`@keyframes mvwave { from { transform: scaleY(0.32); opacity:.55 } to { transform: scaleY(1); opacity:1 } }`}</style>
         </div>
       </section>
+
+      <MarathonRecap />
 
       {/* ------------------------------------------------------ PODCASTERS */}
       <section id="podcasters" className={`relative scroll-mt-16 overflow-hidden ${NAVY}`}>
