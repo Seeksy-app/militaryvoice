@@ -50,11 +50,15 @@ export default function Survey({ token }: { token: string }) {
     // A beat to see the tap land, then on.
     setTimeout(() => next(a), 180);
   };
+  // From the latest answers, not this render's: two quick taps both count.
   const toggle = (key: string) => {
-    const have = (answers[q!.key] as string[] | undefined) ?? [];
-    const on = have.includes(key);
-    if (!on && q!.max && have.length >= q!.max) return;
-    setAnswers({ ...answers, [q!.key]: on ? have.filter((k) => k !== key) : [...have, key] });
+    const { key: qk, max } = q!;
+    setAnswers((prev) => {
+      const have = (prev[qk] as string[] | undefined) ?? [];
+      const on = have.includes(key);
+      if (!on && max && have.length >= max) return prev;
+      return { ...prev, [qk]: on ? have.filter((k) => k !== key) : [...have, key] };
+    });
   };
 
   const shell = (children: React.ReactNode) => (
