@@ -15,7 +15,7 @@ import type { AarReport, AarSection, AarAction } from "@shared/aar";
 type Report = AarReport & { actions?: AarAction[] };
 const AUTHORS = [
   { key: "claude", label: "Claude", sub: "SI producer" },
-  { key: "michael", label: "Michael", sub: "co-author" },
+  { key: "michael", label: "Michael", sub: "AI Stage Manager" },
 ] as const;
 
 // What kind of point each section holds, so the eye can scan for it.
@@ -65,7 +65,7 @@ function Section({ s }: { s: AarSection }) {
   );
 }
 
-export function AdminAar({ scope, title, intro }: { scope: string; title: string; intro: string }) {
+export function AdminAar({ scope, title, intro, single = false }: { scope: string; title: string; intro: string; single?: boolean }) {
   const [author, setAuthor] = useState<(typeof AUTHORS)[number]["key"]>("claude");
   const qc = useQueryClient();
   const key = ["/api/admin/aar", scope, author];
@@ -123,10 +123,10 @@ export function AdminAar({ scope, title, intro }: { scope: string; title: string
         <h2 className="mt-1 text-2xl font-bold text-[#000741] dark:text-white">{title}</h2>
         <p className="mt-2 max-w-3xl text-sm text-muted-foreground">{intro}</p>
         <p className="mt-2 max-w-3xl text-xs text-muted-foreground">
-          Four questions: what was supposed to happen, what actually happened, why, and what we do better. No blame — problems belong to the plan and the system, not to a person. Each author writes their own, apart, then the two are compared.
+          Four questions: what was supposed to happen, what actually happened, why, and what we do better. No blame — problems belong to the plan and the system, not to a person. {single ? "" : "Each author writes their own, apart, then the two are compared."}
         </p>
         <div className="mt-4 flex flex-wrap items-center gap-2">
-          <div className="inline-flex rounded-xl border border-border bg-muted/50 p-1" role="tablist">
+          {!single && <div className="inline-flex rounded-xl border border-border bg-muted/50 p-1" role="tablist">
             {AUTHORS.map((a) => (
               <button
                 key={a.key}
@@ -139,10 +139,10 @@ export function AdminAar({ scope, title, intro }: { scope: string; title: string
                 {a.label} <span className="font-normal text-muted-foreground">· {a.sub}</span>
               </button>
             ))}
-          </div>
+          </div>}
           {!editing ? (
             <Button size="sm" variant="outline" className="ml-auto gap-1.5" onClick={startEdit} disabled={!report} data-testid="aar-edit">
-              <Pencil className="h-3.5 w-3.5" /> {author === "michael" && !data?.saved ? "Write it" : "Edit"}
+              <Pencil className="h-3.5 w-3.5" /> Edit
             </Button>
           ) : (
             <div className="ml-auto flex gap-2">

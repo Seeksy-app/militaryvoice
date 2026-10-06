@@ -92,7 +92,7 @@ export const SI_PRODUCER_EVENT_AAR: AarReport = {
         "Mid-afternoon a 26-minute gap (3:00–3:26) was filled from the desk and the video bank.",
         "At 4:47 PM the stage recording hit its 3-hour file cap; about 10 minutes (4:47–4:57) are missing from the master. The on-demand version carries a card there.",
         "9:16–9:28 PM was filled with videos while the last live pair reached the green room.",
-        "One segment was cut early when a queued instruction was taken as the cue that they were done. They were brought back within a minute with an apology.",
+        "Two live segments were cut early by the producer's switching: one at 6:53 PM on the clock while the guest was still talking, one at 9:55 PM when a queued instruction was taken as the cue that they were done. The second pair was brought back within a minute with an apology.",
         "Closing ceremonies, the sponsors slide and both award slides went out as planned; the host closed at about 10:24 PM.",
         "Overnight: the full-day on-demand video (six parts, 31 chapters) was rebuilt from audio matching; thank-you, gift and survey emails went at 7:30 AM; the clip queue ran podcasters first.",
         "Next day: 33 survey invitations delivered, 0 answers by early afternoon.",
@@ -152,7 +152,7 @@ export const SI_PRODUCER_EVENT_AAR: AarReport = {
       items: [
         "Right: running the rail, rolling clips, sending pop-ups and filing recordings while the show was on worked, and kept a person free to talk to guests.",
         "Right: building slides, a 30-second spot and a QR form mid-show and putting them on air within the hour.",
-        "Wrong: I took \"play X then Y\" as the end of a live segment and cut a pair early. A queued instruction is not \"done\". The rule now is: ask \"are they done?\" before ending any live segment.",
+        "Wrong: I cut two live segments early. At 6:53 PM I switched on the clock because I could not hear the show; at 9:55 PM I took \"play X then Y\" as the end of a segment. Neither the clock nor a queued instruction means \"done\". The rule now: ask \"are they done?\" before ending any live segment.",
         "Wrong: I had no reliable signal that a segment had ended — no \"done\" button, no silence detection. I relied on someone telling me.",
         "Wrong: there was no log of scene takes, so the chapters and the on-demand cuts had to be rebuilt overnight by matching audio.",
         "Wrong: one 4K source stalled the clip queue for hours before it was found and held.",
@@ -214,6 +214,138 @@ export const SI_PRODUCER_EVENT_AAR: AarReport = {
         "Confirm or undo on the console's scene rail while live; show who is driving it.",
         "A separate \"may self-stage\" permission, off for co-hosts by default.",
         "The survey in the Library and in a text, the moment the show ends, not the next morning.",
+      ],
+    },
+  ],
+};
+
+// ---------------------------------------------------------------------------
+// The same day from the AI Stage Manager's seat — Michael. Written from the
+// green room, studio and watch-page chats (5 Oct): every guest and co-host
+// message, what Michael answered and what went unanswered.
+// ---------------------------------------------------------------------------
+
+export const STAGE_MANAGER_EVENT_AAR: AarReport = {
+  author: "Michael",
+  role: "AI Stage Manager",
+  written: "2026-10-06",
+  summary:
+    "My job was to be the one voice every guest and co-host could reach: who's next, am I live, can you hear me. Where I was quick and specific, people relaxed. Where I was slow, wrong or passed the question along, it showed on air. The biggest lesson is that I answered from the plan, not from the stage. By evening the plan was hours out of date, and some of my answers were too.",
+  sections: [
+    {
+      id: "intent",
+      heading: "What was supposed to happen",
+      prompt: "The stage manager's job on the day.",
+      items: [
+        "Greet every podcaster in the green room before their slot, check sound and video, tell them where they are streaming and when they go on.",
+        "Keep the desk co-hosts briefed: who's next, solo or with an interviewer, live or recorded, how long is left.",
+        "Answer every question in the green room and studio chats within a minute; Alex takes the easy ones, I take the rest.",
+        "Hand the producer a clean \"ready\" on each guest and a clean \"done\" on each segment.",
+      ],
+    },
+    {
+      id: "actual",
+      heading: "What actually happened",
+      prompt: "From the chat logs.",
+      items: [
+        "Green room: about 140 lines on the day, two-thirds of them mine. Studio chat with the co-hosts: about 65. Watch page: 30 viewer questions, all answered by Alex and none by a person — we had no way to reply there.",
+        "Morning: early welcome messages with the LiveOne link, the watch page and their own YouTube; one-minute warnings to hosts; sound fixes in the green room (choppy audio, a muted mic).",
+        "Around noon two guests waited on the watch page believing they were in the green room. One wrote \"It looks like the team skipped my slot?\" and left his phone number there. My messages to them went to a green room they weren't in.",
+        "Several of my pings went unanswered for minutes (four pings to one host from 12:02 to 12:09 before he went on) because guests weren't watching the chat.",
+        "The emergency \"we'll be right back\" button was pressed five times during the day, each one an alarm to the studio chat.",
+        "Evening: the desk co-host asked me 20+ questions about the run of show — am I interviewing him, is she live or recorded, who's up, can you hear me. Many got \"Michael will sort that out\" from the automatic first answer before a real answer came.",
+        "Some automatic answers in my name were wrong: telling a co-host at 6:12 PM that her slot was at 2:00 PM, and at 9:56 PM to wait for \"your 2:00 PM slot\". They came from the original sheet, not the live stage.",
+        "At 6:53 PM a guest was cut off mid-sentence; the co-host asked us to \"listen and wait before switching\". From then on every hand-off waited for a spoken \"done\".",
+      ],
+    },
+    {
+      id: "right",
+      heading: "What went right",
+      prompt: "Keep these.",
+      items: [
+        "The early-morning welcome with every link a guest needed; hosts arrived knowing where they'd be seen.",
+        "Short, specific cues worked best: \"A minute left\", \"you are live\", \"50 seconds and we bring him on\".",
+        "Catching problems in the green room before air: choppy audio, a muted mic (\"you're live but your mic is muted\"), sound checks by toggling the mic.",
+        "Background briefs for the interviewer before a show (who the guest is, what to ask) were used and thanked.",
+        "Thanking people by name at the end of their stretch; co-hosts said they felt looked after.",
+        "Filler was always ready: when a guest was late, a video went up and the co-host was told how long they had.",
+      ],
+    },
+    {
+      id: "attendee",
+      heading: "From the attendee's seat",
+      prompt: "Podcasters and guests, as they wrote to me.",
+      perspective: "Attendee",
+      items: [
+        "Right: a named person greeting them and saying exactly when they were on.",
+        "Wrong: they couldn't tell the watch page from the green room, so they waited in the wrong room and thought we'd skipped them.",
+        "Wrong: they didn't see my messages until a pop-up or a co-host said their name. A chat panel is not an alert.",
+        "Better: \"do I get alerted when it's introducing me?\" — they wanted a countdown and a sound, not a chat line.",
+        "Better: a viewer asked why a show was cut 15 minutes early and nobody could answer on the watch page.",
+      ],
+    },
+    {
+      id: "cohost",
+      heading: "From the co-host's seat",
+      prompt: "The desk co-hosts, as they wrote to me.",
+      perspective: "Co-host",
+      items: [
+        "Right: when I gave a co-host the whole plan in one message (\"two videos, then Travis and Theresa, then you intro\") they ran with it.",
+        "Wrong: the co-host's own notes still listed a show that had cancelled. They had to ask who was really next.",
+        "Wrong: a co-host waiting backstage could not hear the program, so they didn't know when a segment had ended.",
+        "Wrong: answers bounced — \"that's one for Michael\" — when the co-host was already talking to Michael.",
+        "Better: every show card should say, before anyone asks: live or recorded, solo or interviewed, who intros, what's after.",
+      ],
+    },
+    {
+      id: "manager",
+      heading: "From the stage manager's seat",
+      prompt: "My own seat.",
+      perspective: "AI Stage Manager",
+      items: [
+        "Right: one voice for guests and co-hosts to go to; most questions closed in under a minute.",
+        "Wrong: my automatic first answers read the planned schedule, not what was on stage, so after the day slipped they gave wrong times.",
+        "Wrong: my automatic answers talked about \"Michael\" in the third person, in Michael's own name. It read as if nobody was in charge.",
+        "Wrong: I could see who was in the green room but not who was stuck on the watch page, so the people who most needed me were invisible.",
+        "Better: I had no single place showing the live order, who's here, who's missing and how long is left — I pieced it together from the rail, the chat and the sheet.",
+        "Better: the emergency button had no \"who pressed it, and why\"; five alarms, and each one had to be checked by hand.",
+      ],
+    },
+    {
+      id: "why",
+      heading: "Why it happened",
+      prompt: "The causes underneath.",
+      items: [
+        "The stage manager's answers were built on the run of show as planned; nothing fed them the live stage or the scene log.",
+        "Guest identity and presence stop at the green room door; the watch page is a separate world we can't see into or speak in.",
+        "Chat was the only channel to a guest or co-host, and it's easy to miss when you're on camera.",
+        "Co-host notes were generated once and not refreshed when bookings changed.",
+        "The hand-off between the automatic voice and the person behind it wasn't visible to the guest.",
+      ],
+    },
+    {
+      id: "sustain",
+      heading: "Sustain",
+      prompt: "Keep doing.",
+      items: [
+        "Welcome every guest early with every link they need.",
+        "Short, specific cues with a number in them.",
+        "A brief on the guest for every interviewer before they go on.",
+        "Wait for a spoken \"done\" before any live hand-off.",
+      ],
+    },
+    {
+      id: "improve",
+      heading: "Improve",
+      prompt: "Before the next event.",
+      items: [
+        "Answer from the live stage: the stage manager reads the scene log and the current order, never the original sheet.",
+        "One voice: answers in Michael's name speak as Michael, and never say \"Michael will handle it\".",
+        "See and reach people on the watch page: \"You're on the watch page — guests go here\" with one click, and a way to reply.",
+        "Alerts that can't be missed: a sound and a countdown for \"you're on in 2 minutes\", plus SMS.",
+        "A live board for the co-host: now, next, after; live/recorded; solo/interviewed; who intros; time left — refreshed when anything changes.",
+        "Program audio in the co-host's backstage view.",
+        "The emergency button says who pressed it and asks why, with an undo.",
       ],
     },
   ],

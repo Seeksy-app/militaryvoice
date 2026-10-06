@@ -174,7 +174,7 @@ import {
   type PublishResult,
 } from "./uploadPost.js";
 import type { HostPostRow, PostResult, PostMetrics } from "../shared/schema.js";
-import { PLATFORM_AAR, SI_PRODUCER_EVENT_AAR, MARATHON_EVENT_ID, aarTemplate } from "../shared/aar.js";
+import { PLATFORM_AAR, SI_PRODUCER_EVENT_AAR, STAGE_MANAGER_EVENT_AAR, MARATHON_EVENT_ID, aarTemplate } from "../shared/aar.js";
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -7602,9 +7602,9 @@ export function registerRoutes(app: Express): void {
   const aarKey = (scope: string, author: string) => `aar:${scope}:${author}`;
   const aarScopeOk = (scope: string) => scope === "platform" || /^event:\d+$/.test(scope);
   const aarDefault = (scope: string, author: string): unknown => {
-    if (scope === "platform") return author === "claude" ? PLATFORM_AAR : { ...aarTemplate("Michael", "Platform owner"), actions: [] };
+    if (scope === "platform") return PLATFORM_AAR;
     if (author === "claude") return scope === `event:${MARATHON_EVENT_ID}` ? SI_PRODUCER_EVENT_AAR : aarTemplate("Claude", "SI producer");
-    return aarTemplate("Michael", "Event team");
+    return scope === `event:${MARATHON_EVENT_ID}` ? STAGE_MANAGER_EVENT_AAR : aarTemplate("Michael", "AI Stage Manager");
   };
   app.get("/api/admin/aar", requireAdmin, async (req, res) => {
     noStore(res);

@@ -5000,7 +5000,7 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                   <AdminAar
                     scope={`event:${selectedEventId}`}
                     title={selectedEvent.name}
-                    intro="How the event went, through the eyes of the people in it: the podcasters and guests, the co-hosts, the SI producer and the event team."
+                    intro="How the event went, through the eyes of the people in it: the podcasters and guests, the co-hosts, the SI producer, the AI Stage Manager and the event team."
                   />
                 </TabsContent>
                 <TabsContent value="health" className="mt-2 lg:mt-0">
@@ -5078,6 +5078,7 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                   <TabsContent value="aar" className="mt-2 lg:mt-0">
                     <AdminAar
                       scope="platform"
+                      single
                       title="Running the platform: what 50 events at once will take"
                       intro="The owner's view, not any one event's. What the Marathon taught us about running four times the shows and 50 events at the same time, with SI providing the service end to end."
                     />
