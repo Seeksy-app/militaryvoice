@@ -97,10 +97,10 @@ export default function Pricing() {
       <NavBar />
       <header className="bg-[#000741] text-white">
         <div className="mx-auto max-w-5xl px-4 py-14 text-center sm:px-6">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#F0A71F]/15 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-[#F0A71F]">Beta pricing</span>
-          <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl" style={HEADLINE_FONT}>Pōstify plans</h1>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#F0A71F]/15 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-[#F0A71F]">Start free</span>
+          <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl" style={HEADLINE_FONT}>Plans</h1>
           <p className="mx-auto mt-4 max-w-2xl text-lg text-white/75">
-            Credits every month for clips and clean episodes. Run out, and extra credits go on your next bill — never past the limit you set.
+            Start on Growth, free for good. Move up to Scale or Pro for monthly Pōstify credits: clips and clean episodes. Run out, and extra credits go on your next bill, never past the limit you set.
           </p>
         </div>
       </header>

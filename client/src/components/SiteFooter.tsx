@@ -41,6 +41,7 @@ export function SiteFooter({ slug, note }: { slug?: string; /** A small line abo
         { href: "/directory", label: "Directory" },
         { href: "/events", label: "Events" },
         { href: "/watchfloor", label: "Studio" },
+        { href: "/pricing", label: "Pricing" },
         { href: "/platform", label: "About Us" },
       ],
     },

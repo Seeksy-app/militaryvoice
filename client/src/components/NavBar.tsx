@@ -31,6 +31,7 @@ const LINKS: { href: string; label: string; anchor?: boolean }[] = [
   { href: "/events", label: "Events" },
   { href: "/discover", label: "Discovery" },
   { href: "/directory", label: "Directory" },
+  { href: "/pricing", label: "Pricing" },
   { href: "/faq", label: "FAQ" },
   { href: "/platform", label: "About Us" },
 ];
