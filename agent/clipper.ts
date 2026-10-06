@@ -2044,6 +2044,32 @@ async function handleSegmentCut(job: Job): Promise<void> {
   }
 }
 
+/**
+ * Bigger than 1080p (a 4K camera file) is cut down to 1080p before anything
+ * else touches it. On 5 Oct one 4K episode held the whole queue for hours:
+ * every render and the clean episode ran at four times the pixels for clips
+ * that end up 1080 tall anyway. Never fatal: if the copy fails, the original
+ * carries on as before.
+ */
+async function fitTo1080(source: string, job: Job): Promise<void> {
+  const probe = await run("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", source]).catch(() => "");
+  const [w, h] = probe.trim().split(",").map(Number);
+  if (!(w > 0 && h > 0) || Math.min(w, h) <= 1080) return;
+  const portrait = h > w;
+  console.log(`[${job.recordingId}] ${w}×${h} — making a 1080p copy first`);
+  progress(job.recordingId, { stage: "download", pct: 100, detail: "making a 1080p copy of a 4K file" });
+  const out = `${source}.1080.mp4`;
+  const started = Date.now();
+  try {
+    await run("ffmpeg", ["-y", "-loglevel", "error", "-i", source, "-vf", portrait ? "scale=1080:-2" : "scale=-2:1080", "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-c:a", "copy", "-movflags", "+faststart", out]);
+    await fs.rename(out, source);
+    console.log(`[${job.recordingId}] 1080p copy made in ${Math.round((Date.now() - started) / 1000)}s`);
+  } catch (err) {
+    console.warn(`[${job.recordingId}] couldn't make a 1080p copy (${(err as Error).message}) — carrying on with the original`);
+    await fs.rm(out, { force: true }).catch(() => {});
+  }
+}
+
 async function handle(job: Job): Promise<void> {
   if (job.segmentCut) return handleSegmentCut(job);
   if (job.transcriptJob) return handleTranscript(job);
@@ -2090,6 +2116,7 @@ async function handle(job: Job): Promise<void> {
     progress(job.recordingId, { stage: "download", pct: 0, detail: total ? `${(total / 1048576).toFixed(0)}MB` : "" });
     await pipeline(Readable.fromWeb(res.body as never), meter, createWriteStream(source));
     console.log(`[${job.recordingId}] downloaded in ${Math.round((Date.now() - started) / 1000)}s`);
+    await fitTo1080(source, job);
     // Saved with no length (the browser's check timed out on the upload): the
     // moment picker was being told the episode was 0 seconds long.
     if (!(job.durationSec > 0)) {
