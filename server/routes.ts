@@ -7670,15 +7670,16 @@ export function registerRoutes(app: Express): void {
   app.get("/api/admin/finance-actuals", requireAdmin, async (req, res) => {
     noStore(res);
     if ((req as any).studioHost) return res.status(403).json({ message: "Admins only." });
-    const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
-    const raw = await storage.getSetting(`finance_actuals:${eventId}`);
+    // The platform's own running costs sit beside the events', under their own key.
+    const key = req.query.scope === "platform" ? "platform" : String(Number(req.query.eventId) || (await storage.getFeaturedEvent()).id);
+    const raw = await storage.getSetting(`finance_actuals:${key}`);
     let lines: unknown = null;
     try { lines = raw ? JSON.parse(raw) : null; } catch { lines = null; }
     res.json({ lines });
   });
   app.put("/api/admin/finance-actuals", requireAdmin, async (req, res) => {
     if ((req as any).studioHost) return res.status(403).json({ message: "Admins only." });
-    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    const key = req.body?.scope === "platform" ? "platform" : String(Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id);
     const lines = (Array.isArray(req.body?.lines) ? req.body.lines : []).slice(0, 200).map((l: any) => ({
       group: String(l?.group ?? "").slice(0, 60),
       label: String(l?.label ?? "").slice(0, 120),
@@ -7686,7 +7687,7 @@ export function registerRoutes(app: Express): void {
       amount: Math.round((Number(l?.amount) || 0) * 100) / 100,
       status: ["actual", "estimate", "enter"].includes(l?.status) ? l.status : "estimate",
     }));
-    await storage.setSetting(`finance_actuals:${eventId}`, JSON.stringify(lines));
+    await storage.setSetting(`finance_actuals:${key}`, JSON.stringify(lines));
     res.json({ lines });
   });
 

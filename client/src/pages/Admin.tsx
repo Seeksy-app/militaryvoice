@@ -36,7 +36,7 @@ import { ProducerChat } from "@/components/ProducerDesk";
 import { RiccohPosts } from "@/components/RiccohPosts";
 import { RiccohImages } from "@/components/RiccohImages";
 import type { AudienceSnapshot } from "@/components/AudienceReach";
-import { FinancesCard } from "@/components/FinancesCard";
+import { FinancesCard, PlatformFinances } from "@/components/FinancesCard";
 import { AdminClips } from "@/components/AdminClips";
 import { AdminSurvey } from "@/components/AdminSurvey";
 import { AdminAar } from "@/components/AdminAar";
@@ -5101,6 +5101,9 @@ export default function Admin({ tab }: { tab?: string } = {}) {
                   </TabsContent>
                   <TabsContent value="team" className="mt-2 lg:mt-0">
                     <TeamCard />
+                  </TabsContent>
+                  <TabsContent value="finances" className="mt-2 lg:mt-0">
+                    <PlatformFinances />
                   </TabsContent>
                   <TabsContent value="aar" className="mt-2 lg:mt-0">
                     <AdminAar

@@ -110,148 +110,26 @@ const TIERS = [
 ];
 
 export function FinancesCard({ event }: { event: PublicEvent }) {
-  const [viewers, setViewers] = useState(100);
-  const hours = event.durationHours || 24;
-  const slotMin = event.slotMinutes || 30;
-  // Matches the current booking pattern; a rough input, and it only moves the
-  // storage-egress line.
-  const [prerecorded, setPrerecorded] = useState(13);
-
-  const m = useMemo(() => model(viewers, hours, slotMin, prerecorded), [viewers, hours, slotMin, prerecorded]);
-  const perViewer = useMemo(() => {
-    const step = model(viewers + 10, hours, slotMin, prerecorded);
-    return Math.max(0, (step.total - m.total) / 10);
-  }, [viewers, hours, slotMin, prerecorded, m.total]);
-
   return (
     <div className="flex flex-col gap-8">
       <ActualCosts eventId={event.id} eventName={event.name} />
 
-      {/* ------------------------------------------------------------ the model */}
-      <section>
-        <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
-          <Calculator className="h-4 w-4" /> What {event.name} costs to run
-        </h3>
-        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-          Published rates, read 17 September 2026. The whole bill turns on one number: how many people watch on our own
-          page at once. Everyone watching on YouTube instead is free.
-        </p>
-
-        <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-card">
-          <div className="border-b border-border p-5">
-            <div className="flex flex-wrap items-baseline gap-3">
-              <span className="text-3xl font-bold tabular-nums" data-testid="finance-viewers">{viewers.toLocaleString()}</span>
-              <span className="text-sm text-muted-foreground">average concurrent viewers on the watch page</span>
-            </div>
-            <Slider
-              className="mt-4"
-              min={10}
-              max={600}
-              step={10}
-              value={[viewers]}
-              onValueChange={([v]) => setViewers(v)}
-              data-testid="slider-finance-viewers"
-            />
-            <div className="mt-1 flex justify-between text-[11px] tabular-nums text-muted-foreground">
-              <span>10</span><span>150</span><span>300</span><span>450</span><span>600</span>
-            </div>
-          </div>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <tbody>
-                {m.lines.map((l) => (
-                  <tr key={l.label} className="border-b border-border last:border-0">
-                    <td className="px-5 py-2.5">
-                      {l.fixed && (
-                        <span className="mr-2 rounded border border-border px-1 text-[10px] uppercase tracking-wide text-muted-foreground">
-                          fixed
-                        </span>
-                      )}
-                      {l.audience && (
-                        <span className="mr-2 rounded border border-[#F0A71F] bg-[#F0A71F]/15 px-1 text-[10px] uppercase tracking-wide text-[#8a5f00] dark:text-[#F0A71F]">
-                          audience
-                        </span>
-                      )}
-                      {l.label}
-                      <span className="block text-xs text-muted-foreground">{l.note}</span>
-                    </td>
-                    <td className={`px-5 py-2.5 text-right tabular-nums ${l.big ? "font-semibold text-destructive" : ""}`}>
-                      {usd(l.cost)}
-                    </td>
-                  </tr>
-                ))}
-                <tr className="border-t-2 border-foreground">
-                  <td className="px-5 py-3 font-semibold">Total for the month of the event</td>
-                  <td className="px-5 py-3 text-right text-base font-semibold tabular-nums" data-testid="finance-total">
-                    {usd(m.total)}
-                  </td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
-
-          {/* The split worth knowing before you price anything: almost all of
-              this bill is the same for an empty room as for a full one. */}
-          <div className="grid gap-px border-t border-border bg-border sm:grid-cols-2">
-            <div className="bg-card p-4">
-              <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">
-                The same at any audience
-              </div>
-              <div className="mt-0.5 text-2xl font-bold tabular-nums" data-testid="finance-flat">{usd0(m.flat)}</div>
-              <div className="text-xs text-muted-foreground">
-                The monthly plans, plus recording, captioning, clip selection and rendering —{" "}
-                <span className="tabular-nums">{usd(m.flat - m.fixed)}</span> of it is the work of turning {m.slots}{" "}
-                shows into recordings and clips, and we pay that whether one person watches or a hundred thousand.
-              </div>
-            </div>
-            <div className="bg-card p-4">
-              <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">Moves with the audience</div>
-              <div className="mt-0.5 text-2xl font-bold tabular-nums" data-testid="finance-audience">{usd0(m.audience)}</div>
-              <div className="text-xs text-muted-foreground">
-                Connection minutes, data transfer and egress — and only for people watching on our own page.
-                {" "}{Math.round((m.audience / m.total) * 100)}% of the bill at this setting.
-              </div>
-            </div>
-          </div>
-
-          <div className="grid gap-px border-t border-border bg-border sm:grid-cols-3">
-            {[
-              ["Fixed monthly", usd0(m.fixed), "plans we pay anyway"],
-              ["Caused by the event", usd0(m.variable), "usage on top"],
-              ["Per podcast slot", usd(m.variable / m.slots), `${m.slots} slots`],
-            ].map(([k, v, n]) => (
-              <div key={k} className="bg-card p-4">
-                <div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">{k}</div>
-                <div className="mt-0.5 text-xl font-bold tabular-nums">{v}</div>
-                <div className="text-xs text-muted-foreground">{n}</div>
-              </div>
-            ))}
-          </div>
-        </div>
-
-        <div className="mt-4 rounded-r-xl border-l-4 border-[#F0A71F] bg-[#F0A71F]/10 p-4 text-sm">
-          <p>
-            <span className="font-semibold">The lever.</span> A viewer on YouTube costs nothing — the feed out to
-            YouTube, X and Twitch is flat whether four people watch or forty thousand. A viewer on our own page costs
-            about <span className="font-semibold tabular-nums">{usd(perViewer)}</span> for the day. Point the promotion
-            at YouTube and the bill stops moving.
-          </p>
-        </div>
-
-        <div className="mt-3 flex items-start gap-2 rounded-xl border border-border bg-muted/30 p-4 text-sm text-muted-foreground">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-[#F0A71F]" />
-          <span>
-            Pre-recorded segments play from storage to every viewer separately — about{" "}
-            <span className="tabular-nums">{Math.round(m.prerecGb).toLocaleString()} GB</span> across {prerecorded}{" "}
-            recorded slots at this audience. The money is small; object storage not being a video CDN is the part worth
-            rehearsing before the day. Every minute of show is also transcoded twice, once for the broadcast and once
-            for the recording — the single biggest saving available is one egress doing both.
-          </span>
-        </div>
-      </section>
-
       <ProductionCosts eventId={event.id} />
+
+    </div>
+  );
+}
+
+/**
+ * The platform owner's money, not any one event's: what the platform costs to
+ * keep running each month, and what to charge (plans and running events for
+ * others). Lives in the platform admin; an event's Finances shows only that
+ * event's own costs.
+ */
+export function PlatformFinances() {
+  return (
+    <div className="flex flex-col gap-8">
+      <ActualCosts scope="platform" eventName="the platform" starting={PLATFORM_STARTING} />
 
       {/* ---------------------------------------------------------- what to charge */}
       <section>
@@ -430,6 +308,20 @@ type Actual = { group: string; label: string; note: string; amount: number; stat
 // Only what this event itself cost: usage on the day and its own purchases.
 // The platform's monthly plans (Render, Upload-Post, LiveKit, Supabase,
 // Vercel, Resend) and its domains aren't the event's, so they aren't here.
+/** The platform's own running costs (Sep–Oct 2026 bills), for the platform admin's Finances. */
+const PLATFORM_STARTING: Actual[] = [
+  { group: "Monthly plans", label: "Render worker (clips)", note: "4 CPU / 8 GB (4c-8g), cuts every clip", amount: 175, status: "actual" },
+  { group: "Monthly plans", label: "Upload-Post", note: "75 profiles: posting, scheduling, analytics", amount: 147, status: "actual" },
+  { group: "Monthly plans", label: "LiveKit Ship", note: "the plan; usage over the allowance is billed on top", amount: 50, status: "actual" },
+  { group: "Monthly plans", label: "Supabase Pro", note: "database and file storage", amount: 25, status: "actual" },
+  { group: "Monthly plans", label: "Vercel Pro", note: "the site and the API", amount: 20, status: "actual" },
+  { group: "Monthly plans", label: "Resend", note: "every email", amount: 20, status: "actual" },
+  { group: "Monthly plans", label: "SimpleTexting", note: "show-day texts, 500 a month (from Oct 2026)", amount: 39, status: "estimate" },
+  { group: "Bought once", label: "Creatomate credits", note: "10,000 credits bought 25 Sep (before our own renderer)", amount: 0, status: "enter" },
+  { group: "From the bank (Mercury)", label: "Telnyx", note: "15 Sep (account since suspended)", amount: 10, status: "actual" },
+  { group: "From the bank (Mercury)", label: "GoDaddy", note: "25 Sep $13.19 and 30 Sep $2.19", amount: 15.38, status: "actual" },
+];
+
 const STARTING_ACTUALS: Actual[] = [
   { group: "Show-day usage", label: "Anthropic API", note: "topped up on show day (clip picks, Alex)", amount: 60, status: "actual" },
   { group: "Show-day usage", label: "Vercel usage over the plan", note: "on show day, about $15 of usage beyond the plan", amount: 15, status: "estimate" },
@@ -448,18 +340,18 @@ const STATUS_STYLE: Record<Actual["status"], string> = {
 };
 const STATUS_LABEL: Record<Actual["status"], string> = { actual: "Actual", estimate: "Estimate", enter: "Enter amount" };
 
-function ActualCosts({ eventId, eventName }: { eventId: number; eventName: string }) {
+function ActualCosts({ eventId = 0, eventName, scope = "event", starting = STARTING_ACTUALS }: { eventId?: number; eventName: string; scope?: "event" | "platform"; starting?: Actual[] }) {
   const qc = useQueryClient();
   const { data, isLoading } = useQuery<{ lines: Actual[] | null }>({
-    queryKey: ["/api/admin/finance-actuals", eventId],
-    queryFn: () => adminGet(`/api/admin/finance-actuals?eventId=${eventId}`),
+    queryKey: ["/api/admin/finance-actuals", scope, eventId],
+    queryFn: () => adminGet(`/api/admin/finance-actuals?${scope === "platform" ? "scope=platform" : `eventId=${eventId}`}`),
   });
   const [lines, setLines] = useState<Actual[]>([]);
   const [dirty, setDirty] = useState(false);
   const [saving, setSaving] = useState(false);
   useEffect(() => {
     if (!data) return;
-    setLines(data.lines && data.lines.length ? data.lines : STARTING_ACTUALS);
+    setLines(data.lines && data.lines.length ? data.lines : starting);
     setDirty(!(data.lines && data.lines.length));
   }, [data]);
 
@@ -468,8 +360,8 @@ function ActualCosts({ eventId, eventName }: { eventId: number; eventName: strin
   const add = () => { setLines((ls) => [...ls, { group: "Other", label: "", note: "", amount: 0, status: "actual" }]); setDirty(true); };
   const save = async () => {
     setSaving(true);
-    await adminSend("PUT", "/api/admin/finance-actuals", { eventId, lines });
-    await qc.invalidateQueries({ queryKey: ["/api/admin/finance-actuals", eventId] });
+    await adminSend("PUT", "/api/admin/finance-actuals", { ...(scope === "platform" ? { scope } : { eventId }), lines });
+    await qc.invalidateQueries({ queryKey: ["/api/admin/finance-actuals", scope, eventId] });
     setSaving(false);
     setDirty(false);
   };
@@ -484,10 +376,12 @@ function ActualCosts({ eventId, eventName }: { eventId: number; eventName: strin
   return (
     <section data-testid="finance-actuals">
       <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
-        <Receipt className="h-4 w-4" /> What {eventName} actually cost
+        <Receipt className="h-4 w-4" /> {scope === "platform" ? "What the platform costs each month" : `What ${eventName} actually cost`}
       </h3>
       <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-        Only this event's own costs: usage on the day and what was bought for it, like the award. The platform's monthly plans aren't included. Change any amount or mark it actual once the bill is in; red lines are bills we know about but haven't read yet.
+        {scope === "platform"
+          ? "The plans and services that keep MilitaryVoices.ai running, whatever the events. Each event's own costs are under that event's Finances. Change any amount or mark it actual once the bill is in; red lines are bills we know about but haven't read yet."
+          : "Only this event's own costs: usage on the day and what was bought for it, like the award. The platform's monthly plans are in the platform admin, under Finances. Change any amount or mark it actual once the bill is in; red lines are bills we know about but haven't read yet."}
       </p>
       <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-card">
         {isLoading ? <p className="p-5 text-sm text-muted-foreground">Loading…</p> : (
