@@ -13,7 +13,7 @@ import { inArray, sql } from "drizzle-orm";
 import { db, schemaIsReady } from "./storage.js";
 import {
   bioPages, contacts, discoveryMembers, eventTeam, events, hostedShows, inboundEmails, mailLog,
-  podcasterProfiles, postifySubscriptions, reminders, signups, sponsorLeads,
+  podcasterProfiles, postifySubscriptions, reminders, signups, sponsorInquiries, sponsorLeads,
 } from "../shared/schema.js";
 import { PLANS } from "../shared/tokens.js";
 
@@ -94,6 +94,12 @@ export async function listPeople(eventId: number | null): Promise<Person[]> {
     if (eventId != null && l.eventId !== eventId) continue;
     if (!l.email) continue;
     const p = get(l.email, l.name); role(p, "Sponsor");
+  }
+  // Sponsors who came to us (the sponsor form), on the platform's CRM.
+  if (eventId == null) {
+    for (const q of await db.select({ email: sponsorInquiries.email, name: sponsorInquiries.name, createdAt: sponsorInquiries.createdAt }).from(sponsorInquiries)) {
+      const p = get(q.email, q.name); role(p, "Sponsor"); joined(p, q.createdAt);
+    }
   }
   // Listeners who asked to be reminded of a show.
   const thisEvent = new Set(books.map((s) => s.id));
