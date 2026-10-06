@@ -267,7 +267,7 @@ async function buildMagazine(eventId: number) {
       let meta: { signupId?: number; title?: string } = {};
       try { meta = JSON.parse(a.about || "{}"); } catch { /* none */ }
       const s = lineup.find((x) => x.id === meta.signupId);
-      return { signupId: meta.signupId ?? 0, title: meta.title || "Excellence in Storytelling", name: s?.hostName.trim() ?? "", show: s?.podcastName ?? "", citation: a.blurb, quote: a.quote, photo: a.art, plaque: `${ORIGIN}/email/award-storytelling-2026.jpg` };
+      return { signupId: meta.signupId ?? 0, title: meta.title || "Excellence in Storytelling", name: s?.hostName.trim() ?? "", show: s?.podcastName ?? "", citation: a.blurb, quote: a.quote, photo: a.art, plaque: `${ORIGIN}/email/award-plaque-cutout.png` };
     })(),
     segments: { done: cuts.filter((c) => c.status === "done").length, working: cuts.filter((c) => c.status === "queued" || c.status === "claimed").length, failed: cuts.filter((c) => c.status === "failed").length },
     // A sponsor's QR goes through the counted link, so the magazine's scans show in their numbers.

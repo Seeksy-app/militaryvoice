@@ -276,29 +276,34 @@ function Listen({ s, ep, label, go }: { s: Show; ep: Episode | null; label: stri
   );
 }
 
-/** The award: their photo full height on the left, the plaque, and why they won. */
+/** The award: who and why on the left, the plaque beside it, their photo small and sharp. */
 function AwardPage({ a, photo, n, event }: { a: NonNullable<Mag["award"]>; photo: string; n: number; event: Mag["event"] }) {
   return (
     <Page n={n} bg={NAVY} color="#fff">
-      <div className="absolute inset-y-0 left-0 overflow-hidden" style={{ width: 360 }}>
-        {photo && <img src={photo} alt={a.name} className="h-full w-full object-cover" style={{ objectPosition: "50% 30%" }} />}
-        <div className="absolute inset-y-0 right-0 w-24" style={{ background: `linear-gradient(to right, transparent, ${NAVY})` }} />
-      </div>
-      <div className="absolute inset-y-0 right-0 flex flex-col px-12 pb-14 pt-16" style={{ left: 360 }}>
+      <div className="absolute inset-0 flex flex-col px-14 pb-14 pt-16">
         <p className="text-[12px] font-bold uppercase tracking-[0.3em]" style={{ color: GOLD }}>{event.occasion} · Award</p>
-        <h2 className="mt-4 text-[44px] font-bold leading-[1.02] tracking-tight" style={HEAD}>{a.title}</h2>
-        <p className="mt-5 text-[26px] font-semibold" style={{ ...HEAD, color: GOLD }}>{a.name}</p>
-        <p className="mt-1 text-[15px] text-white/70">{a.show}</p>
-        {a.citation && <p className="mt-7 text-[16px] leading-[1.65] text-white/90">{a.citation}</p>}
-        {a.quote && (
-          <blockquote className="mt-6 border-l-4 pl-5" style={{ borderColor: GOLD }}>
-            <p className="text-[19px] font-semibold italic leading-snug" style={HEAD}>“{a.quote}”</p>
-          </blockquote>
-        )}
-        <div className="mt-auto flex items-end justify-between gap-6">
-          <img src={a.plaque} alt="The award plaque" className="rounded-lg object-contain shadow-2xl" style={{ maxHeight: 250, maxWidth: 210 }} />
-          <p className="text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-white/50">{event.name}<br />{event.day}</p>
+        <div className="mt-6 flex items-center gap-7">
+          {/* Small on purpose: a 400px photo stretched to the page's height went soft. */}
+          {photo && <img src={photo} alt={a.name} className="h-[170px] w-[170px] shrink-0 rounded-full object-cover" style={{ boxShadow: `0 0 0 5px ${GOLD}`, objectPosition: "50% 30%" }} />}
+          <div className="min-w-0">
+            <h2 className="text-[46px] font-bold leading-[1.02] tracking-tight" style={HEAD}>{a.title}</h2>
+            <p className="mt-3 text-[28px] font-semibold" style={{ ...HEAD, color: GOLD }}>{a.name}</p>
+            <p className="mt-1 text-[15px] text-white/70">{a.show}</p>
+          </div>
         </div>
+        <div className="mt-10 flex min-h-0 flex-1 gap-10">
+          <div className="min-w-0 flex-1">
+            {a.citation && <p className="text-[16px] leading-[1.7] text-white/90">{a.citation}</p>}
+            {a.quote && (
+              <blockquote className="mt-7 border-l-4 pl-5" style={{ borderColor: GOLD }}>
+                <p className="text-[19px] font-semibold italic leading-snug" style={HEAD}>“{a.quote}”</p>
+                <footer className="mt-2 text-[13px] font-semibold text-white/60">{a.name}</footer>
+              </blockquote>
+            )}
+          </div>
+          <img src={a.plaque} alt="The award plaque" className="w-[300px] shrink-0 self-start object-contain" style={{ filter: "drop-shadow(0 18px 30px rgba(0,0,0,0.45))" }} />
+        </div>
+        <p className="mt-6 text-right text-[11px] font-semibold uppercase tracking-[0.12em] text-white/50">{event.name} · {event.day}</p>
       </div>
     </Page>
   );
