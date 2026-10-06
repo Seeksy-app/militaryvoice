@@ -246,7 +246,7 @@ export default function Platform({ pitch = false }: { pitch?: boolean } = {}) {
               Record and go live with your guests, get clips in minutes, and run events with an SI co-host beside you. Then find and verify the people worth putting on your show.
             </p>
             <div className="mt-9 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center lg:justify-start">
-              <Link href="/host/dashboard">
+              <Link href="/host/dashboard?start">
                 <Button size="lg" className="h-12 w-full gap-2 rounded-full bg-[#F0A71F] px-7 text-base font-semibold text-[#1a1200] shadow-[0_10px_30px_rgba(240,167,31,0.35)] hover:bg-[#f5b944] sm:w-auto" data-testid="button-start-free">
                   Start free <ArrowRight className="h-4 w-4" />
                 </Button>

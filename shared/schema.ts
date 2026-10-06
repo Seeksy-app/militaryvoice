@@ -422,7 +422,9 @@ export const profileFieldsSchema = createInsertSchema(podcasterProfiles)
     socialAccounts: true,
   })
   .extend({
-    podcastName: z.string().min(1, "Podcast or show name is required"),
+    // Required of podcasters only, in the refinement below: everyone else never
+    // sees the field, and requiring it here left them unable to save at all.
+    podcastName: z.string().trim().max(160),
     hostName: z.string().min(1, "Your name is required"),
     numPeople: z.number().int().min(1).max(2),
     rssUrl: optionalUrl("RSS feed"),

@@ -1167,7 +1167,11 @@ function memberSignatureHtml(member: { name: string; title: string; photoUrl: st
 export function renderBroadcastEmail(opts: BroadcastEmailOptions): { subject: string; html: string; text: string; fromName: string } {
   const isRico = opts.sender === "rico" && !opts.senderMember;
   const member = opts.senderMember;
-  const resolvedName = opts.firstName.trim() || "Friend";
+  // No name yet (they signed up before telling us): "Hi there," and a subject
+  // without a trailing ", Friend" — a placeholder name reads as a mail merge.
+  const named = opts.firstName.trim();
+  const resolvedName = named || "there";
+  const unnamed = (t: string) => (named ? t : t.replace(/,\s*\{\{First_Name\}\}/gi, "").replace(/\s+\{\{First_Name\}\}(?=[!?.])/gi, ""));
   // {{Remind_Me_Later}} becomes a real link when the caller has a signed URL
   // for this recipient, and disappears cleanly when it doesn't — a test send
   // and the composer's preview have no recipient to sign for, and neither
@@ -1181,7 +1185,7 @@ export function renderBroadcastEmail(opts: BroadcastEmailOptions): { subject: st
   // rather than leaking the token.
   const withSlot = withRemind.replace(/\{\{Slot_Time\}\}/gi, opts.slotLabel?.trim() || "your slot time");
   const resolvedBodyText = withSlot.replace(/\{\{First_Name\}\}/gi, resolvedName);
-  const resolvedSubject = opts.subject
+  const resolvedSubject = unnamed(opts.subject)
     .replace(/\{\{First_Name\}\}/gi, resolvedName)
     .replace(/\{\{Slot_Time\}\}/gi, opts.slotLabel?.trim() || "your slot time");
 

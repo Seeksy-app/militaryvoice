@@ -309,7 +309,7 @@ function SeatMenuItems({ current }: { current: string }) {
   );
 }
 
-export function LoginCard({ pending }: { pending: PendingSlotSummary | null }) {
+export function LoginCard({ pending, start = false }: { pending: PendingSlotSummary | null; start?: boolean }) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   const [step, setStep] = useState<"email" | "code">("email");
@@ -392,13 +392,24 @@ export function LoginCard({ pending }: { pending: PendingSlotSummary | null }) {
         <CardHeader>
           <div className="mb-1 flex items-center gap-2 text-primary">
             {step === "email" ? <Mail className="h-4 w-4" /> : <KeyRound className="h-4 w-4" />}
-            <CardTitle className="text-base">{pending ? "Enter your email to hold it" : "Podcaster sign-in"}</CardTitle>
+            <CardTitle className="text-base">{pending ? "Enter your email to hold it" : start ? "Create your free account" : "Sign in"}</CardTitle>
           </div>
+          {/* Start free and Sign in are the same door — an email and a code —
+              so the card says which one they came for. A new account is
+              three short steps; saying so up front is what makes the code
+              screen read as progress, not a wall. */}
+          {start && !pending && (
+            <p className="text-xs font-semibold uppercase tracking-wider text-[#8a5a00]" data-testid="text-start-step">
+              Step {step === "email" ? 1 : 2} of 3 · {step === "email" ? "Your email" : "Your code"}
+            </p>
+          )}
           <CardDescription>
             {step === "email"
               ? pending
                 ? "No password needed. We'll email you a one-time code, then you'll set up your show once."
-                : "Enter your email and we'll send you a one-time code."
+                : start
+                  ? "No password, no card. We'll email you a 6-digit code, then you'll tell us what you're here for and add your name and photo. About two minutes."
+                  : "Enter your email and we'll send you a one-time code. New here? This creates your free account."
               : `Enter the 6-digit code we sent to ${email}.`}
           </CardDescription>
         </CardHeader>
@@ -430,7 +441,7 @@ export function LoginCard({ pending }: { pending: PendingSlotSummary | null }) {
                 disabled={requestCode.isPending || !email.trim() || (needsHuman && !human)}
                 data-testid="button-request-code"
               >
-                {requestCode.isPending ? "Sending…" : pending ? "Send my code & hold the slot" : "Send me a code"}
+                {requestCode.isPending ? "Sending…" : pending ? "Send my code & hold the slot" : start ? "Send my code" : "Send me a code"}
               </Button>
             </form>
           ) : (
@@ -470,7 +481,7 @@ export function LoginCard({ pending }: { pending: PendingSlotSummary | null }) {
                 </span>
               </label>
               <Button type="submit" disabled={verifyCode.isPending || !code.trim()} data-testid="button-verify-code">
-                {verifyCode.isPending ? "Checking…" : "Sign in"}
+                {verifyCode.isPending ? "Checking…" : start ? "Continue" : "Sign in"}
               </Button>
               <button
                 type="button"
@@ -1008,7 +1019,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     return (
       <div className="min-h-screen">
         <NavBar />
-        <LoginCard pending={pendingSummary} />
+        <LoginCard pending={pendingSummary} start={typeof window !== "undefined" && new URLSearchParams(window.location.search).has("start")} />
       </div>
     );
   }
@@ -1131,7 +1142,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
               </h1>
               {data && (
                 <p className="mt-1 text-sm text-muted-foreground">
-                  {inSetup && pendingSummary ? "Step 3 of 3 · " : ""}
+                  {inSetup ? "Step 3 of 3 · " : ""}
                   Signed in as {data.email}
                 </p>
               )}
