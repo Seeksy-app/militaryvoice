@@ -1,4 +1,5 @@
 import { Link } from "wouter";
+import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { PublicSponsor } from "@shared/schema";
 import { motion } from "framer-motion";
@@ -16,12 +17,9 @@ const HEAD = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 const NAVY = "#000741";
 const GOLD = "#F0A71F";
 
-const ON_AIR = [
-  { src: "/home/onair-edward-amy.jpg", alt: "Edward Andrade of The Drill Pad with co-host Amy Forsythe, live" },
-  { src: "/home/onair-theresa-travis.jpg", alt: "Theresa Carpenter and Travis Johnson, live" },
-  { src: "/home/onair-annette-joe.jpg", alt: "Annette Whittenberger with her guest Joe M. Palacios Jr., live" },
-  { src: "/home/onair-rachel.jpg", alt: "Rachel Oswalt of Your Story Doesn't End Here, live" },
-];
+// The studio photos the site has always opened on, one after another.
+const HERO_IMAGES = Array.from({ length: 12 }, (_, i) => `/hero-${i + 1}.jpg`);
+const HERO_ROTATE_MS = 6000;
 
 const OFFER = [
   { icon: MonitorPlay, title: "A studio that connects to Zoom", body: "Go live or record with your guests. A green room so they arrive ready, layouts that look like TV, and every session recorded." },
@@ -64,7 +62,7 @@ function EventSponsors() {
   return (
     <div className="mt-10 text-center" data-testid="home-event-sponsors">
       <p className="text-xs font-bold uppercase tracking-[0.25em] text-[#053877]/70 dark:text-white/60">Thank you to our 2026 sponsors</p>
-      {paid.length > 0 && <div className="mt-6 flex flex-wrap items-center justify-center gap-6">{paid.map((sp) => logo(sp, "h-20 w-[240px] sm:h-24 sm:w-[280px]"))}</div>}
+      {paid.length > 0 && <div className="mt-6 flex flex-wrap items-center justify-center gap-6">{paid.map((sp) => logo(sp, "h-20 w-[220px] sm:h-24 sm:w-[245px]"))}</div>}
       {friends.length > 0 && (
         <>
           <p className="mt-8 text-xs font-bold uppercase tracking-[0.25em] text-[#053877]/60 dark:text-white/50">Friends of the Marathon</p>
@@ -76,6 +74,11 @@ function EventSponsors() {
 }
 
 export default function HomeCreators() {
+  const [heroIdx, setHeroIdx] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setHeroIdx((i) => (i + 1) % HERO_IMAGES.length), HERO_ROTATE_MS);
+    return () => clearInterval(t);
+  }, []);
   return (
     <div className="min-h-screen overflow-x-clip bg-background">
       {/* The day that just happened, one line above everything. */}
@@ -89,14 +92,19 @@ export default function HomeCreators() {
       <NavBar />
 
       {/* ------------------------------------------------------------- hero */}
-      <section className="relative isolate overflow-hidden text-white" style={{ background: `linear-gradient(180deg, ${NAVY}, #053877)` }}>
-        <div className="mx-auto grid max-w-6xl items-center gap-10 px-4 py-14 sm:px-6 md:py-20 lg:grid-cols-[1.05fr_1fr]">
-          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }}>
+      <section className="relative isolate overflow-hidden bg-[#000741] text-white">
+        {HERO_IMAGES.map((src, i) => (
+          <img key={src} src={src} alt="" aria-hidden="true" fetchPriority={i === 0 ? "high" : "low"}
+            className={`absolute inset-0 -z-10 h-full w-full object-cover object-[70%_center] transition-opacity duration-[1600ms] ease-in-out ${i === heroIdx ? "opacity-90" : "opacity-0"}`} />
+        ))}
+        <div aria-hidden="true" className="absolute inset-0 -z-10 bg-[linear-gradient(90deg,rgba(0,7,65,0.93)_0%,rgba(0,7,65,0.80)_38%,rgba(5,56,119,0.45)_66%,rgba(5,56,119,0.2)_100%)]" />
+        <div className="mx-auto flex min-h-[72vh] max-w-6xl items-center px-4 py-16 sm:px-6 md:py-24">
+          <motion.div initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.6 }} className="max-w-2xl">
             <p className="text-xs font-bold uppercase tracking-[0.25em]" style={{ color: GOLD }}>For military and veteran creators</p>
             <h1 className="mt-4 text-balance text-4xl font-bold leading-[1.05] sm:text-5xl lg:text-6xl" style={HEAD}>
               Where military and veteran voices grow.
             </h1>
-            <p className="mt-5 max-w-xl text-pretty text-lg text-white/80">
+            <p className="mt-5 max-w-xl text-pretty text-lg text-white/85">
               Podcasts, video, social, events and brand partnerships, all in one place. A studio that connects to Zoom, clips in minutes, and an SI co-host in every studio. You only pay for what you need.
             </p>
             <div className="mt-8 flex flex-wrap items-center gap-4">
@@ -108,16 +116,6 @@ export default function HomeCreators() {
               </Link>
             </div>
           </motion.div>
-
-          <motion.figure initial={{ opacity: 0, y: 24, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }} transition={{ duration: 0.7, delay: 0.1 }} className="relative">
-            <div className="grid grid-cols-2 gap-2 overflow-hidden rounded-2xl ring-1 ring-white/15 shadow-2xl">
-              {ON_AIR.map((p) => <img key={p.src} src={p.src} alt={p.alt} className="aspect-video w-full object-cover" loading="eager" />)}
-            </div>
-            <figcaption className="mt-3 flex items-center gap-2 text-sm text-white/70">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-red-600 px-2 py-0.5 text-[11px] font-bold uppercase tracking-wider text-white"><span className="h-1.5 w-1.5 rounded-full bg-white" />Live</span>
-              Real creators on our stage, National Military Podcast Day, October 5, 2026
-            </figcaption>
-          </motion.figure>
         </div>
         <div className="border-t border-white/10 bg-black/15">
           <ul className="mx-auto grid max-w-6xl grid-cols-2 gap-y-4 px-4 py-6 text-center sm:px-6 md:grid-cols-4">
@@ -179,6 +177,20 @@ export default function HomeCreators() {
               </div>
             </Reveal>
           </div>
+          {/* This year's award, beside the replay it was given in. */}
+          <Reveal className="mt-6 overflow-hidden rounded-2xl bg-[#000741] text-white shadow-sm ring-1 ring-black/5" data-testid="home-award">
+            <div className="grid items-center gap-0 md:grid-cols-[1.1fr_1.2fr_0.7fr]">
+              <img src="/home/onair-rachel.jpg" alt="Rachel Oswalt, live on National Military Podcast Day" className="h-full w-full object-cover md:aspect-auto aspect-video" loading="lazy" />
+              <div className="p-6 md:p-8">
+                <p className="text-xs font-bold uppercase tracking-[0.25em]" style={{ color: GOLD }}>2026 Excellence in Storytelling</p>
+                <h3 className="mt-3 text-balance text-2xl font-bold sm:text-3xl" style={HEAD}>Rachel Oswalt</h3>
+                <p className="mt-2 text-pretty text-white/80">Host of <span className="font-semibold text-white">Your Story Doesn't End Here</span>, the military mental health podcast. Chosen out of every show on National Military Podcast Day 2026.</p>
+              </div>
+              <div className="flex justify-center bg-[#0b1650] p-5">
+                <img src="/email/award-storytelling-2026.jpg" alt="The 2026 Excellence in Storytelling plaque, presented to Rachel Oswalt" className="max-h-60 w-auto rounded-md shadow-xl" loading="lazy" />
+              </div>
+            </div>
+          </Reveal>
           <EventSponsors />
         </div>
       </section>
