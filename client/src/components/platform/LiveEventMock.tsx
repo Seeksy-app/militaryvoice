@@ -11,9 +11,10 @@ import { PlatformIcon } from "@/components/SocialIcons";
 const E = "/platform/events";
 const ROOMS = [
   { src: `${E}/e0.jpg`, pos: "70% 45%", title: "Main stage", line: "Keynote · Leading after service" },
+  { src: "/hero-12.jpg", pos: "60% 40%", title: "Podcast studio", line: "Recording · Your show, with your guests" },
   { src: `${E}/e1.jpg`, pos: "55% 40%", title: "Panel · Stage 1", line: "Women who served: what comes next" },
+  { src: "/hero-11.jpg", pos: "65% 35%", title: "Content creator", line: "Clips · Posting to every channel" },
   { src: `${E}/e2.jpg`, pos: "50% 55%", title: "Gala dinner", line: "Live to YouTube from the ballroom" },
-  { src: `${E}/e3.jpg`, pos: "50% 50%", title: "Expo floor", line: "Booth tours with our sponsors" },
 ] as const;
 const HOLD_MS = 6000;
 
