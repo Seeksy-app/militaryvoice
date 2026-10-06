@@ -500,7 +500,9 @@ export function registerMagazine(app: Express, requireAdmin: RequestHandler, req
     const queue = [...lineup];
     const work = async () => {
       for (let x = queue.shift(); x; x = queue.shift()) {
-        const t = await dayTranscript(eventId, x);
+        // A transcript sent with the request (made from the on-demand recording) wins.
+        const given = typeof req.body?.transcripts?.[x.id] === "string" ? String(req.body.transcripts[x.id]).slice(0, 60_000) : "";
+        const t = given || (await dayTranscript(eventId, x));
         if (t.length < 400) { skipped.push({ show: x.podcastName, why: "no transcript of their segment" }); continue; }
         const w = words.find((r) => r.signupId === x.id);
         const keep = req.body?.quotes === "replace" ? "" : (w?.quote ?? "");
