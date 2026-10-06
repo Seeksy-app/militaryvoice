@@ -122,6 +122,7 @@ import { slackInbound, slackNote } from "./slack.js";
 import { registerMagazine, planSegments, claimSegmentCut } from "./magazine.js";
 import { registerSurvey } from "./survey.js";
 import { registerSms } from "./sms.js";
+import { registerDeviceCheck } from "./deviceCheck.js";
 import { registerHealth, beat, addHealthCheck } from "./health.js";
 import { registerNotices } from "./notices.js";
 import { registerGreenRoomChat, logWatchChat } from "./greenRoomChat.js";
@@ -6646,6 +6647,7 @@ export function registerRoutes(app: Express): void {
   registerNotices(app, requireAdmin, requireHostSession);
   registerSurvey(app, requireAdmin);
   registerSms(app, requireAdmin);
+  registerDeviceCheck(app);
   registerGreenRoomChat(app, requireAdmin, requireHostSession, studioHostEmails);
   registerAutomations(app, requireAdmin, {
     unsubscribeUrl: (req, email) => unsubscribeUrl(req, email),
