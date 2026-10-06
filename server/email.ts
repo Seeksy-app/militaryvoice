@@ -9,6 +9,14 @@ const RESEND_BASE = process.env.CUSTOM_CRED_API_RESEND_COM_URL || "https://api.r
 const RESEND_PROXY_TOKEN = process.env.CUSTOM_CRED_API_RESEND_COM_TOKEN;
 
 const FROM_ADDRESS = "MilitaryVoices.ai <hello@militaryvoices.ai>";
+/**
+ * Bulk mail (broadcasts, automations, fan campaigns, the magazine) goes out
+ * from news.militaryvoices.ai, so a newsletter's spam reports can never touch
+ * the reputation that sign-in codes and one-to-one mail depend on. Replies
+ * still come home to hello@ (6 Oct 2026, Resend's advice).
+ */
+export const BULK_ADDRESS = "hello@news.militaryvoices.ai";
+export const REPLY_ADDRESS = "hello@militaryvoices.ai";
 const SITE = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 
 /** Header images live in /public/email; one per mood so emails can rotate. */
@@ -1246,7 +1254,7 @@ export function renderCreatorEmail(o: { showName: string; banner?: string; first
 
 export async function sendCreatorEmail(o: Parameters<typeof renderCreatorEmail>[0] & { to: string; replyTo: string; campaignId: number }): Promise<string | null> {
   const r = renderCreatorEmail(o);
-  const from = `${o.showName.replace(/[<>"]/g, "").slice(0, 60)} via MilitaryVoices.ai <hello@militaryvoices.ai>`;
+  const from = `${o.showName.replace(/[<>"]/g, "").slice(0, 60)} via MilitaryVoices.ai <${BULK_ADDRESS}>`;
   return sendRawEmail({ kind: `creator-campaign:${o.campaignId}`, to: o.to, from, replyTo: o.replyTo, subject: r.subject, html: r.html, text: r.text, headers: { "List-Unsubscribe": `<${o.unsubscribeUrl}>`, "List-Unsubscribe-Post": "List-Unsubscribe=One-Click" } });
 }
 
@@ -1254,7 +1262,8 @@ export async function sendBroadcastEmail(opts: BroadcastEmailOptions): Promise<s
   const rendered = renderBroadcastEmail(opts);
   return sendRawEmail({ kind: opts.kind ?? "sendBroadcastEmail",
     to: opts.to,
-    from: `${rendered.fromName} <hello@militaryvoices.ai>`,
+    from: `${rendered.fromName} <${BULK_ADDRESS}>`,
+    replyTo: REPLY_ADDRESS,
     subject: rendered.subject,
     html: rendered.html,
     text: rendered.text,

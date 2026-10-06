@@ -15,7 +15,7 @@ import crypto from "node:crypto";
 import { and, asc, eq, inArray, ne, sql } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { getAdminEmail } from "./session.js";
-import { emailShell, EMAIL_BANNERS, sendOneOffEmail } from "./email.js";
+import { emailShell, EMAIL_BANNERS, sendOneOffEmail, BULK_ADDRESS, REPLY_ADDRESS } from "./email.js";
 import { uploadPhoto } from "./photoStorage.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
 import { bioPages, clips, contacts, discoveryCache, hostedShows, magazineAds, magazinePages, podcasterProfiles, recordings, segmentCuts, signups, sponsors } from "../shared/schema.js";
@@ -578,7 +578,7 @@ Riccoh`;
     const failed: string[] = [];
     for (const [email, p] of Array.from(people.entries())) {
       const { text, html } = letter(p);
-      const id = await sendOneOffEmail({ kind: "magazine", to: email, subject, html, text }).catch(() => null);
+      const id = await sendOneOffEmail({ kind: "magazine", to: email, subject, html, text, from: `MilitaryVoices.ai <${BULK_ADDRESS}>`, replyTo: REPLY_ADDRESS }).catch(() => null);
       if (id) {
         sent++;
         await storage.recordOneOffSend({ eventId, subject, bodyText: text, sender: "member:1", banner: "podcasters", email, resendId: id }).catch(() => {});
