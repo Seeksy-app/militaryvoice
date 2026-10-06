@@ -149,7 +149,12 @@ export async function planSegments(eventId: number): Promise<{ queued: number; k
   for (const s of lineup) {
     const row = ros.find((r) => r.signupId === s.id);
     // With actual times known, a show with none didn't air as its own segment.
-    if (actuals && !row?.actualStartAtUtc) { notRecorded.push(s.podcastName); continue; }
+    if (actuals && !row?.actualStartAtUtc) {
+      // An old cut from the slot time would be someone else's show (12:00 on 5 Oct played Ian's).
+      await db.delete(segmentCuts).where(and(eq(segmentCuts.eventId, eventId), eq(segmentCuts.signupId, s.id)));
+      notRecorded.push(s.podcastName);
+      continue;
+    }
     const w = row?.actualStartAtUtc
       ? { start: Date.parse(row.actualStartAtUtc), end: Date.parse(row.actualStartAtUtc) + (row.actualMinutes || ev.onAirMinutes) * 60_000 }
       : onAir(ev as never, s.slotIndex);
