@@ -152,7 +152,10 @@ function PostifyStats({ adminGet }: { adminGet: <T>(path: string) => Promise<T> 
 const mmss = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, "0")}`;
 
 /** Colour carries the state, so a failed job is visible without reading. */
-function StatusBadge({ status, claimedAt }: { status: string; claimedAt: string }) {
+/** Held on purpose (a whole-stage recording, or to let the queue move): not a failure. */
+const isHeld = (err: string) => /^Held by the producer/i.test(err || "");
+
+function StatusBadge({ status, claimedAt, error = "" }: { status: string; claimedAt: string; error?: string }) {
   if (status === "running") {
     // How long it has been held matters: past ten minutes the claim goes
     // stale and another worker takes it, and knowing that stops you killing
@@ -165,6 +168,7 @@ function StatusBadge({ status, claimedAt }: { status: string; claimedAt: string 
     );
   }
   if (status === "queued") return <Badge variant="secondary" className="gap-1.5"><Clock className="h-3 w-3" /> Queued</Badge>;
+  if (status === "failed" && isHeld(error)) return <Badge variant="secondary" className="gap-1.5"><Clock className="h-3 w-3" /> Held</Badge>;
   if (status === "failed") return <Badge variant="destructive" className="gap-1.5"><AlertTriangle className="h-3 w-3" /> Failed</Badge>;
   if (status === "done") return <Badge variant="outline">Done</Badge>;
   return <Badge variant="outline" className="text-muted-foreground">Not clipped</Badge>;
@@ -202,7 +206,7 @@ export function AdminClips({
   const totals = useMemo(() => {
     const clips = rows.reduce((n, r) => n + r.clips.length, 0);
     const working = rows.filter((r) => r.clipStatus === "running" || r.clipStatus === "queued").length;
-    return { clips, working, failed: rows.filter((r) => r.clipStatus === "failed").length };
+    return { clips, working, failed: rows.filter((r) => r.clipStatus === "failed" && !isHeld(r.clipError)).length };
   }, [rows]);
 
   async function reclip(id: number) {
@@ -273,7 +277,7 @@ export function AdminClips({
             <button type="button" onClick={() => toggle(r.id)} className="min-w-0 flex-1 text-left" aria-expanded={openIds.has(r.id)} data-testid={`button-open-${r.id}`}>
               <div className="flex items-center gap-2">
                 <span className="truncate text-sm font-semibold">{r.title || `Recording #${r.id}`}</span>
-                <StatusBadge status={r.clipStatus} claimedAt={r.clipClaimedAt} />
+                <StatusBadge status={r.clipStatus} claimedAt={r.clipClaimedAt} error={r.clipError} />
               </div>
               <div className="text-xs text-muted-foreground">
                 {r.segment && <span className="mr-1 font-semibold text-foreground">Segment · in {r.email}'s Library ·</span>}
@@ -302,7 +306,13 @@ export function AdminClips({
 
           {/* The error is the useful part of a failed job, so it is shown, not
               hidden behind a hover. */}
-          {r.clipError && (
+          {r.clipError && isHeld(r.clipError) ? (
+            <p className="border-b border-border bg-muted/40 px-3 py-2 text-xs text-muted-foreground">
+              {!r.email && !r.segment
+                ? "The whole stage recording. Each show was cut from it and clipped in its podcaster's own Library, so it isn't clipped as one. Press Clip to clip it anyway."
+                : r.clipError}
+            </p>
+          ) : r.clipError && (
             <p className="border-b border-border bg-destructive/5 px-3 py-2 text-xs text-destructive">{r.clipError}</p>
           )}
 
