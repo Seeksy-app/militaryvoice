@@ -126,7 +126,7 @@ export default function HomeCreators() {
           </Reveal>
           <div className="mt-8 grid gap-6 md:grid-cols-[1.4fr_1fr]">
             <Reveal className="overflow-hidden rounded-2xl bg-white shadow-sm ring-1 ring-black/5 dark:bg-[#0d1838]">
-              <img src="/home/onair-riccoh-jane.jpg" alt="Host Riccoh Player and Jane Babcock opening the Marathon" className="aspect-video w-full object-cover" loading="lazy" />
+              <img src="/home/replay-console.jpg" alt="The MilitaryVoices studio console live on National Military Podcast Day, with VET S.O.S. on stage" className="aspect-[1668/991] w-full object-cover object-top" loading="lazy" />
               <div className="flex flex-wrap items-center justify-between gap-3 p-5">
                 <div>
                   <p className="font-semibold text-foreground">The Podcast Marathon, hosted by Riccoh Player</p>
