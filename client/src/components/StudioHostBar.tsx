@@ -8,7 +8,7 @@ type Thread = { messages: { id: number; role: Role; content: string; name?: stri
  * The studio host's controls, as big as buttons get, across the top of the
  * console: put me on stage, the next show, and the one for when something
  * goes wrong (OH SH#T!), which covers the screen with "We'll be right back"
- * and calls Michael in the same press. Everything else in the console is still there
+ * and tells the team who pressed it — nothing else. Everything else in the console is still there
  * below; these are the four things a co-host does under pressure.
  */
 export function StudioHostBar({
@@ -41,19 +41,20 @@ export function StudioHostBar({
   chatWaiting?: number;
 }) {
   const [chatOpen, setChatOpen] = useState(false);
-  const openChat = () => (onChat ? onChat() : setChatOpen(true));
   const [alerted, setAlerted] = useState(false);
 
+  // One job: the hold card goes up. The team is told quietly, by name, so
+  // nobody's screen jumps to a chat in the middle of a problem (6 Oct AAR:
+  // it used to open the chat as well). "Back to the show" is the undo.
   const cover = async () => {
     onCover();
-    openChat();
     if (!alerted) {
       setAlerted(true);
       await fetch("/api/host/alex/chat", {
         method: "POST",
         credentials: "include",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ studioId, text: "I pressed OH SH#T! The screen is on We'll be right back. Something's wrong on stage, please help.", toProducer: true, urgent: true }),
+        body: JSON.stringify({ studioId, text: "I put up \"We'll be right back\" (the OH SH#T! button). Something's wrong on stage.", toProducer: true, urgent: true }),
       }).catch(() => {});
     }
   };
@@ -91,7 +92,7 @@ export function StudioHostBar({
             <AlertTriangle className="h-8 w-8 shrink-0" />
             <span>
               <span className="block text-2xl font-black leading-tight tracking-tight">OH SH#T!</span>
-              <span className="block text-xs text-white/85">Puts up "We'll be right back" · calls Michael</span>
+              <span className="block text-xs text-white/85">Puts up "We'll be right back" · the team is told</span>
             </span>
           </button>
         )}

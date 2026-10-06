@@ -2497,12 +2497,22 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                       data-testid="menu-standby-toggle"
                     >
                       <PlayCircle className="h-4 w-4" />
-                      {studio?.fallbackPlaying ? "Stop the standby clip" : studio?.fallbackVideoUrl ? `Roll it: ${studio?.fallbackLabel || "standby"}` : "Pick a standby clip first"}
+                      {studio?.fallbackPlaying ? `Stop ${studio?.fallbackLabel || "the standby clip"}` : studio?.fallbackVideoUrl ? `Roll it: ${studio?.fallbackLabel || "standby"}` : "Pick a standby clip below"}
                     </DropdownMenuItem>
                     <DropdownMenuSeparator />
-                    <DropdownMenuLabel className="text-xs text-muted-foreground">Standby plays</DropdownMenuLabel>
+                    {/* Picking one plays it. It used to only tick it for later,
+                        so a press on "Tonight's lineup" looked like Standby
+                        doing nothing (6 Oct AAR). */}
+                    <DropdownMenuLabel className="text-xs text-muted-foreground">Play now</DropdownMenuLabel>
                     {(standbyLoops.data?.loops ?? []).map((l) => (
-                      <DropdownMenuItem key={l.url} onSelect={() => patchStudio.mutate({ fallbackVideoUrl: l.url, fallbackLabel: l.label })} data-testid="menu-standby-loop">
+                      <DropdownMenuItem
+                        key={l.url}
+                        onSelect={() => {
+                          setStandbyRolled(true);
+                          patchStudio.mutate({ fallbackVideoUrl: l.url, fallbackLabel: l.label, fallbackPlaying: true });
+                        }}
+                        data-testid="menu-standby-loop"
+                      >
                         <Check className={`mr-2 h-3.5 w-3.5 ${studio?.fallbackVideoUrl === l.url ? "opacity-100" : "opacity-0"}`} />
                         {l.label}
                       </DropdownMenuItem>
