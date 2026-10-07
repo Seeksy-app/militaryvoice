@@ -1850,6 +1850,16 @@ async function mixMusic(file: string, music: string, speech: boolean): Promise<v
 }
 
 /**
+ * Is anyone talking? The loudness of the voice band across the file: speech
+ * sits well above -45 dB; a silent screen share or room tone sits far below.
+ */
+async function hasSpeech(file: string): Promise<boolean> {
+  const out = await run("ffmpeg", ["-v", "info", "-i", file, "-map", "0:a:0?", "-af", "highpass=f=200,lowpass=f=3500,volumedetect", "-f", "null", "-"]).catch((e: Error) => e.message);
+  const mean = Number(String(out).match(/mean_volume:\s*(-?[\d.]+) dB/)?.[1]);
+  return Number.isFinite(mean) && mean > -45;
+}
+
+/**
  * Nothing said in it (a product demo over music, a silent screen share):
  * clips by the clock instead of by the words. One clip if it's a minute or
  * less; otherwise evenly spaced 30-second pieces.
@@ -2152,6 +2162,28 @@ async function handle(job: Job): Promise<void> {
         console.warn(`[${job.recordingId}] local transcription failed: ${err.message}`);
         return job.transcript;
       });
+    }
+    // An empty transcript on a recording that has speech in it is a failed
+    // transcription, not a silent recording (7 Oct: Frank's segment came back
+    // empty, read as silent, and got four evenly spaced slices with a centre
+    // crop). Try every engine we have before believing it, and if none can
+    // read it, stop with an error rather than make bad clips.
+    if (!live && lines.length === 0 && (await hasSpeech(source))) {
+      console.warn(`[${job.recordingId}] the transcript came back empty but there's speech: trying the other engines`);
+      const engines: [string, () => Promise<Line[]>][] = [
+        ...(process.env.ELEVENLABS_API_KEY ? [["Scribe", () => transcribeWithScribe(source, dir)] as [string, () => Promise<Line[]>]] : []),
+        ...(process.env.DEEPGRAM_API_KEY ? [["Deepgram", () => transcribeWithDeepgram(source, dir)] as [string, () => Promise<Line[]>]] : []),
+        ["whisper", () => transcribeLocally(source, dir)],
+      ];
+      for (const [name, go] of engines) {
+        try {
+          lines = await go();
+          if (lines.length) { console.log(`[${job.recordingId}] ${name} read it (${lines.length} lines)`); break; }
+        } catch (err) {
+          console.warn(`[${job.recordingId}] ${name} failed: ${(err as Error).message}`);
+        }
+      }
+      if (!lines.length) throw new Error("Couldn't transcribe the speech in this recording, so no clips were made. Try Clip again.");
     }
     // Keep what we transcribed, so Generate more and Suggest edits needn't transcribe it again.
     if (!live && lines.length) {
