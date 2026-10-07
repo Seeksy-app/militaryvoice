@@ -746,7 +746,8 @@ export function registerDiscoveryRoutes(app: Express): void {
         // Signed in to the admin too: they can spend credits on filling a page.
         isAdmin: !!adminEmail,
         // On the free plan as a creator: Discovery shows an upgrade screen instead.
-        locked: !adminEmail && !(await discoveryOpenTo(email)),
+        // Judged on the member account they're signed in as (an admin testing a free account sees what it sees).
+        locked: getSessionEmail(req) ? !(await discoveryOpenTo(String(getSessionEmail(req)))) : false,
       };
     }),
   );
