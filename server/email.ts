@@ -1205,7 +1205,7 @@ export function renderBroadcastEmail(opts: BroadcastEmailOptions): { subject: st
       eyebrow,
       heading: "",
       body: bodyHtml,
-      cta: { href: SITE, label: "Visit MilitaryVoices.ai" },
+      // No standing "Visit MilitaryVoices.ai" button (7 Oct): each email carries its own, and two yellow buttons competed.
       footerNote: `Questions? Reply to this email. · <a href="${opts.unsubscribeUrl}" style="color:#6b7280;">Unsubscribe</a>`,
       preheader: (opts.preheader ?? "").replace(/\{\{First_Name\}\}/gi, resolvedName),
     }),
