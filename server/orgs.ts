@@ -43,12 +43,32 @@ export async function orgMemberEmails(orgId: number): Promise<string[]> {
   return (await db.select({ email: orgMembers.email }).from(orgMembers).where(and(eq(orgMembers.orgId, orgId), eq(orgMembers.status, "active")))).map((r) => r.email);
 }
 
+/**
+ * A logo from their website, so a brand looks like itself from the first
+ * minute: the site's apple-touch-icon (a clean square, usually 180px), else
+ * Google's copy of its icon. Never holds sign-up up for more than a few seconds.
+ */
+export async function logoFromSite(website: string): Promise<string> {
+  let host = "";
+  try { host = new URL(website).hostname; } catch { return ""; }
+  try {
+    const res = await fetch(website, { redirect: "follow", signal: AbortSignal.timeout(4000), headers: { "User-Agent": "Mozilla/5.0 (compatible; MilitaryVoicesBot/1.0)" } });
+    const html = (await res.text()).slice(0, 200_000);
+    const links = Array.from(html.matchAll(/<link\b[^>]*>/gi)).map((m) => m[0]);
+    const pick = links.find((l) => /rel=["'][^"']*apple-touch-icon/i.test(l)) ?? links.find((l) => /rel=["'](?:shortcut )?icon["']/i.test(l) && /sizes=["'](1[2-9]\d|[2-9]\d\d)/i.test(l));
+    const href = pick?.match(/href=["']([^"']+)["']/i)?.[1];
+    if (href) return new URL(href, res.url || website).toString();
+  } catch { /* the site didn't answer in time: the fallback below */ }
+  return `https://www.google.com/s2/favicons?domain=${encodeURIComponent(host)}&sz=128`;
+}
+
 async function createOrg(o: { name: string; kind: string; website?: string; createdBy: string; status?: string }): Promise<OrganizationRow> {
   const kind = KINDS.includes(o.kind) ? o.kind : "brand";
   // Organizers' events are approved one by one, so the account itself is fine at once; brands wait for us.
   const status = o.status ?? (kind === "organizer" ? "approved" : "pending");
+  const logoUrl = o.website ? await logoFromSite(o.website) : "";
   const [org] = await db.insert(organizations).values({
-    name: o.name, kind, website: o.website ?? "", status, createdBy: o.createdBy, createdAt: now(), approvedAt: status === "approved" ? now() : "",
+    name: o.name, kind, website: o.website ?? "", logoUrl, status, createdBy: o.createdBy, createdAt: now(), approvedAt: status === "approved" ? now() : "",
   }).returning();
   await db.insert(orgMembers).values({ orgId: org.id, email: o.createdBy, role: "owner", status: "active", createdAt: now(), joinedAt: now() });
   return org;

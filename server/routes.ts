@@ -129,6 +129,7 @@ import { audienceRecipients, registerPeople } from "./people.js";
 import { registerOrganizer } from "./organizer.js";
 import { registerProjects } from "./projects.js";
 import { orgMemberEmails, registerOrgs } from "./orgs.js";
+import { registerProspects } from "./prospects.js";
 import { eventAdminEmails, eventAdminEvents, eventAdminKey, eventAdminMay } from "./eventAdmin.js";
 import { registerDeviceCheck } from "./deviceCheck.js";
 import { registerHealth, beat, addHealthCheck } from "./health.js";
@@ -6768,6 +6769,7 @@ export function registerRoutes(app: Express): void {
   registerOrganizer(app, requireHostSession, requireAdmin);
   registerProjects(app, requireAdmin);
   registerOrgs(app, requireHostSession, requireAdmin);
+  registerProspects(app, requireAdmin);
   registerDeviceCheck(app);
   registerGreenRoomChat(app, requireAdmin, requireHostSession, studioHostEmails);
   registerAutomations(app, requireAdmin, {

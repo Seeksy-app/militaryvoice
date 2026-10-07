@@ -5,6 +5,7 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { Building2, ExternalLink, Eye } from "lucide-react";
 import { ORG_KINDS, type OrganizationRow } from "@shared/schema";
+import { AdminProspects } from "@/components/AdminProspects";
 
 // Admin → Organizations: every brand, agency and event organizer on the
 // platform, with its team, events and lists. Brands wait here for approval
@@ -29,6 +30,8 @@ export function AdminOrgs() {
   const { toast } = useToast();
   const q = useQuery<Org[]>({ queryKey: ["/api/admin/orgs"], queryFn: () => adminGet("/api/admin/orgs") });
   const [filter, setFilter] = useState<(typeof FILTERS)[number]["key"]>("all");
+  // Accounts we have, and prospects we're after.
+  const [view, setView] = useState<"accounts" | "prospects">("accounts");
   const all = q.data ?? [];
   const rows = all.filter((o) => filter === "all" ? true : filter === "pending" ? o.status === "pending" : o.kind === filter);
   const count = (k: string) => all.filter((o) => k === "all" ? true : k === "pending" ? o.status === "pending" : o.kind === k).length;
@@ -63,6 +66,13 @@ export function AdminOrgs() {
         <Button variant="outline" onClick={() => void backfill()} title="Make organizations for planners who already have events, and for brands and agencies already on Discovery" data-testid="orgs-backfill">Bring existing accounts in</Button>
       </div>
 
+      <div className="flex gap-5 border-b border-border" role="tablist">
+        {([["accounts", "Accounts"], ["prospects", "Brand prospects"]] as const).map(([k, l]) => (
+          <button key={k} type="button" role="tab" aria-selected={view === k} onClick={() => setView(k)} className={`-mb-px border-b-2 pb-2 text-sm font-semibold ${view === k ? "border-[#053877] text-foreground dark:border-[#9cc2ff]" : "border-transparent text-muted-foreground hover:text-foreground"}`} data-testid={`orgs-tab-${k}`}>{l}</button>
+        ))}
+      </div>
+
+      {view === "prospects" ? <AdminProspects /> : <>
       <div className="flex flex-wrap gap-1.5">
         {FILTERS.map((f) => (
           <button key={f.key} type="button" onClick={() => setFilter(f.key)} className={`rounded-lg px-3 py-1.5 text-sm ${filter === f.key ? "bg-[#053877] font-semibold text-white" : "hover:bg-muted"}`}>
@@ -119,6 +129,7 @@ export function AdminOrgs() {
           })}
         </ul>
       )}
+      </>}
     </div>
   );
 }

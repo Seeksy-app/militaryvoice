@@ -3157,3 +3157,28 @@ export const orgMembers = pgTable("org_members", {
 }, (t) => [uniqueIndex("org_members_org_email_idx").on(t.orgId, t.email), index("org_members_email_idx").on(t.email)]);
 export type OrgMemberRow = typeof orgMembers.$inferSelect;
 export const ORG_KINDS = { brand: "Brand", agency: "Agency", organizer: "Event organizer" } as const;
+
+/**
+ * Brand prospects (7 Oct 2026): companies already advertising to the military
+ * community, found in the public ad libraries (Meta, LinkedIn) through
+ * SearchApi, or added by hand. The sales list for brand accounts.
+ */
+export const brandProspects = pgTable("brand_prospects", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  /** meta | linkedin | manual */
+  source: text("source").notNull().default("manual"),
+  /** The search that found them ("veteran discount"). */
+  query: text("query").notNull().default(""),
+  website: text("website").notNull().default(""),
+  /** The advertiser's page on the ad library. */
+  link: text("link").notNull().default(""),
+  adCount: integer("ad_count").notNull().default(0),
+  /** One of their ads, so we know what they say to this audience. */
+  sample: text("sample").notNull().default(""),
+  /** new | contacted | signed_up | passed */
+  status: text("status").notNull().default("new"),
+  notes: text("notes").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (t) => [uniqueIndex("brand_prospects_name_idx").on(t.name)]);

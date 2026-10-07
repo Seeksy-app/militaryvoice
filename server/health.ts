@@ -227,6 +227,7 @@ const DEFS: Def[] = [
       return { state: "down", detail: `${res.status}${res.status === 401 || res.status === 403 ? " (the key was refused)" : ""}: ${body.slice(0, 100)}` };
     },
   },
+  { key: "searchapi", name: "SearchApi", group: "Social and podcasts", powers: "Brand prospects from the ad libraries", run: keyOnly(["SEARCHAPI_API_KEY", "SEARCH_API_KEY", "SEARCHAPI_KEY"], "no free status call") },
   { key: "parallel", name: "Parallel", group: "Social and podcasts", powers: "Sponsor finder research", run: keyOnly(["PARALLEL_API_KEY", "PARALLEL_AI_API_KEY", "PARALLELAI_API_KEY", "PARALLEL_KEY", "PARALLEL_WEB_API_KEY"], "no free status call") },
   // Money and safety
   {
