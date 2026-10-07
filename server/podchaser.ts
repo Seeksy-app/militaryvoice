@@ -279,7 +279,7 @@ export function registerPodcastRoutes(app: Express, member: (req: Request) => Pr
         const words = q || term;
         let at = page, guests: Guest[] = [], eps: LnEpisode[] = [], more = false;
         // A page of episodes with no named guests in it (a topic's solo shows): one more, on the first page only.
-        for (let tries = 0; tries < (page === 0 ? 2 : 1) && guests.length < 3; tries++, at++) {
+        for (let tries = 0; tries < (page === 0 ? 2 : 1) && guests.length < 2; tries++, at++) {
           if (!(await spendListenNotes(w.id))) { if (tries) break; throw new HttpError(429, "That's all the guest searches for today. Try again tomorrow."); }
           const r = await lnSearchEpisodes({ term: words, page: at, byDate: sort === "recent_episode" });
           const found = await guestsIn(r.episodes, words);

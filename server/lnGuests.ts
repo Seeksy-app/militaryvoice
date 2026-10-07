@@ -26,7 +26,7 @@ export async function sameGuest(name: string, about: string, eps: LnEpisode[]): 
   if (!about || eps.length < 2 || !process.env.ANTHROPIC_API_KEY) return all;
   try {
     const out = await new Anthropic().messages.create({
-      model: "claude-sonnet-5",
+      model: READER,
       max_tokens: 300,
       system: `You decide which podcast episodes feature a particular person, as a guest or host. Keep an episode when it plausibly is them (same field, same story); drop it when it's clearly a different person with the same name or only mentions them. Return JSON only: {"keep":[0,2]}`,
       messages: [{ role: "user", content: `Person: ${name} (${about})\n\n${eps.map((e, i) => `[${i}] ${e.show.title}: ${e.title}\n${e.about.slice(0, 300)}`).join("\n\n")}` }],
@@ -40,38 +40,48 @@ export async function sameGuest(name: string, about: string, eps: LnEpisode[]): 
 
 export type Guest = { name: string; about: string; episodes: number[] };
 
+/** Fast enough to read a page of episodes while someone waits (Sonnet took 6 to 15 seconds). */
+const READER = "claude-haiku-4-5-20251001";
+const SYSTEM = `You read podcast episode titles and notes and list the guests: the people interviewed on each episode. Rules: only people named in the text; never the show's host or publisher; never people merely mentioned or discussed (an author of a book being reviewed, a historical figure) unless they are on the episode; no companies. "about" is one short line from the text on who they are (their role, rank, title, book or what they're known for), or "" if the text doesn't say. Merge the same person across episodes. Return JSON only: {"guests":[{"name":"...","about":"...","episodes":[0,3]}]}`;
+
+/** One batch of episodes, read in one call; indexes are the batch's own. */
+async function readBatch(eps: LnEpisode[], focus: string): Promise<{ name?: unknown; about?: unknown; episodes?: unknown }[]> {
+  const listing = eps.map((e, i) => `[${i}] Show: ${e.show.title}${e.show.host ? ` (host/publisher: ${e.show.host})` : ""}\nTitle: ${e.title}\nNotes: ${e.about.slice(0, 400)}`).join("\n\n");
+  const out = await new Anthropic().messages.create({
+    model: READER,
+    max_tokens: 700,
+    system: SYSTEM,
+    messages: [{ role: "user", content: `${focus ? `The search was: ${focus}\n\n` : ""}${listing}` }],
+  });
+  const text = out.content.filter((c) => c.type === "text").map((c) => (c as { text: string }).text).join("");
+  const m = text.match(/\{[\s\S]*\}/);
+  return m ? ((JSON.parse(m[0]) as { guests?: { name?: unknown; about?: unknown; episodes?: unknown }[] }).guests ?? []) : [];
+}
+
 /**
  * Who was interviewed in these episodes: named guests only, never the host,
  * with what the text says they do. Nothing invented; an episode with no named
- * guest gives no one.
+ * guest gives no one. Read in batches of three, side by side, so a page of ten
+ * takes about as long as three.
  */
 export async function guestsIn(eps: LnEpisode[], focus = ""): Promise<Guest[]> {
   if (!eps.length || !process.env.ANTHROPIC_API_KEY) return [];
-  const listing = eps.map((e, i) => `[${i}] Show: ${e.show.title}${e.show.host ? ` (host/publisher: ${e.show.host})` : ""}\nTitle: ${e.title}\nNotes: ${e.about.slice(0, 600)}`).join("\n\n");
-  try {
-    const out = await new Anthropic().messages.create({
-      model: "claude-sonnet-5",
-      max_tokens: 1500,
-      system: `You read podcast episode titles and notes and list the guests: the people interviewed on each episode. Rules: only people named in the text; never the show's host or publisher; never people merely mentioned or discussed (an author of a book being reviewed, a historical figure) unless they are on the episode; no companies. "about" is one short line from the text on who they are (their role, rank, title, book or what they're known for), or "" if the text doesn't say. Merge the same person across episodes. Return JSON only: {"guests":[{"name":"...","about":"...","episodes":[0,3]}]}`,
-      messages: [{ role: "user", content: `${focus ? `The search was: ${focus}\n\n` : ""}${listing}` }],
-    });
-    const text = out.content.filter((c) => c.type === "text").map((c) => (c as { text: string }).text).join("");
-    const m = text.match(/\{[\s\S]*\}/);
-    const j = m ? (JSON.parse(m[0]) as { guests?: { name?: unknown; about?: unknown; episodes?: unknown }[] }) : {};
-    const seen = new Map<string, Guest>();
-    for (const g of j.guests ?? []) {
-      const name = String(g.name ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
-      if (name.split(" ").length < 2 || name.length < 4) continue; // a full name, not "Mike"
-      const idx = (Array.isArray(g.episodes) ? g.episodes : []).map(Number).filter((i) => Number.isInteger(i) && i >= 0 && i < eps.length);
-      if (!idx.length) continue;
-      const k = name.toLowerCase();
-      const had = seen.get(k);
-      if (had) had.episodes = Array.from(new Set([...had.episodes, ...idx]));
-      else seen.set(k, { name, about: String(g.about ?? "").replace(/\s+/g, " ").trim().slice(0, 160), episodes: idx });
-    }
-    return Array.from(seen.values());
-  } catch (err) {
-    console.warn("Guest read failed:", (err as Error).message);
-    return [];
+  const SIZE = 3;
+  const batches = Array.from({ length: Math.ceil(eps.length / SIZE) }, (_, b) => b * SIZE);
+  const read = await Promise.all(batches.map((at) =>
+    readBatch(eps.slice(at, at + SIZE), focus)
+      .then((gs) => gs.map((g) => ({ ...g, episodes: (Array.isArray(g.episodes) ? g.episodes : []).map((i) => Number(i) + at) })))
+      .catch((err) => { console.warn("Guest read failed:", (err as Error).message); return []; })));
+  const seen = new Map<string, Guest>();
+  for (const g of read.flat()) {
+    const name = String(g.name ?? "").replace(/\s+/g, " ").trim().slice(0, 80);
+    if (name.split(" ").length < 2 || name.length < 4) continue; // a full name, not "Mike"
+    const idx = g.episodes.filter((i) => Number.isInteger(i) && i >= 0 && i < eps.length);
+    if (!idx.length) continue;
+    const k = name.toLowerCase();
+    const had = seen.get(k);
+    if (had) { had.episodes = Array.from(new Set([...had.episodes, ...idx])); if (!had.about) had.about = String(g.about ?? "").trim().slice(0, 160); }
+    else seen.set(k, { name, about: String(g.about ?? "").replace(/\s+/g, " ").trim().slice(0, 160), episodes: idx });
   }
+  return Array.from(seen.values());
 }
