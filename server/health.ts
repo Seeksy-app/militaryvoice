@@ -236,7 +236,7 @@ const DEFS: Def[] = [
       const k = (env(...names) ?? "").trim().replace(/^["']|["']$/g, "");
       if (!k) return { state: "off", detail: "Not set here (SEARCHAPI_API_KEY)" };
       // Which variable it read and how long the key is (never the key): enough to spot a wrong name or a cut-off paste.
-      const which = `${used}, ${k.length} characters${names.filter((n) => n !== used && (process.env[n] ?? "").trim()).length ? `; also set: ${names.filter((n) => n !== used && (process.env[n] ?? "").trim()).join(", ")}` : ""}`;
+      const which = `${used}, ${k.length} characters ending …${k.slice(-4)}${names.filter((n) => n !== used && (process.env[n] ?? "").trim()).length ? `; also set: ${names.filter((n) => n !== used && (process.env[n] ?? "").trim()).join(", ")}` : ""}`;
       let res = await fetch("https://www.searchapi.io/api/v1/me", { headers: { Authorization: `Bearer ${k}` }, signal: AbortSignal.timeout(8000) });
       let how = "header";
       if (res.status === 401) { res = await fetch(`https://www.searchapi.io/api/v1/me?api_key=${encodeURIComponent(k)}`, { signal: AbortSignal.timeout(8000) }); how = "api_key"; }
