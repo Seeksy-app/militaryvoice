@@ -34,6 +34,9 @@ export function PodcastHosting() {
   const qc = useQueryClient();
   // The show they picked at sign-up (its feed is on their profile): shown first, with one press to move it here.
   const { data: profile } = useQuery<{ podcastName?: string; rssUrl?: string }>({ queryKey: ["/api/host/profile"], queryFn: async () => (await apiRequest("GET", "/api/host/profile")).json() });
+  // Their real feed (an Apple link from sign-up resolved to the feed behind it), from Alex's intake.
+  const { data: intake } = useQuery<{ known: { rss: string } }>({ queryKey: ["/api/host/podcast-intake"], queryFn: async () => (await apiRequest("GET", "/api/host/podcast-intake")).json() });
+  const feedUrl = intake?.known.rss || profile?.rssUrl || "";
   // Alex's plan can move a show here in one press.
   const moveIn = useMutation({
     mutationFn: async (feedUrl: string) => (await apiRequest("POST", "/api/host/hosting/import", { feedUrl })).json() as Promise<{ episodes: number }>,
@@ -77,7 +80,7 @@ export function PodcastHosting() {
       <section className="mt-2" data-testid="podcast-hosting">
         {/* Alex asks first, then gives the plan (7 Oct). */}
         <AlexPodcastGuide onMove={(rss) => moveIn.mutate(rss)} onStart={() => create.mutate()} moving={moveIn.isPending} />
-        {profile?.rssUrl && <YourShowElsewhere name={profile.podcastName ?? ""} rss={profile.rssUrl} onMoved={refresh} />}
+        {feedUrl && <YourShowElsewhere name={profile?.podcastName ?? ""} rss={feedUrl} onMoved={refresh} />}
         <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
           <IconTile icon={Podcast} className="mx-auto" />
           <h1 className="mt-4 text-2xl font-bold tracking-tight">Host your podcast on MilitaryVoices</h1>
@@ -103,7 +106,7 @@ export function PodcastHosting() {
           </Button>
           <p className="mt-2 text-xs text-muted-foreground">Free while you're a MilitaryVoices podcaster.</p>
         </div>
-        <ImportShow onDone={refresh} initialUrl={profile?.rssUrl ?? ""} />
+        <ImportShow onDone={refresh} initialUrl={feedUrl} />
       </section>
     );
   }

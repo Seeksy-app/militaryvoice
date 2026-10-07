@@ -25,6 +25,20 @@ export function hostOfFeed(rss: string): string {
   return HOSTS.find(([re]) => re.test(u))?.[1] ?? "";
 }
 
+/**
+ * The real feed behind what they gave us: an Apple Podcasts page link (people
+ * paste those for "RSS") is looked up in Apple's directory for its feed.
+ */
+export async function resolveFeed(url: string): Promise<string> {
+  const id = url.match(/podcasts\.apple\.com\/.*\bid(\d+)/)?.[1];
+  if (!id) return url;
+  try {
+    const r = await fetch(`https://itunes.apple.com/lookup?id=${id}&entity=podcast`, { signal: AbortSignal.timeout(8000) });
+    const j = (await r.json()) as { results?: { feedUrl?: string }[] };
+    return j.results?.[0]?.feedUrl || url;
+  } catch { return url; }
+}
+
 export function registerPodcastIntake(app: Express, requireHostSession: RequestHandler) {
   app.get("/api/host/podcast-intake", requireHostSession, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
@@ -32,7 +46,7 @@ export function registerPodcastIntake(app: Express, requireHostSession: RequestH
     let saved: { answers?: Record<string, unknown>; done?: boolean } = {};
     try { saved = JSON.parse((await storage.getSetting(key(me))) || "{}"); } catch { /* none */ }
     const profile = await storage.getProfileByEmail(me).catch(() => undefined);
-    const rss = (profile?.rssUrl ?? "").trim();
+    const rss = await resolveFeed((profile?.rssUrl ?? "").trim());
     // What we can tell without asking: their feed's host, and whether Apple has it.
     let apple = "", episodes = 0, title = profile?.podcastName ?? "";
     if (rss && title) {

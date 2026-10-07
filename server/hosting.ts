@@ -1,3 +1,4 @@
+import { resolveFeed } from "./podcastIntake.js";
 import type { Express, Request } from "express";
 import crypto from "node:crypto";
 import multer from "multer";
@@ -893,8 +894,9 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
   // Move a show here: read its feed from the old host, keep every episode (and its guid, so no app plays it twice).
   app.post("/api/host/hosting/import", requireHostSession, async (req, res) => {
     const email = emailOf(req);
-    const url = String(req.body?.feedUrl ?? "").trim();
-    if (!safeFeedUrl(url)) return res.status(400).json({ message: "Paste your show's RSS feed address (https://…)." });
+    // An Apple Podcasts page link works too: we look up the feed behind it.
+    const url = await resolveFeed(String(req.body?.feedUrl ?? "").trim());
+    if (!safeFeedUrl(url)) return res.status(400).json({ message: "Paste your show's RSS feed address (https://…), or its Apple Podcasts link." });
     const mine = await showsOf(email);
     const target = mine[0];
     if (target && (await episodesOf(target.id)).length) return res.status(409).json({ message: "You already host a show here with episodes. Moving a second show over is coming later." });
