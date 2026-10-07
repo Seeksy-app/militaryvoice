@@ -74,13 +74,51 @@ class HttpError extends Error {
   }
 }
 
+// ---- The credit budget (7 Oct): the account had 100 credits, so spending is
+// capped per day. Past the cap, fresh reads stop and everything already paid
+// for (searches a week, profiles a month) still shows.
+/** What a call costs in Influencers Club credits (their price list). */
+function priceOf(path: string, body: any): number {
+  if (path === "/discovery/") return 0.01 * (Number(body?.paging?.limit) || 24);
+  if (path === "/discovery/creators/similar/") return 0.01 * (Number(body?.paging?.limit) || 12);
+  if (path.includes("/analytics/")) return 0.8;
+  if (path.includes("/raw/")) return 0.03;
+  if (path.includes("/profile/") || path.includes("/email/")) return 0.2;
+  return 0.1;
+}
+const dayKey = () => `ic:spent:${new Date().toISOString().slice(0, 10)}`;
+const monthKey = () => `ic:spent:${new Date().toISOString().slice(0, 7)}`;
+async function readSpent(k: string): Promise<number> {
+  const [row] = await db.select().from(discoveryCache).where(eq(discoveryCache.key, k));
+  return row ? Number(row.payload) || 0 : 0;
+}
+async function addSpent(k: string, n: number) {
+  const v = (await readSpent(k)) + n;
+  await db.insert(discoveryCache).values({ key: k, payload: v.toFixed(2), createdAt: new Date().toISOString() })
+    .onConflictDoUpdate({ target: discoveryCache.key, set: { payload: v.toFixed(2) } });
+}
+/** Today's cap in credits: the owner's setting, else 8. */
+async function dailyCap(): Promise<number> {
+  const v = Number(await storage.getSetting("ic_daily_cap"));
+  return Number.isFinite(v) && v > 0 ? v : 8;
+}
+export async function icSpending(): Promise<{ today: number; month: number; cap: number }> {
+  return { today: await readSpent(dayKey()), month: await readSpent(monthKey()), cap: await dailyCap() };
+}
+
 async function ic(path: string, body: unknown): Promise<any> {
+  const cost = priceOf(path, body);
+  if ((await readSpent(dayKey())) + cost > (await dailyCap())) {
+    throw new HttpError(429, "Discovery has used today's search budget. Saved results still work; fresh searches and profiles open again tomorrow.");
+  }
   const res = await fetch(`${BASE}${path}`, {
     method: "POST",
     headers: { authorization: `Bearer ${key()}`, "content-type": "application/json" },
     body: JSON.stringify(body),
   });
   const text = await res.text();
+  // A 400 "No creator found" costs nothing; everything that answered did.
+  if (res.ok) { await addSpent(dayKey(), cost); await addSpent(monthKey(), cost); }
   let json: any = null;
   try {
     json = JSON.parse(text);
@@ -296,7 +334,9 @@ async function withBasics<T extends CreatorCard>(rows: T[]): Promise<T[]> {
     rows.map(async (r) => {
       if (!r.platform || !r.handle || r.verified) return r;
       try {
-        const acct = await rawAccount(r.platform, r.handle);
+        // Only a read we already hold: buying one per row cost ~0.7 credits a search.
+        const [held] = await db.select().from(discoveryCache).where(eq(discoveryCache.key, `raw:${r.platform}:${r.handle.toLowerCase()}`));
+        const acct = held ? JSON.parse(held.payload) : null;
         if (!acct) return r;
         const channels = Array.from(new Set([...(r.channels ?? []), ...channelsFromLinks(acct.links_in_bio, r.platform)]));
         return { ...r, channels, platformVerified: Boolean(acct.is_verified), category: String(acct.category ?? "") || undefined };
@@ -684,6 +724,16 @@ export function registerDiscoveryRoutes(app: Express): void {
         // Signed in to the admin too: they can spend credits on filling a page.
         isAdmin: !!adminEmail,
       };
+    }),
+  );
+
+  /** The owner sets Discovery's daily credit cap (credits are scarce). */
+  app.post("/api/admin/discover/cap", (req, res) =>
+    send(res, async () => {
+      if (!getAdminEmail(req) || !(await storage.isAdminEmail(getAdminEmail(req)!))) throw new HttpError(401, "Admins only.");
+      const cap = Math.max(0.5, Math.min(200, Number(req.body?.cap) || 8));
+      await storage.setSetting("ic_daily_cap", String(cap));
+      return { ...(await icSpending()), cap };
     }),
   );
 

@@ -10,6 +10,7 @@
 // /api/cron/health runs them every five minutes and posts to Slack when
 // something goes down (after two misses in a row, so a blip doesn't page
 // anyone) and again when it's back.
+import { icSpending } from "./discovery.js";
 import type { Express, RequestHandler } from "express";
 import { eq, sql } from "drizzle-orm";
 import { db, storage } from "./storage.js";
@@ -217,13 +218,16 @@ const DEFS: Def[] = [
   {
     key: "influencers", name: "Influencers Club", group: "Social and podcasts", powers: "Discovery creator search and profiles",
     run: async () => {
+      // Credits are scarce (100 on 7 Oct): show what's been spent against the daily cap.
+      const spend = await icSpending().catch(() => null);
+      const spent = spend ? `; spent ${spend.today.toFixed(1)} of ${spend.cap} credits today, ${spend.month.toFixed(1)} this month` : "";
       const k = env("INFLUENCER_CLUB_API_KEY");
       if (!k) return { state: "off", detail: "Not set up (INFLUENCER_CLUB_API_KEY)" };
       const res = await fetch("https://api-dashboard.influencers.club/public/v1/account/credits", { headers: { Authorization: `Bearer ${k}` }, signal: AbortSignal.timeout(8_000) });
-      if (res.ok) return { state: "ok", detail: "Answering" };
+      if (res.ok) return { state: "ok", detail: `Answering${spent}` };
       const body = await res.text().catch(() => "");
       // Their API answers a bad key in JSON; an HTML page means the address, not the key (they have no free status call).
-      if (body.trimStart().startsWith("<")) return { state: "ok", detail: "Reachable, key set (no free status call)" };
+      if (body.trimStart().startsWith("<")) return { state: "ok", detail: `Reachable, key set${spent}` };
       return { state: "down", detail: `${res.status}${res.status === 401 || res.status === 403 ? " (the key was refused)" : ""}: ${body.slice(0, 100)}` };
     },
   },
