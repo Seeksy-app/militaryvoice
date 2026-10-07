@@ -145,7 +145,7 @@ export function AlexPodcastGuide({ onMove, onStart, moving }: { onMove: (rss: st
 
       {/* The questions, one at a time */}
       {open && cur && (
-        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 sm:items-center" data-testid="alex-guide">
+        <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/30 p-4 sm:items-center" data-testid="alex-guide" data-guide-wait>
           <div className="w-full max-w-lg rounded-3xl bg-background p-6 shadow-2xl">
             <div className="flex items-start gap-3">
               <img src="/alex.jpg" alt="" className="h-12 w-12 shrink-0 rounded-full object-cover ring-2 ring-[#F0A71F]/60" />

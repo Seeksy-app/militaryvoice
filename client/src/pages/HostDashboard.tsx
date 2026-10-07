@@ -81,6 +81,7 @@ import { BrandsOptIn } from "@/components/BrandsOptIn";
 import { BrandRequests } from "@/components/requests/BrandRequests";
 import { Opportunities } from "@/components/requests/Opportunities";
 import { buildSteps, goToStep } from "@/components/NextSteps";
+import { GuideLayer, HomeTour, HOME_TOUR, showGuide } from "@/components/Guide";
 import { PromotionScreen } from "@/components/PromotionScreen";
 import { SocialScreen } from "@/components/SocialScreen";
 import { GreenRoomScreen } from "@/components/GreenRoomScreen";
@@ -1667,6 +1668,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                     const elsewhere = !pod && !!profile?.rssUrl;
                     return (
                       <div className="mt-6 grid gap-4 lg:grid-cols-2" data-testid="dashboard-start-here">
+                      <HomeTour ready />
                         {/* 1. SmartLink */}
                         <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#F0A71F] to-[#f7c873] p-6 text-[#1a1200] shadow-sm" data-testid="dashboard-smartlink">
                           <Globe className="absolute -right-6 -top-6 h-36 w-36 opacity-15" />
@@ -1744,7 +1746,10 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                     if (!left.length) return null;
                     return (
                       <section className="mt-4 rounded-3xl border-2 border-[#F0A71F]/50 bg-[#F0A71F]/[0.07] p-5" data-testid="todo-strip">
-                        <p className="text-sm font-bold text-foreground">Next steps <span className="font-normal text-muted-foreground">· {left.length} to do</span></p>
+                        <div className="flex items-baseline gap-3">
+                          <p className="flex-1 text-sm font-bold text-foreground">Next steps <span className="font-normal text-muted-foreground">· {left.length} to do</span></p>
+                          <button type="button" onClick={() => showGuide(HOME_TOUR)} className="text-xs font-semibold text-[#053877] hover:underline dark:text-[#8ab4f8]" data-testid="todo-tour">Show me around</button>
+                        </div>
                         <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
                           {left.slice(0, 3).map((x, n) => (
                             <button key={x.key} type="button" onClick={() => goToStep(x)} className="group flex items-start gap-3 rounded-2xl bg-card p-4 text-left shadow-sm ring-1 ring-border transition hover:ring-[#053877]/40" data-testid={`todo-${x.key}`}>
@@ -1865,7 +1870,10 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           never again — which is how most of the lineup reached three weeks
           out with no link, no media and no YouTube. */}
       {workspace && (
-        <FloatingChecklist state={checklistState} {...checklistNav} />
+        <>
+          <FloatingChecklist state={checklistState} {...checklistNav} />
+          <GuideLayer />
+        </>
       )}
 
       {/* Half-finished is the failure mode here: a profile and no show means

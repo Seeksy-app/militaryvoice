@@ -1,4 +1,5 @@
 import { pathOf } from "@shared/schema";
+import { showGuide, type GuideStep } from "@/components/Guide";
 
 // What's left to do, worked out from what they've actually done rather than
 // asked as questions. A checklist that already knows the answer is worth
@@ -80,16 +81,56 @@ export interface StepNav {
 }
 
 /**
- * Take them to the screen, then to the spot on it.
+ * Where each step's pointer lands (7 Oct 2026): not the section, the control
+ * itself, with a line saying what to do. Several places per step, best first,
+ * because what's on screen depends on how far they've got.
+ */
+const t = (sel: string, text: string) => ({ sel: `[data-testid="${sel}"]`, text });
+export const STEP_GUIDE: Partial<Record<keyof typeof STEP_ANCHOR, GuideStep>> = {
+  photo: { title: "Add your photo", at: [t("button-upload-photo", "Click the circle and pick a photo. You can zoom and frame it before it saves.")] },
+  smartlink: { title: "Your SmartLink", at: [
+    t("bio-handle", "Pick the name for your link here, like militaryvoices.ai/yourname. Everything saves as you go."),
+    t("bio-checklist", "Work down these steps. Everything saves as you go."),
+  ] },
+  podcast: { title: "Your podcast", at: [
+    t("hosting-move-yours", "Move it here: your feed comes across and Apple and Spotify keep your listing."),
+    t("hosting-start", "Click here to set up your show. It's free, and works with every podcast app."),
+  ] },
+  accounts: { title: "Your accounts", at: [t("button-social-connect", "Click here and pick the accounts you use. Pōstify can post to them for you.")] },
+  postify: { title: "Pōstify", at: [
+    t("recording-upload", "Drop a video here, or click to pick one. Your first one is free."),
+    t("post-start-hero", "Click Start Pōstify and we'll cut the best moments into clips."),
+  ] },
+  brands: { title: "Let brands find you", at: [t("switch-brands-optin", "Switch this on and brands searching for creators can find you. We make the introduction.")] },
+  discovery: { title: "Discovery", at: [t("discover-q", "Type a topic, like veteran entrepreneurs, and press Search.")] },
+  myevent: { title: "Create your event", at: [{ sel: "#ev-name", text: "Start with its name. Pick the day and the slot length below, then Create my event." }] },
+  show: { title: "Your show", at: [
+    t("input-show-name", "Type your show's name, then Save show at the bottom."),
+    { sel: '[data-testid^="button-choose-event-"]', text: "Pick the event to set your show up for." },
+  ] },
+  slot: { title: "Your time", at: [
+    { sel: '[data-testid^="button-take-slot-"]:not([disabled])', text: "Pick a time that works. You can move it later." },
+    { sel: '[data-testid^="button-choose-event-"]', text: "Pick the event first." },
+  ] },
+  materials: { title: "Your media", at: [t("button-media-yes", "Have an intro, outro or slides? Click here to add them. All optional."), t("input-asset-file", "Pick a file to send us.")] },
+  youtube: { title: "YouTube", at: [t("button-youtube-connect", "Click here to connect your channel. We open the broadcast on it when your slot starts.")] },
+  share: { title: "Share your slot", at: [t("input-share-link-copy", "Copy your link and post it anywhere. It shows your artwork and your time.")] },
+};
+
+/**
+ * Take them to the screen, then point at the control.
  *
- * The screen swap is a React render, so the anchor can't exist yet when the
- * click happens. Poll briefly for it rather than guessing at a delay — a cold
- * query can take a second, and a fixed timeout is either too short or a
- * needless wait.
+ * The screen swap is a React render, so the control can't exist yet when the
+ * click happens. The pointer waits for it (and brings it into view); a step
+ * without one scrolls to its section, polling briefly rather than guessing at
+ * a delay.
  */
 export function goToStep(step: Step): void {
   step.go();
+  const guide = STEP_GUIDE[step.key];
+  if (guide) { showGuide([guide]); return; }
   const id = STEP_ANCHOR[step.key];
+  if (!id) return;
   const started = Date.now();
   const find = () => {
     const el = document.getElementById(id);
