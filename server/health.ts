@@ -241,7 +241,13 @@ const DEFS: Def[] = [
       let how = "header";
       if (res.status === 401) { res = await fetch(`https://www.searchapi.io/api/v1/me?api_key=${encodeURIComponent(k)}`, { signal: AbortSignal.timeout(8000) }); how = "api_key"; }
       const body = (await res.json().catch(() => ({}))) as { account?: { remaining_credits?: number; monthly_allowance?: number }; error?: string };
-      if (!res.ok) return { state: "down", detail: `${res.status}${res.status === 401 ? " (the key was refused)" : ""}: ${String(body.error ?? "").slice(0, 100)} [${which}; tried header and api_key]` };
+      if (!res.ok) {
+        // Is it a SerpApi key instead (a different company, similar name, 64-character keys)?
+        const serp = await fetch(`https://serpapi.com/account.json?api_key=${encodeURIComponent(k)}`, { signal: AbortSignal.timeout(8000) }).catch(() => null);
+        const sj = serp?.ok ? ((await serp.json().catch(() => ({}))) as { plan_name?: string; total_searches_left?: number; searches_per_month?: number }) : null;
+        if (sj) return { state: "down", detail: `This is a SerpApi key, not SearchApi: SerpApi ${sj.plan_name ?? ""} plan, ${sj.total_searches_left ?? "?"} searches left. Say which service to use.` };
+        return { state: "down", detail: `${res.status}${res.status === 401 ? " (the key was refused)" : ""}: ${String(body.error ?? "").slice(0, 100)} [${which}; tried header and api_key; not a SerpApi key either]` };
+      }
       return { state: "ok", detail: `${body.account?.remaining_credits ?? "?"} of ${body.account?.monthly_allowance ?? "?"} searches left this month${how === "api_key" ? " (key sent as api_key)" : ""}` };
     },
   },
