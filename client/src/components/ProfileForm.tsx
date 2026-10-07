@@ -1000,11 +1000,18 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
                 <div className="mb-2 flex items-center gap-1.5 font-semibold uppercase tracking-wide">
                   <Radio className="h-3.5 w-3.5 text-primary" /> What happens next
                 </div>
-                {podcaster ? (
+                {podcaster && (pendingSlot || eventOpen) ? (
                   <ol className="list-decimal space-y-1 pl-4">
                     <li>{pendingSlot ? "Your slot is confirmed the moment you save." : "Pick an event and a time from Event settings."}</li>
                     <li>Connect your social accounts so listeners can follow you.</li>
                     <li>We email show-day details and your on-air window.</li>
+                  </ol>
+                ) : podcaster ? (
+                  // No event open (7 Oct): the next steps are about the show itself.
+                  <ol className="list-decimal space-y-1 pl-4">
+                    <li>{startingShow ? "Free hosting is next: your show on Apple, Spotify and every other app." : "Your dashboard opens with your next steps."}</li>
+                    <li>Your first episode of Pōstify clips is free.</li>
+                    <li>Connect your social accounts so listeners can follow you.</li>
                   </ol>
                 ) : (
                   <ol className="list-decimal space-y-1 pl-4">
