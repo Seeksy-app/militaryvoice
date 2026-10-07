@@ -33,10 +33,10 @@ export default function Tour() {
         ) : done ? (
           <section className="mx-auto max-w-xl rounded-3xl border border-border bg-card p-8 text-center" data-testid="tour-done">
             <CheckCircle2 className="mx-auto h-12 w-12 text-emerald-600" />
-            <h1 className="mt-4 text-2xl font-bold tracking-tight">{path === "brand" ? "They're in Discovery" : "They're in"}</h1>
+            <h1 className="mt-4 text-2xl font-bold tracking-tight">{path === "brand" ? "You're in Discovery" : "You're in"}</h1>
             <p className="mt-2 text-muted-foreground">{path === "brand"
-              ? "Their brand home: find creators, saved lists the team shares, and requests once we approve them."
-              : path === "planner" ? "Next: create their first event." : "Their dashboard, with the next steps for the path they picked."}</p>
+              ? "Your brand home opens next: find creators, save them to lists your team shares, and send requests once we've approved you."
+              : path === "planner" ? "Next: create your first event." : "Your dashboard opens next, with your next steps for the path you picked."}</p>
             <Link href="/host/dashboard?start"><Button className="mt-6 gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]">Start for real <ArrowRight className="h-4 w-4" /></Button></Link>
           </section>
         ) : path === "brand" ? (
