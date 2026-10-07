@@ -23,7 +23,9 @@ async function searchApi(params: Record<string, string>): Promise<Record<string,
   const k = key();
   if (!k) throw Object.assign(new Error("Add SEARCHAPI_API_KEY in Vercel to search the ad libraries."), { status: 503 });
   const url = `https://www.searchapi.io/api/v1/search?${new URLSearchParams(params)}`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${k}` }, signal: AbortSignal.timeout(45_000) });
+  let res = await fetch(url, { headers: { Authorization: `Bearer ${k}` }, signal: AbortSignal.timeout(45_000) });
+  // Their docs take the key either way; if the header is refused, try it as api_key.
+  if (res.status === 401) res = await fetch(`${url}&api_key=${encodeURIComponent(k)}`, { signal: AbortSignal.timeout(45_000) });
   const body = (await res.json().catch(() => ({}))) as Record<string, unknown>;
   if (!res.ok) throw Object.assign(new Error(String((body as { error?: string }).error ?? `SearchApi said ${res.status}`)), { status: 502 });
   return body;

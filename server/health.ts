@@ -237,10 +237,12 @@ const DEFS: Def[] = [
       if (!k) return { state: "off", detail: "Not set here (SEARCHAPI_API_KEY)" };
       // Which variable it read and how long the key is (never the key): enough to spot a wrong name or a cut-off paste.
       const which = `${used}, ${k.length} characters${names.filter((n) => n !== used && (process.env[n] ?? "").trim()).length ? `; also set: ${names.filter((n) => n !== used && (process.env[n] ?? "").trim()).join(", ")}` : ""}`;
-      const res = await fetch("https://www.searchapi.io/api/v1/me", { headers: { Authorization: `Bearer ${k}` }, signal: AbortSignal.timeout(8000) });
+      let res = await fetch("https://www.searchapi.io/api/v1/me", { headers: { Authorization: `Bearer ${k}` }, signal: AbortSignal.timeout(8000) });
+      let how = "header";
+      if (res.status === 401) { res = await fetch(`https://www.searchapi.io/api/v1/me?api_key=${encodeURIComponent(k)}`, { signal: AbortSignal.timeout(8000) }); how = "api_key"; }
       const body = (await res.json().catch(() => ({}))) as { account?: { remaining_credits?: number; monthly_allowance?: number }; error?: string };
-      if (!res.ok) return { state: "down", detail: `${res.status}${res.status === 401 ? " (the key was refused)" : ""}: ${String(body.error ?? "").slice(0, 100)} [${which}]` };
-      return { state: "ok", detail: `${body.account?.remaining_credits ?? "?"} of ${body.account?.monthly_allowance ?? "?"} searches left this month` };
+      if (!res.ok) return { state: "down", detail: `${res.status}${res.status === 401 ? " (the key was refused)" : ""}: ${String(body.error ?? "").slice(0, 100)} [${which}; tried header and api_key]` };
+      return { state: "ok", detail: `${body.account?.remaining_credits ?? "?"} of ${body.account?.monthly_allowance ?? "?"} searches left this month${how === "api_key" ? " (key sent as api_key)" : ""}` };
     },
   },
   { key: "parallel", name: "Parallel", group: "Social and podcasts", powers: "Sponsor finder research", run: keyOnly(["PARALLEL_API_KEY", "PARALLEL_AI_API_KEY", "PARALLELAI_API_KEY", "PARALLEL_KEY", "PARALLEL_WEB_API_KEY"], "no free status call") },
