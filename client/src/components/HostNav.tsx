@@ -5,13 +5,13 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { LogoLockup } from "@/components/Logo";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { GetTheApp } from "@/components/GetTheApp";
-import { LayoutDashboard, Plus, Podcast, Clapperboard, Film, Upload, Globe, ChevronRight, ChevronDown, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones, PanelLeftClose, PanelLeftOpen, Sun, Moon, Monitor, Check, MoreHorizontal, BadgeCheck, CreditCard, Trash2, Video, Radio, Building2 } from "lucide-react";
+import { LayoutDashboard, Plus, Podcast, Clapperboard, Film, Upload, Globe, ChevronRight, ChevronDown, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones, PanelLeftClose, PanelLeftOpen, Sun, Moon, Monitor, Check, MoreHorizontal, BadgeCheck, CreditCard, Trash2, Video, Radio, Building2, Send, Inbox } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { NotificationsMenuItem } from "@/components/Notifications";
 import { Link } from "wouter";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
-export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "greenroom" | "recordings" | "contacts" | "pro" | "cohost" | "analytics" | "postify" | "social" | "discovery" | "verified" | "podcast" | "page" | "billing" | "trash" | "studio" | "fans" | "myevents" | "organization";
+export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "greenroom" | "recordings" | "contacts" | "pro" | "cohost" | "analytics" | "postify" | "social" | "discovery" | "verified" | "podcast" | "page" | "billing" | "trash" | "studio" | "fans" | "myevents" | "organization" | "requests" | "opportunities";
 
 interface Item {
   key: HostScreen;
@@ -42,6 +42,7 @@ interface Item {
 export function HostNav({
   screen,
   eventsCount,
+  opportunities,
   contactsCount,
   pathFor,
   onGo,
@@ -82,6 +83,8 @@ export function HostNav({
   proOpen?: boolean;
   /** Which of the three paths they came in on: an event planner's events lead. */
   path?: "podcaster" | "creator" | "planner" | "brand";
+  /** Brands' requests waiting for an answer, shown on Opportunities. */
+  opportunities?: number;
 }) {
   const { toast } = useToast();
   // Admins get into the studio now (to run the Marathon and test it); everyone else sees Oct 5.
@@ -94,6 +97,7 @@ export function HostNav({
       items: [
         { key: "dashboard", label: "Home", hint: "Your saved creators, your team and what's next", icon: LayoutDashboard },
         { key: "discovery", label: "Find creators", hint: "Search military and veteran creators: reach, audience and engagement on every profile", icon: Compass },
+        { key: "requests", label: "Requests", hint: "What you've asked creators for, their answers and rates, and your threads", icon: Send },
         { key: "verified", label: "Verified creators", hint: "Creators we know personally, each one checked by our team", icon: BadgeCheck },
         { key: "organization", label: "Your team", hint: "Your company's account: invite the people you work with; lists are shared", icon: Building2 },
       ],
@@ -116,6 +120,7 @@ export function HostNav({
         { key: "dashboard", label: "Dashboard", hint: "Your home base: your events, your audience and what to do next", icon: LayoutDashboard },
         { key: "page", label: "SmartLink", hint: "Your SmartLink at militaryvoices.ai/you: your podcast, links, messages from listeners, and a media kit for brands", icon: Globe },
         { key: "events", label: "Events", hint: "The events you're part of: your show, your time slot and how to promote it", icon: CalendarDays, badge: eventsCount || undefined },
+        { key: "opportunities", label: "Opportunities", hint: "Requests from brands: say you're interested with your rate, or pass", icon: Inbox, badge: opportunities || undefined },
         ...(cohostHours > 0 ? [{ key: "cohost" as const, label: "Co-host dashboard", hint: `The ${cohostHours} ${cohostHours === 1 ? "hour" : "hours"} you're co-hosting at the desk, and who's on with you`, icon: Mic2 }] : []),
       ],
     },

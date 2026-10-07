@@ -115,7 +115,10 @@ type Org = OrganizationRow & { role: string; team: { id: number; email: string; 
 type List = { id: number; name: string; items: unknown[] };
 
 /** The brand's home: their account, their lists, and what comes next. */
-export function BrandHome({ firstName, goTo }: { firstName: string; goTo: (s: "discovery" | "verified" | "organization") => void }) {
+export function BrandHome({ firstName, goTo }: { firstName: string; goTo: (s: "discovery" | "verified" | "organization" | "requests") => void }) {
+  const requests = useQuery<{ requests: { recipients: { status: string }[] }[] }>({ queryKey: ["/api/brand/requests"], queryFn: () => call("GET", "/api/brand/requests") });
+  const sentCount = requests.data?.requests.length ?? 0;
+  const interestedCount = (requests.data?.requests ?? []).reduce((n, r) => n + r.recipients.filter((x) => x.status === "interested" || x.status === "connected").length, 0);
   const orgs = useQuery<{ orgs: Org[] }>({ queryKey: ["/api/host/orgs"], queryFn: () => call("GET", "/api/host/orgs") });
   const lists = useQuery<List[]>({ queryKey: ["/api/discover/lists"], queryFn: () => call("GET", "/api/discover/lists"), retry: false });
   const me = useQuery<{ reveals?: { used: number; allowance: number } | null }>({ queryKey: ["/api/discover/me"], queryFn: () => call("GET", "/api/discover/me") });
@@ -153,7 +156,7 @@ export function BrandHome({ firstName, goTo }: { firstName: string; goTo: (s: "d
         <Tile icon={Bookmark} label="Saved creators" value={String(saved)} sub={`${lists.data?.length ?? 0} ${lists.data?.length === 1 ? "list" : "lists"}, shared with your team`} onClick={() => goTo("discovery")} />
         <Tile icon={Users} label="Your team" value={String(team)} sub={team > 1 ? "Everyone shares the lists" : "Invite the people you work with"} onClick={() => goTo("organization")} />
         <Tile icon={Compass} label="Contact emails" value={reveals ? `${Math.max(0, reveals.allowance - reveals.used)}` : "…"} sub={reveals ? `left this month, of ${reveals.allowance}` : ""} onClick={() => goTo("discovery")} />
-        <Tile icon={Send} label="Requests" value="0" sub={org?.status === "approved" ? "Opening next" : "Open once you're approved"} />
+        <Tile icon={Send} label="Requests" value={String(sentCount)} sub={sentCount ? `${interestedCount} creators interested` : org?.status === "approved" ? "Send your first one" : "Open once you're approved"} onClick={() => goTo("requests")} />
       </div>
 
       <div className="grid gap-5 lg:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)]">
@@ -176,7 +179,7 @@ export function BrandHome({ firstName, goTo }: { firstName: string; goTo: (s: "d
             <li className="flex gap-3"><IconTile icon={Handshake} /><span><span className="block font-semibold">Run a campaign</span><span className="text-muted-foreground">Posts and videos from creators whose audience is yours.</span></span></li>
             <li className="flex gap-3"><IconTile icon={Building2} /><span><span className="block font-semibold">Book a speaker</span><span className="text-muted-foreground">Veterans with a story, for your event or your team.</span></span></li>
           </ul>
-          <p className="mt-4 text-xs text-muted-foreground">Send a request from any creator's profile once you're approved. Questions? hello@militaryvoices.ai</p>
+          <p className="mt-4 text-xs text-muted-foreground">Send a request from any creator on MilitaryVoices, or to a saved list, once you're approved. Questions? hello@militaryvoices.ai</p>
         </section>
       </div>
     </section>

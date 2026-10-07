@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Search, Sparkles, BadgeCheck, Bookmark, BookmarkCheck, Users, Mail, Phone, Globe, ShieldCheck,
-  Mic2, Megaphone, CalendarDays, X, Loader2, ExternalLink, Plus, Trash2, Download, ChevronRight, Lock, MapPin, Heart, Hash, Handshake, Info,
+  Mic2, Send, Megaphone, CalendarDays, X, Loader2, ExternalLink, Plus, Trash2, Download, ChevronRight, Lock, MapPin, Heart, Hash, Handshake, Info,
   Check, SlidersHorizontal, AtSign, Type as TypeIcon, Wand2, TrendingUp, Instagram, Youtube, Twitter, Twitch, Music2, Share2, Linkedin, Facebook,
   Compass,
 } from "lucide-react";
@@ -15,6 +15,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useToast } from "@/hooks/use-toast";
+import { RequestComposer } from "@/components/requests/RequestComposer";
 import { apiRequest, resolveUploadUrl } from "@/lib/queryClient";
 import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 import { CreatorProfileSections, type Profile, type ProfilePerson } from "@/components/CreatorProfileSections";
@@ -1718,6 +1719,14 @@ function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoi
   const queryClient = useQueryClient();
   const [wantSimilar, setWantSimilar] = useState(false);
   const scroller = useRef<HTMLDivElement>(null);
+  // A brand or agency on their team: they can send creators on MilitaryVoices a request.
+  const [composing, setComposing] = useState(false);
+  const { data: myOrgs } = useQuery<{ orgs: { kind: string; status: string }[] }>({
+    queryKey: ["/api/host/orgs"],
+    queryFn: async () => { const r = await fetch("/api/host/orgs", { credentials: "include" }); return r.ok ? r.json() : { orgs: [] }; },
+    enabled: isMember, staleTime: 60_000,
+  });
+  const brandOrg = (myOrgs?.orgs ?? []).find((o) => o.kind === "brand" || o.kind === "agency");
   const [contact, setContact] = useState<null | { email: string | null; phone: string | null; website: string | null; location: string | null }>(null);
   useEffect(() => { setContact(null); setWantSimilar(false); scroller.current?.scrollTo({ top: 0 }); }, [card?.handle, card?.name]);
   const viaShare = !!card && (sharedKey.toLowerCase() === `${card.platform}:${card.handle}`.toLowerCase() || !!freeKeys?.has(`${card.platform}:${card.handle}`.toLowerCase()));
@@ -1807,7 +1816,15 @@ function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoi
         </a>
       )}
       <div className="ml-auto flex items-center gap-1.5">
-        {isMember && (card.handle || card.verified) && (
+        {brandOrg && (card.member || card.verified) && (
+          <Button size="sm" onClick={() => setComposing(true)} className="h-8 gap-1.5 rounded-lg bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b944]" data-testid="drawer-request">
+            <Send className="h-4 w-4" /> Send a request
+          </Button>
+        )}
+        {composing && (
+          <RequestComposer pending={brandOrg?.status !== "approved"} creators={[{ profileId: card.profileId, signupId: card.profileId ? undefined : card.signupId, name: card.name, picture: card.picture, show: card.member?.show ?? card.verified?.show }]} onClose={() => setComposing(false)} />
+        )}
+        {isMember && (card.handle || card.verified || card.member) && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button size="sm" disabled={saved} className="h-8 gap-1.5 rounded-lg bg-[#2563eb] font-medium text-white hover:bg-[#1d4ed8]" data-testid="drawer-save">

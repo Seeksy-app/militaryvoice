@@ -78,6 +78,8 @@ import { MyEvents } from "@/components/MyEvents";
 import { MyOrganization, OrgInvites } from "@/components/MyOrganization";
 import { BrandHome, BrandSetup } from "@/components/BrandHome";
 import { BrandsOptIn } from "@/components/BrandsOptIn";
+import { BrandRequests } from "@/components/requests/BrandRequests";
+import { Opportunities } from "@/components/requests/Opportunities";
 import { buildSteps, goToStep } from "@/components/NextSteps";
 import { PromotionScreen } from "@/components/PromotionScreen";
 import { SocialScreen } from "@/components/SocialScreen";
@@ -623,7 +625,7 @@ function BackToEvent({ onGo }: { onGo: (s: "events") => void }) {
 }
 
 /** The screens the dashboard nav switches between, and their URLs. */
-const SCREENS = ["dashboard", "editProfile", "events", "promotion", "greenroom", "discovery", "verified", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social", "podcast", "page", "billing", "trash", "studio", "fans", "myevents", "organization"] as const;
+const SCREENS = ["dashboard", "editProfile", "events", "promotion", "greenroom", "discovery", "verified", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social", "podcast", "page", "billing", "trash", "studio", "fans", "myevents", "organization", "requests", "opportunities"] as const;
 type Screen = (typeof SCREENS)[number];
 
 /** /host/dashboard/<slug> ⇄ screen. Home has no slug; the rest are lowercase. */
@@ -631,6 +633,8 @@ const SCREEN_SLUG: Record<Screen, string> = {
   cohost: "cohost",
   myevents: "my-events",
   organization: "organization",
+  requests: "requests",
+  opportunities: "opportunities",
   analytics: "analytics",
   postify: "postify",
   billing: "billing",
@@ -1105,6 +1109,14 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   // The public nav is for people deciding whether to take part; somebody who
   // has already taken a slot just loses a band of screen to it.
   const workspace = !!data && hasProfile && !inSetup;
+  // Brands' requests waiting in their Opportunities (a badge in the menu). Peek doesn't mark them seen.
+  const { data: oppsPeek } = useQuery<{ seen: boolean; status: string }[]>({
+    queryKey: ["/api/host/opportunities", "peek"],
+    queryFn: async () => (await apiRequest("GET", "/api/host/opportunities?peek=1")).json(),
+    enabled: workspace && pathOf(profile?.interests) !== "brand",
+    refetchInterval: 120_000,
+  });
+  const newOpps = (oppsPeek ?? []).filter((o) => o.status === "new").length;
   // Which path they came in on (podcaster, creator, planner): the dashboard follows it.
   const path = pathOf(profile?.interests);
   const checklistState = {
@@ -1255,6 +1267,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           <div className="contents">
           <HostNav
             path={pathOf(profile?.interests)}
+            opportunities={newOpps}
             collapsed={navTucked}
             onToggle={toggleNav}
             screen={screen === "claim" ? "dashboard" : screen}
@@ -1418,6 +1431,10 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           <PodcastHosting />
         ) : screen === "myevents" ? (
           <MyEvents />
+        ) : screen === "requests" ? (
+          <BrandRequests />
+        ) : screen === "opportunities" ? (
+          <Opportunities />
         ) : screen === "organization" ? (
           <MyOrganization defaultKind={path === "planner" ? "organizer" : "brand"} />
         ) : screen === "page" ? (
