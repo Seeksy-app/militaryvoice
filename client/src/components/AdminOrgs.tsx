@@ -14,6 +14,7 @@ type Org = OrganizationRow & {
   team: { id: number; email: string; role: string; status: string }[];
   events: { id: number; name: string; review: string }[];
   lists: number;
+  source: string;
 };
 const FILTERS = [
   { key: "all", label: "All" },
@@ -89,6 +90,7 @@ export function AdminOrgs() {
                       {o.website && <> · <a href={o.website} target="_blank" rel="noreferrer" className="inline-flex items-center gap-0.5 hover:underline">{o.website.replace(/^https?:\/\/(www\.)?/, "").replace(/\/$/, "")}<ExternalLink className="h-3 w-3" /></a></>}
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
+                      {o.source && <span title="Where they signed up from">From {o.source.replace(/^brand-/, "")} · </span>}
                       {o.team.length} on the team{o.events.length ? ` · ${o.events.length} ${o.events.length === 1 ? "event" : "events"}` : ""}{o.lists ? ` · ${o.lists} saved ${o.lists === 1 ? "list" : "lists"}` : ""}
                     </p>
                   </div>

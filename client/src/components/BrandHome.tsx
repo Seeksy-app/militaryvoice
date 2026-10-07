@@ -42,12 +42,15 @@ export function BrandSetup({ onDone }: { onDone: () => void }) {
       fd.append("hostName", name.trim());
       fd.append("interests", "brand");
       await apiUpload("PUT", "/api/host/profile", fd);
-      const joined = (await call("POST", "/api/discover/join", { role: kind, orgName: company.trim(), website, source: "brand-signup" })) as { orgId: number };
+      // Where they came from (a link we shared, ?ref=), so we can see which outreach works.
+      let ref = "";
+      try { ref = localStorage.getItem("mv_brand_ref") ?? ""; } catch { /* fine */ }
+      const joined = (await call("POST", "/api/discover/join", { role: kind, orgName: company.trim(), website, source: ref ? `brand-${ref}` : "brand-signup" })) as { orgId: number };
       if (joined.orgId && goals.length) {
         const about = `Here for: ${goals.map((g) => GOALS.find((x) => x.key === g)?.label.toLowerCase()).join(", ")}.`;
         await call("PUT", `/api/host/orgs/${joined.orgId}`, { about }).catch(() => undefined);
       }
-      try { localStorage.removeItem("mv_interests"); } catch { /* fine */ }
+      try { localStorage.removeItem("mv_interests"); localStorage.removeItem("mv_brand_ref"); } catch { /* fine */ }
       await Promise.all([
         qc.invalidateQueries({ queryKey: ["/api/host/profile"] }),
         qc.invalidateQueries({ queryKey: ["/api/host/orgs"] }),

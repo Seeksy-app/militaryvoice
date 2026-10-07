@@ -33,9 +33,14 @@ const WHY = [
   { icon: Link2, title: "Links that count", line: "Every sponsor link is counted, so you know what a mention actually sent you." },
 ];
 
-/** Into sign-up, already on the brand path. */
+/** Into sign-up, already on the brand path, remembering where they came from (?ref= or utm_source=). */
 function startAsBrand() {
-  try { localStorage.setItem("mv_interests", "brand"); } catch { /* private window: they pick it on the welcome screen */ }
+  try {
+    localStorage.setItem("mv_interests", "brand");
+    const q = new URLSearchParams(window.location.search);
+    const ref = (q.get("ref") || q.get("utm_source") || "").toLowerCase().replace(/[^a-z0-9-]/g, "").slice(0, 24);
+    if (ref) localStorage.setItem("mv_brand_ref", ref);
+  } catch { /* private window: they pick it on the welcome screen */ }
 }
 
 export default function ForBrands() {

@@ -210,11 +210,13 @@ export function registerOrgs(app: Express, requireHostSession: RequestHandler, r
     const team = orgs.length ? await db.select().from(orgMembers).where(inArray(orgMembers.orgId, orgs.map((o) => o.id))) : [];
     const evs = await db.select({ id: events.id, name: events.name, orgId: events.orgId, review: events.review }).from(events).where(ne(events.orgId, 0));
     const lists = await db.select({ id: discoveryLists.id, orgId: discoveryLists.orgId }).from(discoveryLists).where(ne(discoveryLists.orgId, 0));
+    const sources = await db.select({ email: discoveryMembers.email, source: discoveryMembers.source }).from(discoveryMembers);
     res.json(orgs.map((o) => ({
       ...o,
       team: team.filter((t) => t.orgId === o.id).map((t) => ({ id: t.id, email: t.email, role: t.role, status: t.status })),
       events: evs.filter((e) => e.orgId === o.id),
       lists: lists.filter((l) => l.orgId === o.id).length,
+      source: sources.find((x) => norm(x.email) === norm(o.createdBy))?.source ?? "",
     })));
   });
 
