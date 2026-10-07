@@ -801,7 +801,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   const { data: events } = useQuery<PublicEvent[]>({ queryKey: ["/api/events"] });
   const featured = (events ?? []).find((e) => e.isFeatured);
   // For the checklist's free-plan steps: SmartLink up, a show hosted, any clips made.
-  const { data: bioMine } = useQuery<{ page?: { published?: boolean } }>({
+  const { data: bioMine } = useQuery<{ page?: { published?: boolean; handle?: string; brandsOn?: boolean } }>({
     queryKey: ["/api/host/bio"],
     queryFn: async () => (await apiRequest("GET", "/api/host/bio")).json(),
     enabled: !!data,
@@ -1656,6 +1656,107 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                   </div>
                   {/* Someone added them to a brand's, agency's or organizer's team. */}
                   <OrgInvites compact />
+                  {/* Start here (7 Oct): the two things that matter most, big and in colour: their SmartLink and their podcast
+                      (a creator's clips, a planner's events). Next steps right under them, not in a corner. */}
+                  {(() => {
+                    const handle = (bioMine as { page?: { handle?: string; published?: boolean } } | undefined)?.page;
+                    const linkLive = Boolean(handle?.published && handle.handle);
+                    const pod = podcastSources[0];
+                    const fmt = (n: number) => (n >= 1e4 ? `${Math.round(n / 1e3)}K` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(n));
+                    const elsewhere = !pod && !!profile?.rssUrl;
+                    return (
+                      <div className="mt-6 grid gap-4 lg:grid-cols-2" data-testid="dashboard-start-here">
+                        {/* 1. SmartLink */}
+                        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#F0A71F] to-[#f7c873] p-6 text-[#1a1200] shadow-sm" data-testid="dashboard-smartlink">
+                          <Globe className="absolute -right-6 -top-6 h-36 w-36 opacity-15" />
+                          <p className="text-xs font-bold uppercase tracking-[0.16em]">Your SmartLink</p>
+                          {linkLive ? (
+                            <>
+                              <p className="mt-2 break-all text-2xl font-bold tracking-tight">militaryvoices.ai/{handle!.handle}</p>
+                              <p className="mt-1 text-sm text-[#1a1200]/75">One link for every bio: your show, your links, and a way to collect emails.</p>
+                              <div className="mt-4 flex flex-wrap gap-2">
+                                <Button onClick={() => goTo("page")} className="rounded-full bg-[#000741] text-white hover:bg-[#0a1a5c]">Edit it</Button>
+                                <Button variant="outline" onClick={() => void navigator.clipboard.writeText(`https://www.militaryvoices.ai/${handle!.handle}`)} className="rounded-full border-[#1a1200]/30 bg-white/40 hover:bg-white/60">Copy my link</Button>
+                              </div>
+                            </>
+                          ) : (
+                            <>
+                              <p className="mt-2 text-2xl font-bold tracking-tight">One link for every bio</p>
+                              <p className="mt-1 text-sm text-[#1a1200]/75">Your show, your links and a way to collect emails, at militaryvoices.ai/you. About five minutes.</p>
+                              <Button onClick={() => goTo("page")} className="mt-4 rounded-full bg-[#000741] text-white hover:bg-[#0a1a5c]" data-testid="dashboard-smartlink-go">Make my SmartLink</Button>
+                            </>
+                          )}
+                        </div>
+
+                        {/* 2. Their podcast (or a creator's clips, or a planner's events) */}
+                        <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-[#053877] to-[#000741] p-6 text-white shadow-sm" data-testid="dashboard-podcast">
+                          {path === "planner" ? (
+                            <>
+                              <CalendarDays className="absolute -right-6 -top-6 h-36 w-36 opacity-10" />
+                              <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#F0A71F]">Your events</p>
+                              <p className="mt-2 text-2xl font-bold tracking-tight">{(myEventsList?.length ?? 0) > 0 ? `${myEventsList!.length} ${myEventsList!.length === 1 ? "event" : "events"}` : "Run your first event"}</p>
+                              <p className="mt-1 text-sm text-white/75">{(myEventsList?.length ?? 0) > 0 ? "Shape them, send them to us to approve, share the booking link and run the day from the studio." : "Name it, pick the day and the slot length. It stays private until we approve it."}</p>
+                              <Button onClick={() => goTo("myevents")} className="mt-4 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b944]" data-testid="dashboard-planner-go">{(myEventsList?.length ?? 0) > 0 ? "My events" : "Create my event"}</Button>
+                            </>
+                          ) : pod ? (
+                            (() => {
+                              const d = pod.data!;
+                              const hosted = pod.source === "militaryvoices";
+                              return (
+                                <div className="flex items-start gap-4">
+                                  {d.artwork ? <img src={d.artwork} alt="" className="h-20 w-20 shrink-0 rounded-xl object-cover ring-2 ring-white/20" /> : <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-white/10"><Headphones className="h-8 w-8 text-[#F0A71F]" /></span>}
+                                  <div className="min-w-0 flex-1">
+                                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#F0A71F]">Your podcast{hosted ? " · on MilitaryVoices" : ""}</p>
+                                    <p className="mt-1 truncate text-xl font-bold">{pod.showName || "Your show"}</p>
+                                    <p className="mt-1 text-sm text-white/75">{fmt(d.total)} {d.unit} · {d.episodes.length} episodes</p>
+                                    <div className="mt-4 flex flex-wrap gap-2">
+                                      <Button onClick={() => goTo("podcast")} className="gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b944]" data-testid="dashboard-podcast-new">{hosted ? <><Plus className="h-4 w-4" /> New episode</> : "Bring it over"}</Button>
+                                      <Button variant="outline" onClick={() => goTo("analytics")} className="rounded-full border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white">Your listens</Button>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })()
+                          ) : path === "creator" ? (
+                            <>
+                              <Film className="absolute -right-6 -top-6 h-36 w-36 opacity-10" />
+                              <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#F0A71F]">Pōstify</p>
+                              <p className="mt-2 text-2xl font-bold tracking-tight">Turn a video into clips</p>
+                              <p className="mt-1 text-sm text-white/75">Pōstify cuts the best moments with captions, in every shape, and posts them for you. Your first one is free.</p>
+                              <Button onClick={() => goTo("postify")} className="mt-4 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b944]" data-testid="dashboard-creator">Try Pōstify</Button>
+                            </>
+                          ) : (
+                            <>
+                              <Headphones className="absolute -right-6 -top-6 h-36 w-36 opacity-10" />
+                              <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#F0A71F]">Your podcast</p>
+                              <p className="mt-2 text-2xl font-bold tracking-tight">{elsewhere ? (profile?.podcastName || "Your show") : "Host your podcast free"}</p>
+                              <p className="mt-1 text-sm text-white/75">{elsewhere ? "Bring it here and keep your Apple and Spotify listings. Alex, your podcast producer, walks you through it." : "Your feed for Apple, Spotify and every app, with downloads counted the way sponsors count them."}</p>
+                              <Button onClick={() => goTo("podcast")} className="mt-4 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b944]" data-testid="dashboard-podcast-empty">{elsewhere ? "Bring my show over" : "Start my show"}</Button>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })()}
+                  {(() => {
+                    const left = buildSteps(checklistState, checklistNav).filter((x) => !x.done);
+                    if (!left.length) return null;
+                    return (
+                      <section className="mt-4 rounded-3xl border-2 border-[#F0A71F]/50 bg-[#F0A71F]/[0.07] p-5" data-testid="todo-strip">
+                        <p className="text-sm font-bold text-foreground">Next steps <span className="font-normal text-muted-foreground">· {left.length} to do</span></p>
+                        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                          {left.slice(0, 3).map((x, n) => (
+                            <button key={x.key} type="button" onClick={() => goToStep(x)} className="group flex items-start gap-3 rounded-2xl bg-card p-4 text-left shadow-sm ring-1 ring-border transition hover:ring-[#053877]/40" data-testid={`todo-${x.key}`}>
+                              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[#053877] text-sm font-bold text-white">{n + 1}</span>
+                              <span className="min-w-0 flex-1"><span className="block font-semibold text-foreground">{x.label}</span><span className="mt-0.5 block text-xs text-muted-foreground">{x.detail}</span></span>
+                              <ArrowRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-[#053877]" />
+                            </button>
+                          ))}
+                        </div>
+                        {left.length > 3 && <p className="mt-2 text-xs text-muted-foreground">Then: {left.slice(3).map((x) => x.label).join(", ")}.</p>}
+                      </section>
+                    );
+                  })()}
                   {/* Four doors that are about the account, not any one
                       event: on their own row under the accounts card, which keeps
                       the card to the accounts alone (Andrew, 30 Sep). */}
@@ -1691,66 +1792,9 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                       </button>
                     ))}
                   </div>
-                  {/* Your podcast, from wherever it lives (hosted here first): the show, its latest episode and its downloads. */}
-                  {path === "planner" ? (
-                    <div className="mt-6 flex flex-wrap items-center gap-4 rounded-2xl border border-border bg-card p-5" data-testid="dashboard-planner">
-                      <IconTile icon={CalendarDays} />
-                      <div className="min-w-0 flex-1">
-                        <p className="font-semibold text-foreground">{(myEventsList?.length ?? 0) > 0 ? `Your events · ${myEventsList!.length}` : "Run your first event"}</p>
-                        <p className="text-sm text-muted-foreground">{(myEventsList?.length ?? 0) > 0 ? "Shape them, send them to us to approve, share the booking link and run the day from the studio." : "Name it, pick the day and the slot length. It stays private until we approve it."}</p>
-                      </div>
-                      <Button onClick={() => goTo("myevents")} className="rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="dashboard-planner-go">{(myEventsList?.length ?? 0) > 0 ? "My events" : "Create my event"}</Button>
-                    </div>
-                  ) : path === "creator" && podcastSources.length === 0 ? (
-                    <div className="mt-6 flex flex-wrap items-center gap-4 rounded-2xl border border-dashed border-border bg-card p-5" data-testid="dashboard-creator">
-                      <IconTile icon={Film} />
-                      <div className="min-w-0 flex-1"><p className="font-semibold text-foreground">Turn a video into clips</p><p className="text-sm text-muted-foreground">Upload one and Pōstify cuts the best moments with captions, in every shape, and posts them for you. Your first one is free.</p></div>
-                      <Button onClick={() => goTo("postify")} className="rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]">Try Pōstify</Button>
-                    </div>
-                  ) : podcastSources.length > 0 ? (() => {
-                    const p = podcastSources[0];
-                    const d = p.data!;
-                    const latest = [...d.episodes].sort((x, y) => y.published.localeCompare(x.published))[0];
-                    const hosted = p.source === "militaryvoices";
-                    const last30 = hosted || p.source === "buzzsprout" || p.source === "transistor" ? (d.series ?? []).slice(-30).reduce((n, x) => n + x.count, 0) : null;
-                    const fmt = (n: number) => (n >= 1e4 ? `${Math.round(n / 1e3)}K` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(n));
-                    return (
-                      <div className="mt-6 flex flex-wrap items-center gap-5 rounded-2xl border border-border bg-card p-5" data-testid="dashboard-podcast">
-                        {d.artwork ? <img src={d.artwork} alt="" className="h-20 w-20 shrink-0 rounded-xl object-cover" /> : <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-[#053877] text-[#F0A71F]"><Headphones className="h-8 w-8" /></span>}
-                        <div className="min-w-0 flex-1">
-                          <p className="text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Your podcast{hosted ? " · hosted on MilitaryVoices" : ""}</p>
-                          <p className="truncate text-lg font-bold text-foreground">{p.showName || "Your show"}</p>
-                          {latest && <p className="truncate text-sm text-muted-foreground">Latest: <span className="font-medium text-foreground">{latest.title}</span>{latest.published ? ` · ${new Date(latest.published).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}</p>}
-                        </div>
-                        <div className="flex gap-6 text-center">
-                          {last30 !== null && <div><p className="text-xl font-bold tabular-nums text-[#053877] dark:text-[#8ab4f8]">{fmt(last30)}</p><p className="text-[11px] text-muted-foreground">{d.unit}, 30 days</p></div>}
-                          <div><p className="text-xl font-bold tabular-nums text-[#053877] dark:text-[#8ab4f8]">{fmt(d.total)}</p><p className="text-[11px] text-muted-foreground">{d.unit}, all time</p></div>
-                          <div><p className="text-xl font-bold tabular-nums text-[#053877] dark:text-[#8ab4f8]">{d.episodes.length}</p><p className="text-[11px] text-muted-foreground">episodes</p></div>
-                        </div>
-                        <div className="flex flex-wrap gap-2">
-                          {hosted ? (
-                            <Button onClick={() => goTo("podcast")} className="gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="dashboard-podcast-new"><Plus className="h-4 w-4" /> New episode</Button>
-                          ) : (
-                            <Button variant="outline" onClick={() => goTo("analytics")} className="gap-1.5 rounded-full"><BarChart3 className="h-4 w-4" /> Your listens</Button>
-                          )}
-                          <Button variant="outline" onClick={() => goTo("page")} className="gap-1.5 rounded-full" data-testid="dashboard-podcast-page"><Globe className="h-4 w-4" /> Your SmartLink</Button>
-                        </div>
-                      </div>
-                    );
-                  })() : (
-                    <div className="mt-6 flex flex-wrap items-center gap-4 rounded-2xl border border-dashed border-border bg-card p-5" data-testid="dashboard-podcast-empty">
-                      <IconTile icon={Headphones} />
-                      <div className="min-w-0 flex-1"><p className="font-semibold text-foreground">Put your podcast here</p><p className="text-sm text-muted-foreground">Host it with us (your feed for Apple and Spotify, downloads sponsors trust), or connect the host you use.</p></div>
-                      <div className="flex flex-wrap gap-2">
-                        <Button onClick={() => goTo("podcast")} className="rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]">Host your podcast</Button>
-                        <Button variant="outline" onClick={() => { window.location.hash = "section-podcast-stats"; goTo("integrations"); }} className="rounded-full">Connect your host</Button>
-                      </div>
-                    </div>
-                  )}
-                  {/* Three cards: your events (the Marathon is one of them),
-                      your audience, and what's left to do. The co-host hours
-                      live on the event's own page, with the event. */}
-                  <div className="mt-6 grid gap-4 lg:grid-cols-3">
+                  {/* Their events, only for someone who's been on one or is booked (7 Oct): Your audience is in the accounts strip above. */}
+                  {(mySlot || greenRoomHref) && (
+                  <div className="mt-6 max-w-2xl">
                     <div className="h-full rounded-2xl border border-border bg-card p-5" data-testid="section-your-events">
                       <div className="mb-3 flex items-center justify-between gap-2">
                         <p className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Your events</p>
@@ -1800,73 +1844,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                         </div>
                       )}
                     </div>
-
-                    <div className="h-full rounded-2xl border border-border bg-card p-5" data-testid="section-your-audience">
-                      <div className="mb-3 flex items-center justify-between gap-2">
-                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Your audience</p>
-                        <button type="button" onClick={() => goTo("analytics")} className="text-xs font-medium text-[#053877] hover:underline dark:text-[#8ab4f8]" data-testid="link-analytics">Your analytics</button>
-                      </div>
-                      {(() => {
-                        const accts = social?.accounts ?? [];
-                        const total = accts.reduce((n, a) => n + (a.followers ?? 0), 0);
-                        if (accts.length === 0) {
-                          return (
-                            <div className="rounded-xl border border-dashed border-border p-4">
-                              <p className="text-sm text-muted-foreground">Connect the accounts you post from to see your followers in one place.</p>
-                              <Button size="sm" variant="outline" className="mt-3 gap-1.5 rounded-full" onClick={() => goTo("integrations")} data-testid="button-connect-accounts-card">
-                                <Link2 className="h-3.5 w-3.5" /> Connect accounts
-                              </Button>
-                            </div>
-                          );
-                        }
-                        return (
-                          <>
-                            <p className="text-3xl font-bold tabular-nums tracking-tight text-[#053877] dark:text-[#8ab4f8]">{formatFollowers(total)}</p>
-                            <p className="text-sm text-foreground/80">followers across {accts.length} account{accts.length === 1 ? "" : "s"}</p>
-                            <div className="mt-3 flex flex-col gap-1.5">
-                              {[...accts].sort((a, b) => (b.followers ?? 0) - (a.followers ?? 0)).slice(0, 3).map((a) => (
-                                <div key={`${a.platform}-${a.username}`} className="flex items-center gap-2 text-sm">
-                                  <PlatformIcon platform={a.platform} className="h-4 w-4" />
-                                  <span className="min-w-0 flex-1 truncate text-foreground">{a.displayName || a.username}</span>
-                                  <span className="tabular-nums text-foreground/70">{a.followers != null ? formatFollowers(a.followers) : "–"}</span>
-                                </div>
-                              ))}
-                              {/* The podcast itself, from its host: downloads alongside the followers. */}
-                              {podcastSources.filter((p) => p.data!.total > 0).map((p) => (
-                                <div key={p.source} className="flex items-center gap-2 border-t border-border pt-1.5 text-sm" data-testid={`audience-podcast-${p.source}`}>
-                                  <Headphones className="h-4 w-4 text-[#053877] dark:text-[#8ab4f8]" />
-                                  <span className="min-w-0 flex-1 truncate text-foreground">{p.showName || "Your podcast"} <span className="text-muted-foreground">· {p.data!.unit}</span></span>
-                                  <span className="tabular-nums text-foreground/70">{formatFollowers(p.data!.total)}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </>
-                        );
-                      })()}
-                    </div>
-
-                    {/* The same steps as the floating checklist, built from their path: one list, not two. */}
-                    {(() => {
-                      const steps = buildSteps(checklistState, checklistNav);
-                      const left = steps.filter((x) => !x.done);
-                      return (
-                        <div className="h-full rounded-2xl border border-border bg-card p-5" data-testid="todo-strip">
-                          {left.length === 0 ? (
-                            <p className="inline-flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400"><Check className="h-4 w-4" /> You're all set up.</p>
-                          ) : (
-                            <p className="text-sm font-semibold text-foreground">Next steps <span className="ml-1.5 font-normal text-foreground/80">· {left.length} to do</span></p>
-                          )}
-                          <div className="mt-3 flex flex-wrap gap-2">
-                            {left.map((x) => (
-                              <button key={x.key} type="button" onClick={() => goToStep(x)} title={x.detail} className="inline-flex items-center gap-1.5 rounded-full border border-[#053877] bg-[#053877]/[0.06] px-3.5 py-1.5 text-sm text-foreground transition-colors hover:bg-[#053877]/[0.12]" data-testid={`todo-${x.key}`}>
-                                {x.label} <ArrowRight className="h-3.5 w-3.5 opacity-70" />
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      );
-                    })()}
                   </div>
+                  )}
                   {/* How to put the app on their phone, until they have. */}
                   <div className="mt-6"><AppInstallCard /></div>
                 </>
@@ -1944,14 +1923,21 @@ function CreateMenu({ goTo, children }: { goTo: (s: Screen) => void; children: R
   );
 }
 
-/** Discovery on the free plan (7 Oct): what it does, and the way to it. */
+/** Discovery on the free plan (7 Oct): the real page underneath, greyed and still, with the way to it on top. */
 function DiscoveryUpgrade({ which, onUpgrade }: { which: "discovery" | "verified"; onUpgrade: () => void }) {
   return (
-    <section className="mt-6 max-w-2xl rounded-3xl border border-border bg-card p-8 text-center" data-testid="discovery-upgrade">
-      <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F0A71F]/15 text-[#8a5a00] dark:text-[#F0A71F]"><Compass className="h-6 w-6" /></span>
-      <h1 className="mt-4 text-2xl font-bold tracking-tight">{which === "verified" ? "Verified creators" : "Discovery"} comes with Scale and Pro</h1>
-      <p className="mx-auto mt-2 max-w-md text-muted-foreground [text-wrap:pretty]">Search military and veteran podcasters and creators by topic, branch and audience, with their real reach on every profile. Find guests for your show, partners to collaborate with, and sponsors who fit.</p>
-      <Button onClick={onUpgrade} className="mt-6 h-11 gap-2 rounded-full bg-[#F0A71F] px-6 font-semibold text-[#1a1200] hover:bg-[#f5b944]" data-testid="discovery-upgrade-go">See plans</Button>
+    <section className="relative mt-6" data-testid="discovery-upgrade">
+      <div aria-hidden className="pointer-events-none max-h-[78vh] select-none overflow-hidden opacity-45 grayscale-[35%] [mask-image:linear-gradient(to_bottom,black_55%,transparent)]">
+        <Discover embedded part={which === "verified" ? "verified" : "search"} />
+      </div>
+      <div className="absolute inset-x-0 top-24 flex justify-center px-4">
+        <div className="max-w-lg rounded-3xl border border-border bg-card/95 p-8 text-center shadow-2xl backdrop-blur">
+          <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F0A71F]/15 text-[#8a5a00] dark:text-[#F0A71F]"><Compass className="h-6 w-6" /></span>
+          <h1 className="mt-4 text-2xl font-bold tracking-tight">{which === "verified" ? "Verified creators" : "Discovery"} comes with Scale and Pro</h1>
+          <p className="mx-auto mt-2 text-muted-foreground [text-wrap:pretty]">Search military and veteran podcasters and creators by topic, branch and audience, with their real reach on every profile. Find guests for your show, partners to collaborate with, and sponsors who fit.</p>
+          <Button onClick={onUpgrade} className="mt-6 h-11 gap-2 rounded-full bg-[#F0A71F] px-6 font-semibold text-[#1a1200] hover:bg-[#f5b944]" data-testid="discovery-upgrade-go">See plans</Button>
+        </div>
+      </div>
     </section>
   );
 }
