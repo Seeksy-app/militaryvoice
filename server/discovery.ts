@@ -22,7 +22,7 @@ import sharp from "sharp";
 import { getAdminEmail, getSessionEmail, requireHostSession } from "./session.js";
 import { ensureOrg, orgIdsOf, orgsOf } from "./orgs.js";
 import { slackNote } from "./slack.js";
-import { bioPages, pathOf } from "../shared/schema.js";
+import { bioPages, pathOf, postifySubscriptions } from "../shared/schema.js";
 import { parseBrands } from "../shared/bio.js";
 import { ADDONS, FREE_DISCOVERY } from "../shared/tokens.js";
 import {
@@ -53,6 +53,27 @@ async function allowanceFor(email: string): Promise<{ reveals: number; lookups: 
     ? { reveals: ADDONS.discovery.reveals, lookups: ADDONS.discovery.lookups, pro: true }
     : { reveals: FREE_DISCOVERY.reveals, lookups: FREE_DISCOVERY.lookups, pro: false };
 }
+/**
+ * May this person use Discovery (7 Oct)? It's a paid tool for creators: brands,
+ * agencies and event planners have it free (finding creators is why they're
+ * here); podcasters and creators get it with Scale or Pro, or the Discovery
+ * add-on. Everyone else sees an upgrade screen.
+ */
+export async function discoveryOpenTo(email: string): Promise<boolean> {
+  const e = email.trim().toLowerCase();
+  if (!e) return false;
+  if (await storage.isAdminEmail(e)) return true;
+  if ((await orgsOf(e)).length) return true;
+  const profile = await storage.getProfileByEmail(e).catch(() => undefined);
+  const path = pathOf(profile?.interests);
+  if (path === "brand" || path === "planner") return true;
+  const [m] = await db.select({ role: discoveryMembers.role }).from(discoveryMembers).where(eq(discoveryMembers.email, e));
+  if (m && ["brand", "agency", "event"].includes(m.role)) return true;
+  if ((await allowanceFor(e)).pro) return true;
+  const subs = await db.select({ status: postifySubscriptions.status }).from(postifySubscriptions).where(eq(postifySubscriptions.email, e));
+  return subs.some((x) => ["active", "trialing", "past_due"].includes(x.status));
+}
+
 const PAGE_SIZE = 10;
 /** Featured in the hero's demo ahead of our lineup, as platform:handle. Read from cache only. */
 const SHOWCASE: string[] = ["instagram:dr.brittiniewick_dpt"];
@@ -593,6 +614,7 @@ async function requireMember(req: Request): Promise<{ email: string; member: Non
   if (!email) throw new HttpError(401, "Create your free account to search.");
   const member = await memberFor(email);
   if (!member) throw new HttpError(403, "Add Discovery to your account to search.");
+  if (!(await discoveryOpenTo(email))) throw new HttpError(402, "Discovery comes with Scale and Pro. Upgrade to search creators.");
   return { email, member };
 }
 /** The saved lists someone can see: their own, and their organizations'. */
@@ -723,6 +745,8 @@ export function registerDiscoveryRoutes(app: Express): void {
         lookups: member && member.role !== "admin" ? { used: await lookupsThisMonth(email), allowance: (await allowanceFor(email)).lookups } : null,
         // Signed in to the admin too: they can spend credits on filling a page.
         isAdmin: !!adminEmail,
+        // On the free plan as a creator: Discovery shows an upgrade screen instead.
+        locked: !adminEmail && !(await discoveryOpenTo(email)),
       };
     }),
   );

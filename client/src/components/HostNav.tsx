@@ -21,6 +21,8 @@ interface Item {
   badge?: number;
   /** A door that is not open yet: shown, greyed, and it opens the Pro page. */
   locked?: boolean;
+  /** Part of a paid plan they don't have (Discovery on Growth): greyed, with an Upgrade tag; it still opens, to the upgrade screen. */
+  upsell?: boolean;
   feature?: string;
   /** A page rather than a screen: the help hub. */
   href?: string;
@@ -43,6 +45,7 @@ export function HostNav({
   screen,
   eventsCount,
   opportunities,
+  discoveryLocked,
   contactsCount,
   pathFor,
   onGo,
@@ -85,6 +88,8 @@ export function HostNav({
   path?: "podcaster" | "creator" | "planner" | "brand";
   /** Brands' requests waiting for an answer, shown on Opportunities. */
   opportunities?: number;
+  /** On the free plan as a creator: Discovery and Verified creators show Upgrade. */
+  discoveryLocked?: boolean;
 }) {
   const { toast } = useToast();
   // Admins get into the studio now (to run the Marathon and test it); everyone else sees Oct 5.
@@ -148,8 +153,8 @@ export function HostNav({
       items: [
         { key: "analytics", label: "Your analytics", hint: "Your followers, reach and engagement as sponsors see them, and what to charge", icon: BarChart3 },
         { key: "fans", label: "Email your fans", hint: "Write to everyone who signed up on your SmartLink: blocks, live preview, schedule, opens and clicks", icon: Mail },
-        { key: "discovery", label: "Discovery", hint: "Search military and veteran creators to find guests, partners and sponsors", icon: Compass },
-        { key: "verified", label: "Verified creators", hint: "Creators on MilitaryVoices we know personally, each one checked by our team", icon: BadgeCheck },
+        { key: "discovery", label: "Discovery", hint: discoveryLocked ? "Search military and veteran creators to find guests, partners and sponsors. Comes with Scale and Pro." : "Search military and veteran creators to find guests, partners and sponsors", icon: Compass, ...(discoveryLocked ? { upsell: true, tag: "Upgrade" } : {}) },
+        { key: "verified", label: "Verified creators", hint: discoveryLocked ? "Creators on MilitaryVoices we've checked ourselves, to invite as guests or collaborators. Comes with Scale and Pro." : "Creators on MilitaryVoices we know personally, each one checked by our team", icon: BadgeCheck, ...(discoveryLocked ? { upsell: true, tag: "Upgrade" } : {}) },
         ...(contactsCount > 0 ? [{ key: "contacts" as const, label: "Contacts", hint: `${contactsCount} ${contactsCount === 1 ? "person wants" : "people want"} to hear from you`, icon: Users }] : []),
       ],
     },
@@ -215,12 +220,14 @@ export function HostNav({
         className={
           compact
             ? `flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium ${
-                active ? "bg-[#053877] text-white" : it.locked ? "bg-muted text-muted-foreground" : "bg-[#053877]/[0.06] text-foreground"
+                active ? "bg-[#053877] text-white" : it.locked || it.upsell ? "bg-muted text-muted-foreground" : "bg-[#053877]/[0.06] text-foreground"
               }`
             : `relative flex items-center gap-3 rounded-full px-4 py-2 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#053877]/30 ${
                 active
                   ? "bg-[#053877]/[0.12] font-semibold text-[#053877] dark:bg-white/[0.14] dark:text-white"
-                  : it.locked
+                  : it.upsell
+                    ? "text-muted-foreground/80 hover:bg-muted"
+                    : it.locked
                     ? `text-muted-foreground ${proOpen ? "hover:bg-muted" : "cursor-default"}`
                     : "text-foreground/75 hover:bg-muted hover:text-foreground"
               }`

@@ -1117,6 +1117,14 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     refetchInterval: 120_000,
   });
   const newOpps = (oppsPeek ?? []).filter((o) => o.status === "new").length;
+  // Discovery is a paid tool for creators (7 Oct): on Growth it shows Upgrade instead.
+  const { data: discoverMe } = useQuery<{ locked?: boolean }>({
+    queryKey: ["/api/discover/me"],
+    queryFn: async () => (await apiRequest("GET", "/api/discover/me")).json(),
+    enabled: workspace,
+    staleTime: 60_000,
+  });
+  const discoveryLocked = Boolean(discoverMe?.locked);
   // Which path they came in on (podcaster, creator, planner): the dashboard follows it.
   const path = pathOf(profile?.interests);
   const checklistState = {
@@ -1134,6 +1142,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     eventOpen,
     hasOwnEvent: (myEventsList?.length ?? 0) > 0,
     openToBrands: Boolean(profile?.openToBrands),
+    discoveryLocked,
   };
   const checklistNav = {
     onGoEvents: () => goTo("events"),
@@ -1268,6 +1277,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           <HostNav
             path={pathOf(profile?.interests)}
             opportunities={newOpps}
+            discoveryLocked={discoveryLocked}
             collapsed={navTucked}
             onToggle={toggleNav}
             screen={screen === "claim" ? "dashboard" : screen}
@@ -1448,10 +1458,19 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           <ProScreen feature={proFeature} />
         ) : screen === "contacts" ? (
           <ContactsScreen contacts={data?.contacts ?? []} />
+        ) : (screen === "discovery" || screen === "verified") && discoveryLocked ? (
+          <DiscoveryUpgrade which={screen} onUpgrade={() => goTo("billing")} />
         ) : screen === "discovery" ? (
           <Discover embedded part="search" />
         ) : screen === "verified" ? (
-          <Discover embedded part="verified" />
+          <section>
+            {/* What this page is for (7 Oct: "Select" and "Add to a list" said nothing on their own). */}
+            <div className="mt-6 max-w-3xl">
+              <h1 className="text-2xl font-bold tracking-tight">Verified creators</h1>
+              <p className="mt-1 text-sm text-muted-foreground [text-wrap:pretty]">Military and veteran podcasters and creators on MilitaryVoices that our team has checked. Tick the ones you'd like to work with and <b>Add to a list</b> to keep them together. Open anyone to see their audience, then <b>Request an intro</b>: we put you in touch, with their say-so.</p>
+            </div>
+            <Discover embedded part="verified" />
+          </section>
         ) : screen === "greenroom" ? (
           <>
             <BackToEvent onGo={goTo} />
@@ -1922,5 +1941,17 @@ function CreateMenu({ goTo, children }: { goTo: (s: Screen) => void; children: R
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
+  );
+}
+
+/** Discovery on the free plan (7 Oct): what it does, and the way to it. */
+function DiscoveryUpgrade({ which, onUpgrade }: { which: "discovery" | "verified"; onUpgrade: () => void }) {
+  return (
+    <section className="mt-6 max-w-2xl rounded-3xl border border-border bg-card p-8 text-center" data-testid="discovery-upgrade">
+      <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F0A71F]/15 text-[#8a5a00] dark:text-[#F0A71F]"><Compass className="h-6 w-6" /></span>
+      <h1 className="mt-4 text-2xl font-bold tracking-tight">{which === "verified" ? "Verified creators" : "Discovery"} comes with Scale and Pro</h1>
+      <p className="mx-auto mt-2 max-w-md text-muted-foreground [text-wrap:pretty]">Search military and veteran podcasters and creators by topic, branch and audience, with their real reach on every profile. Find guests for your show, partners to collaborate with, and sponsors who fit.</p>
+      <Button onClick={onUpgrade} className="mt-6 h-11 gap-2 rounded-full bg-[#F0A71F] px-6 font-semibold text-[#1a1200] hover:bg-[#f5b944]" data-testid="discovery-upgrade-go">See plans</Button>
+    </section>
   );
 }
