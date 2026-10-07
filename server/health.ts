@@ -178,6 +178,19 @@ const DEFS: Def[] = [
     run: async () => {
       const k = env("ELEVENLABS_API_KEY", "ELEVEN_LABS_API_KEY");
       if (!k) return { state: "off", detail: "Runs on the clip worker; no key here" };
+      // Credit left, not just "answering" (7 Oct: it ran out and clipping quietly made slices). Under 5% left
+      // counts as down, so the five-minute check Slacks the team before transcription stops.
+      const sub = await fetch("https://api.elevenlabs.io/v1/user/subscription", { headers: { "xi-api-key": k }, signal: AbortSignal.timeout(8_000) }).catch(() => null);
+      if (sub?.ok) {
+        const j = (await sub.json().catch(() => ({}))) as { character_count?: number; character_limit?: number; next_character_count_reset_unix?: number };
+        const used = Number(j.character_count) || 0, limit = Number(j.character_limit) || 0;
+        if (limit > 0) {
+          const left = Math.max(0, limit - used);
+          const reset = j.next_character_count_reset_unix ? `, resets ${new Date(j.next_character_count_reset_unix * 1000).toLocaleDateString("en-US", { month: "short", day: "numeric" })}` : "";
+          const detail = `${left.toLocaleString("en-US")} of ${limit.toLocaleString("en-US")} credits left${reset}`;
+          return left / limit < 0.05 ? { state: "down", detail: `Almost out: ${detail}. Top up, or transcription for clips stops.` } : { state: "ok", detail };
+        }
+      }
       const res = await fetch("https://api.elevenlabs.io/v1/user", { headers: { "xi-api-key": k }, signal: AbortSignal.timeout(8_000) });
       if (res.ok) return { state: "ok", detail: "Answering" };
       const body = await res.text().catch(() => "");
