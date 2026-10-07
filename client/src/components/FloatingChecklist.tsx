@@ -35,7 +35,8 @@ export function FloatingChecklist({ state, ...nav }: { state: StepState } & Step
   const [collapsed, setCollapsed] = useState(() => {
     try {
       const v = localStorage.getItem(HIDDEN_KEY);
-      return v === null ? window.innerWidth < 1024 : v === "1";
+      // Folded by default everywhere (7 Oct): Next steps is on the dashboard itself now.
+      return v === null ? true : v === "1";
     } catch { return true; }
   });
   const [ticked, setTicked] = useState<string[]>(readTicked);
