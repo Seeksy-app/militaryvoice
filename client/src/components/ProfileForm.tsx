@@ -100,6 +100,8 @@ interface Props {
    * only ever about the person.
    */
   variant?: "setup" | "profile";
+  /** The admin's sign-up tour (/tour): the real form, but nothing is ever saved. */
+  demo?: boolean;
   /** What they said they're here for, on the way in (comma-separated). */
   interests?: string;
   /** An event is coming up to set a show up for; without one, setup goes straight to the dashboard. */
@@ -164,7 +166,7 @@ const FIELD_LABEL: Record<string, string> = {
   branch: "your branch", serviceStatus: "your status", interests: "what you're here for",
 };
 
-export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, variant = "setup", onDirtyChange, interests: interestsProp, eventOpen = true }: Props) {
+export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, variant = "setup", onDirtyChange, interests: interestsProp, eventOpen = true, demo = false }: Props) {
   const { toast } = useToast();
   // Show questions only for people with a show. Anyone who came through a
   // time on the schedule is booking one, whatever they ticked.
@@ -441,6 +443,8 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
   });
 
   function handleSubmit(values: FormValues) {
+    // The tour: show the next screen, save nothing.
+    if (demo) { onSaved("dashboard"); return; }
     // A photo is asked for, not required: it's on the checklist after.
     mutation.mutate(values);
   }

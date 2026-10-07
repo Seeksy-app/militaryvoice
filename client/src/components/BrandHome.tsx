@@ -24,7 +24,7 @@ async function call(method: string, url: string, body?: unknown) {
 }
 
 /** Who they are, once: their name, the company, brand or agency, and what they're here for. */
-export function BrandSetup({ onDone }: { onDone: () => void }) {
+export function BrandSetup({ onDone, demo = false }: { onDone: () => void; /** The sign-up tour: nothing is saved. */ demo?: boolean }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [name, setName] = useState("");
@@ -36,6 +36,7 @@ export function BrandSetup({ onDone }: { onDone: () => void }) {
   const ready = name.trim() && company.trim();
 
   const save = async () => {
+    if (demo) { onDone(); return; }
     setBusy(true);
     try {
       const fd = new FormData();
