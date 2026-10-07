@@ -20,7 +20,7 @@ import { uploadPhoto } from "./photoStorage.js";
 import { waitUntil } from "@vercel/functions";
 import sharp from "sharp";
 import { getAdminEmail, getSessionEmail, requireHostSession } from "./session.js";
-import { orgIdsOf, orgsOf } from "./orgs.js";
+import { ensureOrg, orgIdsOf, orgsOf } from "./orgs.js";
 import { ADDONS, FREE_DISCOVERY } from "../shared/tokens.js";
 import {
   discoveryMembers,
@@ -661,7 +661,10 @@ export function registerDiscoveryRoutes(app: Express): void {
         .insert(discoveryMembers)
         .values({ email, role, orgName, source, createdAt: new Date().toISOString() })
         .onConflictDoUpdate({ target: discoveryMembers.email, set: { role, orgName } });
-      return { ok: true };
+      // A brand, agency or organizer gets an organization of its own: the team's home for lists and requests.
+      const kind = ({ brand: "brand", agency: "agency", event: "organizer" } as Record<string, string>)[role];
+      const org = kind && orgName ? await ensureOrg(email, kind, orgName, String(req.body?.website ?? "")) : null;
+      return { ok: true, orgId: org?.id ?? 0 };
     }),
   );
 

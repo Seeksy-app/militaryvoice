@@ -111,6 +111,8 @@ export function buildSteps(state: StepState, nav: StepNav): Step[] {
   const goTo = (f?: () => void) => f ?? nav.onGoIntegrations;
   // Each path's own first steps (6 Oct): an event planner's are about their
   // event; a content creator's skip podcast hosting.
+  // A brand's getting-started lives on its own home (BrandHome), not the creator checklist.
+  if (path === "brand") return [];
   if (path === "planner") {
     return [
       { key: "myevent", label: "Create your event", detail: "Name it, pick the day and the slot length. It stays private until we approve it.", done: Boolean(state.hasOwnEvent), cta: "Create my event", go: goTo(nav.onGoMyEvents) },

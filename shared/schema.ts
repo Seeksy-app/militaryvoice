@@ -460,11 +460,14 @@ export const profileFieldsSchema = createInsertSchema(podcasterProfiles)
 /** The four reasons someone opens an account, asked on the way in. */
 // The three paths in (6 Oct): podcaster = "grow,events", content creator =
 // "create", event planner = "host". "discover" stays for older accounts.
-export const INTERESTS = ["events", "grow", "discover", "host", "create"] as const;
+export const INTERESTS = ["events", "grow", "discover", "host", "create", "brand"] as const;
 export type Interest = (typeof INTERESTS)[number];
-/** Which of the three paths an account is on, from what it said on the way in. */
-export function pathOf(interests: string | null | undefined): "podcaster" | "creator" | "planner" {
+/** Which path an account is on, from what it said on the way in. */
+export type MemberPath = "podcaster" | "creator" | "planner" | "brand";
+export function pathOf(interests: string | null | undefined): MemberPath {
   const v = (interests ?? "").trim();
+  // A brand or agency (7 Oct): here to find creators and sponsor shows, not to make content.
+  if (/\bbrand\b/.test(v) && !/\b(events|grow)\b/.test(v)) return "brand";
   if (/\bhost\b/.test(v) && !/\b(events|grow)\b/.test(v)) return "planner";
   if (/\bcreate\b/.test(v) && !/\b(events|grow)\b/.test(v)) return "creator";
   return "podcaster";

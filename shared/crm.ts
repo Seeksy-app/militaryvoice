@@ -72,4 +72,4 @@ export function matchesFilter(p: PersonFacts, f: AudienceFilter): boolean {
 export const filterIsActive = (f: AudienceFilter) =>
   !!(f.roles?.length || f.plans?.length || f.paths?.length || f.tags?.length || f.eventIds?.length || f.joinedDays || f.quietDays || f.smartlink);
 
-export const PATH_LABEL: Record<string, string> = { podcaster: "Podcaster", creator: "Content creator", planner: "Event planner" };
+export const PATH_LABEL: Record<string, string> = { podcaster: "Podcaster", creator: "Content creator", planner: "Event planner", brand: "Brand" };

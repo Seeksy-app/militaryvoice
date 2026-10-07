@@ -81,12 +81,26 @@ export function HostNav({
    *  only for the organisers' own account until the previews are worth it. */
   proOpen?: boolean;
   /** Which of the three paths they came in on: an event planner's events lead. */
-  path?: "podcaster" | "creator" | "planner";
+  path?: "podcaster" | "creator" | "planner" | "brand";
 }) {
   const { toast } = useToast();
   // Admins get into the studio now (to run the Marathon and test it); everyone else sees Oct 5.
   const { isAuthenticated: isAdmin } = useAdminAuth();
-  const groups: { title: string; items: Item[] }[] = [
+  const brand = path === "brand";
+  // A brand's menu (7 Oct): finding creators and its team, none of the making-content tools.
+  const brandGroups: { title: string; items: Item[] }[] = [
+    {
+      title: "Your brand",
+      items: [
+        { key: "dashboard", label: "Home", hint: "Your saved creators, your team and what's next", icon: LayoutDashboard },
+        { key: "discovery", label: "Find creators", hint: "Search military and veteran creators: reach, audience and engagement on every profile", icon: Compass },
+        { key: "verified", label: "Verified creators", hint: "Creators we know personally, each one checked by our team", icon: BadgeCheck },
+        { key: "organization", label: "Your team", hint: "Your company's account: invite the people you work with; lists are shared", icon: Building2 },
+      ],
+    },
+    { title: "Help", items: [{ key: "dashboard", label: "Help", hint: "Search the help articles, or ask Alex, our assistant", icon: LifeBuoy, href: "/help" }] },
+  ];
+  const groups: { title: string; items: Item[] }[] = brand ? brandGroups : [
     // Most-used first. Promotion lives inside Events (it's about an event);
     // Profile lives in the account card at the foot; Integrations is in both.
     // An event planner's own events lead their column; everyone else can run one too.
@@ -153,7 +167,7 @@ export function HostNav({
   const accountItems: Item[] = [
     { key: "editProfile", label: "Profile", hint: "Your photo, bio and service details that listeners and sponsors see", icon: UserRound },
     // A brand, agency or organizer they're on the team of (planners have it under Your events).
-    ...(path !== "planner" ? [{ key: "organization" as const, label: "Organization", hint: "A brand, agency or event organizer you work for, and its team", icon: Building2 }] : []),
+    ...(path !== "planner" && !brand ? [{ key: "organization" as const, label: "Organization", hint: "A brand, agency or event organizer you work for, and its team", icon: Building2 }] : []),
   ];
 
   const [closed, setClosed] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem("mv_nav_folded") || "[]"); } catch { return []; } });
@@ -261,7 +275,7 @@ export function HostNav({
       {collapsed ? (
         <nav key="rail" className="sticky top-16 hidden h-[calc(100vh-4rem)] self-start overflow-y-auto border-r border-border bg-card lg:block" aria-label="Dashboard sections">
           <div className="flex min-h-full w-[72px] flex-col items-center gap-1 py-3">
-            {account && (
+            {account && !brand && (
               <CreatePostMenu onGo={onGo}>
                 <button type="button" aria-label="Create post" title="Create post" className="mb-2 flex h-12 w-12 items-center justify-center rounded-2xl bg-[#053877] text-white shadow-md hover:bg-[#0a4a99]" data-testid="nav-rail-create-post"><Plus className="h-5 w-5" /></button>
               </CreatePostMenu>
@@ -282,7 +296,7 @@ export function HostNav({
       <nav key="column" className="sticky top-16 hidden h-[calc(100vh-4rem)] self-start overflow-y-auto border-r border-border bg-card lg:block" aria-label="Dashboard sections">
         {/* Like Search Console: flush to the edge, no card; what you're working on at the top; the page you're on as a pill. */}
         <div className="flex min-h-full flex-col px-3 py-3">
-          {account && (
+          {account && !brand && (
             <a
               href={pathFor("page")}
               onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); onGo("page"); }}
@@ -297,7 +311,7 @@ export function HostNav({
               <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground" />
             </a>
           )}
-          {account && (
+          {account && !brand && (
             <CreatePostMenu onGo={onGo}>
               <button type="button" className="mb-3 inline-flex w-fit items-center gap-2 self-start rounded-2xl bg-[#053877] py-3 pl-4 pr-5 text-sm font-semibold text-white shadow-md transition-all hover:bg-[#0a4a99] hover:shadow-lg" data-testid="nav-create-post"><Plus className="h-5 w-5" /> Create post</button>
             </CreatePostMenu>

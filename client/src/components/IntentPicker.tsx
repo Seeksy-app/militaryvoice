@@ -1,4 +1,4 @@
-import { CalendarDays, Mic, Clapperboard, Check, ArrowRight } from "lucide-react";
+import { CalendarDays, Mic, Clapperboard, Check, ArrowRight, Building2 } from "lucide-react";
 import type { Interest } from "@shared/schema";
 import { IconTile } from "@/components/ui/icon-tile";
 
@@ -11,7 +11,7 @@ import { IconTile } from "@/components/ui/icon-tile";
  * creator paths share most of the platform; the event planner goes to their
  * own events.
  */
-const PATHS: { key: "podcaster" | "creator" | "planner"; interests: Interest[]; title: string; line: string; points: string[]; icon: typeof CalendarDays }[] = [
+const PATHS: { key: "podcaster" | "creator" | "planner" | "brand"; interests: Interest[]; title: string; line: string; points: string[]; icon: typeof CalendarDays }[] = [
   {
     key: "podcaster", interests: ["grow", "events"], title: "I'm a podcaster", icon: Mic,
     line: "Host your show, get clips from every episode, and get booked on live events.",
@@ -27,18 +27,24 @@ const PATHS: { key: "podcaster" | "creator" | "planner"; interests: Interest[]; 
     line: "Run a live event with our studio, an SI co-host and your own lineup.",
     points: ["Your own event page and booking", "A studio and run of show", "Speakers' clips the same day"],
   },
+  {
+    // The fourth path (7 Oct): the other side of the marketplace.
+    key: "brand", interests: ["brand"], title: "I'm a brand or agency", icon: Building2,
+    line: "Find military and veteran creators, and sponsor their shows.",
+    points: ["Search creators, measured", "Saved lists your team shares", "Sponsor shows and campaigns"],
+  },
 ];
 
 export function IntentPicker({ onDone }: { onDone: (interests: Interest[]) => void }) {
   return (
-    <section className="mx-auto max-w-4xl" data-testid="intent-picker">
+    <section className="mx-auto max-w-6xl" data-testid="intent-picker">
       <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#F0A71F]">Welcome</p>
       <h1 className="mt-1 text-3xl font-bold tracking-tight text-foreground" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>
         Which one sounds like you?
       </h1>
       <p className="mt-2 text-muted-foreground">We'll set your account up for it. Everything else on the platform is still yours to use.</p>
 
-      <div className="mt-6 grid gap-4 md:grid-cols-3">
+      <div className="mt-6 grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {PATHS.map((o) => (
           <button
             key={o.key}

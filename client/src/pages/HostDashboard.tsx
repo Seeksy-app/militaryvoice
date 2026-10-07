@@ -76,6 +76,7 @@ import { PostStudio, NavCredits } from "@/components/PostStudio";
 import { FloatingChecklist } from "@/components/FloatingChecklist";
 import { MyEvents } from "@/components/MyEvents";
 import { MyOrganization, OrgInvites } from "@/components/MyOrganization";
+import { BrandHome, BrandSetup } from "@/components/BrandHome";
 import { buildSteps, goToStep } from "@/components/NextSteps";
 import { PromotionScreen } from "@/components/PromotionScreen";
 import { SocialScreen } from "@/components/SocialScreen";
@@ -1304,6 +1305,9 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
               try { localStorage.setItem("mv_interests", v); } catch { /* private window */ }
             }}
           />
+        ) : inSetup && !pending && pathOf(profile?.interests || interests) === "brand" ? (
+          // A brand or agency: who they are, then straight to finding creators.
+          <BrandSetup onDone={() => goTo("dashboard")} />
         ) : inSetup || screen === "editProfile" ? (
           <section className="mt-6">
             {inSetup && (
@@ -1405,7 +1409,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
         ) : screen === "myevents" ? (
           <MyEvents />
         ) : screen === "organization" ? (
-          <MyOrganization defaultKind={pathOf(profile?.interests) === "planner" ? "organizer" : "brand"} />
+          <MyOrganization defaultKind={path === "planner" ? "organizer" : "brand"} />
         ) : screen === "page" ? (
           <BioBuilder />
         ) : screen === "analytics" ? (
@@ -1545,7 +1549,9 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           </section>
         ) : (
           <>
-            {(() => {
+            {path === "brand" ? (
+              <BrandHome firstName={(profile?.hostName || "").trim().split(/\s+/)[0] || "there"} goTo={(sc) => goTo(sc)} />
+            ) : (() => {
               const mySlot = data.mySignups.length > 0
                 ? {
                     start: slotStart(data.event.startAtUtc, data.event.slotMinutes, data.mySignups[0].slotIndex),

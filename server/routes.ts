@@ -16,6 +16,7 @@ import {
   updateEventSchema,
   insertProfileSchema,
   INTERESTS,
+  pathOf,
   runItemInputSchema,
   platformInterestSchema,
   studioJoinSchema,
@@ -2064,7 +2065,8 @@ export function registerRoutes(app: Express): void {
     // Hidden cards stay out (test seats, people who asked); pinned ones lead,
     // then the lineup, then everyone else in the order they joined.
     const rows = (await storage.listAllProfiles())
-      .filter((p) => p.hostName.trim() && p.photoUrl.trim() && !p.directoryHidden)
+      // Brands aren't creators: the directory is the people making the shows.
+      .filter((p) => p.hostName.trim() && p.photoUrl.trim() && !p.directoryHidden && pathOf(p.interests) !== "brand")
       .sort((a, b) =>
         a.directoryOrder - b.directoryOrder ||
         Number(onLineup.has(b.email.trim().toLowerCase())) - Number(onLineup.has(a.email.trim().toLowerCase())) ||

@@ -54,6 +54,24 @@ async function createOrg(o: { name: string; kind: string; website?: string; crea
   return org;
 }
 
+/**
+ * Their brand or agency account, made when they join Discovery as one (or say
+ * they're a brand at sign-up). The first one of that kind is reused, renamed if
+ * they gave a new name. A new brand waits for our approval.
+ */
+export async function ensureOrg(email: string, kind: string, name: string, website = ""): Promise<OrganizationRow | null> {
+  const e = norm(email);
+  const n = name.trim().slice(0, 120);
+  if (!e || !n || !KINDS.includes(kind)) return null;
+  const had = (await orgsOf(e)).find((o) => o.kind === kind);
+  if (had) return had;
+  const org = await createOrg({ name: n, kind, website: cleanUrl(website) ?? "", createdBy: e });
+  if (org.status === "pending") {
+    await slackNote(`:office: New ${ORG_KINDS[kind as keyof typeof ORG_KINDS].toLowerCase()} on Discovery: "${n}" (${e}), waiting for approval.`, { label: "Review it", url: `${ORIGIN}/admin/orgs` }).catch(() => {});
+  }
+  return org;
+}
+
 /** Their organizer account, made the first time they run an event. */
 export async function organizerOrgFor(email: string, name?: string): Promise<OrganizationRow> {
   const mine = (await orgsOf(email)).filter((o) => o.kind === "organizer");
