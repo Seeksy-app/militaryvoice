@@ -925,11 +925,17 @@ export function registerDiscoveryRoutes(app: Express): void {
             .onConflictDoUpdate({ target: discoveryCache.key, set: { payload: String(used + 1) } });
         }
       }
+      // If the index can't answer (down, or out of credits), our own creators still show.
+      let indexError = "";
       const found = await cached(`search:${hash(body)}`, 7 * DAY, async () => {
         const r = await ic("/discovery/", body);
         const accounts = (r?.accounts ?? []).map((a: any) => toCard(platform, a));
         keepPictures(accounts);
         return { total: num(r?.total) ?? 0, accounts, understood: r?.nlp_search ?? null, applied: r?.applied_filters ?? null };
+      }).catch((e: Error) => {
+        indexError = e.message;
+        console.error("Discovery index failed:", e.message);
+        return { total: 0, accounts: [] as CreatorCard[], understood: null, applied: null };
       });
       const plain = found.accounts.map(({ rawPicture: _r, ...c }: CreatorCard) => c);
       // A visitor's greyed rows don't get the extra read: they can't see it.
@@ -949,7 +955,8 @@ export function registerDiscoveryRoutes(app: Express): void {
         verified = await withExtras(verified);
       }
       if (mode === "keywords") verified = [];
-      return { brief: mode === "keywords" ? `bio mentions ${(filters.keywords_in_bio as string[]).join(" or ")}` : brief, mode, platform, page, pageSize: PAGE_SIZE, total: found.total, results: found.accounts, verified, understood: found.understood, preview };
+      if (indexError && !verified.length) throw new HttpError(502, indexError);
+      return { brief: mode === "keywords" ? `bio mentions ${(filters.keywords_in_bio as string[]).join(" or ")}` : brief, mode, platform, page, pageSize: PAGE_SIZE, total: found.total, results: found.accounts, verified, understood: found.understood, preview, indexError: indexError ? "The wider creator index isn't answering right now, so these are only creators on MilitaryVoices." : "" };
     }),
   );
 

@@ -646,6 +646,7 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
             )}
 
             {/* ours first */}
+            {(r as { indexError?: string } | undefined)?.indexError && <p className="mb-3 rounded-lg bg-[#F0A71F]/10 px-3 py-2 text-sm text-[#8a5a00] dark:text-[#F0A71F]">{(r as { indexError?: string }).indexError}</p>}
             {!!r?.verified?.length && (
               <section className="mt-8">
                 <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#8a5a00]"><BadgeCheck className="h-4 w-4" /> On MilitaryVoices</h3>
