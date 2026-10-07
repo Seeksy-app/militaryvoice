@@ -9,7 +9,8 @@ import { db, schemaIsReady } from "./storage.js";
 import { brandProspects, discoveryCache } from "../shared/schema.js";
 
 const now = () => new Date().toISOString();
-const key = () => (process.env.SEARCHAPI_API_KEY || process.env.SEARCH_API_KEY || process.env.SEARCHAPI_KEY || "").trim();
+// Trimmed, and any quotes a copy-paste brought along taken off.
+const key = () => (process.env.SEARCHAPI_API_KEY || process.env.SEARCH_API_KEY || process.env.SEARCHAPI_KEY || "").trim().replace(/^["']|["']$/g, "");
 const DAY = 24 * 3600_000;
 
 export type Advertiser = { name: string; source: "meta" | "linkedin"; ads: number; sample: string; link: string; website: string; active: boolean };

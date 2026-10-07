@@ -227,7 +227,18 @@ const DEFS: Def[] = [
       return { state: "down", detail: `${res.status}${res.status === 401 || res.status === 403 ? " (the key was refused)" : ""}: ${body.slice(0, 100)}` };
     },
   },
-  { key: "searchapi", name: "SearchApi", group: "Social and podcasts", powers: "Brand prospects from the ad libraries", run: keyOnly(["SEARCHAPI_API_KEY", "SEARCH_API_KEY", "SEARCHAPI_KEY"], "no free status call") },
+  {
+    key: "searchapi", name: "SearchApi", group: "Social and podcasts", powers: "Brand prospects from the ad libraries",
+    // The account call: says whether the key is taken, and how many searches are left this month.
+    run: async () => {
+      const k = (env("SEARCHAPI_API_KEY", "SEARCH_API_KEY", "SEARCHAPI_KEY") ?? "").trim().replace(/^["']|["']$/g, "");
+      if (!k) return { state: "off", detail: "Not set here (SEARCHAPI_API_KEY)" };
+      const res = await fetch("https://www.searchapi.io/api/v1/me", { headers: { Authorization: `Bearer ${k}` }, signal: AbortSignal.timeout(8000) });
+      const body = (await res.json().catch(() => ({}))) as { account?: { remaining_credits?: number; monthly_allowance?: number }; error?: string };
+      if (!res.ok) return { state: "down", detail: `${res.status}${res.status === 401 ? " (the key was refused)" : ""}: ${String(body.error ?? "").slice(0, 100)}` };
+      return { state: "ok", detail: `${body.account?.remaining_credits ?? "?"} of ${body.account?.monthly_allowance ?? "?"} searches left this month` };
+    },
+  },
   { key: "parallel", name: "Parallel", group: "Social and podcasts", powers: "Sponsor finder research", run: keyOnly(["PARALLEL_API_KEY", "PARALLEL_AI_API_KEY", "PARALLELAI_API_KEY", "PARALLEL_KEY", "PARALLEL_WEB_API_KEY"], "no free status call") },
   // Money and safety
   {
