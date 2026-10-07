@@ -15,9 +15,9 @@ type Answers = { published?: string; record?: string[]; host?: string; access?: 
 type Known = { rss: string; host: string; apple: string; episodes: number; title: string };
 type Data = { answers: Answers; done: boolean; known: Known };
 
-const RECORD = ["Zoom", "Riverside", "StreamYard", "Zencastr", "Descript", "Audacity or GarageBand", "My phone", "Something else"];
+const RECORD = ["Zoom", "Riverside", "StreamYard", "YouTube", "Zencastr", "Descript", "Audacity or GarageBand", "My phone", "Something else"];
 const HOSTS = ["Buzzsprout", "Libsyn", "Spotify for Creators", "Captivate", "Transistor", "Podbean", "RSS.com", "Another host", "I'm not sure"];
-const LISTED = ["Apple Podcasts", "Spotify", "YouTube", "Amazon Music", "Somewhere else", "Nowhere yet"];
+const LISTED = ["Apple Podcasts", "Spotify", "YouTube", "Amazon Music", "Somewhere else", "Nowhere yet", "I don't know"];
 const READY = ["Name", "Description", "Cover art", "First episode"];
 
 type Q = { id: keyof Answers; ask: string; sub?: string; options: string[]; multi?: boolean; show: (a: Answers) => boolean };
@@ -56,7 +56,6 @@ export function AlexPodcastGuide({ onMove, onStart, moving }: { onMove: (rss: st
     setA({
       ...(k.rss ? { published: "Yes, it's out" } : {}),
       ...(k.host && k.host !== "MilitaryVoices" ? { host: HOSTS.includes(k.host) ? k.host : "Another host" } : {}),
-      ...(k.apple ? { listed: ["Apple Podcasts"] } : {}),
       ...q.data.answers,
     });
     if (!q.data.done) setOpen(true);
@@ -68,8 +67,9 @@ export function AlexPodcastGuide({ onMove, onStart, moving }: { onMove: (rss: st
     { id: "published", ask: "Have you already recorded or published any episodes?", options: ["Yes, it's out", "Recorded, not published yet", "Not yet"], show: () => !known?.rss },
     { id: "record", ask: "Where do you record and edit your episodes?", sub: "Pick any.", options: RECORD, multi: true, show: () => true },
     { id: "host", ask: known?.host ? `It looks like your show is on ${known.host}. Is that right?` : "Which podcast host is your show on?", options: HOSTS, show: (x) => x.published === "Yes, it's out" },
-    { id: "access", ask: `Can you sign in to your ${hostName} account?`, sub: "You'll need it to keep your Apple and Spotify listings when you move.", options: ["Yes", "I'm not sure", "No"], show: (x) => x.published === "Yes, it's out" && x.host !== "I'm not sure" },
-    { id: "listed", ask: "Where is it listed already?", sub: "Pick any.", options: LISTED, multi: true, show: (x) => x.published === "Yes, it's out" },
+    { id: "access", ask: `Can you sign in to your ${hostName} account?`, sub: "You'll need it to keep your Apple and Spotify listings when you move.", options: ["Yes", "I'm not sure", "No, it's locked or unpaid"], show: (x) => x.published === "Yes, it's out" && x.host !== "I'm not sure" },
+    // Nothing ticked for them: only what they know (7 Oct). We mention what Apple's directory shows.
+    { id: "listed", ask: "Where is it listed already?", sub: known?.apple ? "Pick any. (We found it in Apple's directory, so Apple Podcasts is likely.)" : "Pick any. Not sure is fine.", options: LISTED, multi: true, show: (x) => x.published === "Yes, it's out" },
     { id: "ready", ask: "What do you have ready?", sub: "Pick any. It's fine if it's none yet.", options: READY, multi: true, show: (x) => x.published !== "Yes, it's out" },
     { id: "help", ask: "Would you like me to walk you through it, or have our team set it up with you?", options: ["Walk me through it", "Have the team do it with me"], show: () => true },
   ], [known, hostName]);
@@ -114,7 +114,11 @@ export function AlexPodcastGuide({ onMove, onStart, moving }: { onMove: (rss: st
                     <p className="mt-2 text-xs text-muted-foreground">Your Apple and Spotify links stay the same, and your subscribers follow you over.</p>
                   </>
                 ) : (
-                  <p className="mt-1 text-sm">First, get back into your {hostName} account (use its "forgot password"). The redirect you turn on there is what keeps your Apple and Spotify listings when you move. Once you're in, come back and I'll walk you through the move, or have the team do it with you.</p>
+                  <>
+                    <p className="mt-1 text-sm">The move itself is easy: <b>Move it here</b> brings every episode over. What keeps your Apple and Spotify listings is a forward from your old feed to your new one, set at {hostName}.</p>
+                    <p className="mt-1 text-sm">Can't get into {hostName}, or it's locked until you pay? Ask {hostName}'s support to turn on the redirect to your new feed (hosts do this for paused accounts too). If you own your Apple listing, you can also change its feed address yourself in Apple Podcasts Connect. Or have our team do it with you.</p>
+                    {known?.rss && <Button size="sm" onClick={() => onMove(known.rss)} disabled={moving} className="mt-2 h-8 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]">{moving ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Move it here"}</Button>}
+                  </>
                 )
               ) : (
                 <>

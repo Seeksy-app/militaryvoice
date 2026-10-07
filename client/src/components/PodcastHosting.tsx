@@ -1,3 +1,6 @@
+import type { IconType } from "react-icons";
+import { SiApplepodcasts, SiIheartradio, SiPocketcasts, SiPodcastindex, SiSpotify, SiYoutubemusic } from "react-icons/si";
+import { FaAmazon } from "react-icons/fa";
 import { AlexPodcastGuide } from "@/components/AlexPodcastGuide";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -78,9 +81,9 @@ export function PodcastHosting() {
   if (!shows.length) {
     return (
       <section className="mt-2" data-testid="podcast-hosting">
-        {/* Alex asks first, then gives the plan (7 Oct). */}
-        <AlexPodcastGuide onMove={(rss) => moveIn.mutate(rss)} onStart={() => create.mutate()} moving={moveIn.isPending} />
+        {/* Their show first (the one from sign-up); Alex's questions open over it, and the plan sits under it (7 Oct). */}
         {feedUrl && <YourShowElsewhere name={profile?.podcastName ?? ""} rss={feedUrl} onMoved={refresh} />}
+        <AlexPodcastGuide onMove={(rss) => moveIn.mutate(rss)} onStart={() => create.mutate()} moving={moveIn.isPending} />
         <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
           <IconTile icon={Podcast} className="mx-auto" />
           <h1 className="mt-4 text-2xl font-bold tracking-tight">Host your podcast on MilitaryVoices</h1>
@@ -171,6 +174,23 @@ export function PodcastHosting() {
 
   return (
     <section className="mt-2 space-y-4" data-testid="podcast-hosting">
+      {s.importedFrom && (
+        // Alex, after a move (7 Oct): what's done, what's next, and what happens to the next episode.
+        <div className="flex items-start gap-3 rounded-2xl border border-[#053877]/25 bg-[#053877]/[0.04] p-4" data-testid="alex-after-move">
+          <img src="/alex.jpg" alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" />
+          <div className="min-w-0 flex-1 text-sm">
+            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Alex · your podcast producer</p>
+            {s.redirectOk ? (
+              <p className="mt-1"><b>You're all moved.</b> Publish new episodes here (Episodes, then Add an episode). They go out to Apple, Spotify and every app on their own.</p>
+            ) : (
+              <>
+                <p className="mt-1"><b>Done: your {h.episodes.length} episodes are here.</b> Next, point the apps at your new feed, so Apple and Spotify read it instead of your old host's.</p>
+                <p className="mt-1 text-muted-foreground">Until then, the apps still read your old feed. A new episode you publish here won't reach your Apple or Spotify listeners yet, so turn on the forward first (just below).</p>
+              </>
+            )}
+          </div>
+        </div>
+      )}
       {shows.length > 1 && <button type="button" onClick={() => setOpenId(null)} className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground" data-testid="hosting-all-shows"><ChevronLeft className="h-4 w-4" /> All shows</button>}
       {/* The show: its art, its name, its feed. */}
       <div className="flex flex-wrap items-start gap-5">
@@ -294,7 +314,7 @@ const FIND: Record<string, (t: string) => string> = {
 };
 const DIRS: { key: string; name: string; reach: string; url: string; steps: string[]; link: string; auto?: boolean }[] = [
   { key: "apple", name: "Apple Podcasts", reach: "Apple Podcasts, and the apps that read Apple's list (Overcast, Castro)", url: "https://podcastsconnect.apple.com/my-podcasts/new-feed", steps: ["Sign in with your Apple ID.", "Choose to add a show with an RSS feed, and paste your feed (it's copied).", "Submit. Apple reviews it, usually in a day or two, and writes to your owner email."], link: "https://podcasts.apple.com/…" },
-  { key: "spotify", name: "Spotify", reach: "Spotify", url: "https://creators.spotify.com/pod/dashboard/import", steps: ["Sign in to Spotify for Creators.", "Pick the option to add an existing podcast, and paste your feed.", "Spotify emails a code to your owner email: type it in. It's live within hours."], link: "https://open.spotify.com/show/…" },
+  { key: "spotify", name: "Spotify", reach: "Spotify", url: "https://creators.spotify.com/", steps: ["Sign in to Spotify for Creators (it opens in a new tab).", "Choose to add a podcast you already have on another host, and paste your feed.", "Spotify emails a code to your owner email: type it in. It's live within hours."], link: "https://open.spotify.com/show/…" },
   { key: "youtube", name: "YouTube Music", reach: "YouTube and YouTube Music, as an audio podcast", url: "https://studio.youtube.com", steps: ["Open YouTube Studio on your channel.", "Create, then New podcast, then submit an RSS feed. Paste your feed.", "Confirm with the code YouTube emails to your owner email."], link: "https://music.youtube.com/playlist?list=…" },
   { key: "amazon", name: "Amazon Music & Audible", reach: "Amazon Music, Audible and Alexa", url: "https://podcasters.amazon.com/", steps: ["Sign in with an Amazon account.", "Add your podcast and paste your feed.", "Confirm with the code sent to your owner email."], link: "https://music.amazon.com/podcasts/…" },
   { key: "iheart", name: "iHeartRadio", reach: "iHeartRadio", url: "https://www.iheart.com/content/submit-your-podcast/", steps: ["Open iHeart's podcast submission page and sign in.", "Paste your feed and submit."], link: "https://www.iheart.com/podcast/…" },
@@ -302,6 +322,17 @@ const DIRS: { key: string; name: string; reach: string; url: string; steps: stri
   { key: "listennotes", name: "Listen Notes", reach: "The podcast search engine. We list your show there for you once an episode is out.", url: "https://www.listennotes.com", steps: [], link: "https://www.listennotes.com/podcasts/…", auto: true },
   { key: "podcastindex", name: "Podcast Index", reach: "Dozens of newer apps (Fountain, Podverse, Castamatic and more)", url: "https://podcastindex.org/add", steps: ["Paste your feed and press Submit. That's all."], link: "https://podcastindex.org/podcast/…" },
 ];
+
+/** Each app's own mark, so it's recognisable at a glance (7 Oct). */
+const DIR_ICON: Record<string, { icon: IconType; color: string }> = {
+  apple: { icon: SiApplepodcasts, color: "#9933CC" },
+  spotify: { icon: SiSpotify, color: "#1DB954" },
+  youtube: { icon: SiYoutubemusic, color: "#FF0000" },
+  amazon: { icon: FaAmazon, color: "#FF9900" },
+  iheart: { icon: SiIheartradio, color: "#C6002B" },
+  pocketcasts: { icon: SiPocketcasts, color: "#F43E37" },
+  podcastindex: { icon: SiPodcastindex, color: "#F90000" },
+};
 
 function Directories({ h, ready, onSaved }: { h: Hosted; ready: boolean; onSaved: () => void }) {
   const { toast } = useToast();
@@ -351,7 +382,8 @@ function Directories({ h, ready, onSaved }: { h: Hosted; ready: boolean; onSaved
           return (
             <li key={d.key} className="py-3" data-testid={`hosting-dir-${d.key}`}>
               <div className="flex flex-wrap items-center gap-3">
-                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#053877]/10 text-sm font-bold text-[#053877] dark:bg-white/10 dark:text-[#8fb5e8]">{d.name[0]}</span>
+                {DIR_ICON[d.key] ? (() => { const I = DIR_ICON[d.key].icon; return <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-border"><I className="h-5 w-5" style={{ color: DIR_ICON[d.key].color }} /></span>; })()
+                  : <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#053877]/10 text-sm font-bold text-[#053877] dark:bg-white/10 dark:text-[#8fb5e8]">{d.name[0]}</span>}
                 <button type="button" onClick={() => setOpen(isOpen || st?.state === "submitted" ? `-${d.key}` : d.key)} className="min-w-0 flex-1 text-left">
                   <span className="block text-sm font-semibold">{d.name}{d.auto && <span className="ml-2 align-middle text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Powered by Listen Notes</span>}</span>
                   <span className="block truncate text-xs text-muted-foreground">{d.reach}</span>
@@ -372,7 +404,7 @@ function Directories({ h, ready, onSaved }: { h: Hosted; ready: boolean; onSaved
               {(isOpen || (st?.state === "submitted" && open !== `-${d.key}`)) && (
                 <div className="ml-12 mt-2 space-y-2 text-sm">
                   <ol className="list-decimal space-y-1 pl-5 text-muted-foreground">{d.steps.map((x) => <li key={x}>{x}</li>)}</ol>
-                  <p className="text-xs text-muted-foreground">Approved (usually a few days)? <a href={FIND[d.key]?.(s.title) ?? d.url} target="_blank" rel="noreferrer" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Find it on {d.name}</a>, open your show there, and copy its address into the box. The link is optional: it adds a {d.name} button to your show page.</p>
+                  <p className="text-xs text-muted-foreground">That's all: it goes live on its own once {d.name} approves it, usually within a few days. <span className="text-muted-foreground/80">Optional: <a href={FIND[d.key]?.(s.title) ?? d.url} target="_blank" rel="noreferrer" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">find your show on {d.name}</a> and paste its address below to put a {d.name} button on your show page.</span></p>
                   <form onSubmit={(e) => {
                     e.preventDefault();
                     const u = (links[d.key] ?? st?.url ?? "").trim();
@@ -385,7 +417,7 @@ function Directories({ h, ready, onSaved }: { h: Hosted; ready: boolean; onSaved
                     toast({ title: `${d.name}: live`, description: u ? "Its button is on your show page now." : "Add its link any time." });
                   }} className="flex flex-wrap gap-2">
                     <Input value={links[d.key] ?? st?.url ?? ""} onChange={(e) => setLinks((x) => ({ ...x, [d.key]: e.target.value }))} placeholder={`Your show on ${d.name}: ${d.link}`} className="h-9 min-w-0 flex-1 text-xs" data-testid={`hosting-dir-link-${d.key}`} />
-                    <Button type="submit" size="sm" variant="outline" className="h-9 rounded-lg" data-testid={`hosting-dir-live-${d.key}`}>It's live</Button>
+                    <Button type="submit" size="sm" variant="outline" className="h-9 rounded-lg" data-testid={`hosting-dir-live-${d.key}`}>Save link</Button>
                     {st && <button type="button" onClick={() => { put(d.key, null); setOpen(null); }} className="text-xs font-semibold text-muted-foreground hover:text-foreground">Reset</button>}
                   </form>
                 </div>
@@ -548,6 +580,12 @@ function MoveSubscribers({ h, onDone }: { h: Hosted; onDone: () => void }) {
               <li>Paste your new feed address: <button type="button" onClick={() => navigator.clipboard.writeText(h.feedUrl).then(() => t2({ title: "Copied" }))} className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-xs hover:bg-muted/70">{h.feedUrl.replace(/^https:\/\//, "")} <Copy className="h-3 w-3" /></button></li>
               <li>Save, then press <b>Check the redirect</b>. Keep the old account open for four weeks while the apps catch up.</li>
             </ol>
+          )}
+          {!s.redirectOk && (
+            <div className="mt-3 rounded-xl bg-[#F0A71F]/10 px-3 py-2.5 text-sm">
+              <p className="font-semibold">Can't get into your old host?</p>
+              <p className="mt-0.5 text-muted-foreground">Ask their support to turn on the redirect to your new feed; hosts do this even for paused or unpaid accounts. And if you own your Apple listing, you can change its feed address yourself in Apple Podcasts Connect (your show's information, RSS feed).</p>
+            </div>
           )}
           <p className="mt-2 text-xs text-muted-foreground">Old feed: <span className="font-mono">{s.importedFrom}</span></p>
         </div>
