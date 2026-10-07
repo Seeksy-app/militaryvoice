@@ -31,6 +31,8 @@ const dateOf = (iso: string) => (iso ? new Date(iso).toLocaleDateString(undefine
 export function PodcastHosting() {
   const { toast } = useToast();
   const qc = useQueryClient();
+  // The show they picked at sign-up (its feed is on their profile): shown first, with one press to move it here.
+  const { data: profile } = useQuery<{ podcastName?: string; rssUrl?: string }>({ queryKey: ["/api/host/profile"], queryFn: async () => (await apiRequest("GET", "/api/host/profile")).json() });
   // While an episode's audio is being made, check back every few seconds.
   const q = useQuery<Resp>({ queryKey: KEY, queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json(), refetchInterval: (qq) => ((qq.state.data as Resp | undefined)?.shows.some((x) => x.episodes.some((e) => e.audioJob === "queued" || e.audioJob === "running")) ? 5000 : false) });
   const refresh = () => { void qc.invalidateQueries({ queryKey: KEY }); void qc.invalidateQueries({ queryKey: ["/api/host/podcast-stats"] }); };
@@ -66,6 +68,7 @@ export function PodcastHosting() {
   if (!shows.length) {
     return (
       <section className="mt-2" data-testid="podcast-hosting">
+        {profile?.rssUrl && <YourShowElsewhere name={profile.podcastName ?? ""} rss={profile.rssUrl} onMoved={refresh} />}
         <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
           <IconTile icon={Podcast} className="mx-auto" />
           <h1 className="mt-4 text-2xl font-bold tracking-tight">Host your podcast on MilitaryVoices</h1>
@@ -91,7 +94,7 @@ export function PodcastHosting() {
           </Button>
           <p className="mt-2 text-xs text-muted-foreground">Free while you're a MilitaryVoices podcaster.</p>
         </div>
-        <ImportShow onDone={refresh} />
+        <ImportShow onDone={refresh} initialUrl={profile?.rssUrl ?? ""} />
       </section>
     );
   }
@@ -454,10 +457,41 @@ function YouTubeEpisodes({ h, ready, onDone }: { h: Hosted; ready: boolean; onDo
   );
 }
 
-/** Move a show here from its old host: its feed brings every episode, with their IDs, so no app plays one twice. */
-function ImportShow({ onDone }: { onDone: () => void }) {
+/** The show they told us about at sign-up, hosted somewhere else: what it is, and moving it here in one press. */
+function YourShowElsewhere({ name, rss, onMoved }: { name: string; rss: string; onMoved: () => void }) {
   const { toast } = useToast();
-  const [url, setUrl] = useState("");
+  const found = useQuery<{ title: string; host: string; rss: string; image: string; apple: string; episodes: number }[]>({
+    queryKey: ["/api/host/find-show", name],
+    queryFn: async () => (await apiRequest("GET", `/api/host/find-show?q=${encodeURIComponent(name)}`)).json(),
+    enabled: name.length > 1,
+    staleTime: 3600_000,
+  });
+  const show = (found.data ?? []).find((x) => x.rss === rss);
+  const move = useMutation({
+    mutationFn: async () => (await apiRequest("POST", "/api/host/hosting/import", { feedUrl: rss })).json() as Promise<{ episodes: number }>,
+    onSuccess: (r) => { toast({ title: "Your show is here", description: `${r.episodes} episode${r.episodes === 1 ? "" : "s"} moved over. Next: forward your old feed so your subscribers follow.` }); onMoved(); },
+    onError: (e: Error) => toast({ title: "Couldn't move it", description: e.message.replace(/^\d+:\s*/, ""), variant: "destructive" }),
+  });
+  let host = "";
+  try { host = new URL(rss).hostname.replace(/^(www|feeds?|rss)\./, ""); } catch { /* fine */ }
+  return (
+    <div className="mb-6 flex flex-wrap items-center gap-4 rounded-2xl border border-[#053877]/25 bg-[#053877]/[0.04] p-5 text-left" data-testid="hosting-yours">
+      {show?.image ? <img src={show.image} alt="" className="h-20 w-20 shrink-0 rounded-xl object-cover shadow-sm" /> : <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-[#053877] text-2xl font-bold text-white">{name.charAt(0)}</span>}
+      <div className="min-w-0 flex-1">
+        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Your show</p>
+        <p className="mt-0.5 text-lg font-semibold">{show?.title || name}</p>
+        <p className="text-sm text-muted-foreground">{[show?.episodes ? `${show.episodes} episodes` : "", host && `hosted at ${host}`].filter(Boolean).join(" · ")}{show?.apple ? <> · <a href={show.apple} target="_blank" rel="noreferrer" className="hover:underline">on Apple Podcasts</a></> : null}</p>
+        <p className="mt-1 text-sm">It's on your card and SmartLink already. Host it here and your downloads are counted the way sponsors count them.</p>
+      </div>
+      <Button onClick={() => move.mutate()} disabled={move.isPending} className="h-10 gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-move-yours">{move.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Moving…</> : "Move it here"}</Button>
+    </div>
+  );
+}
+
+/** Move a show here from its old host: its feed brings every episode, with their IDs, so no app plays one twice. */
+function ImportShow({ onDone, initialUrl = "" }: { onDone: () => void; initialUrl?: string }) {
+  const { toast } = useToast();
+  const [url, setUrl] = useState(initialUrl);
   const go = useMutation({
     mutationFn: async () => (await apiRequest("POST", "/api/host/hosting/import", { feedUrl: url.trim() })).json() as Promise<{ episodes: number }>,
     onSuccess: (r) => { toast({ title: "Your show is here", description: `${r.episodes} episode${r.episodes === 1 ? "" : "s"} moved over. Next: forward your old feed so your subscribers follow.` }); onDone(); },

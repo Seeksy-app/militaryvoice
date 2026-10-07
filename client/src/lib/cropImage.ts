@@ -23,7 +23,9 @@ function loadImage(src: string): Promise<HTMLImageElement> {
 export async function getCroppedImageBlob(
   imageSrc: string,
   crop: CropArea,
-  outputSize?: number
+  outputSize?: number,
+  /** Fills the square where the image doesn't reach (a logo zoomed out to fit whole). */
+  background = "#ffffff",
 ): Promise<Blob> {
   const image = await loadImage(imageSrc);
   // Keep the source's own resolution, up to 2000px a side: the photo goes on
@@ -35,17 +37,13 @@ export async function getCroppedImageBlob(
   const ctx = canvas.getContext("2d");
   if (!ctx) throw new Error("Couldn't prepare that photo — try a different browser.");
 
-  ctx.drawImage(
-    image,
-    crop.x,
-    crop.y,
-    crop.width,
-    crop.height,
-    0,
-    0,
-    outputSize,
-    outputSize
-  );
+  // The crop can run past the image's edges when a logo is zoomed out to fit:
+  // paint the background, then place the whole image where the crop puts it
+  // (a source rectangle outside the image fails silently in some browsers).
+  ctx.fillStyle = background;
+  ctx.fillRect(0, 0, outputSize, outputSize);
+  const scale = outputSize / crop.width;
+  ctx.drawImage(image, -crop.x * scale, -crop.y * scale, image.naturalWidth * scale, image.naturalHeight * scale);
 
   return new Promise((resolve, reject) => {
     canvas.toBlob(

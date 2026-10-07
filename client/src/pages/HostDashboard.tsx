@@ -748,7 +748,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     queryFn: async () => (await apiRequest("GET", "/api/signups")).json(),
   });
   // Just enough to know what's still outstanding for the checklist.
-  const { data: hostEvents } = useQuery<{ show: { showName?: string; showFormat?: string; recordingUrl?: string } | null; slotIndex: number | null }[]>({
+  const { data: hostEvents } = useQuery<{ show: { showName?: string; showFormat?: string; recordingUrl?: string } | null; slotIndex: number | null; event?: { startAtUtc: string; durationHours: number } }[]>({
     queryKey: ["/api/host/events"],
     queryFn: async () => (await apiRequest("GET", "/api/host/events")).json(),
     enabled: !!data,
@@ -1271,7 +1271,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
             collapsed={navTucked}
             onToggle={toggleNav}
             screen={screen === "claim" ? "dashboard" : screen}
-            eventsCount={hostEvents?.length ?? 0}
+            // Only events they're actually on and that haven't happened yet (7 Oct: a "1" showed for an event they'd never joined).
+            eventsCount={(hostEvents ?? []).filter((e) => e.slotIndex != null && (!e.event || Date.now() < new Date(e.event.startAtUtc).getTime() + e.event.durationHours * 3600_000)).length}
             contactsCount={data?.contacts?.length ?? 0}
             pathFor={(sc) => hostScreenPath(sc)}
             onGo={(sc, feature) => { setProFeature(feature); goTo(sc); }}

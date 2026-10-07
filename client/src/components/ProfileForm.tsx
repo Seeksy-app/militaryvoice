@@ -56,7 +56,7 @@ interface Draft {
 }
 function readDraft(email: string): Draft | null {
   try {
-    const raw = sessionStorage.getItem(DRAFT_KEY);
+    const raw = localStorage.getItem(DRAFT_KEY) ?? sessionStorage.getItem(DRAFT_KEY);
     if (!raw) return null;
     const d = JSON.parse(raw) as Draft;
     return d.email === email ? d : null;
@@ -66,6 +66,7 @@ function readDraft(email: string): Draft | null {
 }
 function clearDraft() {
   try {
+    localStorage.removeItem(DRAFT_KEY);
     sessionStorage.removeItem(DRAFT_KEY);
   } catch {
     /* ignore */
@@ -216,12 +217,15 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
       const probe = new Image();
       probe.onload = () => {
         const short = Math.min(probe.naturalWidth, probe.naturalHeight);
-        if (short < 400) {
-          setPhotoError(`That one is only ${probe.naturalWidth} × ${probe.naturalHeight}. We need a hi-res photo, at least 1000 pixels on the short side. Try the original from your phone or camera, not a screenshot.`);
+        // Only a thumbnail is turned away. A small logo is fine for a card (7 Oct: a 180px logo was blocked).
+        if (short < 120) {
+          setPhotoError(`That one is only ${probe.naturalWidth} × ${probe.naturalHeight}, too small to use. Try the original file.`);
           if (fileInputRef.current) fileInputRef.current.value = "";
           return;
         }
-        if (short < 1000) {
+        if (short < 400) {
+          setPhotoNote(`This one is small (${probe.naturalWidth} × ${probe.naturalHeight}). It's fine on your card, but may look soft on the big screen and in print. Use a bigger original if you have one.`);
+        } else if (short < 1000) {
           setPhotoNote(`This one is ${probe.naturalWidth} × ${probe.naturalHeight}. It will do, but it will look soft on the big screen. If you have a bigger original, use that.`);
         }
         setRawImageSrc(src);
@@ -314,7 +318,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
       // Stash everything typed so far; the connect flow leaves the page.
       try {
         const draft: Draft = { email, values: form.getValues(), photoDataUrl };
-        sessionStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+        localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
       } catch {
         /* storage full or blocked — connect anyway */
       }
@@ -331,6 +335,22 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
   const existingPhotoUrl = profile?.photoUrl ? resolveUploadUrl(profile.photoUrl) : null;
   const shownPhoto = photoPreview ?? existingPhotoUrl;
   const dirty = form.formState.isDirty || !!photoFile;
+
+  // Sign-up keeps a draft as they type (7 Oct): close the tab, come back, and it's all still there.
+  useEffect(() => {
+    if (!isSetup || demo) return;
+    let t: ReturnType<typeof setTimeout> | undefined;
+    const save = () => {
+      clearTimeout(t);
+      t = setTimeout(() => {
+        try { localStorage.setItem(DRAFT_KEY, JSON.stringify({ email, values: form.getValues(), photoDataUrl } satisfies Draft)); } catch { /* storage full: the leave prompt still guards it */ }
+      }, 600);
+    };
+    const sub = form.watch(save);
+    if (photoDataUrl) save();
+    return () => { sub.unsubscribe(); clearTimeout(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isSetup, demo, photoDataUrl, email]);
   useEffect(() => {
     onDirtyChange?.(dirty);
     // Never leave a stale "unsaved" flag behind when the form unmounts.
@@ -520,7 +540,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
                 <div className="flex flex-col gap-1.5">
                   <div className="text-sm font-medium">Your photo {shownPhoto ? "" : <span className="font-normal text-muted-foreground">(you can add it later)</span>}</div>
                   <p className="text-xs text-muted-foreground">
-                    Upload the biggest, sharpest photo you have: at least 1000 × 1000 pixels, the original from your phone or camera. It goes on the lineup, on the big screen during your show, and in print. You'll crop it to a circle next.
+                    Your face or your show's logo. The bigger the better (1000 × 1000 or more looks sharp on the big screen and in print). You'll frame it in a circle next.
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-2">
                     <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => fileInputRef.current?.click()}>
@@ -1028,7 +1048,8 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
         {/* Save sits just under the form. It was a sticky amber bar across the
             bottom of the window — loud, and in the way of everything below it. */}
         <div className="mt-4" data-testid="bar-save">
-          <div className="flex flex-wrap items-center justify-between gap-3">
+          {/* Setup: the save button on the left, where the Ask Alex bubble can't cover it (7 Oct). */}
+          <div className={`flex flex-wrap items-center gap-3 ${isSetup ? "flex-row-reverse justify-end" : "justify-between"}`}>
             <p className="flex items-center gap-2 text-sm">
               {dirty ? (
                 <>

@@ -209,8 +209,11 @@ export function EventSettings({
     const all = entries ?? [];
     // Setting up a show for an event is what joining it means — there is no
     // separate registration to keep in step with anything.
-    const mine = all.filter((e) => !!e.show?.showName);
-    const joinable = all.filter((e) => !e.show?.showName);
+    // An event that's over (or closed with nothing of theirs on it) is history, not something to join (7 Oct).
+    const ended = (e: EventEntry) => Date.now() >= new Date(e.event.startAtUtc).getTime() + e.event.durationHours * 3600_000;
+    const mine = all.filter((e) => !!e.show?.showName && !ended(e));
+    const joinable = all.filter((e) => !e.show?.showName && !ended(e) && !e.event.closed);
+    const past = all.filter((e) => ended(e) || (!e.show?.showName && e.event.closed));
 
     const card = (entry: EventEntry) => {
       const ready = !!entry.show?.showName;
@@ -288,7 +291,7 @@ export function EventSettings({
           </h2>
           {mine.length === 0 ? (
             <p className="rounded-2xl border border-border bg-card p-5 text-sm text-muted-foreground">
-              You haven't joined an event yet. Pick one below and set your show up for it.
+              {joinable.length ? "You haven't joined an event yet. Pick one below and set your show up for it." : "You're not on any upcoming events. When a new one opens, it shows up here."}
             </p>
           ) : (
             <div className="flex flex-col gap-3">
@@ -325,6 +328,15 @@ export function EventSettings({
               <CalendarDays className="h-4 w-4" /> Events you can join
             </h2>
             <div className="flex flex-col gap-3">{joinable.map(card)}</div>
+          </div>
+        )}
+
+        {past.length > 0 && (
+          <div>
+            <h2 className="mb-3 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-muted-foreground">
+              <CalendarDays className="h-4 w-4" /> Past events
+            </h2>
+            <div className="flex flex-col gap-3 opacity-80">{past.map(card)}</div>
           </div>
         )}
       </section>
