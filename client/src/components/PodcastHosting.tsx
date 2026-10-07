@@ -1,3 +1,4 @@
+import { AlexPodcastGuide } from "@/components/AlexPodcastGuide";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -33,6 +34,12 @@ export function PodcastHosting() {
   const qc = useQueryClient();
   // The show they picked at sign-up (its feed is on their profile): shown first, with one press to move it here.
   const { data: profile } = useQuery<{ podcastName?: string; rssUrl?: string }>({ queryKey: ["/api/host/profile"], queryFn: async () => (await apiRequest("GET", "/api/host/profile")).json() });
+  // Alex's plan can move a show here in one press.
+  const moveIn = useMutation({
+    mutationFn: async (feedUrl: string) => (await apiRequest("POST", "/api/host/hosting/import", { feedUrl })).json() as Promise<{ episodes: number }>,
+    onSuccess: (r) => { toast({ title: "Your show is here", description: `${r.episodes} episode${r.episodes === 1 ? "" : "s"} moved over. Next: turn on the redirect at your old host so your subscribers follow.` }); refresh(); },
+    onError: (e: Error) => toast({ title: "Couldn't move it", description: e.message.replace(/^\d+:\s*/, ""), variant: "destructive" }),
+  });
   // While an episode's audio is being made, check back every few seconds.
   const q = useQuery<Resp>({ queryKey: KEY, queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json(), refetchInterval: (qq) => ((qq.state.data as Resp | undefined)?.shows.some((x) => x.episodes.some((e) => e.audioJob === "queued" || e.audioJob === "running")) ? 5000 : false) });
   const refresh = () => { void qc.invalidateQueries({ queryKey: KEY }); void qc.invalidateQueries({ queryKey: ["/api/host/podcast-stats"] }); };
@@ -68,6 +75,8 @@ export function PodcastHosting() {
   if (!shows.length) {
     return (
       <section className="mt-2" data-testid="podcast-hosting">
+        {/* Alex asks first, then gives the plan (7 Oct). */}
+        <AlexPodcastGuide onMove={(rss) => moveIn.mutate(rss)} onStart={() => create.mutate()} moving={moveIn.isPending} />
         {profile?.rssUrl && <YourShowElsewhere name={profile.podcastName ?? ""} rss={profile.rssUrl} onMoved={refresh} />}
         <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
           <IconTile icon={Podcast} className="mx-auto" />

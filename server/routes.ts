@@ -133,6 +133,7 @@ import { registerProspects } from "./prospects.js";
 import { registerTravel } from "./travel.js";
 import { registerShowFinder } from "./showFinder.js";
 import { registerRequests } from "./requests.js";
+import { registerPodcastIntake } from "./podcastIntake.js";
 import { eventAdminEmails, eventAdminEvents, eventAdminKey, eventAdminMay } from "./eventAdmin.js";
 import { registerDeviceCheck } from "./deviceCheck.js";
 import { registerHealth, beat, addHealthCheck } from "./health.js";
@@ -6776,6 +6777,7 @@ export function registerRoutes(app: Express): void {
   registerTravel(app);
   registerShowFinder(app, requireHostSession);
   registerRequests(app, requireHostSession, requireAdmin);
+  registerPodcastIntake(app, requireHostSession);
   registerDeviceCheck(app);
   registerGreenRoomChat(app, requireAdmin, requireHostSession, studioHostEmails);
   registerAutomations(app, requireAdmin, {
