@@ -138,7 +138,7 @@ function verifyTelnyx(req: Request): boolean {
 }
 
 /** Who on this event's lineup we could text, and with what number. */
-async function peopleFor(eventId: number) {
+export async function peopleFor(eventId: number) {
   const signups = (await storage.listSignups(eventId)).filter((s) => s.status !== "cancelled");
   const event = await storage.getEventById(eventId);
   const start = event ? Date.parse(event.startAtUtc) : NaN;

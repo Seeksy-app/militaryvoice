@@ -3182,3 +3182,20 @@ export const brandProspects = pgTable("brand_prospects", {
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 }, (t) => [uniqueIndex("brand_prospects_name_idx").on(t.name)]);
+
+/** Texts to send at a set time (7 Oct 2026): the outbox cron sends them when due, like timed mail. */
+export const scheduledTexts = pgTable("scheduled_texts", {
+  id: serial("id").primaryKey(),
+  phone: text("phone").notNull(),
+  name: text("name").notNull().default(""),
+  email: text("email").notNull().default(""),
+  eventId: integer("event_id"),
+  body: text("body").notNull(),
+  kind: text("kind").notNull().default("text"),
+  sendAt: text("send_at").notNull(),
+  /** queued | sending | sent | failed | blocked | cancelled */
+  status: text("status").notNull().default("queued"),
+  sentAt: text("sent_at").notNull().default(""),
+  error: text("error").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("scheduled_texts_due_idx").on(t.status, t.sendAt)]);

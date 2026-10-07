@@ -10,7 +10,8 @@ import crypto from "node:crypto";
 import { and, asc, eq, inArray, like, lte } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { emailShell, EMAIL_BANNERS, sendOneOffEmail, bccFor } from "./email.js";
-import { clips, outboxMail, postifySubscriptions, recordings, scheduledGrants, surveyInvites } from "../shared/schema.js";
+import { clips, outboxMail, postifySubscriptions, recordings, scheduledGrants, scheduledTexts, smsOptOuts, surveyInvites } from "../shared/schema.js";
+import { peopleFor, sendSms, toE164 } from "./sms.js";
 import { SURVEY_QUESTIONS } from "../shared/survey.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
@@ -360,6 +361,16 @@ export function registerSurvey(app: Express, requireAdmin: RequestHandler): void
         await db.update(outboxMail).set({ status: "failed", error: String(err?.message ?? err).slice(0, 300) }).where(eq(outboxMail.id, m.id));
       }
     }
+    // Texts set for now or earlier (the survey reminder, 7 Oct).
+    const dueTexts = await db.select().from(scheduledTexts).where(and(eq(scheduledTexts.status, "queued"), lte(scheduledTexts.sendAt, t))).orderBy(asc(scheduledTexts.sendAt)).limit(60);
+    let texted = 0;
+    for (const m of dueTexts) {
+      const [mine] = await db.update(scheduledTexts).set({ status: "sending" }).where(and(eq(scheduledTexts.id, m.id), eq(scheduledTexts.status, "queued"))).returning({ id: scheduledTexts.id });
+      if (!mine) continue;
+      const r = await sendSms({ phone: m.phone, body: m.body, name: m.name, email: m.email, eventId: m.eventId, sentBy: "outbox" }).catch((e: Error) => ({ ok: false, status: "failed", error: e.message }));
+      await db.update(scheduledTexts).set({ status: r.ok ? "sent" : r.status === "blocked" ? "blocked" : "failed", sentAt: r.ok ? now() : "", error: r.ok ? "" : String(r.error).slice(0, 300) }).where(eq(scheduledTexts.id, m.id));
+      if (r.ok) texted++;
+    }
     const grants = await db.select().from(scheduledGrants).where(and(eq(scheduledGrants.doneAt, ""), lte(scheduledGrants.grantAt, t))).limit(100);
     let given = 0;
     for (const g of grants) {
@@ -371,8 +382,55 @@ export function registerSurvey(app: Express, requireAdmin: RequestHandler): void
     const ended = await db.update(postifySubscriptions).set({ status: "canceled", updatedAt: now() })
       .where(and(like(postifySubscriptions.subscriptionId, "comp:%"), eq(postifySubscriptions.status, "active"), lte(postifySubscriptions.periodEnd, t)))
       .returning({ id: postifySubscriptions.id });
-    res.json({ sent, given, ended: ended.length });
+    res.json({ sent, texted, given, ended: ended.length });
   };
+  /**
+   * Text everyone from the event who gave us a mobile number and hasn't answered
+   * the survey: their own survey link, at a set time. `dry` lists who it would go
+   * to without queueing anything. STOPs and anyone who answered are left out
+   * (and sendSms checks STOP again when it sends).
+   */
+  app.post("/api/admin/survey/text", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost || (req as any).eventAdmin) return res.status(403).json({ message: "Admins only." });
+    await schemaIsReady();
+    const eventId = Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id;
+    const sendAt = new Date(String(req.body?.sendAt ?? ""));
+    if (Number.isNaN(sendAt.getTime())) return res.status(400).json({ message: "When should it go?" });
+    const template = String(req.body?.text ?? "").trim();
+    if (!template.includes("{link}")) return res.status(400).json({ message: "The text needs {link} for their survey link." });
+    const answered = new Set((await db.select({ email: surveyInvites.email, done: surveyInvites.completedAt }).from(surveyInvites).where(eq(surveyInvites.survey, SURVEY))).filter((r) => r.done).map((r) => r.email.trim().toLowerCase()));
+    const stopped = new Set((await db.select({ phone: smsOptOuts.phone }).from(smsOptOuts)).map((r) => r.phone));
+    const seen = new Set<string>();
+    const list: { phone: string; name: string; email: string; role: string; link: string; body: string }[] = [];
+    const skipped: { name: string; why: string }[] = [];
+    for (const p of await peopleFor(eventId)) {
+      const phone = toE164(p.phone);
+      const email = p.email.trim().toLowerCase();
+      if (!phone) continue;
+      if (stopped.has(phone)) { skipped.push({ name: p.name, why: "replied STOP" }); continue; }
+      if (answered.has(email)) { skipped.push({ name: p.name, why: "already answered" }); continue; }
+      if (seen.has(phone)) continue;
+      seen.add(phone);
+      const first = (p.name.trim().replace(/^(dr|mr|mrs|ms|sgt)\.?\s+/i, "").split(/\s+/)[0]) || "there";
+      const link = req.body?.dry ? `${ORIGIN}/survey/…` : `${ORIGIN}/survey/${(await inviteFor(email, p.name, p.role === "cohost" ? "cohost" : "host")).token}`;
+      list.push({ phone, name: p.name, email, role: p.role, link, body: template.replace(/\{name\}/gi, first).replace(/\{link\}/gi, link) });
+    }
+    if (req.body?.dry) return res.json({ count: list.length, sendAt: sendAt.toISOString(), people: list.map((x) => ({ name: x.name, role: x.role, last4: x.phone.slice(-4) })), skipped, sample: list[0]?.body ?? "" });
+    // One queue per send: pressing again replaces what's still waiting rather than doubling it.
+    await db.update(scheduledTexts).set({ status: "cancelled" }).where(and(eq(scheduledTexts.kind, "survey-text"), eq(scheduledTexts.status, "queued")));
+    if (list.length) await db.insert(scheduledTexts).values(list.map((x) => ({ phone: x.phone, name: x.name, email: x.email, eventId, body: x.body, kind: "survey-text", sendAt: sendAt.toISOString(), createdAt: now() })));
+    res.json({ queued: list.length, sendAt: sendAt.toISOString(), skipped });
+  });
+  app.get("/api/admin/scheduled-texts", requireAdmin, async (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json(await db.select().from(scheduledTexts).orderBy(asc(scheduledTexts.sendAt)));
+  });
+  app.post("/api/admin/scheduled-texts/cancel", requireAdmin, async (req, res) => {
+    const kind = String(req.body?.kind ?? "survey-text");
+    const rows = await db.update(scheduledTexts).set({ status: "cancelled" }).where(and(eq(scheduledTexts.kind, kind), eq(scheduledTexts.status, "queued"))).returning({ id: scheduledTexts.id });
+    res.json({ cancelled: rows.length });
+  });
+
   app.get("/api/cron/outbox", outboxCron);
   app.post("/api/cron/outbox", outboxCron);
 }
