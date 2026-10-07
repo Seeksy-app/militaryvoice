@@ -96,7 +96,9 @@ async function ic(path: string, body: unknown): Promise<any> {
       throw new HttpError(400, typeof msg === "string" ? msg : `That search couldn't be run. ${JSON.stringify(json).slice(0, 240)}`);
     }
     if (res.status >= 500) throw new HttpError(502, "The creator index couldn't build this one right now. Try again in a few minutes, or open another creator.");
-    throw new HttpError(502, `Couldn't reach the creator index (${res.status}).`);
+    // Say what they said (a refused key and an empty balance both come back as 401/403).
+    console.warn("discovery", res.status, path, text.slice(0, 300));
+    throw new HttpError(502, `Couldn't reach the creator index (${res.status}${typeof msg === "string" && msg ? `: ${msg.slice(0, 160)}` : ""}).`);
   }
   return json;
 }
