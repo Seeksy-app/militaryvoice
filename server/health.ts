@@ -231,11 +231,15 @@ const DEFS: Def[] = [
     key: "searchapi", name: "SearchApi", group: "Social and podcasts", powers: "Brand prospects from the ad libraries",
     // The account call: says whether the key is taken, and how many searches are left this month.
     run: async () => {
-      const k = (env("SEARCHAPI_API_KEY", "SEARCH_API_KEY", "SEARCHAPI_KEY") ?? "").trim().replace(/^["']|["']$/g, "");
+      const names = ["SEARCHAPI_API_KEY", "SEARCH_API_KEY", "SEARCHAPI_KEY"];
+      const used = names.find((n) => (process.env[n] ?? "").trim());
+      const k = (env(...names) ?? "").trim().replace(/^["']|["']$/g, "");
       if (!k) return { state: "off", detail: "Not set here (SEARCHAPI_API_KEY)" };
+      // Which variable it read and how long the key is (never the key): enough to spot a wrong name or a cut-off paste.
+      const which = `${used}, ${k.length} characters${names.filter((n) => n !== used && (process.env[n] ?? "").trim()).length ? `; also set: ${names.filter((n) => n !== used && (process.env[n] ?? "").trim()).join(", ")}` : ""}`;
       const res = await fetch("https://www.searchapi.io/api/v1/me", { headers: { Authorization: `Bearer ${k}` }, signal: AbortSignal.timeout(8000) });
       const body = (await res.json().catch(() => ({}))) as { account?: { remaining_credits?: number; monthly_allowance?: number }; error?: string };
-      if (!res.ok) return { state: "down", detail: `${res.status}${res.status === 401 ? " (the key was refused)" : ""}: ${String(body.error ?? "").slice(0, 100)}` };
+      if (!res.ok) return { state: "down", detail: `${res.status}${res.status === 401 ? " (the key was refused)" : ""}: ${String(body.error ?? "").slice(0, 100)} [${which}]` };
       return { state: "ok", detail: `${body.account?.remaining_credits ?? "?"} of ${body.account?.monthly_allowance ?? "?"} searches left this month` };
     },
   },
