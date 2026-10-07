@@ -982,6 +982,43 @@ export async function sendImportReadyEmail(v: ImportReadyInput): Promise<boolean
   });
 }
 
+/**
+ * A new recording, to the podcaster's editor (7 Oct 2026, Frank: he records on
+ * Zoom and sends the raw video to a production team). A download link that
+ * works without an account, for a week; replies go to the podcaster.
+ */
+export async function sendEditorRecordingEmail(v: { to: string; hostName: string; hostEmail: string; title: string; startedAt: string; durationSec: number; link: string; days: number }): Promise<boolean> {
+  const who = v.hostName.trim() || v.hostEmail;
+  const title = v.title.trim() || "New recording";
+  const when = Date.parse(v.startedAt);
+  const date = Number.isFinite(when)
+    ? new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", timeZone: "America/New_York" }).format(new Date(when))
+    : "";
+  const facts = [date, v.durationSec > 0 ? `Length ${clockLength(v.durationSec)}` : ""].filter(Boolean);
+  const subject = `New recording from ${who}: ${title}`;
+  return sendEmail({ kind: "sendEditorRecordingEmail",
+    to: v.to,
+    replyTo: v.hostEmail,
+    subject,
+    html: emailShell({
+      banner: EMAIL_BANNERS.studio,
+      bannerAlt: "MilitaryVoices.ai",
+      eyebrow: "New recording",
+      heading: `${who} has a new recording for you`,
+      body: `
+        <p style="margin:0 0 14px;">${escapeHtml(who)} asked us to send you each new recording as soon as it's in. Here's the latest, full quality.</p>
+        <div style="background:#f3f6fb;border:1px solid #d8e2f0;border-radius:12px;padding:14px 18px;margin:0 0 14px;">
+          <p style="margin:0;color:#0b1220;font-size:17px;font-weight:700;">${escapeHtml(title)}</p>
+          ${facts.length ? `<p style="margin:4px 0 0;color:#6b7280;font-size:14px;">${escapeHtml(facts.join(" · "))}</p>` : ""}
+        </div>`,
+      cta: { href: v.link, label: "Download the recording" },
+      secondary: `<p style="margin:0;font-size:14px;color:#6b7280;">The link works for ${v.days} days. Reply to this email to reach ${escapeHtml(who)}.</p>`,
+      footerNote: `Sent for ${escapeHtml(who)} by MilitaryVoices.ai. They can stop these in their Zoom settings.`,
+    }),
+    text: `${who} has a new recording for you\n\n${title}${facts.length ? `\n${facts.join(" · ")}` : ""}\n\nDownload it (the link works for ${v.days} days): ${v.link}\n\nReply to this email to reach ${who}.\n`,
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Broadcast — one-to-many announcement email
 // ---------------------------------------------------------------------------

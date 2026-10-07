@@ -134,6 +134,7 @@ import { registerTravel } from "./travel.js";
 import { registerShowFinder } from "./showFinder.js";
 import { registerRequests } from "./requests.js";
 import { registerPodcastIntake } from "./podcastIntake.js";
+import { registerEditorSend, sendToEditors } from "./editorSend.js";
 import { eventAdminEmails, eventAdminEvents, eventAdminKey, eventAdminMay } from "./eventAdmin.js";
 import { registerDeviceCheck } from "./deviceCheck.js";
 import { registerHealth, beat, addHealthCheck } from "./health.js";
@@ -6778,6 +6779,7 @@ export function registerRoutes(app: Express): void {
   registerShowFinder(app, requireHostSession);
   registerRequests(app, requireHostSession, requireAdmin);
   registerPodcastIntake(app, requireHostSession);
+  registerEditorSend(app, requireHostSession);
   registerDeviceCheck(app);
   registerGreenRoomChat(app, requireAdmin, requireHostSession, studioHostEmails);
   registerAutomations(app, requireAdmin, {
@@ -6805,6 +6807,9 @@ export function registerRoutes(app: Express): void {
           .catch((err) => { console.error("Import-ready email failed:", (err as Error).message); return false; });
         // After the reply, so the worker never waits on it; kept alive on Vercel.
         try { waitUntil(mail); } catch { /* not on Vercel */ }
+        // And to their editor, if they asked for that.
+        const editors = sendToEditors(moved);
+        try { waitUntil(editors); } catch { /* not on Vercel */ }
       }
     }
   });

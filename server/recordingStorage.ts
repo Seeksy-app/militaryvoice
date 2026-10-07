@@ -187,6 +187,16 @@ export async function deleteRecordingObject(path: string): Promise<void> {
   }
 }
 
+/** The same, saved as a file with this name rather than played in the browser (an editor's download). */
+export async function signedRecordingDownload(path: string, filename: string, expiresInSeconds = 6 * 3600): Promise<string> {
+  // Plain ASCII: a header can't carry "ō" safely.
+  const name = filename.normalize("NFKD").replace(/[^\x20-\x7e]/g, "").replace(/["\\]/g, "").trim().slice(0, 120) || "recording.mp4";
+  if (usingR2()) return presignS3("GET", path, expiresInSeconds, { "response-content-disposition": `attachment; filename="${name}"` });
+  const { data, error } = await getClient().storage.from(recordingsBucket()).createSignedUrl(path, expiresInSeconds, { download: name });
+  if (error || !data?.signedUrl) throw error ?? new Error("Couldn't sign that recording.");
+  return data.signedUrl;
+}
+
 /** A time-limited download link. Default two hours, plenty for a big MP4. */
 export async function signedRecordingUrl(path: string, expiresInSeconds = 7_200): Promise<string> {
   if (usingR2()) return presignS3("GET", path, expiresInSeconds);

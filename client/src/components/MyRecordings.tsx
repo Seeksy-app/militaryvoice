@@ -8,7 +8,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSepara
 import { PostDialog } from "@/components/PostDialog";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import type { LibraryFolderRow, RecordingRow } from "@shared/schema";
-import { CalendarClock, Check, Download, Folder, FolderInput, FolderOpen, FolderPlus, Library, Loader2, Mic2, MoreHorizontal, Pencil, Play, Share2, Trash2, Wand2, X } from "lucide-react";
+import { CalendarClock, Check, Download, Folder, FolderInput, FolderOpen, FolderPlus, Library, Loader2, Mic2, MoreHorizontal, Pencil, Play, Share2, Trash2, Wand2, X, Send } from "lucide-react";
 
 // A podcaster's own sessions. The studio writes them; nothing here is uploaded
 // by hand. The bucket is private, so every download is a fresh signed link.
@@ -205,6 +205,20 @@ export function MyRecordings({
     }
   }
 
+  /** Email it to their editor (set up on the Zoom card in Integrations). */
+  async function sendToEditor(id: number) {
+    try {
+      const res = await apiRequest("POST", `/api/host/recordings/${id}/send-editor`);
+      const { to } = (await res.json()) as { to: string[] };
+      toast({ title: "Sent to your editor", description: `${to.join(", ")} got a download link.` });
+    } catch (err) {
+      const m = (err as Error).message;
+      toast(/editor's email/.test(m)
+        ? { title: "Add your editor first", description: "In Integrations, on the Zoom card: Send new recordings to my editor." }
+        : { title: "Couldn't send it", description: m, variant: "destructive" });
+    }
+  }
+
   return (
     <section className="mt-2">
       {/* Folders: the podcaster's own. Click to open one; drag an episode onto one to file it. */}
@@ -377,6 +391,9 @@ export function MyRecordings({
                     {r.status === "Ready" && (<>
                     <DropdownMenuItem onSelect={() => void download(r.id)} className="gap-2" data-testid={`button-download-recording-${r.id}`}>
                       <Download className="h-4 w-4" /> {versions.length > 0 ? `Download ${olderPicked ? "this edit" : versions.find((v) => v.rec.id === r.id)?.label.toLowerCase()}` : "Download"}
+                    </DropdownMenuItem>
+                    <DropdownMenuItem onSelect={() => void sendToEditor(r.id)} className="gap-2" data-testid={`button-editor-recording-${r.id}`}>
+                      <Send className="h-4 w-4" /> Send to my editor
                     </DropdownMenuItem>
                     {/* Clips and the clean episode are made in Pōstify. */}
                     {/* A clean copy is already Pōstify's output; clips come from the original. */}

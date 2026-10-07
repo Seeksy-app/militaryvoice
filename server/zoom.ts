@@ -6,6 +6,7 @@ import type { ZoomConnectionRow } from "../shared/schema.js";
 import { waitUntil } from "@vercel/functions";
 import { signedRecordingUpload } from "./recordingStorage.js";
 import { sendImportReadyEmail } from "./email.js";
+import { sendToEditors } from "./editorSend.js";
 
 /**
  * Zoom, connected per podcaster (OAuth, a Zoom Marketplace app). Their cloud
@@ -127,6 +128,7 @@ async function fastImport(id: number): Promise<void> {
     try { s = JSON.parse(row.importSource || "{}"); } catch { s = {}; }
     if (moved && s.auto === true) {
       await sendImportReadyEmail({ to: moved.email, recordingId: moved.id, title: moved.title, startedAt: moved.startedAt, durationSec: moved.durationSec, provider: "zoom" }).catch((e) => console.error("Import-ready email failed:", (e as Error).message));
+      await sendToEditors(moved);
     }
   } catch (err) {
     console.warn(`Fast import ${id} handed to the worker: ${(err as Error).message}`);

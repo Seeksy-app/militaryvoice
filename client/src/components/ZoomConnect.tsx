@@ -6,7 +6,8 @@ import { Switch } from "@/components/ui/switch";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Check, Download, Loader2, Video } from "lucide-react";
+import { Check, Download, Loader2, Plus, Send, Video, X } from "lucide-react";
+import { Input } from "@/components/ui/input";
 import { IconTile } from "@/components/ui/icon-tile";
 
 interface ZoomState { configured: boolean; connected: boolean; zoomEmail: string; autoImport: boolean }
@@ -93,6 +94,72 @@ export function ZoomConnect({ row = false }: { row?: boolean } = {}) {
       </div>
       <ZoomPicker open={picking} onOpenChange={setPicking} />
       {!z.connected && !row && <ImportLink />}
+      {(z.connected || !row) && <EditorSend />}
+    </div>
+  );
+}
+
+/**
+ * Send new recordings to my editor (7 Oct 2026): for a podcaster whose
+ * production team adds the intro, outro and teaser. Each recording that comes
+ * in by itself is emailed to them as a download link; no account needed.
+ */
+export function EditorSend() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const q = useQuery<{ on: boolean; emails: string[] }>({ queryKey: ["/api/host/editor-send"], queryFn: async () => (await apiRequest("GET", "/api/host/editor-send")).json() });
+  const [emails, setEmails] = useState<string[] | null>(null);
+  const [open, setOpen] = useState(false);
+  const list = emails ?? (q.data?.emails.length ? q.data.emails : [""]);
+  const save = useMutation({
+    mutationFn: async (v: { on: boolean; emails: string[] }) => (await apiRequest("PUT", "/api/host/editor-send", v)).json(),
+    onSuccess: (v: { on: boolean; emails: string[] }) => {
+      qc.setQueryData(["/api/host/editor-send"], v);
+      setEmails(null);
+      setOpen(false);
+      toast(v.on ? { title: "Your editor is set", description: `New recordings go to ${v.emails.join(", ")} as soon as they're in.` } : { title: "Stopped sending to your editor" });
+    },
+    onError: (e) => toast({ title: "Couldn't save that", description: (e as Error).message, variant: "destructive" }),
+  });
+  if (!q.data) return null;
+  const on = q.data.on;
+  const editing = open || (!on && emails !== null);
+  const clean = list.map((e) => e.trim()).filter(Boolean);
+  return (
+    <div className="mt-3 rounded-xl border border-border bg-muted/30 p-3.5" data-testid="editor-send">
+      <div className="flex flex-wrap items-center gap-3">
+        <Send className="h-4 w-4 shrink-0 text-[#053877] dark:text-[#8ab4f8]" />
+        <div className="min-w-0 flex-1">
+          <p className="text-sm font-semibold text-foreground">Send new recordings to my editor</p>
+          <p className="text-xs text-muted-foreground">
+            {on ? <>Going to <span className="font-medium text-foreground">{q.data.emails.join(", ")}</span>. They get a download link, no account needed, and replies come to you.</> : "Your editor gets each new recording by email, full quality, the moment it's in. No account needed."}
+          </p>
+        </div>
+        <Switch
+          checked={on || editing}
+          onCheckedChange={(v) => { if (v) { setOpen(true); setEmails(list); } else if (on) save.mutate({ on: false, emails: q.data!.emails }); else { setOpen(false); setEmails(null); } }}
+          data-testid="editor-send-switch"
+        />
+        {on && !open && <Button variant="ghost" size="sm" className="h-8 rounded-full px-3 text-xs" onClick={() => { setOpen(true); setEmails(q.data!.emails); }} data-testid="editor-send-edit">Change</Button>}
+      </div>
+      {editing && (
+        <form className="mt-3 space-y-2" onSubmit={(e) => { e.preventDefault(); if (clean.length) save.mutate({ on: true, emails: clean }); }}>
+          {list.map((v, i) => (
+            <div key={i} className="flex items-center gap-2">
+              <Input type="email" autoFocus={i === 0} value={v} onChange={(e) => setEmails(list.map((x, j) => (j === i ? e.target.value : x)))} placeholder="editor@theirstudio.com" className="h-9" data-testid={`editor-send-email-${i}`} />
+              {list.length > 1 && <button type="button" onClick={() => setEmails(list.filter((_, j) => j !== i))} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted" aria-label="Remove"><X className="h-4 w-4" /></button>}
+            </div>
+          ))}
+          <div className="flex flex-wrap items-center gap-2">
+            {list.length < 3 && <button type="button" onClick={() => setEmails([...list, ""])} className="inline-flex items-center gap-1 text-xs font-semibold text-[#053877] hover:underline dark:text-[#8ab4f8]"><Plus className="h-3.5 w-3.5" /> Add another editor</button>}
+            <span className="flex-1" />
+            <Button type="button" variant="ghost" size="sm" className="rounded-full" onClick={() => { setOpen(false); setEmails(null); }}>Cancel</Button>
+            <Button type="submit" size="sm" disabled={!clean.length || save.isPending} className="rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="editor-send-save">
+              {save.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Save"}
+            </Button>
+          </div>
+        </form>
+      )}
     </div>
   );
 }
