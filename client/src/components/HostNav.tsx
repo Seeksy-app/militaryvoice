@@ -5,13 +5,13 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { LogoLockup } from "@/components/Logo";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { GetTheApp } from "@/components/GetTheApp";
-import { LayoutDashboard, Plus, Podcast, Clapperboard, Film, Upload, Globe, ChevronRight, ChevronDown, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones, PanelLeftClose, PanelLeftOpen, Sun, Moon, Monitor, Check, MoreHorizontal, BadgeCheck, CreditCard, Trash2, Video, Radio } from "lucide-react";
+import { LayoutDashboard, Plus, Podcast, Clapperboard, Film, Upload, Globe, ChevronRight, ChevronDown, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones, PanelLeftClose, PanelLeftOpen, Sun, Moon, Monitor, Check, MoreHorizontal, BadgeCheck, CreditCard, Trash2, Video, Radio, Building2 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { NotificationsMenuItem } from "@/components/Notifications";
 import { Link } from "wouter";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
-export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "greenroom" | "recordings" | "contacts" | "pro" | "cohost" | "analytics" | "postify" | "social" | "discovery" | "verified" | "podcast" | "page" | "billing" | "trash" | "studio" | "fans" | "myevents";
+export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "greenroom" | "recordings" | "contacts" | "pro" | "cohost" | "analytics" | "postify" | "social" | "discovery" | "verified" | "podcast" | "page" | "billing" | "trash" | "studio" | "fans" | "myevents" | "organization";
 
 interface Item {
   key: HostScreen;
@@ -91,7 +91,10 @@ export function HostNav({
     // Profile lives in the account card at the foot; Integrations is in both.
     // An event planner's own events lead their column; everyone else can run one too.
     ...(path === "planner"
-      ? [{ title: "Your events", items: [{ key: "myevents" as const, label: "My events", hint: "Create your event, send it to us to approve, then share it and run it from the studio", icon: CalendarDays }] }]
+      ? [{ title: "Your events", items: [
+          { key: "myevents" as const, label: "My events", hint: "Create your event, send it to us to approve, then share it and run it from the studio", icon: CalendarDays },
+          { key: "organization" as const, label: "Organization", hint: "Your organizer account and your team: everyone on it can run your events", icon: Building2 },
+        ] }]
       : []),
     {
       title: path === "planner" ? "Your profile" : path === "creator" ? "Your content" : "Your show",
@@ -149,6 +152,8 @@ export function HostNav({
   const greenRoomItem: Item = { key: "greenroom", label: "Green room", hint: "Join the studio for your slot, and check your camera and mic first", icon: Headphones };
   const accountItems: Item[] = [
     { key: "editProfile", label: "Profile", hint: "Your photo, bio and service details that listeners and sponsors see", icon: UserRound },
+    // A brand, agency or organizer they're on the team of (planners have it under Your events).
+    ...(path !== "planner" ? [{ key: "organization" as const, label: "Organization", hint: "A brand, agency or event organizer you work for, and its team", icon: Building2 }] : []),
   ];
 
   const [closed, setClosed] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem("mv_nav_folded") || "[]"); } catch { return []; } });

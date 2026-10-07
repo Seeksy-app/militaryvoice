@@ -127,6 +127,7 @@ import { logSceneTake, registerSceneLog } from "./sceneLog.js";
 import { audienceRecipients, registerPeople } from "./people.js";
 import { registerOrganizer } from "./organizer.js";
 import { registerProjects } from "./projects.js";
+import { orgMemberEmails, registerOrgs } from "./orgs.js";
 import { eventAdminEmails, eventAdminEvents, eventAdminKey, eventAdminMay } from "./eventAdmin.js";
 import { registerDeviceCheck } from "./deviceCheck.js";
 import { registerHealth, beat, addHealthCheck } from "./health.js";
@@ -566,7 +567,9 @@ async function studioHostEmails(eventId: number): Promise<string[]> {
   // An event planner runs the studio for their own event once we've approved it.
   const ev = await storage.getEventById(eventId);
   const owner = ev?.review === "approved" ? ev.ownerEmail.trim().toLowerCase() : "";
-  return owner && !listed.includes(owner) ? [...listed, owner] : listed;
+  // …and so does everyone on the organizer's team.
+  const team = ev?.review === "approved" ? await orgMemberEmails(ev.orgId) : [];
+  return Array.from(new Set([...listed, ...(owner ? [owner] : []), ...team]));
 }
 /** The events this signed-in person is a studio host on. */
 async function studioHostEvents(email: string): Promise<number[]> {
@@ -6762,6 +6765,7 @@ export function registerRoutes(app: Express): void {
   registerPeople(app, requireAdmin);
   registerOrganizer(app, requireHostSession, requireAdmin);
   registerProjects(app, requireAdmin);
+  registerOrgs(app, requireHostSession, requireAdmin);
   registerDeviceCheck(app);
   registerGreenRoomChat(app, requireAdmin, requireHostSession, studioHostEmails);
   registerAutomations(app, requireAdmin, {

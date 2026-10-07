@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LayoutDashboard, MonitorPlay, ListOrdered, Users, Handshake, Megaphone, Mail, Contact, DollarSign, Settings2, CalendarDays, DoorOpen, PanelLeftClose, PanelLeftOpen, Film, Compass, BookOpen, BadgeCheck, BookUser, Activity, MessagesSquare, ClipboardList, NotebookPen, Smartphone, KanbanSquare } from "lucide-react";
+import { LayoutDashboard, MonitorPlay, ListOrdered, Users, Handshake, Megaphone, Mail, Contact, DollarSign, Settings2, CalendarDays, DoorOpen, PanelLeftClose, PanelLeftOpen, Film, Compass, BookOpen, BadgeCheck, BookUser, Activity, MessagesSquare, ClipboardList, NotebookPen, Smartphone, KanbanSquare, Building2 } from "lucide-react";
 
 // The admin's nav, down the left.
 //
@@ -75,6 +75,8 @@ export const TOP_GROUPS: { title: string; items: AdminSection[] }[] = [
       { key: "directory", label: "Member Directory", icon: BookUser },
       // The platform's CRM: every member and everyone tied to us; each event keeps its own too.
       { key: "crm", label: "CRM", icon: Mail },
+      // Brands, agencies and event organizers: accounts with teams of their own.
+      { key: "orgs", label: "Organizations", icon: Building2 },
       { key: "team", label: "Team", icon: Contact },
       { key: "finances", label: "Finances", icon: DollarSign },
       { key: "projects", label: "Projects", icon: KanbanSquare },

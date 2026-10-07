@@ -75,6 +75,7 @@ import { RecordingsScreen } from "@/components/RecordingsScreen";
 import { PostStudio, NavCredits } from "@/components/PostStudio";
 import { FloatingChecklist } from "@/components/FloatingChecklist";
 import { MyEvents } from "@/components/MyEvents";
+import { MyOrganization, OrgInvites } from "@/components/MyOrganization";
 import { buildSteps, goToStep } from "@/components/NextSteps";
 import { PromotionScreen } from "@/components/PromotionScreen";
 import { SocialScreen } from "@/components/SocialScreen";
@@ -620,13 +621,14 @@ function BackToEvent({ onGo }: { onGo: (s: "events") => void }) {
 }
 
 /** The screens the dashboard nav switches between, and their URLs. */
-const SCREENS = ["dashboard", "editProfile", "events", "promotion", "greenroom", "discovery", "verified", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social", "podcast", "page", "billing", "trash", "studio", "fans", "myevents"] as const;
+const SCREENS = ["dashboard", "editProfile", "events", "promotion", "greenroom", "discovery", "verified", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social", "podcast", "page", "billing", "trash", "studio", "fans", "myevents", "organization"] as const;
 type Screen = (typeof SCREENS)[number];
 
 /** /host/dashboard/<slug> ⇄ screen. Home has no slug; the rest are lowercase. */
 const SCREEN_SLUG: Record<Screen, string> = {
   cohost: "cohost",
   myevents: "my-events",
+  organization: "organization",
   analytics: "analytics",
   postify: "postify",
   billing: "billing",
@@ -1402,6 +1404,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           <PodcastHosting />
         ) : screen === "myevents" ? (
           <MyEvents />
+        ) : screen === "organization" ? (
+          <MyOrganization defaultKind={pathOf(profile?.interests) === "planner" ? "organizer" : "brand"} />
         ) : screen === "page" ? (
           <BioBuilder />
         ) : screen === "analytics" ? (
@@ -1597,6 +1601,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                       )}
                     </div>
                   </div>
+                  {/* Someone added them to a brand's, agency's or organizer's team. */}
+                  <OrgInvites compact />
                   {/* Four doors that are about the account, not any one
                       event: on their own row under the accounts card, which keeps
                       the card to the accounts alone (Andrew, 30 Sep). */}

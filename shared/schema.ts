@@ -49,6 +49,8 @@ export const events = pgTable("events", {
   // to approve), "approved" (public, studio unlocked). Empty for events we run.
   ownerEmail: text("owner_email").notNull().default(""),
   review: text("review").notNull().default(""),
+  /** The organization that runs it (an event organizer's account); 0 for ours. */
+  orgId: integer("org_id").notNull().default(0),
 });
 
 export const insertEventSchema = createInsertSchema(events)
@@ -2636,6 +2638,8 @@ export const discoveryCache = pgTable("discovery_cache", {
 export const discoveryLists = pgTable("discovery_lists", {
   id: serial("id").primaryKey(),
   email: text("email").notNull(),
+  /** Shared with everyone in this organization (0: just the person who made it). */
+  orgId: integer("org_id").notNull().default(0),
   name: text("name").notNull(),
   createdAt: text("created_at").notNull(),
 }, (t) => [index("discovery_lists_email_idx").on(t.email)]);
@@ -3114,3 +3118,39 @@ export const pmNotes = pgTable("pm_notes", {
   text: text("text").notNull(),
   createdAt: text("created_at").notNull(),
 }, (t) => [index("pm_notes_item_idx").on(t.itemId)]);
+
+/**
+ * Organizations (6 Oct 2026): a brand, an agency or an event organizer as an
+ * account of its own, with a team. Its events, saved Discovery lists and (later)
+ * requests, deals and billing belong to it rather than to one person. The
+ * multi-tenant base: everything a brand or organizer does is scoped to one.
+ */
+export const organizations = pgTable("organizations", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  /** brand | agency | organizer */
+  kind: text("kind").notNull().default("brand"),
+  website: text("website").notNull().default(""),
+  logoUrl: text("logo_url").notNull().default(""),
+  about: text("about").notNull().default(""),
+  /** pending | approved | declined. Brands are approved before they can send requests. */
+  status: text("status").notNull().default("pending"),
+  createdBy: text("created_by").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  approvedAt: text("approved_at").notNull().default(""),
+});
+export type OrganizationRow = typeof organizations.$inferSelect;
+export const orgMembers = pgTable("org_members", {
+  id: serial("id").primaryKey(),
+  orgId: integer("org_id").notNull(),
+  email: text("email").notNull(),
+  /** owner | member */
+  role: text("role").notNull().default("member"),
+  /** invited | active */
+  status: text("status").notNull().default("invited"),
+  invitedBy: text("invited_by").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  joinedAt: text("joined_at").notNull().default(""),
+}, (t) => [uniqueIndex("org_members_org_email_idx").on(t.orgId, t.email), index("org_members_email_idx").on(t.email)]);
+export type OrgMemberRow = typeof orgMembers.$inferSelect;
+export const ORG_KINDS = { brand: "Brand", agency: "Agency", organizer: "Event organizer" } as const;

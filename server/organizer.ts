@@ -4,10 +4,11 @@
 // studio for it as its studio host. Everything here is scoped to events whose
 // ownerEmail is the signed-in person — nothing else on the platform is theirs.
 import type { Express, RequestHandler, Request } from "express";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, inArray, or } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { slackNote } from "./slack.js";
 import { events, signups } from "../shared/schema.js";
+import { orgIdsOf, organizerOrgFor } from "./orgs.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 const now = () => new Date().toISOString();
@@ -35,22 +36,27 @@ function details(b: Record<string, unknown>) {
 const view = (e: typeof events.$inferSelect, booked: number) => ({
   id: e.id, slug: e.slug, name: e.name, tagline: e.tagline, description: e.description, occasion: e.occasion,
   startAtUtc: e.startAtUtc, durationHours: e.durationHours, slotMinutes: e.slotMinutes, onAirMinutes: e.onAirMinutes, bufferMinutes: e.bufferMinutes,
-  review: e.review || "draft", visible: e.visible, booked,
+  review: e.review || "draft", visible: e.visible, booked, orgId: e.orgId,
   slots: Math.floor((e.durationHours * 60) / Math.max(1, e.slotMinutes)),
   pageUrl: `${ORIGIN}/event/${e.slug}`,
   bookUrl: `${ORIGIN}/event/${e.slug}/schedule`,
 });
 
 export function registerOrganizer(app: Express, requireHostSession: RequestHandler, requireAdmin: RequestHandler) {
+  // Theirs: made by them, or run by an organization they're on the team of.
+  const whose = async (req: Request) => {
+    const orgIds = await orgIdsOf(meOf(req));
+    return orgIds.length ? or(eq(events.ownerEmail, meOf(req)), inArray(events.orgId, orgIds)) : eq(events.ownerEmail, meOf(req));
+  };
   const mine = async (req: Request, id: number) => {
-    const [e] = await db.select().from(events).where(and(eq(events.id, id), eq(events.ownerEmail, meOf(req)))).limit(1);
+    const [e] = await db.select().from(events).where(and(eq(events.id, id), await whose(req))).limit(1);
     return e;
   };
 
   app.get("/api/host/my-events", requireHostSession, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     await schemaIsReady();
-    const rows = await db.select().from(events).where(eq(events.ownerEmail, meOf(req))).orderBy(desc(events.id));
+    const rows = await db.select().from(events).where(await whose(req)).orderBy(desc(events.id));
     const out = [];
     for (const e of rows) {
       const n = (await db.select({ id: signups.id, status: signups.status }).from(signups).where(eq(signups.eventId, e.id))).filter((s) => s.status !== "cancelled").length;
@@ -68,13 +74,15 @@ export function registerOrganizer(app: Express, requireHostSession: RequestHandl
     // A planner can have a few drafts going, not hundreds.
     const count = (await db.select({ id: events.id }).from(events).where(eq(events.ownerEmail, me))).length;
     if (count >= 10) return res.status(429).json({ message: "That's ten events. Finish or remove one first, or write to hello@militaryvoices.ai." });
+    // It belongs to their organizer account (made now, the first time).
+    const org = await organizerOrgFor(me, typeof req.body?.orgName === "string" ? req.body.orgName.slice(0, 120) : undefined);
     let slug = slugify(d.name);
     for (let i = 2; (await storage.getEventBySlug(slug)); i++) slug = `${slugify(d.name)}-${i}`;
     const [row] = await db.insert(events).values({
       slug, name: d.name, tagline: d.tagline ?? "", description: d.description ?? "", occasion: d.occasion ?? "",
       startAtUtc: d.startAtUtc, durationHours: d.durationHours ?? 4, slotMinutes: d.slotMinutes ?? 30,
       onAirMinutes: d.onAirMinutes ?? 25, bufferMinutes: d.bufferMinutes ?? 5, bufferPosition: "after",
-      visible: false, isFeatured: false, closed: false, ownerEmail: me, review: "draft",
+      visible: false, isFeatured: false, closed: false, ownerEmail: me, review: "draft", orgId: org.id,
       // Never used for a planner's event (their studio access comes from ownership), but the column has no empty default.
       adminPassword: Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2),
       createdAt: now(),

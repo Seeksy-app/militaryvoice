@@ -14,12 +14,13 @@ import crypto from "node:crypto";
 import { buildProfile } from "./creatorProfile.js";
 import { registerPodcastRoutes } from "./podchaser.js";
 import type { Express, Request, Response } from "express";
-import { and, desc, eq, gte, inArray } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, or } from "drizzle-orm";
 import { db, storage } from "./storage.js";
 import { uploadPhoto } from "./photoStorage.js";
 import { waitUntil } from "@vercel/functions";
 import sharp from "sharp";
 import { getAdminEmail, getSessionEmail, requireHostSession } from "./session.js";
+import { orgIdsOf, orgsOf } from "./orgs.js";
 import { ADDONS, FREE_DISCOVERY } from "../shared/tokens.js";
 import {
   discoveryMembers,
@@ -516,6 +517,11 @@ async function requireMember(req: Request): Promise<{ email: string; member: Non
   const member = await memberFor(email);
   if (!member) throw new HttpError(403, "Add Discovery to your account to search.");
   return { email, member };
+}
+/** The saved lists someone can see: their own, and their organizations'. */
+async function listsOf(email: string) {
+  const ids = await orgIdsOf(email);
+  return ids.length ? or(eq(discoveryLists.email, email), inArray(discoveryLists.orgId, ids)) : eq(discoveryLists.email, email);
 }
 async function revealsThisMonth(email: string): Promise<number> {
   const start = new Date();
@@ -1022,7 +1028,7 @@ export function registerDiscoveryRoutes(app: Express): void {
   app.get("/api/discover/lists", (req, res) =>
     send(res, async () => {
       const { email } = await requireMember(req);
-      const lists = await db.select().from(discoveryLists).where(eq(discoveryLists.email, email)).orderBy(desc(discoveryLists.createdAt));
+      const lists = await db.select().from(discoveryLists).where(await listsOf(email)).orderBy(desc(discoveryLists.createdAt));
       const items = lists.length ? await db.select().from(discoveryListItems).where(inArray(discoveryListItems.listId, lists.map((l) => l.id))) : [];
       return lists.map((l) => ({
         ...l,
@@ -1034,7 +1040,9 @@ export function registerDiscoveryRoutes(app: Express): void {
     send(res, async () => {
       const { email } = await requireMember(req);
       const name = String(req.body?.name ?? "").trim().slice(0, 80) || "My list";
-      const [row] = await db.insert(discoveryLists).values({ email, name, createdAt: new Date().toISOString() }).returning();
+      // Made while on a brand's or agency's team: the whole team shares it.
+      const team = (await orgsOf(email)).find((o) => o.kind !== "organizer") ?? (await orgsOf(email))[0];
+      const [row] = await db.insert(discoveryLists).values({ email, name, orgId: team?.id ?? 0, createdAt: new Date().toISOString() }).returning();
       return row;
     }),
   );
@@ -1042,7 +1050,7 @@ export function registerDiscoveryRoutes(app: Express): void {
     send(res, async () => {
       const { email } = await requireMember(req);
       const id = Number(req.params.id);
-      const [l] = await db.select().from(discoveryLists).where(and(eq(discoveryLists.id, id), eq(discoveryLists.email, email)));
+      const [l] = await db.select().from(discoveryLists).where(and(eq(discoveryLists.id, id), await listsOf(email)));
       if (!l) throw new HttpError(404, "No such list.");
       await db.delete(discoveryListItems).where(eq(discoveryListItems.listId, id));
       await db.delete(discoveryLists).where(eq(discoveryLists.id, id));
@@ -1053,7 +1061,7 @@ export function registerDiscoveryRoutes(app: Express): void {
     send(res, async () => {
       const { email } = await requireMember(req);
       const id = Number(req.params.id);
-      const [l] = await db.select().from(discoveryLists).where(and(eq(discoveryLists.id, id), eq(discoveryLists.email, email)));
+      const [l] = await db.select().from(discoveryLists).where(and(eq(discoveryLists.id, id), await listsOf(email)));
       if (!l) throw new HttpError(404, "No such list.");
       const card = req.body?.card as CreatorCard | undefined;
       if (!card?.handle && !card?.signupId) throw new HttpError(400, "Which creator?");
@@ -1072,7 +1080,7 @@ export function registerDiscoveryRoutes(app: Express): void {
   app.delete("/api/discover/lists/:id/items/:itemId", (req, res) =>
     send(res, async () => {
       const { email } = await requireMember(req);
-      const [l] = await db.select().from(discoveryLists).where(and(eq(discoveryLists.id, Number(req.params.id)), eq(discoveryLists.email, email)));
+      const [l] = await db.select().from(discoveryLists).where(and(eq(discoveryLists.id, Number(req.params.id)), await listsOf(email)));
       if (!l) throw new HttpError(404, "No such list.");
       await db.delete(discoveryListItems).where(and(eq(discoveryListItems.id, Number(req.params.itemId)), eq(discoveryListItems.listId, l.id)));
       return { ok: true };

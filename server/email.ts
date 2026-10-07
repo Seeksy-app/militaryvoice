@@ -1274,3 +1274,22 @@ export async function sendBroadcastEmail(opts: BroadcastEmailOptions): Promise<s
     text: rendered.text,
   });
 }
+
+/** Someone added you to their organization's team (a brand, agency or event organizer). */
+export async function sendOrgInviteEmail(input: { to: string; orgName: string; kind: string; inviter: string; link: string }): Promise<boolean> {
+  const who = input.inviter || "A teammate";
+  return sendRawEmail({ kind: "sendOrgInviteEmail",
+    to: input.to,
+    subject: `${who} added you to ${input.orgName} on MilitaryVoices.ai`,
+    html: emailShell({
+      banner: EMAIL_BANNERS.welcome,
+      bannerAlt: "MilitaryVoices.ai",
+      eyebrow: "You're invited",
+      heading: `Join ${escapeHtml(input.orgName)}`,
+      body: `<p style="margin:0 0 10px;">${escapeHtml(who)} added you to the team at <b>${escapeHtml(input.orgName)}</b>${input.kind ? ` (${escapeHtml(input.kind.toLowerCase())})` : ""} on MilitaryVoices.ai.</p><p style="margin:0 0 4px;">Sign in with this email address and press Join. If you don't have an account yet, signing in makes one: no password, just a code we email you.</p>`,
+      cta: { href: input.link, label: "Sign in and join" },
+      footerNote: `Sent because ${escapeHtml(who)} added this address to ${escapeHtml(input.orgName)}. Not expecting it? Ignore it and nothing happens.`,
+    }),
+    text: `${who} added you to the team at ${input.orgName} on MilitaryVoices.ai.\n\nSign in with this email address and press Join (no password, just a code we email you):\n${input.link}\n\nNot expecting it? Ignore it and nothing happens.\n`,
+  }).then((id) => Boolean(id));
+}

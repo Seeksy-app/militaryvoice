@@ -37,6 +37,8 @@ export function PlatformOverview() {
     void qc.invalidateQueries({ queryKey: ["/api/admin/planner-events"] });
     void qc.invalidateQueries({ queryKey: ["/api/admin/events"] });
   };
+  const orgs = useQuery<{ id: number; name: string; kind: string; status: string }[]>({ queryKey: ["/api/admin/orgs"], queryFn: () => adminGet("/api/admin/orgs") });
+  const orgsWaiting = (orgs.data ?? []).filter((o) => o.status === "pending");
   const health = useQuery<{ checks: { key: string; name: string; state: string; detail: string }[] }>({ queryKey: ["/api/admin/health"], queryFn: () => adminGet("/api/admin/health") });
 
   const aud = (k: string) => people.data?.audiences.find((a) => a.key === k)?.count ?? 0;
@@ -59,6 +61,13 @@ export function PlatformOverview() {
         <Stat icon={Sparkles} label="On a paid plan" value={paying} sub={`${aud("pro")} Pro · ${aud("scale")} Scale · ${aud("growth")} on Growth`} href="/admin/finances" />
         <Stat icon={Inbox} label="Needs a reply" value={counts.data?.needs ?? "…"} sub={`${counts.data?.sentToday ?? 0} emails sent today`} href="/admin/crm" />
       </div>
+
+      {orgsWaiting.length > 0 && (
+        <Link href="/admin/orgs" className="flex items-center justify-between gap-3 rounded-2xl border-2 border-[#F0A71F]/60 bg-[#F0A71F]/10 px-5 py-4 text-sm hover:bg-[#F0A71F]/15" data-testid="overview-orgs-waiting">
+          <span><span className="font-semibold">{orgsWaiting.length} {orgsWaiting.length === 1 ? "organization is" : "organizations are"} waiting for approval:</span> {orgsWaiting.slice(0, 3).map((o) => o.name).join(", ")}{orgsWaiting.length > 3 ? "…" : ""}</span>
+          <ArrowRight className="h-4 w-4 shrink-0" />
+        </Link>
+      )}
 
       {/* Event planners' events sent to us: approving makes them public and opens their studio. */}
       {waiting.length > 0 && (
