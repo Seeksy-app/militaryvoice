@@ -22,7 +22,7 @@ const STATUS: Record<string, { label: string; tone: string }> = {
   declined: { label: "Passed", tone: "bg-muted text-muted-foreground line-through" },
   connected: { label: "Connected", tone: "bg-emerald-100 text-emerald-800 dark:bg-emerald-500/15 dark:text-emerald-300" },
 };
-export const money = (lo: number, hi: number) => (lo && hi ? `$${lo.toLocaleString()} to $${hi.toLocaleString()}` : lo ? `From $${lo.toLocaleString()}` : hi ? `Up to $${hi.toLocaleString()}` : "");
+export const money = (lo: number, hi: number) => (lo && hi && lo === hi ? `$${lo.toLocaleString()}` : lo && hi ? `$${lo.toLocaleString()} to $${hi.toLocaleString()}` : lo ? `From $${lo.toLocaleString()}` : hi ? `Up to $${hi.toLocaleString()}` : "");
 const when = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
 export function BrandRequests() {
