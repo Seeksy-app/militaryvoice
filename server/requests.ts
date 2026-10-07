@@ -289,6 +289,15 @@ export function registerRequests(app: Express, requireHostSession: RequestHandle
       requests: reqs.map((r) => ({ ...r, org: orgs.find((o) => o.id === r.orgId)?.name ?? "", recipients: rcpts.filter((x) => x.requestId === r.id).map((x) => ({ id: x.id, name: x.name, email: x.email, status: x.status, rate: x.rate, seen: !!x.seenAt })) })),
     });
   });
+  /** Remove a request (a test, or one sent by mistake), with its answers and threads. */
+  app.delete("/api/admin/requests/:id", requireAdmin, platformOnly, async (req, res) => {
+    const id = Number(req.params.id);
+    const rows = await db.select({ id: requestRecipients.id }).from(requestRecipients).where(eq(requestRecipients.requestId, id));
+    if (rows.length) await db.delete(requestMessages).where(inArray(requestMessages.recipientId, rows.map((r) => r.id)));
+    await db.delete(requestRecipients).where(eq(requestRecipients.requestId, id));
+    await db.delete(brandRequests).where(eq(brandRequests.id, id));
+    res.json({ ok: true });
+  });
   /** The owner switches the "a brand sent you a request" email on or off. */
   app.post("/api/admin/requests/emails", requireAdmin, platformOnly, async (req, res) => {
     await storage.setSetting("opportunity_emails", req.body?.on === true ? "on" : "off");
