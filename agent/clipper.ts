@@ -2175,15 +2175,18 @@ async function handle(job: Job): Promise<void> {
         ...(process.env.DEEPGRAM_API_KEY ? [["Deepgram", () => transcribeWithDeepgram(source, dir)] as [string, () => Promise<Line[]>]] : []),
         ["whisper", () => transcribeLocally(source, dir)],
       ];
+      const why: string[] = [];
       for (const [name, go] of engines) {
         try {
           lines = await go();
           if (lines.length) { console.log(`[${job.recordingId}] ${name} read it (${lines.length} lines)`); break; }
+          why.push(`${name}: no words`);
         } catch (err) {
           console.warn(`[${job.recordingId}] ${name} failed: ${(err as Error).message}`);
+          why.push(`${name}: ${(err as Error).message.replace(/\s+/g, " ").slice(0, 140)}`);
         }
       }
-      if (!lines.length) throw new Error("Couldn't transcribe the speech in this recording, so no clips were made. Try Clip again.");
+      if (!lines.length) throw new Error(`Couldn't transcribe the speech, so no clips were made. ${why.join(" | ")}`.slice(0, 600));
     }
     // Keep what we transcribed, so Generate more and Suggest edits needn't transcribe it again.
     if (!live && lines.length) {
