@@ -1070,6 +1070,21 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     queryFn: async () => (await apiRequest("GET", "/api/host/cohost")).json(),
     enabled: !!data,
   });
+  // Hooks stay above every early return (7 Oct: these two sat below the signed-out return and blanked the page on sign-out).
+  // Brands' requests waiting in their Opportunities (a badge in the menu). Peek doesn't mark them seen.
+  const { data: oppsPeek } = useQuery<{ seen: boolean; status: string }[]>({
+    queryKey: ["/api/host/opportunities", "peek"],
+    queryFn: async () => (await apiRequest("GET", "/api/host/opportunities?peek=1")).json(),
+    enabled: !!data && hasProfile && pathOf(profile?.interests) !== "brand",
+    refetchInterval: 120_000,
+  });
+  // Discovery is a paid tool for creators (7 Oct): on Growth it shows Upgrade instead.
+  const { data: discoverMe } = useQuery<{ locked?: boolean }>({
+    queryKey: ["/api/discover/me"],
+    queryFn: async () => (await apiRequest("GET", "/api/discover/me")).json(),
+    enabled: !!data && hasProfile,
+    staleTime: 60_000,
+  });
   if (isError) {
     return (
       <div className="min-h-screen">
@@ -1109,21 +1124,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   // The public nav is for people deciding whether to take part; somebody who
   // has already taken a slot just loses a band of screen to it.
   const workspace = !!data && hasProfile && !inSetup;
-  // Brands' requests waiting in their Opportunities (a badge in the menu). Peek doesn't mark them seen.
-  const { data: oppsPeek } = useQuery<{ seen: boolean; status: string }[]>({
-    queryKey: ["/api/host/opportunities", "peek"],
-    queryFn: async () => (await apiRequest("GET", "/api/host/opportunities?peek=1")).json(),
-    enabled: workspace && pathOf(profile?.interests) !== "brand",
-    refetchInterval: 120_000,
-  });
   const newOpps = (oppsPeek ?? []).filter((o) => o.status === "new").length;
-  // Discovery is a paid tool for creators (7 Oct): on Growth it shows Upgrade instead.
-  const { data: discoverMe } = useQuery<{ locked?: boolean }>({
-    queryKey: ["/api/discover/me"],
-    queryFn: async () => (await apiRequest("GET", "/api/discover/me")).json(),
-    enabled: workspace,
-    staleTime: 60_000,
-  });
   const discoveryLocked = Boolean(discoverMe?.locked);
   // Which path they came in on (podcaster, creator, planner): the dashboard follows it.
   const path = pathOf(profile?.interests);
