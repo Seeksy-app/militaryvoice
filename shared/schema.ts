@@ -261,6 +261,8 @@ export const podcasterProfiles = pgTable("podcaster_profiles", {
    *  (comma-separated). Empty for everyone who signed up before it was asked —
    *  they came for the Marathon, so they count as podcasters. */
   interests: text("interests").notNull().default(""),
+  /** They said yes to being found by brands in Discovery (7 Oct): off until they turn it on. */
+  openToBrands: boolean("open_to_brands").notNull().default(false),
   /** The directory's own say over this card: left out, pinned higher (lower
    *  number first), or shown with the show's logo instead of the photo. */
   directoryHidden: boolean("directory_hidden").notNull().default(false),
@@ -2696,6 +2698,8 @@ export const discoveryIntros = pgTable("discovery_intros", {
   id: serial("id").primaryKey(),
   requester: text("requester").notNull(),
   signupId: integer("signup_id").notNull(),
+  /** A member who opted in to brands (not on a lineup): their profile id; 0 for a lineup creator. */
+  profileId: integer("profile_id").notNull().default(0),
   kind: text("kind").notNull().default("intro"), // email | phone | intro
   note: text("note").notNull().default(""),
   createdAt: text("created_at").notNull(),

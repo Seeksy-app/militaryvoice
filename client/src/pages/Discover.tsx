@@ -35,6 +35,9 @@ type Card = {
   engagement: number | null;
   branch: string;
   verified?: { show: string; host: string; serviceStatus: string; slotLabel: string } | null;
+  /** A member who chose to be found by brands: on MilitaryVoices, with their media kit when they have one. */
+  member?: { show: string; host: string; serviceStatus: string; kit: string } | null;
+  profileId?: number;
   signupId?: number;
   quality?: number | null;
   channels?: string[];
@@ -645,7 +648,7 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
             {/* ours first */}
             {!!r?.verified?.length && (
               <section className="mt-8">
-                <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#8a5a00]"><BadgeCheck className="h-4 w-4" /> Verified on MilitaryVoices</h3>
+                <h3 className="flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-[#8a5a00]"><BadgeCheck className="h-4 w-4" /> On MilitaryVoices</h3>
                 <div className="mt-3">
                   <ResultsList rows={r.verified} saved={saved} isMember={isMember} onOpen={openIn([...r.verified, ...results])} onSave={(c) => saveTo.mutate({ card: c })} onSaveMany={saveMany} />
                 </div>
@@ -1395,9 +1398,9 @@ function ResultsList({ rows, total, saved, isMember, isAdmin, onOpen, onSave, on
                       <span className="min-w-0">
                         <span className="flex items-center gap-1.5">
                           <span className="truncate font-medium group-hover:text-[#053877] dark:group-hover:text-[#8fb5e8]">{c.name}</span>
-                          {c.verified ? <BadgeCheck className="h-4 w-4 shrink-0 text-[#F0A71F]" aria-label="Verified on MilitaryVoices" /> : c.platformVerified ? <BadgeCheck className="h-4 w-4 shrink-0 text-[#2563eb]" aria-label="Verified on the platform" /> : null}
+                          {c.verified ? <BadgeCheck className="h-4 w-4 shrink-0 text-[#F0A71F]" aria-label="Verified on MilitaryVoices" /> : c.member ? <span className="shrink-0 rounded bg-[#053877]/10 px-1.5 py-0.5 text-[10px] font-semibold text-[#053877] dark:text-[#9cc2ff]">Member</span> : c.platformVerified ? <BadgeCheck className="h-4 w-4 shrink-0 text-[#2563eb]" aria-label="Verified on the platform" /> : null}
                         </span>
-                        <span className="block max-w-[16rem] truncate text-xs text-muted-foreground">{c.verified ? c.verified.show : isPod(c.platform) ? c.category ?? "" : c.handle ? `@${c.handle}` : ""}{c.branch ? ` · ${c.branch}` : c.category ? ` · ${c.category}` : ""}</span>
+                        <span className="block max-w-[16rem] truncate text-xs text-muted-foreground">{c.verified ? c.verified.show : c.member ? c.member.show || (c.handle ? `@${c.handle}` : "On MilitaryVoices") : isPod(c.platform) ? c.category ?? "" : c.handle ? `@${c.handle}` : ""}{c.branch ? ` · ${c.branch}` : c.category ? ` · ${c.category}` : ""}</span>
                       </span>
                     </button>
                   </td>
@@ -1581,6 +1584,8 @@ function CreatorCard({ c, saved, onOpen, onSave }: { c: Card; saved: boolean; on
         <span className="absolute left-3 top-3 flex flex-wrap gap-1.5">
           {c.verified ? (
             <span className="inline-flex items-center gap-1 rounded-full bg-[#F0A71F] px-2 py-0.5 text-[11px] font-semibold text-[#1a1200] shadow"><BadgeCheck className="h-3 w-3" /> Verified</span>
+          ) : c.member ? (
+            <span className="rounded-full bg-white/90 px-2 py-0.5 text-[11px] font-semibold text-[#053877] shadow">On MilitaryVoices</span>
           ) : c.platform ? (
             <span className="rounded-full bg-black/45 px-2 py-0.5 text-[11px] font-semibold text-white backdrop-blur">{platformLabel(c.platform)}</span>
           ) : null}
@@ -1588,7 +1593,7 @@ function CreatorCard({ c, saved, onOpen, onSave }: { c: Card; saved: boolean; on
         </span>
         <span className="absolute inset-x-3 bottom-3">
           <span className="block truncate text-lg font-semibold leading-tight text-white drop-shadow">{c.name}</span>
-          <span className="block truncate text-xs text-white/75">{c.verified ? c.verified.show : isPod(c.platform) ? c.category ?? "" : c.handle ? `@${c.handle}` : ""}</span>
+          <span className="block truncate text-xs text-white/75">{c.verified ? c.verified.show : c.member?.show ? c.member.show : isPod(c.platform) ? c.category ?? "" : c.handle ? `@${c.handle}` : ""}</span>
         </span>
       </button>
       {onSave && (
@@ -1676,13 +1681,13 @@ function RequestButton({ kind, card, isMember, onJoin }: { kind: "email" | "phon
   const [done, setDone] = useState(false);
   const ask = useMutation({
     mutationFn: async () => {
-      const res = await fetch("/api/discover/intro", { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ signupId: card.signupId, kind }) });
+      const res = await fetch("/api/discover/intro", { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ signupId: card.signupId, profileId: card.profileId, kind }) });
       const j = await res.json();
       if (!res.ok) throw new Error(j.message);
     },
     onSuccess: () => {
       setDone(true);
-      toast({ title: "Requested", description: `We'll ask ${card.verified?.host.split(" ")[0] ?? "them"} and put you in touch, usually within a day.` });
+      toast({ title: "Requested", description: `We'll ask ${(card.verified?.host ?? card.member?.host ?? "").split(" ")[0] || "them"} and put you in touch, usually within a day.` });
     },
     onError: (e: Error) => toast({ title: "Couldn't send that", description: e.message, variant: "destructive" }),
   });
@@ -1842,6 +1847,8 @@ function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoi
             {card.branch && <span className="rounded-md bg-[#053877]/[0.07] px-2 py-0.5 text-xs font-medium text-[#053877] dark:text-[#8fb5e8]">{card.branch}</span>}
             {card.verified && <span className="inline-flex items-center gap-1 rounded-md border border-[#F0A71F]/50 bg-[#F0A71F]/10 px-2 py-0.5 text-xs font-medium text-[#8a5a00]"><BadgeCheck className="h-3.5 w-3.5" /> Verified on MilitaryVoices · {card.verified.show}</span>}
             {card.verified?.serviceStatus && <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">{card.verified.serviceStatus}</span>}
+            {card.member && <span className="inline-flex items-center gap-1 rounded-md border border-[#053877]/30 bg-[#053877]/[0.06] px-2 py-0.5 text-xs font-medium text-[#053877] dark:text-[#9cc2ff]">On MilitaryVoices{card.member.show ? ` · ${card.member.show}` : ""}</span>}
+            {card.member?.serviceStatus && <span className="rounded-md bg-muted px-2 py-0.5 text-xs text-muted-foreground">{card.member.serviceStatus}</span>}
           </div>
           {niches.length > 0 && (
             <div className="mt-3">
@@ -1850,7 +1857,13 @@ function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoi
             </div>
           )}
           {/* contact: our creators through us; everyone else from the index */}
-          {card.verified ? (
+          {card.member ? (
+            <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
+              {card.member.kit && <a href={card.member.kit} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-full bg-[#053877] px-3.5 text-sm font-semibold text-white hover:bg-[#0a4a99]" data-testid="member-kit">Media kit <ExternalLink className="h-3.5 w-3.5" /></a>}
+              <span className="text-muted-foreground">They said yes to brands. We introduce you:</span>
+              <RequestButton kind="email" card={card} isMember={isMember} onJoin={onJoin} />
+            </div>
+          ) : card.verified ? (
             <div className="mt-4 flex flex-wrap items-center gap-2 text-sm">
               <span className="text-muted-foreground">Contact through MilitaryVoices, with their say-so:</span>
               <RequestButton kind="email" card={card} isMember={isMember} onJoin={onJoin} />
@@ -1882,7 +1895,7 @@ function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoi
     </div>
   );
 
-  const placeholder = !card ? null : card.verified && !card.handle ? (
+  const placeholder = !card ? null : (card.verified || card.member) && !card.handle ? (
     <p className="p-8 text-sm text-muted-foreground">No public social account on file for audience data yet.</p>
   ) : !isMember ? (
     <div className="p-8">

@@ -77,6 +77,7 @@ import { FloatingChecklist } from "@/components/FloatingChecklist";
 import { MyEvents } from "@/components/MyEvents";
 import { MyOrganization, OrgInvites } from "@/components/MyOrganization";
 import { BrandHome, BrandSetup } from "@/components/BrandHome";
+import { BrandsOptIn } from "@/components/BrandsOptIn";
 import { buildSteps, goToStep } from "@/components/NextSteps";
 import { PromotionScreen } from "@/components/PromotionScreen";
 import { SocialScreen } from "@/components/SocialScreen";
@@ -1120,6 +1121,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     interests: profile?.interests ?? "",
     eventOpen,
     hasOwnEvent: (myEventsList?.length ?? 0) > 0,
+    openToBrands: Boolean(profile?.openToBrands),
   };
   const checklistNav = {
     onGoEvents: () => goTo("events"),
@@ -1310,6 +1312,9 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           <BrandSetup onDone={() => goTo("dashboard")} />
         ) : inSetup || screen === "editProfile" ? (
           <section className="mt-6">
+            {!inSetup && path !== "brand" && (
+              <BrandsOptIn on={Boolean(profile?.openToBrands)} hasKit={Boolean((bioMine as { page?: { brandsOn?: boolean } } | undefined)?.page?.brandsOn)} onGoPage={() => goTo("page")} />
+            )}
             {inSetup && (
               <p className="mb-6 max-w-2xl text-sm text-muted-foreground">
                 {pending || isPodcaster(profile?.interests || interests)

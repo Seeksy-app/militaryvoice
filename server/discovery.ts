@@ -21,6 +21,9 @@ import { waitUntil } from "@vercel/functions";
 import sharp from "sharp";
 import { getAdminEmail, getSessionEmail, requireHostSession } from "./session.js";
 import { ensureOrg, orgIdsOf, orgsOf } from "./orgs.js";
+import { slackNote } from "./slack.js";
+import { bioPages, pathOf } from "../shared/schema.js";
+import { parseBrands } from "../shared/bio.js";
 import { ADDONS, FREE_DISCOVERY } from "../shared/tokens.js";
 import {
   discoveryMembers,
@@ -206,6 +209,9 @@ export interface CreatorCard {
   branch: string;
   /** On our lineup: verified by us, with their show. */
   verified?: { show: string; host: string; serviceStatus: string; slotLabel: string } | null;
+  /** A member who said yes to brands (7 Oct): on MilitaryVoices, with their media kit when they have one. */
+  member?: { show: string; host: string; serviceStatus: string; kit: string } | null;
+  profileId?: number;
   signupId?: number;
   quality?: number | null;
   /** Their link, only on the server, for keeping the picture. */
@@ -486,6 +492,35 @@ async function verifiedCreators(): Promise<(CreatorCard & { match: string })[]> 
     });
 }
 
+/**
+ * Members who chose to be found by brands (Profile → Let brands find me), and
+ * aren't already on the lineup above. Their card shows what they gave us; their
+ * SmartLink's Brands page is the media kit a brand opens.
+ */
+async function openToBrandsCreators(): Promise<(CreatorCard & { match: string })[]> {
+  const rows = (await db.select().from(podcasterProfiles).where(eq(podcasterProfiles.openToBrands, true)))
+    .filter((p) => p.hostName.trim() && pathOf(p.interests) !== "brand");
+  if (!rows.length) return [];
+  const onLineup = new Set((await storage.listSignups((await storage.getFeaturedEvent()).id)).filter((s) => s.status !== "cancelled").map((s) => s.email.trim().toLowerCase()));
+  const pages = await db.select({ email: bioPages.email, handle: bioPages.handle, published: bioPages.published, brands: bioPages.brands }).from(bioPages).where(inArray(bioPages.email, rows.map((r) => r.email)));
+  return rows.filter((p) => !onLineup.has(p.email.trim().toLowerCase())).map((p) => {
+    let accounts: { platform: string; username: string; followers?: number }[] = [];
+    try { accounts = JSON.parse(p.socialAccounts || "[]"); } catch { /* none */ }
+    const best = [...accounts].sort((x, y) => (y.followers ?? 0) - (x.followers ?? 0))[0];
+    const total = accounts.reduce((n, a) => n + (a.followers ?? 0), 0);
+    const branch = p.branch && !["none", "not applicable", "n/a", ""].includes(p.branch.trim().toLowerCase()) ? p.branch : "";
+    const page = pages.find((x) => x.email.trim().toLowerCase() === p.email.trim().toLowerCase() && x.published && x.handle);
+    const kitOn = Boolean(page && parseBrands(page.brands).on);
+    return {
+      platform: best?.platform ?? "", handle: best?.username ?? "", name: p.hostName.trim(), picture: p.photoUrl, followers: total || null, engagement: null, quality: null, branch,
+      profileId: p.id,
+      member: { show: p.podcastName.trim(), host: p.hostName.trim(), serviceStatus: p.serviceStatus ?? "", kit: page ? `/${page.handle}${kitOn ? "/brands" : ""}` : "" },
+      channels: Array.from(new Set(accounts.map((a) => String(a.platform ?? "").toLowerCase()).filter((x) => x && x !== (best?.platform ?? "")))),
+      match: `${p.podcastName} ${p.hostName} ${branch} ${p.serviceStatus ?? ""} ${p.interests} podcast podcaster creator guest speaker veteran military`.toLowerCase(),
+    };
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Members
 // ---------------------------------------------------------------------------
@@ -650,6 +685,18 @@ export function registerDiscoveryRoutes(app: Express): void {
     }),
   );
 
+  /** Let brands find me (7 Oct): a member's say-so to appear to brands in Discovery. Off until they turn it on. */
+  app.put("/api/host/open-to-brands", requireHostSession, (req, res) =>
+    send(res, async () => {
+      const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+      const profile = await storage.getProfileByEmail(email);
+      if (!profile) throw new HttpError(400, "Finish your profile first.");
+      const on = req.body?.on === true;
+      await db.update(podcasterProfiles).set({ openToBrands: on }).where(eq(podcasterProfiles.id, profile.id));
+      return { on };
+    }),
+  );
+
   /** Add Discovery to the signed-in account. Free. */
   app.post("/api/discover/join", requireHostSession, (req, res) =>
     send(res, async () => {
@@ -778,10 +825,23 @@ export function registerDiscoveryRoutes(app: Express): void {
   app.post("/api/discover/intro", (req, res) =>
     send(res, async () => {
       const { email } = await requireMember(req);
-      const signupId = Number(req.body?.signupId);
+      const signupId = Number(req.body?.signupId) || 0;
+      const profileId = Number(req.body?.profileId) || 0;
       const kind = ["email", "phone", "intro"].includes(String(req.body?.kind)) ? String(req.body.kind) : "intro";
-      if (!signupId) throw new HttpError(400, "Which creator?");
-      await db.insert(discoveryIntros).values({ requester: email, signupId, kind, note: String(req.body?.note ?? "").slice(0, 500), createdAt: new Date().toISOString() });
+      if (!signupId && !profileId) throw new HttpError(400, "Which creator?");
+      let who = "";
+      if (profileId) {
+        // Only someone who said yes to brands can be asked for this way.
+        const [p] = await db.select().from(podcasterProfiles).where(and(eq(podcasterProfiles.id, profileId), eq(podcasterProfiles.openToBrands, true)));
+        if (!p) throw new HttpError(404, "That creator isn't taking requests right now.");
+        who = p.hostName;
+      } else {
+        who = (await storage.listSignups((await storage.getFeaturedEvent()).id)).find((s) => s.id === signupId)?.hostName ?? "";
+      }
+      await db.insert(discoveryIntros).values({ requester: email, signupId, profileId, kind, note: String(req.body?.note ?? "").slice(0, 500), createdAt: new Date().toISOString() });
+      // Someone has to make the introduction: tell the team.
+      const org = (await orgsOf(email)).find((o) => o.kind !== "organizer");
+      await slackNote(`:handshake: ${org ? `${org.name} (${email})` : email} asked for an introduction to ${who || "a creator"} (${kind}).`, { label: "Open Discovery intros", url: "https://www.militaryvoices.ai/admin/discovery" }).catch(() => {});
       return { ok: true };
     }),
   );
@@ -882,9 +942,9 @@ export function registerDiscoveryRoutes(app: Express): void {
         // pull in every veteran podcaster on the lineup. Plurals fold to singular.
         const stop = new Set(["the", "and", "with", "for", "who", "that", "creators", "creator", "followers", "veteran", "veterans", "military", "vets", "about", "talk"]);
         const words = `${q}`.toLowerCase().replace(/[^a-z\s]/g, " ").split(/\s+/).filter((w) => w.length > 2 && !stop.has(w)).map((w) => w.replace(/s$/, ""));
-        verified = (await verifiedCreators())
+        verified = [...(await verifiedCreators()), ...(await openToBrandsCreators())]
           .filter((c) => (!branches.length || branches.some((b) => c.branch.toLowerCase() === b.toLowerCase())) && words.every((w) => c.match.includes(w)))
-          .slice(0, 8)
+          .slice(0, 12)
           .map(({ match: _m, ...c }) => c);
         verified = await withExtras(verified);
       }
@@ -1067,10 +1127,10 @@ export function registerDiscoveryRoutes(app: Express): void {
       const [l] = await db.select().from(discoveryLists).where(and(eq(discoveryLists.id, id), await listsOf(email)));
       if (!l) throw new HttpError(404, "No such list.");
       const card = req.body?.card as CreatorCard | undefined;
-      if (!card?.handle && !card?.signupId) throw new HttpError(400, "Which creator?");
-      // One of ours with no social handle is saved by their booking.
+      if (!card?.handle && !card?.signupId && !card?.profileId) throw new HttpError(400, "Which creator?");
+      // One of ours with no social handle is saved by their booking, or (a member open to brands) their profile.
       const platform = card.handle ? String(card.platform || "instagram") : "militaryvoice";
-      const handle = card.handle ? String(card.handle).toLowerCase() : `signup-${card.signupId}`;
+      const handle = card.handle ? String(card.handle).toLowerCase() : card.signupId ? `signup-${card.signupId}` : `member-${card.profileId}`;
       const existing = await db.select().from(discoveryListItems).where(and(eq(discoveryListItems.listId, id), eq(discoveryListItems.platform, platform), eq(discoveryListItems.handle, handle)));
       if (existing.length) return existing[0];
       const [row] = await db

@@ -29,6 +29,8 @@ export interface StepState {
   eventOpen?: boolean;
   /** An event planner has created at least one event of their own. */
   hasOwnEvent?: boolean;
+  /** They said yes to being found by brands in Discovery. */
+  openToBrands?: boolean;
 }
 
 /**
@@ -51,6 +53,7 @@ export const STEP_ANCHOR = {
   discovery: "",
   postify: "",
   myevent: "",
+  brands: "brands-optin",
 } as const;
 
 export interface Step {
@@ -127,6 +130,7 @@ export function buildSteps(state: StepState, nav: StepNav): Step[] {
       { key: "smartlink", label: "Make your SmartLink", detail: "One link for every bio: your videos, your links, and a way to collect emails. Free.", done: Boolean(state.hasSmartLink), cta: "Make my SmartLink", go: goTo(nav.onGoPage) },
       { key: "accounts", label: "Connect your social accounts", detail: "Pōstify posts your clips to them, on a schedule.", done: state.hasAccounts, cta: "Connect accounts", go: nav.onGoIntegrations },
       { key: "postify", label: "Turn a video into clips", detail: "Your first one is free: short clips with captions, in every shape.", done: Boolean(state.hasClips), cta: "Try Pōstify", go: goTo(nav.onGoPostify) },
+      { key: "brands", label: "Let brands find you", detail: "Show up when brands search for creators to sponsor or hire. We make the introduction.", done: Boolean(state.openToBrands), cta: "Turn it on", go: goTo(nav.onGoProfile) },
       { key: "discovery", label: "Find collaborators in Discovery", detail: "Creators and shows to work with. 10 contact emails a month, free.", done: false, cta: "Open Discovery", go: goTo(nav.onGoDiscovery) },
     ];
   }
@@ -146,6 +150,7 @@ export function buildSteps(state: StepState, nav: StepNav): Step[] {
     ...(wants("grow") || wants("events") || wants("host")
       ? ([{ key: "postify", label: "Make clips with Pōstify", detail: "Your first episode is free: short clips with captions, in every shape.", done: Boolean(state.hasClips), cta: "Try Pōstify", go: go(nav.onGoPostify) }] as Step[])
       : []),
+    { key: "brands", label: "Let brands find you", detail: "Show up when brands search for shows to sponsor. We make the introduction.", done: Boolean(state.openToBrands), cta: "Turn it on", go: go(nav.onGoProfile) },
     ...(want.includes("discover")
       ? ([{ key: "discovery", label: "Find a guest in Discovery", detail: "Search a topic and see who's been on the most shows. 10 contact emails a month, free.", done: false, cta: "Open Discovery", go: go(nav.onGoDiscovery) }] as Step[])
       : []),
