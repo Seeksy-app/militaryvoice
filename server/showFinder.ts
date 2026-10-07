@@ -27,8 +27,17 @@ export async function findShows(term: string): Promise<FoundShow[]> {
   return out;
 }
 
-export function registerShowFinder(app: Express, requireHostSession: RequestHandler) {
-  app.get("/api/host/find-show", requireHostSession, async (req, res) => {
+const hits = new Map<string, number[]>();
+
+export function registerShowFinder(app: Express, _requireHostSession: RequestHandler) {
+  // Open (the sign-up tour uses it before anyone has an account), so a fair share per visitor.
+  app.get("/api/host/find-show", async (req, res) => {
+    const ip = String(req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "").split(",")[0].trim();
+    const t = Date.now();
+    const recent = (hits.get(ip) ?? []).filter((x) => t - x < 600_000);
+    recent.push(t);
+    hits.set(ip, recent);
+    if (recent.length > 60) return res.status(429).json({ message: "Slow down a moment." });
     try { res.json(await findShows(String(req.query.q ?? ""))); }
     catch (e) { res.status(502).json({ message: (e as Error).message }); }
   });

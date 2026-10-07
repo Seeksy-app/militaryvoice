@@ -6,22 +6,17 @@ import { IntentPicker } from "@/components/IntentPicker";
 import { ProfileForm } from "@/components/ProfileForm";
 import { BrandSetup } from "@/components/BrandHome";
 import { Button } from "@/components/ui/button";
-import { useAdminAuth } from "@/lib/admin-auth";
 import { pathOf } from "@shared/schema";
 
 // /tour (7 Oct): the real sign-up screens, in practice mode: pick a path, fill
 // the form, see where it lands, and nothing is ever saved. For recording demo
-// videos and for showing someone how it works. Admins only.
+// videos and for showing anyone how it works (a link we can send).
 
 export default function Tour() {
-  const { isAuthenticated, isLoading } = useAdminAuth();
   const clean = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("clean");
   const [interests, setInterests] = useState("");
   const [done, setDone] = useState(false);
   const path = interests ? pathOf(interests) : null;
-
-  if (isLoading) return null;
-  if (!isAuthenticated) return <p className="p-10 text-center text-sm text-muted-foreground">Sign in to the admin to see the tour.</p>;
 
   return (
     <div className="min-h-screen bg-background">
@@ -42,7 +37,7 @@ export default function Tour() {
             <p className="mt-2 text-muted-foreground">{path === "brand"
               ? "Their brand home: find creators, saved lists the team shares, and requests once we approve them."
               : path === "planner" ? "Next: create their first event." : "Their dashboard, with the next steps for the path they picked."}</p>
-            <Link href="/host/dashboard"><Button className="mt-6 gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]">See a dashboard <ArrowRight className="h-4 w-4" /></Button></Link>
+            <Link href="/host/dashboard?start"><Button className="mt-6 gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]">Start for real <ArrowRight className="h-4 w-4" /></Button></Link>
           </section>
         ) : path === "brand" ? (
           <BrandSetup demo onDone={() => setDone(true)} />
