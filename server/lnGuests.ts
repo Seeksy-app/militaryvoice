@@ -7,13 +7,35 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { LnEpisode } from "./listenNotes.js";
 
-/** "ln:" + their name, so the person route knows to ask Listen Notes and who for. */
-export const lnPersonId = (name: string) => `ln:${Buffer.from(name.trim(), "utf8").toString("base64url")}`;
-export function lnPersonName(id: string): string | null {
-  const m = /^ln:([A-Za-z0-9_-]{2,200})$/.exec(id);
+/** "ln:" + their name (and who they are, to tell two people of one name apart), so the person route knows to ask Listen Notes and who for. */
+export const lnPersonId = (name: string, about = "") => `ln:${Buffer.from(`${name.trim()}${about.trim() ? `\u0001${about.trim().slice(0, 48)}` : ""}`, "utf8").toString("base64url")}`;
+export function lnPersonName(id: string): { name: string; about: string } | null {
+  const m = /^ln:([A-Za-z0-9_-]{2,400})$/.exec(id);
   if (!m) return null;
-  const name = Buffer.from(m[1], "base64url").toString("utf8").replace(/\s+/g, " ").trim();
-  return name.length >= 3 && name.length <= 80 ? name : null;
+  const [rawName, rawAbout = ""] = Buffer.from(m[1], "base64url").toString("utf8").split("\u0001");
+  const name = rawName.replace(/\s+/g, " ").trim();
+  return name.length >= 3 && name.length <= 80 ? { name, about: rawAbout.replace(/\s+/g, " ").trim().slice(0, 160) } : null;
+}
+
+/**
+ * Which of these episodes are this person (not someone of the same name, nor
+ * a passing mention). Without anything to go on but the name, all of them.
+ */
+export async function sameGuest(name: string, about: string, eps: LnEpisode[]): Promise<number[]> {
+  const all = eps.map((_, i) => i);
+  if (!about || eps.length < 2 || !process.env.ANTHROPIC_API_KEY) return all;
+  try {
+    const out = await new Anthropic().messages.create({
+      model: "claude-sonnet-5",
+      max_tokens: 300,
+      system: `You decide which podcast episodes feature a particular person, as a guest or host. Keep an episode when it plausibly is them (same field, same story); drop it when it's clearly a different person with the same name or only mentions them. Return JSON only: {"keep":[0,2]}`,
+      messages: [{ role: "user", content: `Person: ${name} (${about})\n\n${eps.map((e, i) => `[${i}] ${e.show.title}: ${e.title}\n${e.about.slice(0, 300)}`).join("\n\n")}` }],
+    });
+    const text = out.content.filter((c) => c.type === "text").map((c) => (c as { text: string }).text).join("");
+    const m = text.match(/\{[\s\S]*\}/);
+    const keep = (m ? (JSON.parse(m[0]) as { keep?: unknown[] }).keep ?? [] : []).map(Number).filter((i) => Number.isInteger(i) && i >= 0 && i < eps.length);
+    return keep.length ? keep : all;
+  } catch { return all; }
 }
 
 export type Guest = { name: string; about: string; episodes: number[] };

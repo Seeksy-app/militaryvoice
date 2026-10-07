@@ -12,7 +12,7 @@ import { db } from "./storage.js";
 import { discoveryCache } from "../shared/schema.js";
 import { getAdminEmail, getSessionEmail } from "./session.js";
 import { isListenNotesConfigured, spendListenNotes, lnSearchShows, lnShowFull, lnSearchEpisodes, type LnEpisode } from "./listenNotes.js";
-import { guestsIn, lnPersonId, lnPersonName, type Guest } from "./lnGuests.js";
+import { guestsIn, lnPersonId, lnPersonName, sameGuest, type Guest } from "./lnGuests.js";
 
 const BASE = "https://developers.podchaser.com/api/rest/v1";
 const DAY = 86_400_000;
@@ -204,7 +204,7 @@ function lnPersonCard(g: Guest, eps: LnEpisode[]): PodPerson {
   const on = g.episodes.map((i) => eps[i]).filter(Boolean);
   const shows = Array.from(new Set(on.map((e) => e.show.title).filter(Boolean)));
   return {
-    kind: "person", pcid: lnPersonId(g.name), name: g.name,
+    kind: "person", pcid: lnPersonId(g.name, g.about), name: g.name,
     subtitle: g.about || (shows[0] ? `Guest on ${shows[0]}` : "Podcast guest"),
     bio: on.length ? `Guest on ${shows.slice(0, 3).join(", ")}${shows.length > 3 ? " and more" : ""}. ${on.map((e) => `"${e.title}"`).slice(0, 2).join(" · ")}` : "",
     image: "", web: "", location: "", followers: null, appearances: on.length, socials: [],
@@ -332,7 +332,7 @@ export function registerPodcastRoutes(app: Express, member: (req: Request) => Pr
         const { episodesFull, ...show } = await lnShowFull(lnId);
         // Who's been on, read off its latest episodes (no extra Listen Notes request).
         const people = (await guestsIn(episodesFull)).filter((g) => !show.host.toLowerCase().includes(g.name.toLowerCase()))
-          .map((g) => ({ pcid: lnPersonId(g.name), name: g.name, image: "", role: g.about || "Guest", episodes: g.episodes.length }));
+          .map((g) => ({ pcid: lnPersonId(g.name, g.about), name: g.name, image: "", role: g.about || "Guest", episodes: g.episodes.length }));
         return { ...show, people };
       }
       const id = String(req.query.id ?? "").replace(/[^0-9]/g, "").slice(0, 20);
@@ -377,12 +377,15 @@ export function registerPodcastRoutes(app: Express, member: (req: Request) => Pr
       if (w.visitor) throw new HttpError(401, "Create a free account to open a profile.");
       if (!peopleOpen(req)) throw new HttpError(403, "Hosts & guests opens Oct 5.");
       // Someone found on Listen Notes: the episodes with their name in, newest first.
-      const lnName = lnPersonName(String(req.query.pcid ?? ""));
-      if (lnName) {
+      const ln = lnPersonName(String(req.query.pcid ?? ""));
+      if (ln) {
+        const lnName = ln.name;
         if (!isListenNotesConfigured() || !(await spendListenNotes(w.id))) throw new HttpError(429, "That's all the profile lookups for today. Try again tomorrow.");
         const r = await lnSearchEpisodes({ term: `"${lnName}"`, page: 0, byDate: true });
-        const last = lnName.toLowerCase().split(" ").pop() ?? "";
-        const eps = r.episodes.filter((e) => `${e.title} ${e.about} ${e.show.host}`.toLowerCase().includes(last));
+        const named = r.episodes.filter((e) => `${e.title} ${e.about} ${e.show.host}`.toLowerCase().includes(lnName.toLowerCase()));
+        // Two people can share a name: keep the episodes that are this one.
+        const keep = new Set(await sameGuest(lnName, ln.about, named));
+        const eps = named.filter((_, i) => keep.has(i));
         const role = (e: LnEpisode) => (e.show.host.toLowerCase().includes(lnName.toLowerCase()) ? "Host" : "Guest");
         const shows = new Map<string, { id: string; title: string; image: string; web: string; role: string; episodes: number }>();
         for (const e of eps) {
@@ -393,7 +396,7 @@ export function registerPodcastRoutes(app: Express, member: (req: Request) => Pr
         }
         return {
           kind: "person", pcid: String(req.query.pcid), name: lnName,
-          appearances: Math.max(eps.length, Math.min(r.total, 999)),
+          appearances: eps.length < named.length ? eps.length : Math.max(eps.length, Math.min(r.total, 999)),
           shows: Array.from(shows.values()).sort((a, b) => b.episodes - a.episodes),
           recent: eps.map((e) => ({ title: e.title, date: e.date, web: e.web, show: e.show.title, showId: e.show.id, image: e.show.image, role: role(e) })),
           source: "listennotes",
