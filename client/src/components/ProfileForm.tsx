@@ -1,3 +1,4 @@
+import { ShowFinder } from "@/components/ShowFinder";
 import { SmsConsent } from "@/components/SmsConsent";
 import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -182,6 +183,8 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
   const bypassGuard = useRef(false);
   const nextAfterSave = useRef<"events" | "dashboard">("events");
   const isSetup = !profile;
+  /** Setup: their podcast isn't out yet, so the name is a working title and hosting comes next. */
+  const [startingShow, setStartingShow] = useState(false);
 
   const { data: social } = useQuery<{ configured: boolean; accounts: SocialAccount[] }>({
     queryKey: ["/api/host/social"],
@@ -682,16 +685,28 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
               title="Your show"
               description="On your directory card, and on any lineup you join."
             >
+              {variant === "setup" && (
+                <ShowFinder
+                  onPick={(s) => {
+                    if (s) form.setValue("podcastName", s.title, { shouldDirty: true, shouldValidate: true });
+                    form.setValue("rssUrl", s?.rss ?? "", { shouldDirty: true });
+                  }}
+                  onStarting={(v) => {
+                    setStartingShow(v);
+                    try { if (v) localStorage.setItem("mv_start_show", "1"); else localStorage.removeItem("mv_start_show"); } catch { /* fine */ }
+                  }}
+                />
+              )}
               <FormField
                 control={form.control}
                 name="podcastName"
                 render={({ field }) => (
                   <FormItem>
                     <FormLabel>
-                      Podcast / show name <span className="text-destructive">*</span>
+                      {startingShow ? "What will you call it?" : "Podcast / show name"} <span className="text-destructive">*</span>
                     </FormLabel>
                     <FormControl>
-                      <Input placeholder="The Night Watch Podcast" {...field} data-testid="input-podcast-name" />
+                      <Input placeholder={startingShow ? "A working title is fine" : "The Night Watch Podcast"} {...field} data-testid="input-podcast-name" />
                     </FormControl>
                     <FormMessage />
                   </FormItem>
@@ -798,10 +813,10 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
             </SectionCard>
             )}
 
-            {podcaster && (
+            {/* Not at sign-up (7 Oct): Find your show fills the feed in; nobody is asked for an RSS link. */}
+            {podcaster && variant !== "setup" && (
             <SectionCard
               plain={variant === "profile"}
-              step={variant === "setup" ? 3 : undefined}
               icon={Headphones}
               title="Where people can listen"
               description="Both optional — add whichever you have, or skip this and come back later."
@@ -848,7 +863,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
 
             <SectionCard
               plain={variant === "profile"}
-              step={variant === "setup" ? (podcaster ? 4 : 2) : undefined}
+              step={variant === "setup" ? (podcaster ? 3 : 2) : undefined}
               icon={Globe}
               title="Social media"
               description={podcaster

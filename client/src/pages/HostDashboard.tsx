@@ -1352,7 +1352,12 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                 setProfileDirty(false);
                 try { localStorage.removeItem("mv_interests"); } catch { /* fine */ }
                 const want = profile?.interests || interests;
-                if (inSetup && pathOf(want) === "planner") {
+                let startShow = false;
+                try { startShow = localStorage.getItem("mv_start_show") === "1"; localStorage.removeItem("mv_start_show"); } catch { /* fine */ }
+                if (inSetup && startShow) {
+                  // Their podcast isn't out yet: free hosting is the next step.
+                  setScreen("podcast");
+                } else if (inSetup && pathOf(want) === "planner") {
                   // An event planner's next step is their own event.
                   setScreen("myevents");
                 } else if (inSetup && !eventOpen) {
