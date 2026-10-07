@@ -11,7 +11,8 @@ import { eq } from "drizzle-orm";
 import { db } from "./storage.js";
 import { discoveryCache } from "../shared/schema.js";
 import { getAdminEmail, getSessionEmail } from "./session.js";
-import { isListenNotesConfigured, spendListenNotes, lnSearchShows, lnShowFull } from "./listenNotes.js";
+import { isListenNotesConfigured, spendListenNotes, lnSearchShows, lnShowFull, lnSearchEpisodes, type LnEpisode } from "./listenNotes.js";
+import { guestsIn, lnPersonId, lnPersonName, type Guest } from "./lnGuests.js";
 
 const BASE = "https://developers.podchaser.com/api/rest/v1";
 const DAY = 86_400_000;
@@ -196,6 +197,20 @@ const LOCKED = ["audienceEstimate"];
 const PEOPLE_OPENS = Date.parse("2026-10-05T04:00:00Z");
 const peopleOpen = (req: Request) => Boolean(getAdminEmail(req)) || Date.now() >= PEOPLE_OPENS;
 
+/** Podchaser answering right now (its key has been refused since 30 Sep): people come from Listen Notes when it isn't. */
+const podchaserWorks = () => (podchaserOn() ? monthUsage().then(() => true, () => false) : Promise.resolve(false));
+/** A guest read off Listen Notes episodes, as a person card. */
+function lnPersonCard(g: Guest, eps: LnEpisode[]): PodPerson {
+  const on = g.episodes.map((i) => eps[i]).filter(Boolean);
+  const shows = Array.from(new Set(on.map((e) => e.show.title).filter(Boolean)));
+  return {
+    kind: "person", pcid: lnPersonId(g.name), name: g.name,
+    subtitle: g.about || (shows[0] ? `Guest on ${shows[0]}` : "Podcast guest"),
+    bio: on.length ? `Guest on ${shows.slice(0, 3).join(", ")}${shows.length > 3 ? " and more" : ""}. ${on.map((e) => `"${e.title}"`).slice(0, 2).join(" · ")}` : "",
+    image: "", web: "", location: "", followers: null, appearances: on.length, socials: [],
+  };
+}
+
 /** A fresh request, counted against who caused it: a visitor by address, a member by email. */
 async function spendOne(who: string, allowed: number, message: string): Promise<void> {
   const key = `pc:fresh:${who}:${new Date().toISOString().slice(0, 10)}`;
@@ -222,12 +237,14 @@ export function registerPodcastRoutes(app: Express, member: (req: Request) => Pr
   app.get("/api/discover/podcasts/status", (req, res) =>
     send(res, async () => {
       res.set("Cache-Control", "no-store");
-      if (!podchaserOn()) return { on: false };
+      // Hosts & guests runs on Listen Notes whenever Podchaser can't answer.
+      const lnPeople = isListenNotesConfigured() && peopleOpen(req);
+      if (!podchaserOn()) return isListenNotesConfigured() ? { on: true, ok: true, people: lnPeople, locked: LOCKED, source: "listennotes" } : { on: false };
       try {
         const u = await monthUsage(true);
         return { on: true, ok: true, people: peopleOpen(req), locked: LOCKED, ...(getAdminEmail(req) ? { month: { tier: u.tier, used: u.used, left: u.remaining, quota: u.quota, resets: u.cycleEnd } } : {}) };
       } catch (err) {
-        return { on: true, ok: false, why: (err as Error).message };
+        return { on: true, ok: false, why: (err as Error).message, people: lnPeople, locked: LOCKED };
       }
     }),
   );
@@ -254,6 +271,29 @@ export function registerPodcastRoutes(app: Express, member: (req: Request) => Pr
         const since = active ? Date.now() - 90 * DAY : undefined;
         const r = await lnSearchShows({ term, page, byDate: sort !== "relevance", activeSince: since });
         return { kind, term, page, pageSize: r.perPage, total: Math.min(r.total, lnPages * 10), results: r.results, preview: false, locked: LOCKED, source: "listennotes" };
+      }
+
+      // Hosts & guests, for a member, while Podchaser can't answer: guests read off Listen Notes episodes.
+      if (kind === "people" && !w.visitor && listenNotesTester(w.id) && isListenNotesConfigured() && !(await podchaserWorks())) {
+        if (page >= lnPages) return { kind, term, page, pageSize: 10, total: 0, results: [], preview: false, locked: LOCKED, source: "listennotes" };
+        const words = q || term;
+        let at = page, guests: Guest[] = [], eps: LnEpisode[] = [], more = false;
+        // A page of episodes with no named guests in it (a topic's solo shows): one more, on the first page only.
+        for (let tries = 0; tries < (page === 0 ? 2 : 1) && guests.length < 3; tries++, at++) {
+          if (!(await spendListenNotes(w.id))) { if (tries) break; throw new HttpError(429, "That's all the guest searches for today. Try again tomorrow."); }
+          const r = await lnSearchEpisodes({ term: words, page: at, byDate: sort === "recent_episode" });
+          const found = await guestsIn(r.episodes, words);
+          const offset = eps.length;
+          eps = [...eps, ...r.episodes];
+          guests = [...guests, ...found.map((g) => ({ ...g, episodes: g.episodes.map((i) => i + offset) }))];
+          more = r.total > (at + 1) * 10 && at + 1 < lnPages;
+          if (!r.episodes.length) break;
+        }
+        const byName = new Map<string, Guest>();
+        for (const g of guests) { const had = byName.get(g.name.toLowerCase()); if (had) had.episodes.push(...g.episodes); else byName.set(g.name.toLowerCase(), { ...g }); }
+        const results = Array.from(byName.values()).sort((a, b) => b.episodes.length - a.episodes.length).map((g) => lnPersonCard(g, eps));
+        // Paging follows the episodes, not the people; "Best matches" rather than a count that means nothing.
+        return { kind, term, page: at - 1, pageSize: 10, total: more ? 99_999 : 0, results, preview: false, locked: LOCKED, source: "listennotes" };
       }
 
       let found = await readCache<{ total: number; perPage: number; results: (PodShow | PodPerson)[] }>(k, 7 * DAY);
@@ -289,7 +329,11 @@ export function registerPodcastRoutes(app: Express, member: (req: Request) => Pr
       if (lnId) {
         if (!listenNotesTester(w.id)) throw new HttpError(403, "That show isn't open to you yet.");
         if (!isListenNotesConfigured() || !(await spendListenNotes(w.id))) throw new HttpError(429, "That's all the show lookups for today. Try again tomorrow.");
-        return lnShowFull(lnId);
+        const { episodesFull, ...show } = await lnShowFull(lnId);
+        // Who's been on, read off its latest episodes (no extra Listen Notes request).
+        const people = (await guestsIn(episodesFull)).filter((g) => !show.host.toLowerCase().includes(g.name.toLowerCase()))
+          .map((g) => ({ pcid: lnPersonId(g.name), name: g.name, image: "", role: g.about || "Guest", episodes: g.episodes.length }));
+        return { ...show, people };
       }
       const id = String(req.query.id ?? "").replace(/[^0-9]/g, "").slice(0, 20);
       if (!id) throw new HttpError(400, "Which show?");
@@ -332,6 +376,29 @@ export function registerPodcastRoutes(app: Express, member: (req: Request) => Pr
       const w = await who(req);
       if (w.visitor) throw new HttpError(401, "Create a free account to open a profile.");
       if (!peopleOpen(req)) throw new HttpError(403, "Hosts & guests opens Oct 5.");
+      // Someone found on Listen Notes: the episodes with their name in, newest first.
+      const lnName = lnPersonName(String(req.query.pcid ?? ""));
+      if (lnName) {
+        if (!isListenNotesConfigured() || !(await spendListenNotes(w.id))) throw new HttpError(429, "That's all the profile lookups for today. Try again tomorrow.");
+        const r = await lnSearchEpisodes({ term: `"${lnName}"`, page: 0, byDate: true });
+        const last = lnName.toLowerCase().split(" ").pop() ?? "";
+        const eps = r.episodes.filter((e) => `${e.title} ${e.about} ${e.show.host}`.toLowerCase().includes(last));
+        const role = (e: LnEpisode) => (e.show.host.toLowerCase().includes(lnName.toLowerCase()) ? "Host" : "Guest");
+        const shows = new Map<string, { id: string; title: string; image: string; web: string; role: string; episodes: number }>();
+        for (const e of eps) {
+          if (!e.show.id) continue;
+          const had = shows.get(e.show.id);
+          if (had) had.episodes++;
+          else shows.set(e.show.id, { id: e.show.id, title: e.show.title, image: e.show.image, web: "", role: role(e), episodes: 1 });
+        }
+        return {
+          kind: "person", pcid: String(req.query.pcid), name: lnName,
+          appearances: Math.max(eps.length, Math.min(r.total, 999)),
+          shows: Array.from(shows.values()).sort((a, b) => b.episodes - a.episodes),
+          recent: eps.map((e) => ({ title: e.title, date: e.date, web: e.web, show: e.show.title, showId: e.show.id, image: e.show.image, role: role(e) })),
+          source: "listennotes",
+        };
+      }
       const pcid = String(req.query.pcid ?? "").replace(/[^0-9A-Za-z]/g, "").slice(0, 30);
       if (!pcid) throw new HttpError(400, "Who?");
       return cached(`pc2:person:${pcid}`, 30 * DAY, async () => {

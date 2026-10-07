@@ -131,6 +131,30 @@ export async function lnSearchShows(o: { term: string; page: number; byDate: boo
   return { total: num(j?.total) ?? rows.length, perPage: 10, results: rows.map((r: any) => lnShow(r)) };
 }
 
+/** An episode from a search or a show, with the show it's on. */
+export type LnEpisode = { title: string; about: string; date: string; web: string; minutes: number | null; show: { id: string; title: string; image: string; host: string } };
+function lnEpisode(e: any, show?: any): LnEpisode {
+  const p = show ?? e?.podcast ?? {};
+  return {
+    title: clean(e?.title_original ?? e?.title, 200),
+    about: clean(e?.description_original ?? e?.description, 700),
+    date: msIso(e?.pub_date_ms),
+    web: String(e?.listennotes_url ?? ""),
+    minutes: num(e?.audio_length_sec) ? Math.round(Number(e.audio_length_sec) / 60) : null,
+    show: { id: p?.id ? `ln:${p.id}` : "", title: clean(p?.title_original ?? p?.title, 160), image: String(p?.thumbnail || p?.image || e?.thumbnail || ""), host: clean(p?.publisher_original ?? p?.publisher, 160) },
+  };
+}
+
+/** Episodes whose title or notes match: where guests turn up. Ten a page. */
+export async function lnSearchEpisodes(o: { term: string; page: number; byDate: boolean }) {
+  const j = await lnGet("/search", {
+    q: o.term, type: "episode", offset: o.page * 10, page_size: 10, language: "English",
+    sort_by_date: o.byDate ? 1 : 0, only_in: "title,description", len_min: 10,
+  });
+  const rows = Array.isArray(j?.results) ? j.results : [];
+  return { total: num(j?.total) ?? rows.length, episodes: rows.map((e: any) => lnEpisode(e)) as LnEpisode[] };
+}
+
 /** One show, with its ten latest episodes. */
 export async function lnShowFull(id: string) {
   const p = await lnGet(`/podcasts/${encodeURIComponent(id)}`, {});
@@ -143,5 +167,7 @@ export async function lnShowFull(id: string) {
     people: [],
     locked: [] as string[],
     recent: (Array.isArray(p?.episodes) ? p.episodes : []).slice(0, 10).map((e: any) => ({ title: clean(e?.title, 160), date: msIso(e?.pub_date_ms), web: String(e?.listennotes_url ?? ""), minutes: num(e?.audio_length_sec) ? Math.round(Number(e.audio_length_sec) / 60) : null })),
+    /** The same episodes with their notes, for finding who's been on (not sent to the page). */
+    episodesFull: (Array.isArray(p?.episodes) ? p.episodes : []).slice(0, 10).map((e: any) => lnEpisode(e, p)) as LnEpisode[],
   };
 }

@@ -426,7 +426,7 @@ export function PodcastDrawer({ open, from, onGo, onClose, isMember, onJoin, sav
                   </ul>
                 </section>
               )}
-              <p className="pt-2 text-[11px] text-muted-foreground">Podcast data from Podchaser, refreshed monthly.</p>
+              <p className="pt-2 text-[11px] text-muted-foreground">{id.startsWith("ln:") ? <>Podcast data from <a href="https://www.listennotes.com" target="_blank" rel="noreferrer" className="underline-offset-2 hover:underline">Listen Notes</a>{person ? ". Guests are read from episode titles and notes." : "."}</> : "Podcast data from Podchaser, refreshed monthly."}</p>
             </div>
           </>
         )}
