@@ -83,8 +83,9 @@ export function NavBar({ product, account, tone = "light", bare = false }: { pro
               </Link>
             );
           })}
-          <Link href="/sponsor" className={linkCls(location === "/sponsor")} data-testid="link-nav-sponsors">
-            Sponsors
+          {/* Brands and sponsors (7 Oct): one door, which also leads to event sponsorship. */}
+          <Link href="/for-brands" className={linkCls(location === "/for-brands" || location === "/sponsor")} data-testid="link-nav-sponsors">
+            For brands
           </Link>
         </nav>
 
@@ -149,7 +150,7 @@ export function NavBar({ product, account, tone = "light", bare = false }: { pro
               )}
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
-                <Link href="/sponsor">Sponsors</Link>
+                <Link href="/for-brands">For brands</Link>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
