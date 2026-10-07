@@ -1293,3 +1293,22 @@ export async function sendOrgInviteEmail(input: { to: string; orgName: string; k
     text: `${who} added you to the team at ${input.orgName} on MilitaryVoices.ai.\n\nSign in with this email address and press Join (no password, just a code we email you):\n${input.link}\n\nNot expecting it? Ignore it and nothing happens.\n`,
   }).then((id) => Boolean(id));
 }
+
+/** A brand sent a creator a request (phase 4). Sent only once the owner switches it on in Admin. */
+export async function sendOpportunityEmail(input: { to: string; name: string; brand: string; title: string; kind: string; link: string }): Promise<boolean> {
+  const first = input.name.trim().split(/\s+/)[0] || "there";
+  return sendRawEmail({ kind: "sendOpportunityEmail",
+    to: input.to,
+    subject: `${input.brand} sent you a request on MilitaryVoices.ai`,
+    html: emailShell({
+      banner: EMAIL_BANNERS.conversation,
+      bannerAlt: "MilitaryVoices.ai",
+      eyebrow: "A new opportunity",
+      heading: `${escapeHtml(input.brand)} wants to work with you`,
+      body: `<p style="margin:0 0 10px;">Hi ${escapeHtml(first)},</p><p style="margin:0 0 10px;"><b>${escapeHtml(input.brand)}</b> sent you a request: <b>${escapeHtml(input.title)}</b> (${escapeHtml(input.kind.toLowerCase())}).</p><p style="margin:0 0 4px;">Read it, and say you're interested (with your rate) or pass. Your email and number stay private until you both want to connect.</p>`,
+      cta: { href: input.link, label: "See the request" },
+      footerNote: "Sent because you chose to let brands find you on MilitaryVoices.ai. Turn that off any time in Profile.",
+    }),
+    text: `Hi ${first},\n\n${input.brand} sent you a request on MilitaryVoices.ai: ${input.title} (${input.kind.toLowerCase()}).\n\nRead it, and say you're interested (with your rate) or pass. Your email and number stay private until you both want to connect.\n\n${input.link}\n`,
+  }).then((id) => Boolean(id));
+}

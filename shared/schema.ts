@@ -3209,3 +3209,57 @@ export const scheduledTexts = pgTable("scheduled_texts", {
   error: text("error").notNull().default(""),
   createdAt: text("created_at").notNull(),
 }, (t) => [index("scheduled_texts_due_idx").on(t.status, t.sendAt)]);
+
+/**
+ * Requests (7 Oct 2026): a brand asks creators on MilitaryVoices for something
+ * (a sponsored read, a post, a guest spot, an appearance). Each creator it goes
+ * to gets their own row and their own thread, answers Interested (with a rate)
+ * or Not for me, and once the brand connects, both sides see each other's
+ * email. Intro only for now: no money moves through us yet.
+ */
+export const brandRequests = pgTable("brand_requests", {
+  id: serial("id").primaryKey(),
+  orgId: integer("org_id").notNull(),
+  createdBy: text("created_by").notNull(),
+  /** sponsor | post | guest | appearance | ambassador | other */
+  kind: text("kind").notNull().default("sponsor"),
+  title: text("title").notNull(),
+  details: text("details").notNull().default(""),
+  /** Whole dollars; 0 = not said. */
+  budgetLow: integer("budget_low").notNull().default(0),
+  budgetHigh: integer("budget_high").notNull().default(0),
+  /** When it's for, in their words ("November", "Veterans Day week"). */
+  timing: text("timing").notNull().default(""),
+  /** open | closed */
+  status: text("status").notNull().default("open"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (t) => [index("brand_requests_org_idx").on(t.orgId)]);
+export type BrandRequestRow = typeof brandRequests.$inferSelect;
+export const requestRecipients = pgTable("request_recipients", {
+  id: serial("id").primaryKey(),
+  requestId: integer("request_id").notNull(),
+  email: text("email").notNull(),
+  name: text("name").notNull().default(""),
+  show: text("show").notNull().default(""),
+  picture: text("picture").notNull().default(""),
+  /** new | interested | declined | connected */
+  status: text("status").notNull().default("new"),
+  /** What they'd charge, in their words. */
+  rate: text("rate").notNull().default(""),
+  seenAt: text("seen_at").notNull().default(""),
+  respondedAt: text("responded_at").notNull().default(""),
+  connectedAt: text("connected_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("request_recipients_req_idx").on(t.requestId), index("request_recipients_email_idx").on(t.email)]);
+export type RequestRecipientRow = typeof requestRecipients.$inferSelect;
+export const requestMessages = pgTable("request_messages", {
+  id: serial("id").primaryKey(),
+  recipientId: integer("recipient_id").notNull(),
+  /** brand | creator | team */
+  side: text("side").notNull(),
+  author: text("author").notNull().default(""),
+  body: text("body").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("request_messages_rcpt_idx").on(t.recipientId)]);
+export const REQUEST_KINDS = { sponsor: "Sponsored read", post: "Social post or video", guest: "Guest spot", appearance: "Event appearance", ambassador: "Ambassador", other: "Something else" } as const;
