@@ -30,11 +30,16 @@ function details(b: Record<string, unknown>) {
     ...(int("slotMinutes", 10, 240) !== undefined ? { slotMinutes: int("slotMinutes", 10, 240)! } : {}),
     ...(int("onAirMinutes", 5, 240) !== undefined ? { onAirMinutes: int("onAirMinutes", 5, 240)! } : {}),
     ...(int("bufferMinutes", 0, 60) !== undefined ? { bufferMinutes: int("bufferMinutes", 0, 60)! } : {}),
+    // In person: where, and the nearest airport (three letters) for fares.
+    ...(str("venueName", 160) !== undefined ? { venueName: str("venueName", 160)! } : {}),
+    ...(str("venueAddress", 300) !== undefined ? { venueAddress: str("venueAddress", 300)! } : {}),
+    ...(typeof b.airport === "string" ? { airport: /^[A-Za-z]{3}$/.test(b.airport.trim()) ? b.airport.trim().toUpperCase() : "" } : {}),
   };
 }
 
 const view = (e: typeof events.$inferSelect, booked: number) => ({
   id: e.id, slug: e.slug, name: e.name, tagline: e.tagline, description: e.description, occasion: e.occasion,
+  venueName: e.venueName, venueAddress: e.venueAddress, airport: e.airport,
   startAtUtc: e.startAtUtc, durationHours: e.durationHours, slotMinutes: e.slotMinutes, onAirMinutes: e.onAirMinutes, bufferMinutes: e.bufferMinutes,
   review: e.review || "draft", visible: e.visible, booked, orgId: e.orgId,
   slots: Math.floor((e.durationHours * 60) / Math.max(1, e.slotMinutes)),

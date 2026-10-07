@@ -12,6 +12,7 @@ import { SocialIconRow, PlatformIcon, platformLabel, parseSocialAccounts } from 
 import { spotlightFromSignup, type SpotlightItem } from "@/components/SpotlightCard";
 import { sponsorHref, SponsorRibbon } from "@/components/SponsorRibbon";
 import { DiscoveryPromo } from "@/components/DiscoveryPromo";
+import { GettingThere } from "@/components/GettingThere";
 import { SponsorDialog } from "@/components/SponsorDialog";
 import { PodcasterDialog } from "@/components/PodcasterDialog";
 import { useCountdown } from "@/hooks/use-countdown";
@@ -77,6 +78,9 @@ const EVENT_FALLBACK: PublicEvent = {
   about: "",
   review: "",
   orgId: 0,
+  venueName: "",
+  venueAddress: "",
+  airport: "",
   createdAt: "",
 };
 const HERO_IMAGES = [
@@ -884,6 +888,11 @@ export default function Landing({ slug }: Props) {
           </div>
         </div>
       </section>
+
+      {/* In person: fares from your airport, military travel perks, hotels nearby. */}
+      {event?.venueAddress && (
+        <GettingThere eventId={event.id} venueName={event.venueName} venueAddress={event.venueAddress} airport={event.airport} startAtUtc={event.startAtUtc} durationHours={event.durationHours} />
+      )}
 
       <DiscoveryPromo src="home" />
 

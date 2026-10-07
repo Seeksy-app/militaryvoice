@@ -15,6 +15,7 @@ import { ArrowLeft, CalendarPlus, Copy, ExternalLink, Loader2, MonitorPlay, Send
 type MyEvent = {
   id: number; slug: string; name: string; tagline: string; description: string; occasion: string;
   startAtUtc: string; durationHours: number; slotMinutes: number; onAirMinutes: number; bufferMinutes: number;
+  venueName: string; venueAddress: string; airport: string;
   review: "draft" | "pending" | "approved" | string; visible: boolean; booked: number; slots: number; pageUrl: string; bookUrl: string;
 };
 type Booking = { id: number; hostName: string; podcastName: string; email: string; at: string };
@@ -37,12 +38,17 @@ function EventForm({ initial, onSaved, onCancel }: { initial?: MyEvent; onSaved:
   const [start, setStart] = useState(initial ? toLocalInput(initial.startAtUtc) : "");
   const [hours, setHours] = useState(initial?.durationHours ?? 4);
   const [slot, setSlot] = useState(initial?.slotMinutes ?? 30);
+  const [inPerson, setInPerson] = useState(Boolean(initial?.venueAddress));
+  const [venueName, setVenueName] = useState(initial?.venueName ?? "");
+  const [venueAddress, setVenueAddress] = useState(initial?.venueAddress ?? "");
+  const [airport, setAirport] = useState(initial?.airport ?? "");
   const [busy, setBusy] = useState(false);
   const save = async (e: React.FormEvent) => {
     e.preventDefault();
     setBusy(true);
     try {
-      const body = { name, tagline, description, startAtUtc: new Date(start).toISOString(), durationHours: hours, slotMinutes: slot, onAirMinutes: Math.max(5, slot - 5), bufferMinutes: Math.min(5, slot - 5) };
+      const body = { name, tagline, description, startAtUtc: new Date(start).toISOString(), durationHours: hours, slotMinutes: slot, onAirMinutes: Math.max(5, slot - 5), bufferMinutes: Math.min(5, slot - 5),
+        venueName: inPerson ? venueName : "", venueAddress: inPerson ? venueAddress : "", airport: inPerson ? airport : "" };
       const r = await apiRequest(initial ? "PUT" : "POST", initial ? `/api/host/my-events/${initial.id}` : "/api/host/my-events", body);
       onSaved((await r.json()) as MyEvent);
       toast({ title: initial ? "Saved" : "Your event is created", description: initial ? undefined : "It's a private draft. Send it to us when it's ready." });
@@ -76,6 +82,22 @@ function EventForm({ initial, onSaved, onCancel }: { initial?: MyEvent; onSaved:
         </div>
       </div>
       <p className="text-xs text-muted-foreground">{Math.floor((hours * 60) / Math.max(10, slot))} slots for speakers or shows, each with five minutes for the hand-off.</p>
+      {/* Online by default; in person adds Getting there to the event page. */}
+      <div className="rounded-xl border border-border p-4">
+        <div className="flex rounded-lg border border-border p-0.5 text-sm" role="radiogroup" aria-label="Where it happens">
+          {([[false, "Online"], [true, "In person"]] as const).map(([v, l]) => (
+            <button key={l} type="button" role="radio" aria-checked={inPerson === v} onClick={() => setInPerson(v)} className={`flex-1 rounded-md px-3 py-1.5 ${inPerson === v ? "bg-[#053877] font-semibold text-white" : "hover:bg-muted"}`}>{l}</button>
+          ))}
+        </div>
+        {inPerson && (
+          <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_7rem]">
+            <div><Label htmlFor="ev-venue">Venue</Label><Input id="ev-venue" className="mt-1.5" value={venueName} onChange={(e) => setVenueName(e.target.value)} placeholder="VFW Post 1234" /></div>
+            <div><Label htmlFor="ev-addr">Address</Label><Input id="ev-addr" className="mt-1.5" value={venueAddress} onChange={(e) => setVenueAddress(e.target.value)} placeholder="123 Main St, San Diego, CA" /></div>
+            <div><Label htmlFor="ev-air">Airport</Label><Input id="ev-air" className="mt-1.5" value={airport} maxLength={3} onChange={(e) => setAirport(e.target.value.toUpperCase())} placeholder="SAN" /></div>
+            <p className="text-xs text-muted-foreground sm:col-span-3">Your event page will show Getting there: fares from each visitor's airport, military travel perks and hotels nearby.</p>
+          </div>
+        )}
+      </div>
       <div>
         <Label htmlFor="ev-desc">What it is</Label>
         <Textarea id="ev-desc" rows={4} className="mt-1.5" value={description} onChange={(e) => setDescription(e.target.value)} placeholder="Who it's for, what happens, and why it matters." />

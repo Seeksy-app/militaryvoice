@@ -51,6 +51,12 @@ export const events = pgTable("events", {
   review: text("review").notNull().default(""),
   /** The organization that runs it (an event organizer's account); 0 for ours. */
   orgId: integer("org_id").notNull().default(0),
+  // In person (7 Oct): where it is, for the event page's Getting there.
+  // Empty for an online event, which shows none of it.
+  venueName: text("venue_name").notNull().default(""),
+  venueAddress: text("venue_address").notNull().default(""),
+  /** The nearest airport's three-letter code (SAN), for fares to it. */
+  airport: text("airport").notNull().default(""),
 });
 
 export const insertEventSchema = createInsertSchema(events)

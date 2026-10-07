@@ -464,6 +464,9 @@ function EventSettingsCard({ eventId }: { eventId: number }) {
     description: string;
     occasion: string;
     about: string;
+    venueName: string;
+    venueAddress: string;
+    airport: string;
     startLocal: string;
     durationHours: number;
     slotMinutes: number;
@@ -481,6 +484,9 @@ function EventSettingsCard({ eventId }: { eventId: number }) {
         description: event.description,
         occasion: event.occasion ?? "",
         about: event.about ?? "",
+        venueName: event.venueName ?? "",
+        venueAddress: event.venueAddress ?? "",
+        airport: event.airport ?? "",
         startLocal: utcToDateTimeLocalValue(new Date(event.startAtUtc), zone),
         durationHours: event.durationHours,
         slotMinutes: event.slotMinutes,
@@ -512,6 +518,9 @@ function EventSettingsCard({ eventId }: { eventId: number }) {
         description: form.description,
         occasion: form.occasion,
         about: form.about,
+        venueName: form.venueName.trim(),
+        venueAddress: form.venueAddress.trim(),
+        airport: /^[A-Za-z]{3}$/.test(form.airport.trim()) ? form.airport.trim().toUpperCase() : "",
         startAtUtc: dateTimeLocalToUtc(form.startLocal, zone).toISOString(),
         durationHours: form.durationHours,
         slotMinutes: form.slotMinutes,
@@ -588,6 +597,25 @@ function EventSettingsCard({ eventId }: { eventId: number }) {
             data-testid="input-event-occasion"
           />
           <p className="mt-1 text-xs text-muted-foreground">Used on podcasters' social cards, captions and the About page.</p>
+        </div>
+        {/* In person: the event page gets a Getting there section (fares, military travel perks, hotels). */}
+        <div className="rounded-xl border border-border p-4">
+          <p className="text-sm font-semibold">In person? <span className="font-normal text-muted-foreground">Leave blank for an online event.</span></p>
+          <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_8rem]">
+            <div>
+              <Label htmlFor="event-venue">Venue</Label>
+              <Input id="event-venue" value={form.venueName} onChange={(e) => setForm({ ...form, venueName: e.target.value })} placeholder="San Diego Convention Center" data-testid="input-event-venue" />
+            </div>
+            <div>
+              <Label htmlFor="event-address">Address</Label>
+              <Input id="event-address" value={form.venueAddress} onChange={(e) => setForm({ ...form, venueAddress: e.target.value })} placeholder="111 Harbor Dr, San Diego, CA" data-testid="input-event-address" />
+            </div>
+            <div>
+              <Label htmlFor="event-airport">Airport</Label>
+              <Input id="event-airport" value={form.airport} maxLength={3} onChange={(e) => setForm({ ...form, airport: e.target.value.toUpperCase() })} placeholder="SAN" data-testid="input-event-airport" />
+            </div>
+          </div>
+          <p className="mt-2 text-xs text-muted-foreground">With an address, the event page shows Getting there: fares from each visitor's airport, military travel perks and hotels nearby.</p>
         </div>
         <div>
           <Label htmlFor="event-about">About page</Label>

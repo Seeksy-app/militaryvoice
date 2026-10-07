@@ -130,6 +130,7 @@ import { registerOrganizer } from "./organizer.js";
 import { registerProjects } from "./projects.js";
 import { orgMemberEmails, registerOrgs } from "./orgs.js";
 import { registerProspects } from "./prospects.js";
+import { registerTravel } from "./travel.js";
 import { eventAdminEmails, eventAdminEvents, eventAdminKey, eventAdminMay } from "./eventAdmin.js";
 import { registerDeviceCheck } from "./deviceCheck.js";
 import { registerHealth, beat, addHealthCheck } from "./health.js";
@@ -6770,6 +6771,7 @@ export function registerRoutes(app: Express): void {
   registerProjects(app, requireAdmin);
   registerOrgs(app, requireHostSession, requireAdmin);
   registerProspects(app, requireAdmin);
+  registerTravel(app);
   registerDeviceCheck(app);
   registerGreenRoomChat(app, requireAdmin, requireHostSession, studioHostEmails);
   registerAutomations(app, requireAdmin, {
