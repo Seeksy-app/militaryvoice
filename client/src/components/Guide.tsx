@@ -78,7 +78,7 @@ export function GuideLayer() {
   useEffect(() => {
     if (!run) return;
     const step = run.steps[run.i];
-    let raf = 0, scrolled = false;
+    let raf = 0, scrolled = false, gone = false;
     const started = Date.now();
     const tick = () => {
       if (!target.current || !target.current.isConnected) {
@@ -86,7 +86,7 @@ export function GuideLayer() {
         const hit = findTarget(step);
         if (!hit) {
           // Never appeared: move on rather than point at nothing.
-          if (Date.now() - started > 6000) { next(); return; }
+          if (Date.now() - started > 6000) { if (!gone) { gone = true; next(); } return; }
           raf = requestAnimationFrame(tick);
           return;
         }
@@ -105,7 +105,11 @@ export function GuideLayer() {
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    // Animation frames pause in a background tab; scrolling still moves the page.
+    const again = () => { cancelAnimationFrame(raf); tick(); };
+    window.addEventListener("scroll", again, true);
+    window.addEventListener("resize", again);
+    return () => { cancelAnimationFrame(raf); window.removeEventListener("scroll", again, true); window.removeEventListener("resize", again); };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [run]);
 
@@ -186,7 +190,10 @@ export function GuideLayer() {
 
 /** The first visit to the dashboard home: what the four things on it are. Once per browser. */
 export const HOME_TOUR: GuideStep[] = [
-  { title: "Start here", at: [{ sel: '[data-testid="todo-strip"]', text: "Your next steps. We keep this list up to date for you: work down it and each one shows you where to click." }] },
+  { title: "Start here", at: [
+    { sel: '[data-testid="todo-strip"] button[data-testid^="todo-"]:not([data-testid="todo-tour"])', text: "Your next step. Click it and we'll take you there and show you exactly where to click." },
+    { sel: '[data-testid="todo-strip"]', text: "Your next steps. We keep this list up to date for you: work down it." },
+  ] },
   { title: "Your SmartLink", at: [{ sel: '[data-testid="dashboard-smartlink"]', text: "One link for every bio: your show, your videos and a way to collect emails. Free." }] },
   { title: "Your podcast", at: [
     { sel: '[data-testid="dashboard-podcast"]', text: "Host your podcast free, or bring it over. Alex, your podcast producer, walks you through it." },
