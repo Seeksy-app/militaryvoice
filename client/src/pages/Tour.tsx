@@ -48,7 +48,7 @@ export default function Tour() {
                 ? "Tell us about you and your show once. Your directory card is built from these details, and it goes with you to every event you join."
                 : "Tell us about you once. Your directory card is built from these details — it's how organizers find you and invite you."}
             </p>
-            <ProfileForm demo email="you@example.com" profile={null} variant="setup" interests={interests} onSaved={() => setDone(true)} />
+            <ProfileForm demo eventOpen={false} email="you@example.com" profile={null} variant="setup" interests={interests} onSaved={() => setDone(true)} />
           </section>
         )}
       </main>
