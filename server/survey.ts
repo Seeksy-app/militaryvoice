@@ -39,6 +39,22 @@ function cleanAnswers(raw: unknown): Record<string, string | string[]> {
   return out;
 }
 
+/**
+ * How to greet someone in a text: a title stays with the last name ("Mr. Whiskey",
+ * "Dr. Brown", "Sergeant Major Fields"); otherwise their first name, capitalised.
+ */
+export function greetingOf(raw: string): string {
+  const name = raw.trim().replace(/\s*\((ret|retired)\.?\)\s*/gi, " ").replace(/\s+/g, " ");
+  const t = name.match(/^((?:dr|mr|mrs|ms|sgt|sergeant major|sergeant|master sergeant|col|colonel|capt|captain|major|maj|chief|lt|general|gen)\.?)\s+(.+)$/i);
+  const cap = (w: string) => (w ? w[0].toUpperCase() + w.slice(1) : w);
+  if (t) {
+    const words = t[2].split(" ").filter((w) => !/^[A-Z]\.?$/.test(w));
+    const title = t[1].replace(/\b\w/g, (c) => c.toUpperCase());
+    return `${title}${/\.$/.test(title) || !/^(dr|mr|mrs|ms|sgt)$/i.test(t[1]) ? "" : "."} ${cap(words[words.length - 1] ?? "")}`.trim();
+  }
+  return cap(name.split(" ")[0] ?? "") || "there";
+}
+
 async function inviteFor(email: string, name: string, role: string) {
   const e = email.trim().toLowerCase();
   const [have] = await db.select().from(surveyInvites).where(and(eq(surveyInvites.survey, SURVEY), eq(surveyInvites.email, e)));
@@ -400,6 +416,7 @@ export function registerSurvey(app: Express, requireAdmin: RequestHandler): void
     if (!template.includes("{link}")) return res.status(400).json({ message: "The text needs {link} for their survey link." });
     const answered = new Set((await db.select({ email: surveyInvites.email, done: surveyInvites.completedAt }).from(surveyInvites).where(eq(surveyInvites.survey, SURVEY))).filter((r) => r.done).map((r) => r.email.trim().toLowerCase()));
     const stopped = new Set((await db.select({ phone: smsOptOuts.phone }).from(smsOptOuts)).map((r) => r.phone));
+    const exclude = new Set((Array.isArray(req.body?.exclude) ? req.body.exclude : []).map((e: unknown) => String(e).trim().toLowerCase()));
     const seen = new Set<string>();
     const list: { phone: string; name: string; email: string; role: string; link: string; body: string }[] = [];
     const skipped: { name: string; why: string }[] = [];
@@ -411,7 +428,8 @@ export function registerSurvey(app: Express, requireAdmin: RequestHandler): void
       if (answered.has(email)) { skipped.push({ name: p.name, why: "already answered" }); continue; }
       if (seen.has(phone)) continue;
       seen.add(phone);
-      const first = (p.name.trim().replace(/^(dr|mr|mrs|ms|sgt)\.?\s+/i, "").split(/\s+/)[0]) || "there";
+      if (exclude.has(email)) { skipped.push({ name: p.name, why: "left out" }); continue; }
+      const first = greetingOf(p.name);
       const link = req.body?.dry ? `${ORIGIN}/survey/…` : `${ORIGIN}/survey/${(await inviteFor(email, p.name, p.role === "cohost" ? "cohost" : "host")).token}`;
       list.push({ phone, name: p.name, email, role: p.role, link, body: template.replace(/\{name\}/gi, first).replace(/\{link\}/gi, link) });
     }
