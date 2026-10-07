@@ -13,6 +13,7 @@ import { discoveryCache } from "../shared/schema.js";
 import { getAdminEmail, getSessionEmail } from "./session.js";
 import { isListenNotesConfigured, spendListenNotes, lnSearchShows, lnShowFull, lnSearchEpisodes, type LnEpisode } from "./listenNotes.js";
 import { guestsIn, lnPersonId, lnPersonName, sameGuest, type Guest } from "./lnGuests.js";
+import { podscanOn, podscanPeople, podscanPerson, podscanShow, PodscanError } from "./podscan.js";
 
 const BASE = "https://developers.podchaser.com/api/rest/v1";
 const DAY = 86_400_000;
@@ -238,8 +239,8 @@ export function registerPodcastRoutes(app: Express, member: (req: Request) => Pr
     send(res, async () => {
       res.set("Cache-Control", "no-store");
       // Hosts & guests runs on Listen Notes whenever Podchaser can't answer.
-      const lnPeople = isListenNotesConfigured() && peopleOpen(req);
-      if (!podchaserOn()) return isListenNotesConfigured() ? { on: true, ok: true, people: lnPeople, locked: LOCKED, source: "listennotes" } : { on: false };
+      const lnPeople = (isListenNotesConfigured() || podscanOn()) && peopleOpen(req);
+      if (!podchaserOn()) return isListenNotesConfigured() || podscanOn() ? { on: true, ok: true, people: lnPeople, locked: LOCKED, source: podscanOn() ? "podscan" : "listennotes" } : { on: false };
       try {
         const u = await monthUsage(true);
         return { on: true, ok: true, people: peopleOpen(req), locked: LOCKED, ...(getAdminEmail(req) ? { month: { tier: u.tier, used: u.used, left: u.remaining, quota: u.quota, resets: u.cycleEnd } } : {}) };
@@ -273,6 +274,17 @@ export function registerPodcastRoutes(app: Express, member: (req: Request) => Pr
         return { kind, term, page, pageSize: r.perPage, total: Math.min(r.total, lnPages * 10), results: r.results, preview: false, locked: LOCKED, source: "listennotes" };
       }
 
+      // Hosts & guests, for a member: Podscan first (real host and guest records from transcripts).
+      if (kind === "people" && !w.visitor && podscanOn()) {
+        try {
+          const r = await podscanPeople({ q: q || term, page, sort, who: w.id });
+          if (r.results.length || page > 0) return { kind, term, page, pageSize: r.perPage, total: r.total, results: r.results, preview: false, locked: LOCKED, source: "podscan" };
+        } catch (err) {
+          // Out of today's allowance says so; anything else falls through to the next source.
+          if (err instanceof PodscanError && err.status === 429 && /today/.test(err.message)) throw new HttpError(429, err.message);
+          console.warn("Podscan people failed, falling back:", (err as Error).message);
+        }
+      }
       // Hosts & guests, for a member, while Podchaser can't answer: guests read off Listen Notes episodes.
       if (kind === "people" && !w.visitor && listenNotesTester(w.id) && isListenNotesConfigured() && !(await podchaserWorks())) {
         if (page >= lnPages) return { kind, term, page, pageSize: 10, total: 0, results: [], preview: false, locked: LOCKED, source: "listennotes" };
@@ -324,6 +336,12 @@ export function registerPodcastRoutes(app: Express, member: (req: Request) => Pr
     send(res, async () => {
       const w = await who(req);
       if (w.visitor) throw new HttpError(401, "Create a free account to open a show.");
+      // A Podscan show (opened from a Podscan person).
+      const psShow = /^ps:([A-Za-z0-9_-]{3,40})$/.exec(String(req.query.id ?? ""))?.[1];
+      if (psShow) {
+        if (!podscanOn()) throw new HttpError(503, "That show isn't available right now.");
+        try { return await podscanShow(psShow, w.id); } catch (err) { if (err instanceof PodscanError) throw new HttpError(err.status, err.message); throw err; }
+      }
       // A Listen Notes show: asked fresh (their terms), from the month's allowance.
       const lnId = /^ln:([A-Za-z0-9]{8,40})$/.exec(String(req.query.id ?? ""))?.[1];
       if (lnId) {
@@ -376,6 +394,12 @@ export function registerPodcastRoutes(app: Express, member: (req: Request) => Pr
       const w = await who(req);
       if (w.visitor) throw new HttpError(401, "Create a free account to open a profile.");
       if (!peopleOpen(req)) throw new HttpError(403, "Hosts & guests opens Oct 5.");
+      // Someone found on Podscan: their shows and appearances.
+      const psId = /^ps:([A-Za-z0-9_-]{3,60})$/.exec(String(req.query.pcid ?? ""))?.[1];
+      if (psId) {
+        if (!podscanOn()) throw new HttpError(503, "That profile isn't available right now.");
+        try { return await podscanPerson(psId, w.id); } catch (err) { if (err instanceof PodscanError) throw new HttpError(err.status, err.message); throw err; }
+      }
       // Someone found on Listen Notes: the episodes with their name in, newest first.
       const ln = lnPersonName(String(req.query.pcid ?? ""));
       if (ln) {

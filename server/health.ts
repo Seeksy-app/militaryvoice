@@ -17,6 +17,7 @@ import { db, storage } from "./storage.js";
 import { discoveryCache } from "../shared/schema.js";
 import { egress, isLiveKitConfigured, rooms } from "./livekit.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
+import { podscanUsedToday } from "./podscan.js";
 
 export type HealthState = "ok" | "down" | "off";
 export type HealthCheck = { key: string; name: string; group: string; powers: string; state: HealthState; detail: string; ms: number };
@@ -226,6 +227,15 @@ const DEFS: Def[] = [
     run: async () => {
       const k = env("PODCHASER_API_KEY", "PODCHASER_CLIENT_ID", "PODCHASER_KEY");
       return k ? ping("https://developers.podchaser.com/api/rest/v1/usage", { headers: { "x-api-key": k } }) : { state: "off", detail: "Not set up (PODCHASER_API_KEY)" };
+    },
+  },
+  {
+    key: "podscan", name: "Podscan", group: "Social and podcasts", powers: "Hosts & guests in Discovery (people from episode transcripts)",
+    // No call here: every request counts against the day (100 on the trial), and this runs every five minutes.
+    run: async () => {
+      if (!env("PODSCAN_API_KEY")) return { state: "off", detail: "Not set up (PODSCAN_API_KEY); Hosts & guests uses Listen Notes" };
+      const u = await podscanUsedToday().catch(() => null);
+      return { state: "ok", detail: `Key set${u ? `; ${u.used} of ${u.cap} requests used today` : ""}` };
     },
   },
   {

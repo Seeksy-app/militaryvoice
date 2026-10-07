@@ -1215,7 +1215,7 @@ export function registerDiscoveryRoutes(app: Express): void {
       // One of ours with no social handle is saved by their booking, or (a member open to brands) their profile.
       const platform = card.handle ? String(card.platform || "instagram") : "militaryvoice";
       // A Listen Notes guest's id is case-sensitive (their name, encoded): kept as it is.
-      const handle = card.handle ? (/^ln:/.test(String(card.handle)) ? String(card.handle).slice(0, 200) : String(card.handle).toLowerCase()) : card.signupId ? `signup-${card.signupId}` : `member-${card.profileId}`;
+      const handle = card.handle ? (/^(ln|ps):/.test(String(card.handle)) ? String(card.handle).slice(0, 200) : String(card.handle).toLowerCase()) : card.signupId ? `signup-${card.signupId}` : `member-${card.profileId}`;
       const existing = await db.select().from(discoveryListItems).where(and(eq(discoveryListItems.listId, id), eq(discoveryListItems.platform, platform), eq(discoveryListItems.handle, handle)));
       if (existing.length) return existing[0];
       const [row] = await db

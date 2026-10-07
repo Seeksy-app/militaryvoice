@@ -369,7 +369,7 @@ export function PodcastDrawer({ open, from, onGo, onClose, isMember, onJoin, sav
                   <h3 className="mb-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Reach them</h3>
                   <div className="flex flex-wrap gap-2">
                     {(person?.socials ?? []).map((s) => <LinkChip key={s.platform} href={s.url}>{SOCIAL_NAME[s.platform] ?? s.platform}</LinkChip>)}
-                    {person?.web && <LinkChip href={person.web}>Podchaser</LinkChip>}
+                    {person?.web && <LinkChip href={person.web}>{id.startsWith("ps:") ? "Website" : "Podchaser"}</LinkChip>}
                   </div>
                   {!person?.socials?.length && <p className="mt-2 text-sm text-muted-foreground">Their shows below list how to reach them.</p>}
                 </section>
@@ -381,8 +381,8 @@ export function PodcastDrawer({ open, from, onGo, onClose, isMember, onJoin, sav
                   <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground"><Users className="h-3.5 w-3.5" /> Hosts and guests</h3>
                   <ul className="grid gap-2 sm:grid-cols-2">
                     {show.people.map((p) => (
-                      <li key={`${p.pcid}-${p.role}`}>
-                        <button type="button" onClick={() => onGo({ kind: "person", pcid: p.pcid, seed: { name: p.name, image: p.image } })} className="flex w-full items-center gap-3 rounded-xl border border-border px-3 py-2 text-left hover:border-[#053877]/40" data-testid="pod-person">
+                      <li key={`${p.pcid || p.name}-${p.role}`}>
+                        <button type="button" disabled={!p.pcid} onClick={() => p.pcid && onGo({ kind: "person", pcid: p.pcid, seed: { name: p.name, image: p.image } })} className="flex w-full items-center gap-3 rounded-xl border border-border px-3 py-2 text-left hover:border-[#053877]/40" data-testid="pod-person">
                           <Art src={p.image} name={p.name} round size={36} />
                           <span className="min-w-0 flex-1"><span className="block truncate text-sm font-semibold">{p.name}</span><span className="block truncate text-xs text-muted-foreground">{p.role}{p.episodes ? ` · ${p.episodes} ${p.episodes === 1 ? "episode" : "episodes"}` : ""}</span></span>
                           <ChevronRight className="h-4 w-4 text-muted-foreground" />
@@ -426,7 +426,7 @@ export function PodcastDrawer({ open, from, onGo, onClose, isMember, onJoin, sav
                   </ul>
                 </section>
               )}
-              <p className="pt-2 text-[11px] text-muted-foreground">{id.startsWith("ln:") ? <>Podcast data from <a href="https://www.listennotes.com" target="_blank" rel="noreferrer" className="underline-offset-2 hover:underline">Listen Notes</a>{person ? ". Guests are read from episode titles and notes." : "."}</> : "Podcast data from Podchaser, refreshed monthly."}</p>
+              <p className="pt-2 text-[11px] text-muted-foreground">{id.startsWith("ps:") ? <>Podcast data from <a href="https://podscan.fm" target="_blank" rel="noreferrer" className="underline-offset-2 hover:underline">Podscan</a>, read from episode transcripts.</> : id.startsWith("ln:") ? <>Podcast data from <a href="https://www.listennotes.com" target="_blank" rel="noreferrer" className="underline-offset-2 hover:underline">Listen Notes</a>{person ? ". Guests are read from episode titles and notes." : "."}</> : "Podcast data from Podchaser, refreshed monthly."}</p>
             </div>
           </>
         )}
