@@ -330,8 +330,9 @@ function ShowPage({ s, n, event }: { s: Show; n: number; event: Mag["event"] }) 
     const el = body.current;
     if (el && el.scrollHeight > el.clientHeight + 1 && fit < 4) setFit((f) => f + 1);
   });
+  // One type size on every page; a page that still runs long shows one episode, then (rarely) smaller type.
+  const rows = fit >= 1 ? 1 : 2;
   const size = fit >= 2 ? (fit >= 3 ? 0.9 : 0.95) : 1;
-  const rows = fit >= 4 ? 1 : 2;
   const [pick, setPick] = useState(-1);
   const [go, setGo] = useState(0);
   const segment: Episode | null = s.audio ? { title: "Their segment from the Marathon", audioUrl: s.audio, date: "" } : null;
@@ -356,23 +357,23 @@ function ShowPage({ s, n, event }: { s: Show; n: number; event: Mag["event"] }) 
         </div>
 
         <div ref={body} className="mt-8 flex min-h-0 flex-1 flex-col gap-5 overflow-hidden">
-          {s.blurb && <p className="leading-[1.6] text-slate-800" style={{ fontSize: 15.5 * size }}>{s.blurb}</p>}
+          {s.blurb && <p className="leading-[1.6] text-slate-800" style={{ fontSize: 14.5 * size }}>{s.blurb}</p>}
           {s.quote && (
             <blockquote className="border-l-4 pl-5" style={{ borderColor: GOLD }}>
-              <p className="font-semibold italic leading-snug" style={{ ...HEAD, color: NAVY, fontSize: 20 * size }}>“{s.quote}”</p>
+              <p className="font-semibold italic leading-snug" style={{ ...HEAD, color: NAVY, fontSize: 19 * size }}>“{s.quote}”</p>
               <footer className="mt-1.5 text-[13px] font-semibold text-slate-500">{s.hostName}</footer>
             </blockquote>
           )}
           {s.onTheDay && (
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: GOLD }}>On the day</p>
-              <p className="mt-2 leading-[1.6] text-slate-800" style={{ fontSize: 15 * size }}>{s.onTheDay}</p>
+              <p className="mt-2 leading-[1.6] text-slate-800" style={{ fontSize: 14 * size }}>{s.onTheDay}</p>
             </div>
           )}
           {s.about && !s.onTheDay && (
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: GOLD }}>{s.aboutOwn ? `About ${first}` : `About ${first}, in their words`}</p>
-              <p className="mt-2 leading-[1.6] text-slate-700" style={{ fontSize: 14.5 * size }}>{s.about}</p>
+              <p className="mt-2 leading-[1.6] text-slate-700" style={{ fontSize: 14 * size }}>{s.about}</p>
             </div>
           )}
           {!!s.links?.length && (
