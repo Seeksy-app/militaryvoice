@@ -418,8 +418,7 @@ function FlyerPage({ s, f, n }: { s: Show; f: Flyer; n: number }) {
     <Page n={n} bg="#e9d9b4" color={INK}>
       <div className="absolute inset-0" style={{ background: "radial-gradient(120% 70% at 50% 100%, rgba(120,80,30,.18), transparent 60%)" }} />
       <div className="absolute inset-x-0 top-0" style={{ height: 440 }}>
-        <img src={f.banner} alt="American Warriors" className="h-full w-full object-cover" style={{ objectPosition: "50% 45%" }} />
-        <div className="absolute inset-x-0 bottom-0 h-24" style={{ background: "linear-gradient(transparent, #e9d9b4)" }} />
+        <img src={f.banner} alt="American Warriors" className="h-full w-full object-cover" style={{ objectPosition: "50% 45%", WebkitMaskImage: "linear-gradient(#000 72%, transparent)", maskImage: "linear-gradient(#000 72%, transparent)" }} />
         <span className="absolute left-8 top-7 rounded-full px-3.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.18em]" style={{ background: "rgba(47,37,22,.82)", color: CREAM }}>Show {s.number} · {s.time}</span>
       </div>
       <div className="absolute inset-x-12" style={{ top: 418 }}>
@@ -439,8 +438,8 @@ function FlyerPage({ s, f, n }: { s: Show; f: Flyer; n: number }) {
             </figure>
           ))}
         </div>
-        <div className="mt-5 flex flex-wrap justify-center gap-x-2 gap-y-1.5">
-          {f.eras.map((e) => <span key={e} className="border px-2 py-0.5 text-[12.5px] uppercase tracking-[0.06em]" style={{ ...STENCIL, borderColor: "rgba(47,37,22,.45)" }}>{e}</span>)}
+        <div className="mt-5 flex justify-center gap-1.5">
+          {f.eras.map((e) => <span key={e} className="whitespace-nowrap border px-1.5 py-0.5 text-[11.5px] uppercase tracking-[0.04em]" style={{ ...STENCIL, borderColor: "rgba(47,37,22,.45)" }}>{e}</span>)}
         </div>
       </div>
       <footer className="absolute inset-x-0 bottom-0 flex items-center gap-5 px-12 py-6" style={{ background: SLATE, color: CREAM }}>
