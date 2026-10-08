@@ -733,7 +733,7 @@ function ModeMenu({ mode, setMode, onOpenChange, peopleOpen }: { mode: Mode; set
               <li key={m.v}>
                 <button type="button" role="option" aria-selected={m.v === mode} aria-disabled={soon} disabled={soon} onClick={() => { setMode(m.v); setOpen(false); }} className={`flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left ${soon ? "cursor-default opacity-60" : "hover:bg-muted"} ${m.v === mode ? "bg-[#053877]/[0.06]" : ""}`} data-testid={`discover-mode-${m.v}`}>
                   <IconTile icon={I} size="sm" />
-                  <span><span className="flex items-center gap-2 text-sm font-semibold">{m.label}{soon && <span className="rounded-full bg-[#053877]/10 px-2 py-0.5 text-[11px] font-semibold text-[#053877]">Opens Oct 5</span>}</span><span className="block text-xs text-muted-foreground">{m.hint}</span></span>
+                  <span><span className="flex items-center gap-2 text-sm font-semibold">{m.label}{soon && <span className="rounded-full bg-[#053877]/10 px-2 py-0.5 text-[11px] font-semibold text-[#053877]">Soon</span>}</span><span className="block text-xs text-muted-foreground">{m.hint}</span></span>
                 </button>
               </li>
             );

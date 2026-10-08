@@ -144,7 +144,7 @@ export const HELP_INDEX: HelpEntry[] = [
   },
   {
     title: "Rooms or Studio?",
-    summary: "Rooms is here now. Studio, the full marathon studio for your own show, is coming October 5.",
+    summary: "Rooms is the quick way to record and go live with guests; Studio is the full marathon studio for your own show. Both are coming soon.",
     href: "/help/rooms#studio",
     keywords: "studio coming soon october 5 oct 5th marathon studio scenes layouts lower thirds producer console rooms difference",
     audience: "podcasters",

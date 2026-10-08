@@ -70,7 +70,7 @@ export default function HelpRooms() {
         <HelpSection n={6} id="studio" title="Rooms or Studio?">
           <ul className="list-disc space-y-2 pl-5">
             <li><strong>Rooms</strong> is here now: quick, with guests on a link, record, go live.</li>
-            <li><strong>Studio</strong> is the full marathon studio for your own show: scenes, layouts, lower thirds and a producer console. It's coming October 5. Until then, Rooms covers recording and going live.</li>
+            <li><strong>Studio</strong> is the full marathon studio for your own show: scenes, layouts, lower thirds and a producer console. It's coming soon.</li>
             <li>On Marathon day, your slot goes out from the green room, not your room. See <a href="/prepare" className="font-medium text-primary hover:underline">the podcaster guide</a>.</li>
           </ul>
         </HelpSection>

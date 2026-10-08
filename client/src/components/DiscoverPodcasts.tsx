@@ -588,7 +588,7 @@ export function GuestFinder({ showTitle = "" }: { showTitle?: string }) {
       {status.data && status.data.people !== true ? (
         <div className="rounded-2xl border border-border bg-card p-6 text-center shadow-sm" data-testid="guest-soon">
           <Users className="mx-auto h-6 w-6 text-[#053877]" />
-          <h2 className="mt-2 text-sm font-semibold">Find a guest opens Oct 5</h2>
+          <h2 className="mt-2 text-sm font-semibold">Find a guest is back soon</h2>
           <p className="mx-auto mt-1 max-w-sm text-xs text-muted-foreground">Search people who've been guests on podcasts, the most-booked first, and invite them onto your show.</p>
         </div>
       ) : <>
