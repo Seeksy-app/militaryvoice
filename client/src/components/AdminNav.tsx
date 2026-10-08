@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { LayoutDashboard, MonitorPlay, ListOrdered, Users, Handshake, Megaphone, Mail, Contact, DollarSign, Settings2, CalendarDays, DoorOpen, PanelLeftClose, PanelLeftOpen, Film, Compass, BookOpen, BadgeCheck, BookUser, Activity, MessagesSquare, ClipboardList, NotebookPen, Smartphone, KanbanSquare, Building2 } from "lucide-react";
+import { ChevronDown, LayoutDashboard, MonitorPlay, ListOrdered, Users, Handshake, Megaphone, Mail, Contact, DollarSign, Settings2, CalendarDays, DoorOpen, PanelLeftClose, PanelLeftOpen, Film, Compass, BookOpen, BadgeCheck, BookUser, Activity, MessagesSquare, ClipboardList, NotebookPen, Smartphone, KanbanSquare, Building2 } from "lucide-react";
 
 // The admin's nav, down the left.
 //
@@ -63,23 +63,39 @@ export const EVENT_GROUPS: { title: string; items: AdminSection[] }[] = [
   },
 ];
 
+// Grouped like the members' nav (8 Oct): a few headings you can fold, not thirteen in a row.
 export const TOP_GROUPS: { title: string; items: AdminSection[] }[] = [
+  { title: "", items: [{ key: "overview", label: "Overview", icon: LayoutDashboard }] },
   {
-    title: "",
+    title: "People",
     items: [
-      { key: "overview", label: "Overview", icon: LayoutDashboard },
-      { key: "events", label: "Events", icon: CalendarDays },
-      { key: "rooms", label: "Rooms", icon: DoorOpen },
-      { key: "discovery", label: "Discovery", icon: Compass },
-      { key: "verified", label: "Verified", icon: BadgeCheck },
+      // The platform's CRM: every member and everyone tied to us, with Mail; each event keeps its own too.
+      { key: "crm", label: "CRM & mail", icon: Mail },
       { key: "directory", label: "Member Directory", icon: BookUser },
-      // The platform's CRM: every member and everyone tied to us; each event keeps its own too.
-      { key: "crm", label: "CRM", icon: Mail },
+      { key: "verified", label: "Verified", icon: BadgeCheck },
       // Brands, agencies and event organizers: accounts with teams of their own.
       { key: "orgs", label: "Organizations", icon: Building2 },
+    ],
+  },
+  {
+    title: "Events & studio",
+    items: [
+      { key: "events", label: "Events", icon: CalendarDays },
+      { key: "rooms", label: "Rooms", icon: DoorOpen },
+    ],
+  },
+  {
+    title: "Growth",
+    items: [
+      { key: "discovery", label: "Discovery", icon: Compass },
+      { key: "projects", label: "Projects", icon: KanbanSquare },
+    ],
+  },
+  {
+    title: "Running it",
+    items: [
       { key: "team", label: "Team", icon: Contact },
       { key: "finances", label: "Finances", icon: DollarSign },
-      { key: "projects", label: "Projects", icon: KanbanSquare },
       { key: "aar", label: "AAR", icon: NotebookPen },
       { key: "health", label: "System health", icon: Activity },
     ],
@@ -108,6 +124,9 @@ export function AdminNav({
   header?: React.ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState(() => localStorage.getItem("mv_admin_nav") === "icons");
+  // Which headings are folded, remembered like the members' nav.
+  const [closed, setClosed] = useState<string[]>(() => { try { return JSON.parse(localStorage.getItem("mv_admin_folded") || "[]"); } catch { return []; } });
+  const fold = (t: string) => setClosed((c) => { const next = c.includes(t) ? c.filter((x) => x !== t) : [...c, t]; try { localStorage.setItem("mv_admin_folded", JSON.stringify(next)); } catch { /* fine */ } return next; });
   useEffect(() => {
     localStorage.setItem("mv_admin_nav", collapsed ? "icons" : "full");
   }, [collapsed]);
@@ -145,47 +164,49 @@ export function AdminNav({
     >
       {header && !collapsed && <div className="mb-3">{header}</div>}
 
-      <div className="flex flex-col gap-4">
-        {groups.map((g, gi) => (
-          <div key={g.title || gi}>
-            {g.title && !collapsed && (
-              <div className="mb-1 px-2.5 text-[10px] font-bold uppercase tracking-[0.13em] text-muted-foreground/70">
-                {g.title}
-              </div>
-            )}
-            {/* Collapsed, the heading becomes a rule: the grouping is still
-                visible, it just stops taking a line to say so. */}
-            {g.title && collapsed && gi > 0 && <div className="mx-2 mb-1.5 h-px bg-border" />}
-            <div className="flex flex-col gap-0.5">
-              {g.items.map(({ key, label, icon: Icon }) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => onChange(key)}
-                  title={collapsed ? label : undefined}
-                  className={`flex items-center gap-2.5 rounded-lg py-2 text-sm font-medium transition-colors ${
-                    collapsed ? "justify-center px-0" : "px-2.5"
-                  } ${
-                    value === key
-                      ? "bg-primary/10 text-primary"
-                      : "text-muted-foreground hover:bg-muted hover:text-foreground"
-                  }`}
-                  data-testid={`tab-admin-${key}`}
-                >
-                  <Icon className="h-4 w-4 shrink-0" />
-                  {!collapsed && <span className="truncate">{label}</span>}
+      <div className="flex flex-col">
+        {groups.map((g, gi) => {
+          const folded = !!g.title && !collapsed && closed.includes(g.title) && !g.items.some((i) => i.key === value);
+          return (
+            <div key={g.title || gi} className={gi ? "mt-2 border-t border-border pt-2" : ""}>
+              {/* Headings like the members' nav: sentence case, and they fold (never over the page you're on). */}
+              {g.title && !collapsed && (
+                <button type="button" onClick={() => fold(g.title)} aria-expanded={!folded} className="flex w-full items-center justify-between rounded-full px-4 py-1.5 text-left text-[13px] font-medium text-foreground/80 hover:bg-muted" data-testid={`admin-group-${g.title}`}>
+                  {g.title} <ChevronDown className={`h-4 w-4 text-muted-foreground transition-transform ${folded ? "-rotate-90" : ""}`} />
                 </button>
-              ))}
+              )}
+              {!folded && (
+                <div className="flex flex-col gap-0.5">
+                  {g.items.map(({ key, label, icon: Icon }) => {
+                    const on = value === key;
+                    return (
+                      <button
+                        key={key}
+                        type="button"
+                        onClick={() => onChange(key)}
+                        title={collapsed ? label : undefined}
+                        className={`flex items-center gap-3 rounded-full py-2 text-left text-[14px] font-medium outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#053877]/30 ${collapsed ? "justify-center px-0" : "px-4"} ${
+                          on ? "bg-[#053877]/[0.12] font-semibold text-[#053877] dark:bg-white/[0.14] dark:text-white" : "text-foreground/75 hover:bg-muted hover:text-foreground"
+                        }`}
+                        data-testid={`tab-admin-${key}`}
+                      >
+                        <Icon className={`h-4 w-4 shrink-0 ${on ? "text-[#053877] dark:text-white" : "text-muted-foreground"}`} />
+                        {!collapsed && <span className="truncate">{label}</span>}
+                      </button>
+                    );
+                  })}
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       <button
         type="button"
         onClick={() => setCollapsed((v) => !v)}
-        className={`mt-4 flex items-center gap-2.5 rounded-lg py-2 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground ${
-          collapsed ? "w-full justify-center" : "px-2.5"
+        className={`mt-3 flex items-center gap-3 rounded-full border-t border-border py-2 pt-3 text-xs font-medium text-muted-foreground transition-colors hover:bg-muted hover:text-foreground ${
+          collapsed ? "w-full justify-center" : "px-4"
         }`}
         data-testid="button-admin-nav-collapse"
       >

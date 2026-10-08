@@ -128,6 +128,7 @@ import { logSceneTake, registerSceneLog } from "./sceneLog.js";
 import { audienceRecipients, registerPeople } from "./people.js";
 import { registerOrganizer } from "./organizer.js";
 import { registerProjects } from "./projects.js";
+import { registerAdminOverview } from "./adminOverview.js";
 import { orgMemberEmails, registerOrgs } from "./orgs.js";
 import { registerProspects } from "./prospects.js";
 import { registerTravel } from "./travel.js";
@@ -6773,6 +6774,7 @@ export function registerRoutes(app: Express): void {
   registerPeople(app, requireAdmin);
   registerOrganizer(app, requireHostSession, requireAdmin);
   registerProjects(app, requireAdmin);
+  registerAdminOverview(app, requireAdmin);
   registerOrgs(app, requireHostSession, requireAdmin);
   registerProspects(app, requireAdmin);
   registerTravel(app);
