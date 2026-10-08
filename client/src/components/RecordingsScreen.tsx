@@ -81,20 +81,23 @@ export function RecordingsScreen({ socialAccounts }: { socialAccounts?: string |
         <div className="col-span-2 sm:col-span-3 lg:col-span-2">
           <UploadRecording autoOpen />
         </div>
+        {/* On a phone the counts are one swipeable row, so the episodes start on the first screen (8 Oct). */}
+        <div className="col-span-2 -mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] sm:contents [&::-webkit-scrollbar]:hidden">
         {stats.map((s) => {
           const inner = (
             <>
               <s.icon className="h-4 w-4 text-[#b36b00] dark:text-[#F0A71F]" />
-              <p className="mt-1.5 text-2xl font-bold tabular-nums text-foreground">{s.n}</p>
+              <p className="mt-1 text-xl font-bold tabular-nums text-foreground sm:mt-1.5 sm:text-2xl">{s.n}</p>
               <p className="text-xs text-muted-foreground">{s.label}{s.go && <span aria-hidden> →</span>}</p>
             </>
           );
           return s.go ? (
-            <button key={s.label} type="button" onClick={s.go} className="flex flex-col justify-center rounded-2xl border border-border bg-card px-4 py-3 text-left transition-colors hover:border-[#053877]/40 hover:bg-[#053877]/[0.03]" data-testid={`library-stat-${s.label}`}>{inner}</button>
+            <button key={s.label} type="button" onClick={s.go} className="flex min-w-[7.25rem] shrink-0 flex-col justify-center rounded-2xl border border-border bg-card px-3.5 py-2.5 text-left transition-colors hover:border-[#053877]/40 sm:min-w-0 sm:px-4 sm:py-3 hover:bg-[#053877]/[0.03]" data-testid={`library-stat-${s.label}`}>{inner}</button>
           ) : (
-            <div key={s.label} className="flex flex-col justify-center rounded-2xl border border-border bg-card px-4 py-3" data-testid={`library-stat-${s.label}`}>{inner}</div>
+            <div key={s.label} className="flex min-w-[7.25rem] shrink-0 flex-col justify-center rounded-2xl border border-border bg-card px-3.5 py-2.5 sm:min-w-0 sm:px-4 sm:py-3" data-testid={`library-stat-${s.label}`}>{inner}</div>
           );
         })}
+        </div>
       </div>
 
       {/* Two views of one Library: the episodes (with their folders), and every clip made from them. */}
