@@ -1871,7 +1871,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           out with no link, no media and no YouTube. */}
       {workspace && (
         <>
-          <FloatingChecklist state={checklistState} {...checklistNav} />
+          {/* Not on the home screen: Next steps is right there, and two copies of one list is one ignored. */}
+          {screen !== "dashboard" && <FloatingChecklist state={checklistState} {...checklistNav} />}
           <GuideLayer />
         </>
       )}
