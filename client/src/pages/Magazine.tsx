@@ -321,6 +321,57 @@ function AwardPage({ a, photo, n, event }: { a: NonNullable<Mag["award"]>; photo
   );
 }
 
+/** The PodcastOne partnership (8 Oct, from LiveOne's 5 Oct release): the news on one page, the whole release a scan away. */
+const RELEASE_URL = "https://www.tradingview.com/news/acceswire:04c71c9d0094b:0-liveone-nasdaq-lvo-subsidiary-podcastone-nasdaq-podc-launches-multi-year-distribution-content-and-marketing-partnership-with-national-military-podcast-day/";
+function NewsPage({ n, podcastOne, liveOne }: { n: number; podcastOne: string; liveOne: string }) {
+  const stats: [string, string][] = [["16", "hours live"], ["32", "podcasters"], ["56", "channels"], ["234K", "followers"]];
+  return (
+    <Page n={n}>
+      {/* The band: who, and the tickers. */}
+      <div className="absolute inset-x-0 top-0 px-12 pb-9 pt-11" style={{ background: NAVY, color: "#fff" }}>
+        <p className="text-[12px] font-bold uppercase tracking-[0.3em]" style={{ color: GOLD }}>In the news · October 5, 2026</p>
+        <h2 className="mt-3 text-balance text-[38px] font-bold leading-[1.05] tracking-tight" style={HEAD}>PodcastOne and National Military Podcast Day launch a multi-year partnership</h2>
+        <div className="mt-6 flex items-center gap-6">
+          {podcastOne && <img src={podcastOne} alt="PodcastOne" className="h-12 w-auto object-contain" />}
+          {liveOne && <img src={liveOne} alt="LiveOne" className="h-9 w-auto object-contain" />}
+          <img src="/nmpd-logo.png" alt="National Military Podcast Day" className="h-14 w-14 object-contain" />
+          <span className="flex-1" />
+          {["NASDAQ: PODC", "NASDAQ: LVO"].map((t) => <span key={t} className="rounded-full border border-white/30 px-3 py-1 text-[12px] font-bold tracking-[0.08em]" style={{ color: GOLD }}>{t}</span>)}
+        </div>
+      </div>
+      <div className="absolute inset-x-12 flex flex-col" style={{ top: 330, bottom: 150 }}>
+        <p className="text-[16px] leading-[1.6] text-slate-800">LiveOne subsidiary PodcastOne has signed a multi-year distribution, content and marketing partnership with National Military Podcast Day, founded by Colonel Riccoh Player, USMC (Ret.). It launched with the Podcast Marathon itself: sixteen hours, reveille to end of duty, with a new show on air every thirty minutes.</p>
+        <div className="mt-6 grid grid-cols-4 gap-3">
+          {stats.map(([v, l]) => (
+            <div key={l} className="rounded-xl px-3 py-3 text-center" style={{ background: "#f3f6fb" }}>
+              <p className="text-[30px] font-bold leading-none" style={{ ...HEAD, color: NAVY }}>{v}</p>
+              <p className="mt-1 text-[12px] font-semibold uppercase tracking-[0.1em] text-slate-500">{l}</p>
+            </div>
+          ))}
+        </div>
+        <p className="mt-6 text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: GOLD }}>What it means</p>
+        <ul className="mt-2 space-y-2 text-[14.5px] leading-[1.5] text-slate-800">
+          <li className="flex gap-2"><span style={{ color: GOLD }}>■</span><span>PodcastOne streams the full Marathon live, then keeps it on demand all year.</span></li>
+          <li className="flex gap-2"><span style={{ color: GOLD }}>■</span><span>The day is promoted across PodcastOne's shows, including #StillServing: The VFW Podcast, The MilSpouse Show!, The Hard to Kill Podcast and History On The Road.</span></li>
+          <li className="flex gap-2"><span style={{ color: GOLD }}>■</span><span>Military voices reach a network of more than a billion monthly impressions on YouTube, Spotify, Apple Podcasts and iHeartRadio, with 3.9 billion downloads to date.</span></li>
+        </ul>
+        <blockquote className="mt-6 border-l-4 pl-5" style={{ borderColor: GOLD }}>
+          <p className="text-[20px] font-semibold italic leading-snug" style={{ ...HEAD, color: NAVY }}>“We can't think of a greater good to put our platform toward.”</p>
+          <footer className="mt-1 text-[13px] font-semibold text-slate-500">Kit Gray, President, PodcastOne</footer>
+        </blockquote>
+        <p className="mt-4 text-[14.5px] leading-[1.55] text-slate-700">For Colonel Player, PodcastOne's national reach means the stories of military mothers, fathers, brothers and sisters can now find listeners the day could never have reached on its own.</p>
+      </div>
+      <footer className="absolute inset-x-0 bottom-0 flex items-center gap-4 px-12 pb-10 pt-4" style={{ borderTop: "1px solid #e5e7eb" }}>
+        <Qr url={RELEASE_URL} size={84} />
+        <div className="min-w-0 flex-1">
+          <p className="text-[13px] font-bold" style={{ color: NAVY }}>Scan to read the full release</p>
+          <p className="text-[12px] text-slate-500">Source: LiveOne, via ACCESS Newswire, October 5, 2026</p>
+        </div>
+      </footer>
+    </Page>
+  );
+}
+
 function ShowPage({ s, n, event }: { s: Show; n: number; event: Mag["event"] }) {
   const who = [s.branch, s.service].filter(Boolean).join(" · ");
   const eps = s.episodes ?? [];
@@ -528,6 +579,8 @@ export default function Magazine({ slug }: { slug?: string }) {
       <p className="absolute bottom-10 left-12 text-[14px] font-bold tracking-wide" style={{ color: GOLD }}>MILITARYVOICES.AI</p>
       </>}
     </Page>,
+    // The news, second (8 Oct): the PodcastOne partnership, when PodcastOne is one of the sponsors.
+    ...(m.sponsors.some((sp) => /podcastone/i.test(sp.name)) ? [<NewsPage key="news" n={++n} podcastOne={m.sponsors.find((sp) => /podcastone/i.test(sp.name))?.logo ?? ""} liveOne={m.sponsors.find((sp) => /liveone/i.test(sp.name))?.logo ?? ""} />] : []),
     // Welcome
     <Page key="welcome" n={++n}>
       <div className="absolute inset-x-14 top-16">
