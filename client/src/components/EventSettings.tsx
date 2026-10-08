@@ -269,6 +269,8 @@ export function EventSettings({
                   {ready && <Check className="h-3 w-3 shrink-0" />}
                   <span className="truncate">{ready ? entry.show!.showName : "Show not set up"}</span>
                 </span>
+                {/* "No time yet" means nothing once it's over. */}
+                {(booked || Date.parse(entry.event.startAtUtc) + entry.event.durationHours * 3600_000 > Date.now()) && (
                 <span
                   className={`inline-flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 font-semibold ${
                     booked ? "bg-[#F0A71F]/25 text-[#7a5200]" : "border border-dashed border-border text-muted-foreground"
@@ -277,6 +279,7 @@ export function EventSettings({
                   <Clock className="h-3 w-3" />
                   {timeLabel ?? "No time yet"}
                 </span>
+                )}
               </div>
             </div>
 
@@ -425,9 +428,11 @@ export function EventSettings({
                         {showReady && <Check className="h-3 w-3 shrink-0 text-emerald-400" />}
                         <span className="truncate">{showReady ? open.show!.showName : "Show not set up"}</span>
                       </span>
+                      {(air || !over) && (
                       <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-1 font-semibold ${air ? "bg-[#F0A71F] text-[#1a1200]" : "border border-dashed border-white/30 text-white/70"}`}>
                         <Clock className="h-3 w-3" /> {air ? `${onAirLabel} · ${zoneLabel(zone)}` : "No time yet"}
                       </span>
+                      )}
                     </div>
                   </div>
                 </div>
