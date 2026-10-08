@@ -328,18 +328,18 @@ export function BioBuilder() {
           <span className="pl-1 text-[10px] uppercase tracking-wider text-muted-foreground">30 days</span>
         </div>
       </div>
-      <div className="mb-5 inline-flex max-w-full gap-1 overflow-x-auto rounded-full border border-border bg-card p-1 shadow-sm" role="tablist">
+      <div className="mb-5 inline-flex max-w-full gap-1 overflow-x-auto rounded-full border border-border bg-card p-1 shadow-sm [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist">
         {([["profile", "Profile", User], ["design", "Design", Palette], ["content", "Content", Layers], ["social", "Social", AtSign], ["share", "Share", Share2], ["brands", "Brands", Handshake], ["family", "Family", Heart], ["questions", "Messages", MessageCircle]] as const).map(([k, l, I]) => SOON.includes(k) ? (
           <Tooltip key={k}>
             <TooltipTrigger asChild>
-              <span role="tab" aria-disabled="true" aria-selected={false} tabIndex={0} className="inline-flex shrink-0 cursor-not-allowed select-none items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold text-muted-foreground/45" data-testid={`bio-tab-${k}`}>
+              <span role="tab" aria-disabled="true" aria-selected={false} tabIndex={0} className="hidden shrink-0 cursor-not-allowed select-none items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold text-muted-foreground/45 sm:inline-flex" data-testid={`bio-tab-${k}`}>
                 <I className="h-4 w-4" /> {l}
               </span>
             </TooltipTrigger>
             <TooltipContent side="bottom" className="font-semibold">Coming soon</TooltipContent>
           </Tooltip>
         ) : (
-          <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => go(k)} className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-2 text-sm font-semibold transition-colors ${tab === k ? "bg-[#053877] text-white shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`} data-testid={`bio-tab-${k}`}>
+          <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => go(k)} className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-2 text-sm font-semibold transition-colors sm:px-4 ${tab === k ? "bg-[#053877] text-white shadow-sm" : "text-muted-foreground hover:bg-muted hover:text-foreground"}`} data-testid={`bio-tab-${k}`}>
             <I className="h-4 w-4" /> {l}{k === "questions" && newQs > 0 && <span className="rounded-full bg-[#F0A71F] px-1.5 text-[11px] font-bold text-[#1a1200]">{newQs}</span>}
           </button>
         ))}
