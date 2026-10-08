@@ -461,7 +461,7 @@ Open my SmartLink
 === MILITARYVOICES.AI PLATFORM · www.militaryvoices.ai/help/guests ===
 All help Help · Guests
 Book a guest, or be one
-Two tabs on your show find people to have on, and shows to go on. They search Discovery for you. Discovery is free, and it's added for you with your first search.
+Two tabs on your show find people to have on, and shows to go on. They search Discovery for you, which comes with Scale and Pro and is added for you with your first search.
 1 Book a guest
 a Press Podcast in the menu, open your show, and choose the Book a guest tab.
 b Search by a topic they're known for, or a name. People who've been guests on podcasts come up, the most-booked first.
@@ -498,7 +498,7 @@ All help Help · Your account
 Your plan, credits, and what you deleted
 Two things live in your account menu (press your photo, top right): Plan & billing and Recently deleted.
 1 Growth: what's free
-Growth is the free plan. Your SmartLink, podcast hosting and Ask my show are free, always. So is Discovery, with 10 contact emails a month. Your first Pōstify episode is free too.
+Growth is the free plan. Your SmartLink, podcast hosting and Ask my show are free, always, and your first Pōstify episode is free too. Discovery comes with Scale and Pro; for brands and event planners it's free.
 2 Pōstify plans
 A plan gives you credits every month for clips and clean episodes.
 Scale, $19.95 a month: 30 credits a month, 4 clips an episode.
@@ -514,7 +514,7 @@ Music and text edits are included.
 A contact email in Discovery, past your monthly ones: 1 credit. Once paid for, it's free to see again.
 To top up, press Buy 50 credits · $35 in Plan & billing. On a monthly plan, if you run out, extra credits go on your next bill, up to a limit you set in Pōstify.
 4 Discovery Pro
-Discovery is free with 10 contact emails and 200 profile look-ups a month. Discovery Pro raises that to 100 contact emails and 1,000 look-ups a month, for $29 a month. You don't need a Pōstify plan for it.
+Discovery comes with Scale and Pro (and is free for brands and event planners), with 10 contact emails and 200 profile look-ups a month. Discovery Pro raises that to 100 contact emails and 1,000 look-ups a month, for $29 a month. You don't need a Pōstify plan for it.
 a In Plan & billing, press Add Discovery Pro.
 b Once it's on, the same card shows how many contact emails you have left this month, and Manage.
 Past your monthly contact emails, each one is 1 credit. See Book a guest, or be one.
