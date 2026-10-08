@@ -1,6 +1,7 @@
 import type { SocialAccount } from "@shared/schema";
 import { PlatformIcon, platformBackground, formatFollowers } from "@/components/SocialIcons";
 import { ExternalLink } from "lucide-react";
+import { useLayoutEffect, useRef, useState } from "react";
 
 // The dashboard's answer to "what am I connected to?" — one chip per account,
 // showing the avatar the platform actually has, its network badge, and the
@@ -20,6 +21,20 @@ export function ConnectedAccountsStrip({
   extra?: React.ReactNode;
   extraCount?: number;
 }) {
+  // One row on a computer (8 Oct: ten accounts took three rows and pushed the
+  // SmartLink and Next steps below the fold); "Show all" opens the rest.
+  const row = useRef<HTMLDivElement>(null);
+  const [open, setOpen] = useState(false);
+  const [more, setMore] = useState(false);
+  useLayoutEffect(() => {
+    const el = row.current;
+    if (!el) return;
+    const check = () => setMore(el.scrollHeight > el.clientHeight + 4);
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [accounts.length, extraCount]);
   if (accounts.length + extraCount === 0) return null;
 
   return (
@@ -28,6 +43,12 @@ export function ConnectedAccountsStrip({
         <p className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">
           Connected accounts <span className="font-normal text-muted-foreground">({accounts.length + extraCount})</span>
         </p>
+        <span className="flex items-center gap-3">
+        {(more || open) && (
+          <button type="button" onClick={() => setOpen((v) => !v)} className="hidden text-xs font-semibold text-muted-foreground hover:text-foreground sm:inline" data-testid="button-accounts-more">
+            {open ? "Show fewer" : `Show all ${accounts.length + extraCount}`}
+          </button>
+        )}
         {onManage && (
           <button
             type="button"
@@ -38,10 +59,11 @@ export function ConnectedAccountsStrip({
             Manage
           </button>
         )}
+        </span>
       </div>
 
       {/* On a phone: one row that scrolls sideways, each account its picture and followers. */}
-      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] sm:flex-wrap sm:overflow-visible [&::-webkit-scrollbar]:hidden">
+      <div ref={row} className={`-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] sm:flex-wrap [&::-webkit-scrollbar]:hidden ${open ? "sm:overflow-visible" : "sm:max-h-[3.4rem] sm:overflow-hidden"}`}>
         {accounts.map((a) => (
           <a
             key={`${a.platform}-${a.username}`}
