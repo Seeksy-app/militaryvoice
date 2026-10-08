@@ -54,7 +54,7 @@ export default function PressRelease() {
             {data?.podcastOne && <img src={data.podcastOne} alt="PodcastOne" className="h-16 w-auto object-contain sm:h-24" />}
             {data?.liveOne && <img src={data.liveOne} alt="LiveOne" className="h-9 w-auto object-contain sm:h-12" />}
             <div className="flex gap-2">
-              {["NASDAQ: PODC", "NASDAQ: LVO"].map((t) => <span key={t} className="rounded-full border border-white/30 px-3 py-1 text-[12px] font-bold tracking-[0.08em]" style={{ color: GOLD }}>{t}</span>)}
+              {["NASDAQ: PODC", "NASDAQ: LVO"].map((t) => <span key={t} className="whitespace-nowrap rounded-full border border-white/30 px-3 py-1 text-[12px] font-bold tracking-[0.08em]" style={{ color: GOLD }}>{t}</span>)}
             </div>
           </div>
         </div>
