@@ -379,6 +379,85 @@ function NewsPage({ n, podcastOne, liveOne }: { n: number; podcastOne: string; l
   );
 }
 
+/**
+ * A show that isn't one host's podcast gets a flyer instead of the standard page (8 Oct):
+ * American Warriors is a documentary series, so it's their art, their veterans and their trailer.
+ * Images are theirs (YouTube channel art, episode stills from americanwarriors.com), kept under /mag.
+ */
+type Flyer = { banner: string; strip: string; voices: { img: string; pos: string; name: string; line: string }[]; eras: string[]; trailer: string; site: string; siteLine: string };
+const FLYERS: Record<number, Flyer> = {
+  48: {
+    banner: "/mag/aw/banner.jpg",
+    strip: "Their service. In their own words.",
+    voices: [
+      { img: "/mag/aw/mcphail.jpg", pos: "30% 50%", name: "Joe McPhail", line: "WWII Corsair pilot, USMC" },
+      { img: "/mag/aw/ray.jpg", pos: "50% 40%", name: "Col. James Ray", line: "Prisoner of war" },
+      { img: "/mag/aw/ryan.jpg", pos: "62% 40%", name: "Mary Ryan", line: "Desert Storm, battlefield deception" },
+      { img: "/mag/aw/holmes.jpg", pos: "70% 50%", name: "Ben Holmes", line: "Radio operator, Iraq 2009" },
+    ],
+    eras: ["WWII", "Korea", "Vietnam", "Cold War", "Desert Storm", "Bosnia", "Somalia", "Iraq", "Afghanistan"],
+    trailer: "https://www.youtube.com/watch?v=is7LlGqTa7Y",
+    site: "https://americanwarriors.com",
+    siteLine: "A non-profit documentary series honoring veterans of every branch and era.",
+  },
+};
+const STENCIL = { fontFamily: "'Saira Stencil One', 'General Sans', sans-serif" } as const;
+function FlyerPage({ s, f, n }: { s: Show; f: Flyer; n: number }) {
+  useEffect(() => {
+    if (document.getElementById("font-stencil")) return;
+    const l = document.createElement("link");
+    l.id = "font-stencil";
+    l.rel = "stylesheet";
+    l.href = "https://fonts.googleapis.com/css2?family=Saira+Stencil+One&display=swap";
+    document.head.appendChild(l);
+  }, []);
+  const INK = "#2f2516";
+  const SLATE = "#5d6866";
+  const CREAM = "#f3e7c9";
+  return (
+    <Page n={n} bg="#e9d9b4" color={INK}>
+      <div className="absolute inset-0" style={{ background: "radial-gradient(120% 70% at 50% 100%, rgba(120,80,30,.18), transparent 60%)" }} />
+      <div className="absolute inset-x-0 top-0" style={{ height: 440 }}>
+        <img src={f.banner} alt="American Warriors" className="h-full w-full object-cover" style={{ objectPosition: "50% 45%" }} />
+        <div className="absolute inset-x-0 bottom-0 h-24" style={{ background: "linear-gradient(transparent, #e9d9b4)" }} />
+        <span className="absolute left-8 top-7 rounded-full px-3.5 py-1.5 text-[12px] font-bold uppercase tracking-[0.18em]" style={{ background: "rgba(47,37,22,.82)", color: CREAM }}>Show {s.number} · {s.time}</span>
+      </div>
+      <div className="absolute inset-x-12" style={{ top: 418 }}>
+        <div className="mx-auto w-fit -rotate-1 px-8 py-2.5 shadow-md" style={{ background: SLATE, color: CREAM, clipPath: "polygon(1% 4%, 99% 0, 100% 92%, 0 100%)" }}>
+          <p className="text-[27px] leading-none tracking-[0.04em]" style={STENCIL}>{f.strip}</p>
+        </div>
+        <p className="mx-auto mt-6 max-w-[660px] text-pretty text-center text-[16px] leading-[1.6]">{s.blurb}</p>
+        <p className="mt-6 text-center text-[11px] font-bold uppercase tracking-[0.28em]" style={{ color: "#7a5a22" }}>Voices from the series</p>
+        <div className="mt-3 grid grid-cols-4 gap-3">
+          {f.voices.map((v) => (
+            <figure key={v.name} className="bg-[#f6eedb] p-1.5 pb-2 shadow-[0_2px_6px_rgba(47,37,22,.25)]">
+              <img src={v.img} alt={v.name} className="h-[118px] w-full object-cover" style={{ objectPosition: v.pos, filter: "sepia(.35) contrast(1.05)" }} />
+              <figcaption className="px-1 pt-2">
+                <p className="text-[13.5px] font-bold leading-tight" style={HEAD}>{v.name}</p>
+                <p className="mt-0.5 text-[11.5px] leading-snug text-[#5b4a30]">{v.line}</p>
+              </figcaption>
+            </figure>
+          ))}
+        </div>
+        <div className="mt-5 flex flex-wrap justify-center gap-x-2 gap-y-1.5">
+          {f.eras.map((e) => <span key={e} className="border px-2 py-0.5 text-[12.5px] uppercase tracking-[0.06em]" style={{ ...STENCIL, borderColor: "rgba(47,37,22,.45)" }}>{e}</span>)}
+        </div>
+      </div>
+      <footer className="absolute inset-x-0 bottom-0 flex items-center gap-5 px-12 py-6" style={{ background: SLATE, color: CREAM }}>
+        <div className="bg-white p-1"><Qr url={f.trailer} size={74} /></div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[22px] leading-none" style={STENCIL}>Watch the series trailer</p>
+          <p className="mt-1.5 text-[12.5px] opacity-85">{f.siteLine}</p>
+        </div>
+        <div className="text-right">
+          <div className="ml-auto w-fit bg-white p-1"><Qr url={f.site} size={74} /></div>
+          <p className="mt-1 text-[11.5px] font-semibold tracking-[0.06em]">americanwarriors.com</p>
+        </div>
+      </footer>
+    </Page>
+  );
+}
+
 function ShowPage({ s, n, event }: { s: Show; n: number; event: Mag["event"] }) {
   const who = [s.branch, s.service].filter(Boolean).join(" · ");
   const eps = s.episodes ?? [];
@@ -646,7 +725,7 @@ export default function Magazine({ slug }: { slug?: string }) {
     </Page>,
     ...(m.award?.citation ? [<AwardPage key="award" a={m.award} n={++n} event={m.event} photo={m.award.photo || m.shows.find((x) => x.signupId === m.award!.signupId)?.headshot || ""} />] : []),
     ...m.shows.flatMap((s, i) => [
-      <ShowPage key={s.signupId} s={s} n={++n} event={m.event} />,
+      FLYERS[s.signupId] ? <FlyerPage key={s.signupId} s={s} f={FLYERS[s.signupId]} n={++n} /> : <ShowPage key={s.signupId} s={s} n={++n} event={m.event} />,
       ...(after.get(i) ?? []).map((ad) => <AdPage key={`ad-${ad.id}`} ad={ad} n={++n} />),
     ]),
     // The Marathon's sponsors, then its friends: a page each (8 Oct).
