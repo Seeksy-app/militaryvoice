@@ -599,6 +599,8 @@ export const updateSponsorSchema = z.object({
   sortOrder: z.number().int().optional(),
   active: z.boolean().optional(),
   videoUrl: z.string().trim().refine((v) => v === "" || /^https?:\/\//i.test(v), "The video needs to be a link").optional(),
+  /** A sharper logo, as a link (8 Oct: the brand's own full-size file). */
+  logoUrl: z.string().trim().refine((v) => /^https:\/\//i.test(v), "The logo needs to be a link").optional(),
 });
 export type UpdateSponsor = z.infer<typeof updateSponsorSchema>;
 export type SponsorRow = typeof sponsors.$inferSelect;
