@@ -30,6 +30,7 @@ function readTicked(): string[] {
   }
 }
 
+// Computers only (8 Oct): on a phone it stacked on Ask Alex over the page's own controls, and Next steps is on Home.
 export function FloatingChecklist({ state, ...nav }: { state: StepState } & StepNav) {
   // Folded unless they've opened it: on a phone the open list covers half the screen.
   const [collapsed, setCollapsed] = useState(() => {
@@ -73,7 +74,7 @@ export function FloatingChecklist({ state, ...nav }: { state: StepState } & Step
       <button
         type="button"
         onClick={() => setCollapsed(false)}
-        className="fixed bottom-[calc(8.75rem+env(safe-area-inset-bottom))] right-4 z-40 inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-2 text-sm font-semibold shadow-lg transition-transform hover:scale-[1.03] lg:bottom-24 lg:right-5 lg:gap-2 lg:px-3.5 lg:py-2.5"
+        className="fixed bottom-[calc(8.75rem+env(safe-area-inset-bottom))] right-4 z-40 hidden items-center gap-1.5 rounded-full border border-border bg-card px-3 py-2 text-sm font-semibold shadow-lg transition-transform hover:scale-[1.03] lg:bottom-24 lg:right-5 lg:inline-flex lg:gap-2 lg:px-3.5 lg:py-2.5"
         data-testid="button-checklist-open"
       >
         <ListChecks className="h-4 w-4 text-[#F0A71F]" />
@@ -84,7 +85,7 @@ export function FloatingChecklist({ state, ...nav }: { state: StepState } & Step
 
   return (
     <aside
-      className="fixed bottom-[calc(8.75rem+env(safe-area-inset-bottom))] right-4 z-40 w-[min(21rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-border bg-card shadow-2xl lg:bottom-24 lg:right-5"
+      className="fixed bottom-[calc(8.75rem+env(safe-area-inset-bottom))] right-4 z-40 hidden w-[min(21rem,calc(100vw-2rem))] overflow-hidden rounded-2xl border border-border bg-card shadow-2xl lg:bottom-24 lg:right-5 lg:block"
       aria-label="Your next steps"
       data-testid="panel-checklist"
     >
