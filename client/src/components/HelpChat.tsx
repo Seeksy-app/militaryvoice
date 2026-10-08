@@ -18,7 +18,8 @@ type Msg = { role: "user" | "assistant"; content: string };
 
 // Site paths and full URLs in an answer become links. The assistant is told to
 // name pages as paths ("/schedule"), so this is what makes them tappable.
-const LINK_RE = /(https?:\/\/[^\s)]+|(?<![\w/])\/(?:schedule|agenda|prepare|faq|platform|about|sponsors|host\/dashboard|studio|watch|s\/\d+|event\/[\w-]+(?:\/[\w-]+)?)(?![\w/-]))/g;
+// Site paths Alex writes as links: any dashboard screen (/host/dashboard/library) and help article (/help/zoom#auto) too (8 Oct).
+const LINK_RE = /(https?:\/\/[^\s)]+|(?<![\w/])\/(?:schedule|agenda|prepare|faq|platform|about|sponsors|host\/dashboard(?:\/[\w-]+)?|help(?:\/[\w-]+)?(?:#[\w-]+)?|discover|directory|for-brands|tour|studio|watch|s\/\d+|event\/[\w-]+(?:\/[\w-]+)?)(?![\w/-]))/g;
 
 function linkify(text: string) {
   const out: React.ReactNode[] = [];
