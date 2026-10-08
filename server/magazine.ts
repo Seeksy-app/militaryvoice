@@ -21,7 +21,7 @@ import { signedRecordingUrl } from "./recordingStorage.js";
 import { bioPages, clips, contacts, discoveryCache, hostedShows, magazineAds, magazinePages, podcasterProfiles, recordings, segmentCuts, signups, sponsors, transcriptLines } from "../shared/schema.js";
 
 /** A podcaster's private link to their own page (?review=<signupId>.<token>), good before it's published. */
-const reviewToken = (signupId: number) => crypto.createHmac("sha256", process.env.SESSION_SECRET || "mv-magazine").update(`mag-review:${signupId}`).digest("base64url").slice(0, 20);
+const reviewToken = (signupId: number | "all") => crypto.createHmac("sha256", process.env.SESSION_SECRET || "mv-magazine").update(`mag-review:${signupId}`).digest("base64url").slice(0, 20);
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 const now = () => new Date().toISOString();
@@ -487,7 +487,11 @@ export function registerMagazine(app: Express, requireAdmin: RequestHandler, req
     const m = await buildMagazine(ev.id);
     if (!m) return res.status(404).json({ message: "No such magazine." });
     // A podcaster reviewing their own page before it's out (8 Oct): their page only, by its private link.
-    const review = /^(\d+)\.([\w-]{20})$/.exec(String(req.query.review ?? ""));
+    const review = /^(\d+|all)\.([\w-]{20})$/.exec(String(req.query.review ?? ""));
+    // The whole draft, for the host's suggestions (8 Oct: Riccoh is an event admin, not a platform one).
+    if (review && review[1] === "all" && reviewToken("all") === review[2]) {
+      return res.json({ ...m, leftOut: [], admin: false, reviewAll: true });
+    }
     if (review && reviewToken(Number(review[1])) === review[2]) {
       const show = m.shows.find((x) => x.signupId === Number(review[1]));
       if (!show) return res.status(404).json({ message: "That page isn't in the magazine." });
@@ -538,10 +542,11 @@ export function registerMagazine(app: Express, requireAdmin: RequestHandler, req
     const m = await buildMagazine(eventId);
     if (!m) return res.status(404).json({ message: "No such event." });
     const lineup = await db.select().from(signups).where(eq(signups.eventId, eventId));
-    res.json(m.shows.map((s) => {
+    const all = { signupId: 0, podcastName: "The whole magazine", hostName: "", email: "", url: `${ORIGIN}/magazine?review=all.${reviewToken("all")}` };
+    res.json([all, ...m.shows.map((s) => {
       const sg = lineup.find((x) => x.id === s.signupId);
       return { signupId: s.signupId, podcastName: s.podcastName, hostName: s.hostName, email: sg?.email.trim().toLowerCase() ?? "", url: `${ORIGIN}/magazine?review=${s.signupId}.${reviewToken(s.signupId)}` };
-    }));
+    })]);
   });
 
   /** SI drafts every show page that has no words yet (or all, with ?all=1), and the welcome. */

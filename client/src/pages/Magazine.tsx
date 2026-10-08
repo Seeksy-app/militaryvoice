@@ -20,6 +20,8 @@ type Mag = {
   shows: Show[]; sponsors: { name: string; logo: string; url: string; tier?: string }[];
   /** A podcaster's private review of their own page: only that page comes back. */
   review?: number;
+  /** The whole draft, by its private link, for the host's suggestions. */
+  reviewAll?: boolean;
   cover?: { photo: string; style?: string };
   ads?: Ad[];
   award?: { signupId: number; title: string; name: string; show: string; citation: string; quote: string; photo: string; plaque: string } | null;
@@ -625,11 +627,17 @@ export default function Magazine({ slug }: { slug?: string }) {
     <div className="min-h-screen bg-slate-200 print:bg-white">
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Anton&family=Yellowtail&display=block'); @page { size: 8.5in 11in; margin: 0; } @keyframes magFadeIn { from { opacity: 0 } to { opacity: 1 } } .mag-fade-in { animation: magFadeIn 900ms ease-in-out both; } @media print { .mag-fade-in { animation: none !important; } } @media print { .mag-bar { display: none !important; } .mag-sheet { transform: none !important; } .mag-frame { width: auto !important; height: auto !important; margin: 0 !important; } .mag-page { break-after: page; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }`}</style>
       <div className="mag-bar sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-300 bg-white/95 px-4 py-2.5 backdrop-blur">
-        <p className="truncate text-sm font-semibold text-slate-800">{m.event.name} · Keepsake magazine{m.review ? " · your page, for your review" : !m.published ? " · draft (admins only)" : ""}</p>
+        <p className="truncate text-sm font-semibold text-slate-800">{m.event.name} · Keepsake magazine{m.review ? " · your page, for your review" : m.reviewAll ? " · draft, for your review" : !m.published ? " · draft (admins only)" : ""}</p>
         <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-1.5 rounded-full bg-[#053877] px-4 py-1.5 text-sm font-semibold text-white hover:bg-[#0a4a99]" data-testid="magazine-print">
           <Printer className="h-4 w-4" /> Print / save as PDF
         </button>
       </div>
+      {m.reviewAll && (
+        <div className="mag-bar mx-auto mt-6 max-w-[816px] rounded-2xl border border-[#F0A71F]/60 bg-[#F0A71F]/10 px-5 py-4 text-[15px] text-slate-800" data-testid="magazine-review-all-note">
+          <p className="font-semibold">This is the draft of the Podcast Marathon keepsake magazine, for your review.</p>
+          <p className="mt-1">Reply to our email with any suggestions: a page, a word, a photo, the order. It isn't out yet, so please don't share this link.</p>
+        </div>
+      )}
       {m.review && (
         <div className="mag-bar mx-auto mt-6 max-w-[816px] rounded-2xl border border-[#F0A71F]/60 bg-[#F0A71F]/10 px-5 py-4 text-[15px] text-slate-800" data-testid="magazine-review-note">
           <p className="font-semibold">This is your page in the Podcast Marathon keepsake magazine.</p>
