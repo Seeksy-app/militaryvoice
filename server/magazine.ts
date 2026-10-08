@@ -649,6 +649,10 @@ export function registerMagazine(app: Express, requireAdmin: RequestHandler, req
     const eventId = Number(req.params.eventId);
     const signupId = Number(req.params.signupId);
     if (!Number.isInteger(signupId) || signupId < 0) return res.status(400).json({ message: "Which page?" });
+    // The show's name as they want it printed (8 Oct): it's their signup's name, so the lineup and the day follow too.
+    if (signupId > 0 && typeof req.body?.podcastName === "string" && req.body.podcastName.trim()) {
+      await db.update(signups).set({ podcastName: req.body.podcastName.trim().slice(0, 160) }).where(and(eq(signups.id, signupId), eq(signups.eventId, eventId)));
+    }
     await saveWords(eventId, signupId, {
       ...(typeof req.body?.blurb === "string" ? { blurb: req.body.blurb.slice(0, 2500) } : {}),
       ...(typeof req.body?.quote === "string" ? { quote: req.body.quote.slice(0, 300) } : {}),
