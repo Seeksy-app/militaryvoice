@@ -1108,9 +1108,12 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   const cohostHours = cohost?.isCohost ? (cohost.hours?.length ?? 0) + ((cohost.shared?.length ?? 0) > 0 ? 1 : 0) : 0;
   // A co-host with no show of their own gets the co-host dashboard as their
   // dashboard. One who is also on the lineup gets it as a door in the nav.
-  const cohostOnly = !!data && !loadingProfile && !!cohost?.isCohost && data.mySignups.length === 0 && !crew?.isCrew;
+  // After the event (8 Oct), crew and co-host dashboards give way to the person's own.
+  const eventOver = (e?: { startAtUtc: string; durationHours: number }) => !!e && Date.parse(e.startAtUtc) + (e.durationHours + 12) * 3600_000 < Date.now();
+  const crewLive = !!crew?.isCrew && !crew.over;
+  const cohostOnly = !!data && !loadingProfile && !!cohost?.isCohost && !eventOver(cohost.event) && data.mySignups.length === 0 && !crewLive;
   const onTeamForGreenRoom = Boolean(crew?.isCrew || cohost?.isCohost);
-  const crewMode = !!data && !loadingProfile && !hasProfile && !!crew?.isCrew;
+  const crewMode = !!data && !loadingProfile && !hasProfile && crewLive;
   const inSetup = !!data && !loadingProfile && !hasProfile && !crewMode;
   // Who's signed in, for the account menu (the nav's foot on a computer, the header on a phone).
   const account = data ? {

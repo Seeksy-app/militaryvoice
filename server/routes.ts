@@ -135,6 +135,7 @@ import { registerShowFinder } from "./showFinder.js";
 import { registerRequests } from "./requests.js";
 import { registerPodcastIntake } from "./podcastIntake.js";
 import { registerEditorSend, sendToEditors } from "./editorSend.js";
+import { registerPublicSearch } from "./publicSearch.js";
 import { eventAdminEmails, eventAdminEvents, eventAdminKey, eventAdminMay } from "./eventAdmin.js";
 import { registerDeviceCheck } from "./deviceCheck.js";
 import { registerHealth, beat, addHealthCheck } from "./health.js";
@@ -6780,6 +6781,7 @@ export function registerRoutes(app: Express): void {
   registerRequests(app, requireHostSession, requireAdmin);
   registerPodcastIntake(app, requireHostSession);
   registerEditorSend(app, requireHostSession);
+  registerPublicSearch(app);
   registerDeviceCheck(app);
   registerGreenRoomChat(app, requireAdmin, requireHostSession, studioHostEmails);
   registerAutomations(app, requireAdmin, {
@@ -12034,11 +12036,16 @@ Watch at militaryvoices.ai/agenda
     if (mine.length === 0) return res.json({ isCrew: false, member: null, event: null, events: [], studioId: null });
     const featured = await storage.getFeaturedEvent();
     const asked = Number(req.query.eventId) || 0;
-    const ev = mine.find((e) => e.id === asked) ?? mine.find((e) => e.id === featured.id) ?? mine[0];
+    // Over is over (8 Oct: the crew still got "The day: Today" two days after the Marathon): an event
+    // that ended more than half a day ago isn't crew work any more, and the dashboard is their own again.
+    const over = (e: (typeof all)[number]) => Date.parse(e.startAtUtc) + (e.durationHours + 12) * 3600_000 < Date.now();
+    const ahead = mine.filter((e) => !over(e));
+    const ev = mine.find((e) => e.id === asked) ?? ahead.find((e) => e.id === featured.id) ?? ahead[0] ?? mine.find((e) => e.id === featured.id) ?? mine[0];
     const member = (await storage.listEventTeam(ev.id)).find((m) => m.email.trim().toLowerCase() === email) ?? null;
     const studio = (await storage.listStudios(ev.id))[0];
     res.json({
       isCrew: true,
+      over: over(ev),
       member: member ? { id: member.id, name: member.name, title: member.title, photoUrl: member.photoUrl, email: member.email } : null,
       event: { id: ev.id, name: ev.name, startAtUtc: ev.startAtUtc, slotMinutes: ev.slotMinutes, durationHours: ev.durationHours, slug: ev.slug },
       events: mine.map((e) => ({ id: e.id, name: e.name, startAtUtc: e.startAtUtc })),

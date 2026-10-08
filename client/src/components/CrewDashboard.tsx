@@ -19,6 +19,8 @@ const ET = "America/New_York";
 
 export interface CrewInfo {
   isCrew: boolean;
+  /** Their event ended more than half a day ago: the dashboard is their own again. */
+  over?: boolean;
   member: { id: number; name: string; title: string; photoUrl: string; email: string } | null;
   event: { id: number; name: string; startAtUtc: string; slotMinutes: number; durationHours: number; slug: string } | null;
   /** Every event they are crew on; more than one means they choose. */
@@ -139,7 +141,7 @@ export function CrewDashboard({ crew, email, onPickEvent, cohost }: { crew: Crew
                 </div>
               </div>
               <div className="mt-6 flex flex-wrap gap-2">
-                <a href={greenRoom} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-emerald-500 bg-white px-3.5 py-2 text-sm font-medium text-foreground hover:bg-emerald-50" data-testid="door-crew-green-room">
+                <a href={greenRoom} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-emerald-500 bg-white px-3.5 py-2 text-sm font-medium text-[#0b1220] hover:bg-emerald-50" data-testid="door-crew-green-room">
                   <StudioIcon className="h-6 w-6 rounded-md" tone="green" /> Green room
                 </a>
                 <button type="button" onClick={() => document.getElementById("crew-agenda")?.scrollIntoView({ behavior: "smooth", block: "start" })} className="inline-flex items-center gap-2 rounded-full border border-white/25 bg-white/10 px-3.5 py-2 text-sm font-medium text-white hover:bg-white/15">
