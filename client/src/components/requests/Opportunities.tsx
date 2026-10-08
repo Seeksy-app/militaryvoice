@@ -1,4 +1,7 @@
 import { useState } from "react";
+import { useLocation } from "wouter";
+import { showGuide } from "@/components/Guide";
+import { STEP_GUIDE } from "@/components/NextSteps";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Globe, Inbox, Mail, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -23,6 +26,7 @@ type Opp = {
 const when = (iso: string) => new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" });
 
 export function Opportunities() {
+  const [, navigate] = useLocation();
   const q = useQuery<Opp[]>({ queryKey: ["/api/host/opportunities"], queryFn: async () => (await apiRequest("GET", "/api/host/opportunities")).json() });
   const list = q.data ?? [];
   return (
@@ -36,6 +40,11 @@ export function Opportunities() {
           <Inbox className="mx-auto h-6 w-6 text-muted-foreground" />
           <p className="mt-2 font-medium">Nothing yet</p>
           <p className="mt-1 text-sm text-muted-foreground">Turn on Let brands find me in your Profile, and add a media kit to your SmartLink, so brands can find you.</p>
+          {/* The way there, not just the words (8 Oct): the switch, with the pointer on it. */}
+          <div className="mt-4 flex flex-wrap justify-center gap-2">
+            <Button className="rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" onClick={() => { navigate("/host/dashboard/profile"); if (STEP_GUIDE.brands) showGuide([STEP_GUIDE.brands]); }} data-testid="opps-turn-on">Let brands find me</Button>
+            <Button variant="outline" className="rounded-full" onClick={() => navigate("/host/dashboard/page")} data-testid="opps-media-kit">Open my SmartLink</Button>
+          </div>
         </div>
       )}
       {list.map((o) => <OppCard key={o.id} o={o} />)}
