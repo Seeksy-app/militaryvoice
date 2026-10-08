@@ -461,8 +461,8 @@ function BackCover({ podcastOne, liveOne }: { podcastOne: string; liveOne: strin
   return (
     <Page bg={NAVY} color="#fff">
       <div className="absolute inset-0" style={{ background: "radial-gradient(70% 45% at 50% 30%, rgba(240,167,31,.18), transparent 70%)" }} />
-      <div className="absolute inset-x-14 top-16 flex flex-col items-center text-center">
-        <img src="/nmpd-logo.png" alt="National Military Podcast Day" className="h-[190px] w-[190px] object-contain" />
+      <div className="absolute inset-x-14 top-0 flex flex-col items-center justify-center text-center" style={{ bottom: 230 }}>
+        <img src="/nmpd-logo.png" alt="National Military Podcast Day" className="h-[210px] w-[210px] object-contain" />
         <p className="mt-8 text-[14px] font-bold uppercase tracking-[0.34em]" style={{ color: GOLD }}>See you in 2027</p>
         <h2 className="mt-3 text-balance text-[54px] font-bold leading-[1.02] tracking-tight" style={HEAD}>National Military Podcast Day</h2>
         <p className="mt-2 text-[44px] font-bold leading-none" style={{ ...HEAD, color: GOLD }}>October 2027</p>
@@ -471,8 +471,8 @@ function BackCover({ podcastOne, liveOne }: { podcastOne: string; liveOne: strin
           <div className="mt-8 flex flex-col items-center">
             <p className="text-[12px] font-bold uppercase tracking-[0.24em] text-white/60">Streaming live and on demand with</p>
             <div className="mt-4 flex items-center justify-center gap-10">
-              {podcastOne && <img src={podcastOne} alt="PodcastOne" className="h-[64px] w-auto object-contain" />}
-              {liveOne && <img src={liveOne} alt="LiveOne" className="h-[34px] w-auto object-contain" />}
+              {podcastOne && <img src={podcastOne} alt="PodcastOne" className="h-[78px] w-auto object-contain" />}
+              {liveOne && <img src={liveOne} alt="LiveOne" className="h-[40px] w-auto object-contain" />}
             </div>
           </div>
         )}
