@@ -72,10 +72,12 @@ export function IntentPicker({ onDone }: { onDone: (interests: Interest[]) => vo
               data-testid={`intent-${o.key}`}
             >
               {/* The band: the path's colour, its mark, and two rings for depth. */}
-              <span className="relative block h-24 overflow-hidden" style={{ background: look.band }} aria-hidden="true">
-                <span className="absolute -right-10 -top-12 h-40 w-40 rounded-full border border-white/15" />
-                <span className="absolute -right-2 -top-6 h-40 w-40 rounded-full border border-white/10" />
-                <span className="absolute bottom-0 left-5 flex h-14 w-14 translate-y-1/2 items-center justify-center rounded-2xl bg-white shadow-lg ring-4 ring-card transition-transform duration-200 group-hover:scale-105">
+              <span className="relative block h-24" aria-hidden="true">
+                <span className="absolute inset-0 overflow-hidden" style={{ background: look.band }}>
+                  <span className="absolute -right-10 -top-12 h-40 w-40 rounded-full border border-white/15" />
+                  <span className="absolute -right-2 -top-6 h-40 w-40 rounded-full border border-white/10" />
+                </span>
+                <span className="absolute bottom-0 left-5 z-10 flex h-14 w-14 translate-y-1/2 items-center justify-center rounded-2xl bg-white shadow-lg ring-4 ring-card transition-transform duration-200 group-hover:scale-105">
                   <o.icon className="h-7 w-7" style={{ color: look.ring }} />
                 </span>
               </span>
