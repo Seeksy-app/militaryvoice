@@ -836,4 +836,24 @@ Riccoh`;
     else await saveWords(eventId, PUBLISHED, { blurb: "published" });
     res.json({ ok: true, published: req.body?.published !== false });
   });
+
+  /**
+   * /podcast-one-press-release (8 Oct): the PodcastOne partnership release on our
+   * own site. The text is LiveOne's, pasted in by an admin from the copy they sent;
+   * until then the page shows our summary and links to the newswire.
+   */
+  app.get("/api/press/podcast-one", async (_req, res) => {
+    await schemaIsReady();
+    const body = (await storage.getSetting(PRESS_KEY)) ?? "";
+    const rows = await db.select({ name: sponsors.name, logo: sponsors.logoUrl }).from(sponsors).where(eq(sponsors.active, true));
+    const logo = (re: RegExp) => rows.find((r) => re.test(r.name) && r.logo)?.logo ?? "";
+    res.setHeader("Cache-Control", "public, max-age=60");
+    res.json({ body, podcastOne: logo(/podcast\s*one/i), liveOne: logo(/live\s*one/i) });
+  });
+  app.put("/api/admin/press/podcast-one", requireAdmin, async (req, res) => {
+    const body = String(req.body?.body ?? "").replace(/\r\n/g, "\n").trim().slice(0, 40_000);
+    await storage.setSetting(PRESS_KEY, body);
+    res.json({ ok: true, chars: body.length });
+  });
 }
+const PRESS_KEY = "press:podcast-one";

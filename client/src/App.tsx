@@ -48,6 +48,7 @@ import StudioComposite from "@/pages/StudioComposite";
 import StudioControl from "@/pages/StudioControl";
 import Watch from "@/pages/Watch";
 import Magazine from "@/pages/Magazine";
+import PressRelease from "@/pages/PressRelease";
 import { PrivacyPolicy, TermsOfService } from "@/pages/Legal";
 import NationalMilitaryPodcastDay from "@/pages/NationalMilitaryPodcastDay";
 import SponsorVFW from "@/pages/SponsorVFW";
@@ -136,6 +137,7 @@ function AppRouter() {
       <Route path="/keepsake">{() => <Keepsake />}</Route>
       <Route path="/text-alerts">{() => <TextAlerts />}</Route>
       <Route path="/survey/:token">{(p) => <Survey token={p.token} />}</Route>
+      <Route path="/podcast-one-press-release">{() => <PressRelease />}</Route>
       <Route path="/magazine">{() => <Magazine />}</Route>
       <Route path="/magazine/:slug">{(p) => <Magazine slug={p.slug} />}</Route>
       <Route path="/event/:slug/watch">{(params) => <Watch slug={params.slug} />}</Route>

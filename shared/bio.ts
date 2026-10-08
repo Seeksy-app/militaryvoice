@@ -502,7 +502,7 @@ export function parseSocials(raw: string | null | undefined): BioSocial[] {
 /** Top-level addresses the site already uses: never a handle. */
 export const RESERVED_HANDLES = new Set([
   "about", "admin", "agenda", "api", "assets", "directory", "discover", "e", "event", "events", "faq", "feed", "find", "go", "green-room", "greenroom",
-  "headshot", "help", "host", "icons", "login", "logout", "national-military-podcast-day", "og", "platform", "podcast", "podcast-one-pitch", "podcasts",
+  "headshot", "help", "host", "icons", "login", "logout", "national-military-podcast-day", "og", "platform", "podcast", "podcast-one-pitch", "podcast-one-press-release", "podcasts",
   "policy", "prepare", "pricing", "for-brands", "brands", "tour", "privacy", "promo", "review", "s", "schedule", "settings", "signup", "sponsor", "sponsors", "studio", "studio-platform",
   "terms", "text-alerts", "sms", "keepsake", "magazine", "marathon", "survey", "vfw", "watch", "watchfloor", "militaryvoices", "support", "contact", "blog", "app", "www", "static", "robots.txt", "sitemap.xml", "manifest.json",
 ]);

@@ -139,6 +139,7 @@ export function MagazineAdmin({ eventId, slug }: { eventId: number; slug: string
       <CoverPanel eventId={eventId} photo={m.cover?.photo ?? ""} style={m.cover?.style || (m.cover?.photo ? "photo" : "glass")} slug={slug} faces={m.shows.map((x) => ({ id: x.signupId, src: x.headshot || x.art, who: x.hostName.trim().toLowerCase() })).filter((f, i, all) => f.src && all.findIndex((y) => y.src === f.src || y.who === f.who) === i)} onChanged={refresh} />
       <AdsPanel eventId={eventId} ads={m.ads ?? []} onChanged={refresh} />
       <AwardPanel eventId={eventId} award={m.award ?? null} shows={m.shows} onChanged={refresh} />
+      <PressPanel />
 
       <section className="rounded-2xl border border-border bg-card p-5">
         <h3 className="font-semibold">Riccoh's welcome</h3>
@@ -445,6 +446,31 @@ function AwardPanel({ eventId, award, shows, onChanged }: { eventId: number; awa
         <Button variant="outline" size="sm" className="gap-1.5 rounded-full" disabled={busy || !signupId} onClick={() => void post(true)} data-testid="award-draft"><Sparkles className="h-3.5 w-3.5" /> Draft with SI</Button>
         <Button size="sm" className="rounded-full" disabled={busy || !signupId || !citation.trim()} onClick={() => void post(false)} data-testid="award-save">Save</Button>
       </div>
+    </section>
+  );
+}
+
+/** The PodcastOne release page (8 Oct): paste LiveOne's text as they sent it; empty shows our summary. */
+function PressPanel() {
+  const { toast } = useToast();
+  const q = useQuery<{ body: string }>({ queryKey: ["/api/press/podcast-one"], queryFn: async () => (await fetch("/api/press/podcast-one")).json() });
+  const save = async (body: string) => {
+    try {
+      await adminSend("PUT", "/api/admin/press/podcast-one", { body });
+      await q.refetch();
+      toast({ title: body.trim() ? "The release is on the page" : "Back to our summary" });
+    } catch (e) {
+      toast({ title: "Couldn't save", description: (e as Error).message, variant: "destructive" });
+    }
+  };
+  return (
+    <section className="rounded-2xl border border-border bg-card p-5" data-testid="magazine-press">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="font-semibold">PodcastOne press release page</h3>
+        <Button asChild variant="outline" size="sm" className="gap-1.5 rounded-full"><a href="/podcast-one-press-release" target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open</a></Button>
+      </div>
+      <p className="mt-1 text-sm text-muted-foreground">The news page's QR code lands here. Paste the release text LiveOne sent, a blank line between paragraphs. Empty shows our summary and a link to the newswire.</p>
+      {q.data && <Textarea defaultValue={q.data.body} rows={6} className="mt-2 text-sm" placeholder="Paste the release here" onBlur={(e) => { if (e.target.value.trim() !== q.data!.body.trim()) void save(e.target.value); }} data-testid="press-body" />}
     </section>
   );
 }
