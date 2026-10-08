@@ -1134,7 +1134,12 @@ ${transcriptText(lines)}`;
       messages: [{ role: "user", content: plain ? prompt : `${prompt}
 
 Answer with the pick_moments tool.` }],
-    }).catch((err: Error) => { console.warn(`   the pick failed (${err.message})${attempt < 3 ? " — asking again" : ""}`); return null; });
+    }).catch((err: Error) => {
+      // Out of credit isn't a bad answer to work around: rough cuts with first-words titles are what
+      // Andrew called "not good" (7 Oct). Stop with a reason; the clips are re-made once it's topped up.
+      if (/credit balance/i.test(err.message)) throw new Error("Clips are paused on our side for a moment. We'll make these as soon as we're back.");
+      console.warn(`   the pick failed (${err.message})${attempt < 3 ? " — asking again" : ""}`); return null;
+    });
     if (!res) continue;
     const use = res.content.find((c) => c.type === "tool_use");
     if (!use || use.type !== "tool_use") {

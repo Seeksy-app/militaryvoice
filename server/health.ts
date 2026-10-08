@@ -177,7 +177,22 @@ const DEFS: Def[] = [
   // SI
   {
     key: "anthropic", name: "Claude (Anthropic)", group: "SI", powers: "Alex, magazine drafts, inbox replies, SI search",
-    run: async () => (env("ANTHROPIC_API_KEY") ? ping("https://api.anthropic.com/v1/models?limit=1", { headers: { "x-api-key": env("ANTHROPIC_API_KEY"), "anthropic-version": "2023-06-01" } }) : { state: "off", detail: "Not set up (ANTHROPIC_API_KEY)" }),
+    // A one-token message, not the model list (8 Oct: the list answered while every call failed
+    // with "credit balance is too low", so Alex, clips and inbox replies were down with a green light).
+    run: async () => {
+      const k = env("ANTHROPIC_API_KEY");
+      if (!k) return { state: "off", detail: "Not set up (ANTHROPIC_API_KEY)" };
+      const res = await fetch("https://api.anthropic.com/v1/messages", {
+        method: "POST",
+        headers: { "x-api-key": k, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+        body: JSON.stringify({ model: "claude-haiku-4-5-20251001", max_tokens: 1, messages: [{ role: "user", content: "ok" }] }),
+        signal: AbortSignal.timeout(10_000),
+      }).catch((e: Error) => ({ ok: false, status: 0, text: async () => e.message }) as unknown as Response);
+      if (res.ok) return { state: "ok", detail: "Answering" };
+      const body = await res.text().catch(() => "");
+      if (/credit balance/i.test(body)) return { state: "down", detail: "Out of credit: Alex, clip moments and inbox replies are failing. Top up in the Anthropic console (Plans & Billing)." };
+      return { state: "down", detail: `${res.status}: ${body.slice(0, 120)}` };
+    },
   },
   { key: "fal", name: "fal", group: "SI", powers: "Photo cut-outs on SmartLinks", run: keyOnly(["FAL_KEY"], "no free status call") },
   {
