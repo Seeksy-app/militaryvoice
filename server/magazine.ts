@@ -664,6 +664,8 @@ export function registerMagazine(app: Express, requireAdmin: RequestHandler, req
         return m ? { title: (m[1] || m[2]).slice(0, 140), url: m[2].slice(0, 600) } : null;
       }).filter(Boolean).slice(0, 6)) } : {}),
       ...(typeof req.body?.audio === "string" ? { audio: /^https?:\/\//i.test(req.body.audio.trim()) ? req.body.audio.trim().slice(0, 800) : "" } : {}),
+      // The show's art (the thumbnail on their photo), as a link: an image the host sent us.
+      ...(typeof req.body?.art === "string" ? { art: /^(https?:\/\/|\/)/i.test(req.body.art.trim()) ? req.body.art.trim().slice(0, 800) : "" } : {}),
       ...(typeof req.body?.hidden === "boolean" ? { hidden: req.body.hidden } : typeof req.body?.audio === "string" ? {} : { edited: true }),
     });
     res.json({ ok: true });
