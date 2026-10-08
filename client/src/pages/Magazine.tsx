@@ -330,7 +330,7 @@ function ShowPage({ s, n, event }: { s: Show; n: number; event: Mag["event"] }) 
     const el = body.current;
     if (el && el.scrollHeight > el.clientHeight + 1 && fit < 4) setFit((f) => f + 1);
   });
-  const size = fit >= 2 ? (fit >= 3 ? 0.88 : 0.94) : 1;
+  const size = fit >= 2 ? (fit >= 3 ? 0.9 : 0.95) : 1;
   const rows = fit >= 4 ? 1 : 2;
   const [pick, setPick] = useState(-1);
   const [go, setGo] = useState(0);
@@ -355,11 +355,11 @@ function ShowPage({ s, n, event }: { s: Show; n: number; event: Mag["event"] }) 
           </div>
         </div>
 
-        <div ref={body} className={`${fit ? "mt-8" : "mt-10"} flex min-h-0 flex-1 flex-col overflow-hidden ${fit ? "gap-5" : "gap-6"}`}>
-          {s.blurb && <p className="leading-[1.6] text-slate-800" style={{ fontSize: 16 * size }}>{s.blurb}</p>}
+        <div ref={body} className="mt-8 flex min-h-0 flex-1 flex-col gap-5 overflow-hidden">
+          {s.blurb && <p className="leading-[1.6] text-slate-800" style={{ fontSize: 15.5 * size }}>{s.blurb}</p>}
           {s.quote && (
             <blockquote className="border-l-4 pl-5" style={{ borderColor: GOLD }}>
-              <p className="font-semibold italic leading-snug" style={{ ...HEAD, color: NAVY, fontSize: 22 * size }}>“{s.quote}”</p>
+              <p className="font-semibold italic leading-snug" style={{ ...HEAD, color: NAVY, fontSize: 20 * size }}>“{s.quote}”</p>
               <footer className="mt-1.5 text-[13px] font-semibold text-slate-500">{s.hostName}</footer>
             </blockquote>
           )}

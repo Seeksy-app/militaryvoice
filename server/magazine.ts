@@ -498,6 +498,39 @@ export function registerMagazine(app: Express, requireAdmin: RequestHandler, req
     res.json({ ...m, leftOut: admin ? m.leftOut : [], admin });
   });
 
+  /**
+   * Fit every show page to the same shape (8 Oct): a description over 46 words is trimmed to
+   * 36–45, "On the day" over 52 to 40–50. Facts and voice kept, nothing added. Pages a person
+   * edited by hand are left alone (their page fits itself on screen instead).
+   */
+  app.post("/api/admin/magazine/:eventId/fit", requireAdmin, async (req, res) => {
+    const eventId = Number(req.params.eventId);
+    const rows = await db.select().from(magazinePages).where(eq(magazinePages.eventId, eventId));
+    const ai = new Anthropic();
+    const words = (t: string) => t.trim().split(/\s+/).filter(Boolean).length;
+    const trim = async (text: string, lo: number, hi: number, kind: string) => {
+      const out = await ai.messages.create({
+        model: "claude-sonnet-5",
+        max_tokens: 600,
+        system: `You are a magazine copy editor. Shorten the ${kind} to between ${lo} and ${hi} words so it fits the page. Keep the same voice, tense and person. Keep the facts that matter and every name you keep spelled exactly; add nothing that isn't in the text; no hype words. Return only the shortened paragraph.`,
+        messages: [{ role: "user", content: text }],
+      });
+      const t = out.content.filter((c) => c.type === "text").map((c) => (c as { text: string }).text).join("").trim().replace(/^["“]|["”]$/g, "");
+      return words(t) >= lo - 4 && words(t) <= hi + 4 ? t : "";
+    };
+    const done: string[] = [];
+    const todo = rows.filter((r) => r.signupId > 0 && !r.edited && !r.hidden);
+    for (let i = 0; i < todo.length; i += 6) {
+      await Promise.all(todo.slice(i, i + 6).map(async (r) => {
+        const patch: { blurb?: string; onTheDay?: string } = {};
+        if (words(r.blurb) > 46) { const t = await trim(r.blurb, 36, 45, "show description").catch(() => ""); if (t) patch.blurb = t; }
+        if (words(r.onTheDay) > 52) { const t = await trim(r.onTheDay, 40, 50, "summary of what the host talked about live").catch(() => ""); if (t) patch.onTheDay = t; }
+        if (Object.keys(patch).length) { await saveWords(eventId, r.signupId, patch); done.push(`${r.signupId}`); }
+      }));
+    }
+    res.json({ trimmed: done.length, pages: done });
+  });
+
   /** Each podcaster's private link to their own page, for "please review your page". */
   app.get("/api/admin/magazine/:eventId/review-links", requireAdmin, async (req, res) => {
     const eventId = Number(req.params.eventId);
