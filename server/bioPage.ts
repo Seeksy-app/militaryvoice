@@ -35,9 +35,9 @@ async function isPaid(email: string): Promise<boolean> {
 
 const art = multer({ storage: multer.memoryStorage(), limits: { fileSize: 12 * 1024 * 1024 } });
 
-const slugify = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/&/g, "and").replace(/[^a-z0-9]+/g, "").slice(0, 24);
+export const slugify = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/&/g, "and").replace(/[^a-z0-9]+/g, "").slice(0, 24);
 
-async function freeHandle(base: string): Promise<string> {
+export async function freeHandle(base: string): Promise<string> {
   const b = handleOk(base) ? base : `${base || "show"}pod`.slice(0, 24);
   for (let i = 0; i < 50; i++) {
     const h = i ? `${b}${i + 1}` : b;

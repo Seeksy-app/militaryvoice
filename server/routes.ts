@@ -129,6 +129,7 @@ import { audienceRecipients, registerPeople } from "./people.js";
 import { registerOrganizer } from "./organizer.js";
 import { registerProjects } from "./projects.js";
 import { registerAdminOverview } from "./adminOverview.js";
+import { registerBioPrefill } from "./bioPrefill.js";
 import { orgMemberEmails, registerOrgs } from "./orgs.js";
 import { registerProspects } from "./prospects.js";
 import { registerTravel } from "./travel.js";
@@ -6766,6 +6767,7 @@ export function registerRoutes(app: Express): void {
   registerMyStudio(app, requireHostSession, { youtubeToken });
   registerCreatorCampaigns(app, requireHostSession);
   registerMagazine(app, requireAdmin, requireAgent);
+  registerBioPrefill(app, requireAdmin);
   registerHealth(app, requireAdmin);
   registerNotices(app, requireAdmin, requireHostSession);
   registerSurvey(app, requireAdmin);
