@@ -236,12 +236,13 @@ export function PodcastHosting() {
                 {h.episodes.map((e) => (
                   <li key={e.id} className="flex items-center gap-3 py-2.5" data-testid={`hosting-episode-${e.id}`}>
                     <EpisodeArt ep={e} fallback={s.artworkUrl} onDone={refresh} />
-                    <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${e.audioJob === "failed" ? "bg-destructive/10 text-destructive" : e.audioJob ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : e.live ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : e.status === "published" ? "bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]" : "bg-muted text-muted-foreground"}`}>
+                    {/* On a phone the badge moves under the title, which gets the width (8 Oct: "8. MCDP 1 Warfig…"). */}
+                    <span className={`hidden shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold sm:inline-block ${e.audioJob === "failed" ? "bg-destructive/10 text-destructive" : e.audioJob ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : e.live ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : e.status === "published" ? "bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]" : "bg-muted text-muted-foreground"}`}>
                       {e.audioJob === "failed" ? "Audio failed" : e.audioJob ? <span className="inline-flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Preparing audio</span> : e.live ? "Live" : e.status === "published" ? "Scheduled" : "Draft"}
                     </span>
                     <button type="button" onClick={() => setEditEp(e)} className="min-w-0 flex-1 text-left">
-                      <span className="block truncate text-sm font-medium">{e.episodeNumber != null ? `${e.episodeNumber}. ` : ""}{e.title}</span>
-                      <span className="block text-xs text-muted-foreground">{e.publishedAt ? dateOf(e.publishedAt) : "Not published"}{e.durationSec ? ` · ${hms(e.durationSec)}` : ""}{e.youtube ? " · on YouTube" : ""}</span>
+                      <span className="line-clamp-2 text-sm font-medium sm:line-clamp-none sm:block sm:truncate">{e.episodeNumber != null ? `${e.episodeNumber}. ` : ""}{e.title}</span>
+                      <span className="block text-xs text-muted-foreground"><span className={`font-semibold sm:hidden ${e.audioJob === "failed" ? "text-destructive" : e.audioJob ? "text-[#8a5a00] dark:text-[#F0A71F]" : e.live ? "text-emerald-700 dark:text-emerald-400" : ""}`}>{e.audioJob === "failed" ? "Audio failed" : e.audioJob ? "Preparing audio" : e.live ? "Live" : e.status === "published" ? "Scheduled" : "Draft"} · </span>{e.publishedAt ? dateOf(e.publishedAt) : "Not published"}{e.durationSec ? ` · ${hms(e.durationSec)}` : ""}{e.youtube ? " · on YouTube" : ""}</span>
                     </button>
                     <span className="hidden w-24 shrink-0 text-right text-xs tabular-nums text-muted-foreground sm:block"><b className="text-foreground">{compact(e.downloads)}</b> downloads</span>
                     <Button size="sm" variant="outline" className="h-8 shrink-0 rounded-full" onClick={() => setEditEp(e)}>{e.status === "draft" ? "Publish" : "Edit"}</Button>

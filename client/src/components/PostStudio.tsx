@@ -1090,9 +1090,10 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
         <span className="mx-1 hidden h-6 w-px bg-border sm:block" aria-hidden />
         {tab === "clip" ? clipTools : editTools}
       </div>
-      {/* The player as wide as the screen's height allows, centred. */}
+      {/* The player as wide as the screen's height allows, centred, with room left for the timeline
+          below it: at 1280×800 the strip you mark the clip on sat under the fold (8 Oct). */}
       <div className="rounded-2xl border border-border bg-card p-3 shadow-sm" data-testid="viewer-frame">
-        <div className="mx-auto w-full" style={{ maxWidth: "calc((100vh - 24rem) * 16 / 9)" }}>{viewer}</div>
+        <div className="mx-auto w-full" style={{ maxWidth: "calc((100vh - 30rem) * 16 / 9)", minWidth: "min(100%, 22rem)" }}>{viewer}</div>
       </div>
       <div className="mt-3 rounded-2xl border border-border bg-card p-3">
         {tab === "clip" ? (

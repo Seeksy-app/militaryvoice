@@ -199,7 +199,9 @@ async function uploadFile(file: string, contentType: string): Promise<string> {
 // caption image) still ran it out of memory on 27 Sep. So the default follows
 // the machine: one per ~2GB of the container's limit, and never more than its
 // CPUs, since encoding is CPU-bound (2 CPU / 8GB: two, not four).
-const FFMPEG_SLOTS = Math.max(1, Number(process.env.FFMPEG_SLOTS || Math.min(Math.floor(memoryLimit() / 1.9e9), cpuLimit())));
+// 8 Oct: one per ~2.6GB, not ~1.9GB. Two ~950MB Marathon segments rendering three shapes each kept
+// restarting the 8.6GB worker every five minutes with four at once.
+const FFMPEG_SLOTS = Math.max(1, Number(process.env.FFMPEG_SLOTS || Math.min(Math.floor(memoryLimit() / 2.6e9), cpuLimit())));
 
 /** The container's CPUs (cgroup quota), not the host's. */
 function cpuLimit(): number {
@@ -2361,7 +2363,19 @@ const holding = new Set<number>();
 /** Episode edits in hand: a redeploy mid-edit hands those back too. */
 const editing = new Set<number>();
 
-async function release(): Promise<void> {
+/** What the container's memory looked like, for the note left on the way out (cgroup v2). */
+function memoryNote(): string {
+  const gb = (n: number) => `${(n / 1e9).toFixed(1)}GB`;
+  const read = (f: string) => { try { return readFileSync(f, "utf8").trim(); } catch { return ""; } };
+  const cur = Number(read("/sys/fs/cgroup/memory.current")) || process.memoryUsage().rss;
+  const peak = Number(read("/sys/fs/cgroup/memory.peak")) || 0;
+  const oom = /oom_kill (\d+)/.exec(read("/sys/fs/cgroup/memory.events"))?.[1] ?? "?";
+  return `memory ${gb(cur)}${peak ? `, peak ${gb(peak)}` : ""} of ${gb(memoryLimit())}, oom kills ${oom}, ffmpeg running ${ffmpegBusy}`;
+}
+
+async function release(why = "stopping"): Promise<void> {
+  // Say why on the way out (8 Oct: restarts every five minutes, and no way to tell a redeploy from memory).
+  await api("POST", "/api/agent/worker-note", { text: `${why} · holding ${[...holding].join(", ") || "nothing"} · ${memoryNote()}` }).catch(() => {});
   const ids = [...holding];
   const edits = [...editing];
   holding.clear();
@@ -2388,7 +2402,7 @@ async function release(): Promise<void> {
 // closing a window as killing something.
 for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
   process.on(sig, () => {
-    void release().finally(() => process.exit(0));
+    void release(sig).finally(() => process.exit(0));
   });
 }
 
@@ -2407,7 +2421,7 @@ async function tick(): Promise<boolean> {
     // Frozen: hand every held job back and exit, and Render starts a fresh worker.
     if (Date.now() - (lastProgress.get(job.recordingId) ?? Date.now()) > STALL_MS) {
       console.error(`[${job.recordingId}] no progress for ${Math.round(STALL_MS / 60_000)} minutes — handing jobs back and restarting`);
-      void release().finally(() => process.exit(1));
+      void release("stalled").finally(() => process.exit(1));
       return;
     }
     api("POST", `/api/agent/clip-jobs/${job.recordingId}/heartbeat`).catch(() => {});

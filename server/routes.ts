@@ -6790,6 +6790,16 @@ export function registerRoutes(app: Express): void {
   registerAskShow(app, requireAgent);
 
   /** The worker has fetched an import (Zoom): the file is in storage now. */
+  /** The worker's note on the way out (signal, memory): the last 30, for working out why it restarts. */
+  app.post("/api/agent/worker-note", requireAgent, async (req, res) => {
+    const text = String(req.body?.text ?? "").slice(0, 400);
+    if (text) {
+      const prev = JSON.parse((await storage.getSetting("worker_notes").catch(() => "")) || "[]") as string[];
+      await storage.setSetting("worker_notes", JSON.stringify([`${new Date().toISOString()} ${text}`, ...prev].slice(0, 30)));
+    }
+    res.json({ ok: true });
+  });
+
   app.post("/api/agent/imports/:id/done", requireAgent, async (req, res) => {
     const key = typeof req.body?.key === "string" && /^clean\/[\w.-]+$/.test(req.body.key) ? req.body.key : "";
     if (!key) return res.status(400).json({ message: "No file." });

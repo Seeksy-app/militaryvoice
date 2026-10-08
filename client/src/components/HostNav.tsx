@@ -173,6 +173,7 @@ export function HostNav({
     },
   ];
 
+  // Only with a slot still to come (8 Oct: it offered "Join the studio for your slot" after the event).
   const greenRoomItem: Item = { key: "greenroom", label: "Green room", hint: "Join the studio for your slot, and check your camera and mic first", icon: Headphones };
   const accountItems: Item[] = [
     { key: "editProfile", label: "Profile", hint: "Your photo, bio and service details that listeners and sponsors see", icon: UserRound },
@@ -279,7 +280,7 @@ export function HostNav({
         screen={screen}
         onGo={onGo}
         pathFor={pathFor}
-        more={[...groups.flatMap((g) => g.items).flatMap((it) => (it.key === "events" ? [it, greenRoomItem] : [it]))].filter((it) => !it.soon && (it.href || !PHONE_TABS.some((t) => t.key === it.key)))}
+        more={[...groups.flatMap((g) => g.items).flatMap((it) => (it.key === "events" ? (eventsCount ? [it, greenRoomItem] : [it]) : [it]))].filter((it) => !it.soon && (it.href || !PHONE_TABS.some((t) => t.key === it.key)))}
         badge={eventsCount}
         proOpen={proOpen}
       />

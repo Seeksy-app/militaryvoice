@@ -1197,7 +1197,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
       {/* Wide, like the admin: with a column of nav on the left, 1152px left
           the page itself narrower than a phone in landscape. */}
       {/* On a phone the tab bar sits at the bottom: room under the page so it never hides the end of it. */}
-      <div className={workspace ? "px-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] pt-5 sm:px-6 lg:p-0" : "mx-auto max-w-[1560px] px-4 py-10 sm:px-6"}>
+      <div className={workspace ? "px-4 pb-[calc(8.5rem+env(safe-area-inset-bottom))] pt-5 sm:px-6 lg:p-0" : "mx-auto max-w-[1560px] px-4 py-10 sm:px-6"}>
         {workspace ? (
           /* One line: the mark, who you are, and the way out. The page title
              is gone because the highlighted tab below already says
@@ -1300,7 +1300,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
         )}
         {/* Top-justified: whatever the screen is, it starts level with the
             top of the nav, not a band of white below it. */}
-        <div className={`min-w-0 [&>*:first-child]:mt-0 ${workspace ? "lg:mx-auto lg:w-full lg:max-w-[1440px] lg:px-8 lg:pb-12 lg:pt-6" : ""}`}>
+        <div className={`min-w-0 [&>*:first-child]:mt-0 ${workspace ? "lg:mx-auto lg:w-full lg:max-w-[1440px] lg:px-8 lg:pb-36 lg:pt-6" : ""}`}>
         {/* Back to admin and View as, top right of the page (the dashboard
             has them on its own dark card). */}
 
@@ -1712,7 +1712,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                                 <div className="flex items-start gap-4">
                                   {d.artwork ? <img src={d.artwork} alt="" className="h-20 w-20 shrink-0 rounded-xl object-cover ring-2 ring-white/20" /> : <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-white/10"><Headphones className="h-8 w-8 text-[#F0A71F]" /></span>}
                                   <div className="min-w-0 flex-1">
-                                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#F0A71F]">Your podcast{hosted ? " · on MilitaryVoices" : ""}</p>
+                                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#F0A71F]">Your podcast{hosted ? <span className="hidden sm:inline"> · on MilitaryVoices</span> : ""}</p>
                                     <p className="mt-1 truncate text-xl font-bold">{pod.showName || "Your show"}</p>
                                     <p className="mt-1 text-sm text-white/75">{fmt(d.total)} {d.unit} · {d.episodes.length} episodes</p>
                                     <div className="mt-4 flex flex-wrap gap-2">
@@ -1874,8 +1874,9 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           out with no link, no media and no YouTube. */}
       {workspace && (
         <>
-          {/* Not on the home screen: Next steps is right there, and two copies of one list is one ignored. */}
-          {screen !== "dashboard" && <FloatingChecklist state={checklistState} {...checklistNav} />}
+          {/* Not on the home screen (Next steps is right there; two copies of one list is one ignored),
+              nor on the SmartLink builder or in Pōstify, where it sat on the phone preview and the timeline. */}
+          {screen !== "dashboard" && screen !== "page" && screen !== "postify" && <FloatingChecklist state={checklistState} {...checklistNav} />}
           <GuideLayer />
         </>
       )}

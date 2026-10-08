@@ -619,7 +619,8 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
             onSave={(card) => saveTo.mutate({ card })}
           />
         ) : !submitted || submitted.mode === "username" ? (
-          <Welcome sample={sample} onOpenSample={openIn(sample?.results ?? [])} isAdmin={!!me?.isAdmin} verified={branchList.length ? verified.filter((c) => branchList.some((b) => c.branch.toLowerCase() === b.toLowerCase())) : verified} isMember={isMember} signedIn={!!me?.signedIn} onOpenVerified={openIn(verified)} onSaveVerified={(c) => saveTo.mutate({ card: c })} onSaveMany={saveMany} saved={saved} spotlight={spotlight} hidden={demoHide} onJoin={() => setGate(true)} loading={meLoading} part={part} />
+          // On Podcasts the Instagram sample answered a question nobody asked (8 Oct): it's for the social platforms.
+          <Welcome sample={isPodMode(mode) ? null : sample} onOpenSample={openIn(sample?.results ?? [])} isAdmin={!!me?.isAdmin} verified={branchList.length ? verified.filter((c) => branchList.some((b) => c.branch.toLowerCase() === b.toLowerCase())) : verified} isMember={isMember} signedIn={!!me?.signedIn} onOpenVerified={openIn(verified)} onSaveVerified={(c) => saveTo.mutate({ card: c })} onSaveMany={saveMany} saved={saved} spotlight={spotlight} hidden={demoHide} onJoin={() => setGate(true)} loading={meLoading} part={part} />
         ) : (
           <>
             {/* what ran */}
