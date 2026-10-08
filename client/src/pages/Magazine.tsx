@@ -67,7 +67,7 @@ function AdPage({ ad, n }: { ad: Ad; n: number }) {
   return (
     <Page bg={NAVY} color="#fff" n={n}>
       <div className="absolute inset-0 flex flex-col items-center px-16 pb-16 pt-24 text-center">
-        <p className="text-[12px] font-bold uppercase tracking-[0.3em]" style={{ color: GOLD }}>A word from our sponsor</p>
+        <p className="text-[12px] font-bold uppercase tracking-[0.3em]" style={{ color: GOLD }}>{/militaryvoices/i.test(ad.name) ? "From MilitaryVoices.ai" : "A word from our sponsor"}</p>
         <div className="mt-14 flex h-40 w-full items-center justify-center">
           {ad.logo ? <img src={ad.logo} alt={ad.name} className="h-full w-auto max-w-[520px] object-contain" /> : <span className="text-[44px] font-bold" style={HEAD}>{ad.name}</span>}
         </div>
@@ -487,6 +487,8 @@ export default function Magazine({ slug }: { slug?: string }) {
     after.set(at, [...(after.get(at) ?? []), ad]);
   });
   let n = 1;
+  // The sponsors in Andrew's order (8 Oct): PodcastOne, LiveOne, Genius, Tarver; anyone new after them.
+  const rank = (name: string) => { const i = [/podcastone/i, /liveone/i, /genius/i, /tarver/i].findIndex((r) => r.test(name)); return i < 0 ? 99 : i; };
 
   const pages: ReactNode[] = [
     // Cover
@@ -587,7 +589,7 @@ export default function Magazine({ slug }: { slug?: string }) {
     ]),
     // The Marathon's sponsors, then its friends: a page each (8 Oct).
     ...([
-      { key: "sponsors", kicker: "Thank you to our sponsors", title: "Sponsors of the Marathon", line: "The Podcast Marathon happened because they believed in it.", list: m.sponsors.filter((sp) => sp.tier !== "friend") },
+      { key: "sponsors", kicker: "Thank you to our sponsors", title: "Sponsors of the Marathon", line: "The Podcast Marathon happened because they believed in it.", list: m.sponsors.filter((sp) => sp.tier !== "friend").sort((a, b) => rank(a.name) - rank(b.name)) },
       { key: "friends", kicker: "With thanks", title: "Friends of the Marathon", line: "The day is free for every podcaster and every listener because of them.", list: m.sponsors.filter((sp) => sp.tier === "friend") },
     ].filter((g) => g.list.length).map((g) => (
       <Page key={g.key} n={++n}>
@@ -601,9 +603,6 @@ export default function Magazine({ slug }: { slug?: string }) {
                 {sp.logo ? <img src={sp.logo} alt={sp.name} className="max-h-[120px] max-w-full object-contain" /> : <span className="text-[24px] font-bold text-white">{sp.name}</span>}
               </div>
             ))}
-          </div>
-          <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-1 text-center text-[14px] font-semibold text-slate-600">
-            {g.list.map((sp) => <p key={sp.name} className={g.list.length % 2 === 1 && sp === g.list[g.list.length - 1] ? "col-span-2" : ""}>{sp.name}</p>)}
           </div>
         </div>
       </Page>
