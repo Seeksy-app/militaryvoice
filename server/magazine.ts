@@ -20,6 +20,9 @@ import { uploadPhoto } from "./photoStorage.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
 import { bioPages, clips, contacts, discoveryCache, hostedShows, magazineAds, magazinePages, podcasterProfiles, recordings, segmentCuts, signups, sponsors, transcriptLines } from "../shared/schema.js";
 
+/** A podcaster's private link to their own page (?review=<signupId>.<token>), good before it's published. */
+const reviewToken = (signupId: number) => crypto.createHmac("sha256", process.env.SESSION_SECRET || "mv-magazine").update(`mag-review:${signupId}`).digest("base64url").slice(0, 20);
+
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 const now = () => new Date().toISOString();
 /** The row that says the magazine is out: until then only admins can open it. */
@@ -259,7 +262,8 @@ async function buildMagazine(eventId: number) {
     shows,
     /** Left out by an admin (listed for admin only, so they can be put back). */
     leftOut: lineup.filter((s) => out.has(s.id)).map((s) => ({ signupId: s.id, podcastName: s.podcastName, hostName: s.hostName })),
-    sponsors: sponsorRows.map((r) => ({ name: r.name, logo: r.logoUrl, url: r.url })),
+    // tier: "friend" is a Friend of the Marathon; the rest are the Marathon's sponsors (8 Oct: one page each).
+    sponsors: sponsorRows.map((r) => ({ name: r.name, logo: r.logoUrl, url: r.url, tier: r.tier ?? "" })),
     cover: { photo: words.find((x) => x.signupId === COVER)?.art ?? "", style: words.find((x) => x.signupId === COVER)?.quote ?? "" },
     award: (() => {
       const a = words.find((x) => x.signupId === AWARD);
@@ -482,9 +486,28 @@ export function registerMagazine(app: Express, requireAdmin: RequestHandler, req
     if (!ev) return res.status(404).json({ message: "No such magazine." });
     const m = await buildMagazine(ev.id);
     if (!m) return res.status(404).json({ message: "No such magazine." });
+    // A podcaster reviewing their own page before it's out (8 Oct): their page only, by its private link.
+    const review = /^(\d+)\.([\w-]{20})$/.exec(String(req.query.review ?? ""));
+    if (review && reviewToken(Number(review[1])) === review[2]) {
+      const show = m.shows.find((x) => x.signupId === Number(review[1]));
+      if (!show) return res.status(404).json({ message: "That page isn't in the magazine." });
+      return res.json({ ...m, shows: [show], ads: [], sponsors: [], award: null, welcome: "", leftOut: [], admin: false, review: show.signupId });
+    }
     const admin = !!getAdminEmail(req) && (await storage.isAdminEmail(getAdminEmail(req)!));
     if (!m.published && !admin) return res.status(404).json({ message: "The magazine isn't out yet." });
     res.json({ ...m, leftOut: admin ? m.leftOut : [], admin });
+  });
+
+  /** Each podcaster's private link to their own page, for "please review your page". */
+  app.get("/api/admin/magazine/:eventId/review-links", requireAdmin, async (req, res) => {
+    const eventId = Number(req.params.eventId);
+    const m = await buildMagazine(eventId);
+    if (!m) return res.status(404).json({ message: "No such event." });
+    const lineup = await db.select().from(signups).where(eq(signups.eventId, eventId));
+    res.json(m.shows.map((s) => {
+      const sg = lineup.find((x) => x.id === s.signupId);
+      return { signupId: s.signupId, podcastName: s.podcastName, hostName: s.hostName, email: sg?.email.trim().toLowerCase() ?? "", url: `${ORIGIN}/magazine?review=${s.signupId}.${reviewToken(s.signupId)}` };
+    }));
   });
 
   /** SI drafts every show page that has no words yet (or all, with ?all=1), and the welcome. */

@@ -17,7 +17,9 @@ type Mag = {
   event: { name: string; day: string; occasion: string; tagline: string };
   published: boolean; admin?: boolean; welcome: string;
   host: { name: string; title: string; photo: string };
-  shows: Show[]; sponsors: { name: string; logo: string; url: string }[];
+  shows: Show[]; sponsors: { name: string; logo: string; url: string; tier?: string }[];
+  /** A podcaster's private review of their own page: only that page comes back. */
+  review?: number;
   cover?: { photo: string; style?: string };
   ads?: Ad[];
   award?: { signupId: number; title: string; name: string; show: string; citation: string; quote: string; photo: string; plaque: string } | null;
@@ -34,7 +36,7 @@ function Page({ children, bg = "#fff", color = "#0b1a3a", n }: { children: React
   return (
     <section className="mag-page relative overflow-hidden" style={{ width: W, height: H, background: bg, color }}>
       {children}
-      {n != null && <span className="absolute bottom-5 right-8 text-[11px] font-semibold tabular-nums opacity-60">{n}</span>}
+      {!!n && <span className="absolute bottom-5 right-8 text-[11px] font-semibold tabular-nums opacity-60">{n}</span>}
     </section>
   );
 }
@@ -47,10 +49,18 @@ function Qr({ url, size = 96 }: { url: string; size?: number }) {
 
 /** A full-page ad: their own artwork edge to edge, or one we set from their logo, words and a QR. */
 function AdPage({ ad, n }: { ad: Ad; n: number }) {
+  // A page-shaped ad fills the page; anything else (a half-page ad, 8 Oct) sits whole, centred on navy,
+  // until the full-page version arrives.
+  const [shape, setShape] = useState<"page" | "other">("page");
   if (ad.artwork) {
     return (
-      <Page n={n}>
-        <img src={ad.artwork} alt={ad.name} className="absolute inset-0 h-full w-full object-cover" />
+      <Page n={n} bg={shape === "page" ? "#fff" : "#06163a"}>
+        <img
+          src={ad.artwork}
+          alt={ad.name}
+          onLoad={(e) => { const r = e.currentTarget.naturalWidth / Math.max(1, e.currentTarget.naturalHeight); setShape(Math.abs(r - W / H) < 0.04 ? "page" : "other"); }}
+          className={shape === "page" ? "absolute inset-0 h-full w-full object-cover" : "absolute inset-x-0 top-1/2 w-full -translate-y-1/2 object-contain"}
+        />
       </Page>
     );
   }
@@ -312,6 +322,16 @@ function AwardPage({ a, photo, n, event }: { a: NonNullable<Mag["award"]>; photo
 function ShowPage({ s, n, event }: { s: Show; n: number; event: Mag["event"] }) {
   const who = [s.branch, s.service].filter(Boolean).join(" · ");
   const eps = s.episodes ?? [];
+  // Every show page the same shape (8 Oct): description, quote, On the day, two episodes, the player.
+  // When the words run long it fits itself (smaller type, then fewer episodes), never cutting anything off.
+  const body = useRef<HTMLDivElement | null>(null);
+  const [fit, setFit] = useState(0);
+  useLayoutEffect(() => {
+    const el = body.current;
+    if (el && el.scrollHeight > el.clientHeight + 1 && fit < 4) setFit((f) => f + 1);
+  });
+  const size = fit >= 2 ? (fit >= 3 ? 0.88 : 0.94) : 1;
+  const rows = fit >= 4 ? 1 : 2;
   const [pick, setPick] = useState(-1);
   const [go, setGo] = useState(0);
   const segment: Episode | null = s.audio ? { title: "Their segment from the Marathon", audioUrl: s.audio, date: "" } : null;
@@ -335,31 +355,31 @@ function ShowPage({ s, n, event }: { s: Show; n: number; event: Mag["event"] }) 
           </div>
         </div>
 
-        <div className="mt-10 flex min-h-0 flex-1 flex-col gap-6 overflow-hidden">
-          {s.blurb && <p className="text-[16px] leading-[1.6] text-slate-800">{s.blurb}</p>}
+        <div ref={body} className={`${fit ? "mt-8" : "mt-10"} flex min-h-0 flex-1 flex-col overflow-hidden ${fit ? "gap-5" : "gap-6"}`}>
+          {s.blurb && <p className="leading-[1.6] text-slate-800" style={{ fontSize: 16 * size }}>{s.blurb}</p>}
           {s.quote && (
             <blockquote className="border-l-4 pl-5" style={{ borderColor: GOLD }}>
-              <p className="text-[22px] font-semibold italic leading-snug" style={{ ...HEAD, color: NAVY }}>“{s.quote}”</p>
+              <p className="font-semibold italic leading-snug" style={{ ...HEAD, color: NAVY, fontSize: 22 * size }}>“{s.quote}”</p>
               <footer className="mt-1.5 text-[13px] font-semibold text-slate-500">{s.hostName}</footer>
             </blockquote>
           )}
           {s.onTheDay && (
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: GOLD }}>On the day</p>
-              <p className="mt-2 text-[15px] leading-[1.6] text-slate-800">{s.onTheDay}</p>
+              <p className="mt-2 leading-[1.6] text-slate-800" style={{ fontSize: 15 * size }}>{s.onTheDay}</p>
             </div>
           )}
           {s.about && !s.onTheDay && (
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: GOLD }}>{s.aboutOwn ? `About ${first}` : `About ${first}, in their words`}</p>
-              <p className="mt-2 text-[14.5px] leading-[1.6] text-slate-700">{s.about}</p>
+              <p className="mt-2 leading-[1.6] text-slate-700" style={{ fontSize: 14.5 * size }}>{s.about}</p>
             </div>
           )}
           {!!s.links?.length && (
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: GOLD }}>Watch and listen</p>
               <ol className="mt-2 divide-y divide-slate-200 border-y border-slate-200">
-                {s.links.slice(0, s.about || s.quote ? 3 : 4).map((l) => (
+                {s.links.slice(0, rows).map((l) => (
                   <li key={l.url}>
                     <a href={l.url} target="_blank" rel="noreferrer" className="group flex w-full items-baseline gap-3 py-2 text-left">
                       <ExternalLink className="relative top-0.5 h-3.5 w-3.5 shrink-0" style={{ color: GOLD }} />
@@ -375,7 +395,7 @@ function ShowPage({ s, n, event }: { s: Show; n: number; event: Mag["event"] }) 
             <div>
               <p className="text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: GOLD }}>Start with these episodes</p>
               <ol className="mt-2 divide-y divide-slate-200 border-y border-slate-200">
-                {eps.slice(0, s.about || s.quote ? 3 : 4).map((e, i) => (
+                {eps.slice(0, rows).map((e, i) => (
                   <li key={e.audioUrl}>
                     <button type="button" onClick={() => { setPick(i); setGo((g) => g + 1); }} className="group flex w-full items-baseline gap-3 py-2 text-left">
                       <Play className="relative top-0.5 h-3.5 w-3.5 shrink-0 print:hidden" style={{ color: GOLD }} fill="currentColor" />
@@ -407,7 +427,9 @@ export default function Magazine({ slug }: { slug?: string }) {
   const q = useQuery<Mag>({
     queryKey: ["/api/magazine", slug ?? ""],
     queryFn: async () => {
-      const r = await fetch(slug ? `/api/magazine/${encodeURIComponent(slug)}` : "/api/magazine", { credentials: "include" });
+      // A podcaster's private review link carries ?review=<signupId>.<token> through to the API.
+      const review = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("review") : null;
+      const r = await fetch(`${slug ? `/api/magazine/${encodeURIComponent(slug)}` : "/api/magazine"}${review ? `?review=${encodeURIComponent(review)}` : ""}`, { credentials: "include" });
       if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || "The magazine isn't out yet.");
       return r.json();
     },
@@ -562,21 +584,29 @@ export default function Magazine({ slug }: { slug?: string }) {
       <ShowPage key={s.signupId} s={s} n={++n} event={m.event} />,
       ...(after.get(i) ?? []).map((ad) => <AdPage key={`ad-${ad.id}`} ad={ad} n={++n} />),
     ]),
-    // Friends of the Marathon
-    <Page key="sponsors" n={++n}>
-      <div className="absolute inset-x-14 top-16">
-        <p className="text-[12px] font-bold uppercase tracking-[0.3em]" style={{ color: GOLD }}>With thanks</p>
-        <h2 className="mt-3 text-[40px] font-bold tracking-tight" style={{ ...HEAD, color: NAVY }}>Friends of the Marathon</h2>
-        <p className="mt-3 text-[16px] text-slate-600">The day is free for every podcaster and every listener because of them.</p>
-        <div className="mt-12 grid grid-cols-2 gap-8">
-          {m.sponsors.map((sp) => (
-            <div key={sp.name} className="flex h-40 items-center justify-center rounded-2xl p-6" style={{ background: NAVY }}>
-              {sp.logo ? <img src={sp.logo} alt={sp.name} className="max-h-full max-w-full object-contain" /> : <span className="text-[22px] font-bold text-white">{sp.name}</span>}
-            </div>
-          ))}
+    // The Marathon's sponsors, then its friends: a page each (8 Oct).
+    ...([
+      { key: "sponsors", kicker: "Thank you to our sponsors", title: "Sponsors of the Marathon", line: "The Podcast Marathon happened because they believed in it.", list: m.sponsors.filter((sp) => sp.tier !== "friend") },
+      { key: "friends", kicker: "With thanks", title: "Friends of the Marathon", line: "The day is free for every podcaster and every listener because of them.", list: m.sponsors.filter((sp) => sp.tier === "friend") },
+    ].filter((g) => g.list.length).map((g) => (
+      <Page key={g.key} n={++n}>
+        <div className="absolute inset-x-14 top-16">
+          <p className="text-[12px] font-bold uppercase tracking-[0.3em]" style={{ color: GOLD }}>{g.kicker}</p>
+          <h2 className="mt-3 text-[40px] font-bold tracking-tight" style={{ ...HEAD, color: NAVY }}>{g.title}</h2>
+          <p className="mt-3 text-[16px] text-slate-600">{g.line}</p>
+          <div className={`mt-12 grid gap-8 ${g.list.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
+            {g.list.map((sp, i) => (
+              <div key={sp.name} className={`flex flex-col items-center justify-center gap-3 rounded-2xl p-6 ${g.list.length % 2 === 1 && i === g.list.length - 1 && g.list.length > 1 ? "col-span-2 mx-auto w-1/2" : ""}`} style={{ background: NAVY, height: g.list.length <= 4 ? 200 : 160 }}>
+                {sp.logo ? <img src={sp.logo} alt={sp.name} className="max-h-[120px] max-w-full object-contain" /> : <span className="text-[24px] font-bold text-white">{sp.name}</span>}
+              </div>
+            ))}
+          </div>
+          <div className="mt-6 grid grid-cols-2 gap-x-8 gap-y-1 text-center text-[14px] font-semibold text-slate-600">
+            {g.list.map((sp) => <p key={sp.name} className={g.list.length % 2 === 1 && sp === g.list[g.list.length - 1] ? "col-span-2" : ""}>{sp.name}</p>)}
+          </div>
         </div>
-      </div>
-    </Page>,
+      </Page>
+    ))),
     // Back cover
     <Page key="back" bg={NAVY} color="#fff">
       <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 px-16 text-center">
@@ -588,17 +618,26 @@ export default function Magazine({ slug }: { slug?: string }) {
     </Page>,
   ];
 
+  // A podcaster's review link: their page alone, and what to do about it.
+  const shown = m.review ? [<ShowPage key={m.shows[0].signupId} s={m.shows[0]} n={0} event={m.event} />] : pages;
+
   return (
     <div className="min-h-screen bg-slate-200 print:bg-white">
       <style>{`@import url('https://fonts.googleapis.com/css2?family=Anton&family=Yellowtail&display=block'); @page { size: 8.5in 11in; margin: 0; } @keyframes magFadeIn { from { opacity: 0 } to { opacity: 1 } } .mag-fade-in { animation: magFadeIn 900ms ease-in-out both; } @media print { .mag-fade-in { animation: none !important; } } @media print { .mag-bar { display: none !important; } .mag-sheet { transform: none !important; } .mag-frame { width: auto !important; height: auto !important; margin: 0 !important; } .mag-page { break-after: page; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }`}</style>
       <div className="mag-bar sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-300 bg-white/95 px-4 py-2.5 backdrop-blur">
-        <p className="truncate text-sm font-semibold text-slate-800">{m.event.name} · Keepsake magazine{!m.published ? " · draft (admins only)" : ""}</p>
+        <p className="truncate text-sm font-semibold text-slate-800">{m.event.name} · Keepsake magazine{m.review ? " · your page, for your review" : !m.published ? " · draft (admins only)" : ""}</p>
         <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-1.5 rounded-full bg-[#053877] px-4 py-1.5 text-sm font-semibold text-white hover:bg-[#0a4a99]" data-testid="magazine-print">
           <Printer className="h-4 w-4" /> Print / save as PDF
         </button>
       </div>
+      {m.review && (
+        <div className="mag-bar mx-auto mt-6 max-w-[816px] rounded-2xl border border-[#F0A71F]/60 bg-[#F0A71F]/10 px-5 py-4 text-[15px] text-slate-800" data-testid="magazine-review-note">
+          <p className="font-semibold">This is your page in the Podcast Marathon keepsake magazine.</p>
+          <p className="mt-1">If it all looks right, reply to our email with "Approved". Anything to change (a word, your photo, your quote), reply with it by <b>6 pm Eastern today</b> and we'll fix it.</p>
+        </div>
+      )}
       <div ref={box} className="mx-auto max-w-[816px] px-0 py-6 sm:py-10 print:max-w-none print:p-0">
-        {pages.map((p, i) => (
+        {shown.map((p, i) => (
           <div key={i} id={typeof (p as ReactElement)?.key === "string" && /^\d+$/.test((p as ReactElement).key as string) ? `show-${(p as ReactElement).key}` : undefined} className="mag-frame mx-auto mb-8 overflow-hidden shadow-xl print:mb-0 print:overflow-visible print:shadow-none" style={{ width: W * scale, height: H * scale }}>
             <div className="mag-sheet origin-top-left" style={{ width: W, height: H, transform: `scale(${scale})` }}>{p}</div>
           </div>
