@@ -8001,7 +8001,7 @@ export function registerRoutes(app: Express): void {
     res.json({
       post: true,
       beta: { unlimited: a.unlimited, used: a.used, limit: a.limit, left: a.unlimited ? null : a.left, maxMinutes: a.maxMinutes, tokens: a.tokens, payments: stripeReady() },
-      plan: a.sub && plan ? { key: plan.key, name: plan.name, interval: a.sub.interval, credits: plan.credits, overageCents: plan.overageCents, capCents: a.sub.overageCapCents, extraCents: a.extraCents, periodEnd: a.sub.periodEnd, status: a.sub.status } : null,
+      plan: a.sub && plan ? { key: plan.key, name: plan.name, comp: String(a.sub.subscriptionId ?? "").startsWith("comp:"), interval: a.sub.interval, credits: plan.credits, overageCents: plan.overageCents, capCents: a.sub.overageCapCents, extraCents: a.extraCents, periodEnd: a.sub.periodEnd, status: a.sub.status } : null,
     });
   });
 

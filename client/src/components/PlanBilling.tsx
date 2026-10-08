@@ -8,8 +8,9 @@ import { startPlanCheckout, startAddonCheckout, startTokenCheckout, openBillingP
 import { IconTile } from "@/components/ui/icon-tile";
 
 type Features = {
-  beta: { tokens: number; payments: boolean };
-  plan: { key: string; name: string; interval: "month" | "year"; credits: number; periodEnd: string; status: string } | null;
+  beta: { tokens: number; payments: boolean; unlimited?: boolean };
+  /** comp: a gift from us (no Stripe behind it, so no billing page to manage). */
+  plan: { key: string; name: string; comp?: boolean; interval: "month" | "year"; credits: number; periodEnd: string; status: string } | null;
 };
 type DiscoverMe = { member: object | null; discoveryPro?: boolean; reveals: { used: number; allowance: number } | null };
 
@@ -45,14 +46,17 @@ export function PlanBilling() {
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="min-w-0">
             <p className="text-sm text-muted-foreground">Your plan</p>
-            <p className="mt-1 text-xl font-bold">{onPlan ? `Pōstify ${plan!.name}` : "Free"}</p>
+            {/* The plan names everywhere else (6 Oct): Growth is the free one. */}
+            <p className="mt-1 text-xl font-bold">{onPlan ? plan!.name : "Growth"}{onPlan && plan!.comp && <span className="ml-2 rounded-full bg-emerald-600/10 px-2 py-0.5 align-middle text-xs font-semibold text-emerald-700 dark:text-emerald-400">Gift</span>}</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              {onPlan
+              {onPlan && plan!.comp
+                ? `${plan!.credits} credits a month, on us${plan!.periodEnd ? ` until ${day(plan!.periodEnd)}` : ""}.`
+                : onPlan
                 ? `${plan!.credits} credits a month${plan!.interval === "year" ? ", paid yearly" : ""}${plan!.periodEnd ? ` · renews ${day(plan!.periodEnd)}` : ""}${plan!.status === "past_due" ? " · payment didn't go through" : ""}`
-                : "Your SmartLink, podcast hosting and Ask my show are free, always."}
+                : features.data?.beta.unlimited ? "Free, always, and a tester's unlimited credits on top." : "Free, always: your SmartLink, podcast hosting and Ask my show."}
             </p>
           </div>
-          {onPlan && (
+          {onPlan && !plan!.comp && (
             <Button variant="outline" onClick={() => void go("portal", openBillingPortal)} disabled={busy !== null} className="gap-2 rounded-full" data-testid="billing-manage">
               {spin("portal") || <CreditCard className="h-4 w-4" />} Manage billing
             </Button>
