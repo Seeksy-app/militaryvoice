@@ -1157,7 +1157,9 @@ Answer with the pick_moments tool.` }],
   }
   if (!(raw as unknown[]).length) return more ? [] : await titled(client, job, lines, densestStretches(lines, n, "no-answer"));
   const moments = (raw as Moment[]).map((m) => ({
-    title: String(m.title ?? "").slice(0, 120),
+    // A quote the model wrapped twice (""You think you have nothing to give"", 8 Oct) keeps one pair:
+    // a quoted line is often the point of the title ("My only skill is killing people").
+    title: String(m.title ?? "").trim().replace(/^(["“”]\s*){2,}/, "\"").replace(/(\s*["“”]){2,}$/, "\"").slice(0, 120),
     caption: String(m.caption ?? "").slice(0, 400),
     reason: String(m.reason ?? "").slice(0, 400),
     startSec: Math.max(0, Math.floor(Number(m.startSec))),
