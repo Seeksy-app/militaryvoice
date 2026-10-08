@@ -51,7 +51,7 @@ export default function PressRelease() {
           <h1 className="mt-3 text-balance text-3xl font-bold leading-[1.08] tracking-tight sm:text-5xl" style={HEAD}>PodcastOne launches a multi-year partnership with National Military Podcast Day</h1>
           <div className="mt-8 flex flex-wrap items-center justify-center gap-x-10 gap-y-5 rounded-2xl border border-white/15 bg-white/[0.06] px-6 py-5">
             <img src="/nmpd-logo.png" alt="National Military Podcast Day" className="h-16 w-16 object-contain sm:h-20 sm:w-20" />
-            {data?.podcastOne && <img src={data.podcastOne} alt="PodcastOne" className="h-12 w-auto object-contain sm:h-14" />}
+            {data?.podcastOne && <img src={data.podcastOne} alt="PodcastOne" className="h-12 w-auto object-contain brightness-0 invert sm:h-14" />}
             {data?.liveOne && <img src={data.liveOne} alt="LiveOne" className="h-7 w-auto object-contain sm:h-8" />}
             <div className="flex gap-2">
               {["NASDAQ: PODC", "NASDAQ: LVO"].map((t) => <span key={t} className="rounded-full border border-white/30 px-3 py-1 text-[12px] font-bold tracking-[0.08em]" style={{ color: GOLD }}>{t}</span>)}
