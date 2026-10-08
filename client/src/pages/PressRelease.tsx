@@ -1,9 +1,9 @@
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ExternalLink } from "lucide-react";
 
 // /podcast-one-press-release (8 Oct 2026): the PodcastOne partnership on our own
-// site, with live PODC and LVO charts. The release text is LiveOne's: an admin
+// site (no share-price charts since 8 Oct: the page is about the partnership). The release text is LiveOne's: an admin
 // pastes the copy they sent (Admin → Magazine); until then it's our summary and
 // a link to the newswire. The magazine's news page QR lands here.
 
@@ -11,28 +11,6 @@ const NAVY = "#000741";
 const GOLD = "#F0A71F";
 const HEAD = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 export const RELEASE_URL = "https://www.tradingview.com/news/acceswire:04c71c9d0094b:0-liveone-nasdaq-lvo-subsidiary-podcastone-nasdaq-podc-launches-multi-year-distribution-content-and-marketing-partnership-with-national-military-podcast-day/";
-
-/** TradingView's mini chart for one symbol: price, change and a month's line. */
-function Ticker({ symbol, name }: { symbol: string; name: string }) {
-  const box = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    const el = box.current;
-    if (!el) return;
-    el.innerHTML = '<div class="tradingview-widget-container__widget"></div>';
-    const s = document.createElement("script");
-    s.src = "https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js";
-    s.async = true;
-    s.innerHTML = JSON.stringify({ symbol, width: "100%", height: "100%", locale: "en", dateRange: "1M", colorTheme: "light", isTransparent: true, autosize: true, chartOnly: false, noTimeScale: false });
-    el.appendChild(s);
-    return () => { el.innerHTML = ""; };
-  }, [symbol]);
-  return (
-    <figure className="overflow-hidden rounded-2xl border border-slate-200 bg-white p-3 shadow-sm">
-      <figcaption className="px-1 text-[12px] font-bold uppercase tracking-[0.16em] text-slate-500">{name}</figcaption>
-      <div ref={box} className="tradingview-widget-container mt-1 h-[200px]" />
-    </figure>
-  );
-}
 
 export default function PressRelease() {
   const { data } = useQuery<{ body: string; podcastOne: string; liveOne: string }>({
@@ -59,11 +37,6 @@ export default function PressRelease() {
           </div>
         </div>
       </header>
-
-      <section className="mx-auto -mt-1 grid max-w-4xl gap-4 px-4 pt-8 sm:grid-cols-2 sm:px-8" aria-label="Share prices">
-        <Ticker symbol="NASDAQ:PODC" name="PodcastOne · NASDAQ: PODC" />
-        <Ticker symbol="NASDAQ:LVO" name="LiveOne · NASDAQ: LVO" />
-      </section>
 
       <article className="mx-auto max-w-4xl px-4 py-10 sm:px-8">
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm sm:p-10">
@@ -98,7 +71,6 @@ export default function PressRelease() {
             </a>
           </div>
         </div>
-        <p className="mt-6 text-center text-[13px] text-slate-500">Share prices from TradingView, delayed. Not investment advice.</p>
       </article>
     </main>
   );
