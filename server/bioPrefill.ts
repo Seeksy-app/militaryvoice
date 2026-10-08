@@ -9,7 +9,7 @@ import { db, schemaIsReady } from "./storage.js";
 import { parseSocialAccounts } from "./uploadPost.js";
 import { freeHandle, slugify } from "./bioPage.js";
 import { bioPages, magazinePages, podcasterProfiles, signups } from "../shared/schema.js";
-import { parseSections, parseSocials, TEMPLATES, type BioSection, type BioSocial } from "../shared/bio.js";
+import { handleOk, parseSections, parseSocials, TEMPLATES, type BioSection, type BioSocial } from "../shared/bio.js";
 
 const SOCIAL_HOSTS: [RegExp, BioSocial["platform"]][] = [
   [/(^|\.)instagram\.com$/i, "instagram"],
@@ -30,7 +30,7 @@ const usernameOf = (u: URL) => u.pathname.split("/").filter(Boolean).pop()?.repl
 const id = () => Math.random().toString(36).slice(2, 10);
 
 export function registerBioPrefill(app: Express, requireAdmin: RequestHandler) {
-  /** body: { eventId, emails: string[], dryRun?: boolean } → what each page got (or would get). */
+  /** body: { eventId, emails: string[], handles?: { [email]: handle }, dryRun?: boolean } → what each page got (or would get). */
   app.post("/api/admin/bio/prefill", requireAdmin, async (req, res) => {
     await schemaIsReady();
     const eventId = Number(req.body?.eventId);
@@ -85,7 +85,10 @@ export function registerBioPrefill(app: Express, requireAdmin: RequestHandler) {
         if (!dryRun && filled.length) await db.update(bioPages).set({ ...patch, updatedAt: now }).where(eq(bioPages.id, row.id));
         out.push({ email, handle: row.handle, made: false, published: row.published, filled });
       } else {
-        const handle = dryRun ? `${slugify(name || email.split("@")[0])} (to make)` : await freeHandle(slugify(name || email.split("@")[0]));
+        // A cleaner address than the cut-off show name, when one is given and free.
+        const asked = String(req.body?.handles?.[email] ?? "").trim().toLowerCase();
+        const base = handleOk(asked) ? asked : slugify(name || email.split("@")[0]);
+        const handle = dryRun ? `${base} (to make)` : await freeHandle(base);
         if (!dryRun) await db.insert(bioPages).values({
           email, handle,
           theme: JSON.stringify({ ...TEMPLATES.bold.theme, template: "bold", color: "#F0A71F" }),
