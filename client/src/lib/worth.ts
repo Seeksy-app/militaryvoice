@@ -88,10 +88,16 @@ const POD_RATES = [
 export function podcastWorthFor(perEpisode: number): PodcastWorth | null {
   if (!(perEpisode > 0)) return null;
   const niche = 1.1;
-  const deliverables = POD_RATES.map((r) => {
+  const single = POD_RATES.filter((r) => r.key !== "pack").map((r) => {
     const mid = (perEpisode / 1000) * r.cpm * niche;
     return { key: r.key, label: r.label, hint: r.hint, low: round5(mid * 0.8), mid: round5(mid), high: round5(mid * 1.2) };
   });
+  // The package is four of the mid-roll as priced above, 10% off: priced from its own floor-rounded
+  // figure, or a small show's four reads came out at $25, the same as one (8 Oct).
+  const m = single.find((d) => d.key === "mid")!;
+  const pack = POD_RATES.find((r) => r.key === "pack")!;
+  const four = (v: number) => Math.round((v * 4 * 0.9) / 5) * 5;
+  const deliverables = [...single, { key: pack.key, label: pack.label, hint: pack.hint, low: four(m.low), mid: four(m.mid), high: four(m.high) }];
   return {
     perEpisode,
     deliverables,
