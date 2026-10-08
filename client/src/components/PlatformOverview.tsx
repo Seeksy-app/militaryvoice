@@ -160,7 +160,7 @@ export function PlatformOverview() {
         <div className="space-y-5">
           <section className="rounded-2xl border border-border bg-card p-5">
             <h3 className="flex items-center gap-2 text-base font-semibold"><CalendarDays className="h-4 w-4" /> Events</h3>
-            {/* New in the last 30 days, with where each stands. */}
+            {/* New in the last two weeks, with where each stands. */}
             {(ov.data?.newEvents ?? []).length > 0 && (
               <>
                 <p className="mt-2 text-[11px] font-bold uppercase tracking-[0.12em] text-muted-foreground">New</p>

@@ -12,7 +12,7 @@ export function registerAdminOverview(app: Express, requireAdmin: RequestHandler
   app.get("/api/admin/overview", requireAdmin, async (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
     const week = new Date(Date.now() - 7 * 86_400_000).toISOString();
-    const month = new Date(Date.now() - 30 * 86_400_000).toISOString();
+    const fortnight = new Date(Date.now() - 14 * 86_400_000).toISOString();
     const count = sql<number>`count(*)::int`;
 
     const [textsOut, textsDelivered, textsFailed, textsIn, optOuts, optOutsWeek] = await Promise.all([
@@ -40,7 +40,7 @@ export function registerAdminOverview(app: Express, requireAdmin: RequestHandler
     const newEvents = await db
       .select({ id: events.id, name: events.name, startAtUtc: events.startAtUtc, createdAt: events.createdAt, review: events.review, visible: events.visible })
       .from(events)
-      .where(gte(events.createdAt, month))
+      .where(gte(events.createdAt, fortnight))
       .orderBy(desc(events.createdAt))
       .limit(6);
 
