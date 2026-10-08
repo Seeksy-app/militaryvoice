@@ -207,7 +207,8 @@ export function PodcastHosting() {
         {shows.length === 1 && <button type="button" onClick={() => setNewShow(true)} className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold text-[#053877] hover:bg-[#053877]/5 dark:text-[#8fb5e8]" data-testid="hosting-add-show"><Plus className="h-3.5 w-3.5" /> Add a show</button>}
       </div>
 
-      <div className="flex gap-6 overflow-x-auto whitespace-nowrap border-b border-border [scrollbar-width:none]" role="tablist">
+      {/* On a phone the last tabs run off the edge: closer together, and a fade that says there's more (8 Oct). */}
+      <div className="flex gap-4 overflow-x-auto whitespace-nowrap border-b border-border pr-6 [mask-image:linear-gradient(to_right,black_82%,transparent)] [scrollbar-width:none] sm:gap-6 sm:pr-0 sm:[mask-image:none]" role="tablist">
         {tabBtn("episodes", "Episodes")}
         {tabBtn("directories", ready ? "Directories" : "Directories · to do")}
         {tabBtn("details", "Show details")}
