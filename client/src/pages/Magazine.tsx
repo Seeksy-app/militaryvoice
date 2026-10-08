@@ -344,13 +344,22 @@ function NewsPage({ n, podcastOne, liveOne }: { n: number; podcastOne: string; l
         </div>
       </div>
       <div className="absolute inset-x-12 flex flex-col" style={{ top: 384, bottom: 150 }}>
-        <p className="text-[16px] leading-[1.6] text-slate-800">LiveOne subsidiary PodcastOne has signed a multi-year distribution, content and marketing partnership with National Military Podcast Day, founded by Colonel Riccoh Player, USMC (Ret.). It launched with the Podcast Marathon itself: sixteen hours, reveille to end of duty, with a new show on air every thirty minutes.</p>
+        <p className="text-[17px] leading-[1.6] text-slate-800">LiveOne subsidiary PodcastOne has signed a multi-year distribution, content and marketing partnership with National Military Podcast Day, founded by Colonel Riccoh Player, USMC (Ret.). It launched with the Podcast Marathon itself: sixteen hours, reveille to end of duty, with a new show on air every thirty minutes.</p>
         <p className="mt-6 text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: GOLD }}>What it means</p>
-        <ul className="mt-2 space-y-2 text-[14.5px] leading-[1.5] text-slate-800">
+        <ul className="mt-2 space-y-2 text-[15.5px] leading-[1.5] text-slate-800">
           <li className="flex gap-2"><span style={{ color: GOLD }}>■</span><span>PodcastOne streams the full Marathon live, then keeps it on demand all year.</span></li>
           <li className="flex gap-2"><span style={{ color: GOLD }}>■</span><span>The day is promoted across PodcastOne's shows, including #StillServing: The VFW Podcast, The MilSpouse Show!, The Hard to Kill Podcast and History On The Road.</span></li>
-          <li className="flex gap-2"><span style={{ color: GOLD }}>■</span><span>Military voices reach a network of more than a billion monthly impressions on YouTube, Spotify, Apple Podcasts and iHeartRadio, with 3.9 billion downloads to date.</span></li>
         </ul>
+        {/* Who PodcastOne is (8 Oct): their network, big, in place of our own counts. */}
+        <div className="mt-6 flex items-center gap-6 rounded-2xl px-7 py-5" style={{ background: NAVY, color: "#fff" }}>
+          {[["1B+", "monthly impressions"], ["3.9B", "downloads to date"]].map(([v, l]) => (
+            <div key={l} className="shrink-0">
+              <p className="text-[40px] font-bold leading-none" style={{ ...HEAD, color: GOLD }}>{v}</p>
+              <p className="mt-1 text-[12px] font-semibold uppercase tracking-[0.12em] text-white/70">{l}</p>
+            </div>
+          ))}
+          <p className="min-w-0 flex-1 text-pretty text-[14px] leading-snug text-white/85">PodcastOne's network on YouTube, Spotify, Apple Podcasts and iHeartRadio, now carrying military voices.</p>
+        </div>
         <blockquote className="mt-6 border-l-4 pl-5" style={{ borderColor: GOLD }}>
           <p className="text-[20px] font-semibold italic leading-snug" style={{ ...HEAD, color: NAVY }}>“We can't think of a greater good to put our platform toward.”</p>
           <footer className="mt-1 text-[13px] font-semibold text-slate-500">Kit Gray, President, PodcastOne</footer>
