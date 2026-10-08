@@ -455,9 +455,11 @@ export function registerMagazine(app: Express, requireAdmin: RequestHandler, req
     const [row] = await db.select({ id: contacts.id, tags: contacts.tags, firstName: contacts.firstName }).from(contacts).where(eq(sql`lower(${contacts.email})`, email)).limit(1);
     let tags: string[] = [];
     try { tags = JSON.parse(row?.tags || "[]"); } catch { tags = []; }
-    if (!tags.includes("magazine-copy")) tags.push("magazine-copy");
+    // Which list (8 Oct): a copy of the magazine, or National Military Podcast Day 2027 (the back cover's QR).
+    const list = req.body?.list === "nmpd-2027" ? "nmpd-2027" : "magazine-copy";
+    if (!tags.includes(list)) tags.push(list);
     if (row) await db.update(contacts).set({ tags: JSON.stringify(tags), ...(!row.firstName && firstName ? { firstName } : {}) }).where(eq(contacts.id, row.id));
-    else await db.insert(contacts).values({ email, firstName, source: "magazine-copy", importedAt: now(), tags: JSON.stringify(tags) });
+    else await db.insert(contacts).values({ email, firstName, source: list, importedAt: now(), tags: JSON.stringify(tags) });
     res.json({ ok: true });
   });
 

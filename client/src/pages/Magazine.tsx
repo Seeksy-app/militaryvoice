@@ -457,6 +457,39 @@ function FlyerPage({ s, f, n }: { s: Show; f: Flyer; n: number }) {
   );
 }
 
+function BackCover({ podcastOne, liveOne }: { podcastOne: string; liveOne: string }) {
+  return (
+    <Page bg={NAVY} color="#fff">
+      <div className="absolute inset-0" style={{ background: "radial-gradient(70% 45% at 50% 30%, rgba(240,167,31,.18), transparent 70%)" }} />
+      <div className="absolute inset-x-14 top-16 flex flex-col items-center text-center">
+        <img src="/nmpd-logo.png" alt="National Military Podcast Day" className="h-[190px] w-[190px] object-contain" />
+        <p className="mt-8 text-[14px] font-bold uppercase tracking-[0.34em]" style={{ color: GOLD }}>See you in 2027</p>
+        <h2 className="mt-3 text-balance text-[54px] font-bold leading-[1.02] tracking-tight" style={HEAD}>National Military Podcast Day</h2>
+        <p className="mt-2 text-[44px] font-bold leading-none" style={{ ...HEAD, color: GOLD }}>October 2027</p>
+        <p className="mt-6 max-w-[560px] text-balance text-[18px] leading-relaxed text-white/80">Sixteen hours live. Reveille to end of duty. A new military or veteran show every thirty minutes.</p>
+        {(podcastOne || liveOne) && (
+          <div className="mt-8 flex flex-col items-center">
+            <p className="text-[12px] font-bold uppercase tracking-[0.24em] text-white/60">Streaming live and on demand with</p>
+            <div className="mt-4 flex items-center justify-center gap-10">
+              {podcastOne && <img src={podcastOne} alt="PodcastOne" className="h-[64px] w-auto object-contain" />}
+              {liveOne && <img src={liveOne} alt="LiveOne" className="h-[34px] w-auto object-contain" />}
+            </div>
+          </div>
+        )}
+      </div>
+      <footer className="absolute inset-x-14 bottom-12 flex items-center gap-6 border-t border-white/15 pt-7">
+        <div className="rounded-xl bg-white p-2"><Qr url="https://www.militaryvoices.ai/2027" size={104} /></div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[24px] font-bold leading-tight" style={HEAD}>Get on the list for next year</p>
+          <p className="mt-1 text-[15px] text-white/70">The date, the lineup and how to tune in, first.</p>
+          <p className="mt-2 text-[15px] font-semibold" style={{ color: GOLD }}>militaryvoices.ai/2027</p>
+        </div>
+        <img src="/logo-lockup-dark.png" alt="MilitaryVoices.ai" className="h-[72px] w-auto" />
+      </footer>
+    </Page>
+  );
+}
+
 function ShowPage({ s, n, event }: { s: Show; n: number; event: Mag["event"] }) {
   const who = [s.branch, s.service].filter(Boolean).join(" · ");
   const eps = s.episodes ?? [];
@@ -747,15 +780,8 @@ export default function Magazine({ slug }: { slug?: string }) {
         </div>
       </Page>
     ))),
-    // Back cover
-    <Page key="back" bg={NAVY} color="#fff">
-      <div className="absolute inset-0 flex flex-col items-center justify-center gap-6 px-16 text-center">
-        <p className="text-[13px] font-bold uppercase tracking-[0.3em]" style={{ color: GOLD }}>Keep listening</p>
-        <h2 className="text-[46px] font-bold leading-tight tracking-tight" style={HEAD}>Every show in this magazine,<br />all year, on MilitaryVoices.ai</h2>
-        <div className="rounded-2xl bg-white p-4"><Qr url="https://www.militaryvoices.ai" size={150} /></div>
-        <p className="text-[18px] font-semibold" style={{ color: GOLD }}>militaryvoices.ai</p>
-      </div>
-    </Page>,
+    // Back cover (8 Oct): see you in 2027, and the list to hear first.
+    <BackCover key="back" podcastOne={m.sponsors.find((sp) => /podcastone/i.test(sp.name))?.logo ?? ""} liveOne={m.sponsors.find((sp) => /liveone/i.test(sp.name))?.logo ?? ""} />,
   ];
 
   // A podcaster's review link: their page alone, and what to do about it.

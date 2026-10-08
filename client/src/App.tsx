@@ -135,6 +135,7 @@ function AppRouter() {
       <Route path="/studio/control">{() => <StudioControl />}</Route>
       <Route path="/watch">{() => <Watch />}</Route>
       <Route path="/keepsake">{() => <Keepsake />}</Route>
+      <Route path="/2027">{() => <Keepsake next />}</Route>
       <Route path="/text-alerts">{() => <TextAlerts />}</Route>
       <Route path="/survey/:token">{(p) => <Survey token={p.token} />}</Route>
       <Route path="/podcast-one-press-release">{() => <PressRelease />}</Route>
