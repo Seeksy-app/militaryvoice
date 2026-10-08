@@ -21,7 +21,7 @@ export default function HelpGuests() {
       <HelpArticle
         eyebrow="Help · Guests"
         title="Book a guest, or be one"
-        lead={<>Two tabs on your show find people to have on, and shows to go on. They search Discovery for you. Discovery is free, and it's added for you with your first search.</>}
+        lead={<>Two tabs on your show find people to have on, and shows to go on. They search Discovery for you, which comes with Scale and Pro and is added for you with your first search.</>}
         toc={[["#book", "Book a guest"], ["#email", "Find their email"], ["#pitch", "Be a guest"], ["#saved", "Search and Saved"], ["#support", "Help and contact"]]}
       >
         <HelpSection n={1} id="book" title="Book a guest">

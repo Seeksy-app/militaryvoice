@@ -28,7 +28,7 @@ export default function HelpAccount() {
         toc={[["#free", "Growth: what's free"], ["#plans", "Pōstify plans"], ["#credits", "Credits"], ["#discovery", "Discovery Pro"], ["#manage", "Manage billing"], ["#deleted", "Recently deleted"], ["#support", "Help and contact"]]}
       >
         <HelpSection n={1} id="free" title="Growth: what's free">
-          <p>Growth is the free plan. Your SmartLink, podcast hosting and Ask my show are free, always. So is Discovery, with {FREE_DISCOVERY.reveals} contact emails a month. Your first Pōstify episode is free too.</p>
+          <p>Growth is the free plan. Your SmartLink, podcast hosting and Ask my show are free, always, and your first Pōstify episode is free too. Discovery comes with Scale and Pro; for brands and event planners it's free.</p>
         </HelpSection>
 
         <HelpSection n={2} id="plans" title="Pōstify plans">
@@ -54,7 +54,7 @@ export default function HelpAccount() {
         </HelpSection>
 
         <HelpSection n={4} id="discovery" title="Discovery Pro">
-          <p>Discovery is free with {FREE_DISCOVERY.reveals} contact emails and {FREE_DISCOVERY.lookups} profile look-ups a month. <strong>{pro.name}</strong> raises that to {pro.reveals} contact emails and {pro.lookups.toLocaleString()} look-ups a month, for {cents(pro.cents)} a month. You don't need a Pōstify plan for it.</p>
+          <p>Discovery comes with Scale and Pro (and is free for brands and event planners), with {FREE_DISCOVERY.reveals} contact emails and {FREE_DISCOVERY.lookups} profile look-ups a month. <strong>{pro.name}</strong> raises that to {pro.reveals} contact emails and {pro.lookups.toLocaleString()} look-ups a month, for {cents(pro.cents)} a month. You don't need a Pōstify plan for it.</p>
           <HelpStep k="a">In Plan &amp; billing, press <strong>Add {pro.name}</strong>.</HelpStep>
           <HelpStep k="b">Once it's on, the same card shows how many contact emails you have left this month, and <strong>Manage</strong>.</HelpStep>
           <p className="mt-3">Past your monthly contact emails, each one is 1 credit. See <Link href="/help/guests" className="font-medium text-primary hover:underline">Book a guest, or be one</Link>.</p>
