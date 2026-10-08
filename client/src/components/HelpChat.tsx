@@ -135,8 +135,8 @@ export function HelpChat() {
   const seg = location.split(/[?#]/)[0].split("/").filter(Boolean);
   if ((seg.length === 1 || (seg.length === 2 && seg[1] === "brands") || (seg.length === 3 && seg[1] === "family")) && !RESERVED_HANDLES.has(seg[0].toLowerCase())) return null;
 
-  function send() {
-    const text = draft.trim();
+  function send(said?: string) {
+    const text = (said ?? draft).trim();
     if (!text || ask.isPending) return;
     const next = [...msgs, { role: "user" as const, content: text }];
     setMsgs(next);
@@ -168,7 +168,8 @@ export function HelpChat() {
 
       {open && (
         <div
-          className="fixed bottom-5 right-5 z-50 flex h-[min(600px,calc(100vh-40px))] w-[min(380px,calc(100vw-40px))] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl"
+          // In the app on a phone it sits above the tab bar, which it used to cover (8 Oct).
+          className={`fixed right-5 z-50 flex w-[min(380px,calc(100vw-40px))] flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-2xl ${inApp ? "bottom-[calc(4.75rem+env(safe-area-inset-bottom))] h-[min(600px,calc(100dvh-7rem))] lg:bottom-5 lg:h-[min(600px,calc(100vh-40px))]" : "bottom-5 h-[min(600px,calc(100vh-40px))]"}`}
           role="dialog"
           aria-label="Help"
           data-testid="panel-help"
@@ -201,6 +202,14 @@ export function HelpChat() {
                     </div>
                   </div>
                 ))}
+                {/* Something to tap on the way in (8 Oct): the questions people actually ask first. */}
+                {msgs.length === 1 && !ask.isPending && (
+                  <div className="flex flex-wrap gap-2 pl-8" data-testid="help-starters">
+                    {["How do I get my podcast on Spotify and Apple?", "How do I make clips from an episode?", "Where are my Marathon recording and clips?", "How do I connect Zoom?"].map((q) => (
+                      <button key={q} type="button" onClick={() => send(q)} className="rounded-full border border-[#053877]/30 bg-[#053877]/[0.05] px-3 py-1.5 text-left text-xs font-medium text-[#053877] hover:bg-[#053877]/10 dark:border-[#8ab4f8]/30 dark:text-[#8ab4f8]">{q}</button>
+                    ))}
+                  </div>
+                )}
                 {ask.isPending && (
                   <div className="flex justify-start">
                     <div className="rounded-2xl bg-muted px-3.5 py-2.5 text-sm text-muted-foreground">
