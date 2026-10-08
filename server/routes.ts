@@ -6922,6 +6922,8 @@ export function registerRoutes(app: Express): void {
         }
       }
     }
+    // The worker's quick lane (8 Oct): text edits and music only, so they never wait behind a long job.
+    if (req.body?.quickOnly === true) return res.json({ job: null });
     // A show's segment to cut from the day's recording, for the magazine: quick, one MP3.
     if (Array.isArray(req.body?.can) && req.body.can.includes("segment-cut")) {
       const sc = await claimSegmentCut().catch((err) => { console.error("Segment cut claim failed:", err); return null; });

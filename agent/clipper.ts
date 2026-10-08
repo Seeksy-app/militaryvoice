@@ -42,6 +42,7 @@
 // new terminal starts with no keys and no token — and the token is the one
 // thing that cannot be read back out of Vercel once it is marked sensitive.
 import "dotenv/config";
+import { AsyncLocalStorage } from "node:async_hooks";
 import { spawn } from "node:child_process";
 import { createWriteStream, readFileSync } from "node:fs";
 import fs from "node:fs/promises";
@@ -226,8 +227,11 @@ function memoryLimit(): number {
 }
 let ffmpegBusy = 0;
 const ffmpegWaiting: (() => void)[] = [];
+// Work from the quick lane (someone watching a text edit) goes to the front of the ffmpeg queue (8 Oct:
+// Frank's three title changes spun for over an hour behind full clip runs).
+const quickWork = new AsyncLocalStorage<boolean>();
 async function slot<T>(work: () => Promise<T>): Promise<T> {
-  if (ffmpegBusy >= FFMPEG_SLOTS) await new Promise<void>((r) => ffmpegWaiting.push(r));
+  if (ffmpegBusy >= FFMPEG_SLOTS) await new Promise<void>((r) => (quickWork.getStore() ? ffmpegWaiting.unshift(r) : ffmpegWaiting.push(r)));
   ffmpegBusy++;
   try {
     return await work();
@@ -2422,8 +2426,10 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
   });
 }
 
-async function tick(): Promise<boolean> {
-  const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", { can: ["edit", "episode-edit", "segment-cut", "episode-audio", "episode-copy", "episode-still", "living-squeeze", "transcript", "import", "music", "suggest"] });
+async function tick(quick = false): Promise<boolean> {
+  const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", quick
+    ? { can: ["edit", "music"], quickOnly: true }
+    : { can: ["edit", "episode-edit", "segment-cut", "episode-audio", "episode-copy", "episode-still", "living-squeeze", "transcript", "import", "music", "suggest"] });
   if (!job) return false;
   // An edit is one clip, not the recording: a shutdown mid-edit leaves it to
   // the 15-minute reclaim rather than requeuing the whole episode.
@@ -2487,7 +2493,18 @@ async function main(): Promise<void> {
       await new Promise((r) => setTimeout(r, POLL_MS));
     }
   };
-  await Promise.all(Array.from({ length: LANES }, (_, i) => lane(i)));
+  // Plus a quick lane: text edits and music only, so a minute's job someone is watching never waits behind a long one.
+  const quickLane = async () => {
+    for (;;) {
+      try {
+        while (await quickWork.run(true, () => tick(true)));
+      } catch (err) {
+        console.error("quick poll failed:", (err as Error).message);
+      }
+      await new Promise((r) => setTimeout(r, POLL_MS));
+    }
+  };
+  await Promise.all([...Array.from({ length: LANES }, (_, i) => lane(i)), quickLane()]);
 }
 
 // Importing this file to test a piece of it must not start the loop.
