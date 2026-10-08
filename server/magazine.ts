@@ -516,7 +516,8 @@ export function registerMagazine(app: Express, requireAdmin: RequestHandler, req
         messages: [{ role: "user", content: text }],
       });
       const t = out.content.filter((c) => c.type === "text").map((c) => (c as { text: string }).text).join("").trim().replace(/^["“]|["”]$/g, "");
-      return words(t) >= lo - 4 && words(t) <= hi + 4 ? t : "";
+      // A whole paragraph or nothing (8 Oct: one came back cut off mid-word).
+      return words(t) >= lo - 4 && words(t) <= hi + 4 && /[.!?”"')]$/.test(t) ? t : "";
     };
     const done: string[] = [];
     const todo = rows.filter((r) => r.signupId > 0 && !r.edited && !r.hidden);
