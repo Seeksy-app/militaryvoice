@@ -131,6 +131,8 @@ interface Job {
   clipCount?: number;
   /** What the podcaster picked: which shapes, and the caption style. Absent = all three, animated. */
   options?: { formats: Shape[]; captions: "animated" | "classic"; more?: { count: number; avoid: [number, number][] } };
+  /** Picked up again after a stop: the moments that run chose, and the clips already made ("start-end"). */
+  resume?: { moments: Moment[]; done: string[] };
   /** A track to play under the clips (a signed link to the MP3). */
   music?: { url: string; name: string };
   /** "Add music" to finished clips: mix the track into each clip's files (from before any music). */
@@ -2230,13 +2232,20 @@ async function handle(job: Job): Promise<void> {
       }
     }
     console.log(`[${job.recordingId}] choosing moments…`);
-    const moments = silent
-      ? silentMoments(job)
-      : short
-        ? [{ title: (job.title || job.show || "Clip").slice(0, 60), caption: "", reason: "the whole video, cleaned", startSec: 0, endSec: wholeEnd }]
-        : await pickMoments(job, lines);
-    console.log(`[${job.recordingId}] picked ${moments.length}`);
-    progress(job.recordingId, { stage: "render", pct: 0, moments: moments.map((m) => ({ title: m.title, startSec: m.startSec, endSec: m.endSec })), finished: 0 });
+    // Carrying on after a stop: the same moments, so the clips already made still count.
+    const resumed = job.resume?.moments?.length ? job.resume.moments : null;
+    const moments = resumed
+      ? resumed
+      : silent
+        ? silentMoments(job)
+        : short
+          ? [{ title: (job.title || job.show || "Clip").slice(0, 60), caption: "", reason: "the whole video, cleaned", startSec: 0, endSec: wholeEnd }]
+          : await pickMoments(job, lines);
+    const done = new Set(job.resume?.done ?? []);
+    const isDone = (m: Moment) => done.has(`${m.startSec}-${m.endSec}`);
+    console.log(`[${job.recordingId}] ${resumed ? `carrying on: ${moments.filter(isDone).length} of ${moments.length} already made` : `picked ${moments.length}`}`);
+    if (!resumed) await api("POST", `/api/agent/clip-jobs/${job.recordingId}/plan`, { moments }).catch(() => {});
+    progress(job.recordingId, { stage: "render", pct: (moments.filter(isDone).length / Math.max(1, moments.length)) * 100, moments: moments.map((m) => ({ title: m.title, startSec: m.startSec, endSec: m.endSec })), finished: moments.filter(isDone).length });
     if (moments.length === 0) {
       console.log(`[${job.recordingId}] nothing stood alone — no clips`);
       await api("POST", `/api/agent/clip-jobs/${job.recordingId}/done`, { clips: [] });
@@ -2245,7 +2254,7 @@ async function handle(job: Job): Promise<void> {
 
     // Two clips at a time: most of a clip is waiting on Creatomate, not this machine.
     const out: Record<string, unknown>[] = new Array(moments.length);
-    let finishedN = 0;
+    let finishedN = moments.filter(isDone).length;
     const cutOne = async (i: number, m: Moment) => {
       const stem = `${job.recordingId}-${i + 1}`;
       const within = lines.filter((l) => l.endSec > m.startSec && l.startSec < m.endSec);
@@ -2329,7 +2338,7 @@ async function handle(job: Job): Promise<void> {
     };
     let nextClip = 0;
     await Promise.all(Array.from({ length: Math.min(Number(process.env.CLIP_PARALLEL || 2), moments.length) }, async () => {
-      for (let i = nextClip++; i < moments.length; i = nextClip++) await cutOne(i, moments[i]);
+      for (let i = nextClip++; i < moments.length; i = nextClip++) if (!isDone(moments[i])) await cutOne(i, moments[i]);
     }));
     progress(job.recordingId, { stage: "upload", pct: 100 });
 

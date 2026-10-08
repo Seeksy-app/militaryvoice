@@ -7034,12 +7034,28 @@ export function registerRoutes(app: Express): void {
     // No studio transcript (an upload, an import): the one a previous run made, if there is one.
     const lines = live.length ? live : storedTranscript(rec.transcriptJson);
 
+    // Picked up again after the worker was stopped mid-job (8 Oct: it was restarted every five
+    // minutes and started from scratch each time): the same moments, and only the clips not yet made.
+    let resume: { moments: unknown[]; done: string[] } | undefined;
+    if (!cleanOnly && (await storage.getSetting(`clip-resume:${rec.id}`).catch(() => ""))) {
+      await storage.setSetting(`clip-resume:${rec.id}`, "").catch(() => {});
+      let plan: unknown[] = [];
+      try { plan = JSON.parse((await storage.getSetting(`clip-plan:${rec.id}`)) || "[]"); } catch { plan = []; }
+      if (Array.isArray(plan) && plan.length) {
+        const have = await storage.listClips(rec.id);
+        resume = { moments: plan, done: have.map((c) => `${c.startSec}-${c.endSec}`) };
+        // The next clip adds to these rather than replacing them as a fresh run's first would.
+        await storage.setClipProgress(rec.id, JSON.stringify({ stage: "render", streamed: have.length, finished: have.length, detail: `${have.length} of ${plan.length} ready`, at: new Date().toISOString() }));
+      }
+    }
+
     res.json({
       job: {
         recordingId: rec.id,
         title: rec.title,
         durationSec: rec.durationSec,
         downloadUrl,
+        resume,
         show: await showNameFor(rec),
         host: (rec.signupId ? (await storage.getSignupById(rec.signupId))?.hostName : "") ?? "",
         transcript: lines,
@@ -7115,6 +7131,14 @@ export function registerRoutes(app: Express): void {
   );
 
   /** The worker is done: here are the clips, in order. */
+  /** The moments a run picked, kept so a restarted worker can carry on with the same ones. */
+  app.post("/api/agent/clip-jobs/:id/plan", requireAgent, async (req, res) => {
+    const id = Number(req.params.id);
+    const moments = Array.isArray(req.body?.moments) ? req.body.moments.slice(0, 20) : [];
+    await storage.setSetting(`clip-plan:${id}`, JSON.stringify(moments)).catch(() => {});
+    res.json({ ok: true });
+  });
+
   // One clip, the moment it's finished, so the podcaster sees it while the rest are cut.
   // A run's first clip replaces an earlier run's set (a re-clip); Generate more only ever adds.
   app.post("/api/agent/clip-jobs/:id/clip", requireAgent, async (req, res) => {
@@ -7349,6 +7373,8 @@ export function registerRoutes(app: Express): void {
     if (req.body?.requeue) {
       // Held by a producer meanwhile: it stays held, not back in the queue.
       if (rec.clipStatus !== "running") { res.json({ ok: true, held: true }); return; }
+      // Handed back by a stopping worker: the next one carries on where this left off.
+      await storage.setSetting(`clip-resume:${rec.id}`, new Date().toISOString()).catch(() => {});
       await storage.setClipStatus(rec.id, "queued", "");
       res.json({ ok: true, requeued: true });
       return;
