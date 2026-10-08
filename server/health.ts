@@ -114,8 +114,14 @@ const DEFS: Def[] = [
     run: async () => {
       const t = await lastBeat("worker");
       if (!t) return { state: "down", detail: "Hasn't checked in yet" };
-      // It asks for work every few seconds; three quiet minutes means it's stopped.
-      return Date.now() - t < 3 * 60_000 ? { state: "ok", detail: `Asking for work (${ago(Date.now() - t)})` } : { state: "down", detail: `Last asked for work ${ago(Date.now() - t)}` };
+      // It asks for work every few seconds; three quiet minutes means it's stopped,
+      // unless every slot is full: then it doesn't ask, and the jobs' own progress is the sign of life.
+      if (Date.now() - t < 3 * 60_000) return { state: "ok", detail: `Asking for work (${ago(Date.now() - t)})` };
+      const running = ((await db.execute(sql`select clip_progress from recordings where clip_status = 'running'`)) as unknown as { rows?: { clip_progress: string }[] } & { clip_progress: string }[]);
+      const list = (running.rows ?? running) as { clip_progress: string }[];
+      const last = Math.max(0, ...list.map((r) => { try { return Date.parse(JSON.parse(r.clip_progress || "{}").at) || 0; } catch { return 0; } }));
+      if (last && Date.now() - last < 3 * 60_000) return { state: "ok", detail: `Busy with ${list.length} ${list.length === 1 ? "clip" : "clips"} (progress ${ago(Date.now() - last)})` };
+      return { state: "down", detail: `Last asked for work ${ago(Date.now() - t)}` };
     },
   },
   {
