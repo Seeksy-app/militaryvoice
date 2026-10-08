@@ -41,7 +41,7 @@ c Use its switch to turn it on or off for your next Go live. The bin removes it.
 You can add up to six. Go live needs at least one place to go: YouTube or a key.
 6 Rooms or Studio?
 Rooms is here now: quick, with guests on a link, record, go live.
-Studio is the full marathon studio for your own show: scenes, layouts, lower thirds and a producer console. It's coming October 5. Until then, Rooms covers recording and going live.
+Studio is the full marathon studio for your own show: scenes, layouts, lower thirds and a producer console. It's coming soon.
 On Marathon day, your slot goes out from the green room, not your room. See the podcaster guide.
 7 Help and contact
 Email us: hello@militaryvoices.ai. A person reads every message and writes back.
