@@ -760,7 +760,7 @@ export default function Magazine({ slug }: { slug?: string }) {
   ];
 
   // A podcaster's review link: their page alone, and what to do about it.
-  const shown = m.review ? [<ShowPage key={m.shows[0].signupId} s={m.shows[0]} n={0} event={m.event} />] : pages;
+  const shown = m.review ? [FLYERS[m.shows[0].signupId] ? <FlyerPage key={m.shows[0].signupId} s={m.shows[0]} f={FLYERS[m.shows[0].signupId]} n={0} /> : <ShowPage key={m.shows[0].signupId} s={m.shows[0]} n={0} event={m.event} />] : pages;
 
   return (
     <div className="min-h-screen bg-slate-200 print:bg-white">
