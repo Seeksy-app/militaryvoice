@@ -324,22 +324,27 @@ function AwardPage({ a, photo, n, event }: { a: NonNullable<Mag["award"]>; photo
 /** The PodcastOne partnership (8 Oct, from LiveOne's 5 Oct release): the news on one page, the whole release a scan away. */
 const RELEASE_URL = "https://www.tradingview.com/news/acceswire:04c71c9d0094b:0-liveone-nasdaq-lvo-subsidiary-podcastone-nasdaq-podc-launches-multi-year-distribution-content-and-marketing-partnership-with-national-military-podcast-day/";
 function NewsPage({ n, podcastOne, liveOne }: { n: number; podcastOne: string; liveOne: string }) {
-  const stats: [string, string][] = [["16", "hours live"], ["32", "podcasters"], ["56", "channels"], ["234K", "followers"]];
+  // Our own count (8 Oct, audience summary): 32 shows on the day, 83 channels, 253,679 followers.
+  // The release said 56 and 234,000: the same count on 5 Oct, before more accounts were connected.
+  const stats: [string, string][] = [["16", "hours live"], ["32", "shows"], ["83", "channels"], ["253K", "followers"]];
   return (
     <Page n={n}>
       {/* The band: who, and the tickers. */}
       <div className="absolute inset-x-0 top-0 px-12 pb-9 pt-11" style={{ background: NAVY, color: "#fff" }}>
         <p className="text-[12px] font-bold uppercase tracking-[0.3em]" style={{ color: GOLD }}>In the news · October 5, 2026</p>
         <h2 className="mt-3 text-balance text-[38px] font-bold leading-[1.05] tracking-tight" style={HEAD}>PodcastOne and National Military Podcast Day launch a multi-year partnership</h2>
-        <div className="mt-6 flex items-center gap-6">
-          {podcastOne && <img src={podcastOne} alt="PodcastOne" className="h-12 w-auto object-contain" />}
-          {liveOne && <img src={liveOne} alt="LiveOne" className="h-9 w-auto object-contain" />}
-          <img src="/nmpd-logo.png" alt="National Military Podcast Day" className="h-14 w-14 object-contain" />
-          <span className="flex-1" />
-          {["NASDAQ: PODC", "NASDAQ: LVO"].map((t) => <span key={t} className="rounded-full border border-white/30 px-3 py-1 text-[12px] font-bold tracking-[0.08em]" style={{ color: GOLD }}>{t}</span>)}
+        <div className="mt-6 flex items-center gap-6 rounded-2xl border border-white/15 bg-white/[0.06] px-6 py-4">
+          <div className="flex flex-1 items-center justify-center gap-9">
+            <img src="/nmpd-logo.png" alt="National Military Podcast Day" className="h-[72px] w-[72px] object-contain" />
+            {podcastOne && <img src={podcastOne} alt="PodcastOne" className="h-[58px] w-auto object-contain" />}
+            {liveOne && <img src={liveOne} alt="LiveOne" className="h-[34px] w-auto object-contain" />}
+          </div>
+          <div className="flex shrink-0 flex-col gap-2">
+            {["NASDAQ: PODC", "NASDAQ: LVO"].map((t) => <span key={t} className="rounded-full border border-white/30 px-3 py-1 text-center text-[12px] font-bold tracking-[0.08em]" style={{ color: GOLD }}>{t}</span>)}
+          </div>
         </div>
       </div>
-      <div className="absolute inset-x-12 flex flex-col" style={{ top: 330, bottom: 150 }}>
+      <div className="absolute inset-x-12 flex flex-col" style={{ top: 384, bottom: 150 }}>
         <p className="text-[16px] leading-[1.6] text-slate-800">LiveOne subsidiary PodcastOne has signed a multi-year distribution, content and marketing partnership with National Military Podcast Day, founded by Colonel Riccoh Player, USMC (Ret.). It launched with the Podcast Marathon itself: sixteen hours, reveille to end of duty, with a new show on air every thirty minutes.</p>
         <div className="mt-6 grid grid-cols-4 gap-3">
           {stats.map(([v, l]) => (
@@ -566,7 +571,7 @@ export default function Magazine({ slug }: { slug?: string }) {
         <div className="absolute inset-x-12 text-center" style={{ top: 800, zIndex: 300 }}>
           <p className="text-[13px] font-bold uppercase tracking-[0.3em]" style={{ color: "#8a5a00" }}>Keepsake edition · {m.event.occasion}</p>
           <p className="mt-3 text-[22px] font-semibold" style={{ ...HEAD, color: NAVY }}>{m.event.day}</p>
-          <p className="mt-1.5 text-[16px] text-slate-600">{m.shows.filter((s) => !/ceremon/i.test(s.podcastName)).length} military and veteran shows, back to back, one day.</p>
+          <p className="mt-1.5 text-[16px] text-slate-600">{m.shows.length} military and veteran shows, back to back, one day.</p>
           <p className="mt-8 text-[14px] font-bold tracking-wide" style={{ color: NAVY }}>MILITARYVOICES.AI</p>
         </div>
       ) : <>
@@ -574,7 +579,7 @@ export default function Magazine({ slug }: { slug?: string }) {
         <p className="text-[13px] font-bold uppercase tracking-[0.3em]" style={{ color: GOLD }}>Keepsake edition · {m.event.occasion}</p>
         <h1 className="mt-3 text-[76px] font-bold leading-[0.95] tracking-tight" style={HEAD}>{m.event.name}</h1>
         <p className="mt-5 text-[20px] font-medium text-white/80">{m.event.day}</p>
-        <p className="mt-2 text-[16px] text-white/60">{m.shows.filter((s) => !/ceremon/i.test(s.podcastName)).length} military and veteran shows, back to back, one day.</p>
+        <p className="mt-2 text-[16px] text-white/60">{m.shows.length} military and veteran shows, back to back, one day.</p>
       </div>
       <p className="absolute bottom-10 left-12 text-[14px] font-bold tracking-wide" style={{ color: GOLD }}>MILITARYVOICES.AI</p>
       </>}
