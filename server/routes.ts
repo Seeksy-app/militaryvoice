@@ -135,7 +135,6 @@ import { registerShowFinder } from "./showFinder.js";
 import { registerRequests } from "./requests.js";
 import { registerPodcastIntake } from "./podcastIntake.js";
 import { registerEditorSend, sendToEditors } from "./editorSend.js";
-import { registerPublicSearch } from "./publicSearch.js";
 import { eventAdminEmails, eventAdminEvents, eventAdminKey, eventAdminMay } from "./eventAdmin.js";
 import { registerDeviceCheck } from "./deviceCheck.js";
 import { registerHealth, beat, addHealthCheck } from "./health.js";
@@ -6781,7 +6780,6 @@ export function registerRoutes(app: Express): void {
   registerRequests(app, requireHostSession, requireAdmin);
   registerPodcastIntake(app, requireHostSession);
   registerEditorSend(app, requireHostSession);
-  registerPublicSearch(app);
   registerDeviceCheck(app);
   registerGreenRoomChat(app, requireAdmin, requireHostSession, studioHostEmails);
   registerAutomations(app, requireAdmin, {
