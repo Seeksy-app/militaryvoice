@@ -21,7 +21,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { formatDateInZone, formatTimeInZone, zoneLabel, detectLocalTimeZone, slotStart, slotEnd, onAirWindow, totalSlots } from "@/lib/schedule";
 import { isLiveOnlyBlock } from "@shared/slots";
 import type { PublicEvent } from "@shared/schema";
-import { CalendarDays, ChevronRight, ArrowLeft, ArrowRight, Check, Clock, Headphones, Trash2, Megaphone, Rocket, Mic2, Users } from "lucide-react";
+import { CalendarDays, ChevronRight, ArrowLeft, ArrowRight, Check, Clock, Film, Headphones, Trash2, Megaphone, Rocket, Mic2, Users } from "lucide-react";
 import { GreenRoomButton } from "@/components/GreenRoomButton";
 import { CohostSlots } from "@/components/CohostSlots";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -105,11 +105,14 @@ export function EventSettings({
     if (openId != null || !entries) return;
     let chose = false;
     try { chose = sessionStorage.getItem("mv_open_event") === "list"; } catch { /* private window */ }
-    const mineOnly = entries.filter((e) => !!e.show?.showName);
+    // Not one that's over (8 Oct): a finished event opened by itself read as "Lineup full" everywhere.
+    const mineOnly = entries.filter((e) => !!e.show?.showName && Date.parse(e.event.startAtUtc) + e.event.durationHours * 3600_000 > Date.now());
     if (!chose && mineOnly.length === 1) setOpenIdState(mineOnly[0].event.id);
   }, [entries, openId]);
 
   const open = entries?.find((e) => e.event.id === openId) ?? null;
+  /** The whole event has ended: what's left is the recording, not the setup. */
+  const openOver = !!open && Date.parse(open.event.startAtUtc) + open.event.durationHours * 3600_000 < Date.now();
   const eventFull =
     !!open &&
     (openSignups ?? []).filter((x) => x.status !== "cancelled").length >=
@@ -449,7 +452,28 @@ export function EventSettings({
               </div>
             </div>
 
-            {/* The doors, over the foot of the dark card. */}
+            {/* The doors, over the foot of the dark card. After the event, the two that still lead somewhere. */}
+            {openOver ? (
+            <div className="relative -mt-10 grid gap-3 px-3 sm:grid-cols-2 sm:px-5" data-testid="event-over-doors">
+              <Door
+                onClick={() => navigate("/host/dashboard/library")}
+                icon={<IconTile icon={Film} />}
+                title="Your episode and clips"
+                line={open.slotIndex != null ? "The recording of your segment, and the clips cut from it" : "Recordings from the day"}
+                stat="In your Library"
+                good
+                testId="event-over-library"
+              />
+              <Door
+                onClick={() => { try { sessionStorage.setItem("mv_open_event", "list"); } catch { /* fine */ } setOpenId(null); }}
+                icon={<IconTile icon={CalendarDays} />}
+                title="What's coming up"
+                line="Events you can still be part of"
+                stat="All events"
+                testId="event-over-list"
+              />
+            </div>
+            ) : (
             <div className="relative -mt-10 grid gap-3 px-3 sm:grid-cols-2 sm:px-5 xl:grid-cols-4" id="your-time-slot">
               <Door
                 off={shutOut}
@@ -493,10 +517,12 @@ export function EventSettings({
                 testId="event-door-cohost"
               />
             </div>
+            )}
           </div>
         );
       })()}
 
+      {!openOver && (<>
       {/* Your time: change it or give it up. */}
       {open.slotIndex != null ? (
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2 rounded-2xl border border-border bg-card px-4 py-2.5 text-sm" data-testid="event-strip">
@@ -629,6 +655,7 @@ export function EventSettings({
           </Button>
         </div>
       )}
+      </>)}
     </section>
   );
 }
