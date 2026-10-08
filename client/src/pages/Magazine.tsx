@@ -325,10 +325,7 @@ function AwardPage({ a, photo, n, event }: { a: NonNullable<Mag["award"]>; photo
 // The QR lands on our copy of the release (8 Oct): the text, live PODC and LVO charts, and the newswire link.
 const RELEASE_URL = "https://militaryvoices.ai/podcast-one-press-release";
 function NewsPage({ n, podcastOne, liveOne }: { n: number; podcastOne: string; liveOne: string }) {
-  // Our own count (8 Oct, audience summary): 32 shows on the day, 83 social accounts, 253,679 followers.
-  // The release said 56 and 234,000: the same count on 5 Oct, before more accounts were connected.
-  // "Social accounts", not "channels" (8 Oct): it's the hosts' Instagram, YouTube, TikTok, X, Facebook, LinkedIn and Threads.
-  const stats: [string, string][] = [["16", "hours live"], ["32", "shows"], ["83", "social accounts"], ["253K", "followers"]];
+  // No numbers grid (8 Oct): our counts beside PodcastOne's network undersold who they are.
   return (
     <Page n={n}>
       {/* The band: who, and the tickers. */}
@@ -348,14 +345,6 @@ function NewsPage({ n, podcastOne, liveOne }: { n: number; podcastOne: string; l
       </div>
       <div className="absolute inset-x-12 flex flex-col" style={{ top: 384, bottom: 150 }}>
         <p className="text-[16px] leading-[1.6] text-slate-800">LiveOne subsidiary PodcastOne has signed a multi-year distribution, content and marketing partnership with National Military Podcast Day, founded by Colonel Riccoh Player, USMC (Ret.). It launched with the Podcast Marathon itself: sixteen hours, reveille to end of duty, with a new show on air every thirty minutes.</p>
-        <div className="mt-6 grid grid-cols-4 gap-3">
-          {stats.map(([v, l]) => (
-            <div key={l} className="rounded-xl px-3 py-3 text-center" style={{ background: "#f3f6fb" }}>
-              <p className="text-[30px] font-bold leading-none" style={{ ...HEAD, color: NAVY }}>{v}</p>
-              <p className="mt-1 text-[12px] font-semibold uppercase tracking-[0.1em] text-slate-500">{l}</p>
-            </div>
-          ))}
-        </div>
         <p className="mt-6 text-[11px] font-bold uppercase tracking-[0.2em]" style={{ color: GOLD }}>What it means</p>
         <ul className="mt-2 space-y-2 text-[14.5px] leading-[1.5] text-slate-800">
           <li className="flex gap-2"><span style={{ color: GOLD }}>■</span><span>PodcastOne streams the full Marathon live, then keeps it on demand all year.</span></li>
