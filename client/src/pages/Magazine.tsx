@@ -324,9 +324,10 @@ function AwardPage({ a, photo, n, event }: { a: NonNullable<Mag["award"]>; photo
 /** The PodcastOne partnership (8 Oct, from LiveOne's 5 Oct release): the news on one page, the whole release a scan away. */
 const RELEASE_URL = "https://www.tradingview.com/news/acceswire:04c71c9d0094b:0-liveone-nasdaq-lvo-subsidiary-podcastone-nasdaq-podc-launches-multi-year-distribution-content-and-marketing-partnership-with-national-military-podcast-day/";
 function NewsPage({ n, podcastOne, liveOne }: { n: number; podcastOne: string; liveOne: string }) {
-  // Our own count (8 Oct, audience summary): 32 shows on the day, 83 channels, 253,679 followers.
+  // Our own count (8 Oct, audience summary): 32 shows on the day, 83 social accounts, 253,679 followers.
   // The release said 56 and 234,000: the same count on 5 Oct, before more accounts were connected.
-  const stats: [string, string][] = [["16", "hours live"], ["32", "shows"], ["83", "channels"], ["253K", "followers"]];
+  // "Social accounts", not "channels" (8 Oct): it's the hosts' Instagram, YouTube, TikTok, X, Facebook, LinkedIn and Threads.
+  const stats: [string, string][] = [["16", "hours live"], ["32", "shows"], ["83", "social accounts"], ["253K", "followers"]];
   return (
     <Page n={n}>
       {/* The band: who, and the tickers. */}
