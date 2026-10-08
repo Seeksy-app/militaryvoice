@@ -273,8 +273,17 @@ function PagePopup({ p, handle, preview, peek, onPeekClose, solid, ink, sub, car
       const last = Number(localStorage.getItem(key) || 0);
       if (Date.now() - last < 7 * 86_400_000 || (p.kind === "email" && localStorage.getItem(`mv_joined_${handle}`) === "1")) return;
     } catch { /* private window: show it */ }
-    const t = window.setTimeout(() => { setOpen(true); try { localStorage.setItem(key, String(Date.now())); } catch { /* fine */ } }, 4000);
-    return () => clearTimeout(t);
+    // After they've had a look (8 Oct): 40% of the way down the page or 15 seconds in, not 4
+    // seconds after landing, when a dimmed page with a form on it is all a fan has seen.
+    let done = false;
+    const show = () => { if (done) return; done = true; setOpen(true); try { localStorage.setItem(key, String(Date.now())); } catch { /* fine */ } };
+    const t = window.setTimeout(show, 15_000);
+    const onScroll = () => {
+      const room = document.documentElement.scrollHeight - window.innerHeight;
+      if (room > 0 && window.scrollY / room >= 0.4) show();
+    };
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => { clearTimeout(t); window.removeEventListener("scroll", onScroll); };
   }, [preview, key, p.kind, handle]);
   const shown = preview ? peek : open;
   if (!shown) return null;
