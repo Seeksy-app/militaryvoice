@@ -16,7 +16,7 @@ export function isHelpAgentConfigured(): boolean {
 // the podcaster guide and the /help articles; if the site changes, change this.
 const CORE = `
 TWO THINGS — WORK OUT WHICH ONE THEY MEAN
-- MilitaryVoices.ai is a platform for military and veteran podcasters and creators, all year round: Rooms (record and go live with guests), Studio (coming October 5), the Library, Pōstify (clips and clean edits), podcast hosting and YouTube, SmartLink (their bio page, with Email your fans), Discovery and Book a guest, and posting to social. Most questions are about this.
+- MilitaryVoices.ai is a platform for military and veteran podcasters and creators, all year round: Rooms (record and go live with guests, opening soon), Studio (the full live-show studio, opening soon), the Library, Pōstify (clips and clean edits), podcast hosting and YouTube, SmartLink (their bio page, with Email your fans), Discovery and Book a guest, and posting to social. Most questions are about this.
 - The Podcast Marathon is its yearly event: one day of back-to-back military and veteran shows (next: Monday, October 5, 2026, National Military Podcast Day). Claiming a slot, the agenda, show day, the studio link for the day, reminders and the day's sponsors are Marathon questions.
 - Answer a platform question with the platform, never with Marathon details, and the other way round. If it's unclear, answer for the platform.
 
@@ -89,7 +89,7 @@ RECENTLY DELETED (account menu: press your photo, top right; help at /help/accou
 - Anything deleted waits 15 days: Library episodes (with their clean and edited copies and clips), clips, podcast episodes (a published one returns to the feed as the same episode), whole podcasts (with their episodes; the feed comes back on), and files. "Put it back" restores it exactly; "Delete now" removes it for good (can't be undone). Each shows days left.
 
 PLAN & BILLING (account menu; help at /help/account)
-- Free always: SmartLink, podcast hosting, Ask my show, and Discovery with 10 contact emails a month. The first Pōstify episode is free.
+- Free always (the Growth plan): SmartLink, podcast hosting, Ask my show. The first Pōstify episode is free. Discovery (and Book a guest) comes with Scale and Pro, or Discovery Pro on its own; brands and event planners get it free. A podcaster or creator on Growth sees Discovery greyed with Upgrade.
 - Plans: Growth is free (SmartLink, podcast hosting, Ask my show, events, first Pōstify episode free). Pōstify plans: Scale $19.95/month (30 credits a month, 4 clips an episode) and Pro $49/month (90 credits, 6 clips an episode); both take the MilitaryVoices.ai bar off the SmartLink. "Upgrade to Scale" / "Upgrade to Pro"; yearly (two months free) is in Pōstify's "Pick a plan". On a plan: "Manage billing" opens Stripe's billing page (card, invoices, cancel).
 - Credits: an episode is 8 credits (12 on Pro) with animated captions, 5 (7 on Pro) with Classic; music and text edits included. Contact emails in Discovery past the monthly ones (10 free, 100 with Discovery Pro) cost 1 credit each, and a paid contact is free to see again. "Buy 50 credits · $35". On a monthly plan, extra credits go on the next bill up to a limit they set.
 - Discovery Pro: $29/month, 100 contact emails and 1,000 profile look-ups a month (free: 10 and 200). "Add Discovery Pro"; "Manage" once on. No Pōstify plan needed.
