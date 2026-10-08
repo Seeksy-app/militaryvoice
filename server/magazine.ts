@@ -18,7 +18,7 @@ import { getAdminEmail } from "./session.js";
 import { emailShell, EMAIL_BANNERS, sendOneOffEmail, BULK_ADDRESS, REPLY_ADDRESS } from "./email.js";
 import { uploadPhoto } from "./photoStorage.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
-import { bioPages, clips, contacts, discoveryCache, hostedShows, magazineAds, magazinePages, podcasterProfiles, recordings, segmentCuts, signups, sponsors, transcriptLines } from "../shared/schema.js";
+import { siteSettings, bioPages, clips, contacts, discoveryCache, hostedShows, magazineAds, magazinePages, podcasterProfiles, recordings, segmentCuts, signups, sponsors, transcriptLines } from "../shared/schema.js";
 
 /** A podcaster's private link to their own page (?review=<signupId>.<token>), good before it's published. */
 const reviewToken = (signupId: number | "all") => crypto.createHmac("sha256", process.env.SESSION_SECRET || "mv-magazine").update(`mag-review:${signupId}`).digest("base64url").slice(0, 20);
@@ -214,6 +214,8 @@ async function buildMagazine(eventId: number) {
   const et = (ms: number) => new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }).format(new Date(ms)) + " ET";
   const out = new Set(words.filter((x) => x.hidden).map((x) => x.signupId));
   const cuts = await db.select().from(segmentCuts).where(eq(segmentCuts.eventId, eventId));
+  // A page's main picture chosen for the magazine (8 Oct: Riccoh's show logo instead of his profile photo).
+  const photos = new Map((await db.select().from(siteSettings).where(sql`${siteSettings.key} like ${`magazine-photo:${eventId}:%`}`)).map((r) => [Number(r.key.split(":").pop()), r.value]));
   const episodes = await episodesFor(eventId, lineup.filter((s) => !out.has(s.id) && !/ceremon/i.test(s.podcastName)).map((s) => ({ id: s.id, rssUrl: s.rssUrl ?? "", show: s.podcastName, host: s.hostName }))).catch(() => ({} as Record<number, Episode[]>));
   const shows = lineup.filter((s) => !out.has(s.id)).map((s, i) => {
     const e = s.email.trim().toLowerCase();
@@ -230,7 +232,7 @@ async function buildMagazine(eventId: number) {
       hostName: s.hostName,
       branch: s.branch || p?.branch || "",
       service: s.serviceStatus || p?.serviceStatus || "",
-      headshot: p?.photoOriginalUrl || s.photoUrl || p?.photoUrl || "",
+      headshot: photos.get(s.id) || p?.photoOriginalUrl || s.photoUrl || p?.photoUrl || "",
       printQuality: Boolean(p?.photoOriginalUrl),
       art: p?.artworkPrintUrl || w?.art || "",
       blurb: w?.blurb ?? "",
@@ -666,6 +668,8 @@ export function registerMagazine(app: Express, requireAdmin: RequestHandler, req
         return m ? { title: (m[1] || m[2]).slice(0, 140), url: m[2].slice(0, 600) } : null;
       }).filter(Boolean).slice(0, 6)) } : {}),
       ...(typeof req.body?.audio === "string" ? { audio: /^https?:\/\//i.test(req.body.audio.trim()) ? req.body.audio.trim().slice(0, 800) : "" } : {}),
+      // The page's main picture for the magazine only (their profile photo stays as it is); "" puts it back.
+      ...(typeof req.body?.photo === "string" ? await (async () => { await storage.setSetting(`magazine-photo:${eventId}:${signupId}`, /^https:\/\//i.test(req.body.photo.trim()) ? req.body.photo.trim().slice(0, 800) : ""); return {}; })() : {}),
       // The show's art (the thumbnail on their photo), as a link: an image the host sent us.
       ...(typeof req.body?.art === "string" ? { art: /^(https?:\/\/|\/)/i.test(req.body.art.trim()) ? req.body.art.trim().slice(0, 800) : "" } : {}),
       ...(typeof req.body?.hidden === "boolean" ? { hidden: req.body.hidden } : typeof req.body?.audio === "string" ? {} : { edited: true }),
