@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { ChevronDown, LayoutDashboard, MonitorPlay, ListOrdered, Users, Handshake, Megaphone, Mail, Contact, DollarSign, Settings2, CalendarDays, DoorOpen, PanelLeftClose, PanelLeftOpen, Film, Compass, BookOpen, BadgeCheck, BookUser, Activity, MessagesSquare, ClipboardList, NotebookPen, Smartphone, KanbanSquare, Building2 } from "lucide-react";
+import { BarChart3, ChevronDown, LayoutDashboard, MonitorPlay, ListOrdered, Users, Handshake, Megaphone, Mail, Contact, DollarSign, Settings2, CalendarDays, DoorOpen, PanelLeftClose, PanelLeftOpen, Film, Compass, BookOpen, BadgeCheck, BookUser, Activity, MessagesSquare, ClipboardList, NotebookPen, Smartphone, KanbanSquare, Building2 } from "lucide-react";
 
 // The admin's nav, down the left.
 //
@@ -87,6 +87,7 @@ export const TOP_GROUPS: { title: string; items: AdminSection[] }[] = [
   {
     title: "Growth",
     items: [
+      { key: "analytics", label: "Analytics", icon: BarChart3 },
       { key: "discovery", label: "Discovery", icon: Compass },
       { key: "projects", label: "Projects", icon: KanbanSquare },
     ],
