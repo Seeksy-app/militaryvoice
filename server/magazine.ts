@@ -814,7 +814,10 @@ export function registerMagazine(app: Express, requireAdmin: RequestHandler, req
     const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     const subject = "Your page in the Podcast Marathon keepsake magazine";
     const letter = (p: { first: string; show: string; signupId: number }) => {
-      const link = `${base}#show-${p.signupId}`;
+      // Their share link (9 Oct): short, counted, and straight to their page.
+      const link = `${ORIGIN}/m/${p.signupId}`;
+      const graphic = `${ORIGIN}/press/magazine-share/${p.signupId}.jpg`;
+      const caption = `${p.show} is in VOICES of the Military, the keepsake magazine of National Military Podcast Day. Read our page and hear the episode, free: ${link.replace(/^https:\/\/www\./, "")} #NationalMilitaryPodcastDay #MilitaryVoices`;
       const hi = p.first ? firstName(p.first) : "there";
       const text = `Hi ${hi},
 
@@ -822,7 +825,13 @@ The keepsake magazine from the Podcast Marathon is out, and ${p.show} has its ow
 
 See your page: ${link}
 
-It's a keepsake of everyone who was part of National Military Podcast Day. Share your page with your listeners, and flip through the other shows while you're there.
+Share it with your listeners. We made you a graphic with the magazine cover and your show, ready for Instagram, Facebook and LinkedIn:
+${graphic}
+
+Your share link (it opens right on your page): ${link}
+
+A caption you can use:
+${caption}
 
 Thank you for being part of the day.
 
@@ -833,7 +842,12 @@ Riccoh`;
         heading: "Your page in the magazine",
         body: `<p>Hi ${esc(hi)},</p>
 <p>The keepsake magazine from the Podcast Marathon is out, and <strong>${esc(p.show)}</strong> has its own page in it: your photo, a few words about the show, and your latest episodes, which play right from the page.</p>
-<p>It's a keepsake of everyone who was part of National Military Podcast Day. Share your page with your listeners, and flip through the other shows while you're there.</p>
+<p><strong>Share it with your listeners.</strong> We made you a graphic with the magazine cover and your show, ready for Instagram, Facebook and LinkedIn. Post it with your share link, which opens right on your page.</p>
+<p style="margin:18px 0"><a href="${graphic}"><img src="${graphic}" width="420" alt="Your magazine share graphic" style="width:100%;max-width:420px;border-radius:12px;display:block;margin:0 auto"></a></p>
+<p style="text-align:center;margin:0 0 18px"><a href="${graphic}" style="color:#053877;font-weight:bold">Download your graphic</a></p>
+<p>Your share link: <a href="${link}" style="color:#053877;font-weight:bold">${esc(link.replace(/^https:\/\/www\./, ""))}</a></p>
+<p style="margin:0 0 6px">A caption you can use:</p>
+<p style="background:#f3f6fb;border-radius:10px;padding:12px 14px;font-size:14px;line-height:1.5">${esc(caption)}</p>
 <p>Thank you for being part of the day.</p>
 <p>Riccoh</p>`,
         cta: { href: link, label: "See your page" },

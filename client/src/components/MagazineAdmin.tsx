@@ -505,12 +505,12 @@ function StatsPanel({ eventId }: { eventId: number }) {
     }
     return out.sort((a, b) => a.n - b.n);
   };
-  const KINDS = [["play", "Plays"], ["image", "Pictures clicked"], ["link", "Links clicked"], ["qr", "QR codes scanned"]] as const;
+  const KINDS = [["play", "Plays"], ["image", "Pictures clicked"], ["link", "Links clicked"], ["qr", "QR codes scanned"], ["share", "Share links opened"]] as const;
   return (
     <section className="rounded-2xl border border-border bg-card p-5" data-testid="magazine-stats">
       <h3 className="font-semibold">Plays, clicks and scans</h3>
       <p className="mt-1 text-sm text-muted-foreground">Press one to see every item, page by page, with its count. Counting started 9 Oct.{!d?.manifest && " Open the magazine once so every item is listed, including the ones with no clicks yet."}</p>
-      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-5">
         {KINDS.map(([k, label]) => {
           const n = (d?.counts ?? []).filter((c) => c.k === k).reduce((a, c) => a + c.n, 0);
           const on = openKind === k;

@@ -10,7 +10,7 @@ import { db, storage, schemaIsReady } from "./storage.js";
 import { siteSettings } from "../shared/schema.js";
 import { buildMagazine } from "./magazine.js";
 
-const KINDS = new Set(["image", "link", "play", "qr"]);
+const KINDS = new Set(["image", "link", "play", "qr", "share"]);
 const clean = (v: unknown, n: number) => String(v ?? "").replace(/[|\n\r]+/g, " ").trim().slice(0, n);
 
 async function bump(eventId: number, page: string, kind: string, label: string): Promise<void> {
@@ -79,6 +79,22 @@ export function registerMagazineStats(app: Express, requireAdmin: RequestHandler
       console.warn("magazine qr:", (err as Error).message);
     }
     res.redirect(302, to.toString());
+  });
+
+  /**
+   * A podcaster's share link (9 Oct): militaryvoices.ai/m/<signupId>, in their share graphic and email.
+   * Counted as a "share" visit on their page, then straight to their page in the magazine.
+   */
+  app.get("/m/:id", async (req, res) => {
+    const id = Number(req.params.id) || 0;
+    try {
+      await schemaIsReady();
+      const ev = await storage.getFeaturedEvent();
+      if (id && ev?.id) await bump(ev.id, String(id), "share", "Share link");
+    } catch (err) {
+      console.warn("magazine share:", (err as Error).message);
+    }
+    res.redirect(302, id ? `https://www.militaryvoices.ai/magazine#show-${id}` : "https://www.militaryvoices.ai/magazine");
   });
 
   /** What's on each page, in order: sent by the magazine when an admin opens it. */
