@@ -488,6 +488,50 @@ function BackCover({ podcastOne, liveOne }: { podcastOne: string; liveOne: strin
   );
 }
 
+/**
+ * Closing Ceremonies (9 Oct): Alex, the Marathon's SI co-host, signing off. The quote is Alex's own
+ * sign-off from the day (transcribed from the closing segment), the rest is from Riccoh's closing.
+ */
+function ClosingPage({ s, n }: { s: Show; n: number }) {
+  const notes: [string, string][] = [
+    ["Excellence in Storytelling Award", "Rachel Oswalt, for telling it unscripted, every time she's on the mic."],
+    ["A first for military podcasting", "An SI co-host program built for military and veteran voices, live for sixteen hours."],
+    ["Thank-you gifts", "Pōstify credits for every guest and host, and the Pro plan for every co-host."],
+  ];
+  return (
+    <Page n={n} bg="#03051a" color="#fff">
+      <div className="absolute inset-0" style={{ background: "radial-gradient(60% 45% at 25% 55%, rgba(200,16,46,.16), transparent 70%), radial-gradient(50% 40% at 85% 10%, rgba(240,167,31,.14), transparent 70%)" }} />
+      <div className="absolute inset-x-12 top-12">
+        <p className="text-[12px] font-bold uppercase tracking-[0.3em]" style={{ color: GOLD }}>Closing Ceremonies · {s.time}</p>
+        <h2 className="mt-3 text-balance text-[50px] font-bold leading-[1.02] tracking-tight" style={HEAD}>Alex had the last word</h2>
+        <p className="mt-4 max-w-[640px] text-pretty text-[16px] leading-[1.6] text-white/80">Alex is the SI (superintelligence) co-host built into the MilitaryVoices studio. Across sixteen hours, Alex introduced the shows, handed off between them and co-hosted three-quarters of the Marathon. Then Alex welcomed Riccoh Player back to the stage for the closing ceremonies, and signed off the day.</p>
+      </div>
+      <img src="/mag/alex-portrait.jpg" alt="Alex, the SI co-host" className="absolute bottom-[150px] left-0 w-[380px]" style={{ WebkitMaskImage: "radial-gradient(ellipse 72% 78% at 50% 42%, #000 58%, transparent 100%)", maskImage: "radial-gradient(ellipse 72% 78% at 50% 42%, #000 58%, transparent 100%)" }} />
+      <div className="absolute right-12 flex w-[400px] flex-col" style={{ top: 318 }}>
+        <span className="text-[64px] font-bold leading-none" style={{ ...HEAD, color: GOLD }}>“</span>
+        <blockquote className="-mt-4 text-pretty text-[20px] font-semibold italic leading-[1.45]" style={HEAD}>Thank you to every podcaster who took the stage today… But most of all, thank you, the viewer, for taking the time to listen to a military voice. For now, happy National Military Podcast Day. We'll see you soon.</blockquote>
+        <p className="mt-4 text-[13px] font-bold uppercase tracking-[0.18em]" style={{ color: GOLD }}>Alex · SI co-host, signing off</p>
+        <div className="mt-8 space-y-4 border-t border-white/15 pt-6">
+          {notes.map(([t, d]) => (
+            <div key={t}>
+              <p className="text-[15px] font-bold" style={HEAD}>{t}</p>
+              <p className="mt-0.5 text-pretty text-[13.5px] leading-snug text-white/70">{d}</p>
+            </div>
+          ))}
+        </div>
+      </div>
+      <footer className="absolute inset-x-0 bottom-0 flex items-center gap-5 px-12 pb-10 pt-5" style={{ borderTop: "1px solid rgba(255,255,255,.12)" }}>
+        <div className="rounded-lg bg-white p-1.5"><Qr url={`https://www.militaryvoices.ai/api/magazine/segment/${s.signupId}`} size={76} /></div>
+        <div className="min-w-0 flex-1">
+          <p className="text-[16px] font-bold" style={HEAD}>Hear the closing ceremonies</p>
+          <p className="text-[13px] text-white/65">Riccoh Player's close of the day, and Alex's sign-off.</p>
+        </div>
+        <p className="text-right text-[12px] font-bold uppercase tracking-[0.18em] text-white/55">Bigger, better and<br />brighter in 2027</p>
+      </footer>
+    </Page>
+  );
+}
+
 function ShowPage({ s, n, event }: { s: Show; n: number; event: Mag["event"] }) {
   const who = [s.branch, s.service].filter(Boolean).join(" · ");
   const eps = s.episodes ?? [];
@@ -755,7 +799,7 @@ export default function Magazine({ slug }: { slug?: string }) {
     </Page>,
     ...(m.award?.citation ? [<AwardPage key="award" a={m.award} n={++n} event={m.event} photo={m.award.photo || m.shows.find((x) => x.signupId === m.award!.signupId)?.headshot || ""} />] : []),
     ...m.shows.flatMap((s, i) => [
-      FLYERS[s.signupId] ? <FlyerPage key={s.signupId} s={s} f={FLYERS[s.signupId]} n={++n} /> : <ShowPage key={s.signupId} s={s} n={++n} event={m.event} />,
+      /closing ceremon/i.test(s.podcastName) ? <ClosingPage key={s.signupId} s={s} n={++n} /> : FLYERS[s.signupId] ? <FlyerPage key={s.signupId} s={s} f={FLYERS[s.signupId]} n={++n} /> : <ShowPage key={s.signupId} s={s} n={++n} event={m.event} />,
       ...(after.get(i) ?? []).map((ad) => <AdPage key={`ad-${ad.id}`} ad={ad} n={++n} />),
     ]),
     // The Marathon's sponsors, then its friends: a page each (8 Oct).
@@ -783,7 +827,7 @@ export default function Magazine({ slug }: { slug?: string }) {
   ];
 
   // A podcaster's review link: their page alone, and what to do about it.
-  const shown = m.review ? [FLYERS[m.shows[0].signupId] ? <FlyerPage key={m.shows[0].signupId} s={m.shows[0]} f={FLYERS[m.shows[0].signupId]} n={0} /> : <ShowPage key={m.shows[0].signupId} s={m.shows[0]} n={0} event={m.event} />] : pages;
+  const shown = m.review ? [/closing ceremon/i.test(m.shows[0].podcastName) ? <ClosingPage key={m.shows[0].signupId} s={m.shows[0]} n={0} /> : FLYERS[m.shows[0].signupId] ? <FlyerPage key={m.shows[0].signupId} s={m.shows[0]} f={FLYERS[m.shows[0].signupId]} n={0} /> : <ShowPage key={m.shows[0].signupId} s={m.shows[0]} n={0} event={m.event} />] : pages;
 
   return (
     <div className="min-h-screen bg-slate-200 print:bg-white">
