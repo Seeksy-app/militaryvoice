@@ -2,6 +2,7 @@
 // tours for SmartLinks. Key in Vercel as WORLDLABS_API_KEY; base per atlas-beta.worldlabs.ai/docs.
 import type { Express, RequestHandler } from "express";
 import crypto from "node:crypto";
+import { putRecordingObject } from "./recordingStorage.js";
 
 const BASE = (process.env.WLT_API_BASE_URL || "https://api.atlas-beta.worldlabs.ai/api/v2").replace(/\/+$/, "");
 const key = () => process.env.WORLDLABS_API_KEY || process.env.WLT_API_KEY || "";
@@ -37,6 +38,30 @@ export function registerWorldLabs(app: Express, requireAdmin: RequestHandler) {
       signal: AbortSignal.timeout(30_000),
     }).catch((e: Error) => ({ ok: false, status: 502, json: async () => ({ message: e.message }) }) as unknown as Response);
     res.status(r.ok ? 200 : r.status).json(await r.json().catch(() => ({})));
+  });
+
+  /**
+   * Keep a finished operation's pictures (9 Oct): World Labs' output links are signed and expire, so
+   * each frame's image is copied into our storage at worldlabs/<operationId>/<n>.<ext>. Returns the paths.
+   */
+  app.post("/api/admin/worldlabs/operations/:id/save", requireAdmin, async (req, res) => {
+    if (!key()) return res.status(503).json({ message: "WORLDLABS_API_KEY isn't set on the server." });
+    const id = String(req.params.id).replace(/[^a-zA-Z0-9_-]/g, "");
+    const op = await fetch(`${BASE}/operations/${id}`, { headers: { "WLT-Api-Key": key() }, signal: AbortSignal.timeout(20_000) }).then((r) => r.json()).catch(() => null);
+    const frames: { imageAsset?: { url?: string } }[] = op?.response?.frames ?? [];
+    if (!op?.done || !frames.length) return res.status(409).json({ message: "That operation isn't finished, or has no pictures." });
+    const saved: string[] = [];
+    for (let i = 0; i < frames.length; i++) {
+      const url = frames[i].imageAsset?.url;
+      if (!url) continue;
+      const r = await fetch(url, { signal: AbortSignal.timeout(30_000) }).catch(() => null);
+      if (!r?.ok) continue;
+      const type = r.headers.get("content-type") || "image/png";
+      const path = `worldlabs/${id}/${i + 1}.${type.includes("jpeg") ? "jpg" : type.includes("webp") ? "webp" : "png"}`;
+      await putRecordingObject(path, Buffer.from(await r.arrayBuffer()), type);
+      saved.push(path);
+    }
+    res.json({ id, saved, promptUsed: op.response?.promptUsed ?? null });
   });
 
   /** One check on an operation (non-blocking, safe to repeat). */
