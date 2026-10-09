@@ -502,7 +502,8 @@ function BackCover({ podcastOne, liveOne }: { podcastOne: string; liveOne: strin
 function ClosingPage({ s, n }: { s: Show; n: number }) {
   // Watch it right on the page (9 Oct): the day's video from the closing's start; the QR stays for print.
   const [watching, setWatching] = useState(false);
-  const video = s.clip ? `${SITE}/api/magazine/segment/${s.signupId}/video#t=${s.clip.start},${s.clip.start + s.clip.dur}` : "";
+  // The cut starts 45 seconds early, on the end of the show before; Alex's introduction of the closing comes in at 0:47.
+  const video = s.clip ? `${SITE}/api/magazine/segment/${s.signupId}/video#t=${s.clip.start + 45},${s.clip.start + s.clip.dur}` : "";
   const notes: [string, string][] = [
     ["Excellence in Storytelling Award", "Rachel Oswalt, for telling it unscripted, every time she's on the mic."],
     ["A first for military podcasting", "An SI co-host program built for military and veteran voices, live for sixteen hours."],
