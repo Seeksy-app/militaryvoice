@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useLayoutEffect, useRef, useState, type ReactElement, type ReactNode } from "react";
 import { useQuery } from "@tanstack/react-query";
 import QRCode from "qrcode";
 import { ExternalLink, Loader2, Pause, Play, Printer } from "lucide-react";
@@ -14,7 +14,7 @@ type Show = {
 };
 type Episode = { title: string; date: string; audioUrl: string };
 type Mag = {
-  event: { name: string; day: string; occasion: string; tagline: string };
+  event: { id?: number; name: string; day: string; occasion: string; tagline: string };
   published: boolean; admin?: boolean; welcome: string;
   host: { name: string; title: string; photo: string };
   shows: Show[]; sponsors: { name: string; logo: string; url: string; tier?: string }[];
@@ -26,7 +26,7 @@ type Mag = {
   ads?: Ad[];
   award?: { signupId: number; title: string; name: string; show: string; citation: string; quote: string; photo: string; plaque: string } | null;
 };
-type Ad = { id: number; name: string; headline: string; body: string; site: string; link: string; logo: string; artwork: string };
+type Ad = { id: number; name: string; headline: string; body: string; site: string; link: string; logo: string; artwork: string; after?: number };
 
 const NAVY = "#000741";
 const GOLD = "#F0A71F";
@@ -43,10 +43,17 @@ function Page({ children, bg = "#fff", color = "#0b1a3a", n }: { children: React
   );
 }
 
+/** Which magazine and which page we're on, so a QR can be counted (9 Oct). */
+const Where = createContext<{ e: number; p: string }>({ e: 0, p: "" });
+const SITE = "https://www.militaryvoices.ai";
+
 function Qr({ url, size = 96 }: { url: string; size?: number }) {
+  const at = useContext(Where);
+  // Every QR goes through our counter first (/go/m), then on to where it always went.
+  const go = at.e && at.p ? `${SITE}/go/m?e=${at.e}&p=${encodeURIComponent(at.p)}&u=${encodeURIComponent(url)}` : url;
   const [src, setSrc] = useState("");
-  useEffect(() => { void QRCode.toDataURL(url, { margin: 1, width: size * 3, color: { dark: NAVY, light: "#ffffff" } }).then(setSrc).catch(() => {}); }, [url, size]);
-  return src ? <img src={src} alt="" style={{ width: size, height: size }} /> : <span style={{ width: size, height: size }} className="block bg-slate-100" />;
+  useEffect(() => { void QRCode.toDataURL(go, { margin: 1, width: size * 3, color: { dark: NAVY, light: "#ffffff" } }).then(setSrc).catch(() => {}); }, [go, size]);
+  return src ? <img src={src} alt="QR code" data-qr="1" data-href={go} style={{ width: size, height: size }} /> : <span style={{ width: size, height: size }} className="block bg-slate-100" />;
 }
 
 /** A full-page ad: their own artwork edge to edge, or one we set from their logo, words and a QR. */
@@ -283,7 +290,7 @@ function Listen({ s, ep, label, go }: { s: Show; ep: Episode | null; label: stri
         </div>
       </div>
       {t.of > 0 && <span className="shrink-0 text-[12px] tabular-nums text-white/60">{mmss(t.at)} / {mmss(t.of)}</span>}
-      <audio ref={audio} key={ep.audioUrl} data-mag src={ep.audioUrl} preload="none" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onTimeUpdate={(e) => setT({ at: e.currentTarget.currentTime, of: e.currentTarget.duration || 0 })} />
+      <audio ref={audio} key={ep.audioUrl} data-mag data-label={ep.title} src={ep.audioUrl} preload="none" onPlay={() => setPlaying(true)} onPause={() => setPlaying(false)} onTimeUpdate={(e) => setT({ at: e.currentTarget.currentTime, of: e.currentTarget.duration || 0 })} />
     </div>
   );
 }
@@ -558,8 +565,8 @@ function ShowPage({ s, n, event }: { s: Show; n: number; event: Mag["event"] }) 
         {/* Who they are: their photo beside the show, not across the page. */}
         <div className="flex gap-7">
           <div className="relative shrink-0" style={{ width: 230, height: 288 }}>
-            {s.headshot ? <img src={s.headshot} alt="" className="h-full w-full rounded-2xl object-cover" style={{ objectPosition: "50% 22%" }} /> : <div className="h-full w-full rounded-2xl" style={{ background: NAVY }} />}
-            {s.art && <img src={s.art} alt="" className="absolute -bottom-4 -right-4 rounded-xl object-cover shadow-lg" style={{ width: 92, height: 92, border: "4px solid #fff" }} />}
+            {s.headshot ? <img src={s.headshot} alt={`${s.hostName} photo`} className="h-full w-full rounded-2xl object-cover" style={{ objectPosition: "50% 22%" }} /> : <div className="h-full w-full rounded-2xl" style={{ background: NAVY }} />}
+            {s.art && <img src={s.art} alt={`${s.podcastName} art`} className="absolute -bottom-4 -right-4 rounded-xl object-cover shadow-lg" style={{ width: 92, height: 92, border: "4px solid #fff" }} />}
           </div>
           <div className="flex min-w-0 flex-1 flex-col pt-1">
             <span className="self-start rounded-full px-3 py-1 text-[11px] font-bold uppercase tracking-[0.14em]" style={{ background: GOLD, color: "#1a1200" }}>Show {s.number} · {s.time}</span>
@@ -671,6 +678,61 @@ export default function Magazine({ slug }: { slug?: string }) {
     void Promise.all([document.fonts?.ready, ...imgs.map((i) => (i.complete ? Promise.resolve() : new Promise((r) => { i.onload = i.onerror = () => r(null); })))]).then(() => setTimeout(() => window.print(), 600));
   }, [printing, q.data]);
 
+  // Every picture is a link, and every picture click, link click and play is counted (9 Oct).
+  useEffect(() => {
+    const e = q.data?.event.id;
+    if (!e || printing) return;
+    const send = (frame: HTMLElement, k: string, l: string) => {
+      const body = JSON.stringify({ e, p: frame.dataset.pk, k, l: l.slice(0, 90) });
+      try { if (!navigator.sendBeacon?.("/api/magazine/track", new Blob([body], { type: "application/json" }))) throw new Error("no beacon"); }
+      catch { void fetch("/api/magazine/track", { method: "POST", headers: { "Content-Type": "application/json" }, body, keepalive: true }).catch(() => {}); }
+    };
+    const onClick = (ev: MouseEvent) => {
+      const el = ev.target as HTMLElement | null;
+      const frame = el?.closest<HTMLElement>("[data-pk]");
+      if (!el || !frame) return;
+      const a = el.closest("a");
+      if (a) { send(frame, "link", (a.textContent || a.getAttribute("href") || "Link").trim()); return; }
+      const img = el.closest("img");
+      if (!img || el.closest("button")) return;
+      // A QR's own link counts it (/go/m); a picture is counted here, then opens its link.
+      const href = img.dataset.href || frame.dataset.link || "";
+      if (!img.dataset.qr) send(frame, "image", img.alt || `${frame.dataset.pl ?? "Page"} picture`);
+      if (!href) return;
+      if (href.startsWith("#")) document.getElementById(href.slice(1))?.scrollIntoView({ block: "start", behavior: "smooth" });
+      else window.open(href, "_blank", "noopener");
+    };
+    const onPlay = (ev: Event) => {
+      const audio = ev.target as HTMLElement;
+      const frame = audio?.closest?.<HTMLElement>("[data-pk]");
+      if (frame && audio.tagName === "AUDIO") send(frame, "play", audio.dataset.label || frame.dataset.pl || "Audio");
+    };
+    document.addEventListener("click", onClick);
+    document.addEventListener("play", onPlay, true);
+    return () => { document.removeEventListener("click", onClick); document.removeEventListener("play", onPlay, true); };
+  }, [q.data, printing]);
+  // An admin opening the whole magazine sends the page list, so Admin → Magazine can show every item.
+  useEffect(() => {
+    const d = q.data;
+    if (!d?.admin || d.review || d.reviewAll || printing || !d.event.id) return;
+    const t = setTimeout(() => {
+      const pages = Array.from(document.querySelectorAll<HTMLElement>("[data-pk]")).map((f) => {
+        const items: { k: string; l: string }[] = [];
+        f.querySelectorAll<HTMLImageElement>("img").forEach((img) => {
+          if (img.dataset.qr) {
+            try { const u = new URL(new URL(img.dataset.href || "").searchParams.get("u") || ""); items.push({ k: "qr", l: `${u.hostname.replace(/^www\./, "")}${u.pathname === "/" ? "" : u.pathname}`.slice(0, 90) }); } catch { /* not ours */ }
+          } else items.push({ k: "image", l: img.alt || `${f.dataset.pl ?? "Page"} picture` });
+        });
+        f.querySelectorAll<HTMLAudioElement>("audio[data-mag]").forEach((a) => items.push({ k: "play", l: a.dataset.label || f.dataset.pl || "Audio" }));
+        f.querySelectorAll("a").forEach((a) => items.push({ k: "link", l: (a.textContent || a.getAttribute("href") || "Link").trim() }));
+        const seen = new Set<string>();
+        return { p: f.dataset.pk, n: Number(f.dataset.pn), label: f.dataset.pl, items: items.filter((i) => { const key = `${i.k}|${i.l}`; if (seen.has(key)) return false; seen.add(key); return true; }) };
+      });
+      void fetch(`/api/admin/magazine/${d.event.id}/manifest`, { method: "POST", credentials: "include", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ pages }) }).catch(() => {});
+    }, 3000);
+    return () => clearTimeout(t);
+  }, [q.data, printing]);
+
   if (q.isLoading) return <div className="flex min-h-screen items-center justify-center bg-slate-200"><Loader2 className="h-6 w-6 animate-spin text-slate-500" /></div>;
   if (q.isError || !q.data) return <div className="flex min-h-screen items-center justify-center bg-slate-200 p-6 text-center text-slate-600">{(q.error as Error)?.message ?? "The magazine isn't out yet."}</div>;
   const m = q.data;
@@ -695,10 +757,17 @@ export default function Magazine({ slug }: { slug?: string }) {
   const ads = m.ads ?? [];
   // The first ad faces the welcome; the rest are spread evenly through the show pages.
   const after = new Map<number, Ad[]>();
-  ads.slice(1).forEach((ad, k) => {
-    const at = Math.max(0, Math.round(((k + 1) * m.shows.length) / ads.length) - 1);
+  // An ad pinned after a show goes there (9 Oct: Zoom beside Frank Zaccari); the rest spread evenly.
+  const pinnedAds = ads.slice(1).filter((ad) => ad.after && m.shows.some((x) => x.signupId === ad.after));
+  const spread = ads.slice(1).filter((ad) => !pinnedAds.includes(ad));
+  spread.forEach((ad, k) => {
+    const at = Math.max(0, Math.round(((k + 1) * m.shows.length) / (spread.length + 1)) - 1);
     after.set(at, [...(after.get(at) ?? []), ad]);
   });
+  for (const ad of pinnedAds) {
+    const at = m.shows.findIndex((x) => x.signupId === ad.after);
+    after.set(at, [ad, ...(after.get(at) ?? [])]);
+  }
   let n = 1;
   // The sponsors in Andrew's order (8 Oct): PodcastOne, LiveOne, Genius, Tarver; anyone new after them.
   const rank = (name: string) => { const i = [/podcastone/i, /liveone/i, /genius/i, /tarver/i].findIndex((r) => r.test(name)); return i < 0 ? 99 : i; };
@@ -792,7 +861,7 @@ export default function Magazine({ slug }: { slug?: string }) {
       <div className="absolute inset-x-10 flex flex-wrap content-start justify-center gap-1.5" style={{ top: 190, bottom: 48 }}>
         {[...pageFaces.map((f) => ({ id: String(f.id), src: f.src, badge: false })), ...(pageBadge ? [{ id: "badge", src: "/nmpd-logo.png", badge: true }] : [])].map((t) => (
           <div key={t.id} className={`overflow-hidden rounded-md ${t.badge ? "flex items-center justify-center p-1" : ""}`} style={{ width: pageTileW, height: pageTileH }}>
-            <img src={t.src} alt="" className={t.badge ? "max-h-full max-w-full object-contain" : "h-full w-full object-cover"} style={t.badge ? undefined : { objectPosition: "50% 25%" }} />
+            <img src={t.src} alt={t.badge ? "National Military Podcast Day" : `${m.shows.find((x) => String(x.signupId) === t.id)?.podcastName ?? "Podcaster"} (faces page)`} data-href={t.badge ? undefined : `#show-${t.id}`} className={t.badge ? "max-h-full max-w-full object-contain" : "h-full w-full object-cover"} style={t.badge ? undefined : { objectPosition: "50% 25%" }} />
           </div>
         ))}
       </div>
@@ -815,7 +884,7 @@ export default function Magazine({ slug }: { slug?: string }) {
           <div className={`mt-12 grid gap-8 ${g.list.length === 1 ? "grid-cols-1" : "grid-cols-2"}`}>
             {g.list.map((sp, i) => (
               <div key={sp.name} className={`flex flex-col items-center justify-center gap-3 rounded-2xl p-6 ${g.list.length % 2 === 1 && i === g.list.length - 1 && g.list.length > 1 ? "col-span-2 mx-auto w-1/2" : ""}`} style={{ background: NAVY, height: g.list.length <= 4 ? 200 : 160 }}>
-                {sp.logo ? <img src={sp.logo} alt={sp.name} className="max-h-[120px] max-w-full object-contain" /> : <span className="text-[24px] font-bold text-white">{sp.name}</span>}
+                {sp.logo ? <img src={sp.logo} alt={sp.name} data-href={sp.url || undefined} className="max-h-[120px] max-w-full object-contain" /> : <span className="text-[24px] font-bold text-white">{sp.name}</span>}
               </div>
             ))}
           </div>
@@ -827,11 +896,29 @@ export default function Magazine({ slug }: { slug?: string }) {
   ];
 
   // A podcaster's review link: their page alone, and what to do about it.
+  // Each page's name and where its pictures go, for the counts (9 Oct).
+  const pageMeta = (key: string): { label: string; link: string } => {
+    const show = m.shows.find((x) => String(x.signupId) === key);
+    if (show) return { label: show.podcastName, link: /closing ceremon/i.test(show.podcastName) ? `${SITE}/api/magazine/segment/${show.signupId}` : FLYERS[show.signupId]?.site ?? show.link };
+    const ad = ads.find((x) => `ad-${x.id}` === key);
+    if (ad) return { label: `Ad: ${ad.headline || ad.name}`, link: ad.link };
+    const fixed: Record<string, { label: string; link: string }> = {
+      cover: { label: "Cover", link: "" }, news: { label: "PodcastOne news", link: RELEASE_URL }, welcome: { label: "Welcome", link: "" },
+      lineup: { label: "The lineup", link: "" }, faces: { label: "Faces of the Marathon", link: "" }, award: { label: "Award", link: "" },
+      sponsors: { label: "Sponsors of the Marathon", link: "" }, friends: { label: "Friends of the Marathon", link: "" }, back: { label: "Back cover", link: `${SITE}/2027` },
+    };
+    return fixed[key] ?? { label: key, link: "" };
+  };
+  const frameData = (p: ReactNode, i: number) => {
+    const key = String((p as ReactElement)?.key ?? i);
+    const meta = pageMeta(key);
+    return { "data-pk": key, "data-pn": i + 1, "data-pl": meta.label, "data-link": meta.link || undefined };
+  };
   const shown = m.review ? [/closing ceremon/i.test(m.shows[0].podcastName) ? <ClosingPage key={m.shows[0].signupId} s={m.shows[0]} n={0} /> : FLYERS[m.shows[0].signupId] ? <FlyerPage key={m.shows[0].signupId} s={m.shows[0]} f={FLYERS[m.shows[0].signupId]} n={0} /> : <ShowPage key={m.shows[0].signupId} s={m.shows[0]} n={0} event={m.event} />] : pages;
 
   return (
     <div className="min-h-screen bg-slate-200 print:bg-white">
-      <style>{`@import url('https://fonts.googleapis.com/css2?family=Anton&family=Yellowtail&display=block'); @page { size: 8.5in 11in; margin: 0; } @keyframes magFadeIn { from { opacity: 0 } to { opacity: 1 } } .mag-fade-in { animation: magFadeIn 900ms ease-in-out both; } @media print { .mag-fade-in { animation: none !important; } } @media print { .mag-bar { display: none !important; } .mag-sheet { transform: none !important; } .mag-frame { width: auto !important; height: auto !important; margin: 0 !important; } .mag-page { break-after: page; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }`}</style>
+      <style>{`@import url('https://fonts.googleapis.com/css2?family=Anton&family=Yellowtail&display=block'); @page { size: 8.5in 11in; margin: 0; } @keyframes magFadeIn { from { opacity: 0 } to { opacity: 1 } } .mag-fade-in { animation: magFadeIn 900ms ease-in-out both; } @media print { .mag-fade-in { animation: none !important; } } @media screen { .mag-sheet img { cursor: pointer; } } @media print { .mag-bar { display: none !important; } .mag-sheet { transform: none !important; } .mag-frame { width: auto !important; height: auto !important; margin: 0 !important; } .mag-page { break-after: page; } body { -webkit-print-color-adjust: exact; print-color-adjust: exact; } }`}</style>
       <div className="mag-bar sticky top-0 z-10 flex items-center justify-between gap-3 border-b border-slate-300 bg-white/95 px-4 py-2.5 backdrop-blur">
         <p className="truncate text-sm font-semibold text-slate-800">{m.event.name} · Keepsake magazine{m.review ? " · your page, for your review" : m.reviewAll ? " · draft, for your review" : !m.published ? " · draft (admins only)" : ""}</p>
         <button type="button" onClick={() => window.print()} className="inline-flex items-center gap-1.5 rounded-full bg-[#053877] px-4 py-1.5 text-sm font-semibold text-white hover:bg-[#0a4a99]" data-testid="magazine-print">
@@ -852,8 +939,8 @@ export default function Magazine({ slug }: { slug?: string }) {
       )}
       <div ref={box} className="mx-auto max-w-[816px] px-0 py-6 sm:py-10 print:max-w-none print:p-0">
         {shown.map((p, i) => (
-          <div key={i} id={typeof (p as ReactElement)?.key === "string" && /^\d+$/.test((p as ReactElement).key as string) ? `show-${(p as ReactElement).key}` : undefined} className="mag-frame mx-auto mb-8 overflow-hidden shadow-xl print:mb-0 print:overflow-visible print:shadow-none" style={{ width: W * scale, height: H * scale }}>
-            <div className="mag-sheet origin-top-left" style={{ width: W, height: H, transform: `scale(${scale})` }}>{p}</div>
+          <div key={i} {...frameData(p, i)} id={typeof (p as ReactElement)?.key === "string" && /^\d+$/.test((p as ReactElement).key as string) ? `show-${(p as ReactElement).key}` : undefined} className="mag-frame mx-auto mb-8 overflow-hidden shadow-xl print:mb-0 print:overflow-visible print:shadow-none" style={{ width: W * scale, height: H * scale }}>
+            <div className="mag-sheet origin-top-left" style={{ width: W, height: H, transform: `scale(${scale})` }}><Where.Provider value={{ e: m.event.id ?? 0, p: String((p as ReactElement)?.key ?? i) }}>{p}</Where.Provider></div>
           </div>
         ))}
       </div>

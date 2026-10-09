@@ -200,7 +200,7 @@ export async function claimSegmentCut(): Promise<{ id: number; title: string; st
 }
 
 /** Everything the magazine prints, in running order. */
-async function buildMagazine(eventId: number) {
+export async function buildMagazine(eventId: number) {
   const ev = await storage.getEventById(eventId);
   if (!ev) return null;
   const lineup = (await db.select().from(signups).where(and(eq(signups.eventId, eventId), ne(signups.status, "cancelled")))).sort((a, b) => a.slotIndex - b.slotIndex);
@@ -251,6 +251,8 @@ async function buildMagazine(eventId: number) {
     };
   });
   const sponsorRows = (await db.select().from(sponsors).where(and(eq(sponsors.eventId, eventId), eq(sponsors.active, true)))).sort((a, b) => a.sortOrder - b.sortOrder);
+  // An ad pinned after a particular show (9 Oct: the Zoom ad beside Frank Zaccari's page).
+  const pinned = new Map((await db.select().from(siteSettings).where(sql`${siteSettings.key} like ${`magazine-ad-after:${eventId}:%`}`)).map((r) => [Number(r.key.split(":").pop()), Number(r.value) || 0]));
   const adRows = await db.select().from(magazineAds).where(eq(magazineAds.eventId, eventId)).orderBy(asc(magazineAds.sortOrder), asc(magazineAds.id));
   const allSponsors = adRows.some((a) => a.sponsorId) ? await db.select().from(sponsors) : [];
   const riccoh = await storage.getProfileByEmail("riccoh.player@drphil.tv").catch(() => undefined);
@@ -284,6 +286,7 @@ async function buildMagazine(eventId: number) {
         id: a.id, sponsorId: a.sponsorId, name: a.name || sp?.name || "", headline: a.headline, body: a.body,
         site, link: sp ? `${ORIGIN}/go/sponsor/${sp.id}?src=magazine` : site,
         logo: a.logoUrl || sp?.logoUrl || "", artwork: a.artworkUrl,
+        after: pinned.get(a.id) || 0,
       };
     }),
   };
@@ -712,6 +715,11 @@ export function registerMagazine(app: Express, requireAdmin: RequestHandler, req
     if (typeof patch.url === "string" && patch.url && !/^https?:\/\//i.test(patch.url)) patch.url = `https://${patch.url}`;
     if (b.artwork === "") patch.artworkUrl = "";
     if (Number.isInteger(b.sortOrder)) patch.sortOrder = b.sortOrder;
+    // Pin it after a show's page (its signup id), or 0 to spread it with the rest.
+    if (Number.isInteger(b.after)) {
+      const [ad] = await db.select({ eventId: magazineAds.eventId }).from(magazineAds).where(eq(magazineAds.id, Number(req.params.id))).limit(1);
+      if (ad) await storage.setSetting(`magazine-ad-after:${ad.eventId}:${req.params.id}`, String(b.after));
+    }
     if (Object.keys(patch).length) await db.update(magazineAds).set(patch).where(eq(magazineAds.id, Number(req.params.id)));
     res.json({ ok: true });
   });

@@ -140,6 +140,7 @@ export function MagazineAdmin({ eventId, slug }: { eventId: number; slug: string
       <AdsPanel eventId={eventId} ads={m.ads ?? []} onChanged={refresh} />
       <AwardPanel eventId={eventId} award={m.award ?? null} shows={m.shows} onChanged={refresh} />
       <PressPanel />
+      <StatsPanel eventId={eventId} />
 
       <section className="rounded-2xl border border-border bg-card p-5">
         <h3 className="font-semibold">Riccoh's welcome</h3>
@@ -471,6 +472,65 @@ function PressPanel() {
       </div>
       <p className="mt-1 text-sm text-muted-foreground">The news page's QR code lands here. Paste the release text LiveOne sent, a blank line between paragraphs. Empty shows our summary and a link to the newswire.</p>
       {q.data && <Textarea defaultValue={q.data.body} rows={6} className="mt-2 text-sm" placeholder="Paste the release here" onBlur={(e) => { if (e.target.value.trim() !== q.data!.body.trim()) void save(e.target.value); }} data-testid="press-body" />}
+    </section>
+  );
+}
+
+/** The magazine's numbers (9 Oct): plays, picture and link clicks, and QR scans, page by page. */
+type StatItem = { k: string; l: string };
+type Stats = { manifest: { at: string; pages: { p: string; n: number; label: string; items: StatItem[] }[] } | null; counts: { p: string; k: string; l: string; n: number }[] };
+const KIND_LABEL: Record<string, string> = { play: "Played", image: "Picture clicked", link: "Link clicked", qr: "QR scanned" };
+function StatsPanel({ eventId }: { eventId: number }) {
+  const q = useQuery<Stats>({ queryKey: ["/api/admin/magazine/stats", eventId], queryFn: async () => (await fetch(`/api/admin/magazine/${eventId}/stats`, { credentials: "include" })).json(), refetchInterval: 60_000 });
+  const d = q.data;
+  const count = (p: string, k: string, l: string) => d?.counts.find((c) => c.p === p && c.k === k && c.l === l)?.n ?? 0;
+  const totals = (["play", "image", "link", "qr"] as const).map((k) => [k, (d?.counts ?? []).filter((c) => c.k === k).reduce((a, c) => a + c.n, 0)] as const);
+  const pages = [...(d?.manifest?.pages ?? [])].sort((a, b) => a.n - b.n).map((pg) => {
+    // Anything counted on the page that the list doesn't have yet (a renamed episode, say) still shows.
+    const extra = (d?.counts ?? []).filter((c) => c.p === pg.p && !pg.items.some((i) => i.k === c.k && i.l === c.l)).map((c) => ({ k: c.k, l: c.l }));
+    return { ...pg, items: [...pg.items, ...extra] };
+  });
+  return (
+    <section className="rounded-2xl border border-border bg-card p-5" data-testid="magazine-stats">
+      <h3 className="font-semibold">Plays, clicks and scans</h3>
+      <p className="mt-1 text-sm text-muted-foreground">Every picture in the magazine is a link, and every QR code is counted on its way through. Counting started 9 Oct.</p>
+      <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+        {totals.map(([k, n]) => (
+          <div key={k} className="rounded-xl bg-muted/50 p-3 text-center">
+            <p className="text-2xl font-bold tabular-nums">{n}</p>
+            <p className="text-xs font-semibold text-muted-foreground">{({ play: "Plays", image: "Picture clicks", link: "Link clicks", qr: "QR scans" } as Record<string, string>)[k]}</p>
+          </div>
+        ))}
+      </div>
+      {!d?.manifest ? (
+        <p className="mt-4 text-sm text-muted-foreground">Open the magazine once and every page will be listed here.</p>
+      ) : (
+        <div className="mt-5 divide-y divide-border rounded-xl border border-border">
+          {pages.map((pg) => {
+            const total = pg.items.reduce((a, i) => a + count(pg.p, i.k, i.l), 0);
+            return (
+              <details key={pg.p} className="group px-4 py-2.5" open={total > 0}>
+                <summary className="flex cursor-pointer list-none items-center gap-3 text-sm">
+                  <span className="w-8 shrink-0 tabular-nums text-muted-foreground">{pg.n}</span>
+                  <span className="min-w-0 flex-1 truncate font-semibold">{pg.label}</span>
+                  <span className={`tabular-nums font-semibold ${total ? "text-[#053877]" : "text-muted-foreground"}`}>{total}</span>
+                </summary>
+                {pg.items.length > 0 && (
+                  <ul className="mt-2 space-y-1 pb-1 pl-11">
+                    {pg.items.map((i) => (
+                      <li key={`${i.k}|${i.l}`} className="flex items-center gap-3 text-sm">
+                        <span className="w-28 shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{KIND_LABEL[i.k] ?? i.k}</span>
+                        <span className="min-w-0 flex-1 truncate">{i.l}</span>
+                        <span className="tabular-nums">{count(pg.p, i.k, i.l)}</span>
+                      </li>
+                    ))}
+                  </ul>
+                )}
+              </details>
+            );
+          })}
+        </div>
+      )}
     </section>
   );
 }
