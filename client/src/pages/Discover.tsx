@@ -51,7 +51,7 @@ type RowExtra = {
   country: { name: string; code: string; pct: number } | null;
   niches: { name: string; pct: number }[]; collabs: string[]; collabCount: number;
 };
-type Me = { discoveryPro?: boolean; signedIn: boolean; email?: string; isPodcaster?: boolean; member?: { role: string; orgName: string } | null; reveals?: { used: number; allowance: number } | null; lookups?: { used: number; allowance: number } | null; isAdmin?: boolean };
+type Me = { discoveryPro?: boolean; signedIn: boolean; email?: string; isPodcaster?: boolean; member?: { role: string; orgName: string } | null; reveals?: { used: number; allowance: number; unlimited?: boolean } | null; lookups?: { used: number; allowance: number } | null; isAdmin?: boolean };
 /** The saved sample search, every column filled; free to show. */
 type Sample = { q: string; platform: string; total: number; results: Card[]; builtAt: string };
 type SearchResult = { brief: string; mode?: string; total: number; page: number; pageSize: number; results: Card[]; verified: Card[]; understood?: { notes?: string[]; from_nlp?: Record<string, unknown> } | null };
@@ -512,7 +512,7 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
                   <p className="mt-1 text-sm text-muted-foreground">Find military and veteran creators, guests and sponsors, and reach them.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                  {me?.reveals && <span data-testid="discover-allowance">{Math.max(0, me.reveals.allowance - me.reveals.used)} of {me.reveals.allowance} contacts left this month</span>}
+                  {me?.reveals && <span data-testid="discover-allowance">{me.reveals.unlimited ? "Unlimited contacts (admin)" : `${Math.max(0, me.reveals.allowance - me.reveals.used)} of ${me.reveals.allowance} contacts left this month`}</span>}
                   <button type="button" onClick={toEnrich} className="font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">Look up a list</button>
                 </div>
               </div>

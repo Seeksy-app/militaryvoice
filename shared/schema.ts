@@ -2689,6 +2689,18 @@ export const discoveryLookups = pgTable("discovery_lookups", {
 }, (t) => [index("discovery_lookups_email_idx").on(t.email)]);
 
 /** A visit to Discovery, by where it came from. */
+/** Every Discovery search (9 Oct 2026): who (email, "admin:<email>" or "visitor"), what, and how many came back. */
+export const discoverySearches = pgTable("discovery_searches", {
+  id: serial("id").primaryKey(),
+  who: text("who").notNull().default(""),
+  kind: text("kind").notNull().default(""),
+  mode: text("mode").notNull().default(""),
+  q: text("q").notNull().default(""),
+  platform: text("platform").notNull().default(""),
+  results: integer("results").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+});
+
 export const discoveryVisits = pgTable("discovery_visits", {
   id: serial("id").primaryKey(),
   source: text("source").notNull().default(""),

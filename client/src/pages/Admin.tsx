@@ -5154,9 +5154,9 @@ export default function Admin({ tab, eventId: eventParam }: { tab?: string; even
                     <RoomsPanel onOpen={openRoom} />
                   </TabsContent>
                   <TabsContent value="discovery" className="mt-2 flex flex-col gap-6 lg:mt-0">
-                    <DiscoveryStats />
-                    {/* The search itself, as in a member's dashboard: no landing-page banner. */}
+                    {/* The search first (9 Oct): ours has no limit. Then who's using it. */}
                     <Discover embedded part="search" />
+                    <DiscoveryStats />
                   </TabsContent>
                   <TabsContent value="verified" className="mt-2 lg:mt-0">
                     <Discover embedded part="verified" />

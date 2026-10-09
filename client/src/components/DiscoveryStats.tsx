@@ -5,9 +5,15 @@ import { adminGet } from "@/lib/adminApi";
 
 const LABELS: Record<string, string> = { "sponsor-page": "Sponsor page", home: "Homepage", "studio-slide": "Studio slide", "on-air": "On air", "watch-page": "Watch page", "existing-account": "Existing podcaster", admin: "Admin", direct: "Direct" };
 
-/** Discovery, promoted at the event: where visitors and new accounts came from. */
+const whoLabel = (w: string) => (w === "visitor" ? "A visitor (not signed in)" : w.startsWith("admin:") ? `${w.slice(6)} (admin)` : w);
+const ago = (iso: string) => {
+  const m = Math.round((Date.now() - Date.parse(iso)) / 60000);
+  return m < 1 ? "just now" : m < 60 ? `${m} min ago` : m < 1440 ? `${Math.round(m / 60)} h ago` : `${Math.round(m / 1440)} d ago`;
+};
+
+/** Discovery: where visitors came from, and who's searching for what. */
 export function DiscoveryStats() {
-  const { data } = useQuery<{ visits: number; members: number; bySource: Record<string, { visits: number; joins: number }>; byRole: Record<string, number>; recent: { email: string; role: string; orgName: string; source: string; createdAt: string }[] }>({
+  const { data } = useQuery<{ visits: number; members: number; bySource: Record<string, { visits: number; joins: number }>; byRole: Record<string, number>; recent: { email: string; role: string; orgName: string; source: string; createdAt: string }[]; searches?: { who: string; kind: string; mode: string; q: string; platform: string; results: number; at: string }[]; searchers?: { who: string; n: number; last: string }[]; searchCount?: number }>({
     queryKey: ["/api/admin/discover/stats"],
     queryFn: () => adminGet("/api/admin/discover/stats"),
     refetchInterval: 60_000,
@@ -18,7 +24,7 @@ export function DiscoveryStats() {
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base"><Compass className="h-4 w-4 text-primary" /> Discovery</CardTitle>
         <CardDescription>
-          Promoted on the sponsor page, the homepage, a studio slide and the on-the-hour read. Where people came from, and who signed up.{" "}
+          Where visitors came from, and who's searching for what.{" "}
           <a href="/discover" target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 font-medium text-primary hover:underline">Open Discovery <ExternalLink className="h-3 w-3" /></a>
         </CardDescription>
       </CardHeader>
@@ -39,12 +45,22 @@ export function DiscoveryStats() {
           </table>
         </div>
         <div>
-          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Newest accounts</p>
+          {/* Who's searching (9 Oct): the people, then what they asked for. */}
+          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Who's searching · {data?.searchCount ?? 0} searches</p>
           <ul className="mt-2 divide-y divide-border text-sm">
-            {(data?.recent ?? []).length === 0 ? <li className="py-2 text-muted-foreground">None yet.</li> : data!.recent.map((m) => (
-              <li key={m.email} className="flex items-center justify-between gap-2 py-1.5">
-                <span className="min-w-0 truncate">{m.orgName || m.email}<span className="block truncate text-xs text-muted-foreground">{m.email}</span></span>
-                <span className="shrink-0 text-xs capitalize text-muted-foreground">{m.role} · {LABELS[m.source] ?? (m.source || "direct")}</span>
+            {(data?.searchers ?? []).length === 0 ? <li className="py-2 text-muted-foreground">No searches logged yet. They're counted from 9 Oct.</li> : data!.searchers!.slice(0, 8).map((p) => (
+              <li key={p.who} className="flex items-center justify-between gap-2 py-1.5">
+                <span className="min-w-0 truncate">{whoLabel(p.who)}</span>
+                <span className="shrink-0 text-xs text-muted-foreground">{p.n} {p.n === 1 ? "search" : "searches"} · {ago(p.last)}</span>
+              </li>
+            ))}
+          </ul>
+          <p className="mt-5 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Latest searches</p>
+          <ul className="mt-2 max-h-80 divide-y divide-border overflow-y-auto text-sm">
+            {(data?.searches ?? []).length === 0 ? <li className="py-2 text-muted-foreground">None yet.</li> : data!.searches!.map((x, i) => (
+              <li key={i} className="py-1.5">
+                <span className="flex items-baseline justify-between gap-2"><span className="min-w-0 truncate font-medium">"{x.q || "(everyone)"}"</span><span className="shrink-0 text-xs tabular-nums text-muted-foreground">{x.results} found</span></span>
+                <span className="block truncate text-xs text-muted-foreground">{whoLabel(x.who)} · {x.kind === "creators" ? `creators on ${x.platform}` : x.kind === "people" ? "hosts & guests" : "podcasts"} · {ago(x.at)}</span>
               </li>
             ))}
           </ul>

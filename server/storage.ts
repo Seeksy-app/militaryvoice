@@ -230,6 +230,19 @@ async function ensureSchema() {
     );
   `;
   await sql`CREATE INDEX IF NOT EXISTS show_assets_email_idx ON show_assets (email)`;
+  // Who searched Discovery for what (9 Oct 2026), for Admin → Discovery.
+  await sql`
+    CREATE TABLE IF NOT EXISTS discovery_searches (
+      id SERIAL PRIMARY KEY,
+      who TEXT NOT NULL DEFAULT '',
+      kind TEXT NOT NULL DEFAULT '',
+      mode TEXT NOT NULL DEFAULT '',
+      q TEXT NOT NULL DEFAULT '',
+      platform TEXT NOT NULL DEFAULT '',
+      results INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL
+    );
+  `;
   await sql`ALTER TABLE show_assets ADD COLUMN IF NOT EXISTS sort_order INTEGER NOT NULL DEFAULT 0`;
   await sql`ALTER TABLE recordings ADD COLUMN IF NOT EXISTS clip_progress TEXT NOT NULL DEFAULT ''`;
   await sql`ALTER TABLE recordings ADD COLUMN IF NOT EXISTS clean TEXT NOT NULL DEFAULT ''`;

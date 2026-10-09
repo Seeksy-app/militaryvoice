@@ -497,7 +497,7 @@ function BackCover({ podcastOne, liveOne }: { podcastOne: string; liveOne: strin
 
 /**
  * Closing Ceremonies (9 Oct): Alex, the Marathon's SI co-host, signing off. The quote is Alex's own
- * sign-off from the day (transcribed from the closing segment), the rest is from Riccoh's closing.
+ * sign-off from the day (transcribed from the closing segment); the page is Alex's alone (9 Oct).
  */
 function ClosingPage({ s, n }: { s: Show; n: number }) {
   // Watch it right on the page (9 Oct): the day's video from the closing's start; the QR stays for print.

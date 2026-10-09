@@ -14,6 +14,7 @@ import { getAdminEmail, getSessionEmail } from "./session.js";
 import { isListenNotesConfigured, spendListenNotes, lnSearchShows, lnShowFull, lnSearchEpisodes, type LnEpisode } from "./listenNotes.js";
 import { guestsIn, lnPersonId, lnPersonName, sameGuest, type Guest } from "./lnGuests.js";
 import { podscanOn, podscanPeople, podscanPerson, podscanShow, PodscanError } from "./podscan.js";
+import { logSearch } from "./discovery.js";
 
 const BASE = "https://developers.podchaser.com/api/rest/v1";
 const DAY = 86_400_000;
@@ -252,6 +253,8 @@ export function registerPodcastRoutes(app: Express, member: (req: Request) => Pr
 
   app.post("/api/discover/podcasts/search", (req, res) =>
     send(res, async () => {
+      // Every first-page search is logged for Admin → Discovery (9 Oct).
+      const out = await (async () => {
       const w = await who(req);
       const page = Math.max(0, Math.min(20, Number(req.body?.page) || 0));
       if (w.visitor && page > 0) throw new HttpError(403, "Create a free account to see more.");
@@ -328,6 +331,9 @@ export function registerPodcastRoutes(app: Express, member: (req: Request) => Pr
         await Promise.all(rows.map((r) => writeCache(kind === "people" ? `pc2:person-base:${r.pcid}` : `pc2:show-base:${r.id}`, r))).catch(() => {});
       }
       return { kind, term, page, pageSize: found.perPage, total: found.total, results: found.results, preview: w.visitor, locked: LOCKED };
+      })();
+      if (!out.page) void logSearch(req, out.kind === "people" ? "people" : "shows", out.source ?? "", String(req.body?.q ?? "").trim(), "podcasts", Math.max(out.total || 0, out.results?.length || 0));
+      return out;
     }),
   );
 

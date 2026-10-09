@@ -247,6 +247,8 @@ const DEFS: Def[] = [
     key: "podchaser", name: "Podchaser", group: "Social and podcasts", powers: "Hosts & guests search",
     run: async () => {
       const k = env("PODCHASER_API_KEY", "PODCHASER_CLIENT_ID", "PODCHASER_KEY");
+      // Podscan does this job since 7 Oct, so a refused Podchaser key isn't an outage (9 Oct).
+      if (env("PODSCAN_API_KEY")) return { state: "off", detail: "Not in use: Podscan runs Hosts & guests" };
       return k ? ping("https://developers.podchaser.com/api/rest/v1/usage", { headers: { "x-api-key": k } }) : { state: "off", detail: "Not set up (PODCHASER_API_KEY)" };
     },
   },
@@ -293,7 +295,7 @@ const DEFS: Def[] = [
         // Is it a SerpApi key instead (a different company, similar name, 64-character keys)?
         const serp = await fetch(`https://serpapi.com/account.json?api_key=${encodeURIComponent(k)}`, { signal: AbortSignal.timeout(8000) }).catch(() => null);
         const sj = serp?.ok ? ((await serp.json().catch(() => ({}))) as { plan_name?: string; total_searches_left?: number; searches_per_month?: number }) : null;
-        if (sj) return { state: "down", detail: `This is a SerpApi key, not SearchApi: SerpApi ${sj.plan_name ?? ""} plan, ${sj.total_searches_left ?? "?"} searches left. Say which service to use.` };
+        if (sj) return { state: "off", detail: `Not in use: this is a SerpApi key, not SearchApi: SerpApi ${sj.plan_name ?? ""} plan, ${sj.total_searches_left ?? "?"} searches left. Say which service to use.` };
         return { state: "down", detail: `${res.status}${res.status === 401 ? " (the key was refused)" : ""}: ${String(body.error ?? "").slice(0, 100)} [${which}; tried header and api_key; not a SerpApi key either]` };
       }
       return { state: "ok", detail: `${body.account?.remaining_credits ?? "?"} of ${body.account?.monthly_allowance ?? "?"} searches left this month${how === "api_key" ? " (key sent as api_key)" : ""}` };

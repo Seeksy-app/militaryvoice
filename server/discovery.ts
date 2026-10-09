@@ -32,6 +32,7 @@ import {
   discoveryListItems,
   discoveryReveals,
   discoveryVisits,
+  discoverySearches,
   discoveryIntros,
   discoveryLookups,
   podcasterProfiles,
@@ -723,6 +724,14 @@ async function lookupsThisMonth(email: string): Promise<number> {
   return rows.length;
 }
 
+/** Who searched for what: an admin, a signed-in member, or a visitor. Never fails a search. */
+export async function logSearch(req: Request, kind: string, mode: string, q: string, platform: string, results: number): Promise<void> {
+  const admin = (getAdminEmail(req) ?? "").trim().toLowerCase();
+  const who = admin ? `admin:${admin}` : (getSessionEmail(req) ?? "").trim().toLowerCase() || "visitor";
+  await db.insert(discoverySearches).values({ who, kind, mode, q: q.slice(0, 200), platform, results, createdAt: new Date().toISOString() }).catch((e) => console.warn("search log:", (e as Error).message));
+}
+
+
 export function registerDiscoveryRoutes(app: Express): void {
   registerPodcastRoutes(app, requireMember);
   /** Who's asking: signed in or not, and whether Discovery is on their account. */
@@ -739,7 +748,7 @@ export function registerDiscoveryRoutes(app: Express): void {
         email,
         isPodcaster: !!profile,
         member: member ? { role: member.role, orgName: member.orgName, since: member.createdAt } : null,
-        reveals: member ? { used: await revealsThisMonth(email), allowance: (await allowanceFor(email)).reveals } : null,
+        reveals: member ? { used: await revealsThisMonth(email), allowance: (await allowanceFor(email)).reveals, unlimited: !!adminEmail } : null,
         credits: member ? await storage.tokenBalance(email) : 0,
         discoveryPro: member ? (await allowanceFor(email)).pro : false,
         lookups: member && member.role !== "admin" ? { used: await lookupsThisMonth(email), allowance: (await allowanceFor(email)).lookups } : null,
@@ -812,7 +821,17 @@ export function registerDiscoveryRoutes(app: Express): void {
       for (const m of members) (bySource[m.source || "direct"] ??= { visits: 0, joins: 0 }).joins++;
       const byRole: Record<string, number> = {};
       for (const m of members) byRole[m.role] = (byRole[m.role] ?? 0) + 1;
-      return { visits: visits.length, members: members.length, bySource, byRole, recent: members.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 10).map((m) => ({ email: m.email, role: m.role, orgName: m.orgName, source: m.source, createdAt: m.createdAt })) };
+      // Who's searching (9 Oct): the latest searches, and the people who search most.
+      const searches = await db.select().from(discoverySearches).orderBy(desc(discoverySearches.id)).limit(500);
+      const byWho: Record<string, { n: number; last: string }> = {};
+      for (const s of searches) { const w = (byWho[s.who] ??= { n: 0, last: s.createdAt }); w.n++; if (s.createdAt > w.last) w.last = s.createdAt; }
+      return {
+        visits: visits.length, members: members.length, bySource, byRole,
+        recent: members.sort((a, b) => b.createdAt.localeCompare(a.createdAt)).slice(0, 10).map((m) => ({ email: m.email, role: m.role, orgName: m.orgName, source: m.source, createdAt: m.createdAt })),
+        searches: searches.slice(0, 60).map((s) => ({ who: s.who, kind: s.kind, mode: s.mode, q: s.q, platform: s.platform, results: s.results, at: s.createdAt })),
+        searchers: Object.entries(byWho).map(([who, v]) => ({ who, n: v.n, last: v.last })).sort((a, b) => b.n - a.n).slice(0, 20),
+        searchCount: searches.length,
+      };
     }),
   );
 
@@ -1032,6 +1051,7 @@ export function registerDiscoveryRoutes(app: Express): void {
         verified = await withExtras(verified);
       }
       if (mode === "keywords") verified = [];
+      if (page === 0) void logSearch(req, "creators", mode, q || branch, platform, (found.total || 0) + verified.length);
       if (indexError && !verified.length) throw new HttpError(502, indexError);
       return { brief: mode === "keywords" ? `bio mentions ${(filters.keywords_in_bio as string[]).join(" or ")}` : brief, mode, platform, page, pageSize: PAGE_SIZE, total: found.total, results: found.accounts, verified, understood: found.understood, preview, indexError: indexError ? "The wider creator index isn't answering right now, so these are only creators on MilitaryVoices." : "" };
     }),
@@ -1144,7 +1164,8 @@ export function registerDiscoveryRoutes(app: Express): void {
       let byCredit = false;
       // One paid for with a credit is theirs to see again, free, like any other.
       const [paid] = again ? [] : await db.select({ id: postifyTokens.id }).from(postifyTokens).where(eq(postifyTokens.ref, `reveal:${email}:${platform}:${handle.toLowerCase()}`)).limit(1);
-      if (!again && !paid) {
+      // Our own team has no limit (9 Oct): an admin's contacts never come out of an allowance.
+      if (!again && !paid && !getAdminEmail(req)) {
         const used = await revealsThisMonth(email);
         const { reveals, pro } = await allowanceFor(email);
         if (used >= reveals) {
