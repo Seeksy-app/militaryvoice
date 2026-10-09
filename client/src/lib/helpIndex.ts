@@ -336,9 +336,9 @@ export const HELP_INDEX: HelpEntry[] = [
   },
   {
     title: "Sign in to your dashboard",
-    summary: "Your email and a 6-digit code we send you. No password. Tick 'keep me signed in' on your own device.",
+    summary: "Your email and a 6-digit code we send you. No password, and you stay signed in on that device.",
     href: "/host/dashboard",
-    keywords: "sign in login code password email dashboard keep me signed in 30 days",
+    keywords: "sign in login code password email dashboard keep me signed in stay signed in",
     audience: "podcasters",
     category: "lineup",
   },

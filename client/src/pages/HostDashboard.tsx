@@ -58,7 +58,6 @@ import { LogoLockup, LogoLockupOnDark } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Checkbox } from "@/components/ui/checkbox";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Badge } from "@/components/ui/badge";
@@ -324,11 +323,8 @@ export function LoginCard({ pending, start = false }: { pending: PendingSlotSumm
   const [step, setStep] = useState<"email" | "code">("email");
   const [email, setEmail] = useState("");
   const [code, setCode] = useState("");
-  // Off by default, deliberately. The old behaviour gave everyone thirty days
-  // whether they were on their own laptop or a library computer.
-  // On by default: nearly everyone signs in on their own phone or laptop, and a
-  // code every visit is what they complained about. Untick on a shared machine.
-  const [remember, setRemember] = useState(true);
+  // Every sign-in is kept (9 Oct 2026): the "keep me signed in for 30 days" box is gone for now.
+  const remember = true;
 
   // Cloudflare check on the code request — the one form a bot can use to
   // make us send email. Off entirely when the server has no keys.
@@ -477,21 +473,6 @@ export function LoginCard({ pending, start = false }: { pending: PendingSlotSumm
                 onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
                 data-testid="input-host-code"
               />
-              <label className="flex cursor-pointer items-start gap-2.5 rounded-xl border border-border p-3">
-                <Checkbox
-                  checked={remember}
-                  onCheckedChange={(v) => setRemember(v === true)}
-                  className="mt-0.5"
-                  data-testid="checkbox-remember-me"
-                />
-                <span className="min-w-0">
-                  <span className="block text-sm font-medium">Keep me signed in for 30 days</span>
-                  <span className="block text-xs text-muted-foreground">
-                    Only on a device that's yours. Leave it unticked on a shared or public computer — otherwise the
-                    next person to open this browser is signed in as you.
-                  </span>
-                </span>
-              </label>
               <Button type="submit" disabled={verifyCode.isPending || !code.trim()} data-testid="button-verify-code">
                 {verifyCode.isPending ? "Checking…" : start ? "Continue" : "Sign in"}
               </Button>
