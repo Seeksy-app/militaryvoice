@@ -34,7 +34,7 @@ const PLAN_FEATURES: Record<string, Feature[]> = {
     { t: "4 captioned clips an episode", tip: "Picked by SI from your episode, in vertical, square and wide, ready for every platform." },
     { t: "A clean episode, every time", tip: "Ums, false starts and dead air taken out, as MP3 and MP4. Your original is never changed." },
     { t: "Music and title edits included", tip: "Add a track from our library to every clip, and change a title or subtitle, at no extra cost." },
-    { t: "Animated, speaker-framed captions", tip: "Word-by-word captions, framed on whoever is talking. Or Classic captions for fewer credits." },
+    { t: "Animated captions", tip: "Word-by-word captions, framed on whoever is talking. Or Classic captions for fewer credits." },
     { t: "Extra credits 60¢, capped by you", tip: "Run out, and Pōstify keeps going. Extras go on your next bill, never past the limit you set." },
   ],
   pro: [

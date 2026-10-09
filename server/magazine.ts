@@ -243,6 +243,8 @@ export async function buildMagazine(eventId: number) {
       aboutOwn: w?.about ?? "",
       // Their segment: one set by hand, else the one cut from the day's recording.
       audio: w?.audio || (cuts.some((c) => c.signupId === s.id && c.status === "done") ? `${ORIGIN}/api/magazine/segment/${s.id}` : ""),
+      // Their segment in the day's video (9 Oct: the closing plays right on its page): where it starts and how long.
+      clip: (() => { const c = cuts.find((x) => x.signupId === s.id && x.status === "done"); return c ? { start: c.startSec, dur: c.durationSec } : null; })(),
       episodes: episodes[s.id] ?? [],
       links: (() => { try { return w?.links ? (JSON.parse(w.links) as { title: string; url: string }[]) : []; } catch { return []; } })(),
       edited: w?.edited ?? false,
@@ -268,7 +270,7 @@ export async function buildMagazine(eventId: number) {
     leftOut: lineup.filter((s) => out.has(s.id)).map((s) => ({ signupId: s.id, podcastName: s.podcastName, hostName: s.hostName })),
     // tier: "friend" is a Friend of the Marathon; the rest are the Marathon's sponsors (8 Oct: one page each).
     sponsors: sponsorRows.map((r) => ({ name: r.name, logo: r.logoUrl, url: r.url, tier: r.tier ?? "" })),
-    cover: { photo: words.find((x) => x.signupId === COVER)?.art ?? "", style: words.find((x) => x.signupId === COVER)?.quote ?? "" },
+    cover: { photo: words.find((x) => x.signupId === COVER)?.art ?? "", style: words.find((x) => x.signupId === COVER)?.quote ?? "", locked: words.find((x) => x.signupId === COVER)?.edited ?? false },
     award: (() => {
       const a = words.find((x) => x.signupId === AWARD);
       if (!a) return null;
@@ -432,6 +434,16 @@ async function draftWelcome(ai: Anthropic, eventId: number, m: NonNullable<Await
 
 export function registerMagazine(app: Express, requireAdmin: RequestHandler, requireAgent: RequestHandler) {
   /** A show's segment from the day, to play: a fresh link to the MP3 each time. */
+  /** Their segment as video: the day's recording, to play from the segment's start (#t= on the page). */
+  app.get("/api/magazine/segment/:signupId/video", async (req, res) => {
+    await schemaIsReady();
+    const [c] = await db.select().from(segmentCuts).where(and(eq(segmentCuts.signupId, Number(req.params.signupId)), eq(segmentCuts.status, "done")));
+    const [rec] = c ? await db.select({ url: recordings.url }).from(recordings).where(eq(recordings.id, c.recordingId)) : [];
+    if (!rec?.url) return res.status(404).end();
+    res.setHeader("Cache-Control", "no-store");
+    res.redirect(302, /^https?:\/\//i.test(rec.url) ? rec.url : await signedRecordingUrl(rec.url, 6 * 3600));
+  });
+
   app.get("/api/magazine/segment/:signupId", async (req, res) => {
     await schemaIsReady();
     const [c] = await db.select().from(segmentCuts).where(and(eq(segmentCuts.signupId, Number(req.params.signupId)), eq(segmentCuts.status, "done")));
@@ -749,6 +761,7 @@ export function registerMagazine(app: Express, requireAdmin: RequestHandler, req
 
   /** The cover photo (or, deleted, back to every podcaster's face). */
   app.post("/api/admin/magazine/:eventId/cover", requireAdmin, upload.single("photo"), async (req, res) => {
+    if (await coverLocked(Number(req.params.eventId))) return res.status(409).json({ message: "The cover is locked. Unlock it first." });
     if (!req.file) return res.status(400).json({ message: "Pick a photo first." });
     const meta = await sharp(req.file.buffer).metadata().catch(() => ({} as { width?: number; height?: number }));
     const art = await savePage(req.file.buffer, "cover");
@@ -756,13 +769,21 @@ export function registerMagazine(app: Express, requireAdmin: RequestHandler, req
     res.json({ ok: true, photo: art, width: meta.width ?? 0, height: meta.height ?? 0 });
   });
   /** Which cover: a collage style ("glass", "medallion", "prints") or "photo". Kept in the cover row's quote field. */
+  /** Lock the cover (9 Oct): it stays as it is until someone unlocks it. Kept in the cover row's edited flag. */
+  app.put("/api/admin/magazine/:eventId/cover-lock", requireAdmin, async (req, res) => {
+    await saveWords(Number(req.params.eventId), COVER, { edited: req.body?.locked === true });
+    res.json({ ok: true, locked: req.body?.locked === true });
+  });
+  const coverLocked = async (eventId: number) => (await db.select({ edited: magazinePages.edited }).from(magazinePages).where(and(eq(magazinePages.eventId, eventId), eq(magazinePages.signupId, COVER))))[0]?.edited === true;
   app.put("/api/admin/magazine/:eventId/cover-style", requireAdmin, async (req, res) => {
+    if (await coverLocked(Number(req.params.eventId))) return res.status(409).json({ message: "The cover is locked. Unlock it first." });
     const style = ["glass", "medallion", "prints", "letters", "photo"].includes(String(req.body?.style)) ? String(req.body.style) : "";
     if (!style) return res.status(400).json({ message: "Which cover?" });
     await saveWords(Number(req.params.eventId), COVER, { quote: style });
     res.json({ ok: true, style });
   });
   app.delete("/api/admin/magazine/:eventId/cover", requireAdmin, async (req, res) => {
+    if (await coverLocked(Number(req.params.eventId))) return res.status(409).json({ message: "The cover is locked. Unlock it first." });
     await db.delete(magazinePages).where(and(eq(magazinePages.eventId, Number(req.params.eventId)), eq(magazinePages.signupId, COVER)));
     res.json({ ok: true });
   });

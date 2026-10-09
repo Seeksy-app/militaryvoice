@@ -10,7 +10,7 @@ import { ExternalLink, Loader2, Pause, Play, Printer } from "lucide-react";
 
 type Show = {
   signupId: number; number: number; time: string; podcastName: string; hostName: string; branch: string; service: string;
-  headshot: string; printQuality: boolean; art: string; blurb: string; quote: string; onTheDay?: string; link: string; about?: string; aboutOwn?: string; audio?: string; episodes?: Episode[]; links?: { title: string; url: string }[];
+  headshot: string; printQuality: boolean; art: string; blurb: string; quote: string; onTheDay?: string; link: string; about?: string; aboutOwn?: string; audio?: string; episodes?: Episode[]; links?: { title: string; url: string }[]; clip?: { start: number; dur: number } | null;
 };
 type Episode = { title: string; date: string; audioUrl: string };
 type Mag = {
@@ -22,7 +22,7 @@ type Mag = {
   review?: number;
   /** The whole draft, by its private link, for the host's suggestions. */
   reviewAll?: boolean;
-  cover?: { photo: string; style?: string };
+  cover?: { photo: string; style?: string; locked?: boolean };
   ads?: Ad[];
   award?: { signupId: number; title: string; name: string; show: string; citation: string; quote: string; photo: string; plaque: string } | null;
 };
@@ -500,6 +500,9 @@ function BackCover({ podcastOne, liveOne }: { podcastOne: string; liveOne: strin
  * sign-off from the day (transcribed from the closing segment), the rest is from Riccoh's closing.
  */
 function ClosingPage({ s, n }: { s: Show; n: number }) {
+  // Watch it right on the page (9 Oct): the day's video from the closing's start; the QR stays for print.
+  const [watching, setWatching] = useState(false);
+  const video = s.clip ? `${SITE}/api/magazine/segment/${s.signupId}/video#t=${s.clip.start},${s.clip.start + s.clip.dur}` : "";
   const notes: [string, string][] = [
     ["Excellence in Storytelling Award", "Rachel Oswalt, for telling it unscripted, every time she's on the mic."],
     ["A first for military podcasting", "An SI co-host program built for military and veteran voices, live for sixteen hours."],
@@ -527,10 +530,21 @@ function ClosingPage({ s, n }: { s: Show; n: number }) {
           ))}
         </div>
       </div>
+      {watching && video && (
+        <div className="absolute inset-x-8 z-10 overflow-hidden rounded-2xl bg-black shadow-2xl print:hidden" style={{ top: 300 }}>
+          <video src={video} data-label="Closing ceremonies video" controls autoPlay playsInline poster="/mag/alex-portrait.jpg" className="aspect-video w-full bg-black" />
+          <button type="button" onClick={() => setWatching(false)} className="absolute right-3 top-3 rounded-full bg-black/70 px-3 py-1 text-[12px] font-semibold text-white">Close</button>
+        </div>
+      )}
       <footer className="absolute inset-x-0 bottom-0 flex items-center gap-5 px-12 pb-10 pt-5" style={{ borderTop: "1px solid rgba(255,255,255,.12)" }}>
+        {video && (
+          <button type="button" onClick={() => setWatching(true)} aria-label="Watch the closing ceremonies" className="flex h-[76px] w-[76px] shrink-0 items-center justify-center rounded-full shadow-lg print:hidden" style={{ background: GOLD, color: NAVY }} data-testid="closing-play">
+            <Play className="ml-1 h-8 w-8" fill="currentColor" />
+          </button>
+        )}
         <div className="rounded-lg bg-white p-1.5"><Qr url={`https://www.militaryvoices.ai/api/magazine/segment/${s.signupId}`} size={76} /></div>
         <div className="min-w-0 flex-1">
-          <p className="text-[16px] font-bold" style={HEAD}>Hear the closing ceremonies</p>
+          <p className="text-[16px] font-bold" style={HEAD}>Watch the closing ceremonies</p>
           <p className="text-[13px] text-white/65">Riccoh Player's close of the day, and Alex's sign-off.</p>
         </div>
         <p className="text-right text-[12px] font-bold uppercase tracking-[0.18em] text-white/55">Bigger, better and<br />brighter in 2027</p>
@@ -705,7 +719,7 @@ export default function Magazine({ slug }: { slug?: string }) {
     const onPlay = (ev: Event) => {
       const audio = ev.target as HTMLElement;
       const frame = audio?.closest?.<HTMLElement>("[data-pk]");
-      if (frame && audio.tagName === "AUDIO") send(frame, "play", audio.dataset.label || frame.dataset.pl || "Audio");
+      if (frame && (audio.tagName === "AUDIO" || audio.tagName === "VIDEO")) send(frame, "play", audio.dataset.label || frame.dataset.pl || "Audio");
     };
     document.addEventListener("click", onClick);
     document.addEventListener("play", onPlay, true);
@@ -758,16 +772,24 @@ export default function Magazine({ slug }: { slug?: string }) {
   // The first ad faces the welcome; the rest are spread evenly through the show pages.
   const after = new Map<number, Ad[]>();
   // An ad pinned after a show goes there (9 Oct: Zoom beside Frank Zaccari); the rest spread evenly.
-  const pinnedAds = ads.slice(1).filter((ad) => ad.after && m.shows.some((x) => x.signupId === ad.after));
-  const spread = ads.slice(1).filter((ad) => !pinnedAds.includes(ad));
-  spread.forEach((ad, k) => {
-    const at = Math.max(0, Math.round(((k + 1) * m.shows.length) / (spread.length + 1)) - 1);
-    after.set(at, [...(after.get(at) ?? []), ad]);
-  });
-  for (const ad of pinnedAds) {
-    const at = m.shows.findIndex((x) => x.signupId === ad.after);
-    after.set(at, [ad, ...(after.get(at) ?? [])]);
+  // Every ad gets an evenly spaced slot (about one every few shows); a pinned ad takes the slot
+  // nearest its show and moves it onto that show, so the rest stay evenly spaced.
+  const rest = ads.slice(1);
+  const slots = rest.map((_, k) => Math.max(0, Math.round(((k + 1) * m.shows.length) / (rest.length + 1)) - 1));
+  const taken = new Set<number>();
+  const placed = new Map<Ad, number>();
+  for (const ad of rest.filter((a) => a.after && m.shows.some((x) => x.signupId === a.after))) {
+    const target = m.shows.findIndex((x) => x.signupId === ad.after);
+    let best = -1;
+    slots.forEach((pos, k) => { if (!taken.has(k) && (best < 0 || Math.abs(pos - target) < Math.abs(slots[best] - target))) best = k; });
+    if (best < 0) continue;
+    taken.add(best);
+    slots[best] = target;
+    placed.set(ad, best);
   }
+  const free = slots.map((_, k) => k).filter((k) => !taken.has(k));
+  rest.filter((a) => !placed.has(a)).forEach((ad, i) => placed.set(ad, free[i]));
+  for (const [ad, k] of Array.from(placed.entries()).sort((a, b) => slots[a[1]] - slots[b[1]])) after.set(slots[k], [...(after.get(slots[k]) ?? []), ad]);
   let n = 1;
   // The sponsors in Andrew's order (8 Oct): PodcastOne, LiveOne, Genius, Tarver; anyone new after them.
   const rank = (name: string) => { const i = [/podcastone/i, /liveone/i, /genius/i, /tarver/i].findIndex((r) => r.test(name)); return i < 0 ? 99 : i; };

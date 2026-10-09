@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { BookOpen, Camera, Check, EyeOff, ExternalLink, ImageIcon, Loader2, Mail, Megaphone, Plus, Printer, Sparkles, Trash2, Undo2 } from "lucide-react";
+import { BookOpen, Camera, Check, ChevronDown, EyeOff, ExternalLink, ImageIcon, Loader2, Mail, Megaphone, Plus, Printer, Sparkles, Trash2, Undo2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
@@ -11,7 +11,7 @@ import { CoverCollage, type CoverStyle, type Face } from "@/pages/Magazine";
 
 type Show = { signupId: number; number: number; time: string; podcastName: string; hostName: string; headshot: string; printQuality: boolean; art: string; blurb: string; quote: string; onTheDay?: string; link: string; audio?: string; about?: string; aboutOwn?: string; links?: { title: string; url: string }[] };
 type Ad = { id: number; sponsorId: number; name: string; headline: string; body: string; site: string; logo: string; artwork: string };
-type Mag = { event: { name: string }; published: boolean; welcome: string; shows: Show[]; leftOut?: { signupId: number; podcastName: string; hostName: string }[]; cover?: { photo: string; style?: string }; ads?: Ad[]; segments?: { done: number; working: number; failed: number }; distributed?: { at: string; sent: number } | null; award?: Award | null };
+type Mag = { event: { name: string }; published: boolean; welcome: string; shows: Show[]; leftOut?: { signupId: number; podcastName: string; hostName: string }[]; cover?: { photo: string; style?: string; locked?: boolean }; ads?: Ad[]; segments?: { done: number; working: number; failed: number }; distributed?: { at: string; sent: number } | null; award?: Award | null };
 type Award = { signupId: number; title: string; name: string; show: string; citation: string; quote: string; photo: string; plaque: string };
 
 /**
@@ -135,12 +135,12 @@ export function MagazineAdmin({ eventId, slug }: { eventId: number; slug: string
         </div>
       </div>
 
+      <StatsPanel eventId={eventId} />
       <SegmentsPanel eventId={eventId} seg={m.segments} total={m.shows.length} onChanged={refresh} />
-      <CoverPanel eventId={eventId} photo={m.cover?.photo ?? ""} style={m.cover?.style || (m.cover?.photo ? "photo" : "glass")} slug={slug} faces={m.shows.map((x) => ({ id: x.signupId, src: x.headshot || x.art, who: x.hostName.trim().toLowerCase() })).filter((f, i, all) => f.src && all.findIndex((y) => y.src === f.src || y.who === f.who) === i)} onChanged={refresh} />
+      <CoverPanel eventId={eventId} locked={!!m.cover?.locked} photo={m.cover?.photo ?? ""} style={m.cover?.style || (m.cover?.photo ? "photo" : "glass")} slug={slug} faces={m.shows.map((x) => ({ id: x.signupId, src: x.headshot || x.art, who: x.hostName.trim().toLowerCase() })).filter((f, i, all) => f.src && all.findIndex((y) => y.src === f.src || y.who === f.who) === i)} onChanged={refresh} />
       <AdsPanel eventId={eventId} ads={m.ads ?? []} onChanged={refresh} />
       <AwardPanel eventId={eventId} award={m.award ?? null} shows={m.shows} onChanged={refresh} />
       <PressPanel />
-      <StatsPanel eventId={eventId} />
 
       <section className="rounded-2xl border border-border bg-card p-5">
         <h3 className="font-semibold">Riccoh's welcome</h3>
@@ -202,7 +202,7 @@ const COVER_STYLES = [
   { v: "photo", label: "One photo", hint: "A single photo, full page" },
 ] as const;
 
-function CoverPanel({ eventId, photo, style, slug, faces, onChanged }: { eventId: number; photo: string; style: string; slug: string; faces: Face[]; onChanged: () => unknown }) {
+function CoverPanel({ eventId, locked, photo, style, slug, faces, onChanged }: { eventId: number; locked: boolean; photo: string; style: string; slug: string; faces: Face[]; onChanged: () => unknown }) {
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
   const put = async (f: File) => {
@@ -219,6 +219,7 @@ function CoverPanel({ eventId, photo, style, slug, faces, onChanged }: { eventId
   };
   const clear = async () => { setBusy(true); try { await adminSend("DELETE", `/api/admin/magazine/${eventId}/cover`); await onChanged(); } finally { setBusy(false); } };
   const pick = async (v: string) => { setBusy(true); try { await adminSend("PUT", `/api/admin/magazine/${eventId}/cover-style`, { style: v }); await onChanged(); } finally { setBusy(false); } };
+  const lock = async (on: boolean) => { setBusy(true); try { await adminSend("PUT", `/api/admin/magazine/${eventId}/cover-lock`, { locked: on }); await onChanged(); } finally { setBusy(false); } };
   return (
     <section className="flex flex-wrap items-center gap-4 rounded-2xl border border-border bg-card p-5" data-testid="magazine-cover">
       {/* The cover as it is: the chosen style drawn small (the page is 816 × 1056). */}
@@ -230,22 +231,30 @@ function CoverPanel({ eventId, photo, style, slug, faces, onChanged }: { eventId
         )}
       </div>
       <div className="min-w-0 flex-1">
-        <h3 className="font-semibold">Cover</h3>
-        <p className="mt-0.5 text-sm text-muted-foreground">Every podcaster's face, four ways, or one photo for the whole cover.</p>
+        <h3 className="flex items-center gap-2 font-semibold">Cover {locked && <span className="rounded-full bg-[#053877] px-2 py-0.5 text-[11px] font-bold uppercase tracking-wide text-white">Locked</span>}</h3>
+        <p className="mt-0.5 text-sm text-muted-foreground">{locked ? "This is the cover. Unlock it to change the style or the photo." : "Every podcaster's face, four ways, or one photo for the whole cover."}</p>
+        {locked ? (
+          <div className="mt-3 flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" size="sm" className="rounded-full" disabled={busy} onClick={() => void lock(false)} data-testid="magazine-cover-unlock">Unlock</Button>
+            <a href={`/magazine/${encodeURIComponent(slug)}`} target="_blank" rel="noreferrer" className="px-2 py-1.5 text-sm font-medium text-[#053877] hover:underline">See it</a>
+          </div>
+        ) : (
         <div className="mt-3 flex flex-wrap gap-2">
           {COVER_STYLES.filter((c) => c.v !== "photo" || photo).map((c) => (
             <button key={c.v} type="button" disabled={busy} title={c.hint} onClick={() => void pick(c.v)} className={`rounded-full border px-3 py-1.5 text-sm font-medium ${style === c.v ? "border-[#053877] bg-[#053877] text-white" : "border-input hover:bg-muted"}`} data-testid={`magazine-cover-${c.v}`}>{c.label}</button>
           ))}
           <a href={`/magazine/${encodeURIComponent(slug)}`} target="_blank" rel="noreferrer" className="px-2 py-1.5 text-sm font-medium text-[#053877] hover:underline">See it</a>
+          <Button type="button" size="sm" className="rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" disabled={busy} onClick={() => void lock(true)} data-testid="magazine-cover-lock">Lock this cover</Button>
         </div>
+        )}
       </div>
-      <div className="flex items-center gap-2">
+      {!locked && <div className="flex items-center gap-2">
         <label className={`inline-flex h-9 cursor-pointer items-center gap-1.5 rounded-full border border-input bg-background px-4 text-sm font-medium hover:bg-muted ${busy ? "pointer-events-none opacity-50" : ""}`}>
           {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <ImageIcon className="h-4 w-4" />} {photo ? "Change cover photo" : "Use a cover photo"}
           <input type="file" accept="image/*" className="sr-only" aria-label="Cover photo" data-testid="magazine-cover-input" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) void put(f); }} />
         </label>
         {photo && <Button type="button" variant="ghost" size="sm" className="rounded-full text-muted-foreground" disabled={busy} onClick={() => void clear()}>Back to the faces</Button>}
-      </div>
+      </div>}
     </section>
   );
 }
@@ -479,56 +488,58 @@ function PressPanel() {
 /** The magazine's numbers (9 Oct): plays, picture and link clicks, and QR scans, page by page. */
 type StatItem = { k: string; l: string };
 type Stats = { manifest: { at: string; pages: { p: string; n: number; label: string; items: StatItem[] }[] } | null; counts: { p: string; k: string; l: string; n: number }[] };
-const KIND_LABEL: Record<string, string> = { play: "Played", image: "Picture clicked", link: "Link clicked", qr: "QR scanned" };
 function StatsPanel({ eventId }: { eventId: number }) {
   const q = useQuery<Stats>({ queryKey: ["/api/admin/magazine/stats", eventId], queryFn: async () => (await fetch(`/api/admin/magazine/${eventId}/stats`, { credentials: "include" })).json(), refetchInterval: 60_000 });
+  const [openKind, setOpenKind] = useState<string | null>(null);
   const d = q.data;
   const count = (p: string, k: string, l: string) => d?.counts.find((c) => c.p === p && c.k === k && c.l === l)?.n ?? 0;
-  const totals = (["play", "image", "link", "qr"] as const).map((k) => [k, (d?.counts ?? []).filter((c) => c.k === k).reduce((a, c) => a + c.n, 0)] as const);
-  const pages = [...(d?.manifest?.pages ?? [])].sort((a, b) => a.n - b.n).map((pg) => {
-    // Anything counted on the page that the list doesn't have yet (a renamed episode, say) still shows.
-    const extra = (d?.counts ?? []).filter((c) => c.p === pg.p && !pg.items.some((i) => i.k === c.k && i.l === c.l)).map((c) => ({ k: c.k, l: c.l }));
-    return { ...pg, items: [...pg.items, ...extra] };
-  });
+  const pages = [...(d?.manifest?.pages ?? [])].sort((a, b) => a.n - b.n);
+  // Every item of one kind, page by page: the ones in the page list (zeros too), plus anything counted that isn't.
+  const rows = (k: string) => {
+    const out: { n: number; page: string; l: string; c: number }[] = [];
+    for (const pg of pages) for (const i of pg.items.filter((x) => x.k === k)) out.push({ n: pg.n, page: pg.label, l: i.l, c: count(pg.p, k, i.l) });
+    for (const c of d?.counts ?? []) {
+      if (c.k !== k) continue;
+      const pg = pages.find((x) => x.p === c.p);
+      if (!pg || !pg.items.some((i) => i.k === k && i.l === c.l)) out.push({ n: pg?.n ?? 999, page: pg?.label ?? c.p, l: c.l, c: c.n });
+    }
+    return out.sort((a, b) => a.n - b.n);
+  };
+  const KINDS = [["play", "Plays"], ["image", "Pictures clicked"], ["link", "Links clicked"], ["qr", "QR codes scanned"]] as const;
   return (
     <section className="rounded-2xl border border-border bg-card p-5" data-testid="magazine-stats">
       <h3 className="font-semibold">Plays, clicks and scans</h3>
-      <p className="mt-1 text-sm text-muted-foreground">Every picture in the magazine is a link, and every QR code is counted on its way through. Counting started 9 Oct.</p>
+      <p className="mt-1 text-sm text-muted-foreground">Press one to see every item, page by page, with its count. Counting started 9 Oct.{!d?.manifest && " Open the magazine once so every item is listed, including the ones with no clicks yet."}</p>
       <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-        {totals.map(([k, n]) => (
-          <div key={k} className="rounded-xl bg-muted/50 p-3 text-center">
-            <p className="text-2xl font-bold tabular-nums">{n}</p>
-            <p className="text-xs font-semibold text-muted-foreground">{({ play: "Plays", image: "Picture clicks", link: "Link clicks", qr: "QR scans" } as Record<string, string>)[k]}</p>
-          </div>
-        ))}
+        {KINDS.map(([k, label]) => {
+          const n = (d?.counts ?? []).filter((c) => c.k === k).reduce((a, c) => a + c.n, 0);
+          const on = openKind === k;
+          return (
+            <button key={k} type="button" onClick={() => setOpenKind(on ? null : k)} aria-expanded={on} className={`rounded-xl p-3 text-center transition-colors ${on ? "bg-[#053877] text-white" : "bg-muted/50 hover:bg-muted"}`} data-testid={`magazine-stats-${k}`}>
+              <p className="text-2xl font-bold tabular-nums">{n}</p>
+              <p className={`flex items-center justify-center gap-1 text-xs font-semibold ${on ? "text-white/80" : "text-muted-foreground"}`}>{label} <ChevronDown className={`h-3.5 w-3.5 transition-transform ${on ? "rotate-180" : ""}`} /></p>
+            </button>
+          );
+        })}
       </div>
-      {!d?.manifest ? (
-        <p className="mt-4 text-sm text-muted-foreground">Open the magazine once and every page will be listed here.</p>
-      ) : (
-        <div className="mt-5 divide-y divide-border rounded-xl border border-border">
-          {pages.map((pg) => {
-            const total = pg.items.reduce((a, i) => a + count(pg.p, i.k, i.l), 0);
-            return (
-              <details key={pg.p} className="group px-4 py-2.5" open={total > 0}>
-                <summary className="flex cursor-pointer list-none items-center gap-3 text-sm">
-                  <span className="w-8 shrink-0 tabular-nums text-muted-foreground">{pg.n}</span>
-                  <span className="min-w-0 flex-1 truncate font-semibold">{pg.label}</span>
-                  <span className={`tabular-nums font-semibold ${total ? "text-[#053877]" : "text-muted-foreground"}`}>{total}</span>
-                </summary>
-                {pg.items.length > 0 && (
-                  <ul className="mt-2 space-y-1 pb-1 pl-11">
-                    {pg.items.map((i) => (
-                      <li key={`${i.k}|${i.l}`} className="flex items-center gap-3 text-sm">
-                        <span className="w-28 shrink-0 text-xs font-semibold uppercase tracking-wide text-muted-foreground">{KIND_LABEL[i.k] ?? i.k}</span>
-                        <span className="min-w-0 flex-1 truncate">{i.l}</span>
-                        <span className="tabular-nums">{count(pg.p, i.k, i.l)}</span>
-                      </li>
-                    ))}
-                  </ul>
-                )}
-              </details>
-            );
-          })}
+      {openKind && (
+        <div className="mt-4 overflow-hidden rounded-xl border border-border">
+          <table className="w-full text-sm">
+            <thead className="bg-muted/50 text-left text-xs uppercase tracking-wide text-muted-foreground">
+              <tr><th className="w-14 px-3 py-2">Page</th><th className="px-3 py-2">On the page</th><th className="px-3 py-2">Item</th><th className="w-16 px-3 py-2 text-right">Count</th></tr>
+            </thead>
+            <tbody className="divide-y divide-border">
+              {rows(openKind).map((r, i) => (
+                <tr key={`${r.n}-${r.l}-${i}`} className={r.c ? "" : "text-muted-foreground"}>
+                  <td className="px-3 py-1.5 tabular-nums">{r.n < 999 ? r.n : ""}</td>
+                  <td className="max-w-[220px] truncate px-3 py-1.5">{r.page}</td>
+                  <td className="max-w-[320px] truncate px-3 py-1.5">{r.l}</td>
+                  <td className={`px-3 py-1.5 text-right tabular-nums ${r.c ? "font-bold text-[#053877]" : ""}`}>{r.c}</td>
+                </tr>
+              ))}
+              {!rows(openKind).length && <tr><td colSpan={4} className="px-3 py-4 text-center text-muted-foreground">Nothing of this kind yet.</td></tr>}
+            </tbody>
+          </table>
         </div>
       )}
     </section>
