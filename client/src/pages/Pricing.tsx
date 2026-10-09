@@ -20,12 +20,12 @@ const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as c
 type Feature = { t: string; tip: string };
 
 const GROWTH: Feature[] = [
-  { t: "SmartLink: one link for every bio", tip: "Your page at militaryvoices.ai/you: your show, your links, your latest episodes and a way for listeners to reach you." },
-  { t: "Podcast hosting, on Apple, Spotify and more", tip: "We host your show and its feed, so it plays on Apple Podcasts, Spotify and every podcast app, and it's listed in the MilitaryVoices directory." },
-  { t: "SmartChat: listeners ask, SI answers", tip: "Listeners ask your show a question and get an answer from your own episodes, any time of day." },
-  { t: "Zoom recordings, straight to your Library", tip: "Connect Zoom once. Every cloud recording comes in on its own, ready for clips and a clean episode." },
-  { t: "Find creators and sponsors: 10 contacts a month", tip: "Discovery: search military and veteran creators, guests and sponsors, and reveal up to 10 contact emails a month." },
-  { t: "Book and join events, with an SI co-host", tip: "Take a slot in live events like the Podcast Marathon. Alex, our SI co-host, introduces you and keeps the hand-offs moving." },
+  { t: "SmartLink for every bio", tip: "Your page at militaryvoices.ai/you: your show, your links, your latest episodes and a way for listeners to reach you." },
+  { t: "Podcast hosting + directory", tip: "We host your show and its feed, so it plays on Apple Podcasts, Spotify and every podcast app, and it's listed in the MilitaryVoices directory." },
+  { t: "SmartChat for your listeners", tip: "Listeners ask your show a question and get an answer from your own episodes, any time of day." },
+  { t: "Zoom recordings, straight in", tip: "Connect Zoom once. Every cloud recording comes in on its own, ready for clips and a clean episode." },
+  { t: "Discovery: 10 contacts a month", tip: "Discovery: search military and veteran creators, guests and sponsors, and reveal up to 10 contact emails a month." },
+  { t: "Events with an SI co-host", tip: "Take a slot in live events like the Podcast Marathon. Alex, our SI co-host, introduces you and keeps the hand-offs moving." },
 ];
 
 const PLAN_FEATURES: Record<string, Feature[]> = {
@@ -34,16 +34,16 @@ const PLAN_FEATURES: Record<string, Feature[]> = {
     { t: "4 captioned clips an episode", tip: "Picked by SI from your episode, in vertical, square and wide, ready for every platform." },
     { t: "A clean episode, every time", tip: "Ums, false starts and dead air taken out, as MP3 and MP4. Your original is never changed." },
     { t: "Music and title edits included", tip: "Add a track from our library to every clip, and change a title or subtitle, at no extra cost." },
-    { t: "Animated captions that follow the speaker", tip: "Word-by-word captions, framed on whoever is talking. Or Classic captions for fewer credits." },
-    { t: "Extra credits 60¢, up to your limit", tip: "Run out, and Pōstify keeps going. Extras go on your next bill, never past the limit you set." },
+    { t: "Animated, speaker-framed captions", tip: "Word-by-word captions, framed on whoever is talking. Or Classic captions for fewer credits." },
+    { t: "Extra credits 60¢, capped by you", tip: "Run out, and Pōstify keeps going. Extras go on your next bill, never past the limit you set." },
   ],
   pro: [
     { t: "90 Pōstify credits a month", tip: "About 7 episodes a month with animated captions, or 12 with Classic." },
     { t: "6 clips an episode instead of 4", tip: "Two more moments from every episode, in every shape." },
-    { t: "Room for a weekly show, and then some", tip: "A weekly 60-minute show uses 48 credits a month on Pro, so you have room for more." },
+    { t: "Room for a weekly show", tip: "A weekly 60-minute show uses 48 credits a month on Pro, so you have room for more." },
     { t: "Credits at 54¢ each, not 67¢", tip: "The more you make, the less each clip costs." },
-    { t: "Extra credits 50¢, up to your limit", tip: "Run out, and Pōstify keeps going. Extras go on your next bill, never past the limit you set." },
-    { t: "Live Studio hours (coming soon)", tip: "When the MilitaryVoices Studio opens to every show, Pro includes live studio hours for yours." },
+    { t: "Extra credits 50¢, capped by you", tip: "Run out, and Pōstify keeps going. Extras go on your next bill, never past the limit you set." },
+    { t: "Live Studio hours (soon)", tip: "When the MilitaryVoices Studio opens to every show, Pro includes live studio hours for yours." },
   ],
 };
 
@@ -181,7 +181,7 @@ export default function Pricing() {
                 <label className={`mt-5 flex items-start gap-2.5 rounded-2xl border p-3 text-sm ${yearly ? "border-dashed border-border opacity-70" : "cursor-pointer border-[#F0A71F]/60 bg-[#F0A71F]/[0.08]"}`} data-testid={`plan-${p.key}-discovery`}>
                   <Checkbox checked={addDisc} disabled={yearly} onCheckedChange={(v) => setWithDiscovery((w) => ({ ...w, [p.key]: v === true }))} className="mt-0.5 border-[#b36b00] data-[state=checked]:bg-[#b36b00] data-[state=checked]:text-white" />
                   <span className="min-w-0">
-                    <span className="flex items-center gap-1.5 font-semibold text-[#8a5200]"><Compass className="h-3.5 w-3.5" /> Add Discovery Pro · {cents(disc.cents)}/mo</span>
+                    <span className="flex items-center gap-1.5 font-semibold text-[#8a5200]"><Compass className="h-3.5 w-3.5 shrink-0" /> + Discovery Pro {cents(disc.cents)}/mo</span>
                     <span className="mt-0.5 block text-xs text-muted-foreground">{yearly ? "Monthly only: add it on a monthly plan, or later." : `${disc.reveals} contacts and ${disc.lookups.toLocaleString()} profile look-ups a month.`}</span>
                   </span>
                 </label>
