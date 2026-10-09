@@ -36,6 +36,23 @@ async function allowed(eventId: number, url: URL): Promise<boolean> {
   return hosts.set.has(h);
 }
 
+// Not people (9 Oct: one share link showed 47 opens): link previews, email security scanners and
+// scripts fetch links too. They aren't counted, and one person counts once an hour per link.
+const BOTS = /bot|crawl|spider|slurp|preview|facebookexternalhit|facebot|whatsapp|telegram|discord|skype|slack|embedly|vkshare|pinterest|outlook|safelinks|proofpoint|mimecast|barracuda|symantec|forcepoint|zscaler|python|curl|wget|httpclient|okhttp|headless|lighthouse|postman|go-http|java\//i;
+const lastHit = new Map<string, number>();
+function realVisit(req: import("express").Request, key: string): boolean {
+  if (req.method !== "GET") return false;
+  const ua = String(req.headers["user-agent"] ?? "");
+  if (!ua || BOTS.test(ua)) return false;
+  const ip = String(req.headers["x-forwarded-for"] ?? req.socket.remoteAddress ?? "").split(",")[0].trim();
+  const k = `${ip}|${key}`;
+  const at = lastHit.get(k) ?? 0;
+  if (Date.now() - at < 60 * 60_000) return false;
+  lastHit.set(k, Date.now());
+  if (lastHit.size > 20_000) lastHit.clear();
+  return true;
+}
+
 const seen = new Map<string, number[]>();
 const tooMany = (ip: string) => {
   const recent = (seen.get(ip) ?? []).filter((t) => Date.now() - t < 10 * 60_000);
@@ -74,7 +91,7 @@ export function registerMagazineStats(app: Express, requireAdmin: RequestHandler
       if (!(await allowed(eventId, to))) return res.redirect(302, "https://www.militaryvoices.ai/magazine");
       const page = clean(req.query.p, 40);
       const label = clean(req.query.l, 90) || `${to.hostname.replace(/^www\./, "")}${to.pathname === "/" ? "" : to.pathname}`.slice(0, 90);
-      if (eventId && page) await bump(eventId, page, "qr", label);
+      if (eventId && page && realVisit(req, `qr:${page}:${label}`)) await bump(eventId, page, "qr", label);
     } catch (err) {
       console.warn("magazine qr:", (err as Error).message);
     }
@@ -90,7 +107,7 @@ export function registerMagazineStats(app: Express, requireAdmin: RequestHandler
     try {
       await schemaIsReady();
       const ev = await storage.getFeaturedEvent();
-      if (id && ev?.id) await bump(ev.id, String(id), "share", "Share link");
+      if (id && ev?.id && realVisit(req, `share:${id}`)) await bump(ev.id, String(id), "share", "Share link");
     } catch (err) {
       console.warn("magazine share:", (err as Error).message);
     }
