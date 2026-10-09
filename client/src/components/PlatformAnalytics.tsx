@@ -8,7 +8,7 @@ import { adminGet } from "@/lib/adminApi";
 type Data = {
   days: number;
   accounts: { total: number; new: number };
-  revenue: { mrrCents: number; plans: { plan: string; name: string; interval: string; n: number }[]; addons: { addon: string; n: number }[] };
+  revenue: { mrrCents: number; plans: { plan: string; name: string; interval: string; n: number; comped?: boolean }[]; addons: { addon: string; n: number }[] };
   postify: { uploads: number; clips: number; episodes: number };
   smartlink: { pages: number; live: number; views: number; clicks: number };
   hosting: { shows: number; downloads: number };
@@ -78,7 +78,7 @@ export function PlatformAnalytics() {
         <>
           <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
             {[
-              ["Monthly revenue", money(d.revenue.mrrCents)],
+              ["Monthly revenue (paid plans)", money(d.revenue.mrrCents)],
               ["Accounts", d.accounts.total.toLocaleString()],
               [`New accounts · ${d.days}d`, d.accounts.new.toLocaleString()],
               [`Clips made · ${d.days}d`, d.postify.clips.toLocaleString()],
@@ -97,7 +97,7 @@ export function PlatformAnalytics() {
           </div>
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
             <Card icon={DollarSign} title="Plans" rows={[
-              ...d.revenue.plans.map((p) => [`${p.name}${p.interval === "year" ? " (yearly)" : ""}`, p.n] as [string, number]),
+              ...d.revenue.plans.map((p) => [`${p.name}${p.interval === "year" ? " (yearly)" : ""}${p.comped ? " (comped, no charge)" : ""}`, p.n] as [string, number]),
               ...d.revenue.addons.map((a) => [a.addon === "discovery" ? "Discovery Pro" : a.addon, a.n] as [string, number]),
               ...(d.revenue.plans.length || d.revenue.addons.length ? [] : [["Paid plans", 0] as [string, number]]),
             ]} />

@@ -35,8 +35,8 @@ export function registerPlatformAnalytics(app: Express, requireAdmin: RequestHan
     // and nineteen at once held them all.
     const accounts = await safe(() => one(sql`select count(*)::int n from podcaster_profiles`), 0);
     const accountsNew = await safe(() => one(sql`select count(*)::int n from podcaster_profiles where created_at >= ${since}`), 0);
-    const subs = await safe(() => rows(sql`select plan, interval, count(*)::int n from postify_subscriptions where status in ('active','trialing','past_due') group by plan, interval`), []);
-    const addons = await safe(() => rows(sql`select addon, count(*)::int n from addon_subscriptions where status in ('active','trialing','past_due') group by addon`), []);
+    const subs = await safe(() => rows(sql`select plan, interval, (subscription_id like 'sub_%') paid, count(*)::int n from postify_subscriptions where status in ('active','trialing','past_due') group by 1, 2, 3`), []);
+    const addons = await safe(() => rows(sql`select addon, count(*)::int n from addon_subscriptions where status in ('active','trialing','past_due') and subscription_id like 'sub_%' group by addon`), []);
     const recordingsNew = await safe(() => one(sql`select count(*)::int n from recordings where started_at >= ${since}`), 0);
     const clipsNew = await safe(() => one(sql`select count(*)::int n from clips where created_at >= ${since}`), 0);
     const episodesClipped = await safe(() => one(sql`select count(distinct recording_id)::int n from clips where created_at >= ${since}`), 0);
@@ -56,13 +56,15 @@ export function registerPlatformAnalytics(app: Express, requireAdmin: RequestHan
 
     // Monthly recurring revenue: monthly plans at their price, yearly at a twelfth; add-ons monthly.
     let mrrCents = 0;
-    const plans: { plan: string; name: string; interval: string; n: number }[] = [];
+    // Only plans Stripe bills count as revenue; comped plans (a thank-you, a tester) are listed apart.
+    const plans: { plan: string; name: string; interval: string; n: number; comped?: boolean }[] = [];
     for (const s of subs) {
       const p = PLANS[String(s.plan) as keyof typeof PLANS];
       const n = Number(s.n) || 0;
       if (!p) continue;
-      plans.push({ plan: p.key, name: p.name, interval: String(s.interval || "month"), n });
-      mrrCents += n * (s.interval === "year" ? Math.round(p.yearCents / 12) : p.cents);
+      const paid = s.paid === true || s.paid === "t";
+      plans.push({ plan: p.key, name: p.name, interval: String(s.interval || "month"), n, ...(paid ? {} : { comped: true }) });
+      if (paid) mrrCents += n * (s.interval === "year" ? Math.round(p.yearCents / 12) : p.cents);
     }
     for (const a of addons) {
       const ad = ADDONS[String(a.addon) as keyof typeof ADDONS];
