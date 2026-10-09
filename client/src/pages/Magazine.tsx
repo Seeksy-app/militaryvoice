@@ -506,7 +506,7 @@ function ClosingPage({ s, n }: { s: Show; n: number }) {
         <h2 className="mt-3 text-balance text-[50px] font-bold leading-[1.02] tracking-tight" style={HEAD}>Alex had the last word</h2>
         <p className="mt-4 max-w-[640px] text-pretty text-[16px] leading-[1.6] text-white/80">Alex is the SI (superintelligence) co-host built into the MilitaryVoices studio. Across sixteen hours, Alex introduced the shows, handed off between them and co-hosted three-quarters of the Marathon. Then Alex welcomed Riccoh Player back to the stage for the closing ceremonies, and signed off the day.</p>
       </div>
-      <img src="/mag/alex-portrait.jpg" alt="Alex, the SI co-host" className="absolute bottom-[150px] left-0 w-[380px]" style={{ WebkitMaskImage: "radial-gradient(ellipse 72% 78% at 50% 42%, #000 58%, transparent 100%)", maskImage: "radial-gradient(ellipse 72% 78% at 50% 42%, #000 58%, transparent 100%)" }} />
+      <img src="/mag/alex-portrait.jpg" alt="Alex, the SI co-host" className="absolute left-2 top-[468px] w-[372px]" style={{ mixBlendMode: "lighten" }} />
       <div className="absolute right-12 flex w-[400px] flex-col" style={{ top: 318 }}>
         <span className="text-[64px] font-bold leading-none" style={{ ...HEAD, color: GOLD }}>“</span>
         <blockquote className="-mt-4 text-pretty text-[20px] font-semibold italic leading-[1.45]" style={HEAD}>Thank you to every podcaster who took the stage today… But most of all, thank you, the viewer, for taking the time to listen to a military voice. For now, happy National Military Podcast Day. We'll see you soon.</blockquote>
