@@ -131,7 +131,6 @@ import { registerProjects } from "./projects.js";
 import { registerAdminOverview } from "./adminOverview.js";
 import { registerBioPrefill } from "./bioPrefill.js";
 import { registerMagazineStats } from "./magazineStats.js";
-import { registerPlatformAnalytics } from "./platformAnalytics.js";
 import { orgMemberEmails, registerOrgs } from "./orgs.js";
 import { registerProspects } from "./prospects.js";
 import { registerTravel } from "./travel.js";
@@ -6771,7 +6770,7 @@ export function registerRoutes(app: Express): void {
   registerMagazine(app, requireAdmin, requireAgent);
   registerBioPrefill(app, requireAdmin);
   registerMagazineStats(app, requireAdmin);
-  registerPlatformAnalytics(app, requireAdmin);
+  // registerPlatformAnalytics(app, requireAdmin); // off while a hang is investigated (9 Oct)
   registerHealth(app, requireAdmin);
   registerNotices(app, requireAdmin, requireHostSession);
   registerSurvey(app, requireAdmin);
