@@ -502,12 +502,13 @@ function BackCover({ podcastOne, liveOne }: { podcastOne: string; liveOne: strin
 function ClosingPage({ s, n }: { s: Show; n: number }) {
   // Watch it right on the page (9 Oct): the day's video from the closing's start; the QR stays for print.
   const [watching, setWatching] = useState(false);
-  // The cut starts 45 seconds early, on the end of the show before; Alex's introduction of the closing comes in at 0:47.
-  const video = s.clip ? `${SITE}/api/magazine/segment/${s.signupId}/video#t=${s.clip.start + 45},${s.clip.start + s.clip.dur}` : "";
+  // Alex's page, Alex's sign-off (9 Oct): the closing segment's last minute, from 10:22 in.
+  const signOff = s.clip ? `${SITE}/api/magazine/segment/${s.signupId}/video#t=${s.clip.start + 622},${s.clip.start + s.clip.dur}` : "";
+  const video = signOff;
   const notes: [string, string][] = [
-    ["Excellence in Storytelling Award", "Rachel Oswalt, for telling it unscripted, every time she's on the mic."],
-    ["A first for military podcasting", "An SI co-host program built for military and veteran voices, live for sixteen hours."],
-    ["Thank-you gifts", "Pōstify credits for every guest and host, and the Pro plan for every co-host."],
+    ["Sixteen hours on air", "Introduced the shows and handed off between them, reveille to end of duty."],
+    ["Three-quarters of the Marathon", "The first SI co-host built for military and veteran voices."],
+    ["Coming to every studio", "Built into the MilitaryVoices studio, ready to co-host your show."],
   ];
   return (
     <Page n={n} bg="#03051a" color="#fff">
@@ -515,7 +516,7 @@ function ClosingPage({ s, n }: { s: Show; n: number }) {
       <div className="absolute inset-x-12 top-12">
         <p className="text-[12px] font-bold uppercase tracking-[0.3em]" style={{ color: GOLD }}>Closing Ceremonies · {s.time}</p>
         <h2 className="mt-3 text-balance text-[50px] font-bold leading-[1.02] tracking-tight" style={HEAD}>Alex had the last word</h2>
-        <p className="mt-4 max-w-[640px] text-pretty text-[16px] leading-[1.6] text-white/80">Alex is the SI (superintelligence) co-host built into the MilitaryVoices studio. Across sixteen hours, Alex introduced the shows, handed off between them and co-hosted three-quarters of the Marathon. Then Alex welcomed Riccoh Player back to the stage for the closing ceremonies, and signed off the day.</p>
+        <p className="mt-4 max-w-[640px] text-pretty text-[16px] leading-[1.6] text-white/80">Alex is the SI (superintelligence) co-host built into the MilitaryVoices studio. Across sixteen hours, Alex introduced the shows, handed off between them and co-hosted three-quarters of the Marathon. And when the day was done, Alex signed it off.</p>
       </div>
       <img src="/mag/alex-portrait.jpg" alt="Alex, the SI co-host" className="absolute left-2 top-[468px] w-[372px]" style={{ mixBlendMode: "lighten" }} />
       <div className="absolute right-12 flex w-[400px] flex-col" style={{ top: 318 }}>
@@ -533,20 +534,20 @@ function ClosingPage({ s, n }: { s: Show; n: number }) {
       </div>
       {watching && video && (
         <div className="absolute inset-x-8 z-10 overflow-hidden rounded-2xl bg-black shadow-2xl print:hidden" style={{ top: 300 }}>
-          <video src={video} data-label="Closing ceremonies video" controls autoPlay playsInline poster="/mag/alex-portrait.jpg" className="aspect-video w-full bg-black" />
+          <video src={video} data-label="Alex's sign-off video" controls autoPlay playsInline poster="/mag/alex-portrait.jpg" className="aspect-video w-full bg-black" />
           <button type="button" onClick={() => setWatching(false)} className="absolute right-3 top-3 rounded-full bg-black/70 px-3 py-1 text-[12px] font-semibold text-white">Close</button>
         </div>
       )}
       <footer className="absolute inset-x-0 bottom-0 flex items-center gap-5 px-12 pb-10 pt-5" style={{ borderTop: "1px solid rgba(255,255,255,.12)" }}>
         {video && (
-          <button type="button" onClick={() => setWatching(true)} aria-label="Watch the closing ceremonies" className="flex h-[76px] w-[76px] shrink-0 items-center justify-center rounded-full shadow-lg print:hidden" style={{ background: GOLD, color: NAVY }} data-testid="closing-play">
+          <button type="button" onClick={() => setWatching(true)} aria-label="Watch Alex's sign-off" className="flex h-[76px] w-[76px] shrink-0 items-center justify-center rounded-full shadow-lg print:hidden" style={{ background: GOLD, color: NAVY }} data-testid="closing-play">
             <Play className="ml-1 h-8 w-8" fill="currentColor" />
           </button>
         )}
-        <div className="rounded-lg bg-white p-1.5"><Qr url={`https://www.militaryvoices.ai/api/magazine/segment/${s.signupId}`} size={76} /></div>
+        <div className="rounded-lg bg-white p-1.5"><Qr url={signOff || `${SITE}/api/magazine/segment/${s.signupId}`} size={76} /></div>
         <div className="min-w-0 flex-1">
-          <p className="text-[16px] font-bold" style={HEAD}>Watch the closing ceremonies</p>
-          <p className="text-[13px] text-white/65">Riccoh Player's close of the day, and Alex's sign-off.</p>
+          <p className="text-[16px] font-bold" style={HEAD}>Watch Alex sign off</p>
+          <p className="text-[13px] text-white/65">The last minute of the Podcast Marathon.</p>
         </div>
         <p className="text-right text-[12px] font-bold uppercase tracking-[0.18em] text-white/55">Bigger, better and<br />brighter in 2027</p>
       </footer>
