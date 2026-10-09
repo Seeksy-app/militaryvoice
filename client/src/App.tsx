@@ -49,6 +49,7 @@ import StudioControl from "@/pages/StudioControl";
 import Watch from "@/pages/Watch";
 import Magazine from "@/pages/Magazine";
 import PressRelease from "@/pages/PressRelease";
+import Rethink from "@/pages/Rethink";
 import { PrivacyPolicy, TermsOfService } from "@/pages/Legal";
 import NationalMilitaryPodcastDay from "@/pages/NationalMilitaryPodcastDay";
 import SponsorVFW from "@/pages/SponsorVFW";
@@ -136,6 +137,7 @@ function AppRouter() {
       <Route path="/watch">{() => <Watch />}</Route>
       <Route path="/keepsake">{() => <Keepsake />}</Route>
       <Route path="/2027">{() => <Keepsake next />}</Route>
+      <Route path="/rethink">{() => <Rethink />}</Route>
       <Route path="/text-alerts">{() => <TextAlerts />}</Route>
       <Route path="/survey/:token">{(p) => <Survey token={p.token} />}</Route>
       <Route path="/podcast-one-press-release">{() => <PressRelease />}</Route>
