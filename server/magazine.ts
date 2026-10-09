@@ -837,7 +837,7 @@ Thank you for being part of the day.
 
 Riccoh`;
       const html = emailShell({
-        banner: EMAIL_BANNERS.podcasters,
+        banner: EMAIL_BANNERS.magazine,
         eyebrow: "The Podcast Marathon · keepsake magazine",
         heading: "Your page in the magazine",
         body: `<p>Hi ${esc(hi)},</p>

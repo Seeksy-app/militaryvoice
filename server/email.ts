@@ -23,6 +23,8 @@ const SITE = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").repl
 export const EMAIL_BANNERS = {
   welcome: `${SITE}/email/creators.jpg`,
   podcasters: `${SITE}/email/podcasters.jpg`,
+  // The keepsake magazine (9 Oct): the cover's VOICES lettering, everyone's faces inside.
+  magazine: `${SITE}/email/magazine-voices.jpg`,
   studio: `${SITE}/email/studio.jpg`,
   conversation: `${SITE}/email/conversation.jpg`,
   // The sign-in code: one podcaster at the mic, calm, nothing busy behind the code.
