@@ -15,7 +15,7 @@ type Data = {
   smartlink: { pages: number; live: number; views: number; clicks: number };
   hosting: { shows: number; downloads: number };
   discovery: { members: number; new: number; searches: number; reveals: number };
-  magazine: { plays: number; pictures: number; links: number; scans: number };
+  magazine: { plays: number; pictures: number; links: number; scans: number; shares?: number };
   email: { sent: number; failed: number };
   series: { d: string; accounts: number; clips: number; views: number; downloads: number }[];
 };
@@ -109,7 +109,7 @@ export function PlatformAnalytics() {
             <Card icon={Link2} title="SmartLinks" rows={[["Pages", d.smartlink.pages], ["Live", d.smartlink.live], [`Views · ${d.days}d`, d.smartlink.views], [`Clicks · ${d.days}d`, d.smartlink.clicks]]} />
             <Card icon={Radio} title="Hosting" rows={[["Shows hosted", d.hosting.shows], [`Downloads · ${d.days}d`, d.hosting.downloads]]} />
             <Card icon={Compass} title="Discovery" rows={[["Members", d.discovery.members], [`New · ${d.days}d`, d.discovery.new], [`Searches · ${d.days}d`, d.discovery.searches], [`Contacts revealed · ${d.days}d`, d.discovery.reveals]]} />
-            <Card icon={BookOpen} title="Magazine" open={magOpen} onOpen={d.magazineEventId ? () => setMagOpen((v) => !v) : undefined} rows={[["Plays", d.magazine.plays], ["Pictures clicked", d.magazine.pictures], ["Links clicked", d.magazine.links], ["QR scans", d.magazine.scans]]} />
+            <Card icon={BookOpen} title="Magazine" open={magOpen} onOpen={d.magazineEventId ? () => setMagOpen((v) => !v) : undefined} rows={[["Plays", d.magazine.plays], ["Pictures clicked", d.magazine.pictures], ["Links clicked", d.magazine.links], ["QR scans", d.magazine.scans], ["Share links opened", d.magazine.shares ?? 0]]} />
             <Card icon={Mail} title={`Email · ${d.days} days`} rows={[["Sent", d.email.sent], ["Failed", d.email.failed]]} />
           </div>
           {magOpen && d.magazineEventId ? <StatsPanel eventId={d.magazineEventId} /> : null}

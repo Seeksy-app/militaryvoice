@@ -96,7 +96,7 @@ export function registerPlatformAnalytics(app: Express, requireAdmin: RequestHan
       smartlink: { pages: pagesAll, live: pagesLive, views: kind(bioKinds, "view"), clicks: bioKinds.filter((r) => r.kind !== "view").reduce((a, r) => a + (Number(r.n) || 0), 0) },
       hosting: { shows, downloads },
       discovery: { members: discMembers, new: discNew, searches, reveals },
-      magazine: { plays: kind(mag, "play"), pictures: kind(mag, "image"), links: kind(mag, "link"), scans: kind(mag, "qr") },
+      magazine: { plays: kind(mag, "play"), pictures: kind(mag, "image"), links: kind(mag, "link"), scans: kind(mag, "qr"), shares: kind(mag, "share") },
       email: { sent: mailOk, failed: mailFailed },
       series,
     };
