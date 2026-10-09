@@ -132,6 +132,7 @@ import { registerAdminOverview } from "./adminOverview.js";
 import { registerBioPrefill } from "./bioPrefill.js";
 import { registerMagazineStats } from "./magazineStats.js";
 import { registerPlatformAnalytics } from "./platformAnalytics.js";
+import { registerWorldLabs } from "./worldlabs.js";
 import { orgMemberEmails, registerOrgs } from "./orgs.js";
 import { registerProspects } from "./prospects.js";
 import { registerTravel } from "./travel.js";
@@ -6772,6 +6773,7 @@ export function registerRoutes(app: Express): void {
   registerBioPrefill(app, requireAdmin);
   registerMagazineStats(app, requireAdmin);
   registerPlatformAnalytics(app, requireAdmin);
+  registerWorldLabs(app, requireAdmin);
   registerHealth(app, requireAdmin);
   registerNotices(app, requireAdmin, requireHostSession);
   registerSurvey(app, requireAdmin);
