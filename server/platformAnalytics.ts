@@ -3,7 +3,7 @@
 // over a window (7, 30 or 90 days), with a day-by-day line for the main ones.
 import type { Express, RequestHandler } from "express";
 import { sql } from "drizzle-orm";
-import { db, schemaIsReady } from "./storage.js";
+import { db, storage, schemaIsReady } from "./storage.js";
 import { PLANS, ADDONS } from "../shared/tokens.js";
 
 type Row = Record<string, unknown>;
@@ -85,8 +85,11 @@ export function registerPlatformAnalytics(app: Express, requireAdmin: RequestHan
     }, [] as { d: string; accounts: number; clips: number; views: number; downloads: number }[]);
 
     const kind = (list: Row[], k: string) => Number(list.find((r) => r.kind === k)?.n ?? 0);
+    // The magazine's own event, so Analytics can open its full lists (9 Oct).
+    const magazineEventId = await storage.getFeaturedEvent().then((e) => e?.id ?? 0).catch(() => 0);
     return {
       days,
+      magazineEventId,
       accounts: { total: accounts, new: accountsNew },
       revenue: { mrrCents, plans, addons: addons.map((a) => ({ addon: String(a.addon), n: Number(a.n) || 0 })) },
       postify: { uploads: recordingsNew, clips: clipsNew, episodes: episodesClipped },

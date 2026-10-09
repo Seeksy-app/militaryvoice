@@ -2,11 +2,13 @@ import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BarChart3, Users, Scissors, Link2, Radio, Compass, BookOpen, Mail, DollarSign } from "lucide-react";
 import { adminGet } from "@/lib/adminApi";
+import { StatsPanel } from "@/components/MagazineAdmin";
 
 // Admin → Growth → Analytics (9 Oct 2026): the platform's numbers, not any one event's.
 
 type Data = {
   days: number;
+  magazineEventId?: number;
   accounts: { total: number; new: number };
   revenue: { mrrCents: number; plans: { plan: string; name: string; interval: string; n: number; comped?: boolean }[]; addons: { addon: string; n: number }[] };
   postify: { uploads: number; clips: number; episodes: number };
@@ -39,10 +41,11 @@ function Bars({ data, k, label }: { data: Data["series"]; k: "accounts" | "clips
   );
 }
 
-function Card({ icon: Icon, title, rows }: { icon: typeof Users; title: string; rows: [string, string | number][] }) {
+function Card({ icon: Icon, title, rows, onOpen, open }: { icon: typeof Users; title: string; rows: [string, string | number][]; onOpen?: () => void; open?: boolean }) {
+  const Box = onOpen ? "button" : "div";
   return (
-    <div className="rounded-2xl border border-border bg-card p-4">
-      <p className="flex items-center gap-2 text-sm font-semibold"><Icon className="h-4 w-4 text-[#053877]" /> {title}</p>
+    <Box {...(onOpen ? { type: "button" as const, onClick: onOpen, "aria-expanded": open } : {})} className={`rounded-2xl border bg-card p-4 text-left ${onOpen ? `transition-colors hover:border-[#053877] ${open ? "border-[#053877] ring-2 ring-[#053877]/15" : "border-border"}` : "border-border"}`}>
+      <p className="flex items-center gap-2 text-sm font-semibold"><Icon className="h-4 w-4 text-[#053877]" /> {title}{onOpen && <span className="ml-auto text-xs font-semibold text-[#053877]">{open ? "Hide details" : "See every item"}</span>}</p>
       <dl className="mt-3 space-y-1.5 text-sm">
         {rows.map(([k, v]) => (
           <div key={k} className="flex items-baseline justify-between gap-3">
@@ -51,12 +54,13 @@ function Card({ icon: Icon, title, rows }: { icon: typeof Users; title: string; 
           </div>
         ))}
       </dl>
-    </div>
+    </Box>
   );
 }
 
 export function PlatformAnalytics() {
   const [days, setDays] = useState(30);
+  const [magOpen, setMagOpen] = useState(false);
   const q = useQuery<Data>({ queryKey: ["/api/admin/platform-analytics", days], queryFn: () => adminGet(`/api/admin/platform-analytics?days=${days}`), refetchInterval: 5 * 60_000 });
   const d = q.data;
   return (
@@ -105,9 +109,10 @@ export function PlatformAnalytics() {
             <Card icon={Link2} title="SmartLinks" rows={[["Pages", d.smartlink.pages], ["Live", d.smartlink.live], [`Views · ${d.days}d`, d.smartlink.views], [`Clicks · ${d.days}d`, d.smartlink.clicks]]} />
             <Card icon={Radio} title="Hosting" rows={[["Shows hosted", d.hosting.shows], [`Downloads · ${d.days}d`, d.hosting.downloads]]} />
             <Card icon={Compass} title="Discovery" rows={[["Members", d.discovery.members], [`New · ${d.days}d`, d.discovery.new], [`Searches · ${d.days}d`, d.discovery.searches], [`Contacts revealed · ${d.days}d`, d.discovery.reveals]]} />
-            <Card icon={BookOpen} title="Magazine" rows={[["Plays", d.magazine.plays], ["Pictures clicked", d.magazine.pictures], ["Links clicked", d.magazine.links], ["QR scans", d.magazine.scans]]} />
+            <Card icon={BookOpen} title="Magazine" open={magOpen} onOpen={d.magazineEventId ? () => setMagOpen((v) => !v) : undefined} rows={[["Plays", d.magazine.plays], ["Pictures clicked", d.magazine.pictures], ["Links clicked", d.magazine.links], ["QR scans", d.magazine.scans]]} />
             <Card icon={Mail} title={`Email · ${d.days} days`} rows={[["Sent", d.email.sent], ["Failed", d.email.failed]]} />
           </div>
+          {magOpen && d.magazineEventId ? <StatsPanel eventId={d.magazineEventId} /> : null}
         </>
       )}
     </section>

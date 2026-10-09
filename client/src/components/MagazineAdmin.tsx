@@ -488,7 +488,7 @@ function PressPanel() {
 /** The magazine's numbers (9 Oct): plays, picture and link clicks, and QR scans, page by page. */
 type StatItem = { k: string; l: string };
 type Stats = { manifest: { at: string; pages: { p: string; n: number; label: string; items: StatItem[] }[] } | null; counts: { p: string; k: string; l: string; n: number }[] };
-function StatsPanel({ eventId }: { eventId: number }) {
+export function StatsPanel({ eventId }: { eventId: number }) {
   const q = useQuery<Stats>({ queryKey: ["/api/admin/magazine/stats", eventId], queryFn: async () => (await fetch(`/api/admin/magazine/${eventId}/stats`, { credentials: "include" })).json(), refetchInterval: 60_000 });
   const [openKind, setOpenKind] = useState<string | null>(null);
   const d = q.data;
