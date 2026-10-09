@@ -50,9 +50,9 @@ export default function Rethink() {
           <p className="mt-2 select-none font-extrabold leading-[0.78] tracking-[-0.07em]" style={{ fontSize: "clamp(9rem, 30vw, 24rem)" }} aria-hidden="true">
             Re<span className="text-white">:</span>
           </p>
-          <div className="mt-8 flex flex-wrap items-end justify-between gap-4 border-t-4 pt-6 sm:mt-10" style={{ borderColor: NAVY }}>
-            <h1 className="text-balance text-3xl font-bold leading-[1.05] tracking-[0.01em] sm:text-5xl">
-              <span className="text-white">Rethink</span> the Military &amp; Veteran Economy
+          <div className="mt-8 flex items-end justify-between gap-6 border-t-4 pt-6 sm:mt-10" style={{ borderColor: NAVY }}>
+            <h1 className="min-w-0 text-balance text-3xl font-bold leading-[1.05] tracking-[0.01em] sm:text-5xl">
+              <span className="text-white">Rethink</span> the Military <br className="hidden sm:inline" />&amp; Veteran Economy
             </h1>
             <p className="text-5xl font-extrabold leading-none tracking-tight text-white sm:text-7xl">2027</p>
           </div>
