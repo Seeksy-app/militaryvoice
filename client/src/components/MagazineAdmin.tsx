@@ -487,7 +487,7 @@ function PressPanel() {
 
 /** The magazine's numbers (9 Oct): plays, picture and link clicks, and QR scans, page by page. */
 type StatItem = { k: string; l: string };
-type Stats = { manifest: { at: string; pages: { p: string; n: number; label: string; items: StatItem[] }[] } | null; counts: { p: string; k: string; l: string; n: number }[] };
+type Stats = { manifest: { at: string; pages: { p: string; n: number; label: string; items: StatItem[] }[] } | null; counts: { p: string; k: string; l: string; n: number }[]; pre?: { p: string; k: string; l: string; n: number }[] };
 export function StatsPanel({ eventId }: { eventId: number }) {
   const q = useQuery<Stats>({ queryKey: ["/api/admin/magazine/stats", eventId], queryFn: async () => (await fetch(`/api/admin/magazine/${eventId}/stats`, { credentials: "include" })).json(), refetchInterval: 60_000 });
   const [openKind, setOpenKind] = useState<string | null>(null);
@@ -495,14 +495,22 @@ export function StatsPanel({ eventId }: { eventId: number }) {
   const count = (p: string, k: string, l: string) => d?.counts.find((c) => c.p === p && c.k === k && c.l === l)?.n ?? 0;
   const pages = [...(d?.manifest?.pages ?? [])].sort((a, b) => a.n - b.n);
   // Every item of one kind, page by page: the ones in the page list (zeros too), plus anything counted that isn't.
+  const before = (p: string, k: string, l: string) => d?.pre?.find((c) => c.p === p && c.k === k && c.l === l)?.n ?? 0;
   const rows = (k: string) => {
-    const out: { n: number; page: string; l: string; c: number }[] = [];
+    const out: { n: number; page: string; l: string; c: number; pre?: number }[] = [];
     for (const pg of pages) for (const i of pg.items.filter((x) => x.k === k)) out.push({ n: pg.n, page: pg.label, l: i.l, c: count(pg.p, k, i.l) });
+    // Share links counted before the bot filter (9 Oct): listed for reference, beside today's real visits.
+    for (const c of d?.pre ?? []) {
+      if (c.k !== k || out.some((r) => r.l === c.l && pages.find((x) => x.p === c.p)?.label === r.page)) continue;
+      const pg = pages.find((x) => x.p === c.p);
+      if (!(d?.counts ?? []).some((x) => x.p === c.p && x.k === k && x.l === c.l)) out.push({ n: pg?.n ?? 999, page: pg?.label ?? c.p, l: c.l, c: 0 });
+    }
     for (const c of d?.counts ?? []) {
       if (c.k !== k) continue;
       const pg = pages.find((x) => x.p === c.p);
       if (!pg || !pg.items.some((i) => i.k === k && i.l === c.l)) out.push({ n: pg?.n ?? 999, page: pg?.label ?? c.p, l: c.l, c: c.n });
     }
+    for (const r of out) { const pg = pages.find((x) => x.label === r.page); if (pg) r.pre = before(pg.p, k, r.l) || undefined; }
     return out.sort((a, b) => a.n - b.n);
   };
   const KINDS = [["play", "Plays"], ["image", "Pictures clicked"], ["link", "Links clicked"], ["qr", "QR codes scanned"], ["share", "Share links opened"]] as const;
@@ -534,7 +542,7 @@ export function StatsPanel({ eventId }: { eventId: number }) {
                   <td className="px-3 py-1.5 tabular-nums">{r.n < 999 ? r.n : ""}</td>
                   <td className="max-w-[220px] truncate px-3 py-1.5">{r.page}</td>
                   <td className="max-w-[320px] truncate px-3 py-1.5">{r.l}</td>
-                  <td className={`px-3 py-1.5 text-right tabular-nums ${r.c ? "font-bold text-[#053877]" : ""}`}>{r.c}</td>
+                  <td className={`px-3 py-1.5 text-right tabular-nums ${r.c ? "font-bold text-[#053877]" : ""}`}>{r.c}{r.pre ? <span className="ml-1.5 text-[11px] font-normal text-muted-foreground" title="Opens counted before 9 Oct, when link previews and email scanners were still included">({r.pre} before filter)</span> : null}</td>
                 </tr>
               ))}
               {!rows(openKind).length && <tr><td colSpan={4} className="px-3 py-4 text-center text-muted-foreground">Nothing of this kind yet.</td></tr>}

@@ -135,8 +135,14 @@ export function registerMagazineStats(app: Express, requireAdmin: RequestHandler
       const [page, kind, ...rest] = r.key.slice(`magstat:${eventId}:`.length).split("|");
       return { p: page, k: kind, l: rest.join("|"), n: Number(r.value) || 0 };
     });
+    // Counts from before the 9 Oct bot filter, kept for reference (share links).
+    const preRows = await db.select().from(siteSettings).where(sql`${siteSettings.key} like ${`magstat-pre:${eventId}:%`}`);
+    const pre = preRows.map((r) => {
+      const [page, kind, ...rest] = r.key.slice(`magstat-pre:${eventId}:`.length).split("|");
+      return { p: page, k: kind, l: rest.join("|"), n: Number(r.value) || 0 };
+    });
     let manifest: { at: string; pages: { p: string; n: number; label: string; items: { k: string; l: string }[] }[] } | null = null;
     try { manifest = JSON.parse((await storage.getSetting(`magmanifest:${eventId}`)) ?? "null"); } catch { manifest = null; }
-    res.json({ manifest, counts });
+    res.json({ manifest, counts, pre });
   });
 }
