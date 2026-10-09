@@ -21,6 +21,24 @@ export function registerWorldLabs(app: Express, requireAdmin: RequestHandler) {
     res.status(r.ok ? 200 : r.status).json(await r.json().catch(() => ({})));
   });
 
+  /**
+   * Any Atlas task with a body we build (9 Oct: posing several overlapping photos together, then
+   * atlasGenerate for new viewpoints). The body passes straight through; returns the operation.
+   */
+  const TASKS = new Set(["images2PosedRGBD", "atlasGenerate", "atlasMasked", "atlasTextToImage", "atlasChisel"]);
+  app.post("/api/admin/worldlabs/task/:name", requireAdmin, async (req, res) => {
+    if (!key()) return res.status(503).json({ message: "WORLDLABS_API_KEY isn't set on the server." });
+    const name = String(req.params.name);
+    if (!TASKS.has(name)) return res.status(400).json({ message: `Unknown task: ${name}` });
+    const r = await fetch(`${BASE}/tasks:${name}`, {
+      method: "POST",
+      headers: { "WLT-Api-Key": key(), "Content-Type": "application/json", "Idempotency-Key": String(req.headers["idempotency-key"] || crypto.randomUUID()) },
+      body: JSON.stringify(req.body ?? {}),
+      signal: AbortSignal.timeout(30_000),
+    }).catch((e: Error) => ({ ok: false, status: 502, json: async () => ({ message: e.message }) }) as unknown as Response);
+    res.status(r.ok ? 200 : r.status).json(await r.json().catch(() => ({})));
+  });
+
   /** One check on an operation (non-blocking, safe to repeat). */
   app.get("/api/admin/worldlabs/operations/:id", requireAdmin, async (req, res) => {
     if (!key()) return res.status(503).json({ message: "WORLDLABS_API_KEY isn't set on the server." });
