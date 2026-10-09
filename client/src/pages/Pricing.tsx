@@ -3,23 +3,103 @@ import { useState } from "react";
 import { NavBar } from "@/components/NavBar";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { startPlanCheckout, startTokenCheckout, startAddonCheckout } from "@/lib/tokens";
 import { PLANS, CREDIT_PACKS, ADDONS, TEST_PACK, cents, episodeCredits } from "@shared/tokens";
-import { Check, Coins, Scissors, Wand2, Sparkles, Loader2, Gauge, Compass } from "lucide-react";
-import { IconTile } from "@/components/ui/icon-tile";
+import { Check, Coins, Loader2, Compass, Info, ChevronDown } from "lucide-react";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
-// Pōstify pricing, beta. Not in the nav yet: reached from "Generate more",
-// the credits chip and "Choose a plan" in Pōstify, or by link. The numbers
-// live in shared/tokens.ts so the server charges exactly what this page shows.
+// Pricing (9 Oct 2026 redesign): one line per feature with a hover for the detail, each plan building
+// on the one before, Discovery Pro addable to a plan in the same payment, and the clutter (how credits
+// work, what an episode uses, the limit) folded into one "How credits work" panel.
+// The numbers live in shared/tokens.ts so the server charges exactly what this page shows.
 
-const HOW = [
-  { icon: Wand2, title: "8 credits an episode, everything included", body: "Four clips in every shape (vertical, square and wide) with animated captions that follow whoever's speaking, plus the clean episode." },
-  { icon: Scissors, title: "Classic captions: 5 credits", body: "Bold captions burned in instead of animated ones: quicker, and still every shape and the clean episode." },
-  { icon: Sparkles, title: "Music and edits included", body: "Add a track from our library to every clip, and fix a title or subtitle, at no extra cost. Your first episode is free." },
+type Feature = { t: string; tip: string };
+
+const GROWTH: Feature[] = [
+  { t: "SmartLink: one link for every bio", tip: "Your page at militaryvoices.ai/you: your show, your links, your latest episodes and a way for listeners to reach you." },
+  { t: "Podcast hosting, on Apple, Spotify and more", tip: "We host your show and its feed, so it plays on Apple Podcasts, Spotify and every podcast app, and it's listed in the MilitaryVoices directory." },
+  { t: "SmartChat: listeners ask, SI answers", tip: "Listeners ask your show a question and get an answer from your own episodes, any time of day." },
+  { t: "Zoom recordings, straight to your Library", tip: "Connect Zoom once. Every cloud recording comes in on its own, ready for clips and a clean episode." },
+  { t: "Find creators and sponsors: 10 contacts a month", tip: "Discovery: search military and veteran creators, guests and sponsors, and reveal up to 10 contact emails a month." },
+  { t: "Book and join events, with an SI co-host", tip: "Take a slot in live events like the Podcast Marathon. Alex, our SI co-host, introduces you and keeps the hand-offs moving." },
 ];
+
+const PLAN_FEATURES: Record<string, Feature[]> = {
+  creator: [
+    { t: "30 Pōstify credits a month", tip: "About 3 episodes a month with animated captions, or 6 with Classic." },
+    { t: "4 captioned clips an episode", tip: "Picked by SI from your episode, in vertical, square and wide, ready for every platform." },
+    { t: "A clean episode, every time", tip: "Ums, false starts and dead air taken out, as MP3 and MP4. Your original is never changed." },
+    { t: "Music and title edits included", tip: "Add a track from our library to every clip, and change a title or subtitle, at no extra cost." },
+    { t: "Animated captions that follow the speaker", tip: "Word-by-word captions, framed on whoever is talking. Or Classic captions for fewer credits." },
+    { t: "Extra credits 60¢, up to your limit", tip: "Run out, and Pōstify keeps going. Extras go on your next bill, never past the limit you set." },
+  ],
+  pro: [
+    { t: "90 Pōstify credits a month", tip: "About 7 episodes a month with animated captions, or 12 with Classic." },
+    { t: "6 clips an episode instead of 4", tip: "Two more moments from every episode, in every shape." },
+    { t: "Room for a weekly show, and then some", tip: "A weekly 60-minute show uses 48 credits a month on Pro, so you have room for more." },
+    { t: "Credits at 54¢ each, not 67¢", tip: "The more you make, the less each clip costs." },
+    { t: "Extra credits 50¢, up to your limit", tip: "Run out, and Pōstify keeps going. Extras go on your next bill, never past the limit you set." },
+    { t: "Live Studio hours (coming soon)", tip: "When the MilitaryVoices Studio opens to every show, Pro includes live studio hours for yours." },
+  ],
+};
+
+function Line({ f }: { f: Feature }) {
+  return (
+    <li className="flex items-start gap-2">
+      <Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />
+      <Tooltip delayDuration={150}>
+        <TooltipTrigger asChild>
+          <span className="cursor-help underline decoration-dotted decoration-foreground/25 underline-offset-4">{f.t}</span>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-[260px] text-xs leading-relaxed">{f.tip}</TooltipContent>
+      </Tooltip>
+    </li>
+  );
+}
+
+/**
+ * What a weekly show pays for hosting plus clips, a month. Their prices as listed on their own
+ * pricing pages on 9 Oct 2026: Buzzsprout Audio ($15/mo billed yearly), Podbean Unlimited Audio
+ * ($17/mo billed monthly), OpusClip Pro ($29/mo billed monthly). Check again before changing these.
+ */
+const STACKS = [
+  { name: "Buzzsprout + OpusClip", lines: [["Hosting (Buzzsprout Audio)", "$15"], ["Clips (OpusClip Pro)", "$29"]], total: "$44", ours: false },
+  { name: "Podbean + OpusClip", lines: [["Hosting (Podbean Unlimited Audio)", "$17"], ["Clips (OpusClip Pro)", "$29"]], total: "$46", ours: false },
+  { name: "MilitaryVoices Scale", lines: [["Hosting, SmartLink and SmartChat", "Free"], ["Clips and a clean episode (Pōstify)", "$19.95"]], total: "$19.95", ours: true },
+];
+
+function Comparison() {
+  return (
+    <section className="mt-14" data-testid="pricing-compare">
+      <h2 className="text-center text-2xl font-bold tracking-tight text-foreground" style={HEADLINE_FONT}>What a weekly show pays</h2>
+      <p className="mx-auto mt-1 max-w-xl text-center text-sm text-muted-foreground">Hosting plus clips, every month. Elsewhere that's two bills.</p>
+      <div className="mt-6 grid gap-4 md:grid-cols-3">
+        {STACKS.map((s) => (
+          <div key={s.name} className={`flex flex-col rounded-3xl border p-5 ${s.ours ? "border-[#053877] bg-[#053877] text-white shadow-lg" : "border-border bg-card"}`}>
+            <p className={`text-sm font-bold ${s.ours ? "text-[#F0A71F]" : "text-foreground"}`}>{s.name}</p>
+            <ul className="mt-3 flex-1 space-y-2 text-sm">
+              {s.lines.map(([l, v]) => (
+                <li key={l} className="flex items-baseline justify-between gap-3">
+                  <span className={s.ours ? "text-white/80" : "text-muted-foreground"}>{l}</span>
+                  <span className="shrink-0 font-semibold tabular-nums">{v}</span>
+                </li>
+              ))}
+            </ul>
+            <div className={`mt-4 flex items-baseline justify-between border-t pt-3 ${s.ours ? "border-white/20" : "border-border"}`}>
+              <span className="text-sm font-semibold">A month</span>
+              <span className="text-2xl font-bold tabular-nums" style={HEADLINE_FONT}>{s.total}</span>
+            </div>
+          </div>
+        ))}
+      </div>
+      <p className="mt-3 text-center text-[11px] text-muted-foreground">A weekly show: 4 episodes a month. Prices as listed on buzzsprout.com, podbean.com and opus.pro on 9 October 2026. On Scale, a fourth animated episode uses 2 extra credits ($1.20). Buzzsprout, Podbean and OpusClip are trademarks of their owners.</p>
+    </section>
+  );
+}
 
 const EXAMPLES = [
   { label: "An episode, animated captions (4 clips)", credits: episodeCredits({ captions: "animated" }) },
@@ -28,59 +108,13 @@ const EXAMPLES = [
   { label: "A Pro episode, Classic (6 clips)", credits: episodeCredits({ captions: "classic" }, 6) },
 ];
 
-/**
- * Against OpusClip, per episode — the unit a podcaster thinks in. Their
- * credit is a minute of video processed (a 60-minute episode is 60 credits);
- * ours pays for what's made. Their prices as listed on opus.pro, dated below:
- * check them again before changing anything here.
- */
-const COMPARE: { row: string; cells: [string, string, string, string]; note?: string }[] = [
-  { row: "Monthly price", cells: ["$15", "$29", "$19.95", "$49"] },
-  { row: "A weekly 60-minute show (4 episodes a month)", cells: ["Not enough: 150 minutes is 2½ episodes", "Covered", "About $21.15 (2 extra credits)", "Covered, room for 7"], note: "Pōstify: every clip in vertical, square and wide, animated captions, 8 credits an episode (12 on Pro)." },
-  { row: "Clips per episode", cells: ["As many as it finds", "As many as it finds", "4 picked, plus any you mark", "6 picked, plus any you mark"] },
-  { row: "The whole episode cleaned (ums, false starts, dead air out) as MP3 and MP4", cells: ["Not listed", "Not listed", "Included", "Included"] },
-  { row: "Post and schedule to your own accounts", cells: ["Auto-post", "Included", "Included", "Included"] },
-  { row: "Your first episode free", cells: ["—", "—", "Yes", "Yes"] },
-];
-
-function Comparison() {
-  return (
-    <section className="mt-12" data-testid="pricing-compare">
-      <h2 className="text-center text-2xl font-bold tracking-tight text-foreground" style={HEADLINE_FONT}>What a weekly show pays</h2>
-      <p className="mx-auto mt-1 max-w-2xl text-center text-sm text-muted-foreground">OpusClip charges by the minute of video; Pōstify by what it makes. So here's the same month, per episode.</p>
-      <div className="mt-5 overflow-x-auto rounded-3xl border border-border bg-card">
-        <table className="w-full min-w-[640px] text-sm">
-          <thead>
-            <tr className="border-b border-border text-left">
-              <th className="p-4 font-semibold text-muted-foreground" />
-              <th className="p-4 font-semibold text-muted-foreground">OpusClip Starter</th>
-              <th className="p-4 font-semibold text-muted-foreground">OpusClip Pro</th>
-              <th className="bg-[#053877]/[0.05] p-4 font-bold text-foreground">Pōstify Scale</th>
-              <th className="bg-[#053877]/[0.05] p-4 font-bold text-foreground">Pōstify Pro</th>
-            </tr>
-          </thead>
-          <tbody>
-            {COMPARE.map((r) => (
-              <tr key={r.row} className="border-b border-border last:border-0 align-top">
-                <td className="p-4 font-medium text-foreground">{r.row}{r.note && <span className="mt-1 block text-xs font-normal text-muted-foreground">{r.note}</span>}</td>
-                {r.cells.map((c, i) => (
-                  <td key={i} className={`p-4 ${i >= 2 ? "bg-[#053877]/[0.05] font-semibold text-foreground" : "text-muted-foreground"}`}>{c}</td>
-                ))}
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-      <p className="mt-2 text-center text-[11px] text-muted-foreground">OpusClip prices and plans as listed on opus.pro/pricing on 25 September 2026 (monthly billing). OpusClip is a trademark of its owner.</p>
-    </section>
-  );
-}
-
 export default function Pricing() {
   const { toast } = useToast();
   const [busy, setBusy] = useState<string | null>(null);
   const [yearly, setYearly] = useState(false);
+  const [withDiscovery, setWithDiscovery] = useState<Record<string, boolean>>({});
   const testing = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("test");
+  const disc = ADDONS.discovery;
 
   async function go(key: string, fn: () => Promise<void>) {
     setBusy(key);
@@ -96,16 +130,12 @@ export default function Pricing() {
     <div className="flex min-h-screen flex-col bg-background">
       <NavBar />
       <header className="bg-[#000741] text-white">
-        <div className="mx-auto max-w-5xl px-4 py-14 text-center sm:px-6">
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#F0A71F]/15 px-3 py-1 text-xs font-bold uppercase tracking-[0.16em] text-[#F0A71F]">Start free</span>
-          <h1 className="mt-4 text-4xl font-bold tracking-tight sm:text-5xl" style={HEADLINE_FONT}>Plans</h1>
-          <p className="mx-auto mt-4 max-w-2xl text-lg text-white/75">
-            Start on Growth, free for good. Move up to Scale or Pro for monthly Pōstify credits: clips and clean episodes. Run out, and extra credits go on your next bill, never past the limit you set.
-          </p>
+        <div className="mx-auto max-w-5xl px-4 py-12 text-center sm:px-6">
+          <h1 className="text-balance text-4xl font-bold tracking-tight sm:text-5xl" style={HEADLINE_FONT}>Military and veteran plans</h1>
         </div>
       </header>
 
-      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-12 sm:px-6">
+      <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6">
         <div className="mb-8 flex justify-center">
           <div className="inline-flex rounded-full border border-border bg-card p-1 text-sm font-semibold" role="tablist" aria-label="Billing">
             <button type="button" role="tab" aria-selected={!yearly} onClick={() => setYearly(false)} className={`rounded-full px-4 py-1.5 ${!yearly ? "bg-[#053877] text-white" : "text-muted-foreground hover:text-foreground"}`} data-testid="billing-monthly">Monthly</button>
@@ -114,26 +144,22 @@ export default function Pricing() {
             </button>
           </div>
         </div>
+
         <div className="mx-auto grid max-w-5xl gap-5 md:grid-cols-3">
-          {/* Growth: everything that costs us pennies, free for good. The
-              name is the point — people want Growth, and it happens to be free. */}
+          {/* Growth: everything that costs us pennies, free for good. */}
           <div className="relative flex flex-col rounded-3xl border border-border bg-card p-6 shadow-sm" data-testid="plan-card-growth">
             <p className="flex items-center gap-2 text-sm font-semibold text-muted-foreground"><Coins className="h-4 w-4 text-emerald-600" /> Growth</p>
             <p className="mt-3 text-4xl font-bold tracking-tight text-foreground" style={HEADLINE_FONT}>Free<span className="text-base font-medium text-muted-foreground"> forever</span></p>
             <p className="mt-1 text-sm font-semibold text-foreground">Your first episode of clips on us</p>
-            <ul className="mt-3 flex-1 space-y-1.5 text-sm text-foreground/80">
-              <li>Your SmartLink: one link for every bio</li>
-              <li>Podcast hosting, on every app</li>
-              <li>Ask my show: listeners ask, SI answers from your episodes</li>
-              <li>Discovery, with 10 contact emails a month</li>
-              <li>Book and join events, with an SI co-host</li>
-            </ul>
+            <ul className="mt-4 flex-1 space-y-2 text-sm text-foreground/85">{GROWTH.map((f) => <Line key={f.t} f={f} />)}</ul>
             <Link href="/host/dashboard?start">
-              <Button variant="outline" className="mt-5 w-full gap-2 rounded-full" data-testid="plan-growth-start">Start with Growth</Button>
+              <Button variant="outline" className="mt-6 w-full gap-2 rounded-full" data-testid="plan-growth-start">Start with Growth</Button>
             </Link>
           </div>
+
           {Object.values(PLANS).map((p) => {
             const popular = "popular" in p && p.popular;
+            const addDisc = !yearly && !!withDiscovery[p.key];
             return (
               <div key={p.key} className={`relative flex flex-col rounded-3xl border bg-card p-6 shadow-sm ${popular ? "border-[#053877] ring-2 ring-[#053877]/15" : "border-border"}`} data-testid={`plan-card-${p.key}`}>
                 {popular && <span className="absolute -top-3 left-6 rounded-full bg-[#053877] px-3 py-1 text-xs font-semibold text-white">Best value</span>}
@@ -141,47 +167,47 @@ export default function Pricing() {
                 {yearly ? (
                   <>
                     <p className="mt-3 text-4xl font-bold tracking-tight text-foreground" style={HEADLINE_FONT}>{cents(Math.round(p.yearCents / 12))}<span className="text-base font-medium text-muted-foreground"> /month</span></p>
-                    <p className="text-xs text-muted-foreground"><span className="line-through">{cents(p.cents * 12)}</span> {cents(p.yearCents)} billed yearly</p>
-                    <p className="mt-2 text-sm font-semibold text-foreground">{(p.credits * 12).toLocaleString()} credits a year, all at once</p>
+                    <p className="mt-1 text-xs text-muted-foreground"><span className="line-through">{cents(p.cents * 12)}</span> {cents(p.yearCents)} billed yearly, all {(p.credits * 12).toLocaleString()} credits at once</p>
                   </>
                 ) : (
                   <>
                     <p className="mt-3 text-4xl font-bold tracking-tight text-foreground" style={HEADLINE_FONT}>{cents(p.cents)}<span className="text-base font-medium text-muted-foreground"> /month</span></p>
-                    <p className="mt-1 text-sm font-semibold text-foreground">{p.credits} credits a month</p>
+                    <p className="mt-1 text-sm font-semibold text-foreground">Everything in {p.key === "pro" ? "Scale" : "Growth"}, plus</p>
                   </>
                 )}
-                <p className="mt-3 flex-1 text-sm text-foreground/80">{p.blurb}</p>
-                <p className="mt-3 text-xs text-muted-foreground">{yearly ? "Top up with a credit pack any time." : `Extra credits ${cents(p.overageCents)} each, up to your limit.`}</p>
+                <ul className="mt-4 flex-1 space-y-2 text-sm text-foreground/85">{(PLAN_FEATURES[p.key] ?? []).map((f) => <Line key={f.t} f={f} />)}</ul>
+
+                {/* Discovery Pro in the same payment (monthly plans). */}
+                <label className={`mt-5 flex items-start gap-2.5 rounded-2xl border p-3 text-sm ${yearly ? "border-dashed border-border opacity-70" : "cursor-pointer border-[#F0A71F]/60 bg-[#F0A71F]/[0.08]"}`} data-testid={`plan-${p.key}-discovery`}>
+                  <Checkbox checked={addDisc} disabled={yearly} onCheckedChange={(v) => setWithDiscovery((w) => ({ ...w, [p.key]: v === true }))} className="mt-0.5 border-[#b36b00] data-[state=checked]:bg-[#b36b00] data-[state=checked]:text-white" />
+                  <span className="min-w-0">
+                    <span className="flex items-center gap-1.5 font-semibold text-[#8a5200]"><Compass className="h-3.5 w-3.5" /> Add Discovery Pro · {cents(disc.cents)}/mo</span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground">{yearly ? "Monthly only: add it on a monthly plan, or later." : `${disc.reveals} contacts and ${disc.lookups.toLocaleString()} profile look-ups a month.`}</span>
+                  </span>
+                </label>
+
                 <Button
-                  onClick={() => void go(p.key, () => startPlanCheckout(p.key, yearly ? "year" : "month"))}
+                  onClick={() => void go(p.key, () => startPlanCheckout(p.key, yearly ? "year" : "month", addDisc ? ["discovery"] : []))}
                   disabled={busy !== null}
-                  className={`mt-5 w-full gap-2 rounded-full ${popular ? "bg-[#053877] text-white hover:bg-[#0a4a99]" : ""}`}
+                  className={`mt-4 w-full gap-2 rounded-full ${popular ? "bg-[#053877] text-white hover:bg-[#0a4a99]" : ""}`}
                   variant={popular ? "default" : "outline"}
                 >
                   {busy === p.key && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Choose {p.name}{yearly ? " yearly" : ""}
+                  Choose {p.name}{yearly ? " yearly" : ""}{addDisc ? ` + Discovery Pro · ${cents(p.cents + disc.cents)}/mo` : ""}
                 </Button>
               </div>
             );
           })}
         </div>
 
-        {/* No subscription: credits bought once. */}
-        <div className="mx-auto mt-10 max-w-3xl">
-          <p className="text-center text-sm font-semibold text-foreground">Rather not subscribe? Buy credits once.</p>
-          <p className="mt-1 text-center text-xs text-muted-foreground">No plan, nothing monthly. They don't run out during the beta.</p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            {CREDIT_PACKS.map((p) => (
-              <div key={p.key} className="flex flex-col items-center rounded-2xl border border-border bg-card p-4 text-center" data-testid={`pack-card-${p.key}`}>
-                <p className="text-sm font-semibold text-muted-foreground">{p.tokens} credits</p>
-                <p className="mt-1 text-2xl font-bold text-foreground" style={HEADLINE_FONT}>${p.price}</p>
-                <p className="text-xs text-muted-foreground">{Math.round((p.price / p.tokens) * 100)}¢ a credit · {p.blurb}</p>
-                <Button variant="outline" onClick={() => void go(p.key, () => startTokenCheckout(p.key))} disabled={busy !== null} className="mt-3 w-full gap-2 rounded-full">
-                  {busy === p.key && <Loader2 className="h-4 w-4 animate-spin" />} Buy {p.tokens}
-                </Button>
-              </div>
-            ))}
-          </div>
+        {/* No subscription: credits bought once, in one line. */}
+        <div className="mx-auto mt-8 flex max-w-4xl flex-wrap items-center justify-center gap-2 text-sm">
+          <span className="mr-1 font-semibold text-foreground">Rather not subscribe? Buy credits once:</span>
+          {CREDIT_PACKS.map((p) => (
+            <Button key={p.key} variant="outline" size="sm" onClick={() => void go(p.key, () => startTokenCheckout(p.key))} disabled={busy !== null} className="gap-1.5 rounded-full" data-testid={`pack-card-${p.key}`}>
+              {busy === p.key && <Loader2 className="h-3.5 w-3.5 animate-spin" />} {p.tokens} for ${p.price}
+            </Button>
+          ))}
         </div>
 
         {testing && (
@@ -196,66 +222,54 @@ export default function Pricing() {
           </div>
         )}
 
-        <div className="mt-12 grid gap-6 rounded-3xl border border-border bg-card p-6 sm:p-8 md:grid-cols-3">
-          {HOW.map(({ icon: Icon, title, body }) => (
-            <div key={title}>
-              <IconTile icon={Icon} />
-              <p className="mt-3 font-semibold text-foreground">{title}</p>
-              <p className="mt-1 text-sm text-muted-foreground">{body}</p>
-            </div>
-          ))}
-        </div>
+        <Comparison />
 
-        {/* Add-ons: their own subscriptions, with or without a plan. */}
-        <section id="discovery" className="mx-auto mt-12 max-w-3xl scroll-mt-24">
-          <p className="text-center text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00]">Add-on</p>
-          <div className="mt-3 flex flex-col gap-5 rounded-3xl border border-border bg-card p-6 sm:flex-row sm:items-center" data-testid="addon-discovery">
-            <IconTile icon={Compass} />
+        {/* Discovery Pro on its own. */}
+        <section id="discovery" className="mx-auto mt-14 max-w-3xl scroll-mt-24">
+          <div className="flex flex-col gap-4 rounded-3xl border border-[#F0A71F]/50 bg-[#F0A71F]/[0.06] p-6 sm:flex-row sm:items-center" data-testid="addon-discovery">
             <div className="min-w-0 flex-1">
-              <p className="text-lg font-bold text-foreground" style={HEADLINE_FONT}>{ADDONS.discovery.name} <span className="text-base font-semibold text-muted-foreground">· {cents(ADDONS.discovery.cents)}/month</span></p>
-              <p className="text-sm text-muted-foreground">{ADDONS.discovery.blurb} Works with or without a Pōstify plan.</p>
+              <p className="flex items-center gap-2 text-lg font-bold text-foreground" style={HEADLINE_FONT}><Compass className="h-5 w-5 text-[#b36b00]" /> {disc.name} <span className="text-base font-semibold text-muted-foreground">· {cents(disc.cents)}/month</span></p>
+              <p className="mt-1 text-sm text-muted-foreground">{disc.blurb} Add it with Scale or Pro above in one payment, or here.</p>
               <ul className="mt-2 space-y-1 text-sm text-foreground/85">
-                {ADDONS.discovery.features.map((f) => <li key={f} className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#F0A71F]" /> {f}</li>)}
+                {disc.features.map((f) => <li key={f} className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#b36b00]" /> {f}</li>)}
               </ul>
             </div>
-            <Button onClick={() => void go("discovery", () => startAddonCheckout("discovery"))} disabled={busy !== null} className="shrink-0 gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="addon-discovery-buy">
+            <Button onClick={() => void go("discovery", () => startAddonCheckout("discovery"))} disabled={busy !== null} variant="outline" className="shrink-0 gap-2 rounded-full border-[#b36b00]/50" data-testid="addon-discovery-buy">
               {busy === "discovery" && <Loader2 className="h-4 w-4 animate-spin" />} Add Discovery Pro
             </Button>
           </div>
         </section>
 
-        <Comparison />
-
-        <div className="mt-8 grid gap-6 md:grid-cols-2">
-          <div className="rounded-3xl border border-border bg-card p-6">
-            <p className="font-semibold text-foreground">What an episode uses</p>
-            <p className="mt-1 text-sm text-muted-foreground">Including its clean episode. You choose when you start Pōstify.</p>
-            <ul className="mt-4 divide-y divide-border">
-              {EXAMPLES.map((e) => (
-                <li key={e.label} className="flex items-center justify-between py-2 text-sm">
-                  <span className="text-foreground/85">{e.label}</span>
-                  <span className="font-semibold tabular-nums text-foreground">{e.credits} credits</span>
-                </li>
-              ))}
-            </ul>
+        {/* Everything about credits, folded away until someone wants it. */}
+        <details className="group mx-auto mt-10 max-w-3xl rounded-3xl border border-border bg-card p-6" data-testid="pricing-how-credits">
+          <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-semibold text-foreground">
+            <span className="flex items-center gap-2"><Info className="h-4 w-4 text-[#053877]" /> How credits work</span>
+            <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />
+          </summary>
+          <div className="mt-4 grid gap-6 text-sm md:grid-cols-2">
+            <div>
+              <p className="font-semibold text-foreground">What an episode uses</p>
+              <p className="mt-1 text-muted-foreground">Every clip in every shape, plus the clean episode. You choose when you start Pōstify.</p>
+              <ul className="mt-3 divide-y divide-border">
+                {EXAMPLES.map((e) => (
+                  <li key={e.label} className="flex items-center justify-between py-2">
+                    <span className="text-foreground/85">{e.label}</span>
+                    <span className="font-semibold tabular-nums text-foreground">{e.credits} credits</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+            <div>
+              <p className="font-semibold text-foreground">Your limit, your call</p>
+              <p className="mt-1 text-muted-foreground">When your month's credits run out, Pōstify keeps going with extra credits on your next bill. You choose how far: no extras, or up to $10, $20, $50 or $100 a month ($20 unless you change it).</p>
+              <ul className="mt-3 space-y-1.5 text-muted-foreground">
+                {["Unused credits carry over while you're on a plan (beta).", "Update your card or cancel any time, in one click.", "Your originals are never changed or replaced.", "Episodes up to 90 minutes each."].map((t) => (
+                  <li key={t} className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" /> {t}</li>
+                ))}
+              </ul>
+            </div>
           </div>
-          <div className="rounded-3xl border border-border bg-card p-6">
-            <p className="flex items-center gap-2 font-semibold text-foreground"><Gauge className="h-4 w-4 text-[#b36b00]" /> Your limit, your call</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              When your month's credits run out, Pōstify keeps going with extra credits, added to your next bill. You set how far: no extras at all, or up to $10, $20, $50 or $100 a month. $20 unless you change it.
-            </p>
-            <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
-              {[
-                "Unused credits carry over while you're on a plan (beta).",
-                "Update your card or cancel any time, in one click.",
-                "Your originals are never changed or replaced.",
-                "Episodes up to 90 minutes each.",
-              ].map((t) => (
-                <li key={t} className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#F0A71F]" /> {t}</li>
-              ))}
-            </ul>
-          </div>
-        </div>
+        </details>
       </main>
       <SiteFooter />
     </div>

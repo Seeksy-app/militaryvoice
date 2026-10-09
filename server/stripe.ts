@@ -163,19 +163,22 @@ function ensureBilling(): Promise<Record<string, string>> {
   return billing;
 }
 
-export async function createPlanCheckout(v: { email: string; plan: PlanKey; interval?: PlanInterval; origin: string; customerId?: string }): Promise<string> {
+export async function createPlanCheckout(v: { email: string; plan: PlanKey; interval?: PlanInterval; origin: string; customerId?: string; addons?: AddonKey[] }): Promise<string> {
   const plan = planOf(v.plan);
   if (!plan) throw new Error("Which plan?");
   const interval: PlanInterval = v.interval === "year" ? "year" : "month";
   const ids = await ensureBilling();
-  const meta = { kind: "postify_plan", email: v.email, plan: plan.key, interval };
+  // Add-ons in the same payment (9 Oct): monthly only, on the plan's own subscription.
+  const addons = interval === "month" ? (v.addons ?? []).filter((a) => a in ADDONS) : [];
+  const addonItems = await Promise.all(addons.map(async (a) => ({ price: await addonPrice(a), quantity: 1 })));
+  const meta = { kind: "postify_plan", email: v.email, plan: plan.key, interval, ...(addons.length ? { addons: addons.join(",") } : {}) };
   const s = await stripe("POST", "/checkout/sessions", flat({
     mode: "subscription",
     ...(v.customerId ? { customer: v.customerId } : { customer_email: v.email }),
     client_reference_id: v.email,
     line_items: interval === "year"
       ? [{ price: ids[`postify_${plan.key}_yearly`], quantity: 1 }]
-      : [{ price: ids[`postify_${plan.key}_monthly`], quantity: 1 }, { price: ids[`postify_${plan.key}_extra`] }],
+      : [{ price: ids[`postify_${plan.key}_monthly`], quantity: 1 }, { price: ids[`postify_${plan.key}_extra`] }, ...addonItems],
     metadata: meta,
     subscription_data: { metadata: meta },
     success_url: `${v.origin}/host/dashboard/postify?subscribed={CHECKOUT_SESSION_ID}`,
@@ -253,6 +256,24 @@ export function addonStateFrom(sub: any): AddonState | null {
   if (!(addon in ADDONS) || !email) return null;
   const end = Number(sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end);
   return { email, addon, status: String(sub.status), customerId: String(sub.customer), subscriptionId: String(sub.id), periodEnd: end ? new Date(end * 1000).toISOString() : "" };
+}
+
+/** Add-ons bought with a plan, in the same subscription: one state each, following the plan's status. */
+export function bundledAddonStatesFrom(sub: any): AddonState[] {
+  if (!sub || sub.object !== "subscription" || sub.metadata?.kind !== "postify_plan" || !sub.metadata?.addons) return [];
+  const email = String(sub.metadata.email || "").trim().toLowerCase();
+  const end = Number(sub.current_period_end ?? sub.items?.data?.[0]?.current_period_end);
+  return String(sub.metadata.addons).split(",").filter((a) => a in ADDONS).map((a) => ({
+    email, addon: a as AddonKey, status: String(sub.status), customerId: String(sub.customer), subscriptionId: String(sub.id), periodEnd: end ? new Date(end * 1000).toISOString() : "",
+  }));
+}
+
+/** Back from a plan checkout: any add-ons bought with it. */
+export async function readPlanSessionAddons(sessionId: string): Promise<AddonState[]> {
+  if (!/^cs_[\w]+$/.test(sessionId)) return [];
+  const s = await stripe("GET", `/checkout/sessions/${sessionId}`);
+  if (s?.metadata?.kind !== "postify_plan" || !s.subscription || !s.metadata?.addons) return [];
+  return bundledAddonStatesFrom(await stripe("GET", `/subscriptions/${encodeURIComponent(String(s.subscription))}`));
 }
 
 /** Back from an add-on checkout: the subscription it made, read from Stripe. */

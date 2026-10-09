@@ -169,7 +169,7 @@ import { registerMyStudio } from "./myStudio.js";
 import { registerCreatorCampaigns } from "./creatorCampaigns.js";
 import { registerContactProfile } from "./contactProfile.js";
 import { registerAskShow, claimTranscript } from "./askShow.js";
-import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, readSubscription, reportExtraCredits, billingPortal, createAddonCheckout, readAddonSession, addonStateFrom, type PlanState } from "./stripe.js";
+import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, readSubscription, reportExtraCredits, billingPortal, createAddonCheckout, readAddonSession, addonStateFrom, bundledAddonStatesFrom, readPlanSessionAddons, type PlanState } from "./stripe.js";
 import { episodeCredits, SHORT_VIDEO_SEC, planOf, PLANS, ADDONS, DEFAULT_OVERAGE_CAP_CENTS, OVERAGE_CAP_CHOICES, type PlanKey, type AddonKey } from "../shared/tokens.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, getSession, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
 import {
@@ -8061,7 +8061,11 @@ export function registerRoutes(app: Express): void {
     const sub = await storage.getSubscription(email);
     if (sub && ["active", "trialing", "past_due"].includes(sub.status)) return res.status(409).json({ message: "You already have a plan. Change it under Manage billing." });
     try {
-      res.json({ url: await createPlanCheckout({ email, plan: key as PlanKey, interval: req.body?.interval === "year" ? "year" : "month", origin: originOf(req), customerId: sub?.customerId || undefined }) });
+      const asked = (Array.isArray(req.body?.addons) ? req.body.addons : []).map(String).filter((a: string) => a in ADDONS) as AddonKey[];
+      // Never twice: an add-on they already pay for stays where it is.
+      const addons: AddonKey[] = [];
+      for (const a of asked) { const have = await storage.getAddon(email, a); if (!(have && ["active", "trialing", "past_due", "comped"].includes(have.status))) addons.push(a); }
+      res.json({ url: await createPlanCheckout({ email, plan: key as PlanKey, interval: req.body?.interval === "year" ? "year" : "month", origin: originOf(req), customerId: sub?.customerId || undefined, addons }) });
     } catch (err: any) {
       console.error("Plan checkout failed:", err?.message);
       res.status(502).json({ message: "Checkout didn't open. Try again in a moment." });
@@ -8076,6 +8080,7 @@ export function registerRoutes(app: Express): void {
       const state = await readPlanSession(String(req.body?.sessionId ?? ""));
       if (!state || state.email !== email) return res.status(404).json({ message: "We couldn't find that subscription." });
       await syncPlan(state);
+      for (const a of await readPlanSessionAddons(String(req.body?.sessionId ?? "")).catch(() => [])) await storage.upsertAddon(a);
       const plan = planOf(state.plan)!;
       res.json({ plan: `${plan.name}${state.interval === "year" ? " (yearly)" : ""}`, credits: plan.credits * (state.interval === "year" ? 12 : 1), balance: await storage.tokenBalance(email) });
     } catch (err: any) {
@@ -8212,6 +8217,7 @@ export function registerRoutes(app: Express): void {
       if (event.type.startsWith("customer.subscription.")) {
         const addon = addonStateFrom(obj);
         if (addon) await storage.upsertAddon(addon);
+        for (const a of bundledAddonStatesFrom(obj)) await storage.upsertAddon(a);
       }
       if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted" || event.type === "customer.subscription.created") {
         const state = planStateFrom(obj);
