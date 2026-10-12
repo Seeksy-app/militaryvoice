@@ -2015,6 +2015,42 @@ function TextEditor({ body, align = "left", onBody, onAlign, rows = 5, maxLength
 
 // ---- Share -------------------------------------------------------------------------
 
+/** Their free podcast website (12 Oct 2026): militaryvoices.ai/<handle>/show, on unless they switch it off. */
+function WebsiteCard() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const q = useQuery<{ on: boolean; url: string; published: boolean }>({ queryKey: ["/api/host/site"] });
+  const d = q.data;
+  if (!d?.url) return null;
+  const set = async (on: boolean) => {
+    const r = await apiRequest("POST", "/api/host/site", { on });
+    qc.setQueryData(["/api/host/site"], await r.json());
+    toast({ title: on ? "Your website is on" : "Your website is off" });
+  };
+  return (
+    <Card icon={Monitor} tone="gold" title="Your podcast website">
+      <p className="-mt-1 text-xs text-muted-foreground">Free. Every episode gets its own page with notes and a transcript, plus your clips, a "be a guest" form and your media kit. It updates itself when you publish.</p>
+      {!d.published ? (
+        <p className="text-sm text-muted-foreground">Publish your SmartLink and your website goes live with it.</p>
+      ) : (
+        <>
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-border p-3">
+            <span className="text-sm font-semibold">{d.on ? "On" : "Off"}</span>
+            <Switch checked={d.on} onCheckedChange={(v) => void set(v)} aria-label="Website on" data-testid="site-switch" />
+          </div>
+          {d.on && (
+            <div className="flex gap-2">
+              <Input readOnly value={d.url.replace(/^https?:\/\/(www\.)?/, "")} className="font-mono text-sm" />
+              <Button onClick={() => void navigator.clipboard.writeText(d.url).then(() => toast({ title: "Website link copied" }))} className="shrink-0 gap-1.5 rounded-full bg-[#053877] hover:bg-[#0a4a99]" data-testid="site-copy"><Copy className="h-4 w-4" /> Copy</Button>
+              <Button asChild variant="outline" className="shrink-0 gap-1.5 rounded-full"><a href={d.url} target="_blank" rel="noreferrer"><ExternalLink className="h-4 w-4" /> Open</a></Button>
+            </div>
+          )}
+        </>
+      )}
+    </Card>
+  );
+}
+
 function ShareTab({ url }: { url: string }) {
   const { toast } = useToast();
   const [qr, setQr] = useState("");
@@ -2049,6 +2085,8 @@ function ShareTab({ url }: { url: string }) {
           </button>
         </div>
       </Card>
+
+      <WebsiteCard />
 
       <Card icon={MessageCircle} tone="blue" title="Message me link">
         <p className="-mt-1 text-xs text-muted-foreground">Opens your page with the chat already open. Put it in a post or your show notes: "Questions? Message me."</p>

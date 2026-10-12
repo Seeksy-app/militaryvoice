@@ -33,6 +33,7 @@ import Directory from "@/pages/Directory";
 import PodcastPage from "@/pages/PodcastPage";
 import BioPublicPage from "@/pages/BioPublicPage";
 import BioBrandsPage from "@/pages/BioBrandsPage";
+import ShowSite, { ShowEpisode } from "@/pages/ShowSite";
 import BioFamilyPage from "@/pages/BioFamilyPage";
 import PromoDiscovery from "@/pages/PromoDiscovery";
 import Prepare from "@/pages/Prepare";
@@ -174,6 +175,9 @@ function AppRouter() {
       {/* A podcaster's page: militaryvoices.ai/<handle>. Last, so every real address wins; an unknown handle is the 404. */}
       <Route path="/:handle/family/:key">{(p) => <BioFamilyPage handle={p.handle} fkey={p.key} />}</Route>
       <Route path="/:handle/brands">{(p) => <BioBrandsPage handle={p.handle} />}</Route>
+      {/* Their free podcast website (12 Oct 2026), and a page per episode. */}
+      <Route path="/:handle/show">{(p) => <ShowSite handle={p.handle} />}</Route>
+      <Route path="/:handle/show/:slug">{(p) => <ShowEpisode handle={p.handle} slug={p.slug} />}</Route>
       <Route path="/:handle">{(p) => <BioPublicPage handle={p.handle} />}</Route>
       <Route component={NotFound} />
     </Switch>
