@@ -247,9 +247,10 @@ const DEFS: Def[] = [
     key: "podchaser", name: "Podchaser", group: "Social and podcasts", powers: "Hosts & guests search",
     run: async () => {
       const k = env("PODCHASER_API_KEY", "PODCHASER_CLIENT_ID", "PODCHASER_KEY");
-      // Podscan does this job since 7 Oct, so a refused Podchaser key isn't an outage (9 Oct).
-      if (env("PODSCAN_API_KEY")) return { state: "off", detail: "Not in use: Podscan runs Hosts & guests" };
-      return k ? ping("https://developers.podchaser.com/api/rest/v1/usage", { headers: { "x-api-key": k } }) : { state: "off", detail: "Not set up (PODCHASER_API_KEY)" };
+      // Podscan leads Hosts & guests since 7 Oct; Podchaser is paid again (12 Oct) and kept beside it, so it's checked too.
+      if (!k) return { state: "off", detail: "Not set up (PODCHASER_API_KEY)" };
+      const r = await ping("https://developers.podchaser.com/api/rest/v1/usage", { headers: { "x-api-key": k } });
+      return env("PODSCAN_API_KEY") && r.state === "ok" ? { ...r, detail: `${r.detail} · alongside Podscan` } : r;
     },
   },
   {
