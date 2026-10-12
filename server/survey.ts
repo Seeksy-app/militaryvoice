@@ -162,6 +162,41 @@ ${giftHtml}${plaque}
   return { subject, html, text };
 }
 
+/** The last call (12 Oct): to everyone who hasn't answered, from Riccoh, with their own link. */
+export function lastCallEmail(name: string, role: string, surveyUrl: string): { subject: string; html: string; text: string } {
+  const hi = name.trim() || "there";
+  const served = role === "interviewee"
+    ? "You served, and on the Marathon you shared your story with everyone who served beside you."
+    : "You served, and now you're telling the stories that matter to the people who served beside you.";
+  const lines = ["sponsors who want your audience,", "clips that bring in new listeners,", "a home for your show that's yours."];
+  const body = `<p style="margin:0 0 16px;">Hi ${esc(hi)},</p>
+<p style="margin:0 0 16px;">Last call: our short survey from National Military Podcast Day closes this <strong>Friday, October 16</strong>.</p>
+<p style="margin:0 0 10px;">${served} That work deserves to pay. Military and veteran creators are building real businesses, and we're building MilitaryVoices.ai to help you earn more from yours:</p>
+<ul style="margin:0 0 16px;padding-left:20px;">${lines.map((l) => `<li style="margin:0 0 6px;">${l}</li>`).join("")}</ul>
+<p style="margin:0 0 16px;">To get that right, we need to hear from you. It's six quick taps, about a minute, and your answers decide what we build next and what it costs.</p>`;
+  const html = emailShell({
+    banner: EMAIL_BANNERS.podcasters,
+    bannerAlt: "National Military Podcast Day",
+    eyebrow: "National Military Podcast Day · last call",
+    heading: `Last call, ${hi}`,
+    body,
+    cta: { href: surveyUrl, label: "Take the 1-minute survey" },
+    secondary: `<p style="margin:16px 0 0;">Thank you for being part of the day.</p><p style="margin:12px 0 0;">Semper Fi,<br>Riccoh Player<br>Host, National Military Podcast Day</p>`,
+    preheader: "Our survey closes Friday. One minute helps us help you earn more.",
+  });
+  const text = [
+    `Hi ${hi},`, "",
+    "Last call: our short survey from National Military Podcast Day closes this Friday, October 16.", "",
+    `${served} That work deserves to pay. Military and veteran creators are building real businesses, and we're building MilitaryVoices.ai to help you earn more from yours:`,
+    ...lines.map((l) => `- ${l}`), "",
+    "To get that right, we need to hear from you. It's six quick taps, about a minute, and your answers decide what we build next and what it costs:",
+    surveyUrl, "",
+    "Thank you for being part of the day.", "",
+    "Semper Fi,", "Riccoh Player", "Host, National Military Podcast Day",
+  ].join("\n");
+  return { subject: "Last call for the Marathon survey", html, text };
+}
+
 export function registerSurvey(app: Express, requireAdmin: RequestHandler): void {
   /**
    * For Admin → Podcasters: what each booking has had back since the day —
@@ -271,6 +306,30 @@ export function registerSurvey(app: Express, requireAdmin: RequestHandler): void
     res.json({ count: out.length, items: out });
   });
 
+  /**
+   * Last call (12 Oct): everyone invited who hasn't answered, queued for `sendAt` from Riccoh.
+   * `preview` returns the mail without queueing. Anyone who answers before it goes is skipped by the outbox.
+   */
+  app.post("/api/admin/survey/last-call", requireAdmin, async (req, res) => {
+    await schemaIsReady();
+    const sendAt = String(req.body?.sendAt ?? "");
+    const preview = req.body?.preview === true;
+    if (!preview && !Number.isFinite(Date.parse(sendAt))) return res.status(400).json({ message: "When should it go?" });
+    const rows = await db.select().from(surveyInvites).where(eq(surveyInvites.survey, SURVEY)).orderBy(asc(surveyInvites.name));
+    const out: { email: string; name: string; subject: string; queued?: number; html?: string; text?: string }[] = [];
+    for (const r of rows) {
+      if (r.completedAt) continue;
+      const name = /^(dr|mr|mrs|ms|sergeant|sgt)\.?\s/i.test(r.name.trim()) ? greetingOf(r.name) : firstName(r.name);
+      const mail = lastCallEmail(name, r.role, `${ORIGIN}/survey/${r.token}`);
+      if (preview) { out.push({ email: r.email, name, ...mail }); continue; }
+      const [already] = await db.select({ id: outboxMail.id }).from(outboxMail).where(and(eq(outboxMail.to, r.email), eq(outboxMail.kind, "survey-last-call"), eq(outboxMail.status, "queued")));
+      if (already) { out.push({ email: r.email, name, subject: mail.subject, queued: already.id }); continue; }
+      const [row] = await db.insert(outboxMail).values({ to: r.email, subject: mail.subject, html: mail.html, text: mail.text, sender: "riccoh", kind: "survey-last-call", sendAt: new Date(sendAt).toISOString(), createdAt: now() }).returning({ id: outboxMail.id });
+      out.push({ email: r.email, name, subject: mail.subject, queued: row.id });
+    }
+    res.json({ count: out.length, items: out });
+  });
+
   /** Mail waiting to go, and what went. */
   app.get("/api/admin/outbox", requireAdmin, async (_req, res) => {
     await schemaIsReady();
@@ -369,6 +428,11 @@ export function registerSurvey(app: Express, requireAdmin: RequestHandler): void
       // Claim it first, so two runs can't both send it.
       const [mine] = await db.update(outboxMail).set({ status: "sending" }).where(and(eq(outboxMail.id, m.id), eq(outboxMail.status, "queued"))).returning({ id: outboxMail.id });
       if (!mine) continue;
+      // A survey reminder isn't sent to someone who has answered since it was queued.
+      if (m.kind === "survey-last-call") {
+        const [inv] = await db.select({ completedAt: surveyInvites.completedAt }).from(surveyInvites).where(and(eq(surveyInvites.survey, SURVEY), eq(surveyInvites.email, m.to)));
+        if (inv?.completedAt) { await db.update(outboxMail).set({ status: "cancelled", error: "Answered before it went." }).where(eq(outboxMail.id, m.id)); continue; }
+      }
       try {
         const id = await sendOneOffEmail({ to: m.to, subject: m.subject, html: m.html, text: m.text, kind: m.kind, bcc: m.sender === "riccoh" ? bccFor("riccoh", m.to) : undefined });
         await db.update(outboxMail).set(id ? { status: "sent", sentAt: now() } : { status: "failed", error: "The mail service didn't take it." }).where(eq(outboxMail.id, m.id));
