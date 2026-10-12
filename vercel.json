@@ -19,6 +19,10 @@
       "destination": "/api"
     },
     {
+      "source": "/sitemap-shows.xml",
+      "destination": "/api"
+    },
+    {
       "source": "/s/(.*)",
       "destination": "/api"
     },

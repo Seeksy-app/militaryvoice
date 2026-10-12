@@ -1948,6 +1948,8 @@ export function registerRoutes(app: Express): void {
         "Disallow: /api",
         "",
         `Sitemap: ${origin}/sitemap.xml`,
+        // Every podcaster's SmartLink, website and episode pages (12 Oct).
+        `Sitemap: ${origin}/sitemap-shows.xml`,
         "",
       ].join("\n"),
     );

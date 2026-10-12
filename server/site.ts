@@ -6,29 +6,38 @@
 // podcaster can switch it off (site-off:<page id> in site_settings).
 import type { Express } from "express";
 import crypto from "node:crypto";
-import { and, desc, eq, ne } from "drizzle-orm";
+import { and, desc, eq, like, ne } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { requireHostSession } from "./session.js";
 import { sendListenerQuestionEmail } from "./email.js";
 import { readFeed } from "./hosting.js";
-import { bioPages, bioEvents, clips, hostedEpisodes, hostedShows, listenerQuestions, showTranscripts, type BioPageRow } from "../shared/schema.js";
+import { resolveFeed } from "./podcastIntake.js";
+import { bioPages, bioEvents, clips, siteSettings, hostedEpisodes, hostedShows, listenerQuestions, showTranscripts, type BioPageRow } from "../shared/schema.js";
 import { parseBrands, parseSocials, parseTheme } from "../shared/bio.js";
 import type { SiteEpisode, SiteEpisodeFull, SitePublic } from "../shared/site.js";
+import { REVIEW_EMAIL } from "../shared/review.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 const now = () => new Date().toISOString();
 const str = (v: unknown, n: number) => (typeof v === "string" ? v : "").slice(0, n);
 const offKey = (pageId: number) => `site-off:${pageId}`;
 
+/** Feed text with its character codes turned back into characters ("O&#039; Nukes" → "O' Nukes"). */
+function decode(t: string): string {
+  return t
+    .replace(/&#(\d+);/g, (_, n) => String.fromCodePoint(Number(n)))
+    .replace(/&#x([0-9a-f]+);/gi, (_, n) => String.fromCodePoint(parseInt(n, 16)))
+    .replace(/&nbsp;/g, " ").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
+}
+
 /** Notes as plain text: tags out, paragraphs kept. */
 function plain(html: string): string {
-  return html
+  return decode(html
     .replace(/<\s*br\s*\/?>/gi, "\n")
     .replace(/<\/(p|div|li|h[1-6])>/gi, "\n")
     .replace(/<li[^>]*>/gi, "• ")
     .replace(/<[^>]+>/g, "")
-    .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'")
-    .replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+    .replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n")).trim();
 }
 const slugOf = (title: string) => title.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/&/g, " and ").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 60).replace(/-+$/, "") || "episode";
 const rssKey = (guid: string) => "r" + crypto.createHash("sha1").update(guid).digest("hex").slice(0, 8);
@@ -56,13 +65,13 @@ async function buildShow(row: BioPageRow): Promise<Show | null> {
       .filter((e) => e.status === "published" && e.publishedAt && Date.parse(e.publishedAt) <= Date.now() && (e.audioKey || e.audioUrl));
     if (eps.length) {
       return {
-        title: hosted.title, description: plain(hosted.description), author: hosted.author, artworkUrl: hosted.artworkUrl,
+        title: decode(hosted.title), description: plain(hosted.description), author: decode(hosted.author), artworkUrl: hosted.artworkUrl,
         appleUrl: hosted.appleUrl, spotifyUrl: hosted.spotifyUrl, feedUrl: `${ORIGIN}/feed/${hosted.slug}`, pageUrl: hosted.website,
         episodes: eps.map((e) => {
           const notes = plain(e.description);
           const key = `h${e.id}`;
           return {
-            key, slug: `${slugOf(e.title)}-${key}`, title: e.title, publishedAt: e.publishedAt, durationSec: e.durationSec,
+            key, slug: `${slugOf(decode(e.title))}-${key}`, title: decode(e.title), publishedAt: e.publishedAt, durationSec: e.durationSec,
             audio: `${ORIGIN}/e/${e.id}.${/mp4|m4a|aac/.test(e.mime) ? (e.mime.startsWith("video") ? "mp4" : "m4a") : "mp3"}`,
             artworkUrl: e.artworkUrl || hosted.artworkUrl, summary: notes.slice(0, 220), episodeNumber: e.episodeNumber, season: e.season,
             hasTranscript: false, notes, transcriptKey: `hosted:${e.id}`,
@@ -71,17 +80,23 @@ async function buildShow(row: BioPageRow): Promise<Show | null> {
       };
     }
   }
-  const url = row.rssUrl.trim();
-  if (!/^https?:\/\//.test(url)) return null;
-  const f = await readFeed(url);
+  const profile = await storage.getProfileByEmail(row.email).catch(() => undefined);
+  let f: Awaited<ReturnType<typeof readFeed>> | null = null;
+  let url = "";
+  for (const raw of [row.rssUrl, profile?.rssUrl ?? ""].map((u) => u.trim()).filter((u, i, a) => /^https?:\/\//.test(u) && a.indexOf(u) === i)) {
+    url = await resolveFeed(raw);
+    f = await readFeed(url).catch(() => null);
+    if (f?.items.length) break;
+  }
+  if (!f) return null;
   const items = f.items.filter((it) => it.url).sort((a, b) => b.published.localeCompare(a.published)).slice(0, 200);
   return {
-    title: f.title, description: plain(f.description), author: f.author, artworkUrl: f.artwork, appleUrl: "", spotifyUrl: "", feedUrl: url, pageUrl: f.link,
+    title: decode(f.title), description: plain(f.description), author: decode(f.author), artworkUrl: f.artwork, appleUrl: "", spotifyUrl: "", feedUrl: url, pageUrl: f.link,
     episodes: items.map((it) => {
       const notes = plain(it.notes);
       const key = rssKey(it.guid || it.url);
       return {
-        key, slug: `${slugOf(it.title)}-${key}`, title: it.title, publishedAt: it.published, durationSec: it.duration, audio: it.url,
+        key, slug: `${slugOf(decode(it.title))}-${key}`, title: decode(it.title), publishedAt: it.published, durationSec: it.duration, audio: it.url,
         artworkUrl: it.image || f.artwork, summary: notes.slice(0, 220), episodeNumber: it.episode, season: it.season,
         hasTranscript: false, notes, transcriptKey: `rss:${it.guid}`.slice(0, 400),
       };
@@ -185,6 +200,42 @@ export function registerSite(app: Express): void {
     await db.insert(bioEvents).values({ pageId: row.id, kind: "ask", label: "Be a guest", day: now().slice(0, 10), createdAt: now() }).catch(() => {});
     void sendListenerQuestionEmail({ to: row.email, show: row.displayName, name, fromEmail, question, episode: "Be a guest", dashboardUrl: `${ORIGIN}/host/dashboard/page?tab=messages` }).catch(() => {});
     res.json({ ok: true });
+  });
+
+  /**
+   * Every podcaster's SmartLink, website and episode pages, for search engines (12 Oct).
+   * Listed in robots.txt beside /sitemap.xml. Built at most every 6 hours per server.
+   */
+  let map: { at: number; xml: string } | null = null;
+  app.get("/sitemap-shows.xml", async (_req, res) => {
+    if (!map || Date.now() - map.at > 6 * 3600_000) {
+      await schemaIsReady();
+      const pages = await db.select().from(bioPages).where(eq(bioPages.published, true));
+      const off = new Set((await db.select({ key: siteSettings.key, value: siteSettings.value }).from(siteSettings).where(like(siteSettings.key, "site-off:%"))).filter((r) => r.value === "1").map((r) => Number(r.key.slice(9))));
+      const urls: { loc: string; lastmod: string; priority: string }[] = [];
+      const today = now().slice(0, 10);
+      const day = (iso: string) => (Number.isFinite(Date.parse(iso)) ? new Date(iso).toISOString().slice(0, 10) : today);
+      // Our own team's test pages and the app-review account stay out of search.
+      const team = new Set([...(await storage.listAdmins()).map((a) => a.email.trim().toLowerCase()), REVIEW_EMAIL.toLowerCase()]);
+      const ours = /@(podlogix\.co|militaryvoices?\.ai|workready360\.com|smartloads\.io|empowerify\.io)$/i;
+      const live = pages.filter((p) => p.handle && !team.has(p.email.trim().toLowerCase()) && !ours.test(p.email.trim()));
+      // A few feeds at a time: a slow host shouldn't hold up the rest.
+      for (let i = 0; i < live.length; i += 4) {
+        await Promise.all(live.slice(i, i + 4).map(async (row) => {
+          // Only podcasters with a show to play: a page with nothing in it isn't worth a search result.
+          const show = await showFor(row).catch(() => null);
+          if (!show?.episodes.length) return;
+          urls.push({ loc: `${ORIGIN}/${row.handle}`, lastmod: day(row.updatedAt), priority: "0.6" });
+          if (off.has(row.id)) return;
+          urls.push({ loc: `${ORIGIN}/${row.handle}/show`, lastmod: day(show.episodes[0]?.publishedAt ?? row.updatedAt), priority: "0.8" });
+          for (const e of show.episodes.slice(0, 500)) urls.push({ loc: `${ORIGIN}/${row.handle}/show/${e.slug}`, lastmod: day(e.publishedAt), priority: "0.5" });
+        }));
+      }
+      const esc = (u: string) => u.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+      map = { at: Date.now(), xml: `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n${urls.map((u) => `  <url><loc>${esc(u.loc)}</loc><lastmod>${u.lastmod}</lastmod><priority>${u.priority}</priority></url>`).join("\n")}\n</urlset>\n` };
+    }
+    res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=21600");
+    res.type("application/xml").send(map.xml);
   });
 
   /** The podcaster's switch: on unless they turn it off. */

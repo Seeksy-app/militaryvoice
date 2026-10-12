@@ -135,7 +135,7 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
 
       <div className="mx-auto mt-6 flex max-w-[560px] flex-col gap-4 px-4">
         {/* Their blocks in their order; the podcast is one of them (they add it from Content). */}
-        {data.sections.map((s) => s.type === "podcast" ? (data.podcast ? <PodcastCard key={s.id} p={data.podcast} onAsk={data.ai?.enabled ? setAskEp : undefined} opts={{ ...DEFAULT_PODCAST, ...(t.podcast ?? {}) }} style={t.podcastStyle ?? "spotlight"} full={(t.podcastFrame ?? "full") === "full"} fallbackArt={data.avatarUrl} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} ev={ev} share={share} copied={copied} /> : null) : <Section key={s.id} s={s} btn={btn} ink={ink} sub={sub} card={card} line={line} accent={accent} preview={preview} ev={ev} handle={data.handle} onSubscribe={onSubscribe} />)}
+        {data.sections.map((s) => s.type === "podcast" ? (data.podcast ? <PodcastCard key={s.id} p={data.podcast} siteUrl={data.siteUrl} onAsk={data.ai?.enabled ? setAskEp : undefined} opts={{ ...DEFAULT_PODCAST, ...(t.podcast ?? {}) }} style={t.podcastStyle ?? "spotlight"} full={(t.podcastFrame ?? "full") === "full"} fallbackArt={data.avatarUrl} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} ev={ev} share={share} copied={copied} /> : null) : <Section key={s.id} s={s} btn={btn} ink={ink} sub={sub} card={card} line={line} accent={accent} preview={preview} ev={ev} handle={data.handle} onSubscribe={onSubscribe} />)}
         {BRANDS_LIVE && data.brandsOn && <p className="mt-2 text-center text-xs" style={{ color: sub }}><a href={preview ? undefined : `/${data.handle}/brands`} className="font-semibold hover:underline" data-testid="bio-for-brands">For brands: sponsor this show</a></p>}
       </div>
       {(t.shareButton || t.contactButton) && (
@@ -446,8 +446,8 @@ function CutoutTop({ kind, src, name, bg, scene, paper, dark, bigName, nameY = 0
   );
 }
 
-function PodcastCard({ p, onAsk, opts, style, full, fallbackArt, accent, ink, sub, card, line, radius, preview, ev, share, copied }: {
-  p: NonNullable<BioPublic["podcast"]>; onAsk?: (e: { id: string; title: string }) => void; opts: BioPodcastOptions; style: BioTheme["podcastStyle"]; full: boolean; fallbackArt: string; accent: string; ink: string; sub: string; card: string; line: string; radius: number; preview: boolean; ev: Ev; share: (title: string, id: string) => void; copied: string | null;
+function PodcastCard({ p, siteUrl, onAsk, opts, style, full, fallbackArt, accent, ink, sub, card, line, radius, preview, ev, share, copied }: {
+  p: NonNullable<BioPublic["podcast"]>; siteUrl?: string; onAsk?: (e: { id: string; title: string }) => void; opts: BioPodcastOptions; style: BioTheme["podcastStyle"]; full: boolean; fallbackArt: string; accent: string; ink: string; sub: string; card: string; line: string; radius: number; preview: boolean; ev: Ev; share: (title: string, id: string) => void; copied: string | null;
 }) {
   const [playing, setPlaying] = useState<string | null>(null);
   const [first, ...rest] = p.episodes;
@@ -544,7 +544,9 @@ function PodcastCard({ p, onAsk, opts, style, full, fallbackArt, accent, ink, su
       <div className="flex flex-wrap gap-2 px-4 pb-3 pt-1.5">
         {opts.apple && p.appleUrl && <a href={preview ? undefined : p.appleUrl} target="_blank" rel="noreferrer" onClick={() => ev("click", "Apple Podcasts")} className="px-3.5 py-2 text-xs font-semibold text-white" style={{ background: "#872EC4", borderRadius: radius }}>Apple Podcasts</a>}
         {opts.spotify && p.spotifyUrl && <a href={preview ? undefined : p.spotifyUrl} target="_blank" rel="noreferrer" onClick={() => ev("click", "Spotify")} className="px-3.5 py-2 text-xs font-semibold text-black" style={{ background: "#1DB954", borderRadius: radius }}>Spotify</a>}
-        {opts.all && p.pageUrl && <a href={preview ? undefined : p.pageUrl} target="_blank" rel="noreferrer" onClick={() => ev("click", "All episodes")} className="px-3.5 py-2 text-xs font-semibold" style={{ border: `1px solid ${line}`, borderRadius: radius }}>All episodes</a>}
+        {/* Their podcast website has every episode (12 Oct): the button is always there when it's on. */}
+        {siteUrl ? <a href={preview ? undefined : siteUrl} onClick={() => ev("click", "All episodes")} className="px-3.5 py-2 text-xs font-semibold" style={{ border: `1px solid ${line}`, borderRadius: radius }} data-testid="bio-all-episodes">All episodes</a>
+          : opts.all && p.pageUrl && <a href={preview ? undefined : p.pageUrl} target="_blank" rel="noreferrer" onClick={() => ev("click", "All episodes")} className="px-3.5 py-2 text-xs font-semibold" style={{ border: `1px solid ${line}`, borderRadius: radius }}>All episodes</a>}
         {opts.rss && <button type="button" onClick={() => { void navigator.clipboard?.writeText(p.feedUrl); ev("click", "RSS"); }} className="inline-flex items-center gap-1 px-3.5 py-2 text-xs font-semibold" style={{ border: `1px solid ${line}`, borderRadius: radius }}><Radio className="h-3.5 w-3.5" /> RSS <Copy className="h-3 w-3" style={{ color: sub }} /></button>}
       </div>
     </section>

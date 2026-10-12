@@ -125,6 +125,7 @@ async function publicOf(row: BioPageRow): Promise<BioPublic> {
     askEnabled: row.askEnabled,
     welcome: row.welcome.trim() || `Hi! Thanks for listening. What's on your mind?`,
     brandsOn: parseBrands(row.brands).on,
+    siteUrl: (await storage.getSetting(`site-off:${row.id}`).catch(() => null)) === "1" ? "" : `/${row.handle}/show`,
     cutoutUrl: row.cutoutFrom && row.cutoutFrom === row.avatarUrl ? row.cutoutUrl : "",
     livingUrl: row.livingFrom && row.livingFrom === (row.heroUrl || row.avatarUrl) ? row.livingUrl : "",
     introUrl: row.introUrl,

@@ -379,6 +379,8 @@ export interface BioPublic {
   welcome: string;
   /** Their media kit is on (a "For brands" link at the foot of the page). */
   brandsOn?: boolean;
+  /** Their free podcast website (/<handle>/show), "" when they've switched it off. */
+  siteUrl?: string;
   /** Their photo with the background taken out, for the Cutout top ("" until made). */
   cutoutUrl?: string;
   /** Their living photo (a short looping video of the top's photo, "" until made). */
