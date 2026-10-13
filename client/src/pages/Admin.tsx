@@ -30,6 +30,7 @@ import { adminGet, adminSend, adminUpload, adminExportUrl } from "@/lib/adminApi
 import { SocialCalendar } from "@/components/SocialCalendar";
 import { DiscoveryStats } from "@/components/DiscoveryStats";
 import { PlatformAnalytics } from "@/components/PlatformAnalytics";
+import { GtmPanel } from "@/components/GtmPanel";
 import { RunOfShow } from "@/components/RunOfShow";
 import { StudioConsole } from "@/components/StudioConsole";
 import { StudioHostsCard } from "@/components/StudioHostsCard";
@@ -5182,6 +5183,9 @@ export default function Admin({ tab, eventId: eventParam }: { tab?: string; even
                   </TabsContent>
                   <TabsContent value="analytics" className="mt-2 lg:mt-0">
                     <PlatformAnalytics />
+                  </TabsContent>
+                  <TabsContent value="gtm" className="mt-2 lg:mt-0">
+                    <GtmPanel />
                   </TabsContent>
                   <TabsContent value="projects" className="mt-2 lg:mt-0">
                     <AdminProjects />
