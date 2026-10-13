@@ -129,10 +129,10 @@ function AssetCard({ a, onPost, onDelete, onCopy }: { a: Asset; onPost: () => vo
   const postable = a.kind === "image" || a.kind === "video";
   return (
     <div className="group flex flex-col overflow-hidden rounded-2xl border border-border bg-card">
-      <div className="relative aspect-[4/3] bg-[#05060f]">
-        {a.kind === "image" ? <img src={a.url} alt="" className="h-full w-full object-contain" loading="lazy" />
-          : a.kind === "video" ? <video src={`${a.url}#t=2`} className="h-full w-full object-contain" preload="metadata" muted playsInline controls />
-          : <div className="flex h-full items-center justify-center text-white/70"><Icon className="h-10 w-10" /></div>}
+      <div className="relative aspect-[4/3] shrink-0 overflow-hidden bg-[#05060f]">
+        {a.kind === "image" ? <img src={a.url} alt="" className="absolute inset-0 h-full w-full object-contain" loading="lazy" />
+          : a.kind === "video" ? <video src={`${a.url}#t=2`} className="absolute inset-0 h-full w-full object-contain" preload="metadata" muted playsInline controls />
+          : <div className="absolute inset-0 flex items-center justify-center text-white/70"><Icon className="h-10 w-10" /></div>}
         <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-semibold capitalize text-white"><Icon className="h-3 w-3" /> {a.kind}</span>
       </div>
       <div className="flex flex-1 flex-col p-3">
@@ -214,8 +214,8 @@ function Composer({ a, d, onClose, onPosted }: { a: Asset; d: Data; onClose: () 
   return (
     <Shell title={`Post: ${a.title}`} onClose={onClose}>
       <div className="mt-4 grid gap-5 sm:grid-cols-[180px_1fr]">
-        <div className="overflow-hidden rounded-2xl bg-[#05060f]">
-          {a.kind === "image" ? <img src={a.url} alt="" className="w-full object-contain" /> : <video src={`${a.url}#t=2`} className="w-full" preload="metadata" muted playsInline />}
+        <div className="relative aspect-[4/5] overflow-hidden rounded-2xl bg-[#05060f]">
+          {a.kind === "image" ? <img src={a.url} alt="" className="absolute inset-0 h-full w-full object-contain" /> : <video src={`${a.url}#t=2`} className="absolute inset-0 h-full w-full object-contain" preload="metadata" muted playsInline />}
         </div>
         <div className="space-y-4">
           <div>
