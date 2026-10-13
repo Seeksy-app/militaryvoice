@@ -1662,8 +1662,10 @@ export const clipResultSchema = z.object({
   title: z.string().trim().min(1).max(120),
   caption: z.string().trim().max(400).default(""),
   reason: z.string().trim().max(400).default(""),
-  startSec: z.number().int().min(0),
-  endSec: z.number().int().min(1),
+  // Whole seconds, rounded outward (13 Oct 2026): a short video made into one clip ends where
+  // the video does (72.03), and refusing that failed the whole job after it had rendered.
+  startSec: z.number().min(0).transform((n) => Math.floor(n)),
+  endSec: z.number().min(1).transform((n) => Math.ceil(n)),
   transcript: z.string().trim().max(8000).default(""),
   url: z.string().trim().max(600).default(""),
   verticalUrl: z.string().trim().max(600).default(""),
