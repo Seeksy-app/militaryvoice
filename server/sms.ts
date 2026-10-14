@@ -6,9 +6,11 @@
 // or writes a line, and it goes. Every text says who it's from, the first one
 // to a number says how to stop them, and a STOP reply is honoured for good.
 //
-// SimpleTexting needs SIMPLETEXTING_API_TOKEN (and SIMPLETEXTING_ACCOUNT_PHONE
-// when the account has more than one number); SIMPLETEXTING_WEBHOOK_SECRET
-// guards the reply/STOP webhook, which carries no signature of its own.
+// SimpleTexting needs SIMPLETEXTING_API_TOKEN; SIMPLETEXTING_WEBHOOK_SECRET
+// guards the reply/STOP webhook, which carries no signature of its own. The
+// account is shared with SmartLoads, so we only send from, and only handle
+// events for, our own number (SIMPLETEXTING_ACCOUNT_PHONE, default 2015344064;
+// see ./smsNumber.ts).
 // Telnyx (TELNYX_API_KEY + TELNYX_FROM_NUMBER) is used only if SimpleTexting
 // isn't set. With neither, the admin says texting isn't set up, and nothing
 // is sent. (Telnyx suspended our account on 6 Oct 2026.)
@@ -20,6 +22,7 @@ import { getAdminEmail } from "./session.js";
 import { slackNote } from "./slack.js";
 import { smsMessages, smsOptIns, smsOptOuts } from "../shared/schema.js";
 import { SMS_CONSENT } from "../shared/sms.js";
+import { forOtherNumber, messageBody, ownAccountPhone, webhookBody } from "./smsNumber.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 const now = () => new Date().toISOString();
@@ -46,7 +49,7 @@ export function smsConfigured(): boolean {
 }
 /** The number texts come from, for the admin to show. */
 function fromNumber(): string {
-  if (simpleTexting()) return toE164(process.env.SIMPLETEXTING_ACCOUNT_PHONE || "") || "your SimpleTexting number";
+  if (simpleTexting()) return `+1${ownAccountPhone()}`;
   return toE164(process.env.TELNYX_FROM_NUMBER || "");
 }
 /** SimpleTexting wants US numbers as ten digits. */
@@ -55,13 +58,10 @@ const tenDigits = (e164: string) => e164.replace(/^\+1/, "").replace(/\D/g, "");
 const ST_BASE = "https://api-app2.simpletexting.com/v2/api";
 async function simpleTextingSend(to: string, text: string): Promise<{ ok: boolean; id: string; error: string }> {
   try {
-    const body: Record<string, string> = { contactPhone: tenDigits(to), mode: "AUTO", text };
-    const acct = toE164(process.env.SIMPLETEXTING_ACCOUNT_PHONE || "");
-    if (acct) body.accountPhone = tenDigits(acct);
     const r = await fetch(`${ST_BASE}/messages`, {
       method: "POST",
       headers: { authorization: `Bearer ${process.env.SIMPLETEXTING_API_TOKEN}`, "content-type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify(messageBody(tenDigits(to), text)),
     });
     const j = (await r.json().catch(() => ({}))) as { id?: string; message?: string; error?: string; details?: string };
     if (!r.ok) return { ok: false, id: "", error: j.message || j.details || j.error || `SimpleTexting said ${r.status}` };
@@ -293,14 +293,17 @@ export function registerSms(app: Express, requireAdmin: RequestHandler) {
 
   /**
    * SimpleTexting: replies, delivery reports and unsubscribes. Their webhooks
-   * aren't signed, so the URL carries our secret.
+   * aren't signed, so the URL carries our secret. A reply or delivery report
+   * for another number on the shared account (SmartLoads') is acknowledged and
+   * left alone: not logged, not sent to Slack.
    */
   app.post("/api/webhooks/simpletexting", async (req, res) => {
     const secret = process.env.SIMPLETEXTING_WEBHOOK_SECRET;
     if (!secret || String(req.query.key ?? "") !== secret) return res.status(401).json({ message: "No" });
-    await schemaIsReady();
     const type = String(req.body?.type ?? "");
     const v = (req.body?.values ?? {}) as Record<string, any>;
+    if (forOtherNumber(type, v)) return res.json({ ok: true, ignored: "other_number" });
+    await schemaIsReady();
     if (type === "UNSUBSCRIBE_REPORT") {
       const phone = toE164(String(v.phone ?? v.contactPhone ?? ""));
       if (phone) await db.insert(smsOptOuts).values({ phone, createdAt: now() }).onConflictDoNothing();
@@ -338,7 +341,7 @@ export function registerSms(app: Express, requireAdmin: RequestHandler) {
     const r = await fetch(`${ST_BASE}/webhooks`, {
       method: "POST",
       headers: { authorization: `Bearer ${process.env.SIMPLETEXTING_API_TOKEN}`, "content-type": "application/json" },
-      body: JSON.stringify({ url: `${ORIGIN}/api/webhooks/simpletexting?key=${encodeURIComponent(secret)}`, triggers: ["INCOMING_MESSAGE", "DELIVERY_REPORT", "NON_DELIVERED_REPORT", "UNSUBSCRIBE_REPORT"], requestPerSecLimit: 10 }),
+      body: JSON.stringify(webhookBody(`${ORIGIN}/api/webhooks/simpletexting?key=${encodeURIComponent(secret)}`)),
     });
     const j = await r.json().catch(() => ({}));
     res.status(r.ok ? 200 : 502).json(r.ok ? { ok: true } : { message: (j as { message?: string }).message || `SimpleTexting said ${r.status}` });
