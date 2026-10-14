@@ -22,6 +22,7 @@ A live event platform for military/veteran podcasters. Hosts sign-up pages, a br
 - **Secrets go in terminal only** — never paste API keys in chat: `read -rs K && printf '%s' "$K" | vercel env add NAME production && unset K`
 - **Local `.env` hits PRODUCTION DB** — never create real bookings/plans for real accounts; always clean test rows
 - **Vercel ESM runtime** — relative imports need `.js` extension; no fonts at runtime
+- **SimpleTexting is shared with SmartLoads** — one account, two numbers. Ours is `2015344064` (`SIMPLETEXTING_ACCOUNT_PHONE`, that's the default when unset). We send only from ours and our webhook ignores replies/delivery reports for any other number (`server/smsNumber.ts`); STOPs are account-wide and always recorded. Never act on SmartLoads' number or its texts.
 
 ## Current event
 - **24-Hour Podcastathon** — Oct 5, 2026. Event ID = 1 in DB.
