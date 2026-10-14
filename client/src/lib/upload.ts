@@ -119,13 +119,22 @@ function putPart(url: string, blob: Blob, onBytes: (n: number) => void): Promise
 export async function uploadToStorage(file: File, onProgress: (pct: number) => void): Promise<string> {
   // Unlike the processing after it, an upload lives in this tab: leaving
   // stops it, so the browser asks first.
-  const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
-  window.addEventListener("beforeunload", warn);
+  const release = holdPage();
   try {
     return await upload(file, onProgress);
   } finally {
-    window.removeEventListener("beforeunload", warn);
+    release();
   }
+}
+
+/**
+ * Ask before the tab closes or reloads, until the returned function is called.
+ * For work only this tab can finish: an upload, and filing it once it's up.
+ */
+export function holdPage(): () => void {
+  const warn = (e: BeforeUnloadEvent) => { e.preventDefault(); e.returnValue = ""; };
+  window.addEventListener("beforeunload", warn);
+  return () => window.removeEventListener("beforeunload", warn);
 }
 
 async function upload(file: File, onProgress: (pct: number) => void): Promise<string> {

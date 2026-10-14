@@ -18,7 +18,7 @@ import { NotifyPrompt } from "@/components/Notifications";
 import { UploadRecording } from "@/components/UploadRecording";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { useToast } from "@/hooks/use-toast";
-import { apiRequest } from "@/lib/queryClient";
+import { API_BASE, apiRequest } from "@/lib/queryClient";
 import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/schema";
 import { Slider } from "@/components/ui/slider";
 import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2, Clapperboard, Plus, ArrowLeftToLine, ArrowRightToLine, MoreHorizontal, Blend, Brackets, Library, ArrowLeft, CalendarClock } from "lucide-react";
@@ -808,19 +808,37 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
   // Saved a moment after each change.
   const [draftAt, setDraftAt] = useState<string>(() => draft0?.at ?? "");
   const [draftSaving, setDraftSaving] = useState(false);
+  const draftBody = useMemo(() => ({ source, trimStart: trim.start, trimEnd: trim.end, cuts, intro, outro, introT, outroT, music }), [source, trim.start, trim.end, cuts, intro, outro, introT, outroT, music]);
+  // The change still waiting for its save, so leaving can send it on the way out.
+  const unsaved = useRef<{ id: number; body: typeof draftBody } | null>(null);
   const saveDraft = useCallback(async () => {
+    unsaved.current = null;
     setDraftSaving(true);
     try {
-      await apiRequest("PUT", `/api/host/recordings/${rec.id}/edit-draft`, { source, trimStart: trim.start, trimEnd: trim.end, cuts, intro, outro, introT, outroT, music });
+      await apiRequest("PUT", `/api/host/recordings/${rec.id}/edit-draft`, draftBody);
       setDraftAt(new Date().toISOString());
     } catch { /* the next change tries again */ } finally { setDraftSaving(false); }
-  }, [rec.id, source, trim.start, trim.end, cuts, intro, outro, introT, outroT, music]);
+  }, [rec.id, draftBody]);
   const firstDraftRun = useRef(true);
   useEffect(() => {
     if (firstDraftRun.current) { firstDraftRun.current = false; return; }
+    unsaved.current = { id: rec.id, body: draftBody };
     const t = window.setTimeout(() => void saveDraft(), 900);
     return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [saveDraft]);
+  // Closing the tab, or going elsewhere in the app, inside that moment: send it
+  // anyway. keepalive lets the request finish after the page has gone.
+  useEffect(() => {
+    const flush = () => {
+      const u = unsaved.current;
+      if (!u) return;
+      unsaved.current = null;
+      void fetch(`${API_BASE}/api/host/recordings/${u.id}/edit-draft`, { method: "PUT", keepalive: true, headers: { "Content-Type": "application/json" }, body: JSON.stringify(u.body) }).catch(() => {});
+    };
+    window.addEventListener("pagehide", flush);
+    return () => { window.removeEventListener("pagehide", flush); flush(); };
+  }, []);
   const cutTotal = cuts.reduce((a, c) => a + (c[1] - c[0]), 0);
   // The AI's recommended edits, for this version of the episode; the ones you've answered go.
   const sug = parseEditSuggest(rec.editSuggest);

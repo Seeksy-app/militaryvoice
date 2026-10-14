@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { durationOf, uploadToStorage } from "@/lib/upload";
+import { durationOf, holdPage, uploadToStorage } from "@/lib/upload";
 import { Loader2, Upload } from "lucide-react";
 import { IconTile } from "@/components/ui/icon-tile";
 
@@ -36,6 +36,8 @@ export function UploadRecording({ onDone, tall = false, autoOpen = false, initia
     // Still inside the click that asked for it, so the browser lets the picker open.
     input.current?.click();
   }, [autoOpen]);
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
   const started = useRef<File | null>(null);
   useEffect(() => {
     if (initialFile && started.current !== initialFile) { started.current = initialFile; void go(initialFile); }
@@ -50,19 +52,25 @@ export function UploadRecording({ onDone, tall = false, autoOpen = false, initia
       toast({ title: "That file is over 2GB", description: "Export a smaller copy (1080p is plenty) and try again.", variant: "destructive" });
       return;
     }
+    // Held until it's filed, not just uploaded: a tab closed in between left
+    // the file in storage with nothing in the Library to show for it.
+    const release = holdPage();
     try {
       setPct(0);
       setName(file.name);
       const durationSec = await durationOf(file);
       const storageKey = await uploadToStorage(file, setPct);
       const { id } = (await (await apiRequest("POST", "/api/host/uploads/recording", { storageKey, fileName: file.name, durationSec, sizeBytes: file.size })).json()) as { id: number };
+      release();
       await qc.invalidateQueries({ queryKey: ["/api/host/recordings"] });
-      if (onDone) onDone(id);
+      // Moved to another page while it uploaded: it carried on, so say where it went.
+      if (onDone && mounted.current) onDone(id);
       else toast({ title: "Added to your Library", description: "Open it in Pōstify to make clips and a clean episode." });
     } catch (e) {
       toast({ title: "Couldn't upload that", description: (e as Error).message, variant: "destructive" });
     } finally {
-      setPct(null);
+      release();
+      if (mounted.current) setPct(null);
       if (input.current) input.current.value = "";
     }
   }
