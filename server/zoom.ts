@@ -7,6 +7,7 @@ import { waitUntil } from "@vercel/functions";
 import { signedRecordingUpload } from "./recordingStorage.js";
 import { sendImportReadyEmail } from "./email.js";
 import { sendToEditors } from "./editorSend.js";
+import { slackNote } from "./slack.js";
 
 /**
  * Zoom, connected per podcaster (OAuth, a Zoom Marketplace app). Their cloud
@@ -261,6 +262,10 @@ export function registerZoom(app: Express): void {
       const me = await fetch("https://api.zoom.us/v2/users/me", { headers: { Authorization: `Bearer ${t.accessToken}` } }).then((r) => r.json()) as { id?: string; email?: string; account_id?: string };
       if (!me.id) throw new Error("no Zoom user");
       await storage.upsertZoom({ email, zoomUserId: me.id, zoomAccountId: me.account_id ?? "", zoomEmail: me.email ?? "", accessToken: t.accessToken, refreshToken: t.refreshToken, expiresAt: t.expiresAt });
+      // The team hears about it, so someone can check their first recording comes in (the help video promises it).
+      const who = await storage.getProfileByEmail(email).catch(() => undefined);
+      const note = slackNote(`:movie_camera: ${who?.hostName || email}${who?.podcastName ? ` (${who.podcastName})` : ""} connected Zoom${me.email && me.email !== email ? ` as ${me.email}` : ""}. Check their first recording comes into the Library.`, { label: "Open in CRM", url: `/admin/crm?with=${encodeURIComponent(email)}` });
+      try { waitUntil(note); } catch { /* not on Vercel */ }
       back("connected");
     } catch (err) {
       console.error("Zoom connect failed:", (err as Error).message);
