@@ -71,6 +71,40 @@ async function simpleTextingSend(to: string, text: string): Promise<{ ok: boolea
   }
 }
 
+/**
+ * Their name on SimpleTexting too (14 Oct 2026): a text sent to a bare number makes a contact with
+ * no name, so before each text the contact is created or updated with their name and email and put
+ * on the "MilitaryVoices" list. Best effort: a refusal here never stops the text.
+ */
+const ST_LIST = "MilitaryVoices";
+let stListId: string | null = null;
+async function stCall(path: string, init: RequestInit = {}): Promise<{ ok: boolean; status: number; j: any }> {
+  const r = await fetch(`${ST_BASE}${path}`, { ...init, headers: { authorization: `Bearer ${process.env.SIMPLETEXTING_API_TOKEN}`, "content-type": "application/json", ...(init.headers ?? {}) }, signal: AbortSignal.timeout(10_000) });
+  return { ok: r.ok, status: r.status, j: await r.json().catch(() => ({})) };
+}
+async function stList(): Promise<string | null> {
+  if (stListId) return stListId;
+  const got = await stCall(`/contact-lists?page=0&size=100`);
+  const found = (got.j?.content ?? got.j?.data ?? []).find((l: { name?: string }) => l.name === ST_LIST);
+  if (found?.id) return (stListId = String(found.id));
+  const made = await stCall(`/contact-lists`, { method: "POST", body: JSON.stringify({ name: ST_LIST }) });
+  return (stListId = made.j?.id ? String(made.j.id) : null);
+}
+export async function simpleTextingContact(phone: string, name: string, email: string): Promise<{ ok: boolean; error: string }> {
+  if (!simpleTexting()) return { ok: false, error: "Not on SimpleTexting" };
+  try {
+    const parts = name.trim().replace(/\s+/g, " ").split(" ");
+    const firstName = parts[0] ?? "";
+    const lastName = parts.length > 1 ? parts.slice(1).join(" ") : "";
+    const list = await stList().catch(() => null);
+    const body: Record<string, unknown> = { contactPhone: tenDigits(phone), ...(firstName ? { firstName } : {}), ...(lastName ? { lastName } : {}), ...(email ? { email } : {}), ...(list ? { listIds: [list] } : {}) };
+    const r = await stCall(`/contacts?upsert=true&listsReplacement=false`, { method: "POST", body: JSON.stringify(body) });
+    return r.ok ? { ok: true, error: "" } : { ok: false, error: r.j?.message || r.j?.details || `SimpleTexting said ${r.status}` };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
 /** One text, through Telnyx. Never throws: the result says what happened. */
 async function telnyxSend(to: string, text: string): Promise<{ ok: boolean; id: string; error: string }> {
   try {
@@ -114,6 +148,7 @@ export async function sendSms(o: { phone: string; body: string; name?: string; e
     await db.insert(smsMessages).values({ ...base, phone, body: text, status: "failed", error: "Texting isn't set up yet" });
     return { ok: false, status: "failed", error: "Texting isn't set up yet" };
   }
+  if (simpleTexting() && (o.name || o.email)) await simpleTextingContact(phone, o.name ?? "", o.email ?? "").catch(() => null);
   const r = simpleTexting() ? await simpleTextingSend(phone, text) : await telnyxSend(phone, text);
   await db.insert(smsMessages).values({ ...base, phone, body: text, status: r.ok ? "sent" : "failed", providerId: r.id, error: r.error });
   return { ok: r.ok, status: r.ok ? "sent" : "failed", error: r.error };
@@ -281,6 +316,21 @@ export function registerSms(app: Express, requireAdmin: RequestHandler) {
   });
 
   /** Point SimpleTexting's replies, delivery reports and STOPs at us. One press, once. */
+  /** Names for the contacts already on SimpleTexting: everyone we've texted, from our log. */
+  app.post("/api/admin/sms/sync-contacts", requireAdmin, adminOnly, async (_req, res) => {
+    if (!simpleTexting()) return res.status(400).json({ message: "Texting isn't on SimpleTexting." });
+    const rows = await db.select({ phone: smsMessages.phone, name: smsMessages.name, email: smsMessages.email }).from(smsMessages).orderBy(desc(smsMessages.id));
+    const people = new Map<string, { name: string; email: string }>();
+    for (const r of rows) { const had = people.get(r.phone); if (!had || (!had.name && r.name)) people.set(r.phone, { name: r.name || had?.name || "", email: r.email || had?.email || "" }); }
+    let done = 0; const failed: string[] = [];
+    for (const [phone, p] of Array.from(people)) {
+      if (!p.name && !p.email) continue;
+      const r = await simpleTextingContact(phone, p.name, p.email);
+      if (r.ok) done++; else failed.push(`${p.name || phone}: ${r.error}`);
+    }
+    res.json({ people: people.size, updated: done, failed: failed.slice(0, 10), list: stListId });
+  });
+
   app.post("/api/admin/sms/connect-webhook", requireAdmin, adminOnly, async (_req, res) => {
     if (!simpleTexting()) return res.status(400).json({ message: "Add SIMPLETEXTING_API_TOKEN first." });
     const secret = process.env.SIMPLETEXTING_WEBHOOK_SECRET;
