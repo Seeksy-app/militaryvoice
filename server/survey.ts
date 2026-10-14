@@ -447,6 +447,11 @@ export function registerSurvey(app: Express, requireAdmin: RequestHandler): void
     for (const m of dueTexts) {
       const [mine] = await db.update(scheduledTexts).set({ status: "sending" }).where(and(eq(scheduledTexts.id, m.id), eq(scheduledTexts.status, "queued"))).returning({ id: scheduledTexts.id });
       if (!mine) continue;
+      // A Zoom nudge is moot once they've connected it.
+      if (m.kind === "zoom-nudge" && m.email && (await storage.getZoom(m.email))) {
+        await db.update(scheduledTexts).set({ status: "cancelled", error: "Connected Zoom before it went." }).where(eq(scheduledTexts.id, m.id));
+        continue;
+      }
       const r = await sendSms({ phone: m.phone, body: m.body, name: m.name, email: m.email, eventId: m.eventId, sentBy: "outbox" }).catch((e: Error) => ({ ok: false, status: "failed", error: e.message }));
       await db.update(scheduledTexts).set({ status: r.ok ? "sent" : r.status === "blocked" ? "blocked" : "failed", sentAt: r.ok ? now() : "", error: r.ok ? "" : String(r.error).slice(0, 300) }).where(eq(scheduledTexts.id, m.id));
       if (r.ok) texted++;
