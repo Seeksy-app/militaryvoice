@@ -122,7 +122,7 @@ Names only. Values live in Vercel (site) and Render (worker). Set secrets from a
 |---|---|---|
 | `SIMPLETEXTING_API_TOKEN` | `server/sms.ts` | Show-day texts. The SimpleTexting account is shared with SmartLoads (14 Oct 2026). |
 | `SIMPLETEXTING_ACCOUNT_PHONE` | `server/smsNumber.ts` | Our number on that account, ten digits (`+1`, spaces and dashes are fine). Default `2015344064`. Every send names it as `accountPhone`, and `/api/webhooks/simpletexting` acknowledges and ignores replies and delivery reports for any other number (SmartLoads'). STOPs carry no number and are account-wide, so they're always recorded. |
-| `SIMPLETEXTING_WEBHOOK_SECRET` | `server/sms.ts` | `?key=` on the webhook URL (SimpleTexting doesn't sign). "Connect replies and STOPs" registers the webhook for our number only. |
+| `SIMPLETEXTING_WEBHOOK_SECRET` | `server/sms.ts` | `?key=` on the webhook URL (SimpleTexting doesn't sign). "Connect replies and STOPs" registers the webhook for our number only, but SimpleTexting adds a new webhook each time and never replaces one: with two registered, every reply is logged and posted to Slack twice. Don't press it while a webhook exists; to re-register, first delete the old one in SimpleTexting (Settings → API → Webhooks). The handler's number filter is enough on its own. |
 | `TELNYX_API_KEY`, `TELNYX_FROM_NUMBER`, `TELNYX_MESSAGING_PROFILE_ID`, `TELNYX_PUBLIC_KEY` | `server/sms.ts` | Fallback only when SimpleTexting isn't set (account suspended 6 Oct 2026). |
 
 ### Media and storage
