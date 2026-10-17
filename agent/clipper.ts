@@ -56,6 +56,7 @@ import sharp from "sharp";
 import { textPath, fitSize, textWidth } from "../server/textPath.js";
 import { cutList, snapToAudio, keepRanges, selectGraph, envelope, type Word } from "./refine.js";
 import { captionTrack, type CaptionStyle, type TimedWord } from "./wordCaptions.js";
+import { glimpseLane } from "./glimpse.js";
 
 const API_BASE = (process.env.API_BASE || "http://localhost:3000").replace(/\/+$/, "");
 const AGENT_TOKEN = process.env.AGENT_TOKEN || "";
@@ -2504,7 +2505,8 @@ async function main(): Promise<void> {
       await new Promise((r) => setTimeout(r, POLL_MS));
     }
   };
-  await Promise.all([...Array.from({ length: LANES }, (_, i) => lane(i)), quickLane()]);
+  // The Glimpse pilot: idle unless an admin turns it on (server/glimpse.ts).
+  await Promise.all([...Array.from({ length: LANES }, (_, i) => lane(i)), quickLane(), glimpseLane(api, run)]);
 }
 
 // Importing this file to test a piece of it must not start the loop.

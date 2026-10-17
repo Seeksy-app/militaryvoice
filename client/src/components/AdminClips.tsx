@@ -5,6 +5,7 @@ import { Badge } from "@/components/ui/badge";
 import { useToast } from "@/hooks/use-toast";
 import { Film, RefreshCw, Download, Clock, AlertTriangle, Loader2, Play, Sparkles, ChevronDown } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
+import { GlimpsePanel } from "@/components/GlimpsePanel";
 
 // What the clipper produced, where a producer can actually look at it.
 //
@@ -227,6 +228,7 @@ export function AdminClips({
   return (
     <section className="flex flex-col gap-4" data-testid="section-admin-clips">
       <PostifyStats adminGet={adminGet} />
+      <GlimpsePanel adminGet={adminGet} adminSend={adminSend} />
       <div className="flex flex-wrap items-baseline justify-between gap-2">
         <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em]">
           <Film className="h-4 w-4 text-primary" /> Recordings &amp; clips

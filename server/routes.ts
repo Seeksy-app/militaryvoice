@@ -70,6 +70,7 @@ import { showClock } from "../shared/showClock.js";
 import { registerDiscoveryRoutes, probeIc } from "./discovery.js";
 import { registerMce } from "./mce.js";
 import { registerCreatomate } from "./creatomate.js";
+import { registerGlimpse } from "./glimpse.js";
 import { isConfigured as isInfluencersConfigured, credits, enrichHandle } from "./influencers.js";
 import { deriveSocialAccounts } from "../shared/socialLinks.js";
 import { buildAudienceSnapshot, readAudienceSnapshot, saveAudienceSnapshot, AUDIENCE_WINDOW_DAYS } from "./audience.js";
@@ -8347,6 +8348,7 @@ export function registerRoutes(app: Express): void {
 
   /** The podcaster's own "Make clips": queue one of their finished recordings that hasn't been clipped (or failed). */
   registerCreatomate(app, requireAdmin, requireAgent);
+  registerGlimpse(app, requireAdmin, requireAgent);
 
   app.post("/api/host/recordings/:id/clip", requireHostSession, async (req, res) => {
     const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
