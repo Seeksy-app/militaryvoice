@@ -75,7 +75,14 @@ Limits for the pilot:
 2. **Retention.** No period is given for media fetched from a link or uploaded. We ask them, and ask how to delete.
 3. **Billing.** Are failed, timed-out or cancelled runs charged? We ask them.
 4. **Structured output.** Does `elorian-1-agent` accept `response_format` with a JSON schema? If not, we ask for JSON in the prompt and validate it ourselves.
-5. **Account limits.** Video length per resolution, frames and the output cap are only shown at `GET /v1/limits`, which needs the key. It is one free call once the key is in.
+5. **Account limits: answered 17 Oct.** `GET /v1/limits`:
+   - tier "free", with a hard weekly budget of $5 that resets each Monday 00:00 UTC; the credit balance is $10;
+   - video up to 200 s at 1080p, 450 s at 720p and 600 s at 360p;
+   - at most 376 frames, 220k context tokens and 2 GB;
+   - `max_completion_tokens` 4,096. That settles the 8,000-vs-4,096 question: use 4,096;
+   - 15,000 requests a minute and 40 at once, far beyond what we need.
+
+   A 60-second excerpt at 5 fps is 300 frames, which fits. At 2 fps it is 120.
 6. **Rights.** The pilot needs one published episode whose podcaster has agreed to their video being processed by another company. No minors, no private or sensitive interviews.
 
 ## Files that would change (phase 2, after approval)
