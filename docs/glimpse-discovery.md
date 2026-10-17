@@ -71,7 +71,7 @@ Limits for the pilot:
 
 ## Still open (blocks the pilot)
 
-1. **Training opt-out.** The terms (§8.2) license Elorian to train on inputs. Paid accounts can opt out by email, but the two pages name different addresses: contact@elorian.ai (terms) and privacy@elorian.ai (privacy). We email both and get a written yes before any upload.
+1. **Training opt-out.** The terms (§8.2) license Elorian to train on inputs. Paid accounts can opt out by email, but the two pages name different addresses: contact@elorian.ai (terms) and privacy@elorian.ai (privacy). We email both and get a written yes before any upload. **Sent 17 Oct from hello@ to both addresses, with questions 2 and 3; waiting for a reply.**
 2. **Retention.** No period is given for media fetched from a link or uploaded. We ask them, and ask how to delete.
 3. **Billing.** Are failed, timed-out or cancelled runs charged? We ask them.
 4. **Structured output.** Does `elorian-1-agent` accept `response_format` with a JSON schema? If not, we ask for JSON in the prompt and validate it ourselves.
@@ -83,7 +83,7 @@ Limits for the pilot:
    - 15,000 requests a minute and 40 at once, far beyond what we need.
 
    A 60-second excerpt at 5 fps is 300 frames, which fits. At 2 fps it is 120.
-6. **Rights.** The pilot needs one published episode whose podcaster has agreed to their video being processed by another company. No minors, no private or sensitive interviews.
+6. **Rights.** Proposed test: Riccoh's "Marine Veteran and Author Michael Nixon" (recording 229, 27:46, 4 clips; the clean copy is 230). It needs Riccoh's OK and the guest's. The pilot needs one published episode whose podcaster has agreed to their video being processed by another company. No minors, no private or sensitive interviews.
 
 ## Files that would change (phase 2, after approval)
 
