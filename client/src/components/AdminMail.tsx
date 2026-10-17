@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { AlertTriangle, Archive, ArchiveRestore, ArrowDownLeft, ArrowUpRight, Check, CheckCheck, Eye, Inbox, Loader2, Mail, MailOpen, Megaphone, MousePointerClick, PenSquare, Search, Send, SendHorizontal, Sparkles, Trash2, X } from "lucide-react";
@@ -209,6 +209,15 @@ export function ThreadView({ email, focus, onChanged, onProfile }: { email: stri
     setSubject(waiting?.inbound?.draftSubject || (lastIn ? (lastIn.subject.startsWith("Re:") ? lastIn.subject : `Re: ${lastIn.subject}`) : ""));
     setText(waiting?.inbound?.draftText ?? "");
   }, [email, waiting?.key, lastIn?.key]); // eslint-disable-line react-hooks/exhaustive-deps
+  // Newest first unless they choose otherwise (remembered); and just what they wrote, or just what we sent.
+  const [order, setOrder] = useState<"new" | "old">(() => { try { return localStorage.getItem("mv_mail_order") === "old" ? "old" : "new"; } catch { return "new"; } });
+  const [show, setShow] = useState<"all" | "in" | "out">("all");
+  const [hl, setHl] = useState("");
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const all = t.data?.messages ?? [];
+  const shown = useMemo(() => all.filter((m) => show === "all" || m.dir === show).sort((a, b) => (order === "new" ? b.at.localeCompare(a.at) : a.at.localeCompare(b.at))), [all, show, order]);
+  const setOrderKept = (o: "new" | "old") => { setOrder(o); try { localStorage.setItem("mv_mail_order", o); } catch { /* private window */ } };
+  const showIt = (key: string) => { setShow("all"); setHl(key); setTimeout(() => document.getElementById(`mail-${key}`)?.scrollIntoView({ block: "center", behavior: "smooth" }), 50); };
   useEffect(() => { if (t.data) document.getElementById(`mail-${focus}`)?.scrollIntoView({ block: "center" }); }, [t.data, focus]);
   const send = async () => {
     if (!text.trim()) return;
@@ -235,19 +244,29 @@ export function ThreadView({ email, focus, onChanged, onProfile }: { email: stri
     <div className="flex min-h-full flex-col" data-testid="mail-thread">
       <header className="sticky top-0 z-10 border-b border-border bg-card/95 px-5 py-3 backdrop-blur">
         {onProfile ? <button type="button" onClick={() => onProfile(email)} className="text-base font-semibold hover:underline" data-testid="mail-open-profile">{t.data.name}</button> : <p className="text-base font-semibold">{t.data.name}</p>}
-        <p className="text-xs text-muted-foreground">{t.data.email}{t.data.contact ? ` · ${t.data.contact.lifecycleStage || t.data.contact.status}` : ""} · {t.data.messages.length} {t.data.messages.length === 1 ? "email" : "emails"}</p>
+        <p className="text-xs text-muted-foreground">{t.data.email}{t.data.contact ? ` · ${t.data.contact.lifecycleStage || t.data.contact.status}` : ""} · {all.length} {all.length === 1 ? "email" : "emails"}</p>
+        <div className="mt-2 flex flex-wrap items-center gap-2 text-xs" data-testid="mail-thread-sort">
+          <div className="flex gap-0.5 rounded-full border border-border p-0.5">
+            {([["all", `All ${all.length}`], ["in", `Received ${all.filter((m) => m.dir === "in").length}`], ["out", `Sent ${all.filter((m) => m.dir === "out").length}`]] as const).map(([k, label]) => (
+              <button key={k} type="button" onClick={() => setShow(k)} className={`rounded-full px-2.5 py-1 font-semibold ${show === k ? "bg-[#053877] text-white" : "text-muted-foreground hover:text-foreground"}`} data-testid={`mail-show-${k}`}>{label}</button>
+            ))}
+          </div>
+          <button type="button" onClick={() => setOrderKept(order === "new" ? "old" : "new")} className="rounded-full border border-border px-2.5 py-1 font-semibold text-muted-foreground hover:text-foreground" data-testid="mail-order">{order === "new" ? "Newest first ↓" : "Oldest first ↑"}</button>
+        </div>
       </header>
       <ol className="flex-1 space-y-3 p-5">
-        {t.data.messages.map((m) => (
+        {shown.map((m) => (
           <li key={m.key} id={`mail-${m.key}`} className={`flex ${m.dir === "out" ? "justify-end" : ""}`}>
-            <div className={`w-full max-w-[42rem] rounded-2xl border p-4 ${m.dir === "out" ? "border-[#053877]/20 bg-[#053877]/[0.04] dark:bg-white/[0.04]" : "border-border bg-background"} ${m.key === focus ? "ring-2 ring-[#F0A71F]/60" : ""}`}>
+            <div className={`w-full max-w-[42rem] rounded-2xl border p-4 ${m.dir === "out" ? "border-[#053877]/20 bg-[#053877]/[0.04] dark:bg-white/[0.04]" : "border-border bg-background"} ${m.key === focus || m.key === hl ? "ring-2 ring-[#F0A71F]/60" : ""}`}>
               <div className="mb-1.5 flex flex-wrap items-center gap-2 text-xs">
                 <span className="font-semibold">{m.dir === "in" ? m.from : kindOf(m.kind)}</span>
                 <span className="text-muted-foreground">{full(m.at)}</span>
                 <span className="ml-auto">{m.dir === "out" ? <Fate ok={m.ok} events={m.events} error={m.error} /> : m.inbound?.status === "sent" ? <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">Answered</span> : m.inbound && (m.inbound.status === "new" || m.inbound.status === "drafted") ? <span className="rounded-full bg-[#F0A71F]/20 px-2 py-0.5 text-[11px] font-semibold text-[#8a5a00] dark:text-[#F0A71F]">Needs a reply</span> : null}</span>
               </div>
               <p className="text-sm font-semibold">{m.subject || "(no subject)"}</p>
-              <p className="mt-1.5 whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground/90">{m.body || "(no words kept)"}</p>
+              {/* Long ones (a campaign) fold to a few lines, so the conversation reads at a glance. */}
+              <p className={`mt-1.5 whitespace-pre-wrap break-words text-sm leading-relaxed text-foreground/90 ${m.body.length > 500 && !open.has(m.key) ? "line-clamp-5" : ""}`}>{m.body || "(no words kept)"}</p>
+              {m.body.length > 500 && <button type="button" onClick={() => setOpen((o) => { const n = new Set(o); n.has(m.key) ? n.delete(m.key) : n.add(m.key); return n; })} className="mt-1 text-xs font-semibold text-[#053877] hover:underline dark:text-[#F0A71F]">{open.has(m.key) ? "Show less" : "Show all"}</button>}
               {m.dir === "in" && m.inbound && <Attachments inboundId={m.inbound.id} />}
             </div>
           </li>
@@ -255,7 +274,12 @@ export function ThreadView({ email, focus, onChanged, onProfile }: { email: stri
       </ol>
       {/* Write back: a waiting message's suggested reply is already in the box. */}
       <div className="sticky bottom-0 border-t border-border bg-card p-4" data-testid="mail-reply">
-        {waiting && <p className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-[#8a5a00] dark:text-[#F0A71F]"><Sparkles className="h-3.5 w-3.5" /> Suggested reply to their last email. Change anything, then send.</p>}
+        {waiting && (
+          <p className="mb-2 flex flex-wrap items-center gap-x-1.5 text-xs font-semibold text-[#8a5a00] dark:text-[#F0A71F]">
+            <Sparkles className="h-3.5 w-3.5" /> Suggested reply to their email of {full(waiting.at)}, “{waiting.subject || "no subject"}”. Change anything, then send.
+            <button type="button" onClick={() => showIt(waiting.key)} className="underline underline-offset-2 hover:text-foreground" data-testid="mail-show-replying-to">Show their email</button>
+          </p>
+        )}
         <div className="flex flex-wrap gap-2">
           <select value={from} onChange={(e) => setFrom(e.target.value)} className="h-9 rounded-md border border-input bg-background px-2 text-sm" aria-label="Send as">
             <option value="team">From the team (hello@)</option>
