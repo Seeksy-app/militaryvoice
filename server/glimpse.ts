@@ -125,15 +125,16 @@ export function registerGlimpse(app: Express, requireAdmin: RequestHandler, requ
   app.post("/api/agent/glimpse/claim", requireAgent, async (req, res) => {
     const hasKey = req.body?.hasKey === true;
     await write("glimpse:worker", { at: now(), hasKey });
-    if (!hasKey || !(await isOn())) return res.json({ job: null });
     const states = await allStates();
     // Anything out too long: written off, its reservation counted as spent.
+    // Before the switch check, so one left out when it was switched off still gets an answer.
     for (const { clipId, state } of states) {
       if (state.status === "running" && state.startedAt && Date.now() - Date.parse(state.startedAt) > STALE_MS) {
         await write(KEY(clipId), { ...state, status: "failed", finishedAt: now(), error: "No answer came back within 30 minutes. Elorian may still have charged for it." });
         await addSpend(state.startedAt.slice(0, 10), { reserved: -GLIMPSE_RESERVE_MICRO, actual: GLIMPSE_RESERVE_MICRO });
       }
     }
+    if (!hasKey || !(await isOn())) return res.json({ job: null });
     const next = states.filter((x) => x.state.status === "queued").sort((a, b) => a.state.queuedAt.localeCompare(b.state.queuedAt))[0];
     if (!next) return res.json({ job: null });
     const s = await spendOf(today());
