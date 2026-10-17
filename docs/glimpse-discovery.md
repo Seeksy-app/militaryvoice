@@ -98,3 +98,29 @@ Limits for the pilot:
 | `scripts/glimpse-test.ts` (new) | offline checks against made-up responses: disabled, no key, no credits, bad JSON, timestamp offsets, 429, timeout, duplicate job, budget spent |
 
 **The key** goes in Render, on the clipper service, as `ELORIAN_API_KEY`. It needs Chat and Files scopes, or Everything, and a 90-day expiry. The worker already makes long calls, so the background run and polling suit it.
+
+## Pilot result (17 Oct 2026)
+
+**Episode:** Riccoh's "Marine Veteran and Author Michael Nixon" (recording 229). Clips 517 and 519 were reviewed. Clip 518 was still out when this was written, and clip 520 was skipped on cost.
+
+**Cost and time**
+
+| Clip | Tokens in (cached) | Tokens out | Cost | Time |
+|---|---|---|---|---|
+| 517 | 484k (181k) | 41k | 32¢ | 7 min |
+| 519 | 371k (168k) | 23k | 20¢ | similar |
+
+The agent model reads the video several times over. That makes it about 10× the docs' estimate, and the 4,096 output cap doesn't bound it.
+
+**Quality.** It was accurate and very specific:
+- It saw the side-by-side webcam split letterboxed inside 16:9, and that a centred 9:16 crop lands on the seam with no face.
+- It caught a hand over the mouth, a chin cut off by the tile edge during lean-ins, the studio mic in front of the guest, and the name labels.
+- It read the on-screen text, with one "Riccob" misread.
+
+**Against what we already do.** Our renderer already detects the two-up and stacks the panels in the vertical (frame checked on clip 517). Glimpse's headline warning is a case we handle.
+
+**Verdict.** Not worth running on every clip at 20–32¢ and minutes per clip; today's framing costs a few cents. Possible uses:
+- a spot-check on hard footage (in-studio multi-camera, phone video);
+- with `reasoning_effort: low` or plain `elorian-1`, which wasn't tried.
+
+**Left switched off.** Two copies of the worker can each take a clip, so if it's used again it should be limited to one at a time.
