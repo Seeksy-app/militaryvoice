@@ -28,32 +28,48 @@ const t = (s: number) => `${Math.floor(s / 60)}:${String(Math.round(s % 60)).pad
 const ago = (iso: string) => { const m = Math.round((Date.now() - Date.parse(iso)) / 60000); return m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`; };
 
 function Review({ s, onVerdict }: { s: GlimpseState; onVerdict: (useful: boolean) => void }) {
-  if (s.status === "queued") return <p className="text-[11px] text-muted-foreground">Waiting for the worker…</p>;
-  if (s.status === "running") return <p className="flex items-center gap-1 text-[11px] text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Glimpse is watching it…</p>;
-  if (s.status === "skipped") return <p className="text-[11px] text-muted-foreground">Skipped: {s.error}</p>;
-  if (s.status === "failed") return <p className="text-[11px] text-destructive">{s.error}</p>;
+  const [more, setMore] = useState(false);
+  if (s.status === "queued") return <p className="text-xs text-muted-foreground">Waiting for the worker…</p>;
+  if (s.status === "running") return <p className="flex items-center gap-1 text-xs text-muted-foreground"><Loader2 className="h-3 w-3 animate-spin" /> Glimpse is watching it…</p>;
+  if (s.status === "skipped") return <p className="text-xs text-muted-foreground">Skipped: {s.error}</p>;
+  if (s.status === "failed") return <p className="text-xs text-destructive">{s.error}</p>;
   const o = s.observations!;
-  const verdictColour = o.crop916.verdict === "yes" ? "text-emerald-700 dark:text-emerald-400" : o.crop916.verdict === "no" ? "text-destructive" : "text-amber-700 dark:text-amber-400";
-  const rows: [string, string[]][] = [
-    ["Cuts", o.shots.map((x) => `${t(x.at)} ${x.note}`)],
-    ["Speaker", o.subject.map((x) => `${t(x.from)}–${t(x.to)} ${x.note}`)],
-    ["In the way", o.obstructions.map((x) => `${t(x.from)}–${t(x.to)} ${x.note}`)],
-    ["On screen", o.onScreenText.map((x) => `${t(x.at)} “${x.text}”`)],
-    ["Crop problems", o.crop916.problems.map((x) => `${t(x.from)}–${t(x.to)} ${x.note}`)],
+  const verdictColour = o.crop916.verdict === "yes" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : o.crop916.verdict === "no" ? "bg-destructive/10 text-destructive" : "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]";
+  const sections: [string, { when: string; text: string }[]][] = [
+    ["Crop problems", o.crop916.problems.map((x) => ({ when: `${t(x.from)}–${t(x.to)}`, text: x.note }))],
+    ["In the way", o.obstructions.map((x) => ({ when: `${t(x.from)}–${t(x.to)}`, text: x.note }))],
+    ["Speaker", o.subject.map((x) => ({ when: `${t(x.from)}–${t(x.to)}`, text: x.note }))],
+    ["Cuts", o.shots.map((x) => ({ when: t(x.at), text: x.note }))],
+    ["On screen", o.onScreenText.map((x) => ({ when: t(x.at), text: `“${x.text}”` }))],
   ];
+  const counts = sections.filter(([, v]) => v.length).map(([k, v]) => `${v.length} ${k.toLowerCase()}`).join(" · ");
   return (
-    <div className="space-y-1.5 text-[11px] leading-snug">
-      <p><span className={`font-bold ${verdictColour}`}>9:16 crop: {o.crop916.verdict}</span>{o.crop916.note ? ` · ${o.crop916.note}` : ""}</p>
-      {rows.filter(([, v]) => v.length).map(([k, v]) => (
-        <div key={k}><span className="font-semibold">{k}</span><ul className="ml-3 list-disc text-muted-foreground">{v.map((line, i) => <li key={i}>{line}</li>)}</ul></div>
-      ))}
-      {o.uncertainty && <p className="text-muted-foreground"><span className="font-semibold text-foreground">Not sure of</span> {o.uncertainty}</p>}
-      {!!s.warnings?.length && <p className="text-amber-700 dark:text-amber-400">{s.warnings.join(" ")}</p>}
-      <p className="text-muted-foreground">Episode times · {s.usage ? `${usd(s.usage.costMicro)} · ${s.usage.prompt.toLocaleString()} in / ${s.usage.completion.toLocaleString()} out` : "no usage reported"}</p>
-      <div className="flex items-center gap-1.5 pt-1">
+    <div className="space-y-2 text-xs leading-snug">
+      <div>
+        <span className={`inline-block rounded-full px-2 py-0.5 text-[11px] font-bold ${verdictColour}`}>Vertical crop: {o.crop916.verdict}</span>
+        {o.crop916.note && <p className="mt-1 line-clamp-3 text-muted-foreground" title={o.crop916.note}>{o.crop916.note}</p>}
+      </div>
+      <p className="text-[11px] text-muted-foreground">{counts || "Nothing else noted"}</p>
+      <button type="button" onClick={() => setMore((m) => !m)} className="text-[11px] font-semibold text-primary hover:underline">{more ? "Hide what it saw" : "Show what it saw"}</button>
+      {more && (
+        <div className="max-h-80 space-y-2 overflow-y-auto rounded-md bg-muted/40 p-2">
+          {sections.filter(([, v]) => v.length).map(([k, v]) => (
+            <div key={k}>
+              <p className="font-semibold">{k}</p>
+              <ul className="mt-0.5 space-y-1">
+                {v.map((x, i) => <li key={i} className="flex gap-2"><span className="w-20 shrink-0 tabular-nums text-muted-foreground">{x.when}</span><span className="min-w-0">{x.text}</span></li>)}
+              </ul>
+            </div>
+          ))}
+          {o.uncertainty && <p><span className="font-semibold">Not sure of</span> <span className="text-muted-foreground">{o.uncertainty}</span></p>}
+          {!!s.warnings?.length && <p className="text-amber-700 dark:text-amber-400">{s.warnings.join(" ")}</p>}
+        </div>
+      )}
+      <div className="flex flex-wrap items-center gap-1.5 border-t border-border pt-2">
         <span className="font-semibold">Useful?</span>
         <Button size="sm" variant={s.review?.useful === true ? "default" : "outline"} className="h-6 gap-1 px-2 text-[11px]" onClick={() => onVerdict(true)}><ThumbsUp className="h-3 w-3" /> Yes</Button>
         <Button size="sm" variant={s.review?.useful === false ? "default" : "outline"} className="h-6 gap-1 px-2 text-[11px]" onClick={() => onVerdict(false)}><ThumbsDown className="h-3 w-3" /> No</Button>
+        <span className="ml-auto text-[11px] text-muted-foreground">{s.usage ? usd(s.usage.costMicro) : ""}</span>
       </div>
     </div>
   );
@@ -116,11 +132,11 @@ export function GlimpsePanel({ adminGet, adminSend }: { adminGet: <T>(path: stri
           </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {data.clips.map((c) => (
-              <div key={c.id} className="flex gap-3 rounded-lg border border-border p-2" data-testid={`glimpse-clip-${c.id}`}>
-                <video src={c.verticalUrl} controls preload="metadata" className="aspect-[9/16] w-28 shrink-0 rounded-md bg-black object-contain" />
+              <div key={c.id} className="flex items-start gap-3 rounded-lg border border-border p-3" data-testid={`glimpse-clip-${c.id}`}>
+                <video src={`${c.verticalUrl}#t=3`} controls preload="metadata" playsInline className="h-56 w-[7.9rem] shrink-0 rounded-md bg-black object-contain" />
                 <div className="min-w-0 flex-1">
-                  <p className="text-xs font-semibold">{c.title}</p>
-                  <p className="mb-1 text-[11px] text-muted-foreground">{t(c.startSec)}–{t(c.endSec)}</p>
+                  <p className="text-sm font-semibold leading-snug [text-wrap:balance]">{c.title}</p>
+                  <p className="mb-2 text-[11px] text-muted-foreground">{t(c.startSec)}–{t(c.endSec)}</p>
                   {data.reviews[c.id] ? (
                     <Review s={data.reviews[c.id]} onVerdict={(useful) => act(() => adminSend("POST", `/api/admin/glimpse/${c.id}/verdict`, { useful }))} />
                   ) : <p className="text-[11px] text-muted-foreground">Not reviewed.</p>}
