@@ -18,7 +18,7 @@ import { signedRecordingUrl } from "./recordingStorage.js";
 import { getAdminEmail } from "./session.js";
 import { siteSettings } from "../shared/schema.js";
 import {
-  GLIMPSE_DEFAULT_CAP_MICRO, GLIMPSE_MAX_CLIPS, GLIMPSE_MAX_SEC, GLIMPSE_MAX_TOKENS, GLIMPSE_MODEL, GLIMPSE_RESERVE_MICRO,
+  GLIMPSE_DEFAULT_CAP_MICRO, GLIMPSE_MAX_CLIPS, GLIMPSE_MAX_SEC, GLIMPSE_MAX_TOKENS, GLIMPSE_MODEL, GLIMPSE_RESERVE_MICRO, GLIMPSE_TYPICAL_MICRO,
   glimpseCostMicro, glimpseFits, glimpsePrompt, glimpseStops, parseGlimpse, type GlimpseState, type GlimpseUsage,
 } from "../shared/glimpse.js";
 
@@ -104,7 +104,7 @@ export function registerGlimpse(app: Express, requireAdmin: RequestHandler, requ
       await write(KEY(c.id), { status: skip ? "skipped" : "queued", error: skip || undefined, recordingId: rec.id, sourceStart: c.startSec, sourceEnd: end, requestedBy: by, queuedAt: now() } satisfies GlimpseState);
       if (!skip) queued++;
     }
-    res.json({ queued, estimateMicro: queued * 40_000 });
+    res.json({ queued, estimateMicro: queued * GLIMPSE_TYPICAL_MICRO });
   });
 
   /** A person's call on one clip's review. */

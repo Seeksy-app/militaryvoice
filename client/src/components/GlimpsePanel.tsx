@@ -5,7 +5,7 @@ import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { Eye, Loader2, ThumbsDown, ThumbsUp } from "lucide-react";
-import type { GlimpseState } from "@shared/glimpse";
+import { GLIMPSE_TYPICAL_MICRO, type GlimpseState } from "@shared/glimpse";
 
 // The Glimpse pilot (server/glimpse.ts): an outside model watches each clip
 // and says what it sees, so a person can judge whether that helps framing.
@@ -111,7 +111,7 @@ export function GlimpsePanel({ adminGet, adminSend }: { adminGet: <T>(path: stri
             <p className="text-sm"><span className="font-semibold">{data.recording.title}</span> <span className="text-muted-foreground">· {data.recording.email} · {data.clips.length} clips</span></p>
             <Button size="sm" className="h-8 text-xs" disabled={busy || !data.on || pending === 0} title={data.on ? "" : "Switch Glimpse on first"}
               onClick={() => act(() => adminSend("POST", "/api/admin/glimpse/review", { recordingId: data.recording!.id }), "Sent to the worker")} data-testid="glimpse-review">
-              {pending ? `Review ${pending} clip${pending === 1 ? "" : "s"} (about ${usd(pending * 40_000)})` : "All reviewed"}
+              {pending ? `Review ${pending} clip${pending === 1 ? "" : "s"} (about ${usd(pending * GLIMPSE_TYPICAL_MICRO)})` : "All reviewed"}
             </Button>
           </div>
           <div className="mt-3 grid gap-3 sm:grid-cols-2 xl:grid-cols-3">

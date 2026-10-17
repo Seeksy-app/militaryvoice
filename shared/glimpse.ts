@@ -19,12 +19,15 @@ export const GLIMPSE_MAX_SEC = 75;
 // Prices in micro-dollars per token ($0.60 / $0.06 / $3.00 per million).
 const IN = 0.6, CACHED = 0.06, OUT = 3;
 /**
- * Held against the day's cap while a clip is out: the most one can cost.
- * 75s at 5fps is 375 frames at ~98 tokens, ~37k in; plus a transcript and
- * 4,096 out. Comes to about 4¢; 6¢ leaves room.
+ * Held against the day's cap while a clip is out: the most one is likely to
+ * cost. The agent model reads the video several times over: the first real
+ * clip (66s, 17 Oct) used 484k tokens in (181k cached) and 41k out, 32¢.
+ * 40¢ covers that with a little room.
  */
-export const GLIMPSE_RESERVE_MICRO = 60_000;
+export const GLIMPSE_RESERVE_MICRO = 400_000;
 /** The day's ceiling unless an admin sets another: $1. */
+/** What one clip typically costs, for the estimate on the button. */
+export const GLIMPSE_TYPICAL_MICRO = 320_000;
 export const GLIMPSE_DEFAULT_CAP_MICRO = 1_000_000;
 
 export type GlimpseUsage = { prompt_tokens?: number; completion_tokens?: number; prompt_tokens_details?: { cached_tokens?: number } };

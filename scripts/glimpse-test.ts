@@ -41,9 +41,9 @@ check("an empty object parses, with warnings for each missing part", p.ok && p.w
 check("cost: 30k in + 2k out = 2.4¢", glimpseCostMicro({ prompt_tokens: 30_000, completion_tokens: 2_000 }) === 24_000);
 check("cost: cached tokens at a tenth", glimpseCostMicro({ prompt_tokens: 30_000, completion_tokens: 0, prompt_tokens_details: { cached_tokens: 20_000 } }) === 7_200);
 check("cost: no usage is 0", glimpseCostMicro(null) === 0);
-check("budget: room for one more", glimpseFits({ reserved: 0, actual: 900_000 }, 1_000_000) === true);
-check("budget: spent", glimpseFits({ reserved: GLIMPSE_RESERVE_MICRO, actual: 900_000 }, 1_000_000) === false);
-check("budget: out-but-unanswered counts", glimpseFits({ reserved: 16 * GLIMPSE_RESERVE_MICRO, actual: 0 }, 1_000_000) === false);
+check("budget: room for one more", glimpseFits({ reserved: 0, actual: 600_000 }, 1_000_000) === true);
+check("budget: spent", glimpseFits({ reserved: 0, actual: 700_000 }, 1_000_000) === false);
+check("budget: out-but-unanswered counts", glimpseFits({ reserved: 2 * GLIMPSE_RESERVE_MICRO, actual: 0 }, 1_000_000) === false);
 
 // When to stop everything.
 check("401 stops", glimpseStops(401, ""));
