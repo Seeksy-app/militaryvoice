@@ -195,7 +195,7 @@ function buildHtml(rawInput: ConfirmationEmailInput): string {
   };
   return emailShell({
     banner: EMAIL_BANNERS.welcome,
-    bannerAlt: "National Military Podcast Day · October 5, 2026",
+    bannerAlt: rawInput.eventName,
     eyebrow: rawInput.eventName,
     heading: `You're on the lineup, ${rawInput.hostName}`,
     body: `

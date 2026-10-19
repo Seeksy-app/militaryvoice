@@ -69,7 +69,7 @@ export const insertEventSchema = createInsertSchema(events)
       .regex(/^[a-z0-9-]+$/, "Use lowercase letters, numbers, and hyphens only"),
     onAirMinutes: z.number().int().min(1),
     bufferMinutes: z.number().int().min(0),
-    bufferPosition: z.enum(["before", "after"]),
+    bufferPosition: z.enum(["before", "after", "both"]),
   });
 export const updateEventSchema = insertEventSchema.partial();
 export type InsertEvent = z.infer<typeof insertEventSchema>;
@@ -87,6 +87,8 @@ export const signups = pgTable("signups", {
   id: serial("id").primaryKey(),
   eventId: integer("event_id").notNull(),
   slotIndex: integer("slot_index").notNull(),
+  /** How many slots in a row it holds: 2 is an hour on a 30-minute schedule (the Digital Experience). */
+  slotSpan: integer("slot_span").notNull().default(1),
   podcastName: text("podcast_name").notNull(),
   hostName: text("host_name").notNull(),
   email: text("email").notNull(),
@@ -150,6 +152,7 @@ export const insertSignupSchema = createInsertSchema(signups)
     email: z.string().email("Enter a valid email"),
     numPeople: z.number().int().min(1).max(2),
     slotIndex: z.number().int().min(0),
+    slotSpan: z.number().int().min(1).max(2).default(1),
     photoUrl: z.string().min(1, "A photo is required"),
   });
 
@@ -162,6 +165,7 @@ export type PublicSignup = Pick<
   | "id"
   | "eventId"
   | "slotIndex"
+  | "slotSpan"
   | "podcastName"
   | "hostName"
   | "photoUrl"

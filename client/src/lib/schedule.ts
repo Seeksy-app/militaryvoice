@@ -66,7 +66,7 @@ export function slotEnd(eventStartUtc: string, slotMinutes: number, index: numbe
 export interface OnAirSettings {
   onAirMinutes: number;
   bufferMinutes: number;
-  bufferPosition: string; // "before" | "after"
+  bufferPosition: string; // "before" | "after" | "both" (half each side)
 }
 
 /**
@@ -81,6 +81,10 @@ export function onAirWindow(
   const bufferMs = settings.bufferMinutes * 60000;
   if (settings.bufferPosition === "before") {
     const start = new Date(blockStart.getTime() + bufferMs);
+    return { start, end: new Date(start.getTime() + onAirMs) };
+  }
+  if (settings.bufferPosition === "both") {
+    const start = new Date(blockStart.getTime() + bufferMs / 2);
     return { start, end: new Date(start.getTime() + onAirMs) };
   }
   const start = blockStart;

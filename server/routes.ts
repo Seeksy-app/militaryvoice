@@ -71,6 +71,7 @@ import { registerDiscoveryRoutes, probeIc } from "./discovery.js";
 import { registerMce } from "./mce.js";
 import { registerCreatomate } from "./creatomate.js";
 import { registerGlimpse } from "./glimpse.js";
+import { registerDigitalExperience } from "./digitalExperience.js";
 import { isConfigured as isInfluencersConfigured, credits, enrichHandle } from "./influencers.js";
 import { deriveSocialAccounts } from "../shared/socialLinks.js";
 import { buildAudienceSnapshot, readAudienceSnapshot, saveAudienceSnapshot, AUDIENCE_WINDOW_DAYS } from "./audience.js";
@@ -343,6 +344,7 @@ function toPublicSignup(s: Awaited<ReturnType<typeof storage.listSignups>>[numbe
     id: s.id,
     eventId: s.eventId,
     slotIndex: s.slotIndex,
+    slotSpan: s.slotSpan,
     podcastName: s.podcastName,
     hostName: s.hostName,
     photoUrl: s.photoUrl,
@@ -423,20 +425,32 @@ async function withCoHosts(rows: PublicSignup[], all: { coHostEmail: string; id:
   }));
 }
 
-function slotWindow(event: EventRow, slotIndex: number): { start: Date; end: Date } {
+/** A booking's block on the clock: `span` slots in a row (an hour on a 30-minute schedule is 2). */
+function slotWindow(event: EventRow, slotIndex: number, span = 1): { start: Date; end: Date } {
   const start = new Date(new Date(event.startAtUtc).getTime() + slotIndex * event.slotMinutes * 60000);
-  return { start, end: new Date(start.getTime() + event.slotMinutes * 60000) };
+  return { start, end: new Date(start.getTime() + Math.max(1, span) * event.slotMinutes * 60000) };
 }
 
-function calendarLinksFor(signup: { id: number; podcastName: string; hostName: string; slotIndex: number }, event: EventRow, origin: string) {
-  const { start, end } = slotWindow(event, signup.slotIndex);
+/** When they're actually on: the block less its buffer. A longer booking gains its extra slots' full length. */
+function onAirFor(event: EventRow, slotIndex: number, span = 1): { start: Date; end: Date } {
+  const { start } = slotWindow(event, slotIndex);
+  return onAirWindowServer(start, event.onAirMinutes + (Math.max(1, span) - 1) * event.slotMinutes, event.bufferMinutes, event.bufferPosition);
+}
+
+/** Where an event's schedule lives: the Digital Experience has its own page; the rest use the agenda. */
+function schedulePath(event: EventRow): string {
+  return event.slug.startsWith("digital-experience") ? "/digital-experience" : "/agenda";
+}
+
+function calendarLinksFor(signup: { id: number; podcastName: string; hostName: string; slotIndex: number; slotSpan?: number }, event: EventRow, origin: string) {
+  const { start, end } = slotWindow(event, signup.slotIndex, signup.slotSpan ?? 1);
   return buildCalendarLinks({
     title: `${signup.podcastName} — ${event.name.trim()}`,
-    details: `${signup.hostName} is live on the MilitaryVoices.ai ${event.name.trim()}. Agenda: ${origin}/agenda`,
+    details: `${signup.hostName} is live on ${/^militaryvoices/i.test(event.name.trim()) ? "the" : "the MilitaryVoices.ai"} ${event.name.trim()}. Schedule: ${origin}${schedulePath(event)}`,
     start,
     end,
     icsUrl: `${origin}/api/signups/${signup.id}/calendar.ics`,
-    location: `${origin}/agenda`,
+    location: `${origin}${schedulePath(event)}`,
   });
 }
 
@@ -561,6 +575,11 @@ function onAirWindowServer(
 ): { start: Date; end: Date } {
   if (bufferPosition === "before") {
     const start = new Date(blockStart.getTime() + bufferMinutes * 60000);
+    return { start, end: new Date(start.getTime() + onAirMinutes * 60000) };
+  }
+  // Half the buffer each side: the station's intro before them and its outro after.
+  if (bufferPosition === "both") {
+    const start = new Date(blockStart.getTime() + (bufferMinutes / 2) * 60000);
     return { start, end: new Date(start.getTime() + onAirMinutes * 60000) };
   }
   return { start: blockStart, end: new Date(blockStart.getTime() + onAirMinutes * 60000) };
@@ -9245,9 +9264,8 @@ export function registerRoutes(app: Express): void {
    */
   async function sendSignupConfirmation(signup: SignupRow, event: EventRow, origin: string): Promise<boolean> {
     try {
-      const blockStart = new Date(new Date(event.startAtUtc).getTime() + signup.slotIndex * event.slotMinutes * 60000);
       const tz = signup.timezone || "America/New_York";
-      const onAir = onAirWindowServer(blockStart, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
+      const onAir = onAirFor(event, signup.slotIndex, signup.slotSpan);
       const id = await sendConfirmationEmail({
         to: signup.email,
         hostName: signup.hostName,
@@ -9256,7 +9274,7 @@ export function registerRoutes(app: Express): void {
         onAirStartLabel: formatDateTimeInZone(onAir.start, tz),
         onAirEndLabel: formatTimeInZone(onAir.end, tz),
         timezoneLabel: zoneAbbrev(onAir.start, tz),
-        agendaUrl: `${origin}/agenda`,
+        agendaUrl: `${origin}${schedulePath(event)}`,
         calendar: calendarLinksFor(signup, event, origin),
       });
       if (id) await storage.recordCadenceSend(event.id, "confirmation", signup.email, id).catch(() => {});
@@ -9283,8 +9301,7 @@ export function registerRoutes(app: Express): void {
     // Also notify Riccoh so he knows every time a podcaster signs up.
     const RICCOH_EMAIL = "riccoh.player@drphil.tv";
     try {
-      const blockStart = new Date(new Date(event.startAtUtc).getTime() + signup.slotIndex * event.slotMinutes * 60000);
-      const onAir = onAirWindowServer(blockStart, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
+      const onAir = onAirFor(event, signup.slotIndex, signup.slotSpan);
       const tz = signup.timezone || "America/New_York";
       await sendBookingAlert({
         to,
@@ -9318,6 +9335,9 @@ export function registerRoutes(app: Express): void {
       console.error("Failed to send the booking alert:", err);
     }
   }
+
+  // The Digital Experience: its own page and booking, on these same events underneath.
+  registerDigitalExperience(app, { requireHostSession, upload, savePhoto: enhanceAndSavePhoto, sendConfirmation: sendSignupConfirmation, notifyOrganiser: notifyOrganiserOfBooking, calendarFor: calendarLinksFor });
 
   app.post("/api/signups", requireHostSession, async (req, res) => {
     const email = (req as any).hostEmail as string;
@@ -9488,27 +9508,28 @@ export function registerRoutes(app: Express): void {
       return;
     }
     const event = (await storage.getEventById(signup.eventId)) ?? (await storage.getFeaturedEvent());
-    const start = new Date(new Date(event.startAtUtc).getTime() + signup.slotIndex * event.slotMinutes * 60000);
-    const end = new Date(start.getTime() + event.slotMinutes * 60000);
+    const { start, end } = slotWindow(event, signup.slotIndex, signup.slotSpan);
     const tz = signup.timezone || "America/New_York";
-    const onAir = onAirWindowServer(start, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
+    const onAir = onAirFor(event, signup.slotIndex, signup.slotSpan);
     const bufferNote =
       event.bufferMinutes > 0
-        ? ` (on air ${formatTimeInZone(onAir.start, tz)}–${formatTimeInZone(onAir.end, tz)} ${tz}, with a ${event.bufferMinutes}-minute buffer ${event.bufferPosition} for sponsor/transition)`
+        ? ` (on air ${formatTimeInZone(onAir.start, tz)}–${formatTimeInZone(onAir.end, tz)} ${tz}${event.bufferPosition === "both" ? `; the station's ${event.bufferMinutes / 2}-minute intro plays before you and its outro after` : `, with a ${event.bufferMinutes}-minute buffer ${event.bufferPosition} for sponsor/transition`})`
         : "";
+    const evName = event.name.trim();
+    const onThe = /^militaryvoices/i.test(evName) ? evName : `MilitaryVoices.ai ${evName}`;
 
     const ics = [
       "BEGIN:VCALENDAR",
       "VERSION:2.0",
-      "PRODID:-//MilitaryVoices.ai//Podcast Marathon//EN",
+      `PRODID:-//MilitaryVoices.ai//${icsEscape(evName)}//EN`,
       "CALSCALE:GREGORIAN",
       "BEGIN:VEVENT",
       `UID:militaryvoice-signup-${signup.id}@militaryvoice.ai`,
       `DTSTAMP:${toIcsUtcStamp(new Date())}`,
       `DTSTART:${toIcsUtcStamp(start)}`,
       `DTEND:${toIcsUtcStamp(end)}`,
-      `SUMMARY:${icsEscape(`${signup.podcastName} — MilitaryVoices.ai Podcast Marathon`)}`,
-      `DESCRIPTION:${icsEscape(`${signup.hostName} is live on the MilitaryVoices.ai Podcast Marathon. Tune in!${bufferNote}`)}`,
+      `SUMMARY:${icsEscape(`${signup.podcastName} — ${onThe}`)}`,
+      `DESCRIPTION:${icsEscape(`${signup.hostName} is live on the ${onThe}. Tune in!${bufferNote}`)}`,
       "END:VEVENT",
       "END:VCALENDAR",
     ].join("\r\n");

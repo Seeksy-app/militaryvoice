@@ -1,3 +1,4 @@
+import { DxTimes } from "@/components/DxTimes";
 import { useEffect, useMemo, useState } from "react";
 import { GuestsEditor } from "@/components/GuestsEditor";
 import { useSearch, useLocation, Link } from "wouter";
@@ -964,9 +965,13 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
         }
       }
 
-      // One slot per podcaster: moving to a new time releases the current one first.
-      for (const held of data.mySignups) {
-        await apiRequest("DELETE", `/api/host/signups/${held.id}`);
+      // One slot per podcaster per event: moving to a new time releases the current one first.
+      // Only on the same event: mySignups is the featured event's, and booking another
+      // event (a Digital Experience day) must never give up a slot held there.
+      if (targetEventId === data.event.id) {
+        for (const held of data.mySignups) {
+          await apiRequest("DELETE", `/api/host/signups/${held.id}`);
+        }
       }
       const res = await apiRequest("POST", "/api/signups", {
         eventId: targetEventId,
@@ -1642,6 +1647,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                   </div>
                   {/* Someone added them to a brand's, agency's or organizer's team. */}
                   <OrgInvites compact />
+                  <DxTimes />
                   {/* Start here (7 Oct): the two things that matter most, big and in colour: their SmartLink and their podcast
                       (a creator's clips, a planner's events). Next steps right under them, not in a corner. */}
                   {(() => {
