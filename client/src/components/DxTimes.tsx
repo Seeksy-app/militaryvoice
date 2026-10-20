@@ -24,6 +24,11 @@ export function CalendarButtons({ cal }: { cal: DxCal }) {
   );
 }
 
+/** Their booth for that booking: opens an hour before (the page says so until then). */
+export function BoothButton({ id }: { id: number }) {
+  return <a href={`/booth/${id}`} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#053877] px-3.5 text-sm font-semibold text-white hover:bg-[#0a4a99]" data-testid={`dx-booth-${id}`}><Radio className="h-4 w-4" /> Your booth</a>;
+}
+
 export function DxTimes() {
   const { data } = useQuery<{ bookings: Booking[] }>({ queryKey: ["/api/dx/mine"], queryFn: async () => (await apiRequest("GET", "/api/dx/mine")).json(), retry: false });
   if (!data?.bookings.length) return null;
@@ -37,7 +42,7 @@ export function DxTimes() {
         {data.bookings.map((b) => (
           <li key={b.id} className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-sm"><span className="font-semibold">{day(b.startAtUtc)}</span>, {time(b.startAtUtc)}–{time(b.endAtUtc)} ET · {b.show}</span>
-            <CalendarButtons cal={b.calendar} />
+            <span className="flex flex-wrap gap-2"><BoothButton id={b.id} /><CalendarButtons cal={b.calendar} /></span>
           </li>
         ))}
       </ul>

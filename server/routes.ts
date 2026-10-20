@@ -72,6 +72,7 @@ import { registerMce } from "./mce.js";
 import { registerCreatomate } from "./creatomate.js";
 import { registerGlimpse } from "./glimpse.js";
 import { registerDigitalExperience } from "./digitalExperience.js";
+import { registerBooth } from "./booth.js";
 import { isConfigured as isInfluencersConfigured, credits, enrichHandle } from "./influencers.js";
 import { deriveSocialAccounts } from "../shared/socialLinks.js";
 import { buildAudienceSnapshot, readAudienceSnapshot, saveAudienceSnapshot, AUDIENCE_WINDOW_DAYS } from "./audience.js";
@@ -9337,6 +9338,7 @@ export function registerRoutes(app: Express): void {
   }
 
   // The Digital Experience: its own page and booking, on these same events underneath.
+  registerBooth(app);
   registerDigitalExperience(app, { requireHostSession, upload, savePhoto: enhanceAndSavePhoto, sendConfirmation: sendSignupConfirmation, notifyOrganiser: notifyOrganiserOfBooking, calendarFor: calendarLinksFor });
 
   app.post("/api/signups", requireHostSession, async (req, res) => {

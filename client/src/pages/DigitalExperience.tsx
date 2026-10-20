@@ -11,7 +11,7 @@ import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, apiUpload } from "@/lib/queryClient";
 import { CalendarPlus, Check, Clock, Loader2, Mic2, Radio } from "lucide-react";
-import { CalendarButtons } from "@/components/DxTimes";
+import { BoothButton, CalendarButtons } from "@/components/DxTimes";
 
 // The MilitaryVoices Digital Experience: a live channel, weekdays 7 am to
 // 10 pm Eastern. Pick a time, choose 30 or 60 minutes, book it here (an
@@ -202,7 +202,7 @@ export default function DigitalExperience() {
               {mine.data.bookings.map((b) => (
                 <li key={b.id} className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm"><span className="font-semibold">{dayLabel(b.startAtUtc)}</span>, {time(b.startAtUtc)}–{time(b.endAtUtc)} ET · {b.show}</span>
-                  <CalendarButtons cal={b.calendar} />
+                  <span className="flex flex-wrap gap-2"><BoothButton id={b.id} /><CalendarButtons cal={b.calendar} /></span>
                 </li>
               ))}
             </ul>

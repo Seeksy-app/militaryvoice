@@ -112,6 +112,13 @@ export function useStageRoom(
   seedMeta?: RoomMeta,
   /** The recorder's copy of the stage, rather than a viewer's. */
   forRecording = false,
+  /**
+   * Who's on air, when the clock decides rather than a producer (the Digital
+   * Experience): given a participant's attributes. `pickKey` changes when the
+   * answer would (the next booking's turn), so the stage is read again.
+   */
+  pick?: (attributes: Record<string, string>) => boolean,
+  pickKey?: string,
 ) {
   const [tiles, setTiles] = useState<StageTile[]>([]);
   // Seeded from the record, then overwritten by the room's own metadata once
@@ -123,6 +130,10 @@ export function useStageRoom(
   const [connected, setConnected] = useState(false);
   const [failed, setFailed] = useState(false);
   const roomRef = useRef<Room | null>(null);
+  const pickRef = useRef(pick);
+  pickRef.current = pick;
+  const snapRef = useRef<() => void>(() => {});
+  useEffect(() => { snapRef.current(); }, [pickKey]);
 
   useEffect(() => {
     if (seedMeta) setMeta((prev) => ({ ...seedMeta, ...prev }));
@@ -152,7 +163,7 @@ export function useStageRoom(
     const snapshot = () => {
       const next: StageTile[] = [];
       room.remoteParticipants.forEach((p: RemoteParticipant) => {
-        if ((p.attributes?.state ?? "") !== "On stage") return;
+        if (pickRef.current ? !pickRef.current(p.attributes ?? {}) : (p.attributes?.state ?? "") !== "On stage") return;
         let video: RemoteTrack | null = null;
         let audio: RemoteTrack | null = null;
         p.trackPublications.forEach((pub: RemoteTrackPublication) => {
@@ -177,6 +188,7 @@ export function useStageRoom(
       next.sort((a, b) => a.identity.localeCompare(b.identity));
       setTiles(next);
     };
+    snapRef.current = snapshot;
 
     room
       .on(RoomEvent.ParticipantConnected, snapshot)

@@ -11,6 +11,8 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import Agenda from "@/pages/Agenda";
 import DigitalExperience from "@/pages/DigitalExperience";
+import Booth from "@/pages/Booth";
+import Program from "@/pages/Program";
 import Events from "@/pages/Events";
 import Admin from "@/pages/Admin";
 import MyStudio from "@/pages/MyStudio";
@@ -105,6 +107,8 @@ function AppRouter() {
       <Route path="/schedule">{() => <Home />}</Route>
       <Route path="/agenda">{() => <Agenda />}</Route>
       <Route path="/digital-experience">{() => <DigitalExperience />}</Route>
+      <Route path="/booth/:id">{(params) => <Booth id={params.id} />}</Route>
+      <Route path="/dx/program">{() => <Program />}</Route>
       <Route path="/faq">{() => <Faq />}</Route>
       <Route path="/review">{() => <ReviewLogin />}</Route>
       <Route path="/help">{() => <HelpIndex />}</Route>
