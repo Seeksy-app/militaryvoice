@@ -115,6 +115,7 @@ import {
   sendPrepNudge,
   sendFinalNudge,
   sendOnAirNudge,
+  sendDxReminder,
   sendBookingAlert,
   sendScheduleReference,
   sendHelpRequestAlert,
@@ -979,9 +980,11 @@ export function registerRoutes(app: Express): void {
     const events = await storage.listEvents();
     const out: { signupId: number; to: string; kind: NudgeKind; sent: boolean; suppressed: NudgeKind[] }[] = [];
 
+    const dxIds = await dxEventIds();
     for (const event of events) {
       const signups = (await storage.listSignups(event.id)).filter((x) => x.status !== "cancelled");
       if (signups.length === 0) continue;
+      const isDx = dxIds.includes(event.id);
       const shows = await Promise.all(
         signups.map((sg) => storage.getEventShow(sg.email, event.id).catch(() => undefined)),
       );
@@ -990,8 +993,7 @@ export function registerRoutes(app: Express): void {
 
       for (let i = 0; i < signups.length; i++) {
         const signup = signups[i];
-        const blockStart = new Date(new Date(event.startAtUtc).getTime() + signup.slotIndex * event.slotMinutes * 60000);
-        const onAir = onAirWindowServer(blockStart, event.onAirMinutes, event.bufferMinutes, event.bufferPosition);
+        const onAir = onAirFor(event, signup.slotIndex, signup.slotSpan);
         // Nothing to nudge about once they're on.
         if (onAir.start.getTime() <= now) continue;
 
@@ -1014,10 +1016,37 @@ export function registerRoutes(app: Express): void {
         // Claim before sending: a missed nudge beats a duplicate.
         if (!(await storage.claimNudge(signup.id, kind, true))) continue;
 
+        let sent: string | null = null;
+        // The Digital Experience has its own two reminders, in its own look, pointing at its page and booth.
+        // No two-week one: the Marathon's uploads checklist doesn't apply.
+        if (isDx) {
+          if (kind === "prep") { out.push({ signupId: signup.id, to: signup.email, kind, sent: false, suppressed }); continue; }
+          const { start, end } = slotWindow(event, signup.slotIndex, signup.slotSpan);
+          const ET = "America/New_York";
+          const d = (x: Date, o: Intl.DateTimeFormatOptions) => x.toLocaleString("en-US", { timeZone: ET, ...o });
+          try {
+            sent = await sendDxReminder(kind === "final" ? "final" : "onair", {
+              to: signup.email,
+              hostName: signup.hostName,
+              show: signup.podcastName,
+              about: signup.notes,
+              whenLabel: `${d(start, { weekday: "long", month: "long", day: "numeric" })} · ${d(start, { hour: "numeric", minute: "2-digit" })}–${d(end, { hour: "numeric", minute: "2-digit" })} ET`,
+              liveLabel: `${d(onAir.start, { hour: "numeric", minute: "2-digit" })} ET`,
+              pageUrl: `${PUBLIC_ORIGIN}/digital-experience?show=${signup.id}`,
+              boothUrl: `${PUBLIC_ORIGIN}/booth/${signup.id}`,
+            });
+            if (!sent) await storage.releaseNudge(signup.id, kind);
+          } catch (err) {
+            console.error(`DX reminder ${kind} failed for signup ${signup.id}:`, err);
+          }
+          out.push({ signupId: signup.id, to: signup.email, kind, sent: !!sent, suppressed });
+          if (sent) await storage.recordCadenceSend(event.id, kind, signup.email, sent).catch(() => {});
+          continue;
+        }
+
         const payload = await buildNudgePayload(signup, event);
 
         const send = kind === "prep" ? sendPrepNudge : kind === "final" ? sendFinalNudge : sendOnAirNudge;
-        let sent: string | null = null;
         try {
           sent = await send(payload);
           if (!sent) {
@@ -1887,10 +1916,14 @@ export function registerRoutes(app: Express): void {
     }
     const { signup, event, whenLabel } = found;
     const origin = `${req.protocol}://${req.get("host")}`;
-    const target = `/agenda?slot=${signup.slotIndex}`;
+    // A Digital Experience booking shares its own page and look, never the Marathon's.
+    const dx = event.slug.startsWith("digital-experience");
+    const target = dx ? `/digital-experience?show=${signup.id}` : `/agenda?slot=${signup.slotIndex}`;
     const title = `${signup.podcastName} · ${whenLabel}`;
-    const desc = `${signup.hostName} is live on ${event.name} for National Military Podcast Day. Tune in, or set a reminder.`;
-    const img = `${origin}/og/slot/${id}.jpg`;
+    const desc = dx
+      ? `${signup.hostName} is live on the MilitaryVoices Digital Experience, a live channel of military and veteran voices. Tune in.`
+      : `${signup.hostName} is live on ${event.name} for National Military Podcast Day. Tune in, or set a reminder.`;
+    const img = dx ? `${origin}/dx/hero.jpg` : `${origin}/og/slot/${id}.jpg`;
     const esc = (v: string) =>
       v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 
@@ -9285,7 +9318,7 @@ export function registerRoutes(app: Express): void {
         agendaUrl: `${origin}${schedulePath(event)}`,
         calendar: calendarLinksFor(signup, event, origin),
         // The Digital Experience's own look, not the Marathon's.
-        ...(event.slug.startsWith("digital-experience") ? { banner: `${origin}/dx/email.jpg` } : {}),
+        ...(event.slug.startsWith("digital-experience") ? { banner: `${origin}/dx/email.jpg`, dx: { shareUrl: `${origin}/digital-experience?show=${signup.id}` } } : {}),
       });
       if (id) await storage.recordCadenceSend(event.id, "confirmation", signup.email, id).catch(() => {});
       return !!id;
@@ -10738,6 +10771,10 @@ The Podcast Marathon team`;
       const signups = (await storage.listSignups(event.id)).filter(
         (s) => s.status !== "cancelled" && s.email.trim().toLowerCase() === email,
       );
+      // An event that's over stays only for the people who were in it: a newcomer's
+      // dashboard isn't hung on last month's Marathon (Andrew, 20 Oct).
+      const over = Date.parse(event.startAtUtc) + event.durationHours * 3600_000 < Date.now();
+      if (over && !show && signups.length === 0) continue;
       out.push({
         event: toPublicEvent(event),
         show,

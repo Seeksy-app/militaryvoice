@@ -169,6 +169,8 @@ export interface ConfirmationEmailInput {
   to: string;
   /** A header image for this event's own look (the Digital Experience), in place of the usual one. */
   banner?: string;
+  /** The Digital Experience: its own next steps (share, booth in the menu), none of the Marathon's. */
+  dx?: { shareUrl: string };
   calendar?: CalendarLinks;
   hostName: string;
   podcastName: string;
@@ -207,16 +209,22 @@ function buildHtml(rawInput: ConfirmationEmailInput): string {
         <p style="margin:0;color:#1f2937;font-size:20px;font-weight:800;">${input.onAirStartLabel} – ${input.onAirEndLabel}</p>
         <p style="margin:2px 0 0;color:#6b7280;font-size:13px;">${escapeHtml(input.timezoneLabel)}</p>
       </div>
-      <p style="margin:0 0 12px;">Next, from your dashboard: set your show up for the event, send us anything you want played
+      ${rawInput.dx
+        ? `<p style="margin:0 0 12px;">Next: tell your audience. Your graphics, caption and link are ready on <a href="${rawInput.dx.shareUrl}" style="color:#053877;font-weight:700;">the schedule page</a>, and you can update what you'll do from your dashboard.</p>
+      <p style="margin:0;">On the day, your booth opens an hour before your time: find <strong>Booth</strong> in your dashboard menu and be in it <strong>10 minutes before</strong> you're live. Our AI producer brings you on and off.</p>`
+        : `<p style="margin:0 0 12px;">Next, from your dashboard: set your show up for the event, send us anything you want played
         (intro, outro, images), and tick the ready-made posts and we'll promote your slot from your own accounts.</p>
-      <p style="margin:0;">On the day, be in the studio page <strong>10 minutes before</strong> you're on. We'll email the details ahead of time.</p>`,
+      <p style="margin:0;">On the day, be in the studio page <strong>10 minutes before</strong> you're on. We'll email the details ahead of time.</p>`}`,
     cta: { href: input.agendaUrl, label: "See the lineup" },
     secondary: input.calendar ? calendarButtonsHtml(input.calendar) : undefined,
   });
 }
 
 function buildText(input: ConfirmationEmailInput): string {
-  return `You're on the schedule, ${input.hostName}\n\n${input.podcastName} is confirmed for ${input.eventName}.\n\nYou're on air: ${input.onAirStartLabel} - ${input.onAirEndLabel} (${input.timezoneLabel})\n\nWe'll email you the studio details and how to log in ahead of the event. Please be ready and online 10 minutes before your go-live time.\n\nView the agenda: ${input.agendaUrl}\n${input.calendar ? "\n" + calendarText(input.calendar) : ""}`;
+  const next = input.dx
+    ? `Next: tell your audience. Your graphics, caption and link: ${input.dx.shareUrl}\n\nOn the day, your booth opens an hour before your time: find Booth in your dashboard menu and be in it 10 minutes before you're live.`
+    : `We'll email you the studio details and how to log in ahead of the event. Please be ready and online 10 minutes before your go-live time.`;
+  return `You're on the schedule, ${input.hostName}\n\n${input.podcastName} is confirmed for ${input.eventName}.\n\nYou're on air: ${input.onAirStartLabel} - ${input.onAirEndLabel} (${input.timezoneLabel})\n\n${next}\n\nThe schedule: ${input.agendaUrl}\n${input.calendar ? "\n" + calendarText(input.calendar) : ""}`;
 }
 
 /** Low-level Resend sender shared by every email type. Never throws — logs and
@@ -741,6 +749,50 @@ export async function sendFinalNudge(v: NudgeInput): Promise<string | null> {
 /** An hour out: one link, nothing else. */
 export async function sendOnAirNudge(v: NudgeInput): Promise<string | null> {
   return sendRawEmail({ kind: "sendOnAirNudge", to: v.to, ...renderNudge("onair", v) });
+}
+
+// ---------------------------------------------------------------------------
+// The Digital Experience's own reminders: its look, its page, its booth.
+// Nothing here points at the Marathon (Andrew, 20 Oct).
+export interface DxReminderInput {
+  to: string;
+  hostName: string;
+  show: string;
+  about: string;
+  /** "Monday, October 26 · 12:00–12:30 PM ET" */
+  whenLabel: string;
+  /** "12:03 PM ET": when they're live, after the station's intro. */
+  liveLabel: string;
+  pageUrl: string;
+  boothUrl: string;
+}
+
+/** "final" two days out (your time, your topic, your graphics); "onair" an hour out (your booth is open). */
+export async function sendDxReminder(kind: "final" | "onair", v: DxReminderInput): Promise<string | null> {
+  const first = (v.hostName || "").trim().split(/\s+/)[0] || "there";
+  const p = (t: string) => `<p style="margin:0 0 16px;">${t}</p>`;
+  const final = kind === "final";
+  const body = final
+    ? p(`<strong>${escapeHtml(v.show)}</strong> is on the MilitaryVoices Digital Experience:`) +
+      `<div style="background:#fff7e6;border:1px solid #f0a71f;border-radius:12px;padding:16px 20px;margin:0 0 18px;"><p style="margin:0;color:#1f2937;font-size:18px;font-weight:800;">${escapeHtml(v.whenLabel)}</p><p style="margin:4px 0 0;color:#6b7280;font-size:13px;">You're live at ${escapeHtml(v.liveLabel)}, after the station's 3-minute intro.</p></div>` +
+      p(`<strong>What you'll do:</strong> ${v.about ? escapeHtml(v.about) : "not set yet"}. You can change it from your dashboard.`) +
+      p("Your graphics, caption and link are ready to post, so your audience knows when to tune in.") +
+      p("On the day, your booth opens an hour before your time: find <strong>Booth</strong> in your dashboard menu, and be in it 10 minutes before you're live.")
+    : p(`<strong>${escapeHtml(v.show)}</strong> is live at <strong>${escapeHtml(v.liveLabel)}</strong>, right after the station's intro.`) +
+      p("Go in now: check your camera and microphone, share the guest link if you have a guest, and watch the countdown. Our AI producer brings you on and off.");
+  const html = emailShell({
+    banner: `${SITE}/dx/email.jpg`,
+    bannerAlt: "MilitaryVoices Digital Experience",
+    eyebrow: "MilitaryVoices Digital Experience",
+    heading: final ? `You're on in two days, ${escapeHtml(first)}` : `Your booth is open, ${escapeHtml(first)}`,
+    body,
+    cta: final ? { href: v.pageUrl, label: "Get your graphics and link" } : { href: v.boothUrl, label: "Enter your booth" },
+    footerNote: "You're getting this because you booked a time on the MilitaryVoices Digital Experience. Reply and a person will read it.",
+  });
+  const text = final
+    ? `Hi ${first},\n\n${v.show} is on the MilitaryVoices Digital Experience: ${v.whenLabel}. You're live at ${v.liveLabel}, after the station's 3-minute intro.\n\nWhat you'll do: ${v.about || "not set yet"}. You can change it from your dashboard.\n\nYour graphics, caption and link: ${v.pageUrl}\n\nOn the day, your booth opens an hour before your time: find Booth in your dashboard menu, and be in it 10 minutes before you're live.`
+    : `Hi ${first},\n\n${v.show} is live at ${v.liveLabel}, right after the station's intro. Your booth is open: ${v.boothUrl}\n\nCheck your camera and microphone, share the guest link if you have a guest, and watch the countdown.`;
+  return sendRawEmail({ kind: final ? "dxReminderFinal" : "dxReminderOnAir", to: v.to, subject: final ? `Two days to go: ${v.show} on the Digital Experience` : `Your booth is open: you're live at ${v.liveLabel}`, html, text });
 }
 
 // ---------------------------------------------------------------------------
