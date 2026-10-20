@@ -167,6 +167,8 @@ function calendarText(c: CalendarLinks): string {
 
 export interface ConfirmationEmailInput {
   to: string;
+  /** A header image for this event's own look (the Digital Experience), in place of the usual one. */
+  banner?: string;
   calendar?: CalendarLinks;
   hostName: string;
   podcastName: string;
@@ -194,7 +196,7 @@ function buildHtml(rawInput: ConfirmationEmailInput): string {
     eventName: escapeHtml(rawInput.eventName),
   };
   return emailShell({
-    banner: EMAIL_BANNERS.welcome,
+    banner: rawInput.banner || EMAIL_BANNERS.welcome,
     bannerAlt: rawInput.eventName,
     eyebrow: rawInput.eventName,
     heading: `You're on the lineup, ${rawInput.hostName}`,
@@ -351,6 +353,8 @@ export async function sendConfirmationEmail(input: ConfirmationEmailInput): Prom
 export interface LoginCodeEmailInput {
   to: string;
   code: string;
+  /** Where they're signing in from: "dx" is the Digital Experience sign-up, which gets its own look. */
+  context?: string;
 }
 
 /** Send a podcaster their one-time typed sign-in code. Never throws. */
@@ -364,9 +368,9 @@ export async function sendLoginCodeEmail(input: LoginCodeEmailInput): Promise<bo
     to: input.to,
     subject: `Your sign-in code: ${input.code}`,
     html: emailShell({
-      banner: EMAIL_BANNERS.signin,
-      bannerAlt: "MilitaryVoices.ai",
-      eyebrow: "Sign-in",
+      banner: input.context === "dx" ? `${SITE}/dx/email.jpg` : EMAIL_BANNERS.signin,
+      bannerAlt: input.context === "dx" ? "MilitaryVoices Digital Experience" : "MilitaryVoices.ai",
+      eyebrow: input.context === "dx" ? "Digital Experience · sign-in" : "Sign-in",
       heading: "Your sign-in code",
       body: `<p style="margin:0 0 16px;">Enter this code on the sign-in page. It expires in 15 minutes.</p>${codeBlock}<p style="margin:0;color:#9ca3af;font-size:13px;">If you didn't request this, you can ignore this email.</p>`,
       footerNote: "One-time code — expires in 15 minutes.",

@@ -9284,6 +9284,8 @@ export function registerRoutes(app: Express): void {
         timezoneLabel: zoneAbbrev(onAir.start, tz),
         agendaUrl: `${origin}${schedulePath(event)}`,
         calendar: calendarLinksFor(signup, event, origin),
+        // The Digital Experience's own look, not the Marathon's.
+        ...(event.slug.startsWith("digital-experience") ? { banner: `${origin}/dx/email.jpg` } : {}),
       });
       if (id) await storage.recordCadenceSend(event.id, "confirmation", signup.email, id).catch(() => {});
       return !!id;
@@ -10029,7 +10031,7 @@ export function registerRoutes(app: Express): void {
       // Local dev without Resend: surface the code in the terminal so sign-in still works.
       console.log(`[dev] login code for ${email}: ${code}`);
     }
-    await sendLoginCodeEmail({ to: email, code });
+    await sendLoginCodeEmail({ to: email, code, context: req.body?.context === "dx" ? "dx" : undefined });
     res.json({ ok: true, message: "We sent a 6-digit code to that email." });
   });
 

@@ -8,8 +8,9 @@
 // pick a time and book it there, signed in with an emailed code. An hour is
 // one booking holding two slots (signups.slot_span = 2).
 import type { Express, RequestHandler } from "express";
-import { storage } from "./storage.js";
-import { insertSignupSchema, type EventRow, type SignupRow } from "../shared/schema.js";
+import { eq } from "drizzle-orm";
+import { db, storage } from "./storage.js";
+import { insertSignupSchema, signups, type EventRow, type SignupRow } from "../shared/schema.js";
 
 type Deps = {
   requireHostSession: RequestHandler;
@@ -69,11 +70,25 @@ export function registerDigitalExperience(app: Express, d: Deps): void {
       const ev = await storage.getEventById(id);
       if (!ev) continue;
       for (const s of (await storage.listSignups(ev.id)).filter((x) => active(x) && x.email.trim().toLowerCase() === email)) {
-        bookings.push({ id: s.id, eventId: ev.id, day: ev.name, slotIndex: s.slotIndex, span: s.slotSpan || 1, show: s.podcastName, host: s.hostName, photo: s.photoUrl, startAtUtc: new Date(slotStartMs(ev, s.slotIndex)).toISOString(), endAtUtc: new Date(slotStartMs(ev, s.slotIndex + (s.slotSpan || 1))).toISOString(), calendar: d.calendarFor(s, ev, origin) });
+        bookings.push({ id: s.id, eventId: ev.id, day: ev.name, slotIndex: s.slotIndex, span: s.slotSpan || 1, show: s.podcastName, host: s.hostName, photo: s.photoUrl, about: s.notes, startAtUtc: new Date(slotStartMs(ev, s.slotIndex)).toISOString(), endAtUtc: new Date(slotStartMs(ev, s.slotIndex + (s.slotSpan || 1))).toISOString(), calendar: d.calendarFor(s, ev, origin) });
       }
     }
     const lastShow = profile?.podcastName || "";
     res.json({ email, profile: profile ? { hostName: profile.hostName, phone: profile.phone, photoUrl: profile.photoUrl, podcastName: lastShow, link: profile.rssUrl || profile.youtubeUrl || "" } : null, bookings });
+  });
+
+  /** Fine-tune a booking from their account: what they'll do, and the show's name. */
+  app.patch("/api/dx/booking/:id", d.requireHostSession, async (req, res) => {
+    const email = String((req as any).hostEmail).trim().toLowerCase();
+    const s = await storage.getSignupById(Number(req.params.id));
+    if (!s || s.status === "cancelled" || !(await dxEventIds()).includes(s.eventId) || s.email.trim().toLowerCase() !== email) return res.status(404).json({ message: "That booking isn't yours." });
+    const about = typeof req.body?.about === "string" ? req.body.about.trim().slice(0, 600) : undefined;
+    const show = typeof req.body?.show === "string" ? req.body.show.trim().slice(0, 120) : undefined;
+    if (about === "") return res.status(400).json({ message: "Add what you'll do: your topic or episode title." });
+    if (show === "") return res.status(400).json({ message: "Add the name of your show or segment." });
+    if (about !== undefined) await db.update(signups).set({ notes: about }).where(eq(signups.id, s.id));
+    if (show !== undefined) await storage.setSignupPodcastName(s.id, show);
+    res.json({ ok: true });
   });
 
   /**
@@ -98,6 +113,7 @@ export function registerDigitalExperience(app: Express, d: Deps): void {
     if (!ev) return res.status(404).json({ message: "That day isn't part of the Digital Experience." });
     if (!hostName) return res.status(400).json({ message: "Add your name." });
     if (!showName) return res.status(400).json({ message: "Add the name of your show or segment." });
+    if (!about) return res.status(400).json({ message: "Add what you'll do: your topic or episode title." });
     if (link && !/^https?:\/\/\S+$/i.test(link)) return res.status(400).json({ message: "The link should start with https://" });
     if (ev.closed) return res.status(409).json({ message: "That day's schedule is closed." });
     if (!Number.isInteger(slotIndex) || slotIndex < 0 || slotIndex + span > slotsIn(ev)) return res.status(400).json({ message: span === 2 ? "An hour doesn't fit there: the day ends at 10 pm." : "That time isn't on the schedule." });

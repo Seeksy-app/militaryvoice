@@ -11,7 +11,7 @@ import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, apiUpload } from "@/lib/queryClient";
 import { Bot, Check, Clock, Loader2, Mic, Share2 } from "lucide-react";
-import { BoothButton, CalendarButtons } from "@/components/DxTimes";
+import { BoothButton, CalendarButtons, EditTopic } from "@/components/DxTimes";
 import { DxShare } from "@/components/DxShare";
 
 // The MilitaryVoices Digital Experience: a live channel, weekdays 7 am to
@@ -22,7 +22,7 @@ import { DxShare } from "@/components/DxShare";
 type Slot = { index: number; startAtUtc: string; past: boolean; taken: { id: number; show: string; host: string; photo: string; first: boolean; span: number } | null };
 type Day = { eventId: number; name: string; startAtUtc: string; slotMinutes: number; onAirMinutes: number; bufferMinutes: number; closed: boolean; slots: Slot[] };
 type Cal = { google: string; outlook: string; ics: string };
-type Booking = { id: number; eventId: number; day: string; slotIndex: number; span: number; show: string; host: string; photo: string; startAtUtc: string; endAtUtc: string; calendar: Cal };
+type Booking = { id: number; eventId: number; day: string; slotIndex: number; span: number; show: string; host: string; photo: string; about?: string; startAtUtc: string; endAtUtc: string; calendar: Cal };
 type Mine = { email: string; profile: { hostName: string; phone: string; photoUrl: string; podcastName: string; link: string } | null; bookings: Booking[] };
 
 const ET = "America/New_York";
@@ -63,7 +63,7 @@ function BookDialog({ day, slot, onClose, onBooked }: { day: Day; slot: Slot; on
     setBusy(true);
     try { await fn(); } catch (e) { toast({ title: fail, description: (e as Error).message, variant: "destructive" }); setHumanReset((n) => n + 1); } finally { setBusy(false); }
   };
-  const sendCode = () => run(async () => { await apiRequest("POST", "/api/host/request-code", { email: email.trim(), turnstileToken: human }); setStep("code"); }, "Couldn't send a code");
+  const sendCode = () => run(async () => { await apiRequest("POST", "/api/host/request-code", { email: email.trim(), turnstileToken: human, context: "dx" }); setStep("code"); }, "Couldn't send a code");
   const verify = () => run(async () => { await apiRequest("POST", "/api/host/verify-code", { email: email.trim(), code: code.trim(), remember: true }); await session.refetch(); setStep("details"); }, "That code didn't work");
   const book = () => run(async () => {
     const fd = new FormData();
@@ -126,11 +126,16 @@ function BookDialog({ day, slot, onClose, onBooked }: { day: Day; slot: Slot; on
         )}
         {step === "details" && (
           <div className="space-y-3">
+            {session.data?.email && <p className="rounded-lg bg-muted/60 px-3 py-2 text-xs text-muted-foreground">Signed in as <span className="font-semibold text-foreground">{session.data.email}</span>. {mine.data?.profile ? "We've filled in what we have; change anything." : ""}</p>}
             <div className="grid gap-3 sm:grid-cols-2">
               <div><Label htmlFor="dx-name">Your name</Label><Input id="dx-name" value={f.hostName} onChange={(e) => setF({ ...f, hostName: e.target.value })} className="mt-1" /></div>
               <div><Label htmlFor="dx-show">Show or segment name</Label><Input id="dx-show" value={f.showName} onChange={(e) => setF({ ...f, showName: e.target.value })} className="mt-1" /></div>
             </div>
-            <div><Label htmlFor="dx-about">What you'll do <span className="font-normal text-muted-foreground">(optional)</span></Label><Textarea id="dx-about" rows={2} value={f.about} onChange={(e) => setF({ ...f, about: e.target.value })} placeholder="A live episode, an interview, the day's news…" className="mt-1" /></div>
+            <div>
+              <Label htmlFor="dx-about">What you'll do</Label>
+              <Textarea id="dx-about" rows={2} value={f.about} onChange={(e) => setF({ ...f, about: e.target.value })} placeholder="Your topic or episode title, e.g. Life after the Corps: starting a business" className="mt-1" />
+              <p className="mt-1 text-xs text-muted-foreground">You can update and fine-tune it in your account any time before you're on.</p>
+            </div>
             <div className="grid gap-3 sm:grid-cols-2">
               <div><Label htmlFor="dx-link">Link to your show <span className="font-normal text-muted-foreground">(optional)</span></Label><Input id="dx-link" value={f.link} onChange={(e) => setF({ ...f, link: e.target.value })} placeholder="https://" className="mt-1" /></div>
               <div><Label htmlFor="dx-phone">Mobile <span className="font-normal text-muted-foreground">(for show-day texts)</span></Label><Input id="dx-phone" type="tel" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} className="mt-1" /></div>
@@ -142,7 +147,7 @@ function BookDialog({ day, slot, onClose, onBooked }: { day: Day; slot: Slot; on
                 <Input id="dx-photo" type="file" accept="image/*" onChange={(e) => setPhoto(e.target.files?.[0] ?? null)} />
               </div>
             </div>
-            <Button className="w-full bg-[#F0A71F] text-[#1a1200] hover:bg-[#f5b94a]" disabled={busy || !f.hostName.trim() || !f.showName.trim() || (!hasPhoto && !photo)} onClick={() => void book()} data-testid="dx-book">
+            <Button className="w-full bg-[#F0A71F] text-[#1a1200] hover:bg-[#f5b94a]" disabled={busy || !f.hostName.trim() || !f.showName.trim() || !f.about.trim() || (!hasPhoto && !photo)} onClick={() => void book()} data-testid="dx-book">
               {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : `Book ${span === 2 ? "60" : "30"} minutes`}
             </Button>
           </div>
@@ -233,6 +238,7 @@ export default function DigitalExperience() {
                 <li key={b.id} className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm"><span className="font-semibold">{dayLabel(b.startAtUtc)}</span>, {time(b.startAtUtc)}–{time(b.endAtUtc)} ET · {b.show}</span>
                   <span className="flex flex-wrap gap-2"><BoothButton id={b.id} /><button type="button" onClick={() => setSharing(sharing === b.id ? null : b.id)} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-background px-3.5 text-sm font-semibold hover:bg-muted"><Share2 className="h-4 w-4" /> Share</button><CalendarButtons cal={b.calendar} /></span>
+                  <EditTopic id={b.id} about={b.about ?? ""} />
                   {sharing === b.id && <div className="w-full rounded-xl bg-background p-3"><DxShare b={b} /></div>}
                 </li>
               ))}

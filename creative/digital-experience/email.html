@@ -1,0 +1,47 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@500;700;800;900&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { width: 1400px; height: 560px; overflow: hidden; font-family: Inter, Arial, sans-serif; -webkit-font-smoothing: antialiased; }
+  .art { position: relative; width: 1400px; height: 560px; background: radial-gradient(ellipse 80% 90% at 78% 50%, #0d3a8a 0%, #05175a 38%, #000741 72%); color: #fff; overflow: hidden; }
+  /* Broadcast rings from the mic, right side */
+  .rings { position: absolute; right: 170px; top: 50%; width: 0; height: 0; }
+  .ring { position: absolute; border-radius: 50%; border: 3px solid rgba(240,167,31,.85); transform: translate(-50%,-50%); }
+  .mic { position: absolute; transform: translate(-50%,-50%); width: 180px; height: 180px; border-radius: 50%; background: #F0A71F; display: flex; align-items: center; justify-content: center; box-shadow: 0 30px 80px rgba(0,0,0,.45), 0 0 0 14px rgba(240,167,31,.18); }
+  .mic svg { width: 92px; height: 92px; }
+  /* faint stripes, lower left */
+  .stripes { position: absolute; left: -120px; bottom: -160px; width: 900px; height: 420px; background: repeating-linear-gradient(-28deg, rgba(255,255,255,.035) 0 26px, transparent 26px 58px); transform: rotate(0deg); }
+  .brand { position: absolute; left: 80px; top: 56px; display: flex; align-items: center; gap: 18px; }
+  .brand img { height: 46px; }
+  .brand span { font-weight: 800; font-size: 26px; letter-spacing: .2em; }
+  .live { position: absolute; left: 80px; top: 140px; display: inline-flex; align-items: center; gap: 12px; background: #ED1C24; border-radius: 999px; padding: 10px 22px; font-weight: 900; font-size: 24px; letter-spacing: .18em; }
+  .live i { width: 14px; height: 14px; border-radius: 50%; background: #fff; display: inline-block; }
+  h1 { position: absolute; left: 76px; top: 196px; font-weight: 900; font-size: 100px; line-height: .9; letter-spacing: -.035em; }
+  h1 em { font-style: normal; color: #F0A71F; }
+  .sub { position: absolute; left: 80px; top: 420px; font-size: 26px; font-weight: 600; color: rgba(255,255,255,.88); }
+  .chip { display: none; }
+  .chip b { font-size: 46px; font-weight: 900; color: #F0A71F; letter-spacing: .04em; }
+  .chip span { font-size: 30px; font-weight: 700; color: #fff; }
+</style></head>
+<body>
+<div class="art">
+  <div class="stripes"></div>
+  <div class="rings" id="rings"></div>
+  <div class="brand"><img src="logo-wave.png" alt=""><span>MILITARYVOICES</span></div>
+  <div class="live"><i></i>LIVE</div>
+  <h1>Digital<br><em>Experience</em></h1>
+  <p class="sub">Military &amp; veteran voices · weekdays 7 am – 10 pm ET</p>
+  <div class="chip" id="chip"><b id="chipB">OCT 26 – 30</b><span id="chipS">Beta week · free</span></div>
+</div>
+<script>
+  const q = new URLSearchParams(location.search);
+  if (q.get("b")) document.getElementById("chipB").textContent = q.get("b");
+  if (q.has("s")) document.getElementById("chipS").textContent = q.get("s");
+  const r = document.getElementById("rings");
+  [[250,.9],[340,.6],[430,.38],[520,.2],[610,.1]].forEach(([d,o]) => { const e = document.createElement("div"); e.className = "ring"; e.style.width = e.style.height = d + "px"; e.style.opacity = o; r.appendChild(e); });
+  const m = document.createElement("div"); m.className = "mic";
+  m.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="#000741" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 10v1a7 7 0 0 0 14 0v-1"/><line x1="12" y1="18" x2="12" y2="22"/><line x1="8" y1="22" x2="16" y2="22"/></svg>';
+  r.appendChild(m);
+</script>
+</body></html>
