@@ -441,9 +441,9 @@ function onAirFor(event: EventRow, slotIndex: number, span = 1): { start: Date; 
   return onAirWindowServer(start, event.onAirMinutes + (Math.max(1, span) - 1) * event.slotMinutes, event.bufferMinutes, event.bufferPosition);
 }
 
-/** Where an event's schedule lives: the Digital Bureau has its own page; the rest use the agenda. */
+/** Where an event's schedule lives: Live From Anywhere has its own page; the rest use the agenda. */
 function schedulePath(event: EventRow): string {
-  return event.slug.startsWith("digital-experience") ? "/digital-bureau" : "/agenda";
+  return event.slug.startsWith("digital-experience") ? "/live-from-anywhere" : "/agenda";
 }
 
 function calendarLinksFor(signup: { id: number; podcastName: string; hostName: string; slotIndex: number; slotSpan?: number }, event: EventRow, origin: string) {
@@ -1017,7 +1017,7 @@ export function registerRoutes(app: Express): void {
         if (!(await storage.claimNudge(signup.id, kind, true))) continue;
 
         let sent: string | null = null;
-        // The Digital Bureau has its own two reminders, in its own look, pointing at its page and booth.
+        // The Live From Anywhere has its own two reminders, in its own look, pointing at its page and booth.
         // No two-week one: the Marathon's uploads checklist doesn't apply.
         if (isDx) {
           if (kind === "prep") { out.push({ signupId: signup.id, to: signup.email, kind, sent: false, suppressed }); continue; }
@@ -1032,7 +1032,7 @@ export function registerRoutes(app: Express): void {
               about: signup.notes,
               whenLabel: `${d(start, { weekday: "long", month: "long", day: "numeric" })} · ${d(start, { hour: "numeric", minute: "2-digit" })}–${d(end, { hour: "numeric", minute: "2-digit" })} ET`,
               liveLabel: `${d(onAir.start, { hour: "numeric", minute: "2-digit" })} ET`,
-              pageUrl: `${PUBLIC_ORIGIN}/digital-bureau?show=${signup.id}`,
+              pageUrl: `${PUBLIC_ORIGIN}/live-from-anywhere?show=${signup.id}`,
               boothUrl: `${PUBLIC_ORIGIN}/booth/${signup.id}`,
             });
             if (!sent) await storage.releaseNudge(signup.id, kind);
@@ -1488,7 +1488,7 @@ export function registerRoutes(app: Express): void {
       if (!rec || Date.now() - Date.parse(rec.startedAt) < 2 * 3600_000) continue;
       const stamp = new Date().toISOString().replace(/[:.]/g, "-");
       const filepath = `event-${st.eventId}/${stamp}-continued.mp4`;
-      // A Digital Bureau day films its program page, not the Marathon's stage.
+      // A Live From Anywhere day films its program page, not the Marathon's stage.
       const tpl = (await dxEventIds()).includes(st.eventId) ? `${PUBLIC_ORIGIN}/dx/program` : templateBaseUrl(req) ?? `${PUBLIC_ORIGIN}/studio/composite`;
       const egressId = await startSegmentRecording(roomName(st.id), filepath, tpl);
       await storage.createRecording({ eventId: st.eventId, studioId: st.id, signupId: rec.signupId ?? null, email: rec.email, title: `${rec.title.replace(/ \(continued\)$/, "")} (continued)`, egressId, filepath });
@@ -1916,12 +1916,12 @@ export function registerRoutes(app: Express): void {
     }
     const { signup, event, whenLabel } = found;
     const origin = `${req.protocol}://${req.get("host")}`;
-    // A Digital Bureau booking shares its own page and look, never the Marathon's.
+    // A Live From Anywhere booking shares its own page and look, never the Marathon's.
     const dx = event.slug.startsWith("digital-experience");
-    const target = dx ? `/digital-bureau?show=${signup.id}` : `/agenda?slot=${signup.slotIndex}`;
+    const target = dx ? `/live-from-anywhere?show=${signup.id}` : `/agenda?slot=${signup.slotIndex}`;
     const title = `${signup.podcastName} · ${whenLabel}`;
     const desc = dx
-      ? `${signup.hostName} is live on the MilitaryVoices Digital Bureau, a live channel of military and veteran voices. Tune in.`
+      ? `${signup.hostName} is live on MilitaryVoices Live From Anywhere, a live channel of military and veteran voices. Tune in.`
       : `${signup.hostName} is live on ${event.name} for National Military Podcast Day. Tune in, or set a reminder.`;
     const img = dx ? `${origin}/dx/hero.jpg` : `${origin}/og/slot/${id}.jpg`;
     const esc = (v: string) =>
@@ -6127,7 +6127,7 @@ export function registerRoutes(app: Express): void {
    * podcasters' whole-show channels join the broadcast (going live earlier
    * left them out on purpose).
    */
-  // The Digital Bureau's days start, renew and stop on their own.
+  // The Live From Anywhere's days start, renew and stop on their own.
   registerDxBroadcast(app, PUBLIC_ORIGIN, requireAdmin);
 
   app.get("/api/cron/studio-channels", async (req, res) => {
@@ -9317,8 +9317,8 @@ export function registerRoutes(app: Express): void {
         timezoneLabel: zoneAbbrev(onAir.start, tz),
         agendaUrl: `${origin}${schedulePath(event)}`,
         calendar: calendarLinksFor(signup, event, origin),
-        // The Digital Bureau's own look, not the Marathon's.
-        ...(event.slug.startsWith("digital-experience") ? { banner: `${origin}/dx/email.jpg`, dx: { shareUrl: `${origin}/digital-bureau?show=${signup.id}` } } : {}),
+        // The Live From Anywhere's own look, not the Marathon's.
+        ...(event.slug.startsWith("digital-experience") ? { banner: `${origin}/dx/email.jpg`, dx: { shareUrl: `${origin}/live-from-anywhere?show=${signup.id}` } } : {}),
       });
       if (id) await storage.recordCadenceSend(event.id, "confirmation", signup.email, id).catch(() => {});
       return !!id;
@@ -9379,7 +9379,7 @@ export function registerRoutes(app: Express): void {
     }
   }
 
-  // The Digital Bureau: its own page and booking, on these same events underneath.
+  // The Live From Anywhere: its own page and booking, on these same events underneath.
   registerBooth(app);
   registerDigitalExperience(app, { requireHostSession, upload, savePhoto: enhanceAndSavePhoto, sendConfirmation: sendSignupConfirmation, notifyOrganiser: notifyOrganiserOfBooking, calendarFor: calendarLinksFor });
 

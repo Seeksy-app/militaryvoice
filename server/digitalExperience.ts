@@ -1,10 +1,10 @@
-// The MilitaryVoices Digital Bureau: a live channel, Monday to Friday,
+// The MilitaryVoices Live From Anywhere: a live channel, Monday to Friday,
 // 7 am to 10 pm Eastern, in 30- or 60-minute segments. A beta week, free.
 //
 // Each day is an ordinary event underneath (site_settings "dx:events" lists
 // their ids), so the studio, run of show, reminders, Admin → Podcasters and
 // the confirmation email with its calendar buttons all work as they did for
-// the Marathon. What's its own is the way in: /digital-bureau, one page,
+// the Marathon. What's its own is the way in: /live-from-anywhere, one page,
 // pick a time and book it there, signed in with an emailed code. An hour is
 // one booking holding two slots (signups.slot_span = 2).
 import type { Express, RequestHandler } from "express";
@@ -108,9 +108,9 @@ export function registerDigitalExperience(app: Express, d: Deps): void {
     const phone = String(b.phone ?? "").trim().slice(0, 40);
     const link = String(b.link ?? "").trim().slice(0, 500);
     const about = String(b.about ?? "").trim().slice(0, 600);
-    if (!(await dxEventIds()).includes(eventId)) return res.status(404).json({ message: "That day isn't part of the Digital Bureau." });
+    if (!(await dxEventIds()).includes(eventId)) return res.status(404).json({ message: "That day isn't part of Live From Anywhere." });
     const ev = await storage.getEventById(eventId);
-    if (!ev) return res.status(404).json({ message: "That day isn't part of the Digital Bureau." });
+    if (!ev) return res.status(404).json({ message: "That day isn't part of Live From Anywhere." });
     if (!hostName) return res.status(400).json({ message: "Add your name." });
     if (!showName) return res.status(400).json({ message: "Add the name of your show or segment." });
     if (!about) return res.status(400).json({ message: "Add what you'll do: your topic or episode title." });

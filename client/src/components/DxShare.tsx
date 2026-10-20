@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Check, Copy, Download, Loader2 } from "lucide-react";
 
-// A booking's share kit for the Digital Bureau: their link (the schedule
+// A booking's share kit for Live From Anywhere: their link (the schedule
 // opened on their show), ready-made graphics with their photo and time, a
 // caption to paste, and one-click posts. The graphics are drawn here in the
 // browser (canvas), in the week's look (client/public/dx), so there's nothing
@@ -13,9 +13,9 @@ const ET = "America/New_York";
 const time = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { timeZone: ET, hour: "numeric", minute: "2-digit" });
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { timeZone: ET, weekday: "long", month: "long", day: "numeric" });
 
-export const dxShareUrl = (id: number) => `${window.location.origin}/digital-bureau?show=${id}`;
+export const dxShareUrl = (id: number) => `${window.location.origin}/live-from-anywhere?show=${id}`;
 export const dxCaption = (b: DxShareBooking) =>
-  `I'm going live on the MilitaryVoices Digital Bureau: ${b.show}, ${day(b.startAtUtc)} at ${time(b.startAtUtc)} ET. A live channel of military and veteran voices. Tune in: ${dxShareUrl(b.id)}`;
+  `I'm going live on MilitaryVoices Live From Anywhere: ${b.show}, ${day(b.startAtUtc)} at ${time(b.startAtUtc)} ET. A live channel of military and veteran voices. Tune in: ${dxShareUrl(b.id)}`;
 
 function loadImage(src: string, cors = true): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
@@ -71,10 +71,10 @@ export async function draw(b: DxShareBooking, shape: "square" | "story"): Promis
   x.fillStyle = "#fff"; x.font = font(900, 28); x.fillText("● LIVE", W - 205, 111);
   // Headline.
   x.textAlign = "center";
-  x.fillStyle = "#fff"; x.font = font(900, shape === "square" ? 64 : 80);
-  x.fillText("I'm going live on the", cx, shape === "square" ? 235 : 360);
+  x.fillStyle = "#fff"; x.font = font(900, shape === "square" ? 52 : 64);
+  x.fillText("I'm going live on MilitaryVoices", cx, shape === "square" ? 235 : 360);
   x.fillStyle = "#F0A71F"; x.font = font(900, shape === "square" ? 70 : 88);
-  x.fillText("Digital Bureau", cx, shape === "square" ? 312 : 460);
+  x.fillText("Live From Anywhere", cx, shape === "square" ? 312 : 460);
   // Photo in a gold ring.
   const photo = await loadImage(b.photo);
   x.save(); x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.closePath(); x.clip();
@@ -101,11 +101,11 @@ export async function draw(b: DxShareBooking, shape: "square" | "story"): Promis
   x.fillStyle = "#F0A71F"; x.fillText(when, cx, y);
   // The tagline, as on the page and the artwork, then the address.
   x.fillStyle = "#fff"; x.font = font(800, shape === "square" ? 32 : 46);
-  x.fillText("Military voices, live from anywhere.", cx, H - (shape === "square" ? 125 : 260));
+  x.fillText("On Air, On Screen, On Stage, On Location.", cx, H - (shape === "square" ? 125 : 260));
   x.fillStyle = "#F0A71F"; x.font = font(700, shape === "square" ? 24 : 34);
-  x.fillText("On air. On screen. On stage. On location.", cx, H - (shape === "square" ? 88 : 208));
+  x.fillText("M–F · 7 am – 10 pm ET", cx, H - (shape === "square" ? 88 : 208));
   x.fillStyle = "rgba(255,255,255,0.65)"; x.font = font(700, shape === "square" ? 26 : 32);
-  x.fillText("militaryvoices.ai/digital-bureau", cx, H - (shape === "square" ? 38 : 90));
+  x.fillText("militaryvoices.ai/live-from-anywhere", cx, H - (shape === "square" ? 38 : 90));
   try { return c.toDataURL("image/png"); } catch { return ""; }
 }
 

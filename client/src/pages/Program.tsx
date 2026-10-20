@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { StageGrid, useStageRoom } from "@/components/StageView";
 
-// The Digital Bureau on air: what the broadcast films all day.
+// The Live From Anywhere on air: what the broadcast films all day.
 //
 // No producer and no scenes. The clock reads the day's bookings (from
 // /api/booth/program) and decides: the station's intro card for the first
@@ -42,7 +42,7 @@ function Card({ eyebrow, title, sub, photo, foot }: { eyebrow: string; title: st
           {foot && <p className="mt-10 text-3xl font-bold text-[#F0A71F]">{foot}</p>}
         </div>
       </div>
-      <p className="absolute bottom-10 left-24 text-xl font-bold uppercase tracking-[0.18em] text-white/60">MilitaryVoices Digital Bureau · On air. On screen. On stage. On location.</p>
+      <p className="absolute bottom-10 left-24 text-xl font-bold uppercase tracking-[0.18em] text-white/60">MilitaryVoices Live From Anywhere · On Air, On Screen, On Stage, On Location.</p>
     </div>
   );
 }
@@ -95,7 +95,7 @@ export default function Program() {
             <video src={program.data.fillerUrl} autoPlay loop playsInline className="absolute inset-0 h-full w-full object-cover" />
             <div className="absolute bottom-8 left-8 rounded-2xl bg-[#000741]/85 px-7 py-4 text-3xl font-bold text-white">{nextLine}</div>
           </>
-        : <Card eyebrow="MilitaryVoices Digital Bureau" title="Military voices, live from anywhere." sub={nextLine} />)}
+        : <Card eyebrow="MilitaryVoices" title="Live From Anywhere" sub={nextLine} />)}
 
       <img src="/logo-wave.png?v=2" alt="" className="pointer-events-none absolute right-6 top-5 h-10 w-auto opacity-90 drop-shadow-lg" />
       {phase === "live" && (

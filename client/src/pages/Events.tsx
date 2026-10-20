@@ -18,7 +18,7 @@ const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as c
  * Marathon is the first; "Add your event" opens the same short form as
  * "Plan an event with us" on the About page.
  */
-/** One card's worth: an event, or the Digital Bureau's week (its days are one thing to the public). */
+/** One card's worth: an event, or Live From Anywhere's week (its days are one thing to the public). */
 type Item = { key: string; title: string; tagline: string; image: string; start: Date; end: Date; when: string; href: string; cta: string; agenda?: string };
 
 export default function Events() {
@@ -38,9 +38,9 @@ export default function Events() {
   if (dx?.days.length) {
     const first = new Date(dx.days[0].startAtUtc), last = new Date(dx.days[dx.days.length - 1].startAtUtc);
     items.push({
-      key: "digital-experience", title: "MilitaryVoices Digital Bureau", tagline: "Military voices, live from anywhere. On air. On screen. On stage. On location. Weekdays 7 am to 10 pm Eastern; take 30 or 60 minutes, free during the beta week.",
+      key: "digital-experience", title: "MilitaryVoices Live From Anywhere", tagline: "On Air, On Screen, On Stage, On Location. M–F, 7 am to 10 pm Eastern: take 30 or 60 minutes, free during the beta week.",
       image: "/dx/hero.jpg", start: first, end: new Date(last.getTime() + 15 * 3600_000),
-      when: `${formatDateInZone(first, zone)} – ${formatDateInZone(last, zone)} · weekdays, 7 am – 10 pm ET`, href: "/digital-bureau", cta: "Pick your time",
+      when: `${formatDateInZone(first, zone)} – ${formatDateInZone(last, zone)} · weekdays, 7 am – 10 pm ET`, href: "/live-from-anywhere", cta: "Pick your time",
     });
   }
   const now = Date.now();

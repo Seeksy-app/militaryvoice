@@ -4830,7 +4830,7 @@ function CrmEventPanel({ eventId, event }: { eventId: number | null; event?: Pub
 /** Where people sign up for this event: copy it to share, or open it. */
 function SignupPageLink({ event }: { event: { slug: string; isFeatured?: boolean } }) {
   const { toast } = useToast();
-  const path = event.slug.startsWith("digital-experience") ? "/digital-bureau" : event.isFeatured ? "/schedule" : `/event/${event.slug}/schedule`;
+  const path = event.slug.startsWith("digital-experience") ? "/live-from-anywhere" : event.isFeatured ? "/schedule" : `/event/${event.slug}/schedule`;
   const url = `${window.location.origin}${path}`;
   return (
     <span className="flex items-center gap-0.5" data-testid="event-signup-link">
@@ -4842,7 +4842,7 @@ function SignupPageLink({ event }: { event: { slug: string; isFeatured?: boolean
   );
 }
 
-/** A Digital Bureau day gets its own simple screen (the AI producer runs it); every other event, the full console. */
+/** A Live From Anywhere day gets its own simple screen (the AI producer runs it); every other event, the full console. */
 function EventStudio({ eventId, adminGet, adminSend, onLeave }: { eventId?: number; adminGet: <T>(path: string) => Promise<T>; adminSend: (method: string, path: string, body?: unknown) => Promise<any>; onLeave: () => void }) {
   const dx = useQuery<{ days: { eventId: number }[] }>({ queryKey: ["/api/dx"], queryFn: () => adminGet("/api/dx"), staleTime: 300_000 });
   if (dx.isLoading) return null;

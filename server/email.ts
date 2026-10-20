@@ -167,9 +167,9 @@ function calendarText(c: CalendarLinks): string {
 
 export interface ConfirmationEmailInput {
   to: string;
-  /** A header image for this event's own look (the Digital Bureau), in place of the usual one. */
+  /** A header image for this event's own look (Live From Anywhere), in place of the usual one. */
   banner?: string;
-  /** The Digital Bureau: its own next steps (share, booth in the menu), none of the Marathon's. */
+  /** The Live From Anywhere: its own next steps (share, booth in the menu), none of the Marathon's. */
   dx?: { shareUrl: string };
   calendar?: CalendarLinks;
   hostName: string;
@@ -361,7 +361,7 @@ export async function sendConfirmationEmail(input: ConfirmationEmailInput): Prom
 export interface LoginCodeEmailInput {
   to: string;
   code: string;
-  /** Where they're signing in from: "dx" is the Digital Bureau sign-up, which gets its own look. */
+  /** Where they're signing in from: "dx" is Live From Anywhere sign-up, which gets its own look. */
   context?: string;
 }
 
@@ -377,8 +377,8 @@ export async function sendLoginCodeEmail(input: LoginCodeEmailInput): Promise<bo
     subject: `Your sign-in code: ${input.code}`,
     html: emailShell({
       banner: input.context === "dx" ? `${SITE}/dx/email.jpg` : EMAIL_BANNERS.signin,
-      bannerAlt: input.context === "dx" ? "MilitaryVoices Digital Bureau" : "MilitaryVoices.ai",
-      eyebrow: input.context === "dx" ? "Digital Bureau · sign-in" : "Sign-in",
+      bannerAlt: input.context === "dx" ? "MilitaryVoices Live From Anywhere" : "MilitaryVoices.ai",
+      eyebrow: input.context === "dx" ? "Live From Anywhere · sign-in" : "Sign-in",
       heading: "Your sign-in code",
       body: `<p style="margin:0 0 16px;">Enter this code on the sign-in page. It expires in 15 minutes.</p>${codeBlock}<p style="margin:0;color:#9ca3af;font-size:13px;">If you didn't request this, you can ignore this email.</p>`,
       footerNote: "One-time code — expires in 15 minutes.",
@@ -752,7 +752,7 @@ export async function sendOnAirNudge(v: NudgeInput): Promise<string | null> {
 }
 
 // ---------------------------------------------------------------------------
-// The Digital Bureau's own reminders: its look, its page, its booth.
+// The Live From Anywhere's own reminders: its look, its page, its booth.
 // Nothing here points at the Marathon (Andrew, 20 Oct).
 export interface DxReminderInput {
   to: string;
@@ -773,7 +773,7 @@ export async function sendDxReminder(kind: "final" | "onair", v: DxReminderInput
   const p = (t: string) => `<p style="margin:0 0 16px;">${t}</p>`;
   const final = kind === "final";
   const body = final
-    ? p(`<strong>${escapeHtml(v.show)}</strong> is on the MilitaryVoices Digital Bureau:`) +
+    ? p(`<strong>${escapeHtml(v.show)}</strong> is on MilitaryVoices Live From Anywhere:`) +
       `<div style="background:#fff7e6;border:1px solid #f0a71f;border-radius:12px;padding:16px 20px;margin:0 0 18px;"><p style="margin:0;color:#1f2937;font-size:18px;font-weight:800;">${escapeHtml(v.whenLabel)}</p><p style="margin:4px 0 0;color:#6b7280;font-size:13px;">You're live at ${escapeHtml(v.liveLabel)}, after the station's 3-minute intro.</p></div>` +
       p(`<strong>What you'll do:</strong> ${v.about ? escapeHtml(v.about) : "not set yet"}. You can change it from your dashboard.`) +
       p("Your graphics, caption and link are ready to post, so your audience knows when to tune in.") +
@@ -782,17 +782,17 @@ export async function sendDxReminder(kind: "final" | "onair", v: DxReminderInput
       p("Go in now: check your camera and microphone, share the guest link if you have a guest, and watch the countdown. Our AI producer brings you on and off.");
   const html = emailShell({
     banner: `${SITE}/dx/email.jpg`,
-    bannerAlt: "MilitaryVoices Digital Bureau",
-    eyebrow: "MilitaryVoices Digital Bureau",
+    bannerAlt: "MilitaryVoices Live From Anywhere",
+    eyebrow: "MilitaryVoices Live From Anywhere",
     heading: final ? `You're on in two days, ${escapeHtml(first)}` : `Your booth is open, ${escapeHtml(first)}`,
     body,
     cta: final ? { href: v.pageUrl, label: "Get your graphics and link" } : { href: v.boothUrl, label: "Enter your booth" },
-    footerNote: "You're getting this because you booked a time on the MilitaryVoices Digital Bureau. Reply and a person will read it.",
+    footerNote: "You're getting this because you booked a time on MilitaryVoices Live From Anywhere. Reply and a person will read it.",
   });
   const text = final
-    ? `Hi ${first},\n\n${v.show} is on the MilitaryVoices Digital Bureau: ${v.whenLabel}. You're live at ${v.liveLabel}, after the station's 3-minute intro.\n\nWhat you'll do: ${v.about || "not set yet"}. You can change it from your dashboard.\n\nYour graphics, caption and link: ${v.pageUrl}\n\nOn the day, your booth opens an hour before your time: find Booth in your dashboard menu, and be in it 10 minutes before you're live.`
+    ? `Hi ${first},\n\n${v.show} is on MilitaryVoices Live From Anywhere: ${v.whenLabel}. You're live at ${v.liveLabel}, after the station's 3-minute intro.\n\nWhat you'll do: ${v.about || "not set yet"}. You can change it from your dashboard.\n\nYour graphics, caption and link: ${v.pageUrl}\n\nOn the day, your booth opens an hour before your time: find Booth in your dashboard menu, and be in it 10 minutes before you're live.`
     : `Hi ${first},\n\n${v.show} is live at ${v.liveLabel}, right after the station's intro. Your booth is open: ${v.boothUrl}\n\nCheck your camera and microphone, share the guest link if you have a guest, and watch the countdown.`;
-  return sendRawEmail({ kind: final ? "dxReminderFinal" : "dxReminderOnAir", to: v.to, subject: final ? `Two days to go: ${v.show} on the Digital Bureau` : `Your booth is open: you're live at ${v.liveLabel}`, html, text });
+  return sendRawEmail({ kind: final ? "dxReminderFinal" : "dxReminderOnAir", to: v.to, subject: final ? `Two days to go: ${v.show} on Live From Anywhere` : `Your booth is open: you're live at ${v.liveLabel}`, html, text });
 }
 
 // ---------------------------------------------------------------------------
