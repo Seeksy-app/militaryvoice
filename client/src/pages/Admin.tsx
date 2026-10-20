@@ -1796,10 +1796,27 @@ function EventPicker({ onOpen }: { onOpen: (id: number) => void }) {
     queryFn: () => adminGet<SignupRow[]>("/api/admin/signups"),
   });
   const zone = useMemo(detectLocalTimeZone, []);
+  // Upcoming first; the ones that are over sit under Past (Andrew, 20 Oct).
+  const [when, setWhen] = useState<"upcoming" | "past">("upcoming");
   if (isLoading || !events) return <Skeleton className="h-32 w-full rounded-xl" />;
+  const endOf = (e: PublicEvent) => Date.parse(e.startAtUtc) + e.durationHours * 3600_000;
+  const now = Date.now();
+  const upcoming = events.filter((e) => endOf(e) >= now).sort((a, b) => Date.parse(a.startAtUtc) - Date.parse(b.startAtUtc));
+  const past = events.filter((e) => endOf(e) < now).sort((a, b) => Date.parse(b.startAtUtc) - Date.parse(a.startAtUtc));
+  const shown = when === "upcoming" ? upcoming : past;
   return (
+    <div>
+    <div className="mb-4 inline-flex gap-1 rounded-full border border-border bg-card p-1 text-sm" role="tablist" data-testid="events-when">
+      {([["upcoming", "Upcoming", upcoming.length], ["past", "Past", past.length]] as const).map(([k, label, n]) => (
+        <button key={k} type="button" role="tab" aria-selected={when === k} onClick={() => setWhen(k)}
+          className={`rounded-full px-4 py-1.5 font-semibold ${when === k ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"}`} data-testid={`events-${k}`}>
+          {label} <span className="tabular-nums opacity-70">{n}</span>
+        </button>
+      ))}
+    </div>
+    {shown.length === 0 && <p className="rounded-xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">{when === "upcoming" ? "Nothing coming up." : "No past events yet."}</p>}
     <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-      {events.map((e) => {
+      {shown.map((e) => {
         const start = new Date(e.startAtUtc);
         const booked = (signups ?? []).filter((s) => s.eventId === e.id && s.status !== "cancelled").length;
         const total = Math.floor((e.durationHours * 60) / e.slotMinutes);
@@ -1836,6 +1853,7 @@ function EventPicker({ onOpen }: { onOpen: (id: number) => void }) {
           </button>
         );
       })}
+    </div>
     </div>
   );
 }
