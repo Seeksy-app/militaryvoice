@@ -4827,6 +4827,21 @@ function CrmEventPanel({ eventId, event }: { eventId: number | null; event?: Pub
   );
 }
 
+/** Where people sign up for this event: copy it to share, or open it. */
+function SignupPageLink({ event }: { event: { slug: string; isFeatured?: boolean } }) {
+  const { toast } = useToast();
+  const path = event.slug.startsWith("digital-experience") ? "/digital-experience" : event.isFeatured ? "/schedule" : `/event/${event.slug}/schedule`;
+  const url = `${window.location.origin}${path}`;
+  return (
+    <span className="flex items-center gap-0.5" data-testid="event-signup-link">
+      <Button variant="ghost" size="sm" className="gap-1.5 rounded-xl" onClick={() => void navigator.clipboard.writeText(url).then(() => toast({ title: "Sign-up link copied", description: url }))} data-testid="button-copy-signup-link">
+        <Copy className="h-3.5 w-3.5" /> Sign-up link
+      </Button>
+      <a href={path} target="_blank" rel="noreferrer" className="rounded-xl px-2 py-1.5 text-sm font-medium text-muted-foreground hover:bg-muted hover:text-foreground" title="Open the sign-up page">Open ↗</a>
+    </span>
+  );
+}
+
 /** A Digital Experience day gets its own simple screen (the AI producer runs it); every other event, the full console. */
 function EventStudio({ eventId, adminGet, adminSend, onLeave }: { eventId?: number; adminGet: <T>(path: string) => Promise<T>; adminSend: (method: string, path: string, body?: unknown) => Promise<any>; onLeave: () => void }) {
   const dx = useQuery<{ days: { eventId: number }[] }>({ queryKey: ["/api/dx"], queryFn: () => adminGet("/api/dx"), staleTime: 300_000 });
@@ -5057,16 +5072,19 @@ export default function Admin({ tab, eventId: eventParam }: { tab?: string; even
                   <span className="h-6 w-px bg-border" aria-hidden="true" />
                   {/* Visible and closed answer different questions: can anyone find it, and can anyone still get on it. */}
                   <label className="flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-medium hover:bg-muted">
+                    {/* On (green, to the right) means taking signups, like Public beside it; off closes the lineup. */}
                     <Switch
-                      checked={selectedEvent.closed === true}
-                      onCheckedChange={(v) => setEventClosed(selectedEvent.id, v)}
-                      className="data-[state=checked]:bg-[#ED1C24]"
+                      checked={selectedEvent.closed !== true}
+                      onCheckedChange={(v) => setEventClosed(selectedEvent.id, !v)}
+                      className="data-[state=checked]:bg-[#1a9e5f]"
                       data-testid="switch-event-closed"
                     />
-                    <span className={selectedEvent.closed === true ? "font-semibold text-[#ED1C24]" : "text-muted-foreground"}>
-                      {selectedEvent.closed === true ? "Lineup closed" : "Taking signups"}
+                    <span className={selectedEvent.closed !== true ? "font-semibold text-[#15834f] dark:text-[#3ac486]" : "font-semibold text-[#ED1C24]"}>
+                      {selectedEvent.closed !== true ? "Taking signups" : "Lineup closed"}
                     </span>
                   </label>
+                  <span className="h-6 w-px bg-border" aria-hidden="true" />
+                  <SignupPageLink event={selectedEvent} />
                   {selectedEvent.closed === true && (
                     <>
                       <span className="h-6 w-px bg-border" aria-hidden="true" />
