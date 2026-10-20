@@ -1,4 +1,4 @@
-// The Digital Experience runs itself: every minute this starts each day's
+// The Digital Bureau runs itself: every minute this starts each day's
 // broadcast a few minutes before 7 am ET, records it, renews the stream before
 // LiveKit's 12-hour cap, and stops it after 10 pm. What goes out is the
 // program page (/dx/program), which follows the clock. No producer needed.
@@ -130,7 +130,7 @@ export function registerDxBroadcast(app: Express, origin: string, requireAdmin?:
     app.get("/api/admin/dx/:eventId", requireAdmin, async (req, res) => {
       res.setHeader("Cache-Control", "no-store");
       const id = Number(req.params.eventId);
-      if (!(await dxEventIds()).includes(id)) return res.status(404).json({ message: "Not a Digital Experience day." });
+      if (!(await dxEventIds()).includes(id)) return res.status(404).json({ message: "Not a Digital Bureau day." });
       const ev = (await storage.getEventById(id))!;
       const studio = await storage.getOrCreateStudio(id);
       const room = roomName(studio.id);
@@ -158,7 +158,7 @@ export function registerDxBroadcast(app: Express, origin: string, requireAdmin?:
     /** Put the day on air now, or take it off: for a rehearsal, or if something needs a restart. */
     app.post("/api/admin/dx/:eventId/air", requireAdmin, async (req, res) => {
       const id = Number(req.params.eventId);
-      if (!(await dxEventIds()).includes(id)) return res.status(404).json({ message: "Not a Digital Experience day." });
+      if (!(await dxEventIds()).includes(id)) return res.status(404).json({ message: "Not a Digital Bureau day." });
       if (!isLiveKitConfigured()) return res.status(503).json({ message: "The studio isn't switched on." });
       try {
         const studio = await storage.getOrCreateStudio(id);

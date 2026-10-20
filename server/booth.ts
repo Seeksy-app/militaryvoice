@@ -1,4 +1,4 @@
-// The Digital Experience booth: a podcaster's own simple studio for their
+// The Digital Bureau booth: a podcaster's own simple studio for their
 // booking, and the schedule the broadcast plays from. No producer, no scenes:
 // the clock decides who's on (see client/src/pages/Program.tsx).
 //
@@ -68,7 +68,7 @@ export function registerBooth(app: Express): void {
         if (roomName(studio.id) === room) { ev = await storage.getEventById(id); break; }
       }
     } else if (ids.includes(Number(req.query.eventId))) ev = await storage.getEventById(Number(req.query.eventId));
-    if (!ev) return res.status(404).json({ message: "Not a Digital Experience room." });
+    if (!ev) return res.status(404).json({ message: "Not a Digital Bureau room." });
     const list = (await storage.listSignups(ev.id)).filter((s) => s.status !== "cancelled").sort((a, b) => a.slotIndex - b.slotIndex);
     res.json({
       eventId: ev.id,
@@ -86,7 +86,7 @@ export function registerBooth(app: Express): void {
   app.get("/api/booth/:id", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     const b = await bookingFor(Number(req.params.id));
-    if (!b) return res.status(404).json({ message: "That booking isn't on the Digital Experience." });
+    if (!b) return res.status(404).json({ message: "That booking isn't on the Digital Bureau." });
     const role = roleOf(req, b.s, req.query.g);
     if (!role) return res.status(401).json({ message: "Sign in with the email you booked with, or use the guest link you were sent." });
     const t = bookingTimes(b.ev, b.s);
@@ -113,7 +113,7 @@ export function registerBooth(app: Express): void {
   /** Into the day's room, carrying the booking's id. Open from an hour before until ten minutes after. */
   app.post("/api/booth/:id/token", async (req, res) => {
     const b = await bookingFor(Number(req.params.id));
-    if (!b) return res.status(404).json({ message: "That booking isn't on the Digital Experience." });
+    if (!b) return res.status(404).json({ message: "That booking isn't on the Digital Bureau." });
     const role = roleOf(req, b.s, req.body?.g);
     if (!role) return res.status(401).json({ message: "Sign in with the email you booked with, or use the guest link you were sent." });
     if (!isLiveKitConfigured()) return res.status(503).json({ message: "The studio isn't switched on yet." });

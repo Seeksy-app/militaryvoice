@@ -8,8 +8,8 @@ import { DxShare } from "@/components/DxShare";
 import { apiRequest } from "@/lib/queryClient";
 import { Pencil } from "lucide-react";
 
-// The Digital Experience on someone's own dashboard: the times they booked,
-// with the calendar buttons, so a booking made on /digital-experience is in
+// The Digital Bureau on someone's own dashboard: the times they booked,
+// with the calendar buttons, so a booking made on /digital-bureau is in
 // their account too. Nothing shows when they have none.
 
 export type DxCal = { google: string; outlook: string; ics: string };
@@ -72,8 +72,8 @@ export function DxTimes() {
   return (
     <div className="mt-6 rounded-2xl border border-[#F0A71F]/60 bg-[#fff7e6] p-4 dark:bg-[#F0A71F]/10" data-testid="dashboard-dx-times">
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="flex items-center gap-2 text-sm font-bold"><Radio className="h-4 w-4 text-[#b36b00]" /> Digital Experience: your times</p>
-        <a href="/digital-experience" className="text-xs font-semibold text-[#053877] underline dark:text-[#F0A71F]">See the schedule</a>
+        <p className="flex items-center gap-2 text-sm font-bold"><Radio className="h-4 w-4 text-[#b36b00]" /> Digital Bureau: your times</p>
+        <a href="/digital-bureau" className="text-xs font-semibold text-[#053877] underline dark:text-[#F0A71F]">See the schedule</a>
       </div>
       <ul className="mt-3 space-y-3">
         {data.bookings.map((b) => (

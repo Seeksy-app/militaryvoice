@@ -14,7 +14,7 @@ import { Bot, Check, Clock, Loader2, Mic, Share2 } from "lucide-react";
 import { CalendarButtons, EditTopic } from "@/components/DxTimes";
 import { DxShare } from "@/components/DxShare";
 
-// The MilitaryVoices Digital Experience: a live channel, weekdays 7 am to
+// The MilitaryVoices Digital Bureau: a live channel, weekdays 7 am to
 // 10 pm Eastern. Pick a time, choose 30 or 60 minutes, book it here (an
 // emailed code signs them in, so it lands in their account), then add it to
 // their calendar. Server: server/digitalExperience.ts.
@@ -84,7 +84,7 @@ function BookDialog({ day, slot, onClose, onBooked }: { day: Day; slot: Slot; on
       <DialogContent className="max-h-[92vh] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="[text-wrap:balance]">{step === "done" ? "You're on the schedule" : `${dayLabel(slot.startAtUtc)}, ${time(slot.startAtUtc)} ET`}</DialogTitle>
-          <DialogDescription>{step === "done" ? "We've emailed your confirmation." : "MilitaryVoices Digital Experience · free during the beta"}</DialogDescription>
+          <DialogDescription>{step === "done" ? "We've emailed your confirmation." : "MilitaryVoices Digital Bureau · free during the beta"}</DialogDescription>
         </DialogHeader>
 
         {step !== "done" && (
@@ -209,7 +209,7 @@ export default function DigitalExperience() {
             <p className="flex items-center gap-3 text-sm font-extrabold uppercase tracking-[0.2em]"><img src="/logo-wave.png" alt="" className="h-6 w-auto" /> MilitaryVoices</p>
             <p className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#ED1C24] px-3.5 py-1 text-xs font-black uppercase tracking-[0.18em]"><span className="h-2 w-2 rounded-full bg-white" /> Live</p>
             <h1 className="mt-3 text-6xl font-black leading-[0.9] tracking-[-0.035em] sm:text-7xl lg:text-8xl">
-              Digital<br /><span className="text-[#F0A71F]">Experience</span>
+              Digital<br /><span className="text-[#F0A71F]">Bureau</span>
             </h1>
             <p className="mt-6 max-w-xl text-lg text-white/85 [text-wrap:pretty] sm:text-xl sm:leading-snug">A live channel of military and veteran voices, Monday to Friday, 7 am to 10 pm Eastern. Take 30 or 60 minutes for a live episode, an interview, the day's news, or whatever your voice brings to the community.</p>
             <div className="mt-7 flex flex-wrap items-center gap-4">
@@ -249,7 +249,7 @@ export default function DigitalExperience() {
         {sharedSlot && (
           <div className="mb-6 flex items-center gap-4 rounded-2xl border-2 border-[#F0A71F] bg-[#fff7e6] p-4 dark:bg-[#F0A71F]/10" data-testid="dx-shared">
             {sharedSlot.taken!.photo && <img src={sharedSlot.taken!.photo} alt="" className="h-14 w-14 shrink-0 rounded-full object-cover" />}
-            <p className="text-sm"><span className="block text-base font-bold">{sharedSlot.taken!.show}</span>with {sharedSlot.taken!.host} · live {dayLabel(sharedSlot.startAtUtc)} at {time(sharedSlot.startAtUtc)} ET on the MilitaryVoices Digital Experience</p>
+            <p className="text-sm"><span className="block text-base font-bold">{sharedSlot.taken!.show}</span>with {sharedSlot.taken!.host} · live {dayLabel(sharedSlot.startAtUtc)} at {time(sharedSlot.startAtUtc)} ET on the MilitaryVoices Digital Bureau</p>
           </div>
         )}
         {/* What they get, right above where they choose. */}

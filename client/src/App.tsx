@@ -106,7 +106,9 @@ function AppRouter() {
       <Route path="/events">{() => <Events />}</Route>
       <Route path="/schedule">{() => <Home />}</Route>
       <Route path="/agenda">{() => <Agenda />}</Route>
-      <Route path="/digital-experience">{() => <DigitalExperience />}</Route>
+      <Route path="/digital-bureau">{() => <DigitalExperience />}</Route>
+      {/* Its first name: links already sent keep working. */}
+      <Route path="/digital-experience">{() => { window.location.replace(`/digital-bureau${window.location.search}`); return null; }}</Route>
       <Route path="/booth/:id">{(params) => <Booth id={params.id} />}</Route>
       <Route path="/dx/program">{() => <Program />}</Route>
       <Route path="/faq">{() => <Faq />}</Route>

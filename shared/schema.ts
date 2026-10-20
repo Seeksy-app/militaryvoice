@@ -87,7 +87,7 @@ export const signups = pgTable("signups", {
   id: serial("id").primaryKey(),
   eventId: integer("event_id").notNull(),
   slotIndex: integer("slot_index").notNull(),
-  /** How many slots in a row it holds: 2 is an hour on a 30-minute schedule (the Digital Experience). */
+  /** How many slots in a row it holds: 2 is an hour on a 30-minute schedule (the Digital Bureau). */
   slotSpan: integer("slot_span").notNull().default(1),
   podcastName: text("podcast_name").notNull(),
   hostName: text("host_name").notNull(),

@@ -110,7 +110,7 @@ export function HostNav({
     },
     { title: "Help", items: [{ key: "dashboard", label: "Help", hint: "Search the help articles, or ask Alex, our assistant", icon: LifeBuoy, href: "/help" }] },
   ];
-  // The Digital Experience booth joins the menu once they've booked (not as a button on pages, Andrew 20 Oct):
+  // The Digital Bureau booth joins the menu once they've booked (not as a button on pages, Andrew 20 Oct):
   // their next time's booth, which opens an hour before it.
   const dx = useQuery<{ bookings: { id: number; startAtUtc: string; endAtUtc: string }[] }>({ queryKey: ["/api/dx/mine"], retry: false, staleTime: 60_000 });
   const nextBooth = (dx.data?.bookings ?? []).filter((b) => Date.parse(b.endAtUtc) + 10 * 60_000 > Date.now()).sort((a, b) => Date.parse(a.startAtUtc) - Date.parse(b.startAtUtc))[0];
@@ -130,7 +130,7 @@ export function HostNav({
         { key: "dashboard", label: "Dashboard", hint: "Your home base: your events, your audience and what to do next", icon: LayoutDashboard },
         { key: "page", label: "SmartLink", hint: "Your SmartLink at militaryvoices.ai/you: your podcast, links, messages from listeners, and a media kit for brands", icon: Globe },
         { key: "events", label: "Events", hint: "The events you're part of: your show, your time slot and how to promote it", icon: CalendarDays, badge: eventsCount || undefined },
-        ...(nextBooth ? [{ key: "dashboard" as const, label: "Booth", hint: "Your Digital Experience booth: it opens an hour before your time", icon: Radio, href: `/booth/${nextBooth.id}` }] : []),
+        ...(nextBooth ? [{ key: "dashboard" as const, label: "Booth", hint: "Your Digital Bureau booth: it opens an hour before your time", icon: Radio, href: `/booth/${nextBooth.id}` }] : []),
         { key: "opportunities", label: "Opportunities", hint: "Requests from brands: say you're interested with your rate, or pass", icon: Inbox, badge: opportunities || undefined },
         ...(cohostHours > 0 ? [{ key: "cohost" as const, label: "Co-host dashboard", hint: `The ${cohostHours} ${cohostHours === 1 ? "hour" : "hours"} you're co-hosting at the desk, and who's on with you`, icon: Mic2 }] : []),
       ],
