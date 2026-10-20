@@ -967,7 +967,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
 
       // One slot per podcaster per event: moving to a new time releases the current one first.
       // Only on the same event: mySignups is the featured event's, and booking another
-      // event (a Live From Anywhere day) must never give up a slot held there.
+      // event (a MilitaryVoices Radio day) must never give up a slot held there.
       if (targetEventId === data.event.id) {
         for (const held of data.mySignups) {
           await apiRequest("DELETE", `/api/host/signups/${held.id}`);

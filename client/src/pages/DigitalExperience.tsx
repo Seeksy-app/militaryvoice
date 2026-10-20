@@ -14,7 +14,7 @@ import { Bot, Check, Clock, Loader2, Share2 } from "lucide-react";
 import { CalendarButtons, EditTopic } from "@/components/DxTimes";
 import { DxShare } from "@/components/DxShare";
 
-// The MilitaryVoices Live From Anywhere: a live channel, weekdays 7 am to
+// MilitaryVoices Radio: a live channel, weekdays 7 am to
 // 10 pm Eastern. Pick a time, choose 30 or 60 minutes, book it here (an
 // emailed code signs them in, so it lands in their account), then add it to
 // their calendar. Server: server/digitalExperience.ts.
@@ -84,7 +84,7 @@ function BookDialog({ day, slot, onClose, onBooked }: { day: Day; slot: Slot; on
       <DialogContent className="max-h-[92vh] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle className="[text-wrap:balance]">{step === "done" ? "You're on the schedule" : `${dayLabel(slot.startAtUtc)}, ${time(slot.startAtUtc)} ET`}</DialogTitle>
-          <DialogDescription>{step === "done" ? "We've emailed your confirmation." : "MilitaryVoices Live From Anywhere · free during the beta"}</DialogDescription>
+          <DialogDescription>{step === "done" ? "We've emailed your confirmation." : "MilitaryVoices Radio · free during the beta"}</DialogDescription>
         </DialogHeader>
 
         {step !== "done" && (
@@ -208,17 +208,19 @@ export default function DigitalExperience() {
         <div aria-hidden="true" className="pointer-events-none absolute -bottom-40 -left-32 h-[26rem] w-[56rem] opacity-60" style={{ background: "repeating-linear-gradient(-28deg, rgba(255,255,255,.035) 0 26px, transparent 26px 58px)" }} />
         <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 py-12 sm:px-6 sm:py-16 lg:grid-cols-[1.35fr_1fr]">
           <div>
-            <p className="flex items-center gap-3 text-sm font-extrabold uppercase tracking-[0.2em]"><img src="/logo-wave.png" alt="" className="h-6 w-auto" /> MilitaryVoices</p>
-            <p className="mt-6 inline-flex items-center gap-2 rounded-full bg-[#ED1C24] px-3.5 py-1 text-xs font-black uppercase tracking-[0.18em]"><span className="h-2 w-2 rounded-full bg-white" /> Live</p>
-            <h1 className="mt-3 text-6xl font-black leading-[0.9] tracking-[-0.035em] sm:text-7xl lg:text-8xl">
-              Live From<br /><span className="text-[#F0A71F]">Anywhere</span>
+            <p className="flex items-center gap-3 text-sm font-extrabold uppercase tracking-[0.2em]"><img src="/logo-wave.png" alt="" className="h-6 w-auto" /> MilitaryVoices Radio</p>
+            <p className="mt-6 flex flex-wrap items-center gap-3">
+              <span className="inline-flex items-center gap-2 rounded-full bg-[#ED1C24] px-3.5 py-1 text-xs font-black uppercase tracking-[0.18em]"><span className="h-2 w-2 rounded-full bg-white" /> Live From Anywhere</span>
+              <span className="text-xs font-bold uppercase tracking-[0.16em] text-[#F0A71F]">Free beta week · {range || "Oct 26–30"}</span>
+            </p>
+            <h1 className="mt-4 text-5xl font-black leading-[0.95] tracking-[-0.03em] sm:text-6xl">
+              Your show, live on <span className="text-[#F0A71F]">MilitaryVoices Radio</span>
             </h1>
-            <p className="mt-5 text-2xl font-extrabold tracking-tight sm:text-3xl">On Air, On Screen, On Stage, On Location.</p>
-            <p className="mt-1 text-base font-bold tracking-wide text-[#F0A71F] sm:text-lg">M–F · 7 am – 10 pm ET</p>
-            <p className="mt-5 max-w-xl text-base text-white/80 [text-wrap:pretty] sm:text-lg sm:leading-snug">A live channel of military and veteran voices, Monday to Friday, 7 am to 10 pm Eastern. Take 30 or 60 minutes for a live episode, an interview, the day's news, or whatever your voice brings to the community.</p>
+            <p className="mt-5 max-w-xl text-xl font-bold leading-snug [text-wrap:pretty] sm:text-2xl">The live station for military and veteran voices, weekdays 7 am – 10 pm ET.</p>
+            <p className="mt-3 max-w-xl text-base text-white/80 [text-wrap:pretty] sm:text-lg sm:leading-snug">Book a 30- or 60-minute slot and go live on LiveOne, YouTube and MilitaryVoices.ai. Our AI producer opens and closes your show. You just talk.</p>
             <div className="mt-7 flex flex-wrap items-center gap-4">
-              <a href="#pick-a-time" className="inline-flex h-12 items-center rounded-full bg-[#F0A71F] px-7 text-base font-bold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="dx-pick-cta">Pick your time ↓</a>
-              <span className="inline-flex items-baseline gap-2 rounded-xl border-2 border-[#F0A71F] px-4 py-2"><b className="text-lg font-black tracking-wide text-[#F0A71F]">{(range || "Oct 26–30").toUpperCase()}</b><span className="text-sm font-semibold">7 am – 10 pm ET · free beta</span></span>
+              <a href="#pick-a-time" className="inline-flex h-12 items-center rounded-full bg-[#F0A71F] px-7 text-base font-bold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="dx-pick-cta">Book my slot ↓</a>
+              <a href="/radio" className="text-sm font-semibold text-white/85 underline underline-offset-4 hover:text-white" data-testid="dx-listen">Listen live →</a>
             </div>
           </div>
         </div>
@@ -244,7 +246,7 @@ export default function DigitalExperience() {
         {sharedSlot && (
           <div className="mb-6 flex items-center gap-4 rounded-2xl border-2 border-[#F0A71F] bg-[#fff7e6] p-4 dark:bg-[#F0A71F]/10" data-testid="dx-shared">
             {sharedSlot.taken!.photo && <img src={sharedSlot.taken!.photo} alt="" className="h-14 w-14 shrink-0 rounded-full object-cover" />}
-            <p className="text-sm"><span className="block text-base font-bold">{sharedSlot.taken!.show}</span>with {sharedSlot.taken!.host} · live {dayLabel(sharedSlot.startAtUtc)} at {time(sharedSlot.startAtUtc)} ET on MilitaryVoices Live From Anywhere</p>
+            <p className="text-sm"><span className="block text-base font-bold">{sharedSlot.taken!.show}</span>with {sharedSlot.taken!.host} · live {dayLabel(sharedSlot.startAtUtc)} at {time(sharedSlot.startAtUtc)} ET on MilitaryVoices Radio</p>
           </div>
         )}
         {/* What they get, right above where they choose. */}

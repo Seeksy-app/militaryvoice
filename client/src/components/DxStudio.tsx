@@ -5,7 +5,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Destinations } from "@/components/Destinations";
 import { Bot, ExternalLink, Loader2, Radio, Users } from "lucide-react";
 
-// Admin → Studio for a Live From Anywhere day: not the Marathon's console (no
+// Admin → Studio for a MilitaryVoices Radio day: not the Marathon's console (no
 // scenes, no desk, no standby cards). The AI producer runs the day by the
 // clock (server/dxBroadcast.ts, client/src/pages/Program.tsx); this is where
 // you watch it, step in, and set where it streams.

@@ -6,7 +6,7 @@ import { RoomEvent, Track, type RemoteParticipant } from "livekit-client";
 import { Check, Copy, Radio } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
-// The Live From Anywhere booth: one booking's own simple studio. Check the
+// MilitaryVoices Radio booth: one booking's own simple studio. Check the
 // camera and mic, wait with a countdown, go on air on the clock, see the time
 // left. The day's room is shared with every booking, so this page only shows
 // and plays the people on this booking (their signupId attribute); the
@@ -110,7 +110,7 @@ export default function Booth({ id }: { id: string }) {
   if (!info.data) {
     return (
       <div className={shell}>
-        <p className="text-2xl font-bold">Your Live From Anywhere booth</p>
+        <p className="text-2xl font-bold">Your MilitaryVoices Radio booth</p>
         <p className="max-w-md text-center text-white/75">{say(info.error)}</p>
         <a href="/host/dashboard" className="rounded-full bg-white px-5 py-2.5 font-semibold text-[#000741]">Sign in</a>
       </div>
@@ -127,9 +127,9 @@ export default function Booth({ id }: { id: string }) {
   }
   const header = (
     <div className="text-center">
-      <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#F0A71F]">MilitaryVoices Live From Anywhere</p>
+      <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#F0A71F]">MilitaryVoices Radio</p>
       <h1 className="mt-1 text-2xl font-bold [text-wrap:balance]">{d.show}</h1>
-      <p className="mt-1 text-sm text-white/70">{d.day.replace(/^MilitaryVoices Live From Anywhere · /, "")} · {hm(d.startAtUtc)}–{hm(d.endAtUtc)} ET · live {hm(d.onAirAtUtc)}–{hm(d.offAirAtUtc)}</p>
+      <p className="mt-1 text-sm text-white/70">{d.day.replace(/^MilitaryVoices Radio · /, "")} · {hm(d.startAtUtc)}–{hm(d.endAtUtc)} ET · live {hm(d.onAirAtUtc)}–{hm(d.offAirAtUtc)}</p>
     </div>
   );
 

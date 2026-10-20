@@ -11,6 +11,7 @@ import NotFound from "@/pages/not-found";
 import Home from "@/pages/Home";
 import Agenda from "@/pages/Agenda";
 import DigitalExperience from "@/pages/DigitalExperience";
+import RadioPage from "@/pages/Radio";
 import Booth from "@/pages/Booth";
 import Program from "@/pages/Program";
 import Events from "@/pages/Events";
@@ -106,10 +107,12 @@ function AppRouter() {
       <Route path="/events">{() => <Events />}</Route>
       <Route path="/schedule">{() => <Home />}</Route>
       <Route path="/agenda">{() => <Agenda />}</Route>
-      <Route path="/live-from-anywhere">{() => <DigitalExperience />}</Route>
-      {/* Its earlier names (Digital Experience, Digital Bureau): links already sent keep working. */}
-      <Route path="/digital-bureau">{() => { window.location.replace(`/live-from-anywhere${window.location.search}`); return null; }}</Route>
-      <Route path="/digital-experience">{() => { window.location.replace(`/live-from-anywhere${window.location.search}`); return null; }}</Route>
+      <Route path="/radio">{() => <RadioPage />}</Route>
+      <Route path="/radio/book">{() => <DigitalExperience />}</Route>
+      {/* Its earlier names (Digital Experience, Digital Bureau, Live From Anywhere): links already sent keep working. */}
+      <Route path="/live-from-anywhere">{() => { window.location.replace(`/radio/book${window.location.search}`); return null; }}</Route>
+      <Route path="/digital-bureau">{() => { window.location.replace(`/radio/book${window.location.search}`); return null; }}</Route>
+      <Route path="/digital-experience">{() => { window.location.replace(`/radio/book${window.location.search}`); return null; }}</Route>
       <Route path="/booth/:id">{(params) => <Booth id={params.id} />}</Route>
       <Route path="/dx/program">{() => <Program />}</Route>
       <Route path="/faq">{() => <Faq />}</Route>

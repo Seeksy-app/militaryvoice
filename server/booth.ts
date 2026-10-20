@@ -1,4 +1,4 @@
-// The Live From Anywhere booth: a podcaster's own simple studio for their
+// MilitaryVoices Radio booth: a podcaster's own simple studio for their
 // booking, and the schedule the broadcast plays from. No producer, no scenes:
 // the clock decides who's on (see client/src/pages/Program.tsx).
 //
@@ -41,6 +41,17 @@ async function bookingFor(id: number): Promise<{ s: SignupRow; ev: EventRow } | 
   return ev ? { s, ev } : null;
 }
 
+/** The day for listeners: the one on today (Eastern), else the next one, else the last one. */
+async function radioDay(): Promise<EventRow | undefined> {
+  const days: EventRow[] = [];
+  for (const id of await dxEventIds()) { const ev = await storage.getEventById(id); if (ev) days.push(ev); }
+  days.sort((a, b) => ms(a.startAtUtc) - ms(b.startAtUtc));
+  const now = Date.now();
+  const end = (e: EventRow) => ms(e.startAtUtc) + e.durationHours * 3600_000;
+  const et = (t: number) => new Date(t).toLocaleDateString("en-US", { timeZone: "America/New_York" });
+  return days.find((e) => et(ms(e.startAtUtc)) === et(now) && end(e) > now) ?? days.find((e) => ms(e.startAtUtc) > now) ?? days[days.length - 1];
+}
+
 export function registerBooth(app: Express): void {
   /** Who they are to this booking, or nothing: the booking's owner or co-host signed in, an admin, or a guest with the link. */
   const roleOf = (req: Parameters<Parameters<Express["get"]>[1]>[0], s: SignupRow, g: unknown): "host" | "guest" | "admin" | null => {
@@ -68,7 +79,7 @@ export function registerBooth(app: Express): void {
         if (roomName(studio.id) === room) { ev = await storage.getEventById(id); break; }
       }
     } else if (ids.includes(Number(req.query.eventId))) ev = await storage.getEventById(Number(req.query.eventId));
-    if (!ev) return res.status(404).json({ message: "Not a Live From Anywhere room." });
+    if (!ev) return res.status(404).json({ message: "Not a MilitaryVoices Radio room." });
     const list = (await storage.listSignups(ev.id)).filter((s) => s.status !== "cancelled").sort((a, b) => a.slotIndex - b.slotIndex);
     res.json({
       eventId: ev.id,
@@ -83,10 +94,41 @@ export function registerBooth(app: Express): void {
     });
   });
 
+  /**
+   * MilitaryVoices Radio for listeners (/radio): which day, whether it's on air,
+   * the day's lineup, and where else to watch (set in site_settings
+   * "dx:youtube-url" / "dx:liveone-url" once those streams exist).
+   */
+  app.get("/api/radio", async (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const ev = await radioDay();
+    if (!ev) return res.json({ day: null });
+    const studio = await storage.getOrCreateStudio(ev.id);
+    const list = (await storage.listSignups(ev.id)).filter((s) => s.status !== "cancelled").sort((a, b) => a.slotIndex - b.slotIndex);
+    const start = ms(ev.startAtUtc), end = start + ev.durationHours * 3600_000;
+    res.json({
+      day: { eventId: ev.id, name: ev.name, startAtUtc: ev.startAtUtc, endAtUtc: new Date(end).toISOString() },
+      onAir: studio.status === "Live" || (Date.now() >= start && Date.now() < end),
+      youtube: (await storage.getSetting("dx:youtube-url")) ?? "",
+      liveone: (await storage.getSetting("dx:liveone-url")) ?? "",
+      bookings: list.map((s) => { const t = bookingTimes(ev, s); return { id: s.id, show: s.podcastName, host: s.hostName, photo: s.photoUrl, about: s.notes, startAtUtc: new Date(t.start).toISOString(), endAtUtc: new Date(t.end).toISOString() }; }),
+    });
+  });
+
+  /** A listener's pass into the day's room: watch and hear only, while the day is on. */
+  app.post("/api/radio/token", async (_req, res) => {
+    if (!isLiveKitConfigured()) return res.status(503).json({ message: "The station isn't on yet." });
+    const ev = await radioDay();
+    if (!ev) return res.status(404).json({ message: "Nothing scheduled." });
+    const studio = await storage.getOrCreateStudio(ev.id);
+    const token = await studioToken({ room: roomName(studio.id), identity: `listener-${crypto.randomBytes(6).toString("hex")}`, name: "Listener", canPublish: false, attributes: { role: "listener" } });
+    res.json({ url: publicLiveKitUrl(), token, eventId: ev.id });
+  });
+
   app.get("/api/booth/:id", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     const b = await bookingFor(Number(req.params.id));
-    if (!b) return res.status(404).json({ message: "That booking isn't on Live From Anywhere." });
+    if (!b) return res.status(404).json({ message: "That booking isn't on MilitaryVoices Radio." });
     const role = roleOf(req, b.s, req.query.g);
     if (!role) return res.status(401).json({ message: "Sign in with the email you booked with, or use the guest link you were sent." });
     const t = bookingTimes(b.ev, b.s);
@@ -113,7 +155,7 @@ export function registerBooth(app: Express): void {
   /** Into the day's room, carrying the booking's id. Open from an hour before until ten minutes after. */
   app.post("/api/booth/:id/token", async (req, res) => {
     const b = await bookingFor(Number(req.params.id));
-    if (!b) return res.status(404).json({ message: "That booking isn't on Live From Anywhere." });
+    if (!b) return res.status(404).json({ message: "That booking isn't on MilitaryVoices Radio." });
     const role = roleOf(req, b.s, req.body?.g);
     if (!role) return res.status(401).json({ message: "Sign in with the email you booked with, or use the guest link you were sent." });
     if (!isLiveKitConfigured()) return res.status(503).json({ message: "The studio isn't switched on yet." });

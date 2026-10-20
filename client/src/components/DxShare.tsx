@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { Check, Copy, Download, Loader2 } from "lucide-react";
 
-// A booking's share kit for Live From Anywhere: their link (the schedule
+// A booking's share kit for MilitaryVoices Radio: their link (the schedule
 // opened on their show), ready-made graphics with their photo and time, a
 // caption to paste, and one-click posts. The graphics are drawn here in the
 // browser (canvas), in the week's look (client/public/dx), so there's nothing
@@ -13,9 +13,9 @@ const ET = "America/New_York";
 const time = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { timeZone: ET, hour: "numeric", minute: "2-digit" });
 const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { timeZone: ET, weekday: "long", month: "long", day: "numeric" });
 
-export const dxShareUrl = (id: number) => `${window.location.origin}/live-from-anywhere?show=${id}`;
+export const dxShareUrl = (id: number) => `${window.location.origin}/radio?show=${id}`;
 export const dxCaption = (b: DxShareBooking) =>
-  `I'm going live on MilitaryVoices Live From Anywhere: ${b.show}, ${day(b.startAtUtc)} at ${time(b.startAtUtc)} ET. A live channel of military and veteran voices. Tune in: ${dxShareUrl(b.id)}`;
+  `I'm live on MilitaryVoices Radio ${day(b.startAtUtc)} at ${time(b.startAtUtc)} ET with ${b.show}. The live station for military and veteran voices. Tune in: ${dxShareUrl(b.id)}`;
 
 function loadImage(src: string, cors = true): Promise<HTMLImageElement | null> {
   return new Promise((resolve) => {
@@ -72,9 +72,9 @@ export async function draw(b: DxShareBooking, shape: "square" | "story"): Promis
   // Headline.
   x.textAlign = "center";
   x.fillStyle = "#fff"; x.font = font(900, shape === "square" ? 52 : 64);
-  x.fillText("I'm going live on MilitaryVoices", cx, shape === "square" ? 235 : 360);
+  x.fillText("I'm on the air", cx, shape === "square" ? 235 : 360);
   x.fillStyle = "#F0A71F"; x.font = font(900, shape === "square" ? 70 : 88);
-  x.fillText("Live From Anywhere", cx, shape === "square" ? 312 : 460);
+  x.fillText("MilitaryVoices Radio", cx, shape === "square" ? 312 : 460);
   // Photo in a gold ring.
   const photo = await loadImage(b.photo);
   x.save(); x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.closePath(); x.clip();
@@ -100,12 +100,12 @@ export async function draw(b: DxShareBooking, shape: "square" | "story"): Promis
   x.strokeStyle = "#F0A71F"; x.lineWidth = 4; x.beginPath(); x.roundRect(cx - bw / 2, y - bh + 22, bw, bh, 18); x.stroke();
   x.fillStyle = "#F0A71F"; x.fillText(when, cx, y);
   // The tagline, as on the page and the artwork, then the address.
-  x.fillStyle = "#fff"; x.font = font(800, shape === "square" ? 32 : 46);
-  x.fillText("On Air, On Screen, On Stage, On Location.", cx, H - (shape === "square" ? 125 : 260));
-  x.fillStyle = "#F0A71F"; x.font = font(700, shape === "square" ? 24 : 34);
-  x.fillText("M–F · 7 am – 10 pm ET", cx, H - (shape === "square" ? 88 : 208));
-  x.fillStyle = "rgba(255,255,255,0.65)"; x.font = font(700, shape === "square" ? 26 : 32);
-  x.fillText("militaryvoices.ai/live-from-anywhere", cx, H - (shape === "square" ? 38 : 90));
+  x.fillStyle = "#fff"; x.font = font(700, shape === "square" ? 28 : 40);
+  x.fillText("Listen or watch live at", cx, H - (shape === "square" ? 128 : 262));
+  x.fillStyle = "#F0A71F"; x.font = font(900, shape === "square" ? 34 : 48);
+  x.fillText("militaryvoices.ai/radio", cx, H - (shape === "square" ? 82 : 196));
+  x.fillStyle = "rgba(255,255,255,0.65)"; x.font = font(700, shape === "square" ? 22 : 30);
+  x.fillText("Live From Anywhere · M–F 7 am – 10 pm ET", cx, H - (shape === "square" ? 36 : 90));
   try { return c.toDataURL("image/png"); } catch { return ""; }
 }
 

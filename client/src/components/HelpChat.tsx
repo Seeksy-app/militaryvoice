@@ -57,7 +57,7 @@ function linkify(text: string) {
 }
 
 // Not on the studio or the watch page, where it would sit on the picture.
-const HIDDEN_ON = ["/promo", "/studio", "/watch", "/podcast/", "/magazine", "/booth", "/dx/"];
+const HIDDEN_ON = ["/promo", "/studio", "/watch", "/podcast/", "/magazine", "/booth", "/dx/", "/radio"];
 
 const OPENER: Msg = {
   role: "assistant",

@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { StageGrid, useStageRoom } from "@/components/StageView";
 
-// The Live From Anywhere on air: what the broadcast films all day.
+// MilitaryVoices Radio on air: what the broadcast films all day.
 //
 // No producer and no scenes. The clock reads the day's bookings (from
 // /api/booth/program) and decides: the station's intro card for the first
@@ -42,7 +42,7 @@ function Card({ eyebrow, title, sub, photo, foot }: { eyebrow: string; title: st
           {foot && <p className="mt-10 text-3xl font-bold text-[#F0A71F]">{foot}</p>}
         </div>
       </div>
-      <p className="absolute bottom-10 left-24 text-xl font-bold uppercase tracking-[0.18em] text-white/60">MilitaryVoices Live From Anywhere · On Air, On Screen, On Stage, On Location.</p>
+      <p className="absolute bottom-10 left-24 text-xl font-bold uppercase tracking-[0.18em] text-white/60">MilitaryVoices Radio · Live From Anywhere · M–F 7 am – 10 pm ET</p>
     </div>
   );
 }
@@ -50,10 +50,17 @@ function Card({ eyebrow, title, sub, photo, foot }: { eyebrow: string; title: st
 export default function Program() {
   (window as unknown as { __mvBroadcast?: boolean }).__mvBroadcast = true;
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
-  const url = params.get("url");
-  const token = params.get("token");
+  // ?listen=1: a listener's copy (the /radio page embeds it). It asks for its own pass, and stays muted until a tap.
+  const listen = params.get("listen") === "1";
+  const pass = useQuery<{ url: string; token: string; eventId: number }>({
+    queryKey: ["/api/radio/token"], enabled: listen, staleTime: Infinity, retry: false,
+    queryFn: async () => (await fetch("/api/radio/token", { method: "POST" })).json(),
+  });
+  const [muted, setMuted] = useState(listen);
+  const url = listen ? pass.data?.url ?? null : params.get("url");
+  const token = listen ? pass.data?.token ?? null : params.get("token");
   const room = roomFromToken(token);
-  const eventId = params.get("eventId");
+  const eventId = listen ? String(pass.data?.eventId ?? "") : params.get("eventId");
   const program = useQuery<Program>({
     queryKey: ["/api/booth/program", room, eventId],
     queryFn: async () => (await fetch(`/api/booth/program?${room ? `room=${encodeURIComponent(room)}` : `eventId=${eventId ?? ""}`}`)).json(),
@@ -61,7 +68,7 @@ export default function Program() {
   });
 
   // Preview only (no recorder token): ?at=2026-10-26T13:01:00Z plays the day as if it were then.
-  const shift = useMemo(() => { const at = Date.parse(params.get("at") ?? ""); return !token && Number.isFinite(at) ? at - Date.now() : 0; }, [params, token]);
+  const shift = useMemo(() => { const at = Date.parse(params.get("at") ?? ""); return !token && !listen && Number.isFinite(at) ? at - Date.now() : 0; }, [params, token, listen]);
   const [now, setNow] = useState(Date.now() + shift);
   useEffect(() => { const t = setInterval(() => setNow(Date.now() + shift), 500); return () => clearInterval(t); }, [shift]);
 
@@ -72,11 +79,12 @@ export default function Program() {
 
   // Only the booking on the clock is on air, and only while it's live.
   const onAir = phase === "live" ? current!.id : -1;
-  const { tiles, connected, failed, caption } = useStageRoom(url, token, false, undefined, true, (a) => Number(a.signupId) === onAir, String(onAir));
+  const { tiles, connected, failed, caption } = useStageRoom(url, token, muted, undefined, !listen, (a) => Number(a.signupId) === onAir, String(onAir));
 
   const started = useRef(false);
   useEffect(() => {
     if (started.current) return;
+    if (listen) return;
     if ((connected || failed || !token) && program.data) {
       started.current = true;
       console.log("START_RECORDING");
@@ -92,12 +100,17 @@ export default function Program() {
       {phase === "outro" && <Card eyebrow="Thank you" title={current!.host} sub={current!.show} photo={current!.photo} foot={nextLine} />}
       {phase === "filler" && (program.data?.fillerUrl
         ? <>
-            <video src={program.data.fillerUrl} autoPlay loop playsInline className="absolute inset-0 h-full w-full object-cover" />
+            <video src={program.data.fillerUrl} autoPlay loop playsInline muted={muted} className="absolute inset-0 h-full w-full object-cover" />
             <div className="absolute bottom-8 left-8 rounded-2xl bg-[#000741]/85 px-7 py-4 text-3xl font-bold text-white">{nextLine}</div>
           </>
-        : <Card eyebrow="MilitaryVoices" title="Live From Anywhere" sub={nextLine} />)}
+        : <Card eyebrow="MilitaryVoices Radio" title="Live From Anywhere" sub={nextLine} />)}
 
       <img src="/logo-wave.png?v=2" alt="" className="pointer-events-none absolute right-6 top-5 h-10 w-auto opacity-90 drop-shadow-lg" />
+      {listen && muted && (
+        <button type="button" onClick={() => setMuted(false)} className="absolute inset-0 z-20 flex items-center justify-center bg-black/30" data-testid="radio-tap-to-listen">
+          <span className="flex items-center gap-4 rounded-full bg-[#F0A71F] px-12 py-7 text-5xl font-black text-[#1a1200] shadow-2xl">▶ Tap to listen</span>
+        </button>
+      )}
       {phase === "live" && (
         <div className="pointer-events-none absolute left-6 top-5 flex items-center gap-2 rounded-full bg-[#ED1C24] px-4 py-1.5">
           <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-white" />
