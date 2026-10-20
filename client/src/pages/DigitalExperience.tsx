@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, apiUpload } from "@/lib/queryClient";
-import { Bot, Check, Clock, Loader2, Radio, Share2 } from "lucide-react";
+import { Bot, Check, Clock, Loader2, Share2 } from "lucide-react";
 import { BoothButton, CalendarButtons } from "@/components/DxTimes";
 import { DxShare } from "@/components/DxShare";
 
@@ -198,11 +198,12 @@ export default function DigitalExperience() {
       <section className="bg-[#000741] text-white">
         <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:px-6 sm:py-14 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
           <div>
-          <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-[#F0A71F]"><Radio className="h-4 w-4" /> Beta week · free · {range || "October"}</p>
-          <h1 className="mt-3 text-3xl font-black leading-tight [text-wrap:balance] sm:text-5xl">MilitaryVoices Digital Experience</h1>
-          <p className="mt-3 max-w-2xl text-base text-white/80 [text-wrap:pretty] sm:text-lg">A live channel of military and veteran voices, Monday to Friday, 7 am to 10 pm Eastern. Take 30 or 60 minutes for a live episode, an interview, the day's news, or whatever your voice brings to the community.</p>
+          {/* The artwork says the name and the dates; said once, not twice (Andrew, 20 Oct). The title stays for search and screen readers. */}
+          <h1 className="sr-only">MilitaryVoices Digital Experience · {range || "October"} · beta week, free</h1>
+          <p className="max-w-xl text-lg text-white/85 [text-wrap:pretty] sm:text-2xl sm:leading-snug">A live channel of military and veteran voices, Monday to Friday, 7 am to 10 pm Eastern. Take 30 or 60 minutes for a live episode, an interview, the day's news, or whatever your voice brings to the community.</p>
+          <a href="#pick-a-time" className="mt-6 inline-flex h-12 items-center rounded-full bg-[#F0A71F] px-7 text-base font-bold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="dx-pick-cta">Pick your time ↓</a>
           </div>
-          <img src="/dx/hero.jpg" alt="MilitaryVoices Digital Experience: military and veteran voices, live weekdays 7 am to 10 pm ET" className="w-full rounded-2xl shadow-2xl ring-1 ring-white/10" />
+          <img src="/dx/hero.jpg" alt="MilitaryVoices Digital Experience: military and veteran voices, live weekdays 7 am to 10 pm ET" className="order-first w-full rounded-2xl shadow-2xl ring-1 ring-white/10 lg:order-none" />
           <ul className="grid gap-3 text-sm sm:grid-cols-3 lg:col-span-2">
             {[[Clock, "30 or 60 minutes", "Pick a time below; an hour takes two half-hours."], [Bot, "Our AI producer runs the show", "It brings you on and off, with a 3-minute intro before you and an outro after."], [Share2, "Ready to share", "Your own link and ready-made graphics for social, the moment you book."]].map(([I, t, d]) => {
               const Icon = I as typeof Clock;
@@ -234,7 +235,7 @@ export default function DigitalExperience() {
             <p className="text-sm"><span className="block text-base font-bold">{sharedSlot.taken!.show}</span>with {sharedSlot.taken!.host} · live {dayLabel(sharedSlot.startAtUtc)} at {time(sharedSlot.startAtUtc)} ET on the MilitaryVoices Digital Experience</p>
           </div>
         )}
-        <h2 className="text-lg font-bold">Pick a time</h2>
+        <h2 id="pick-a-time" className="scroll-mt-24 text-lg font-bold">Pick a time</h2>
         <p className="text-sm text-muted-foreground">All times Eastern.{localZone !== ET ? " Each booking shows your own time too." : ""}</p>
         {isLoading ? <div className="flex justify-center p-10"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div> : (
           <>
