@@ -6095,7 +6095,7 @@ export function registerRoutes(app: Express): void {
    * left them out on purpose).
    */
   // The Digital Experience's days start, renew and stop on their own.
-  registerDxBroadcast(app, PUBLIC_ORIGIN);
+  registerDxBroadcast(app, PUBLIC_ORIGIN, requireAdmin);
 
   app.get("/api/cron/studio-channels", async (req, res) => {
     const secret = process.env.CRON_SECRET;

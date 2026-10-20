@@ -1,5 +1,7 @@
+import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { CalendarPlus, Radio } from "lucide-react";
+import { CalendarPlus, Radio, Share2 } from "lucide-react";
+import { DxShare } from "@/components/DxShare";
 import { apiRequest } from "@/lib/queryClient";
 
 // The Digital Experience on someone's own dashboard: the times they booked,
@@ -7,7 +9,7 @@ import { apiRequest } from "@/lib/queryClient";
 // their account too. Nothing shows when they have none.
 
 export type DxCal = { google: string; outlook: string; ics: string };
-type Booking = { id: number; startAtUtc: string; endAtUtc: string; show: string; calendar: DxCal };
+type Booking = { id: number; startAtUtc: string; endAtUtc: string; show: string; host: string; photo: string; calendar: DxCal };
 
 const ET = "America/New_York";
 const time = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { timeZone: ET, hour: "numeric", minute: "2-digit" });
@@ -30,6 +32,7 @@ export function BoothButton({ id }: { id: number }) {
 }
 
 export function DxTimes() {
+  const [sharing, setSharing] = useState<number | null>(null);
   const { data } = useQuery<{ bookings: Booking[] }>({ queryKey: ["/api/dx/mine"], queryFn: async () => (await apiRequest("GET", "/api/dx/mine")).json(), retry: false });
   if (!data?.bookings.length) return null;
   return (
@@ -42,7 +45,8 @@ export function DxTimes() {
         {data.bookings.map((b) => (
           <li key={b.id} className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-sm"><span className="font-semibold">{day(b.startAtUtc)}</span>, {time(b.startAtUtc)}–{time(b.endAtUtc)} ET · {b.show}</span>
-            <span className="flex flex-wrap gap-2"><BoothButton id={b.id} /><CalendarButtons cal={b.calendar} /></span>
+            <span className="flex flex-wrap gap-2"><BoothButton id={b.id} /><button type="button" onClick={() => setSharing(sharing === b.id ? null : b.id)} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-background px-3.5 text-sm font-semibold hover:bg-muted"><Share2 className="h-4 w-4" /> Share</button><CalendarButtons cal={b.calendar} /></span>
+            {sharing === b.id && <div className="w-full rounded-xl bg-background p-3"><DxShare b={b} /></div>}
           </li>
         ))}
       </ul>

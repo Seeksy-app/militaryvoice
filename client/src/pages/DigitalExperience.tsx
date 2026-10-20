@@ -10,18 +10,19 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, apiUpload } from "@/lib/queryClient";
-import { CalendarPlus, Check, Clock, Loader2, Mic2, Radio } from "lucide-react";
+import { Bot, Check, Clock, Loader2, Radio, Share2 } from "lucide-react";
 import { BoothButton, CalendarButtons } from "@/components/DxTimes";
+import { DxShare } from "@/components/DxShare";
 
 // The MilitaryVoices Digital Experience: a live channel, weekdays 7 am to
 // 10 pm Eastern. Pick a time, choose 30 or 60 minutes, book it here (an
 // emailed code signs them in, so it lands in their account), then add it to
 // their calendar. Server: server/digitalExperience.ts.
 
-type Slot = { index: number; startAtUtc: string; past: boolean; taken: { show: string; host: string; photo: string; first: boolean; span: number } | null };
+type Slot = { index: number; startAtUtc: string; past: boolean; taken: { id: number; show: string; host: string; photo: string; first: boolean; span: number } | null };
 type Day = { eventId: number; name: string; startAtUtc: string; slotMinutes: number; onAirMinutes: number; bufferMinutes: number; closed: boolean; slots: Slot[] };
 type Cal = { google: string; outlook: string; ics: string };
-type Booking = { id: number; eventId: number; day: string; slotIndex: number; span: number; show: string; startAtUtc: string; endAtUtc: string; calendar: Cal };
+type Booking = { id: number; eventId: number; day: string; slotIndex: number; span: number; show: string; host: string; photo: string; startAtUtc: string; endAtUtc: string; calendar: Cal };
 type Mine = { email: string; profile: { hostName: string; phone: string; photoUrl: string; podcastName: string; link: string } | null; bookings: Booking[] };
 
 const ET = "America/New_York";
@@ -48,7 +49,7 @@ function BookDialog({ day, slot, onClose, onBooked }: { day: Day; slot: Slot; on
   const [busy, setBusy] = useState(false);
   const [f, setF] = useState({ hostName: "", showName: "", link: "", phone: "", about: "" });
   const [photo, setPhoto] = useState<File | null>(null);
-  const [done, setDone] = useState<{ startAtUtc: string; endAtUtc: string; calendar: Cal } | null>(null);
+  const [done, setDone] = useState<{ id: number; show: string; host: string; photo: string; startAtUtc: string; endAtUtc: string; calendar: Cal } | null>(null);
   useEffect(() => { if (session.data && step !== "done") setStep("details"); }, [session.data]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const p = mine.data?.profile;
@@ -72,7 +73,7 @@ function BookDialog({ day, slot, onClose, onBooked }: { day: Day; slot: Slot; on
     fd.set("timezone", localZone);
     for (const [k, v] of Object.entries(f)) fd.set(k, v.trim());
     if (photo) fd.set("photo", photo);
-    const r = (await (await apiUpload("POST", "/api/dx/book", fd)).json()) as { startAtUtc: string; endAtUtc: string; calendar: Cal };
+    const r = (await (await apiUpload("POST", "/api/dx/book", fd)).json()) as { id: number; show: string; host: string; photo: string; startAtUtc: string; endAtUtc: string; calendar: Cal };
     setDone(r);
     setStep("done");
     onBooked();
@@ -153,8 +154,16 @@ function BookDialog({ day, slot, onClose, onBooked }: { day: Day; slot: Slot; on
               <p className="text-lg font-bold">{dayLabel(done.startAtUtc)}</p>
               <p className="text-sm">{time(done.startAtUtc)}–{time(done.endAtUtc)} ET{!sameClock(done.startAtUtc) ? ` (${time(done.startAtUtc, localZone)} your time)` : ""}</p>
             </div>
-            <div><p className="mb-2 text-sm font-semibold">Add it to your calendar</p><CalendarButtons cal={done.calendar} /></div>
-            <p className="text-sm text-muted-foreground">It's saved in your account: it shows on <a href="/host/dashboard" className="font-semibold text-[#053877] underline dark:text-[#F0A71F]">your dashboard</a> and at the top of this page. We'll send the studio link before the day.</p>
+            <div>
+              <p className="mb-1 flex items-center gap-1.5 text-sm font-bold"><Share2 className="h-4 w-4" /> Tell your audience</p>
+              <p className="mb-3 text-xs text-muted-foreground">Your graphics, a caption and your own link, ready to post.</p>
+              <DxShare b={done} />
+            </div>
+            <details className="text-sm">
+              <summary className="cursor-pointer font-semibold">Add it to your calendar</summary>
+              <div className="mt-2"><CalendarButtons cal={done.calendar} /></div>
+            </details>
+            <p className="text-sm text-muted-foreground">It's saved in your account: on <a href="/host/dashboard" className="font-semibold text-[#053877] underline dark:text-[#F0A71F]">your dashboard</a> and at the top of this page, with the link to your booth. It opens an hour before your time.</p>
             <Button variant="outline" className="w-full" onClick={onClose}>Done</Button>
           </div>
         )}
@@ -169,7 +178,13 @@ export default function DigitalExperience() {
   const session = useQuery<{ email: string } | null>({ queryKey: ["dx-session"], queryFn: async () => { const r = await fetch("/api/host/session", { credentials: "include" }); return r.ok ? r.json() : null; } });
   const mine = useQuery<Mine>({ queryKey: ["/api/dx/mine"], enabled: !!session.data, queryFn: async () => (await apiRequest("GET", "/api/dx/mine")).json() });
   const days = data?.days ?? [];
+  // A shared link (?show=<booking>) opens on that show's day, with it marked.
+  const shared = useMemo(() => Number(new URLSearchParams(window.location.search).get("show")) || 0, []);
+  const sharedDay = days.find((d) => d.slots.some((s) => s.taken?.id === shared));
+  const sharedSlot = sharedDay?.slots.find((s) => s.taken?.id === shared && s.taken.first);
+  const [sharing, setSharing] = useState<number | null>(null);
   const [dayId, setDayId] = useState<number | null>(null);
+  useEffect(() => { if (sharedDay && dayId === null) setDayId(sharedDay.eventId); }, [sharedDay, dayId]);
   const day = days.find((d) => d.eventId === dayId) ?? days.find((d) => d.slots.some((s) => !s.taken && !s.past)) ?? days[0];
   const [pick, setPick] = useState<Slot | null>(null);
   const open = (d: Day) => d.slots.filter((s) => !s.taken && !s.past).length;
@@ -181,12 +196,15 @@ export default function DigitalExperience() {
     <div className="min-h-screen bg-background">
       <NavBar />
       <section className="bg-[#000741] text-white">
-        <div className="mx-auto max-w-6xl px-4 py-10 sm:px-6 sm:py-14">
+        <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:px-6 sm:py-14 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
+          <div>
           <p className="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.16em] text-[#F0A71F]"><Radio className="h-4 w-4" /> Beta week · free · {range || "October"}</p>
           <h1 className="mt-3 text-3xl font-black leading-tight [text-wrap:balance] sm:text-5xl">MilitaryVoices Digital Experience</h1>
           <p className="mt-3 max-w-2xl text-base text-white/80 [text-wrap:pretty] sm:text-lg">A live channel of military and veteran voices, Monday to Friday, 7 am to 10 pm Eastern. Take 30 or 60 minutes for a live episode, an interview, the day's news, or whatever your voice brings to the community.</p>
-          <ul className="mt-6 grid gap-3 text-sm sm:grid-cols-3">
-            {[[Clock, "30 or 60 minutes", "Pick a time below; an hour takes two half-hours."], [Mic2, "We bring you on and off", "A 3-minute station intro plays before you and an outro after."], [CalendarPlus, "In your calendar", "Google, Outlook or Apple, the moment you book."]].map(([I, t, d]) => {
+          </div>
+          <img src="/dx/hero.jpg" alt="MilitaryVoices Digital Experience: military and veteran voices, live weekdays 7 am to 10 pm ET" className="w-full rounded-2xl shadow-2xl ring-1 ring-white/10" />
+          <ul className="grid gap-3 text-sm sm:grid-cols-3 lg:col-span-2">
+            {[[Clock, "30 or 60 minutes", "Pick a time below; an hour takes two half-hours."], [Bot, "Our AI producer runs the show", "It brings you on and off, with a 3-minute intro before you and an outro after."], [Share2, "Ready to share", "Your own link and ready-made graphics for social, the moment you book."]].map(([I, t, d]) => {
               const Icon = I as typeof Clock;
               return <li key={t as string} className="flex gap-3 rounded-xl bg-white/[0.06] p-3"><Icon className="mt-0.5 h-5 w-5 shrink-0 text-[#F0A71F]" /><span><span className="block font-semibold">{t as string}</span><span className="text-white/70">{d as string}</span></span></li>;
             })}
@@ -202,13 +220,20 @@ export default function DigitalExperience() {
               {mine.data.bookings.map((b) => (
                 <li key={b.id} className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm"><span className="font-semibold">{dayLabel(b.startAtUtc)}</span>, {time(b.startAtUtc)}–{time(b.endAtUtc)} ET · {b.show}</span>
-                  <span className="flex flex-wrap gap-2"><BoothButton id={b.id} /><CalendarButtons cal={b.calendar} /></span>
+                  <span className="flex flex-wrap gap-2"><BoothButton id={b.id} /><button type="button" onClick={() => setSharing(sharing === b.id ? null : b.id)} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-background px-3.5 text-sm font-semibold hover:bg-muted"><Share2 className="h-4 w-4" /> Share</button><CalendarButtons cal={b.calendar} /></span>
+                  {sharing === b.id && <div className="w-full rounded-xl bg-background p-3"><DxShare b={b} /></div>}
                 </li>
               ))}
             </ul>
           </div>
         )}
 
+        {sharedSlot && (
+          <div className="mb-6 flex items-center gap-4 rounded-2xl border-2 border-[#F0A71F] bg-[#fff7e6] p-4 dark:bg-[#F0A71F]/10" data-testid="dx-shared">
+            {sharedSlot.taken!.photo && <img src={sharedSlot.taken!.photo} alt="" className="h-14 w-14 shrink-0 rounded-full object-cover" />}
+            <p className="text-sm"><span className="block text-base font-bold">{sharedSlot.taken!.show}</span>with {sharedSlot.taken!.host} · live {dayLabel(sharedSlot.startAtUtc)} at {time(sharedSlot.startAtUtc)} ET on the MilitaryVoices Digital Experience</p>
+          </div>
+        )}
         <h2 className="text-lg font-bold">Pick a time</h2>
         <p className="text-sm text-muted-foreground">All times Eastern.{localZone !== ET ? " Each booking shows your own time too." : ""}</p>
         {isLoading ? <div className="flex justify-center p-10"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div> : (
@@ -229,7 +254,7 @@ export default function DigitalExperience() {
                   return (
                     <li key={s.index}>
                       <button type="button" disabled={!free} onClick={() => setPick(s)}
-                        className={`flex h-full w-full flex-col items-start rounded-xl border p-3 text-left transition-colors ${free ? "border-border bg-card hover:border-[#F0A71F] hover:bg-[#F0A71F]/10" : "cursor-default border-transparent bg-muted/60"}`} data-testid={`dx-slot-${s.index}`}>
+                        className={`flex h-full w-full flex-col items-start rounded-xl border p-3 text-left transition-colors ${free ? "border-border bg-card hover:border-[#F0A71F] hover:bg-[#F0A71F]/10" : "cursor-default border-transparent bg-muted/60"} ${shared && s.taken?.id === shared ? "ring-2 ring-[#F0A71F]" : ""}`} data-testid={`dx-slot-${s.index}`}>
                         <span className="text-sm font-bold tabular-nums">{time(s.startAtUtc)}</span>
                         {s.taken ? (
                           <span className="mt-1 flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">

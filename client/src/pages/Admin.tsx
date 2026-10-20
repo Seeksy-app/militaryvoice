@@ -32,6 +32,7 @@ import { DiscoveryStats } from "@/components/DiscoveryStats";
 import { PlatformAnalytics } from "@/components/PlatformAnalytics";
 import { GtmPanel } from "@/components/GtmPanel";
 import { RunOfShow } from "@/components/RunOfShow";
+import { DxStudio } from "@/components/DxStudio";
 import { StudioConsole } from "@/components/StudioConsole";
 import { StudioHostsCard } from "@/components/StudioHostsCard";
 import { ProducerChat } from "@/components/ProducerDesk";
@@ -4808,6 +4809,14 @@ function CrmEventPanel({ eventId, event }: { eventId: number | null; event?: Pub
   );
 }
 
+/** A Digital Experience day gets its own simple screen (the AI producer runs it); every other event, the full console. */
+function EventStudio({ eventId, adminGet, adminSend, onLeave }: { eventId?: number; adminGet: <T>(path: string) => Promise<T>; adminSend: (method: string, path: string, body?: unknown) => Promise<any>; onLeave: () => void }) {
+  const dx = useQuery<{ days: { eventId: number }[] }>({ queryKey: ["/api/dx"], queryFn: () => adminGet("/api/dx"), staleTime: 300_000 });
+  if (dx.isLoading) return null;
+  if (eventId && dx.data?.days.some((d) => d.eventId === eventId)) return <DxStudio eventId={eventId} adminGet={adminGet} adminSend={adminSend} />;
+  return <StudioConsole adminGet={adminGet} adminSend={adminSend} view="live" eventId={eventId} kind="event" onLeave={onLeave} />;
+}
+
 export default function Admin({ tab, eventId: eventParam }: { tab?: string; eventId?: string } = {}) {
   const { isAuthenticated, isLoading, admin, logout } = useAdminAuth();
   const isMobile = useIsMobile();
@@ -4988,13 +4997,14 @@ export default function Admin({ tab, eventId: eventParam }: { tab?: string; even
                   link a button rather than a raw address across the page. */}
               <div className="mb-6 flex flex-wrap items-end justify-between gap-4 pt-1" data-testid="event-header">
                 <div className="min-w-0">
+                  {/* A real button, not a faint label: it's the way out of an event (Andrew, 20 Oct). */}
                   {!eventOnly && <button
                     type="button"
                     onClick={() => pickEvent(null)}
-                    className="mb-1.5 inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground hover:text-foreground"
+                    className="mb-3 inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-card px-4 text-sm font-semibold text-foreground shadow-sm hover:bg-muted"
                     data-testid="button-all-events"
                   >
-                    ← All events
+                    <ArrowLeft className="h-4 w-4" /> All events
                   </button>}
                   <h2 className="flex flex-wrap items-center gap-3 text-3xl font-bold tracking-tight" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>
                     <span className="min-w-0">{selectedEvent.name}</span>
@@ -5059,7 +5069,7 @@ export default function Admin({ tab, eventId: eventParam }: { tab?: string; even
                   <EventOverview eventId={selectedEventId} event={selectedEvent} go={setEventTab} />
                 </TabsContent>
                 <TabsContent value="studio" className="mt-2 lg:mt-0">
-                  <StudioConsole key={`ev-${selectedEventId}`} adminGet={adminGet} adminSend={adminSend} view="live" eventId={selectedEventId} kind="event" onLeave={() => setEventTab("overview")} />
+                  <EventStudio key={`ev-${selectedEventId}`} adminGet={adminGet} adminSend={adminSend} eventId={selectedEventId} onLeave={() => setEventTab("overview")} />
                 </TabsContent>
                 <TabsContent value="clips" className="mt-2 lg:mt-0">
                   <OutsideCapture />

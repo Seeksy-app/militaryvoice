@@ -39,8 +39,8 @@ export function registerDigitalExperience(app: Express, d: Deps): void {
       const ev = await storage.getEventById(id);
       if (!ev) continue;
       const list = (await storage.listSignups(ev.id)).filter(active);
-      const owner = new Map<number, { show: string; host: string; photo: string; first: boolean; span: number }>();
-      for (const s of list) held(s).forEach((i, k) => owner.set(i, { show: s.podcastName, host: s.hostName, photo: s.photoUrl, first: k === 0, span: s.slotSpan || 1 }));
+      const owner = new Map<number, { id: number; show: string; host: string; photo: string; first: boolean; span: number }>();
+      for (const s of list) held(s).forEach((i, k) => owner.set(i, { id: s.id, show: s.podcastName, host: s.hostName, photo: s.photoUrl, first: k === 0, span: s.slotSpan || 1 }));
       days.push({
         eventId: ev.id,
         name: ev.name,
@@ -69,7 +69,7 @@ export function registerDigitalExperience(app: Express, d: Deps): void {
       const ev = await storage.getEventById(id);
       if (!ev) continue;
       for (const s of (await storage.listSignups(ev.id)).filter((x) => active(x) && x.email.trim().toLowerCase() === email)) {
-        bookings.push({ id: s.id, eventId: ev.id, day: ev.name, slotIndex: s.slotIndex, span: s.slotSpan || 1, show: s.podcastName, startAtUtc: new Date(slotStartMs(ev, s.slotIndex)).toISOString(), endAtUtc: new Date(slotStartMs(ev, s.slotIndex + (s.slotSpan || 1))).toISOString(), calendar: d.calendarFor(s, ev, origin) });
+        bookings.push({ id: s.id, eventId: ev.id, day: ev.name, slotIndex: s.slotIndex, span: s.slotSpan || 1, show: s.podcastName, host: s.hostName, photo: s.photoUrl, startAtUtc: new Date(slotStartMs(ev, s.slotIndex)).toISOString(), endAtUtc: new Date(slotStartMs(ev, s.slotIndex + (s.slotSpan || 1))).toISOString(), calendar: d.calendarFor(s, ev, origin) });
       }
     }
     const lastShow = profile?.podcastName || "";
@@ -170,6 +170,6 @@ export function registerDigitalExperience(app: Express, d: Deps): void {
       d.sendConfirmation(created, ev, origin),
       d.notifyOrganiser(created, ev, origin, all.reduce((n, s) => n + (s.slotSpan || 1), 0), slotsIn(ev)),
     ]);
-    res.status(201).json({ id: created.id, day: ev.name, startAtUtc: new Date(slotStartMs(ev, slotIndex)).toISOString(), endAtUtc: new Date(slotStartMs(ev, slotIndex + span)).toISOString(), calendar: d.calendarFor(created, ev, origin) });
+    res.status(201).json({ id: created.id, show: created.podcastName, host: created.hostName, photo: created.photoUrl, day: ev.name, startAtUtc: new Date(slotStartMs(ev, slotIndex)).toISOString(), endAtUtc: new Date(slotStartMs(ev, slotIndex + span)).toISOString(), calendar: d.calendarFor(created, ev, origin) });
   });
 }
