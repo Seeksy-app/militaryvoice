@@ -195,21 +195,16 @@ export default function DigitalExperience() {
   return (
     <div className="min-h-screen bg-background">
       <NavBar />
+      {/* The artwork is the hero, on the left and most of the width; the words and the way in beside it (Andrew, 20 Oct). */}
       <section className="bg-[#000741] text-white">
-        <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:px-6 sm:py-14 lg:grid-cols-[1.1fr_0.9fr] lg:items-center">
-          <div>
-          {/* The artwork says the name and the dates; said once, not twice (Andrew, 20 Oct). The title stays for search and screen readers. */}
+        <div className="mx-auto grid max-w-6xl gap-8 px-4 py-10 sm:px-6 sm:py-12 lg:grid-cols-[1.7fr_1fr] lg:items-center">
+          {/* The artwork says the name and the dates; said once, not twice. The title stays for search and screen readers. */}
           <h1 className="sr-only">MilitaryVoices Digital Experience · {range || "October"} · beta week, free</h1>
-          <p className="max-w-xl text-lg text-white/85 [text-wrap:pretty] sm:text-2xl sm:leading-snug">A live channel of military and veteran voices, Monday to Friday, 7 am to 10 pm Eastern. Take 30 or 60 minutes for a live episode, an interview, the day's news, or whatever your voice brings to the community.</p>
-          <a href="#pick-a-time" className="mt-6 inline-flex h-12 items-center rounded-full bg-[#F0A71F] px-7 text-base font-bold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="dx-pick-cta">Pick your time ↓</a>
+          <img src="/dx/hero.jpg" alt="MilitaryVoices Digital Experience: military and veteran voices, live weekdays 7 am to 10 pm ET" className="w-full rounded-2xl shadow-2xl ring-1 ring-white/10" />
+          <div>
+            <p className="text-lg text-white/85 [text-wrap:pretty] sm:text-xl sm:leading-snug">A live channel of military and veteran voices, Monday to Friday, 7 am to 10 pm Eastern. Take 30 or 60 minutes for a live episode, an interview, the day's news, or whatever your voice brings to the community.</p>
+            <a href="#pick-a-time" className="mt-6 inline-flex h-12 items-center rounded-full bg-[#F0A71F] px-7 text-base font-bold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="dx-pick-cta">Pick your time ↓</a>
           </div>
-          <img src="/dx/hero.jpg" alt="MilitaryVoices Digital Experience: military and veteran voices, live weekdays 7 am to 10 pm ET" className="order-first w-full rounded-2xl shadow-2xl ring-1 ring-white/10 lg:order-none" />
-          <ul className="grid gap-3 text-sm sm:grid-cols-3 lg:col-span-2">
-            {[[Clock, "30 or 60 minutes", "Pick a time below; an hour takes two half-hours."], [Bot, "Our AI producer runs the show", "It brings you on and off, with a 3-minute intro before you and an outro after."], [Share2, "Ready to share", "Your own link and ready-made graphics for social, the moment you book."]].map(([I, t, d]) => {
-              const Icon = I as typeof Clock;
-              return <li key={t as string} className="flex gap-3 rounded-xl bg-white/[0.06] p-3"><Icon className="mt-0.5 h-5 w-5 shrink-0 text-[#F0A71F]" /><span><span className="block font-semibold">{t as string}</span><span className="text-white/70">{d as string}</span></span></li>;
-            })}
-          </ul>
         </div>
       </section>
 
@@ -235,6 +230,13 @@ export default function DigitalExperience() {
             <p className="text-sm"><span className="block text-base font-bold">{sharedSlot.taken!.show}</span>with {sharedSlot.taken!.host} · live {dayLabel(sharedSlot.startAtUtc)} at {time(sharedSlot.startAtUtc)} ET on the MilitaryVoices Digital Experience</p>
           </div>
         )}
+        {/* What they get, right above where they choose. */}
+        <ul className="mb-8 grid gap-3 text-sm sm:grid-cols-3" data-testid="dx-what">
+          {[[Clock, "30 or 60 minutes", "Pick a time below; an hour takes two half-hours."], [Bot, "Our AI producer runs the show", "It brings you on and off, with a 3-minute intro before you and an outro after."], [Share2, "Ready to share", "Your own link and ready-made graphics for social, the moment you book."]].map(([I, t, d]) => {
+            const Icon = I as typeof Clock;
+            return <li key={t as string} className="flex gap-3 rounded-xl border border-border bg-card p-4"><Icon className="mt-0.5 h-5 w-5 shrink-0 text-[#b36b00] dark:text-[#F0A71F]" /><span><span className="block font-semibold">{t as string}</span><span className="text-muted-foreground">{d as string}</span></span></li>;
+          })}
+        </ul>
         <h2 id="pick-a-time" className="scroll-mt-24 text-lg font-bold">Pick a time</h2>
         <p className="text-sm text-muted-foreground">All times Eastern.{localZone !== ET ? " Each booking shows your own time too." : ""}</p>
         {isLoading ? <div className="flex justify-center p-10"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div> : (
