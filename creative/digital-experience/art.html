@@ -19,22 +19,29 @@
   .live i { width: 14px; height: 14px; border-radius: 50%; background: #fff; display: inline-block; }
   h1 { position: absolute; left: 92px; top: 300px; font-weight: 900; font-size: 148px; line-height: .9; letter-spacing: -.035em; }
   h1 em { font-style: normal; color: #F0A71F; }
-  .sub { position: absolute; left: 96px; top: 600px; font-size: 34px; font-weight: 600; color: rgba(255,255,255,.88); }
+  .sub { position: absolute; left: 96px; top: 600px; font-size: 40px; font-weight: 800; color: #fff; }
   .chip { position: absolute; left: 96px; bottom: 78px; display: inline-flex; align-items: baseline; gap: 18px; border: 3px solid #F0A71F; border-radius: 18px; padding: 14px 26px; }
   .chip b { font-size: 46px; font-weight: 900; color: #F0A71F; letter-spacing: .04em; }
   .chip span { font-size: 30px; font-weight: 700; color: #fff; }
+  .sub2 { position: absolute; left: 96px; top: 658px; font-size: 28px; font-weight: 700; letter-spacing: .04em; color: #F0A71F; }
+  .photo { position: absolute; top: 0; bottom: 0; right: 0; width: 64%; background-size: cover; background-position: center 30%; filter: grayscale(1) contrast(1.1) brightness(1.05); opacity: .5; mix-blend-mode: luminosity;  -webkit-mask-image: linear-gradient(90deg, transparent 0%, #000 38%); mask-image: linear-gradient(90deg, transparent 0%, #000 38%); }
+  .photo::after { content: ""; position: absolute; inset: 0; background: linear-gradient(90deg, #000741 0%, rgba(0,7,65,.55) 30%, rgba(0,7,65,.15) 65%, rgba(0,7,65,.35) 100%); }
+  #rings.off { display: none; }
 </style></head>
 <body>
 <div class="art">
+  <div class="photo" id="photo"></div>
   <div class="stripes"></div>
   <div class="rings" id="rings"></div>
   <div class="brand"><img src="logo-wave.png" alt=""><span>MILITARYVOICES</span></div>
   <div class="live"><i></i>LIVE</div>
   <h1>Digital<br><em>Bureau</em></h1>
-  <p class="sub">Military &amp; veteran voices · weekdays 7 am – 10 pm ET</p>
-  <div class="chip" id="chip"><b id="chipB">OCT 26 – 30</b><span id="chipS">Beta week · free</span></div>
+  <p class="sub">Military voices, live from anywhere.</p>
+  <p class="sub2">On air. On screen. On stage. On location.</p>
+  <div class="chip" id="chip"><b id="chipB">OCT 26 – 30</b><span id="chipS">7 am – 10 pm ET · free beta</span></div>
 </div>
 <script>
+  const bg = new URLSearchParams(location.search).get("bg") || "bg-host.jpg"; if (bg) { document.getElementById("photo").style.backgroundImage = `url(${bg})`; document.getElementById("rings").classList.add("off"); }
   const q = new URLSearchParams(location.search);
   if (q.get("b")) document.getElementById("chipB").textContent = q.get("b");
   if (q.has("s")) document.getElementById("chipS").textContent = q.get("s");

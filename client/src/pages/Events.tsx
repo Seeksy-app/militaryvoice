@@ -38,7 +38,7 @@ export default function Events() {
   if (dx?.days.length) {
     const first = new Date(dx.days[0].startAtUtc), last = new Date(dx.days[dx.days.length - 1].startAtUtc);
     items.push({
-      key: "digital-experience", title: "MilitaryVoices Digital Bureau", tagline: "A live channel of military and veteran voices, weekdays 7 am to 10 pm Eastern. Take 30 or 60 minutes. Free during the beta week.",
+      key: "digital-experience", title: "MilitaryVoices Digital Bureau", tagline: "Military voices, live from anywhere. On air. On screen. On stage. On location. Weekdays 7 am to 10 pm Eastern; take 30 or 60 minutes, free during the beta week.",
       image: "/dx/hero.jpg", start: first, end: new Date(last.getTime() + 15 * 3600_000),
       when: `${formatDateInZone(first, zone)} – ${formatDateInZone(last, zone)} · weekdays, 7 am – 10 pm ET`, href: "/digital-bureau", cta: "Pick your time",
     });

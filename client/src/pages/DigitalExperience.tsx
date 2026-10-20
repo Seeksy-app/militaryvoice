@@ -10,7 +10,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, apiUpload } from "@/lib/queryClient";
-import { Bot, Check, Clock, Loader2, Mic, Share2 } from "lucide-react";
+import { Bot, Check, Clock, Loader2, Share2 } from "lucide-react";
 import { CalendarButtons, EditTopic } from "@/components/DxTimes";
 import { DxShare } from "@/components/DxShare";
 
@@ -203,6 +203,8 @@ export default function DigitalExperience() {
       {/* The hero is the artwork itself (client/public/dx), built in the page rather than shown as a picture in a box:
           the name once, big, with the broadcast mic beside it (Andrew, 20 Oct). */}
       <section className="relative overflow-hidden bg-[#000741] text-white" style={{ background: "radial-gradient(ellipse 70% 120% at 82% 50%, #0d3a8a 0%, #05175a 40%, #000741 75%)" }}>
+        {/* A host on the mic, faded in on the right (Andrew, 20 Oct): it's a broadcast, not an in-person event. */}
+        <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 hidden w-[62%] bg-cover opacity-50 mix-blend-luminosity grayscale md:block" style={{ backgroundImage: "url(/dx/host.jpg)", backgroundPosition: "center 30%", WebkitMaskImage: "linear-gradient(90deg, transparent 0%, #000 38%)", maskImage: "linear-gradient(90deg, transparent 0%, #000 38%)" }} />
         <div aria-hidden="true" className="pointer-events-none absolute -bottom-40 -left-32 h-[26rem] w-[56rem] opacity-60" style={{ background: "repeating-linear-gradient(-28deg, rgba(255,255,255,.035) 0 26px, transparent 26px 58px)" }} />
         <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 py-12 sm:px-6 sm:py-16 lg:grid-cols-[1.35fr_1fr]">
           <div>
@@ -211,20 +213,13 @@ export default function DigitalExperience() {
             <h1 className="mt-3 text-6xl font-black leading-[0.9] tracking-[-0.035em] sm:text-7xl lg:text-8xl">
               Digital<br /><span className="text-[#F0A71F]">Bureau</span>
             </h1>
-            <p className="mt-6 max-w-xl text-lg text-white/85 [text-wrap:pretty] sm:text-xl sm:leading-snug">A live channel of military and veteran voices, Monday to Friday, 7 am to 10 pm Eastern. Take 30 or 60 minutes for a live episode, an interview, the day's news, or whatever your voice brings to the community.</p>
+            <p className="mt-5 text-2xl font-extrabold tracking-tight sm:text-3xl">Military voices, live from anywhere.</p>
+            <p className="mt-1 text-base font-bold tracking-wide text-[#F0A71F] sm:text-lg">On air. On screen. On stage. On location.</p>
+            <p className="mt-5 max-w-xl text-base text-white/80 [text-wrap:pretty] sm:text-lg sm:leading-snug">A live channel of military and veteran voices, Monday to Friday, 7 am to 10 pm Eastern. Take 30 or 60 minutes for a live episode, an interview, the day's news, or whatever your voice brings to the community.</p>
             <div className="mt-7 flex flex-wrap items-center gap-4">
               <a href="#pick-a-time" className="inline-flex h-12 items-center rounded-full bg-[#F0A71F] px-7 text-base font-bold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="dx-pick-cta">Pick your time ↓</a>
-              <span className="inline-flex items-baseline gap-2 rounded-xl border-2 border-[#F0A71F] px-4 py-2"><b className="text-lg font-black tracking-wide text-[#F0A71F]">{(range || "Oct 26–30").toUpperCase()}</b><span className="text-sm font-semibold">Beta week · free</span></span>
+              <span className="inline-flex items-baseline gap-2 rounded-xl border-2 border-[#F0A71F] px-4 py-2"><b className="text-lg font-black tracking-wide text-[#F0A71F]">{(range || "Oct 26–30").toUpperCase()}</b><span className="text-sm font-semibold">7 am – 10 pm ET · free beta</span></span>
             </div>
-          </div>
-          {/* The broadcast mic, as on the artwork. */}
-          <div aria-hidden="true" className="relative mx-auto hidden aspect-square w-full max-w-[26rem] lg:block">
-            {[1, 0.78, 0.58, 0.4].map((k, i) => (
-              <span key={k} className="absolute left-1/2 top-1/2 rounded-full border-[3px] border-[#F0A71F]" style={{ width: `${k * 100}%`, height: `${k * 100}%`, transform: "translate(-50%,-50%)", opacity: 0.15 + i * 0.22 }} />
-            ))}
-            <span className="absolute left-1/2 top-1/2 flex h-[30%] w-[30%] -translate-x-1/2 -translate-y-1/2 items-center justify-center rounded-full bg-[#F0A71F] shadow-[0_30px_80px_rgba(0,0,0,.45),0_0_0_14px_rgba(240,167,31,.18)]">
-              <Mic className="h-1/2 w-1/2 text-[#000741]" strokeWidth={2.2} />
-            </span>
           </div>
         </div>
       </section>
