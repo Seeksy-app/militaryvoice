@@ -49,8 +49,8 @@ function wrap(ctx: CanvasRenderingContext2D, text: string, width: number, lines:
   return out;
 }
 
-/** One graphic: square (posts) or tall (stories). */
-async function draw(b: DxShareBooking, shape: "square" | "story"): Promise<string> {
+/** One graphic: square (posts) or tall (stories). Exported for making samples. */
+export async function draw(b: DxShareBooking, shape: "square" | "story"): Promise<string> {
   await document.fonts.load("900 80px Inter").catch(() => {});
   const W = 1080, H = shape === "square" ? 1080 : 1920;
   const c = document.createElement("canvas");
@@ -80,7 +80,10 @@ async function draw(b: DxShareBooking, shape: "square" | "story"): Promise<strin
   x.save(); x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.closePath(); x.clip();
   if (photo) {
     const s = Math.max((2 * r) / photo.width, (2 * r) / photo.height);
-    x.drawImage(photo, cx - (photo.width * s) / 2, cy - (photo.height * s) / 2, photo.width * s, photo.height * s);
+    // A tall portrait keeps its face: crop toward the top rather than the middle.
+    const spare = photo.height * s - 2 * r;
+    const top = spare > 0 ? cy - r - spare * 0.18 : cy - (photo.height * s) / 2;
+    x.drawImage(photo, cx - (photo.width * s) / 2, top, photo.width * s, photo.height * s);
   } else { x.fillStyle = "#0a2a6b"; x.fillRect(cx - r, cy - r, 2 * r, 2 * r); }
   x.restore();
   x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.strokeStyle = "#F0A71F"; x.lineWidth = 12; x.stroke();
