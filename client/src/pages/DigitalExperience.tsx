@@ -203,8 +203,8 @@ export default function DigitalExperience() {
       {/* The hero is the artwork itself (client/public/dx), built in the page rather than shown as a picture in a box:
           the name once, big, with the broadcast mic beside it (Andrew, 20 Oct). */}
       <section className="relative overflow-hidden bg-[#000741] text-white" style={{ background: "radial-gradient(ellipse 70% 120% at 82% 50%, #0d3a8a 0%, #05175a 40%, #000741 75%)" }}>
-        {/* A host on the mic, faded in on the right (Andrew, 20 Oct): it's a broadcast, not an in-person event. */}
-        <div aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-0 hidden w-[62%] bg-cover opacity-50 mix-blend-luminosity grayscale md:block" style={{ backgroundImage: "url(/dx/host.jpg)", backgroundPosition: "center 30%", WebkitMaskImage: "linear-gradient(90deg, transparent 0%, #000 38%)", maskImage: "linear-gradient(90deg, transparent 0%, #000 38%)" }} />
+        {/* Hosts on the mic in a studio, faded in (Andrew, 20 Oct): it's a broadcast, not an in-person event. Mirrored so the host sits on the right. */}
+        <div aria-hidden="true" className="pointer-events-none absolute inset-0 hidden bg-cover opacity-55 mix-blend-luminosity grayscale md:block" style={{ backgroundImage: "url(/dx/onair.jpg)", backgroundPosition: "center 35%", transform: "scaleX(-1)", WebkitMaskImage: "linear-gradient(270deg, transparent 0%, rgba(0,0,0,.35) 30%, #000 60%)", maskImage: "linear-gradient(270deg, transparent 0%, rgba(0,0,0,.35) 30%, #000 60%)" }} />
         <div aria-hidden="true" className="pointer-events-none absolute -bottom-40 -left-32 h-[26rem] w-[56rem] opacity-60" style={{ background: "repeating-linear-gradient(-28deg, rgba(255,255,255,.035) 0 26px, transparent 26px 58px)" }} />
         <div className="relative mx-auto grid max-w-6xl items-center gap-10 px-4 py-12 sm:px-6 sm:py-16 lg:grid-cols-[1.35fr_1fr]">
           <div>
