@@ -104,6 +104,8 @@ export function registerBooth(app: Express): void {
       opensAtUtc: new Date(t.start - OPENS_MIN * 60_000).toISOString(),
       closesAtUtc: new Date(t.end + CLOSES_MIN * 60_000).toISOString(),
       guestLink: role === "guest" ? "" : `${origin}/booth/${b.s.id}?g=${boothGuestKey(b.s.id)}`,
+      // An admin can open any booth at any time (to see it, or to help); so can a developer's machine.
+      anytime: !!getAdminEmail(req) || (process.env.NODE_ENV === "development" && !process.env.VERCEL),
       ready: isLiveKitConfigured(),
     });
   });
@@ -118,7 +120,7 @@ export function registerBooth(app: Express): void {
     const t = bookingTimes(b.ev, b.s);
     const now = Date.now();
     // On a developer's machine the booth opens any time, to try it.
-    const anytime = role === "admin" || (process.env.NODE_ENV === "development" && !process.env.VERCEL);
+    const anytime = !!getAdminEmail(req) || (process.env.NODE_ENV === "development" && !process.env.VERCEL);
     if (!anytime && now < t.start - OPENS_MIN * 60_000) return res.status(409).json({ message: `Your booth opens an hour before your time.` });
     if (!anytime && now > t.end + CLOSES_MIN * 60_000) return res.status(409).json({ message: "Your time has finished. Thank you for being on!" });
     const studio = await storage.getOrCreateStudio(b.ev.id);
@@ -127,7 +129,7 @@ export function registerBooth(app: Express): void {
       room: roomName(studio.id),
       identity: `b-${b.s.id}-${crypto.randomBytes(4).toString("hex")}`,
       name,
-      canPublish: role !== "admin",
+      canPublish: true,
       attributes: {
         signupId: String(b.s.id),
         role: role === "guest" ? "guest" : "host",

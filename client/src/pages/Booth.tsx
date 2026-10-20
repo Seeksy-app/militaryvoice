@@ -12,7 +12,7 @@ import { apiRequest } from "@/lib/queryClient";
 // and plays the people on this booking (their signupId attribute); the
 // station's intro and outro play on air around them (see Program.tsx).
 
-type Info = { signupId: number; role: "host" | "guest" | "admin"; show: string; host: string; day: string; startAtUtc: string; endAtUtc: string; onAirAtUtc: string; offAirAtUtc: string; opensAtUtc: string; closesAtUtc: string; guestLink: string; ready: boolean };
+type Info = { signupId: number; role: "host" | "guest" | "admin"; show: string; host: string; day: string; startAtUtc: string; endAtUtc: string; onAirAtUtc: string; offAirAtUtc: string; opensAtUtc: string; closesAtUtc: string; guestLink: string; ready: boolean; anytime?: boolean };
 
 const ET = "America/New_York";
 const hm = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { timeZone: ET, hour: "numeric", minute: "2-digit" });
@@ -134,8 +134,8 @@ export default function Booth({ id }: { id: string }) {
   );
 
   if (!conn) {
-    // On a developer's machine the booth opens any time, to try it (the server agrees).
-    const early = now < Date.parse(d.opensAtUtc) && d.role !== "admin" && window.location.hostname !== "localhost";
+    // An admin (or a developer's machine) can go in any time; the server agrees.
+    const early = now < Date.parse(d.opensAtUtc) && !d.anytime;
     return (
       <div data-lk-theme="default" className={shell}>
         {header}
