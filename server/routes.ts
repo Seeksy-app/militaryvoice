@@ -73,6 +73,8 @@ import { registerCreatomate } from "./creatomate.js";
 import { registerGlimpse } from "./glimpse.js";
 import { registerDigitalExperience } from "./digitalExperience.js";
 import { registerBooth } from "./booth.js";
+import { registerDxBroadcast } from "./dxBroadcast.js";
+import { dxEventIds } from "./digitalExperience.js";
 import { isConfigured as isInfluencersConfigured, credits, enrichHandle } from "./influencers.js";
 import { deriveSocialAccounts } from "../shared/socialLinks.js";
 import { buildAudienceSnapshot, readAudienceSnapshot, saveAudienceSnapshot, AUDIENCE_WINDOW_DAYS } from "./audience.js";
@@ -1457,7 +1459,9 @@ export function registerRoutes(app: Express): void {
       if (!rec || Date.now() - Date.parse(rec.startedAt) < 2 * 3600_000) continue;
       const stamp = new Date().toISOString().replace(/[:.]/g, "-");
       const filepath = `event-${st.eventId}/${stamp}-continued.mp4`;
-      const egressId = await startSegmentRecording(roomName(st.id), filepath, templateBaseUrl(req) ?? `${PUBLIC_ORIGIN}/studio/composite`);
+      // A Digital Experience day films its program page, not the Marathon's stage.
+      const tpl = (await dxEventIds()).includes(st.eventId) ? `${PUBLIC_ORIGIN}/dx/program` : templateBaseUrl(req) ?? `${PUBLIC_ORIGIN}/studio/composite`;
+      const egressId = await startSegmentRecording(roomName(st.id), filepath, tpl);
       await storage.createRecording({ eventId: st.eventId, studioId: st.id, signupId: rec.signupId ?? null, email: rec.email, title: `${rec.title.replace(/ \(continued\)$/, "")} (continued)`, egressId, filepath });
       await storage.updateStudio(st.id, { recordingEgressId: egressId });
       await storage.setSetting(`retire_egress:${st.id}`, rec.egressId);
@@ -6090,6 +6094,9 @@ export function registerRoutes(app: Express): void {
    * podcasters' whole-show channels join the broadcast (going live earlier
    * left them out on purpose).
    */
+  // The Digital Experience's days start, renew and stop on their own.
+  registerDxBroadcast(app, PUBLIC_ORIGIN);
+
   app.get("/api/cron/studio-channels", async (req, res) => {
     const secret = process.env.CRON_SECRET;
     if (secret && (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "") !== secret) return res.status(401).json({ message: "Not authorised." });

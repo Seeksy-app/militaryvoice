@@ -111,6 +111,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/dx-broadcast",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/health",
       "schedule": "*/5 * * * *"
     }
