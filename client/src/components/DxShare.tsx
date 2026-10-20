@@ -60,7 +60,7 @@ async function draw(b: DxShareBooking, shape: "square" | "story"): Promise<strin
   g.addColorStop(0, "#0d3a8a"); g.addColorStop(0.45, "#05175a"); g.addColorStop(1, "#000741");
   x.fillStyle = g; x.fillRect(0, 0, W, H);
   // Broadcast rings behind the photo.
-  const cy = shape === "square" ? 535 : 900, cx = W / 2, r = shape === "square" ? 160 : 250;
+  const cy = shape === "square" ? 520 : 900, cx = W / 2, r = shape === "square" ? 145 : 250;
   [1.35, 1.7, 2.05, 2.4].forEach((k, i) => { x.beginPath(); x.arc(cx, cy, r * k, 0, Math.PI * 2); x.strokeStyle = `rgba(240,167,31,${0.7 - i * 0.16})`; x.lineWidth = 4; x.stroke(); });
   const font = (w: number, s: number) => `${w} ${s}px Inter, Arial, sans-serif`;
   // Brand line and LIVE pill.
@@ -85,19 +85,24 @@ async function draw(b: DxShareBooking, shape: "square" | "story"): Promise<strin
   x.restore();
   x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.strokeStyle = "#F0A71F"; x.lineWidth = 12; x.stroke();
   // Show, host, time.
-  let y = cy + r + (shape === "square" ? 78 : 140);
+  let y = cy + r + (shape === "square" ? 72 : 140);
   x.fillStyle = "#fff"; x.font = font(900, shape === "square" ? 54 : 68);
-  for (const l of wrap(x, b.show, W - 160, 2)) { x.fillText(l, cx, y); y += shape === "square" ? 62 : 80; }
+  for (const l of wrap(x, b.show, W - 160, shape === "square" ? 1 : 2)) { x.fillText(l, cx, y); y += shape === "square" ? 62 : 80; }
   x.fillStyle = "rgba(255,255,255,0.8)"; x.font = font(600, shape === "square" ? 34 : 42);
-  x.fillText(`with ${b.host}`, cx, y + 4); y += shape === "square" ? 82 : 110;
+  x.fillText(`with ${b.host}`, cx, y + 4); y += shape === "square" ? 76 : 110;
   // The time, in the gold box.
   const when = `${day(b.startAtUtc).toUpperCase()} · ${time(b.startAtUtc)} ET`;
   x.font = font(900, shape === "square" ? 36 : 46);
   const bw = x.measureText(when).width + 70, bh = shape === "square" ? 72 : 92;
   x.strokeStyle = "#F0A71F"; x.lineWidth = 4; x.beginPath(); x.roundRect(cx - bw / 2, y - bh + 22, bw, bh, 18); x.stroke();
   x.fillStyle = "#F0A71F"; x.fillText(when, cx, y);
+  // The tagline, as on the page and the artwork, then the address.
+  x.fillStyle = "#fff"; x.font = font(800, shape === "square" ? 32 : 46);
+  x.fillText("Military voices, live from anywhere.", cx, H - (shape === "square" ? 125 : 260));
+  x.fillStyle = "#F0A71F"; x.font = font(700, shape === "square" ? 24 : 34);
+  x.fillText("On air. On screen. On stage. On location.", cx, H - (shape === "square" ? 88 : 208));
   x.fillStyle = "rgba(255,255,255,0.65)"; x.font = font(700, shape === "square" ? 26 : 32);
-  x.fillText("militaryvoices.ai/digital-bureau", cx, H - (shape === "square" ? 50 : 90));
+  x.fillText("militaryvoices.ai/digital-bureau", cx, H - (shape === "square" ? 38 : 90));
   try { return c.toDataURL("image/png"); } catch { return ""; }
 }
 
