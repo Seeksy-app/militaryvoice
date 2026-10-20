@@ -59,8 +59,14 @@ export async function draw(b: DxShareBooking, shape: "square" | "story"): Promis
   const g = x.createRadialGradient(W * 0.75, H * 0.35, 40, W * 0.6, H * 0.45, H * 0.9);
   g.addColorStop(0, "#0d3a8a"); g.addColorStop(0.45, "#05175a"); g.addColorStop(1, "#000741");
   x.fillStyle = g; x.fillRect(0, 0, W, H);
+  // "#StillServing: The VFW Podcast" reads as a name and a subtitle: the part
+  // after the colon gets its own line, a size down. The square makes room by
+  // lifting the photo a little.
+  const colon = b.show.indexOf(": ");
+  const [title, subtitle] = colon > 0 ? [b.show.slice(0, colon + 1), b.show.slice(colon + 2)] : [b.show, ""];
+  const sq = shape === "square", two = !!subtitle;
   // Broadcast rings behind the photo.
-  const cy = shape === "square" ? 520 : 900, cx = W / 2, r = shape === "square" ? 145 : 250;
+  const cy = sq ? (two ? 505 : 520) : 900, cx = W / 2, r = sq ? (two ? 135 : 145) : 250;
   [1.35, 1.7, 2.05, 2.4].forEach((k, i) => { x.beginPath(); x.arc(cx, cy, r * k, 0, Math.PI * 2); x.strokeStyle = `rgba(240,167,31,${0.7 - i * 0.16})`; x.lineWidth = 4; x.stroke(); });
   const font = (w: number, s: number) => `${w} ${s}px Inter, Arial, sans-serif`;
   // Brand line and LIVE pill.
@@ -88,9 +94,13 @@ export async function draw(b: DxShareBooking, shape: "square" | "story"): Promis
   x.restore();
   x.beginPath(); x.arc(cx, cy, r, 0, Math.PI * 2); x.strokeStyle = "#F0A71F"; x.lineWidth = 12; x.stroke();
   // Show, host, time.
-  let y = cy + r + (shape === "square" ? 72 : 140);
-  x.fillStyle = "#fff"; x.font = font(900, shape === "square" ? 54 : 68);
-  for (const l of wrap(x, b.show, W - 160, shape === "square" ? 1 : 2)) { x.fillText(l, cx, y); y += shape === "square" ? 62 : 80; }
+  let y = cy + r + (sq ? (two ? 66 : 72) : 140);
+  x.fillStyle = "#fff"; x.font = font(900, sq ? 54 : 68);
+  for (const l of wrap(x, title, W - 160, sq || two ? 1 : 2)) { x.fillText(l, cx, y); y += sq ? 62 : 80; }
+  if (two) {
+    x.font = font(800, sq ? 44 : 56);
+    x.fillText(wrap(x, subtitle, W - 160, 1)[0] ?? "", cx, y - (sq ? 6 : 8)); y += sq ? 48 : 66;
+  }
   x.fillStyle = "rgba(255,255,255,0.8)"; x.font = font(600, shape === "square" ? 34 : 42);
   x.fillText(`with ${b.host}`, cx, y + 4); y += shape === "square" ? 76 : 110;
   // The time, in the gold box.
