@@ -65,11 +65,6 @@ export function EditTopic({ id, about }: { id: number; about: string }) {
   );
 }
 
-/** Their booth for that booking: opens an hour before (the page says so until then). */
-export function BoothButton({ id }: { id: number }) {
-  return <a href={`/booth/${id}`} className="inline-flex h-9 items-center gap-1.5 rounded-full bg-[#053877] px-3.5 text-sm font-semibold text-white hover:bg-[#0a4a99]" data-testid={`dx-booth-${id}`}><Radio className="h-4 w-4" /> Your booth</a>;
-}
-
 export function DxTimes() {
   const [sharing, setSharing] = useState<number | null>(null);
   const { data } = useQuery<{ bookings: Booking[] }>({ queryKey: ["/api/dx/mine"], queryFn: async () => (await apiRequest("GET", "/api/dx/mine")).json(), retry: false });
@@ -84,7 +79,7 @@ export function DxTimes() {
         {data.bookings.map((b) => (
           <li key={b.id} className="flex flex-wrap items-center justify-between gap-2">
             <span className="text-sm"><span className="font-semibold">{day(b.startAtUtc)}</span>, {time(b.startAtUtc)}–{time(b.endAtUtc)} ET · {b.show}</span>
-            <span className="flex flex-wrap gap-2"><BoothButton id={b.id} /><button type="button" onClick={() => setSharing(sharing === b.id ? null : b.id)} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-background px-3.5 text-sm font-semibold hover:bg-muted"><Share2 className="h-4 w-4" /> Share</button><CalendarButtons cal={b.calendar} /></span>
+            <span className="flex flex-wrap gap-2"><button type="button" onClick={() => setSharing(sharing === b.id ? null : b.id)} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-background px-3.5 text-sm font-semibold hover:bg-muted"><Share2 className="h-4 w-4" /> Share</button><CalendarButtons cal={b.calendar} /></span>
             <EditTopic id={b.id} about={b.about ?? ""} />
             {sharing === b.id && <div className="w-full rounded-xl bg-background p-3"><DxShare b={b} /></div>}
           </li>

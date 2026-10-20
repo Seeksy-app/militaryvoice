@@ -11,7 +11,7 @@ import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest, apiUpload } from "@/lib/queryClient";
 import { Bot, Check, Clock, Loader2, Mic, Share2 } from "lucide-react";
-import { BoothButton, CalendarButtons, EditTopic } from "@/components/DxTimes";
+import { CalendarButtons, EditTopic } from "@/components/DxTimes";
 import { DxShare } from "@/components/DxShare";
 
 // The MilitaryVoices Digital Experience: a live channel, weekdays 7 am to
@@ -168,7 +168,7 @@ function BookDialog({ day, slot, onClose, onBooked }: { day: Day; slot: Slot; on
               <summary className="cursor-pointer font-semibold">Add it to your calendar</summary>
               <div className="mt-2"><CalendarButtons cal={done.calendar} /></div>
             </details>
-            <p className="text-sm text-muted-foreground">It's saved in your account: on <a href="/host/dashboard" className="font-semibold text-[#053877] underline dark:text-[#F0A71F]">your dashboard</a> and at the top of this page, with the link to your booth. It opens an hour before your time.</p>
+            <p className="text-sm text-muted-foreground">It's saved in your account: on <a href="/host/dashboard" className="font-semibold text-[#053877] underline dark:text-[#F0A71F]">your dashboard</a> and at the top of this page. Your booth, where you go on air, appears in your dashboard menu.</p>
             <Button variant="outline" className="w-full" onClick={onClose}>Done</Button>
           </div>
         )}
@@ -237,7 +237,7 @@ export default function DigitalExperience() {
               {mine.data.bookings.map((b) => (
                 <li key={b.id} className="flex flex-wrap items-center justify-between gap-2">
                   <span className="text-sm"><span className="font-semibold">{dayLabel(b.startAtUtc)}</span>, {time(b.startAtUtc)}–{time(b.endAtUtc)} ET · {b.show}</span>
-                  <span className="flex flex-wrap gap-2"><BoothButton id={b.id} /><button type="button" onClick={() => setSharing(sharing === b.id ? null : b.id)} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-background px-3.5 text-sm font-semibold hover:bg-muted"><Share2 className="h-4 w-4" /> Share</button><CalendarButtons cal={b.calendar} /></span>
+                  <span className="flex flex-wrap gap-2"><button type="button" onClick={() => setSharing(sharing === b.id ? null : b.id)} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-background px-3.5 text-sm font-semibold hover:bg-muted"><Share2 className="h-4 w-4" /> Share</button><CalendarButtons cal={b.calendar} /></span>
                   <EditTopic id={b.id} about={b.about ?? ""} />
                   {sharing === b.id && <div className="w-full rounded-xl bg-background p-3"><DxShare b={b} /></div>}
                 </li>
