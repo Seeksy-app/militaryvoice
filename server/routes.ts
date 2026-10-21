@@ -7929,8 +7929,30 @@ export function registerRoutes(app: Express): void {
       note: String(l?.note ?? "").slice(0, 300),
       amount: Math.round((Number(l?.amount) || 0) * 100) / 100,
       status: ["actual", "estimate", "enter"].includes(l?.status) ? l.status : "estimate",
+      // The platform's bills are often shared with other work: the part that's ours, in percent.
+      ...(l?.share != null && Number.isFinite(Number(l.share)) ? { share: Math.min(100, Math.max(0, Math.round(Number(l.share)))) } : {}),
     }));
     await storage.setSetting(`finance_actuals:${key}`, JSON.stringify(lines));
+    res.json({ lines });
+  });
+
+  /** Money the owners put in: a hand-kept list, saved whole. */
+  app.get("/api/admin/finance-contributions", requireAdmin, async (req, res) => {
+    noStore(res);
+    if ((req as any).studioHost) return res.status(403).json({ message: "Admins only." });
+    let lines: unknown = [];
+    try { lines = JSON.parse((await storage.getSetting("finance_contributions")) ?? "[]"); } catch { lines = []; }
+    res.json({ lines });
+  });
+  app.put("/api/admin/finance-contributions", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost) return res.status(403).json({ message: "Admins only." });
+    const lines = (Array.isArray(req.body?.lines) ? req.body.lines : []).slice(0, 500).map((l: any) => ({
+      name: String(l?.name ?? "").slice(0, 120),
+      date: /^\d{4}-\d{2}-\d{2}$/.test(String(l?.date ?? "")) ? String(l.date) : "",
+      note: String(l?.note ?? "").slice(0, 300),
+      amount: Math.round((Number(l?.amount) || 0) * 100) / 100,
+    }));
+    await storage.setSetting("finance_contributions", JSON.stringify(lines));
     res.json({ lines });
   });
 

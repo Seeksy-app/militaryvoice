@@ -4,7 +4,7 @@ import { adminGet, adminSend } from "@/lib/adminApi";
 import { Slider } from "@/components/ui/slider";
 import type { PublicEvent } from "@shared/schema";
 import { PLANS } from "@shared/tokens";
-import { Calculator, TrendingUp, AlertTriangle, Film, ChevronRight, Receipt, Plus, Trash2, Save } from "lucide-react";
+import { Calculator, TrendingUp, AlertTriangle, Film, ChevronRight, Receipt, Plus, Trash2, Save, HandCoins } from "lucide-react";
 
 // What the event costs to run, and what to charge afterwards.
 //
@@ -160,6 +160,8 @@ export function PlatformFinances() {
   return (
     <div className="flex flex-col gap-8">
       <ActualCosts scope="platform" eventName="the platform" starting={PLATFORM_STARTING} />
+
+      <OwnerContributions />
 
       {/* ---------------------------------------------------------- what to charge */}
       <section>
@@ -340,7 +342,9 @@ export function ProductionCosts({ eventId }: { eventId: number }) {
 // read the amount of). Starts from what we know as of 6 Oct 2026.
 // ---------------------------------------------------------------------------
 
-type Actual = { group: string; label: string; note: string; amount: number; status: "actual" | "estimate" | "enter" };
+type Actual = { group: string; label: string; note: string; amount: number; status: "actual" | "estimate" | "enter"; share?: number };
+/** The part of a bill that's ours, in percent: many are shared with other work. */
+const shareOf = (l: Actual) => (l.share == null ? 100 : l.share);
 
 // Only what this event itself cost: usage on the day and its own purchases.
 // The platform's monthly plans (Render, Upload-Post, LiveKit, Supabase,
@@ -405,6 +409,8 @@ function ActualCosts({ eventId = 0, eventName, scope = "event", starting = START
 
   const sum = (f: (l: Actual) => boolean) => lines.filter(f).reduce((n, l) => n + (Number(l.amount) || 0), 0);
   const total = sum(() => true);
+  const platform = scope === "platform";
+  const ours = lines.reduce((n, l) => n + ((Number(l.amount) || 0) * shareOf(l)) / 100, 0);
   const actual = sum((l) => l.status === "actual");
   const estimate = sum((l) => l.status === "estimate");
   const missing = lines.filter((l) => l.status === "enter").length;
@@ -417,7 +423,7 @@ function ActualCosts({ eventId = 0, eventName, scope = "event", starting = START
       </h3>
       <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
         {scope === "platform"
-          ? "The plans and services that keep MilitaryVoices.ai running, whatever the events. Each event's own costs are under that event's Finances. Change any amount or mark it actual once the bill is in; red lines are bills we know about but haven't read yet."
+          ? "The plans and services that keep MilitaryVoices.ai running, whatever the events. Many bills are shared with other work, so each has the share that's ours; the full bill is beside it. Each event's own costs are under that event's Finances. Red lines are bills we know about but haven't read yet."
           : "Only this event's own costs: usage on the day and what was bought for it, like the award. The platform's monthly plans are in the platform admin, under Finances. Change any amount or mark it actual once the bill is in; red lines are bills we know about but haven't read yet."}
       </p>
       <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-card">
@@ -425,9 +431,14 @@ function ActualCosts({ eventId = 0, eventName, scope = "event", starting = START
           <div className="overflow-x-auto">
             <table className="w-full text-sm">
               <tbody>
+                {platform && (
+                  <tr className="text-[11px] uppercase tracking-[0.1em] text-muted-foreground">
+                    <td /><td /><td className="px-2 py-2 text-right">Full bill</td><td className="px-2 py-2 text-right">Our share</td><td className="px-2 py-2 text-right">Ours</td><td />
+                  </tr>
+                )}
                 {groups.map((g) => (
                   <Fragment key={g}>
-                    <tr className="bg-muted/40"><td colSpan={4} className="px-5 py-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">{g}</td></tr>
+                    <tr className="bg-muted/40"><td colSpan={platform ? 6 : 4} className="px-5 py-2 text-[11px] font-semibold uppercase tracking-[0.1em] text-muted-foreground">{g}</td></tr>
                     {lines.map((l, i) => l.group !== g ? null : (
                       <tr key={i} className="border-b border-border last:border-0">
                         <td className="w-full px-5 py-2">
@@ -442,15 +453,22 @@ function ActualCosts({ eventId = 0, eventName, scope = "event", starting = START
                         <td className="px-2 py-2 text-right">
                           <span className="inline-flex items-center rounded-lg border border-border px-2 py-1 tabular-nums">$<input type="number" step="0.01" min="0" value={l.amount} onChange={(e) => edit(i, { amount: Number(e.target.value) })} className="w-20 bg-transparent text-right outline-none" aria-label={`Amount for ${l.label}`} /></span>
                         </td>
+                        {platform && <>
+                          <td className="px-2 py-2 text-right">
+                            <span className="inline-flex items-center rounded-lg border border-border px-2 py-1 tabular-nums"><input type="number" step="5" min="0" max="100" value={shareOf(l)} onChange={(e) => edit(i, { share: Math.min(100, Math.max(0, Number(e.target.value) || 0)) })} className="w-10 bg-transparent text-right outline-none" aria-label={`Our share of ${l.label}`} />%</span>
+                          </td>
+                          <td className={`whitespace-nowrap px-2 py-2 text-right font-semibold tabular-nums ${shareOf(l) === 0 ? "text-muted-foreground" : ""}`}>{usd(((Number(l.amount) || 0) * shareOf(l)) / 100)}</td>
+                        </>}
                         <td className="pr-4"><button type="button" onClick={() => remove(i)} className="text-muted-foreground hover:text-destructive" aria-label={`Remove ${l.label}`}><Trash2 className="h-4 w-4" /></button></td>
                       </tr>
                     ))}
                   </Fragment>
                 ))}
                 <tr className="border-t-2 border-foreground">
-                  <td className="px-5 py-3 font-semibold">Total so far</td>
+                  <td className="px-5 py-3 font-semibold">{platform ? "Total a month" : "Total so far"}</td>
                   <td />
-                  <td className="px-2 py-3 text-right text-base font-semibold tabular-nums" data-testid="finance-actual-total">{usd(total)}</td>
+                  <td className={`px-2 py-3 text-right tabular-nums ${platform ? "text-muted-foreground" : "text-base font-semibold"}`} data-testid="finance-actual-total">{usd(total)}</td>
+                  {platform && <><td /><td className="whitespace-nowrap px-2 py-3 text-right text-base font-semibold tabular-nums" data-testid="finance-ours-total">{usd(ours)}</td></>}
                   <td />
                 </tr>
               </tbody>
@@ -458,13 +476,98 @@ function ActualCosts({ eventId = 0, eventName, scope = "event", starting = START
           </div>
         )}
         <div className="grid gap-px border-t border-border bg-border sm:grid-cols-3">
-          {[["Actual", usd(actual), "real charges and plan prices"], ["Estimates", usd(estimate), "until the bills come in"], ["Still to enter", String(missing), missing === 1 ? "bill to read" : "bills to read"]].map(([k, v, n]) => (
+          {(platform
+            ? [["Ours a month", usd(ours), "our share of every bill"], ["Full bills", usd(total), "what we pay, shared or not"], ["Still to enter", String(missing), missing === 1 ? "bill to read" : "bills to read"]]
+            : [["Actual", usd(actual), "real charges and plan prices"], ["Estimates", usd(estimate), "until the bills come in"], ["Still to enter", String(missing), missing === 1 ? "bill to read" : "bills to read"]]).map(([k, v, n]) => (
             <div key={k} className="bg-card p-4"><div className="text-[11px] uppercase tracking-[0.12em] text-muted-foreground">{k}</div><div className="mt-0.5 text-xl font-bold tabular-nums">{v}</div><div className="text-xs text-muted-foreground">{n}</div></div>
           ))}
         </div>
         <div className="flex items-center justify-between gap-3 border-t border-border p-4">
           <button type="button" onClick={add} className="inline-flex items-center gap-1.5 text-sm font-medium text-[#053877] hover:underline dark:text-[#9cc2ff]"><Plus className="h-4 w-4" /> Add a line</button>
           <button type="button" onClick={() => void save()} disabled={!dirty || saving} className="inline-flex items-center gap-1.5 rounded-lg bg-[#000741] px-4 py-2 text-sm font-semibold text-white disabled:opacity-40" data-testid="button-save-actuals"><Save className="h-4 w-4" />{saving ? "Saving…" : dirty ? "Save" : "Saved"}</button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Owner contributions: money the owners have put into the business, kept by
+// hand (who, when, how much). Saved whole, like the ledger above.
+// ---------------------------------------------------------------------------
+
+type Contribution = { name: string; date: string; note: string; amount: number };
+
+function OwnerContributions() {
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery<{ lines: Contribution[] }>({
+    queryKey: ["/api/admin/finance-contributions"],
+    queryFn: () => adminGet("/api/admin/finance-contributions"),
+  });
+  const [lines, setLines] = useState<Contribution[]>([]);
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { if (data) { setLines(data.lines ?? []); setDirty(false); } }, [data]);
+
+  const edit = (i: number, patch: Partial<Contribution>) => { setLines((ls) => ls.map((l, k) => (k === i ? { ...l, ...patch } : l))); setDirty(true); };
+  const remove = (i: number) => { setLines((ls) => ls.filter((_, k) => k !== i)); setDirty(true); };
+  // A new line starts with the last person's name: most deposits come from the same people.
+  const add = () => { setLines((ls) => [...ls, { name: ls[ls.length - 1]?.name ?? "", date: new Date().toISOString().slice(0, 10), note: "", amount: 0 }]); setDirty(true); };
+  const save = async () => {
+    setSaving(true);
+    await adminSend("PUT", "/api/admin/finance-contributions", { lines });
+    await qc.invalidateQueries({ queryKey: ["/api/admin/finance-contributions"] });
+    setSaving(false);
+    setDirty(false);
+  };
+  const total = lines.reduce((n, l) => n + (Number(l.amount) || 0), 0);
+  const byName = Array.from(lines.reduce((m, l) => m.set(l.name.trim() || "Unnamed", (m.get(l.name.trim() || "Unnamed") ?? 0) + (Number(l.amount) || 0)), new Map<string, number>()));
+
+  return (
+    <section data-testid="owner-contributions">
+      <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
+        <HandCoins className="h-4 w-4" /> Owner contributions
+      </h3>
+      <p className="mt-1 max-w-2xl text-sm text-muted-foreground">Money the owners have put in. Add each deposit as it lands; leave the date empty if you still need to look it up.</p>
+      <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-card">
+        {isLoading ? <p className="p-5 text-sm text-muted-foreground">Loading…</p> : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <tbody>
+                {lines.length === 0 && <tr><td className="px-5 py-4 text-muted-foreground">No contributions yet.</td></tr>}
+                {lines.map((l, i) => (
+                  <tr key={i} className="border-b border-border last:border-0">
+                    <td className="w-full px-5 py-2">
+                      <input value={l.name} onChange={(e) => edit(i, { name: e.target.value })} placeholder="Who" className="w-full bg-transparent font-medium outline-none" />
+                      <input value={l.note} onChange={(e) => edit(i, { note: e.target.value })} placeholder="Note" className="w-full bg-transparent text-xs text-muted-foreground outline-none" />
+                    </td>
+                    <td className="px-2 py-2">
+                      <input type="date" value={l.date} onChange={(e) => edit(i, { date: e.target.value })} className={`rounded-lg border px-2 py-1 text-xs ${l.date ? "border-border" : "border-destructive/40 bg-destructive/10"}`} aria-label={`Date for ${l.name}`} />
+                    </td>
+                    <td className="px-2 py-2 text-right">
+                      <span className="inline-flex items-center rounded-lg border border-border px-2 py-1 tabular-nums">$<input type="number" step="0.01" min="0" value={l.amount} onChange={(e) => edit(i, { amount: Number(e.target.value) })} className="w-24 bg-transparent text-right outline-none" aria-label={`Amount from ${l.name}`} /></span>
+                    </td>
+                    <td className="pr-4"><button type="button" onClick={() => remove(i)} className="text-muted-foreground hover:text-destructive" aria-label={`Remove ${l.name}'s contribution`}><Trash2 className="h-4 w-4" /></button></td>
+                  </tr>
+                ))}
+                <tr className="border-t-2 border-foreground">
+                  <td className="px-5 py-3 font-semibold">Total put in</td>
+                  <td />
+                  <td className="px-2 py-3 text-right text-base font-semibold tabular-nums" data-testid="contributions-total">{usd(total)}</td>
+                  <td />
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+        {byName.length > 1 && (
+          <div className="flex flex-wrap gap-x-6 gap-y-1 border-t border-border px-5 py-3 text-sm">
+            {byName.map(([n, v]) => <span key={n}><span className="text-muted-foreground">{n}</span> <span className="font-semibold tabular-nums">{usd(v)}</span></span>)}
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-3 border-t border-border p-4">
+          <button type="button" onClick={add} className="inline-flex items-center gap-1.5 text-sm font-medium text-[#053877] hover:underline dark:text-[#9cc2ff]" data-testid="button-add-contribution"><Plus className="h-4 w-4" /> Add a contribution</button>
+          <button type="button" onClick={() => void save()} disabled={!dirty || saving} className="inline-flex items-center gap-1.5 rounded-lg bg-[#000741] px-4 py-2 text-sm font-semibold text-white disabled:opacity-40" data-testid="button-save-contributions"><Save className="h-4 w-4" />{saving ? "Saving…" : dirty ? "Save" : "Saved"}</button>
         </div>
       </div>
     </section>
