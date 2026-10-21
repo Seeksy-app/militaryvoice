@@ -63,7 +63,11 @@ export function SiteFooter({ slug, note }: { slug?: string; /** A small line abo
         <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
           {/* Always the dark-ground lockup: this band is navy in both themes,
               so the theme-swapping one puts near-black letters on navy. */}
-          <LogoLockupOnDark className="h-12 w-auto shrink-0 self-start" />
+          <div className="flex shrink-0 flex-col items-start gap-5">
+            <LogoLockupOnDark className="h-12 w-auto" />
+            {/* The badge is red and blue on white: it sits on its own white tile so it reads on navy. */}
+            <img src="/veteran-owned.png" alt="Veteran-Owned Business, verified by the Texas Veterans Commission" width={215} height={220} loading="lazy" className="h-24 w-auto rounded-xl bg-white p-1.5" data-testid="veteran-owned-badge" />
+          </div>
           <div className="grid grid-cols-2 gap-x-10 gap-y-8 sm:grid-cols-3">
             {columns.map((c) => (
               <nav key={c.title} aria-label={c.title}>
