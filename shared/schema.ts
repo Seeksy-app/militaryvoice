@@ -2747,6 +2747,8 @@ export const hostedShows = pgTable("hosted_shows", {
   explicit: boolean("explicit").notNull().default(false),
   /** episodic | serial */
   showType: text("show_type").notNull().default("episodic"),
+  /** The voices are AI (a synthetic host or narrator). Listen Notes refuses those shows, so we never submit one there. */
+  aiVoice: boolean("ai_voice").notNull().default(false),
   website: text("website").notNull().default(""),
   copyright: text("copyright").notNull().default(""),
   /** podcast:guid: the show's permanent ID, whatever its address. */

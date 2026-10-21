@@ -500,12 +500,13 @@ async function postEpisodeToYouTube(e: HostedEpisodeRow, show: HostedShowRow, pr
  * A show on Listen Notes: once it has an episode out, its feed is submitted
  * (one request), and the Directories tab shows "live" with its page when
  * Listen Notes has it. Resubmitting is how a pending one is checked: it
- * answers "found" once accepted. At most once a day per show.
+ * answers "found" once accepted. At most once a day per show. Never an
+ * AI-voiced show: Listen Notes refuses them, and blocks whoever sends them.
  */
 export async function listOnListenNotes(showId: number, force = false): Promise<void> {
   if (!isListenNotesConfigured()) return;
   const [show] = await db.select().from(hostedShows).where(eq(hostedShows.id, showId)).limit(1);
-  if (!show) return;
+  if (!show || show.aiVoice) return;
   const dirs = (() => { try { return JSON.parse(show.directories || "{}") as Record<string, { state: string; url: string; at?: string }>; } catch { return {}; } })();
   const cur = dirs.listennotes;
   if (cur?.state === "live" && cur.url) return;
@@ -679,6 +680,7 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
       ...str("title", 200), ...str("description", 4000), ...str("author", 200), ...str("ownerName", 200), ...str("website", 300), ...str("copyright", 300),
       ...(category ? { category, subcategory: subcategory ?? "" } : subcategory !== undefined ? { subcategory } : {}),
       ...(typeof b.explicit === "boolean" ? { explicit: b.explicit } : {}),
+      ...(typeof b.aiVoice === "boolean" ? { aiVoice: b.aiVoice } : {}),
       ...(b.youtubeMode === "ask" || b.youtubeMode === "always" ? { youtubeMode: b.youtubeMode } : {}),
       ...(["public", "unlisted", "private"].includes(b.youtubePrivacy) ? { youtubePrivacy: b.youtubePrivacy } : {}),
       ...(b.showType === "serial" || b.showType === "episodic" ? { showType: b.showType } : {}),

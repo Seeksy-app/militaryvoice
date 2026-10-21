@@ -390,8 +390,10 @@ function Directories({ h, ready, onSaved }: { h: Hosted; ready: boolean; onSaved
                   <span className="block text-sm font-semibold">{d.name}{d.auto && <span className="ml-2 align-middle text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Powered by Listen Notes</span>}</span>
                   <span className="block truncate text-xs text-muted-foreground">{d.reach}</span>
                 </button>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${st?.state === "live" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : st?.state === "submitted" ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : "bg-muted text-muted-foreground"}`}>{st?.state === "live" ? (moved && !s.redirectOk ? "Live, by your old feed" : "Live") : st?.state === "submitted" ? "Submitted" : d.auto ? "Automatic" : moved ? "Moves with your forward" : "Not listed"}</span>
-                {d.auto && !(st?.state === "live" && st.url) ? (
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${st?.state === "live" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : st?.state === "submitted" ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : "bg-muted text-muted-foreground"}`}>{st?.state === "live" ? (moved && !s.redirectOk ? "Live, by your old feed" : "Live") : st?.state === "submitted" ? "Submitted" : d.auto && s.aiVoice ? "Not listed" : d.auto ? "Automatic" : moved ? "Moves with your forward" : "Not listed"}</span>
+                {d.auto && s.aiVoice && !(st?.state === "live" && st.url) ? (
+                  <span className="shrink-0 text-xs text-muted-foreground" data-testid={`hosting-dir-ai-${d.key}`}>Doesn't take AI-voiced shows</span>
+                ) : d.auto && !(st?.state === "live" && st.url) ? (
                   // Listed for them (our Listen Notes submission): nothing to press.
                   <span className="shrink-0 text-xs text-muted-foreground" data-testid={`hosting-dir-auto-${d.key}`}>
                     {st?.state === "submitted" ? "In review (up to 12 hours)" : st?.state === "rejected" ? "Not accepted" : "When your first episode is out"}
@@ -752,6 +754,7 @@ function ShowForm({ show, categories, onSaved, onDeleted, focus = "" }: { show: 
           <label className={`${label} sm:col-span-2`}>Moving to another host? (optional)<Input value={v.newFeedUrl} onChange={(e) => set("newFeedUrl", e.target.value)} className="mt-1" placeholder="Your new host's feed address. Leave empty to stay." /><span className="mt-1 block font-normal">Your feed then forwards every app there (a 301), and your subscribers follow.</span></label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={v.explicit} onChange={(e) => set("explicit", e.target.checked)} /> Explicit language</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={v.showType === "serial"} onChange={(e) => set("showType", e.target.checked ? "serial" : "episodic")} /> Listen in order (a series)</label>
+          <label className="flex items-start gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={v.aiVoice} onChange={(e) => set("aiVoice", e.target.checked)} className="mt-1" data-testid="hosting-ai-voice" /><span>AI voices (a synthetic host or narrator)<span className="block text-xs text-muted-foreground">Listen Notes doesn't list AI-voiced shows, so we won't send this one there.</span></span></label>
         </div>
         <div className="mt-4 flex justify-end gap-2">
           {dirty && <Button variant="outline" onClick={() => setF({})}>Undo changes</Button>}
