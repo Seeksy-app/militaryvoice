@@ -1923,7 +1923,7 @@ export function registerRoutes(app: Express): void {
     const desc = dx
       ? `${signup.hostName} is live on MilitaryVoices Radio, a live channel of military and veteran voices. Tune in.`
       : `${signup.hostName} is live on ${event.name} for National Military Podcast Day. Tune in, or set a reminder.`;
-    const img = dx ? `${origin}/dx/hero.jpg` : `${origin}/og/slot/${id}.jpg`;
+    const img = dx ? `${origin}/dx/hero.jpg?v=nov` : `${origin}/og/slot/${id}.jpg`;
     const esc = (v: string) =>
       v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 

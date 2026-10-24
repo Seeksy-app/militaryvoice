@@ -39,7 +39,7 @@ export default function Events() {
     const first = new Date(dx.days[0].startAtUtc), last = new Date(dx.days[dx.days.length - 1].startAtUtc);
     items.push({
       key: "digital-experience", title: "MilitaryVoices Radio", tagline: "The live station for military and veteran voices. Live From Anywhere, weekdays 7 am to 10 pm Eastern. Podcasters: book a 30- or 60-minute slot, free during the beta week.",
-      image: "/dx/hero.jpg", start: first, end: new Date(last.getTime() + 15 * 3600_000),
+      image: "/dx/hero.jpg?v=nov", start: first, end: new Date(last.getTime() + 15 * 3600_000),
       when: `${formatDateInZone(first, zone)} – ${formatDateInZone(last, zone)} · weekdays, 7 am – 10 pm ET`, href: "/radio", cta: "Tune in",
     });
   }
