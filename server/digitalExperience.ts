@@ -127,8 +127,11 @@ export function registerDigitalExperience(app: Express, d: Deps): void {
       const mine = clash.email.trim().toLowerCase() === email;
       return res.status(409).json({ message: mine ? "You already have this time. It's in your account." : span === 2 ? "Part of that hour was just taken. Pick another time, or take 30 minutes." : "Someone just took that time. Pick another." });
     }
-    // One booking a day each, so the week has room for everyone; another day is fine.
-    if (list.some((s) => s.email.trim().toLowerCase() === email)) return res.status(409).json({ message: "You already have a time that day. Pick another day, or cancel that one first." });
+    // As many as they like across the week, but on any one day at most one
+    // morning and one afternoon, so each day has room for everyone (24 Oct).
+    const half = (i: number) => (Number(new Date(slotStartMs(ev, i)).toLocaleString("en-US", { timeZone: "America/New_York", hour: "numeric", hourCycle: "h23" })) < 12 ? "morning" : "afternoon");
+    const sameHalf = list.find((s) => s.email.trim().toLowerCase() === email && half(s.slotIndex) === half(slotIndex));
+    if (sameHalf) return res.status(409).json({ message: `You already have a ${half(slotIndex)} time that day. Pick ${half(slotIndex) === "morning" ? "an afternoon" : "a morning"} time, or another day.` });
 
     // Their photo goes on the station's on-air graphics: one on file, or the one they just added.
     let profile = await storage.getProfileByEmail(email);

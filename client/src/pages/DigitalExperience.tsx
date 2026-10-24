@@ -257,7 +257,7 @@ export default function DigitalExperience() {
           })}
         </ul>
         <h2 id="pick-a-time" className="scroll-mt-24 text-lg font-bold">Pick a time</h2>
-        <p className="text-sm text-muted-foreground">All times Eastern.{localZone !== ET ? " Each booking shows your own time too." : ""}</p>
+        <p className="text-sm text-muted-foreground">All times Eastern.{localZone !== ET ? " Each booking shows your own time too." : ""} Book as many as you like: one a day, or one morning and one afternoon on the same day.</p>
         {isLoading ? <div className="flex justify-center p-10"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div> : (
           <>
             <div className="mt-4 flex gap-2 overflow-x-auto pb-1" role="tablist">
