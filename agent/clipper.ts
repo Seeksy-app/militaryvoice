@@ -2071,6 +2071,43 @@ async function handleSegmentCut(job: Job): Promise<void> {
 }
 
 /**
+ * An iPhone video in HDR (Dolby Vision / HLG, 10-bit HEVC) becomes ordinary
+ * 8-bit SDR before anything else touches it. Left as it was, every encode
+ * after it kept the 10 bits: the clean episode came out as H.264 High 10,
+ * which no browser plays, so Riccoh's player showed a black screen (23 Oct).
+ * Tone-mapped where this ffmpeg can (zscale); otherwise just 8-bit, which
+ * plays, a little flat. Capped at 1080p in the same pass. Never fatal.
+ */
+async function toSdr(source: string, job: Job): Promise<void> {
+  const probe = await run("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height,pix_fmt,color_transfer", "-of", "csv=p=0", source]).catch(() => "");
+  const [w, h, pixFmt = "", transfer = ""] = probe.trim().split(",");
+  const hdr = /arib-std-b67|smpte2084/.test(transfer);
+  if (!hdr && !/10|12/.test(pixFmt)) return;
+  const fit = Math.min(Number(w), Number(h)) > 1080 ? (Number(h) > Number(w) ? ",scale=1080:-2" : ",scale=-2:1080") : "";
+  console.log(`[${job.recordingId}] ${hdr ? "HDR" : "10-bit"} video (${pixFmt}, ${transfer || "no transfer tag"}) — making a standard copy first`);
+  progress(job.recordingId, { stage: "download", pct: 100, detail: "converting an HDR phone video" });
+  const out = `${source}.sdr.mp4`;
+  const tags = ["-color_primaries", "bt709", "-color_trc", "bt709", "-colorspace", "bt709"];
+  // setparams too: the output flags alone left it labelled HLG, and players then treat it as HDR.
+  const encode = (vf: string) => run("ffmpeg", ["-y", "-loglevel", "error", "-i", source, "-map", "0:v:0", "-map", "0:a?", "-vf", `${vf},setparams=color_primaries=bt709:color_trc=bt709:colorspace=bt709`, "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", ...tags, "-c:a", "aac", "-b:a", "192k", "-movflags", "+faststart", out]);
+  const started = Date.now();
+  try {
+    await encode(hdr
+      ? `zscale=t=linear:npl=100,format=gbrpf32le,zscale=p=bt709,tonemap=tonemap=hable:desat=0,zscale=t=bt709:m=bt709:r=tv,format=yuv420p${fit}`
+      : `format=yuv420p${fit}`)
+      .catch((err: Error) => {
+        console.warn(`[${job.recordingId}] tone-mapping unavailable (${err.message.slice(0, 120)}) — 8-bit without it`);
+        return encode(`format=yuv420p${fit}`);
+      });
+    await fs.rename(out, source);
+    console.log(`[${job.recordingId}] standard copy made in ${Math.round((Date.now() - started) / 1000)}s`);
+  } catch (err) {
+    console.warn(`[${job.recordingId}] couldn't make a standard copy (${(err as Error).message}) — carrying on with the original`);
+    await fs.rm(out, { force: true }).catch(() => {});
+  }
+}
+
+/**
  * Bigger than 1080p (a 4K camera file) is cut down to 1080p before anything
  * else touches it. On 5 Oct one 4K episode held the whole queue for hours:
  * every render and the clean episode ran at four times the pixels for clips
@@ -2142,6 +2179,7 @@ async function handle(job: Job): Promise<void> {
     progress(job.recordingId, { stage: "download", pct: 0, detail: total ? `${(total / 1048576).toFixed(0)}MB` : "" });
     await pipeline(Readable.fromWeb(res.body as never), meter, createWriteStream(source));
     console.log(`[${job.recordingId}] downloaded in ${Math.round((Date.now() - started) / 1000)}s`);
+    await toSdr(source, job);
     await fitTo1080(source, job);
     // Saved with no length (the browser's check timed out on the upload): the
     // moment picker was being told the episode was 0 seconds long.
