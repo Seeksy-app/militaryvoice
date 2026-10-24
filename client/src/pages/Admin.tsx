@@ -38,6 +38,7 @@ import { StudioHostsCard } from "@/components/StudioHostsCard";
 import { ProducerChat } from "@/components/ProducerDesk";
 import { RiccohPosts } from "@/components/RiccohPosts";
 import { RiccohImages } from "@/components/RiccohImages";
+import { RadioCreatives } from "@/components/RadioCreatives";
 import type { AudienceSnapshot } from "@/components/AudienceReach";
 import { FinancesCard, PlatformFinances } from "@/components/FinancesCard";
 import { AdminClips } from "@/components/AdminClips";
@@ -5132,9 +5133,12 @@ export default function Admin({ tab, eventId: eventParam }: { tab?: string; even
                   <MagazineAdmin eventId={selectedEventId} slug={selectedEvent.slug} />
                 </TabsContent>
                 <TabsContent value="promotion" className="mt-2 flex flex-col gap-12 lg:mt-0">
-                  <DiscoveryStats />
-                  <RiccohImages event={selectedEvent} />
-                  <RiccohPosts event={selectedEvent} />
+                  {/* A Radio day: the station's artwork. The Marathon's poster and spotlights don't apply. */}
+                  {selectedEvent.slug.startsWith("digital-experience") ? <RadioCreatives /> : <>
+                    <DiscoveryStats />
+                    <RiccohImages event={selectedEvent} />
+                    <RiccohPosts event={selectedEvent} />
+                  </>}
                 </TabsContent>
                 <TabsContent value="finances" className="mt-2 lg:mt-0">
                   <FinancesCard event={selectedEvent} />
