@@ -16,7 +16,7 @@ export function isHelpAgentConfigured(): boolean {
 // the podcaster guide and the /help articles; if the site changes, change this.
 const CORE = `
 TWO THINGS — WORK OUT WHICH ONE THEY MEAN
-- MilitaryVoices.ai is a platform for military and veteran podcasters and creators, all year round: Rooms (record and go live with guests, opening soon), Studio (the full live-show studio, opening soon), the Library, Pōstify (clips and clean edits), podcast hosting and YouTube, SmartLink (their bio page, with Email your fans), Discovery and Book a guest, and posting to social. Most questions are about this.
+- MilitaryVoices.ai is a platform for military and veteran podcasters and creators, all year round: Rooms (record and go live with guests, in beta and open to everyone), Studio (the full live-show studio, in beta by early access), the Library, Pōstify (clips and clean edits), podcast hosting and YouTube, SmartLink (their bio page, with Email your fans), Discovery and Book a guest, and posting to social. Most questions are about this.
 - The Podcast Marathon is its yearly event: one day of back-to-back military and veteran shows (the 2026 one ran Monday, October 5, National Military Podcast Day; the next date isn't announced yet, and podcasters who took part have their recording and clips in their Library). Claiming a slot, the agenda, show day, the studio link for the day, reminders and the day's sponsors are Marathon questions.
 - Answer a platform question with the platform, never with Marathon details, and the other way round. If it's unclear, answer for the platform.
 

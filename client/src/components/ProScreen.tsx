@@ -71,7 +71,7 @@ export function ProScreen({ feature }: { feature?: string }) {
   return (
     <section className="mt-2" id={`pro-${f.key}`} data-testid={`pro-${f.key}`}>
       <p className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#F0A71F]">
-        <Lock className="h-3.5 w-3.5" /> Pro · coming after the Marathon
+        <Lock className="h-3.5 w-3.5" /> {f.key === "studio" ? "Beta · early access" : "Pro · coming soon"}
       </p>
       <div className="mt-2 flex flex-wrap items-end justify-between gap-4">
         <div>
@@ -85,7 +85,7 @@ export function ProScreen({ feature }: { feature?: string }) {
           <p className="inline-flex items-center gap-2 text-sm font-medium text-emerald-700 dark:text-emerald-400"><Check className="h-4 w-4" /> You're on the list for this one.</p>
         ) : (
           <Button className="rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" disabled={busy === f.key} onClick={() => interested(f.key)} data-testid={`pro-interested-${f.key}`}>
-            I'd use this
+            {f.key === "studio" ? "Ask for early access" : "I'd use this"}
           </Button>
         )}
       </div>

@@ -144,9 +144,9 @@ export const HELP_INDEX: HelpEntry[] = [
   },
   {
     title: "Rooms or Studio?",
-    summary: "Rooms is the quick way to record and go live with guests; Studio is the full marathon studio for your own show. Both are coming soon.",
+    summary: "Rooms is the quick way to record and go live with guests; Studio is the full marathon studio for your own show. Both are in beta: Rooms is open to everyone, Studio by early access.",
     href: "/help/rooms#studio",
-    keywords: "studio coming soon october 5 oct 5th marathon studio scenes layouts lower thirds producer console rooms difference",
+    keywords: "studio beta early access coming soon marathon studio scenes layouts lower thirds producer console rooms difference",
     audience: "podcasters",
     category: "create",
   },

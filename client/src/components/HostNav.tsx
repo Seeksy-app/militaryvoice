@@ -140,8 +140,8 @@ export function HostNav({
     {
       title: "Record & host",
       items: [
-        { key: "pro", feature: "studio", label: "Studio", hint: "The full marathon studio for your own show: scenes, layouts, lower thirds and a producer console. Coming soon.", icon: MonitorPlay, tag: "Soon", soon: "Studio for your own show is coming soon" },
-        { key: "studio", label: "Rooms", hint: "Quick, like Zoom: hop in with guests, record it or don't, and go live. Coming soon.", icon: Video, tag: "Soon", soon: "Rooms are coming soon" },
+        { key: "pro", feature: "studio", label: "Studio", hint: "The full marathon studio for your own show: scenes, layouts, lower thirds and a producer console. In beta: ask for early access.", icon: MonitorPlay, tag: "Beta" },
+        { key: "studio", label: "Rooms", hint: "Quick, like Zoom: hop in with guests, record it or don't, and go live", icon: Video, tag: "Beta" },
         { key: "podcast", label: "Podcast", hint: "Host your show: your RSS feed for Apple and Spotify, episodes, and downloads sponsors trust", icon: Podcast },
         ...(path !== "planner" ? [{ key: "myevents" as const, label: "Run an event", hint: "Put on your own live event: your page, your lineup, our studio", icon: CalendarDays }] : []),
         { key: "recordings", label: "Library", hint: "Every episode in one place: studio recordings, uploads, Zoom calls and cleaned-up versions", icon: Library },
@@ -207,7 +207,7 @@ export function HostNav({
         </Link>
       );
     }
-    const adminThrough = !!it.soon && isAdmin;
+    const adminThrough = isAdmin && (!!it.soon || it.feature === "studio");
     const active = it.soon && !adminThrough ? false : it.locked ? screen === "pro" && (feature ?? "campaigns") === it.feature : screen === it.key || (it.key === "events" && (screen === "promotion" || (screen === "greenroom" && !compact)));
     const inert = !!it.locked && !proOpen;
     return (
@@ -303,7 +303,7 @@ export function HostNav({
               const Icon = it.icon;
               const active = screen === it.key || (it.key === "events" && (screen === "promotion" || screen === "greenroom"));
               return (
-                <RailButton key={`r-${it.key}-${it.feature ?? ""}-${it.href ?? ""}`} tip={it.label} active={active} href={it.href} onClick={it.href ? undefined : () => { if (it.soon && !isAdmin) { toast({ title: it.soon }); return; } if (it.soon && it.feature === "studio") { window.location.href = "/admin/studio"; return; } onGo(it.key, it.feature); }} testid={`nav-rail-${it.key}`}>
+                <RailButton key={`r-${it.key}-${it.feature ?? ""}-${it.href ?? ""}`} tip={it.label} active={active} href={it.href} onClick={it.href ? undefined : () => { if (it.soon && !isAdmin) { toast({ title: it.soon }); return; } if (isAdmin && it.feature === "studio") { window.location.href = "/admin/studio"; return; } onGo(it.key, it.feature); }} testid={`nav-rail-${it.key}`}>
                   <Icon className="h-5 w-5" />
                 </RailButton>
               );
