@@ -88,7 +88,8 @@ import { ContactsScreen } from "@/components/ContactsScreen";
 import { CommandCenter } from "@/components/CommandCenter";
 import { IntentPicker } from "@/components/IntentPicker";
 import { MyAnalytics } from "@/components/MyAnalytics";
-import { usePodcastSources, useListings } from "@/components/PodcastStats";
+import { PodcastChips, usePodcastSources, ListingChips, useListings } from "@/components/PodcastStats";
+import { ConnectedAccountsStrip } from "@/components/ConnectedAccountsStrip";
 import { PodcastHosting } from "@/components/PodcastHosting";
 import { BioBuilder } from "@/components/BioBuilder";
 import { GetTheApp, AppInstallCard } from "@/components/GetTheApp";
@@ -1626,19 +1627,11 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                     }
                   />
                   {/* Three blocks, one way to each thing (28 Oct: seven blocks repeated the menu, and the
-                      SmartLink was on the page three times). The accounts are one line under the card. */}
-                  <div className="relative z-10 -mt-6 px-3 sm:px-5">
-                    <div className="rounded-2xl border border-border bg-card px-4 py-2.5 shadow-sm">
+                      SmartLink was on the page three times). The accounts, with faces, stay across the top: Andrew likes them there. */}
+                  <div className="relative z-10 -mt-8 px-3 sm:px-5">
+                    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
                       {social?.configured && (social.accounts?.length ?? 0) > 0 ? (
-                        <button type="button" onClick={() => goTo("integrations")} className="flex w-full items-center gap-3 text-left text-sm" data-testid="dashboard-accounts">
-                          <span className="flex shrink-0 -space-x-2">
-                            {social.accounts.slice(0, 5).map((a) => a.image
-                              ? <img key={`${a.platform}-${a.username}`} src={a.image} alt="" className="h-7 w-7 rounded-full border-2 border-card bg-muted object-cover" />
-                              : <span key={`${a.platform}-${a.username}`} className="h-7 w-7 rounded-full border-2 border-card bg-muted" />)}
-                          </span>
-                          <span className="min-w-0 truncate font-medium text-foreground">{social.accounts.length + podcastSources.length + listings.length} accounts connected</span>
-                          <span className="ml-auto shrink-0 text-xs font-semibold text-[#053877] dark:text-[#8ab4f8]">Manage</span>
-                        </button>
+                        <ConnectedAccountsStrip accounts={social.accounts} onManage={() => goTo("integrations")} extra={<><PodcastChips onOpen={() => goTo("analytics")} /><ListingChips /></>} extraCount={podcastSources.length + listings.length} />
                       ) : (
                         <button type="button" onClick={() => goTo("integrations")} className="flex w-full items-center gap-3 text-left text-sm text-muted-foreground hover:text-foreground" data-testid="button-connect-accounts">
                           <Link2 className="h-4 w-4 text-[#053877]" /> Connect the accounts you post from — they show as follow buttons on your card, and we post your promo cards for you.
