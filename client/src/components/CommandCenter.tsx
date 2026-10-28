@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { ArrowRight, CalendarDays, Check, ListOrdered, Mail, Shield, Share2 } from "lucide-react";
+import { ArrowRight, ArrowUp, CalendarDays, Check, ListOrdered, Mail, Shield, Share2, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { resolveUploadUrl } from "@/lib/queryClient";
 import { StudioIcon } from "@/components/GreenRoomButton";
@@ -44,6 +44,7 @@ export function CommandCenter({
   eventStartUtc: string;
 }) {
   const now = new Date();
+  const [askText, setAskText] = useState("");
   return (
     <section className="relative overflow-hidden rounded-2xl bg-[#04102b] px-4 pb-11 pt-4 text-white sm:px-7 sm:pb-12 sm:pt-6" data-testid="command-center">
       <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full border border-white/[0.07]" aria-hidden="true" />
@@ -77,6 +78,22 @@ export function CommandCenter({
           </div>
         </div>
       </div>
+      {/* One box to ask for anything, under the greeting (28 Oct, after Clay's home): Alex answers or takes them there. */}
+      <form
+        className="relative mt-4 flex max-w-2xl items-center gap-2 rounded-2xl bg-white/[0.08] p-1.5 pl-4 ring-1 ring-white/15 focus-within:ring-[#F0A71F]/60 sm:mt-5"
+        onSubmit={(e) => {
+          e.preventDefault();
+          const q = askText.trim();
+          if (!q) return;
+          window.dispatchEvent(new CustomEvent("mv:ask-alex", { detail: { question: q, send: true } }));
+          setAskText("");
+        }}
+        data-testid="dashboard-ask"
+      >
+        <Sparkles className="h-4 w-4 shrink-0 text-[#F0A71F]" />
+        <input value={askText} onChange={(e) => setAskText(e.target.value)} placeholder="Ask Alex anything, or say what you'd like to do…" className="min-w-0 flex-1 bg-transparent py-2 text-sm text-white placeholder:text-white/55 focus:outline-none" aria-label="Ask Alex" />
+        <button type="submit" aria-label="Ask" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#F0A71F] text-[#1a1200] hover:bg-[#f5b944]"><ArrowUp className="h-4 w-4" /></button>
+      </form>
     </section>
   );
 }

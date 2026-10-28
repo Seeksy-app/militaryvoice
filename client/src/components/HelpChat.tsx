@@ -90,14 +90,23 @@ export function HelpChat() {
   useEffect(() => {
     if (window.location.hash === "#help") setOpen(true);
     const onAsk = (e: Event) => {
-      const q = String((e as CustomEvent<{ question?: string }>).detail?.question ?? "");
+      const d = (e as CustomEvent<{ question?: string; send?: boolean }>).detail;
+      const q = String(d?.question ?? "");
       setOpen(true);
       setMode("chat");
-      if (q) setDraft(q);
+      if (q && d?.send) setPendingAsk(q);
+      else if (q) setDraft(q);
     };
     window.addEventListener("mv:ask-alex", onAsk);
     return () => window.removeEventListener("mv:ask-alex", onAsk);
   }, []);
+  // A question asked somewhere else (the dashboard's ask box) goes straight in, not just into the box.
+  const [pendingAsk, setPendingAsk] = useState("");
+  useEffect(() => {
+    if (!pendingAsk) return;
+    send(pendingAsk);
+    setPendingAsk("");
+  }, [pendingAsk]); // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight, behavior: "smooth" });
