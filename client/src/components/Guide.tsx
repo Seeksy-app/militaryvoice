@@ -188,7 +188,7 @@ export function GuideLayer() {
   );
 }
 
-/** The first visit to the dashboard home: what the four things on it are. Once per browser. */
+/** The first visit to the dashboard home: what the things on it are. Once per browser. */
 export const HOME_TOUR: GuideStep[] = [
   { title: "Start here", at: [
     { sel: '[data-testid="todo-strip"] button[data-testid^="todo-"]:not([data-testid="todo-tour"])', text: "Your next step. Click it and we'll take you there and show you exactly where to click." },
@@ -198,7 +198,7 @@ export const HOME_TOUR: GuideStep[] = [
   { title: "Your podcast", at: [
     { sel: '[data-testid="dashboard-podcast"]', text: "Host your podcast free, or bring it over. Alex, your podcast producer, walks you through it." },
   ] },
-  { title: "Create", at: [{ sel: '[data-testid="door-create"]', text: "Make a post, turn a video into clips, or add an episode. It all starts here." }] },
+  { title: "Create", at: [{ sel: '[data-testid="nav-create-post"]', text: "Make a post, turn a video into clips, or add an episode. It all starts here." }] },
 ];
 
 const HOME_KEY = "mv_tour_home";
