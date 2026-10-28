@@ -65,26 +65,38 @@ export function EditTopic({ id, about }: { id: number; about: string }) {
   );
 }
 
-export function DxTimes() {
-  const [sharing, setSharing] = useState<number | null>(null);
+/**
+ * The Dashboard's "Coming up" (28 Oct): their Radio times as quiet rows, and
+ * whatever else is booked (`extra`, an event row) under them. Nothing at all
+ * when there's nothing coming.
+ */
+export function DxTimes({ extra }: { extra?: React.ReactNode } = {}) {
+  const [open, setOpen] = useState<{ id: number; what: "share" | "cal" } | null>(null);
   const { data } = useQuery<{ bookings: Booking[] }>({ queryKey: ["/api/dx/mine"], queryFn: async () => (await apiRequest("GET", "/api/dx/mine")).json(), retry: false });
-  if (!data?.bookings.length) return null;
+  const bookings = data?.bookings ?? [];
+  if (!bookings.length && !extra) return null;
+  const pill = "inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-background px-3 text-xs font-semibold hover:bg-muted";
+  const toggle = (id: number, what: "share" | "cal") => setOpen((o) => (o?.id === id && o.what === what ? null : { id, what }));
   return (
-    <div className="mt-6 rounded-2xl border border-[#F0A71F]/60 bg-[#fff7e6] p-4 dark:bg-[#F0A71F]/10" data-testid="dashboard-dx-times">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className="flex items-center gap-2 text-sm font-bold"><Radio className="h-4 w-4 text-[#b36b00]" /> MilitaryVoices Radio: your times</p>
-        <a href="/radio/book" className="text-xs font-semibold text-[#053877] underline dark:text-[#F0A71F]">See the schedule</a>
-      </div>
-      <ul className="mt-3 space-y-3">
-        {data.bookings.map((b) => (
-          <li key={b.id} className="flex flex-wrap items-center justify-between gap-2">
-            <span className="text-sm"><span className="font-semibold">{day(b.startAtUtc)}</span>, {time(b.startAtUtc)}–{time(b.endAtUtc)} ET · {b.show}</span>
-            <span className="flex flex-wrap gap-2"><button type="button" onClick={() => setSharing(sharing === b.id ? null : b.id)} className="inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-background px-3.5 text-sm font-semibold hover:bg-muted"><Share2 className="h-4 w-4" /> Share</button><CalendarButtons cal={b.calendar} /></span>
-            <EditTopic id={b.id} about={b.about ?? ""} />
-            {sharing === b.id && <div className="w-full rounded-xl bg-background p-3"><DxShare b={b} /></div>}
+    <section className="mt-8" data-testid="dashboard-dx-times">
+      <h2 className="text-lg font-semibold tracking-tight text-foreground">Coming up</h2>
+      <ul className="mt-3 overflow-hidden rounded-2xl border border-border bg-card">
+        {bookings.map((b) => (
+          <li key={b.id} className="border-b border-border px-4 py-3 last:border-b-0">
+            <div className="flex flex-wrap items-center gap-3">
+              <Radio className="h-4 w-4 shrink-0 text-[#b36b00]" />
+              <span className="min-w-0 flex-1 text-sm"><span className="font-medium text-foreground">MilitaryVoices Radio</span> <span className="text-muted-foreground">· {day(b.startAtUtc)} · {time(b.startAtUtc)}–{time(b.endAtUtc)} ET</span></span>
+              <span className="flex gap-2">
+                <button type="button" onClick={() => toggle(b.id, "share")} className={pill}><Share2 className="h-3.5 w-3.5" /> Share</button>
+                <button type="button" onClick={() => toggle(b.id, "cal")} className={pill}><CalendarPlus className="h-3.5 w-3.5" /> Add to calendar</button>
+              </span>
+            </div>
+            <div className="mt-1.5 pl-7 text-muted-foreground"><EditTopic id={b.id} about={b.about ?? ""} /></div>
+            {open?.id === b.id && <div className="mt-3 rounded-xl bg-muted/40 p-3">{open.what === "share" ? <DxShare b={b} /> : <CalendarButtons cal={b.calendar} />}</div>}
           </li>
         ))}
+        {extra}
       </ul>
-    </div>
+    </section>
   );
 }

@@ -190,14 +190,12 @@ export function GuideLayer() {
 
 /** The first visit to the dashboard home: what the things on it are. Once per browser. */
 export const HOME_TOUR: GuideStep[] = [
+  { title: "Ask Alex", at: [{ sel: '[data-testid="dashboard-ask"]', text: "Ask Alex anything: how to do something, or to do it for you." }] },
   { title: "Start here", at: [
-    { sel: '[data-testid="todo-strip"] button[data-testid^="todo-"]:not([data-testid="todo-tour"])', text: "Your next step. Click it and we'll take you there and show you exactly where to click." },
-    { sel: '[data-testid="todo-strip"]', text: "Your next steps. We keep this list up to date for you: work down it." },
+    { sel: '[data-testid="todo-strip"] button[data-testid^="todo-"]', text: "Your next step, outlined. Click it and we'll take you there and show you exactly where to click." },
+    { sel: '[data-testid="todo-strip"]', text: "The things you'll do most, one click each." },
   ] },
-  { title: "Your SmartLink", at: [{ sel: '[data-testid="dashboard-smartlink"]', text: "One link for every bio: your show, your videos and a way to collect emails. Free." }] },
-  { title: "Your podcast", at: [
-    { sel: '[data-testid="dashboard-podcast"]', text: "Host your podcast free, or bring it over. Alex, your podcast producer, walks you through it." },
-  ] },
+  { title: "Your files", at: [{ sel: '[data-testid="dashboard-files"]', text: "Everything you've made: your show and SmartLink, episodes, clips and posts." }] },
   { title: "Create", at: [{ sel: '[data-testid="nav-create-post"]', text: "Make a post, turn a video into clips, or add an episode. It all starts here." }] },
 ];
 

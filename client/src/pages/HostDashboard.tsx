@@ -9,7 +9,6 @@ import {
   LogOut,
   Download,
   Radio,
-  Headphones,
   Mail,
   KeyRound,
   ArrowLeft,
@@ -30,9 +29,11 @@ import {
   ArrowRight,
   PlayCircle,
   Compass,
-  Film,
   Megaphone,
   Plus,
+  Wand2,
+  Video,
+  Sparkles,
   Menu,
   CircleHelp,
   Check,
@@ -90,9 +91,10 @@ import { IntentPicker } from "@/components/IntentPicker";
 import { MyAnalytics } from "@/components/MyAnalytics";
 import { PodcastChips, usePodcastSources, ListingChips, useListings } from "@/components/PodcastStats";
 import { ConnectedAccountsStrip } from "@/components/ConnectedAccountsStrip";
+import { HomeFiles } from "@/components/HomeFiles";
 import { PodcastHosting } from "@/components/PodcastHosting";
 import { BioBuilder } from "@/components/BioBuilder";
-import { GetTheApp, AppInstallCard } from "@/components/GetTheApp";
+import { GetTheApp } from "@/components/GetTheApp";
 import { isPodcaster, pathOf } from "@shared/schema";
 import { StudioIcon } from "@/components/GreenRoomButton";
 import { CrewDashboard, type CrewInfo } from "@/components/CrewDashboard";
@@ -1603,183 +1605,88 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                 : null;
               return (
                 <>
+                  {/* The home page, after Clay's (28 Oct): a light greeting with one ask box, the accounts with
+                      their faces (Andrew likes them across the top), four doors, then Coming up and Your files as
+                      quiet rows. The navy and gold slabs it replaced made every block shout. */}
+                  <HomeTour ready />
                   <CommandCenter
                     firstName={(profile?.hostName || "").trim().split(/\s+/)[0] || "there"}
                     photoUrl={profile?.photoUrl ?? ""}
                     podcastName={profile?.podcastName ?? ""}
-                    email={data.email}
-                    serviceLine={[profile?.serviceStatus, profile?.branch].filter((v) => v && v !== "Not applicable").join(" · ")}
-                    eventName={data.event.name.trim()}
-                    eventStartUtc={data.event.startAtUtc}
                     actions={
-                      <div className="hidden items-center gap-2 lg:flex">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="h-7 shrink-0 gap-1.5 rounded-full border-white/25 bg-transparent px-3 text-xs text-white hover:bg-white/10 hover:text-white"
-                          onClick={() => logout.mutate()}
-                          disabled={logout.isPending}
-                          data-testid="button-card-logout"
-                        >
+                      <div className="flex items-center gap-3">
+                        <button type="button" onClick={() => showGuide(HOME_TOUR)} className="text-xs font-semibold text-[#053877] hover:underline dark:text-[#8ab4f8]" data-testid="todo-tour">Show me around</button>
+                        <Button variant="outline" size="sm" className="hidden h-8 shrink-0 gap-1.5 rounded-full px-3 text-xs lg:inline-flex" onClick={() => logout.mutate()} disabled={logout.isPending} data-testid="button-card-logout">
                           <LogOut className="h-3.5 w-3.5" /> Sign out
                         </Button>
                       </div>
                     }
                   />
-                  {/* Three blocks, one way to each thing (28 Oct: seven blocks repeated the menu, and the
-                      SmartLink was on the page three times). The accounts, with faces, stay across the top: Andrew likes them there. */}
-                  <div className="relative z-10 -mt-8 px-3 sm:px-5">
-                    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-                      {social?.configured && (social.accounts?.length ?? 0) > 0 ? (
-                        <ConnectedAccountsStrip accounts={social.accounts} onManage={() => goTo("integrations")} extra={<><PodcastChips onOpen={() => goTo("analytics")} /><ListingChips /></>} extraCount={podcastSources.length + listings.length} />
-                      ) : (
-                        <button type="button" onClick={() => goTo("integrations")} className="flex w-full items-center gap-3 text-left text-sm text-muted-foreground hover:text-foreground" data-testid="button-connect-accounts">
-                          <Link2 className="h-4 w-4 text-[#053877]" /> Connect the accounts you post from — they show as follow buttons on your card, and we post your promo cards for you.
-                          <ArrowRight className="ml-auto h-4 w-4" />
-                        </button>
-                      )}
-                    </div>
+                  <div className="mt-5">
+                    {social?.configured && (social.accounts?.length ?? 0) > 0 ? (
+                      <ConnectedAccountsStrip accounts={social.accounts} onManage={() => goTo("integrations")} extra={<><PodcastChips onOpen={() => goTo("analytics")} /><ListingChips /></>} extraCount={podcastSources.length + listings.length} />
+                    ) : (
+                      <button type="button" onClick={() => goTo("integrations")} className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-left text-sm text-muted-foreground hover:text-foreground" data-testid="button-connect-accounts">
+                        <Link2 className="h-4 w-4 text-[#053877]" /> Connect the accounts you post from — they show as follow buttons on your card, and we post your promo cards for you.
+                        <ArrowRight className="ml-auto h-4 w-4" />
+                      </button>
+                    )}
                   </div>
                   {/* Someone added them to a brand's, agency's or organizer's team. */}
                   <OrgInvites compact />
-                  {/* 1. Coming up: their Radio times, and an event they're booked on. Nothing coming up, nothing here
-                      (the episode and clips from one that's over are in the Library). */}
-                  <DxTimes />
-                  {eventOpen && (mySlot || greenRoomHref) && (
-                    <div className="mt-4 rounded-2xl border border-border bg-card p-5" data-testid="section-your-events">
-                      <div className="mb-3 flex items-center justify-between gap-2">
-                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">Coming up</p>
-                        <button type="button" onClick={() => goTo("events")} className="text-xs font-medium text-[#053877] hover:underline dark:text-[#8ab4f8]" data-testid="link-all-events">All events</button>
+                  {/* Four doors. The last is their next step, outlined, so it isn't a box of its own. */}
+                  {(() => {
+                    const step = buildSteps(checklistState, checklistNav).filter((x) => !x.done)[0];
+                    const hosted = podcastSources.some((p) => p.source === "militaryvoices");
+                    const doors: { key: string; icon: typeof Plus; title: string; hint: string; go: () => void; tag?: string; next?: boolean }[] = [
+                      path === "planner"
+                        ? { key: "myevents", icon: CalendarDays, title: "My events", hint: "Create and run yours", go: () => goTo("myevents") }
+                        : { key: "episode", icon: Mic2, title: hosted ? "New episode" : "Your podcast", hint: hosted ? "Publish to every app" : "Host it free", go: () => goTo("podcast") },
+                      { key: "clips", icon: Wand2, title: "Make clips", hint: "Pōstify a video", go: () => goTo("postify") },
+                      { key: "live", icon: Video, title: "Go live", hint: "Open a Room", go: () => { window.location.href = "/room"; } },
+                      step
+                        ? { key: `todo-${step.key}`, icon: Sparkles, title: step.label, tag: step.tag, hint: `Next step: ${step.cta.toLowerCase()}`, go: () => goToStep(step), next: true }
+                        : { key: "page", icon: Globe, title: "Your SmartLink", hint: "Edit your page", go: () => goTo("page") },
+                    ];
+                    return (
+                      <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="todo-strip">
+                        {doors.map((d) => (
+                          <button key={d.key} type="button" onClick={d.go} className={`rounded-2xl bg-card p-4 text-left shadow-sm transition-colors hover:bg-muted/40 ${d.next ? "border-2 border-[#053877]" : "border border-border"}`} data-testid={d.next ? d.key : `door-${d.key}`}>
+                            <d.icon className="h-5 w-5 text-[#053877] dark:text-[#8ab4f8]" />
+                            <span className="mt-2 flex items-center gap-2 text-sm font-semibold text-foreground">{d.title}{d.tag && <span className="rounded-full bg-[#F0A71F]/20 px-1.5 py-px text-[10px] font-semibold leading-4 text-[#8a5a00] dark:text-[#F0A71F]">{d.tag}</span>}</span>
+                            <span className="mt-0.5 block text-xs text-muted-foreground">{d.hint}</span>
+                          </button>
+                        ))}
                       </div>
-                      <div className="rounded-xl border border-[#053877]/20 bg-[#053877]/[0.035] p-3.5">
-                        <p className="font-semibold text-foreground">{data.event.name.trim()}</p>
-                        <p className="mt-0.5 text-sm tabular-nums text-foreground/80">
-                          {mySlot
-                            ? `${formatDateInZone(mySlot.start, zone)} · ${formatTimeInZone(mySlot.start, zone)}–${formatTimeInZone(mySlot.end, zone)}`
-                            : "On the team for the day"}
-                        </p>
-                        <div className="mt-3 flex flex-wrap gap-2">
-                          {/* The green room comes once the show is set up —
-                              until then, setting it up is the one thing to do. */}
+                    );
+                  })()}
+                  {/* Coming up: Radio times, then an event they're booked on, as rows. Nothing coming, nothing here. */}
+                  <DxTimes
+                    extra={eventOpen && (mySlot || greenRoomHref) ? (
+                      <li className="flex flex-wrap items-center gap-3 px-4 py-3" data-testid="section-your-events">
+                        <CalendarDays className="h-4 w-4 shrink-0 text-[#053877]" />
+                        <span className="min-w-0 flex-1 text-sm">
+                          <span className="font-medium text-foreground">{data.event.name.trim()}</span>{" "}
+                          <span className="text-muted-foreground">· {mySlot ? `${formatDateInZone(mySlot.start, zone)} · ${formatTimeInZone(mySlot.start, zone)}–${formatTimeInZone(mySlot.end, zone)}` : "On the team for the day"}</span>
+                        </span>
+                        <span className="flex flex-wrap gap-2">
                           {greenRoomHref && (onTeamForGreenRoom || !!hostEvents?.find((e) => e.slotIndex != null)?.show?.showName) ? (
-                            <a href={greenRoomHref} target="_blank" rel="noreferrer" className="inline-flex items-center gap-2 rounded-full border border-emerald-600 bg-white px-3 py-1.5 text-sm font-medium text-foreground hover:bg-emerald-50 dark:bg-card" data-testid="link-on-the-day-green-room">
-                              <StudioIcon className="h-5 w-5 rounded-md" tone="green" /> Green room
+                            <a href={greenRoomHref} target="_blank" rel="noreferrer" className="inline-flex h-8 items-center gap-1.5 rounded-full border border-emerald-600 bg-background px-3 text-xs font-semibold text-foreground hover:bg-emerald-50" data-testid="link-on-the-day-green-room">
+                              <StudioIcon className="h-4 w-4 rounded" tone="green" /> Green room
                             </a>
                           ) : null}
                           {data.mySignups.length > 0 && (
-                            <button type="button" onClick={() => goTo("promotion")} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:border-[#053877]/40" data-testid="button-event-promote">
-                              <Megaphone className="h-3.5 w-3.5" /> Promote it
-                            </button>
+                            <button type="button" onClick={() => goTo("promotion")} className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-background px-3 text-xs font-semibold hover:bg-muted" data-testid="button-event-promote"><Megaphone className="h-3.5 w-3.5" /> Promote it</button>
                           )}
-                          <button type="button" onClick={() => goTo("events")} className="inline-flex items-center gap-1.5 rounded-full border border-border bg-card px-3 py-1.5 text-sm font-medium text-foreground hover:border-[#053877]/40" data-testid="button-event-details">
-                            {hostEvents?.find((e) => e.slotIndex != null)?.show?.showName || onTeamForGreenRoom ? "Event details" : "Set up your show"} <ArrowRight className="h-3.5 w-3.5" />
+                          <button type="button" onClick={() => goTo("events")} className="inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-background px-3 text-xs font-semibold hover:bg-muted" data-testid="button-event-details">
+                            {hostEvents?.find((e) => e.slotIndex != null)?.show?.showName || onTeamForGreenRoom ? "Event details" : "Set up your show"}
                           </button>
-                        </div>
-                      </div>
-                    </div>
-                  )}
-                  {/* 2. Your show: their podcast (a creator's clips, a planner's events) with their SmartLink along
-                      the foot of the same card, instead of two big cards and a tile. */}
-                  {(() => {
-                    const handle = (bioMine as { page?: { handle?: string; published?: boolean } } | undefined)?.page;
-                    const linkLive = Boolean(handle?.published && handle.handle);
-                    const pod = podcastSources[0];
-                    const fmt = (n: number) => (n >= 1e4 ? `${Math.round(n / 1e3)}K` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(n));
-                    const elsewhere = !pod && !!profile?.rssUrl;
-                    return (
-                      <div className="mt-6 overflow-hidden rounded-3xl bg-gradient-to-br from-[#053877] to-[#000741] text-white shadow-sm" data-testid="dashboard-start-here">
-                        <HomeTour ready />
-                        <div className="relative overflow-hidden p-6" data-testid="dashboard-podcast">
-                          {path === "planner" ? (
-                            <>
-                              <CalendarDays className="absolute -right-6 -top-6 h-36 w-36 opacity-10" />
-                              <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#F0A71F]">Your events</p>
-                              <p className="mt-2 text-2xl font-bold tracking-tight">{(myEventsList?.length ?? 0) > 0 ? `${myEventsList!.length} ${myEventsList!.length === 1 ? "event" : "events"}` : "Run your first event"}</p>
-                              <p className="mt-1 text-sm text-white/75">{(myEventsList?.length ?? 0) > 0 ? "Shape them, send them to us to approve, share the booking link and run the day from the studio." : "Name it, pick the day and the slot length. It stays private until we approve it."}</p>
-                              <Button onClick={() => goTo("myevents")} className="mt-4 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b944]" data-testid="dashboard-planner-go">{(myEventsList?.length ?? 0) > 0 ? "My events" : "Create my event"}</Button>
-                            </>
-                          ) : pod ? (
-                            (() => {
-                              const d = pod.data!;
-                              const hosted = pod.source === "militaryvoices";
-                              return (
-                                <div className="flex items-start gap-4">
-                                  {d.artwork ? <img src={d.artwork} alt="" className="h-20 w-20 shrink-0 rounded-xl object-cover ring-2 ring-white/20" /> : <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-white/10"><Headphones className="h-8 w-8 text-[#F0A71F]" /></span>}
-                                  <div className="min-w-0 flex-1">
-                                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#F0A71F]">Your podcast{hosted ? <span className="hidden sm:inline"> · on MilitaryVoices</span> : ""}</p>
-                                    <p className="mt-1 truncate text-xl font-bold">{pod.showName || "Your show"}</p>
-                                    <p className="mt-1 text-sm text-white/75">{fmt(d.total)} {d.unit} · {d.episodes.length} episodes</p>
-                                    <div className="mt-4 flex flex-wrap gap-2">
-                                      <Button onClick={() => goTo("podcast")} className="gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b944]" data-testid="dashboard-podcast-new">{hosted ? <><Plus className="h-4 w-4" /> New episode</> : "Bring it over"}</Button>
-                                      <Button variant="outline" onClick={() => goTo("analytics")} className="rounded-full border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white">Your listens</Button>
-                                    </div>
-                                  </div>
-                                </div>
-                              );
-                            })()
-                          ) : path === "creator" ? (
-                            <>
-                              <Film className="absolute -right-6 -top-6 h-36 w-36 opacity-10" />
-                              <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#F0A71F]">Pōstify</p>
-                              <p className="mt-2 text-2xl font-bold tracking-tight">Turn a video into clips</p>
-                              <p className="mt-1 text-sm text-white/75">Pōstify cuts the best moments with captions, in every shape, and posts them for you. Your first one is free.</p>
-                              <Button onClick={() => goTo("postify")} className="mt-4 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b944]" data-testid="dashboard-creator">Try Pōstify</Button>
-                            </>
-                          ) : (
-                            <>
-                              <Headphones className="absolute -right-6 -top-6 h-36 w-36 opacity-10" />
-                              <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#F0A71F]">Your podcast</p>
-                              <p className="mt-2 text-2xl font-bold tracking-tight">{elsewhere ? (profile?.podcastName || "Your show") : "Host your podcast free"}</p>
-                              <p className="mt-1 text-sm text-white/75">{elsewhere ? "Bring it here and keep your Apple and Spotify listings. Alex, your podcast producer, walks you through it." : "Your feed for Apple, Spotify and every app, with downloads counted the way sponsors count them."}</p>
-                              <Button onClick={() => goTo("podcast")} className="mt-4 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b944]" data-testid="dashboard-podcast-empty">{elsewhere ? "Bring my show over" : "Start my show"}</Button>
-                            </>
-                          )}
-                        </div>
-                        <div className="flex flex-wrap items-center gap-3 border-t border-white/10 bg-white/[0.06] px-6 py-4" data-testid="dashboard-smartlink">
-                          <Globe className="h-5 w-5 shrink-0 text-[#F0A71F]" />
-                          <span className="min-w-0 flex-1">
-                            <span className="block text-[11px] font-bold uppercase tracking-[0.16em] text-[#F0A71F]">Your SmartLink</span>
-                            {linkLive
-                              ? <span className="block truncate font-semibold">militaryvoices.ai/{handle!.handle}</span>
-                              : <span className="block text-sm text-white/75">One link for every bio, at militaryvoices.ai/you. About five minutes.</span>}
-                          </span>
-                          {linkLive ? (
-                            <span className="flex gap-2">
-                              <Button size="sm" onClick={() => void navigator.clipboard.writeText(`https://www.militaryvoices.ai/${handle!.handle}`).then(() => toast({ title: "Link copied" }))} className="rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b944]" data-testid="dashboard-smartlink-copy">Copy</Button>
-                              <Button size="sm" variant="outline" onClick={() => goTo("page")} className="rounded-full border-white/30 bg-transparent text-white hover:bg-white/10 hover:text-white">Edit</Button>
-                            </span>
-                          ) : (
-                            <Button size="sm" onClick={() => goTo("page")} className="rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b944]" data-testid="dashboard-smartlink-go">Make my SmartLink</Button>
-                          )}
-                        </div>
-                      </div>
-                    );
-                  })()}
-                  {/* 3. The next step: one, not three side by side. */}
-                  {(() => {
-                    const left = buildSteps(checklistState, checklistNav).filter((x) => !x.done);
-                    if (!left.length) return null;
-                    const x = left[0];
-                    return (
-                      <section className="mt-4 rounded-3xl border-2 border-[#F0A71F]/50 bg-[#F0A71F]/[0.07] p-5" data-testid="todo-strip">
-                        <div className="flex items-baseline gap-3">
-                          <p className="flex-1 text-sm font-bold text-foreground">Next step <span className="font-normal text-muted-foreground">· {left.length} to do</span></p>
-                          <button type="button" onClick={() => showGuide(HOME_TOUR)} className="text-xs font-semibold text-[#053877] hover:underline dark:text-[#8ab4f8]" data-testid="todo-tour">Show me around</button>
-                        </div>
-                        <button type="button" onClick={() => goToStep(x)} className="group mt-3 flex w-full items-center gap-3 rounded-2xl bg-card p-4 text-left shadow-sm ring-1 ring-border transition hover:ring-[#053877]/40" data-testid={`todo-${x.key}`}>
-                          <span className="min-w-0 flex-1">
-                            <span className="flex items-center gap-2 font-semibold text-foreground">{x.label}{x.tag && <span className="rounded-full bg-[#F0A71F]/20 px-1.5 py-px text-[10px] font-semibold leading-4 text-[#8a5a00] dark:text-[#F0A71F]">{x.tag}</span>}</span>
-                            <span className="mt-0.5 block text-sm text-muted-foreground">{x.detail}</span>
-                          </span>
-                          <span className="hidden shrink-0 rounded-full bg-[#053877] px-4 py-2 text-sm font-semibold text-white sm:inline">{x.cta}</span>
-                          <ArrowRight className="h-4 w-4 shrink-0 text-muted-foreground transition group-hover:translate-x-0.5 group-hover:text-[#053877] sm:hidden" />
-                        </button>
-                        {left.length > 1 && <p className="mt-2 text-xs text-muted-foreground">Then: {left.slice(1).map((s) => s.label).join(", ")}.</p>}
-                      </section>
-                    );
-                  })()}
-                  {/* How to put the app on their phone, until they have. */}
-                  <div className="mt-6"><AppInstallCard /></div>
+                        </span>
+                      </li>
+                    ) : undefined}
+                  />
+                  {/* Your files: shows and SmartLink, episodes, clips and posts, as Clay lists its tables. */}
+                  <HomeFiles goTo={(sc) => goTo(sc)} handle={(() => { const pg = (bioMine as { page?: { handle?: string; published?: boolean } } | undefined)?.page; return pg?.published && pg.handle ? pg.handle : ""; })()} />
                 </>
               );
             })()}

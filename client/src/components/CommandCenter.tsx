@@ -1,5 +1,5 @@
 import { Link } from "wouter";
-import { ArrowRight, ArrowUp, CalendarDays, Check, ListOrdered, Mail, Shield, Share2, Sparkles } from "lucide-react";
+import { ArrowRight, ArrowUp, CalendarDays, Check, ListOrdered, Share2, Sparkles } from "lucide-react";
 import { useState } from "react";
 import { resolveUploadUrl } from "@/lib/queryClient";
 import { StudioIcon } from "@/components/GreenRoomButton";
@@ -14,73 +14,49 @@ function greeting(now: Date): string {
 }
 
 /**
- * The top of the dashboard, in three layers.
+ * The top of the dashboard: who you are, and one box to ask for anything.
  *
- * A short dark card — who you are, what day it is, the two numbers promotion
- * produces. Four cards under it that each go somewhere: the green room, your
- * accounts, your slot, the co-host hours. Then the white page begins with
- * what is left to do. The first version put all of that on the dark card
- * and it was a wall; the slot time appeared twice and the greeting once too
- * often.
+ * Light, like the page under it (28 Oct, after Clay's home): the navy slab it
+ * used to be made every block below it shout too. The email and service line
+ * went with it; they're on the Profile.
  */
 export function CommandCenter({
   firstName,
   photoUrl,
   podcastName,
-  email,
-  serviceLine,
-  eventName,
-  eventStartUtc,
   actions,
 }: {
-  /** Top right: the admin's account switcher and Sign out, which used to be a header bar of their own. */
+  /** Top right: Show me around, Sign out. */
   actions?: React.ReactNode;
   firstName: string;
   photoUrl: string;
   podcastName: string;
-  email: string;
-  serviceLine: string;
-  eventName: string;
-  eventStartUtc: string;
+  email?: string;
+  serviceLine?: string;
+  eventName?: string;
+  eventStartUtc?: string;
 }) {
   const now = new Date();
   const [askText, setAskText] = useState("");
   return (
-    <section className="relative overflow-hidden rounded-2xl bg-[#04102b] px-4 pb-11 pt-4 text-white sm:px-7 sm:pb-12 sm:pt-6" data-testid="command-center">
-      <div className="pointer-events-none absolute -right-24 -top-24 h-72 w-72 rounded-full border border-white/[0.07]" aria-hidden="true" />
-      <div className="pointer-events-none absolute -right-8 -top-8 h-72 w-72 rounded-full border border-white/[0.07]" aria-hidden="true" />
-      {actions && <div className="relative z-10 mb-3 flex flex-wrap items-center justify-end gap-2 sm:absolute sm:right-5 sm:top-5 sm:mb-0">{actions}</div>}
-      <div className="relative flex flex-wrap items-end justify-between gap-5">
-        {/* Who this is, once: the avatar and the show up here beside the
-            greeting, so the page below can get on with the slot. */}
-        <div className="flex min-w-0 items-center gap-3 sm:gap-4">
+    <section className="pt-2" data-testid="command-center">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex min-w-0 items-center gap-3">
           {photoUrl ? (
-            <img src={resolveUploadUrl(photoUrl)} alt={podcastName} className="h-14 w-14 shrink-0 rounded-full object-cover ring-2 ring-white/15 sm:h-24 sm:w-24 sm:ring-4" />
+            <img src={resolveUploadUrl(photoUrl)} alt={podcastName} className="h-12 w-12 shrink-0 rounded-full object-cover ring-1 ring-border" />
           ) : (
-            <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-full bg-white/10 text-xl font-bold sm:h-24 sm:w-24 sm:text-2xl">{(podcastName || firstName).slice(0, 1)}</span>
+            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#053877]/10 text-lg font-bold text-[#053877]">{(podcastName || firstName).slice(0, 1)}</span>
           )}
           <div className="min-w-0">
-            {/* On a phone: the greeting and the show, one glance; the rest is for the big screen. */}
-            <p className="hidden items-center gap-2 text-[11px] font-bold uppercase tracking-[0.18em] text-[#F0A71F] sm:flex">
-              <span className="h-1.5 w-1.5 rounded-full bg-[#F0A71F]" /> Your command center
-            </p>
-            <h2 className="text-xl font-bold leading-tight tracking-tight text-white sm:mt-1 sm:text-4xl" style={HEADLINE_FONT}>
-              {greeting(now)}, {firstName} 👋
-            </h2>
-            <p className="mt-0.5 truncate text-sm text-white/85 sm:mt-1">
-              <span className="font-semibold text-white">{podcastName}</span>
-              <span className="hidden sm:inline">{" · "}{now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</span>
-            </p>
-            <p className="mt-1.5 hidden flex-wrap items-center gap-x-4 gap-y-1 text-sm text-white/75 sm:flex">
-              <span className="inline-flex items-center gap-1.5"><Mail className="h-3.5 w-3.5 text-white/80" /> {email}</span>
-              {serviceLine && <span className="inline-flex items-center gap-1.5"><Shield className="h-3.5 w-3.5 text-white/80" /> {serviceLine}</span>}
-            </p>
+            <h1 className="text-2xl font-bold leading-tight tracking-tight text-foreground sm:text-3xl" style={HEADLINE_FONT}>{greeting(now)}, {firstName}</h1>
+            <p className="truncate text-sm text-muted-foreground">{podcastName}{podcastName ? " · " : ""}{now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p>
           </div>
         </div>
+        {actions}
       </div>
-      {/* One box to ask for anything, under the greeting (28 Oct, after Clay's home): Alex answers or takes them there. */}
+      {/* One box to ask for anything (after Clay's home): Alex answers, or takes them there. */}
       <form
-        className="relative mt-4 flex max-w-2xl items-center gap-2 rounded-2xl bg-white/[0.08] p-1.5 pl-4 ring-1 ring-white/15 focus-within:ring-[#F0A71F]/60 sm:mt-5"
+        className="mt-5 flex max-w-3xl items-center gap-2 rounded-2xl border border-border bg-card p-1.5 pl-4 shadow-sm focus-within:border-[#053877]/50"
         onSubmit={(e) => {
           e.preventDefault();
           const q = askText.trim();
@@ -91,8 +67,8 @@ export function CommandCenter({
         data-testid="dashboard-ask"
       >
         <Sparkles className="h-4 w-4 shrink-0 text-[#F0A71F]" />
-        <input value={askText} onChange={(e) => setAskText(e.target.value)} placeholder="Ask Alex anything, or say what you'd like to do…" className="min-w-0 flex-1 bg-transparent py-2 text-sm text-white placeholder:text-white/55 focus:outline-none" aria-label="Ask Alex" />
-        <button type="submit" aria-label="Ask" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#F0A71F] text-[#1a1200] hover:bg-[#f5b944]"><ArrowUp className="h-4 w-4" /></button>
+        <input value={askText} onChange={(e) => setAskText(e.target.value)} placeholder="Ask Alex anything, or say what you'd like to do…" className="min-w-0 flex-1 bg-transparent py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none" aria-label="Ask Alex" />
+        <button type="submit" aria-label="Ask" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#053877] text-white hover:bg-[#0a4a99]"><ArrowUp className="h-4 w-4" /></button>
       </form>
     </section>
   );
