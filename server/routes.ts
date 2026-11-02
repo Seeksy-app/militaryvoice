@@ -7956,6 +7956,46 @@ export function registerRoutes(app: Express): void {
     res.json({ lines });
   });
 
+  // Revenue: money that came in (sponsorships, plans, anything else), kept by
+  // hand like the contributions. Until it's first saved it starts with the
+  // sponsors who bought a package on the site, at the package price.
+  const REVENUE_KINDS = ["Sponsorship", "Plans and credits", "Ads", "Other"];
+  app.get("/api/admin/finance-revenue", requireAdmin, async (req, res) => {
+    noStore(res);
+    if ((req as any).studioHost) return res.status(403).json({ message: "Admins only." });
+    const saved = await storage.getSetting("finance_revenue");
+    if (saved != null) {
+      let lines: unknown = [];
+      try { lines = JSON.parse(saved); } catch { lines = []; }
+      return res.json({ lines, kinds: REVENUE_KINDS });
+    }
+    const sponsors = (await storage.listSponsors(false)).filter((sp) => sp.packageId > 0);
+    const lines: { source: string; kind: string; date: string; note: string; amount: number }[] = [];
+    for (const ev of Array.from(new Set(sponsors.map((sp) => sp.eventId)))) {
+      const pkgs = await storage.listSponsorPackages(ev);
+      const shows = await storage.listShowSponsors(ev);
+      for (const sp of sponsors.filter((x) => x.eventId === ev)) {
+        const pkg = pkgs.find((p) => p.id === sp.packageId);
+        if (!pkg || pkg.price <= 0) continue;
+        const n = Math.max(1, shows.filter((x) => x.sponsorId === sp.id).length);
+        lines.push({ source: sp.name, kind: "Sponsorship", date: sp.createdAt.slice(0, 10), note: n > 1 ? `${n} × ${pkg.name}, $${pkg.price.toLocaleString()} each` : pkg.name, amount: n * pkg.price });
+      }
+    }
+    res.json({ lines, kinds: REVENUE_KINDS });
+  });
+  app.put("/api/admin/finance-revenue", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost) return res.status(403).json({ message: "Admins only." });
+    const lines = (Array.isArray(req.body?.lines) ? req.body.lines : []).slice(0, 1000).map((l: any) => ({
+      source: String(l?.source ?? "").slice(0, 120),
+      kind: REVENUE_KINDS.includes(String(l?.kind)) ? String(l.kind) : "Other",
+      date: /^\d{4}-\d{2}-\d{2}$/.test(String(l?.date ?? "")) ? String(l.date) : "",
+      note: String(l?.note ?? "").slice(0, 300),
+      amount: Math.round((Number(l?.amount) || 0) * 100) / 100,
+    }));
+    await storage.setSetting("finance_revenue", JSON.stringify(lines));
+    res.json({ lines, kinds: REVENUE_KINDS });
+  });
+
   // After-action reports. `scope` is "event:<id>" or "platform"; each author
   // has their own copy. Until someone saves, the written starting text (or an
   // empty template) is what comes back.

@@ -161,6 +161,8 @@ export function PlatformFinances() {
     <div className="flex flex-col gap-8">
       <ActualCosts scope="platform" eventName="the platform" starting={PLATFORM_STARTING} />
 
+      <Revenue />
+
       <OwnerContributions />
 
       {/* ---------------------------------------------------------- what to charge */}
@@ -485,6 +487,95 @@ function ActualCosts({ eventId = 0, eventName, scope = "event", starting = START
         <div className="flex items-center justify-between gap-3 border-t border-border p-4">
           <button type="button" onClick={add} className="inline-flex items-center gap-1.5 text-sm font-medium text-[#053877] hover:underline dark:text-[#9cc2ff]"><Plus className="h-4 w-4" /> Add a line</button>
           <button type="button" onClick={() => void save()} disabled={!dirty || saving} className="inline-flex items-center gap-1.5 rounded-lg bg-[#000741] px-4 py-2 text-sm font-semibold text-white disabled:opacity-40" data-testid="button-save-actuals"><Save className="h-4 w-4" />{saving ? "Saving…" : dirty ? "Save" : "Saved"}</button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Revenue: money that came in, kept by hand (who, what kind, when, how much).
+// It starts with the sponsors who bought a package on the site; everything
+// else is added here. Saved whole, like the contributions under it.
+// ---------------------------------------------------------------------------
+
+type RevenueLine = { source: string; kind: string; date: string; note: string; amount: number };
+
+function Revenue() {
+  const qc = useQueryClient();
+  const { data, isLoading } = useQuery<{ lines: RevenueLine[]; kinds: string[] }>({
+    queryKey: ["/api/admin/finance-revenue"],
+    queryFn: () => adminGet("/api/admin/finance-revenue"),
+  });
+  const kinds = data?.kinds ?? ["Sponsorship", "Plans and credits", "Ads", "Other"];
+  const [lines, setLines] = useState<RevenueLine[]>([]);
+  const [dirty, setDirty] = useState(false);
+  const [saving, setSaving] = useState(false);
+  useEffect(() => { if (data) { setLines(data.lines ?? []); setDirty(false); } }, [data]);
+
+  const edit = (i: number, patch: Partial<RevenueLine>) => { setLines((ls) => ls.map((l, k) => (k === i ? { ...l, ...patch } : l))); setDirty(true); };
+  const remove = (i: number) => { setLines((ls) => ls.filter((_, k) => k !== i)); setDirty(true); };
+  const add = () => { setLines((ls) => [...ls, { source: "", kind: "Sponsorship", date: new Date().toISOString().slice(0, 10), note: "", amount: 0 }]); setDirty(true); };
+  const save = async () => {
+    setSaving(true);
+    await adminSend("PUT", "/api/admin/finance-revenue", { lines });
+    await qc.invalidateQueries({ queryKey: ["/api/admin/finance-revenue"] });
+    setSaving(false);
+    setDirty(false);
+  };
+  const total = lines.reduce((n, l) => n + (Number(l.amount) || 0), 0);
+  const byKind = kinds.map((k) => [k, lines.filter((l) => l.kind === k).reduce((n, l) => n + (Number(l.amount) || 0), 0)] as const).filter(([, v]) => v > 0);
+
+  return (
+    <section data-testid="finance-revenue">
+      <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
+        <TrendingUp className="h-4 w-4" /> Revenue
+      </h3>
+      <p className="mt-1 max-w-2xl text-sm text-muted-foreground">Money that came in: sponsorships, plans, ads and anything else. The sponsors who bought a package are already here; add the rest as it lands.</p>
+      <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-card">
+        {isLoading ? <p className="p-5 text-sm text-muted-foreground">Loading…</p> : (
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <tbody>
+                {lines.length === 0 && <tr><td className="px-5 py-4 text-muted-foreground">No revenue yet.</td></tr>}
+                {lines.map((l, i) => (
+                  <tr key={i} className="border-b border-border last:border-0">
+                    <td className="w-full px-5 py-2">
+                      <input value={l.source} onChange={(e) => edit(i, { source: e.target.value })} placeholder="From who" className="w-full bg-transparent font-medium outline-none" />
+                      <input value={l.note} onChange={(e) => edit(i, { note: e.target.value })} placeholder="What for" className="w-full bg-transparent text-xs text-muted-foreground outline-none" />
+                    </td>
+                    <td className="px-2 py-2">
+                      <select value={l.kind} onChange={(e) => edit(i, { kind: e.target.value })} className="rounded-lg border border-border bg-background px-2 py-1 text-xs" aria-label={`Kind of revenue from ${l.source}`}>
+                        {kinds.map((k) => <option key={k} value={k}>{k}</option>)}
+                      </select>
+                    </td>
+                    <td className="px-2 py-2">
+                      <input type="date" value={l.date} onChange={(e) => edit(i, { date: e.target.value })} className={`rounded-lg border px-2 py-1 text-xs ${l.date ? "border-border" : "border-destructive/40 bg-destructive/10"}`} aria-label={`Date for ${l.source}`} />
+                    </td>
+                    <td className="px-2 py-2 text-right">
+                      <span className="inline-flex items-center rounded-lg border border-border px-2 py-1 tabular-nums">$<input type="number" step="0.01" min="0" value={l.amount} onChange={(e) => edit(i, { amount: Number(e.target.value) })} className="w-24 bg-transparent text-right outline-none" aria-label={`Amount from ${l.source}`} /></span>
+                    </td>
+                    <td className="pr-4"><button type="button" onClick={() => remove(i)} className="text-muted-foreground hover:text-destructive" aria-label={`Remove ${l.source}`}><Trash2 className="h-4 w-4" /></button></td>
+                  </tr>
+                ))}
+                <tr className="border-t-2 border-foreground">
+                  <td className="px-5 py-3 font-semibold">Total revenue</td>
+                  <td /><td />
+                  <td className="px-2 py-3 text-right text-base font-semibold tabular-nums" data-testid="revenue-total">{usd(total)}</td>
+                  <td />
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        )}
+        {byKind.length > 1 && (
+          <div className="flex flex-wrap gap-x-6 gap-y-1 border-t border-border px-5 py-3 text-sm">
+            {byKind.map(([k, v]) => <span key={k}><span className="text-muted-foreground">{k}</span> <span className="font-semibold tabular-nums">{usd(v)}</span></span>)}
+          </div>
+        )}
+        <div className="flex items-center justify-between gap-3 border-t border-border p-4">
+          <button type="button" onClick={add} className="inline-flex items-center gap-1.5 text-sm font-medium text-[#053877] hover:underline dark:text-[#9cc2ff]" data-testid="button-add-revenue"><Plus className="h-4 w-4" /> Add revenue</button>
+          <button type="button" onClick={() => void save()} disabled={!dirty || saving} className="inline-flex items-center gap-1.5 rounded-lg bg-[#000741] px-4 py-2 text-sm font-semibold text-white disabled:opacity-40" data-testid="button-save-revenue"><Save className="h-4 w-4" />{saving ? "Saving…" : dirty ? "Save" : "Saved"}</button>
         </div>
       </div>
     </section>
