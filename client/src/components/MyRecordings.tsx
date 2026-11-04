@@ -325,7 +325,7 @@ export function MyRecordings({
                 </span>
               )}
             </div>
-            <div className="flex items-start gap-2 p-3">
+            <div className="flex flex-wrap items-start gap-2 p-3">
               <div className="min-w-0 flex-1">
                 {renaming?.id === main.id ? (
                   <form onSubmit={(e) => { e.preventDefault(); void saveTitle(); }} className="flex items-center gap-1">
@@ -353,39 +353,6 @@ export function MyRecordings({
                     <> · <button type="button" onClick={() => onShowClips(main.id)} className="font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]" data-testid={`recording-clips-${main.id}`}>{clipCounts!.get(main.id)} clip{clipCounts!.get(main.id) === 1 ? "" : "s"} →</button></>
                   )}
                 </p>
-                {versions.length > 0 && (
-                  <div className="mt-2 inline-flex rounded-full border border-border p-0.5" role="group" aria-label="Version">
-                    {versions.map((v) => (
-                      <button
-                        key={v.rec.id}
-                        type="button"
-                        onClick={() => { setPicked((p) => ({ ...p, [main.id]: v.rec.id })); setPlaying(null); }}
-                        aria-pressed={v.rec.id === r.id}
-                        className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition-colors ${v.rec.id === r.id ? "bg-[#000741] text-white dark:bg-white dark:text-[#000741]" : "text-muted-foreground hover:text-foreground"}`}
-                        data-testid={`version-${main.id}-${v.rec.id}`}
-                      >
-                        {v.label}
-                      </button>
-                    ))}
-                    {earlier.length > 0 && (
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <button type="button" className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold transition-colors ${olderPicked ? "bg-[#000741] text-white dark:bg-white dark:text-[#000741]" : "text-muted-foreground hover:text-foreground"}`} data-testid={`version-earlier-${main.id}`}>
-                            {olderPicked ? olderPicked.label : `Earlier edits (${earlier.length})`} ▾
-                          </button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="start" className="w-56">
-                          {earlier.map((v) => (
-                            <DropdownMenuItem key={v.rec.id} onSelect={() => { setPicked((p) => ({ ...p, [main.id]: v.rec.id })); setPlaying(null); }} className="flex justify-between gap-2 text-sm">
-                              <span>{v.label}</span>
-                              <span className="tabular-nums text-xs text-muted-foreground">{clock(v.rec.durationSec)}</span>
-                            </DropdownMenuItem>
-                          ))}
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    )}
-                  </div>
-                )}
               </div>
               {/* Pōstify on the card itself, not only in the menu: storing an episode spends nothing; this is the button that does. */}
               {r.status === "Ready" && !main.egressId.startsWith("CLEAN_") && (
@@ -477,6 +444,40 @@ export function MyRecordings({
                     )}
                   </DropdownMenuContent>
                 </DropdownMenu>
+              )}
+              {/* The versions get their own full-width row so the labels never wrap. */}
+              {versions.length > 0 && (
+                <div className="mt-1 flex w-full items-center gap-1 rounded-full border border-border p-1" role="group" aria-label="Version">
+                  {versions.map((v) => (
+                    <button
+                      key={v.rec.id}
+                      type="button"
+                      onClick={() => { setPicked((p) => ({ ...p, [main.id]: v.rec.id })); setPlaying(null); }}
+                      aria-pressed={v.rec.id === r.id}
+                      className={`flex-1 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${v.rec.id === r.id ? "bg-[#000741] text-white dark:bg-white dark:text-[#000741]" : "text-muted-foreground hover:text-foreground"}`}
+                      data-testid={`version-${main.id}-${v.rec.id}`}
+                    >
+                      {v.label}
+                    </button>
+                  ))}
+                  {earlier.length > 0 && (
+                    <DropdownMenu>
+                      <DropdownMenuTrigger asChild>
+                        <button type="button" className={`flex-1 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${olderPicked ? "bg-[#000741] text-white dark:bg-white dark:text-[#000741]" : "text-muted-foreground hover:text-foreground"}`} data-testid={`version-earlier-${main.id}`}>
+                          {olderPicked ? olderPicked.label : `Earlier edits (${earlier.length})`} ▾
+                        </button>
+                      </DropdownMenuTrigger>
+                      <DropdownMenuContent align="start" className="w-56">
+                        {earlier.map((v) => (
+                          <DropdownMenuItem key={v.rec.id} onSelect={() => { setPicked((p) => ({ ...p, [main.id]: v.rec.id })); setPlaying(null); }} className="flex justify-between gap-2 text-sm">
+                            <span>{v.label}</span>
+                            <span className="tabular-nums text-xs text-muted-foreground">{clock(v.rec.durationSec)}</span>
+                          </DropdownMenuItem>
+                        ))}
+                      </DropdownMenuContent>
+                    </DropdownMenu>
+                  )}
+                </div>
               )}
             </div>
           </li>
