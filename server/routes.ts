@@ -7501,8 +7501,9 @@ export function registerRoutes(app: Express): void {
     // Trim: new in and out points in the episode (the remake cuts from there).
     const times: { startSec?: number; endSec?: number } = {};
     if (req.body?.startSec !== undefined || req.body?.endSec !== undefined) {
-      const startSec = Math.max(0, Math.round(Number(req.body.startSec ?? clip.startSec) * 10) / 10);
-      const endSec = Math.round(Number(req.body.endSec ?? clip.endSec) * 10) / 10;
+      // Whole seconds: start_sec and end_sec are integer columns (a 3.9 here failed the update).
+      const startSec = Math.max(0, Math.round(Number(req.body.startSec ?? clip.startSec)));
+      const endSec = Math.round(Number(req.body.endSec ?? clip.endSec));
       if (!(endSec - startSec >= 5)) return res.status(400).json({ message: "A clip needs at least 5 seconds." });
       if (endSec - startSec > 180) return res.status(400).json({ message: "Clips are 3 minutes at most." });
       Object.assign(times, { startSec, endSec });
