@@ -7,6 +7,10 @@
   ],
   "rewrites": [
     {
+      "source": "/radio-plan",
+      "destination": "/radio-plan.html"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api"
     },

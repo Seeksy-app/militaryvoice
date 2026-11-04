@@ -1,0 +1,274 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="robots" content="noindex, nofollow">
+<link rel="icon" href="/favicon.png">
+<title>MilitaryVoices Radio · Launch Plan</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&family=JetBrains+Mono:wght@500;700&display=swap">
+<style>
+/* Layout: a working plan. Navy masthead band, then the lineup, the day-by-day calendar (the main thing), and the graphics library. */
+:root{
+  --navy:#000741; --navy-2:#05175a; --gold:#F0A71F; --red:#ED1C24;
+  --bg:#f6f7fb; --surface:#ffffff; --fg:#0c1230; --muted:#5a6280; --line:#dde1ee; --chip:#eef1fa; --link:#053877;
+  --display:"Inter",system-ui,-apple-system,"Segoe UI",Arial,sans-serif;
+  --mono:"JetBrains Mono",ui-monospace,Menlo,monospace;
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#060a24;--surface:#0d1438;--fg:#eef0fa;--muted:#a3abc9;--line:#232c57;--chip:#151e4a;--link:#9cc0ff;color-scheme:dark}}
+:root[data-theme="dark"]{--bg:#060a24;--surface:#0d1438;--fg:#eef0fa;--muted:#a3abc9;--line:#232c57;--chip:#151e4a;--link:#9cc0ff;color-scheme:dark}
+*{box-sizing:border-box}
+html{-webkit-text-size-adjust:100%}
+body{margin:0}
+img{max-width:100%}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--fg);font-family:var(--display);font-size:16px;line-height:1.55}
+h1,h2,h3{text-wrap:balance;margin:0;line-height:1.1}
+p{margin:0}
+a{color:var(--link)}
+.wrap{max-width:1120px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px))}
+.mast{background:radial-gradient(circle at 80% 20%,#0d3a8a 0,var(--navy-2) 45%,var(--navy) 100%);color:#fff;padding-block:48px 40px}
+.eyebrow{font-weight:800;letter-spacing:.2em;text-transform:uppercase;font-size:12px;color:var(--gold)}
+.mast h1{font-size:clamp(34px,6vw,58px);font-weight:900;margin-top:10px}
+.mast h1 span{color:var(--gold)}
+.mast .lede{max-width:64ch;margin-top:16px;color:rgba(255,255,255,.86);font-size:17px}
+.facts{display:flex;flex-wrap:wrap;gap:10px;margin-top:24px}
+.fact{border:1px solid rgba(255,255,255,.22);border-radius:999px;padding:7px 14px;font-weight:700;font-size:14px;color:#fff}
+.fact b{color:var(--gold)}
+main{padding-block:40px 80px;display:grid;gap:56px}
+section>h2{font-size:28px;font-weight:900}
+section>.sub{color:var(--muted);margin-top:6px;max-width:70ch}
+.table-scroll{overflow-x:auto;margin-top:18px;border:1px solid var(--line);border-radius:14px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;min-width:640px;font-size:15px}
+th,td{text-align:left;padding:11px 14px;border-bottom:1px solid var(--line);vertical-align:middle}
+th{font-size:12px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted);font-weight:800}
+tr:last-child td{border-bottom:0}
+td.t{font-family:var(--mono);font-weight:700;white-space:nowrap;font-variant-numeric:tabular-nums}
+.who{display:flex;align-items:center;gap:10px}
+.who img{width:36px;height:36px;border-radius:50%;object-fit:cover;object-position:50% 22%;border:2px solid var(--gold);flex:none}
+.open td{color:var(--muted);font-style:italic}
+.phase{margin-top:26px}
+.phase h3{font-size:19px;font-weight:800;display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.phase h3 small{font-weight:600;color:var(--muted);font-size:14px}
+.days{display:grid;gap:12px;margin-top:14px}
+.day{display:grid;grid-template-columns:96px 1fr;gap:18px;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:16px}
+.day.key{border-color:var(--gold);box-shadow:inset 4px 0 0 var(--gold)}
+.date{font-family:var(--mono);font-weight:700;font-variant-numeric:tabular-nums}
+.date .dow{display:block;font-size:12px;letter-spacing:.14em;color:var(--muted)}
+.date .dn{display:block;font-size:24px}
+.posts{display:grid;gap:14px;min-width:0}
+.post{display:grid;grid-template-columns:auto 1fr;gap:14px;min-width:0}
+.thumbs{display:flex;gap:6px;align-items:flex-start}
+.thumbs img{height:84px;width:auto;border-radius:8px;border:1px solid var(--line);display:block;cursor:zoom-in}
+.ptext{min-width:0}
+.ptitle{font-weight:800;font-size:15px}
+.ptitle .when{font-family:var(--mono);font-weight:700;font-size:12px;color:var(--muted);margin-left:6px;letter-spacing:.04em}
+.tag{display:inline-block;font-size:11px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;border-radius:999px;padding:2px 8px;background:var(--chip);color:var(--muted);margin-right:6px;vertical-align:2px}
+.tag.story{background:rgba(240,167,31,.18);color:#9a6400}
+:root:not([data-theme="light"]) .tag.story{color:var(--gold)}
+@media (prefers-color-scheme:light){:root:not([data-theme="dark"]) .tag.story{color:#9a6400}}
+:root[data-theme="light"] .tag.story{color:#9a6400}
+.cap{margin-top:6px;font-size:14px;color:var(--fg);white-space:pre-wrap;background:var(--chip);border-radius:10px;padding:10px 12px;max-width:72ch}
+.copy{margin-top:6px;font:inherit;font-size:13px;font-weight:700;border:1px solid var(--line);background:var(--surface);color:var(--fg);border-radius:999px;padding:5px 12px;cursor:pointer}
+.copy:hover{border-color:var(--gold)}
+.copy:focus-visible,.gal button:focus-visible{outline:3px solid var(--gold);outline-offset:2px}
+.note{font-size:14px;color:var(--muted);margin-top:4px}
+.gal-group{margin-top:22px}
+.gal-group h3{font-size:16px;font-weight:800}
+.gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:12px;margin-top:10px}
+.gal figure{margin:0;min-width:0}
+.gal button{display:block;width:100%;padding:0;border:1px solid var(--line);border-radius:10px;overflow:hidden;background:var(--surface);cursor:zoom-in}
+.gal img{width:100%;height:auto;display:block}
+.gal figcaption{font-family:var(--mono);font-size:11px;color:var(--muted);margin-top:4px;word-break:break-all}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:18px}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:18px}
+.card h3{font-size:17px;font-weight:800}
+.card ul{margin:10px 0 0;padding-left:18px}
+.card li{margin-top:6px}
+.lb{position:fixed;inset:0;background:rgba(0,4,30,.88);display:flex;align-items:center;justify-content:center;padding:max(16px,env(safe-area-inset-top,0px)) max(16px,env(safe-area-inset-right,0px)) max(16px,env(safe-area-inset-bottom,0px)) max(16px,env(safe-area-inset-left,0px));z-index:20;cursor:zoom-out}
+.lb img{max-height:92vh;max-width:100%;border-radius:10px}
+@media (max-width:620px){.day{grid-template-columns:1fr;gap:10px}.date .dn{display:inline;font-size:20px;margin-left:8px}.date .dow{display:inline}.post{grid-template-columns:1fr}.thumbs img{height:110px}}
+@media (prefers-reduced-motion:reduce){*{transition:none!important}}
+</style>
+</head>
+<body>
+
+
+<header class="mast">
+  <div class="wrap">
+    <p class="eyebrow">MilitaryVoices Radio · Nov 16–20, 2026</p>
+    <h1>Radio launch plan: <span>post every day</span></h1>
+    <p class="lede">Eleven days of build-up, then live-week posts timed to each show. Every graphic below is ready to post from the MilitaryVoices accounts, and the hosts and Riccoh reshare. Each host already has their own "I'm on the air" kit on their dashboard.</p>
+    <div class="facts">
+      <span class="fact"><b>10</b> shows booked</span>
+      <span class="fact"><b>8</b> hosts</span>
+      <span class="fact"><b>39</b> graphics ready</span>
+      <span class="fact"><b>Thu Nov 19</b> still open</span>
+    </div>
+  </div>
+</header>
+
+<main class="wrap">
+
+<section id="lineup">
+  <h2>Who's on the air</h2>
+  <p class="sub">From the bookings as of Nov 4. All times Eastern. The station runs 7 am – 10 pm each day, with the AI producer between shows.</p>
+  <div class="table-scroll"><table id="lineup-table">
+    <thead><tr><th>Day</th><th>Time</th><th>Show</th><th>Host</th></tr></thead>
+    <tbody></tbody>
+  </table></div>
+</section>
+
+<section id="calendar">
+  <h2>Posting calendar</h2>
+  <p class="sub">One feed post a day before launch, plus the matching story. During the week, the day's lineup goes out at 7 am and each show gets a story 30 minutes before it starts. Captions are ready to paste. Gold days matter most.</p>
+  <div id="phases"></div>
+</section>
+
+<section id="reach">
+  <h2>Getting it seen</h2>
+  <div class="cols">
+    <div class="card">
+      <h3>Our accounts</h3>
+      <ul>
+        <li>Post from MilitaryVoices on Facebook, Instagram, LinkedIn and X. These can be scheduled in the Social desk all at once.</li>
+        <li>Tag the host in every spotlight. Riccoh is @riccoh_player. Frank Zaccari, Carmen White (Talking With Heroes) and Trisha Stetzel (Beyond the Uniform) are on LinkedIn.</li>
+        <li>Pin the week lineup to the top of each profile from Nov 11 to Nov 20.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>The hosts</h3>
+      <ul>
+        <li>Each host has a ready share kit (square, story and caption) under their booking on the dashboard. Send them a short note on Nov 10 asking them to post it, and again the morning of their show.</li>
+        <li>Ask each host to reshare our spotlight on the day it goes up.</li>
+        <li>Frank Zaccari and Dave Morrow are on twice, so they can post on both days.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Riccoh and partners</h3>
+      <ul>
+        <li>Riccoh posts the week lineup and his own spotlight, and sends the lineup and Book your show graphics to LiveOne and PodcastOne (he asked for one on Nov 3).</li>
+        <li>Book your show goes to the Marathon podcasters to fill Thursday, Nov 19.</li>
+        <li>During the week, Pōstify clips from each show feed the Thursday and Friday posts.</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="graphics">
+  <h2>All the graphics</h2>
+  <p class="sub">Tap one to see it full size, then press and hold (or right-click) to save it. Squares are 1080 × 1080, lineups and posters are 1080 × 1350, stories are 1080 × 1920 and the wide poster is 1920 × 1080.</p>
+  <div id="gallery"></div>
+</section>
+
+</main>
+<div class="lb" id="lb" hidden><img id="lb-img" alt=""></div>
+
+<script>
+const SHOWS = {
+  63:{show:"The Warriors' Voice",host:"Riccoh Player",day:"Mon",date:"Nov 16",time:"7:00 AM"},
+  65:{show:"Bounce Back in Business & Life",host:"Frank Zaccari",day:"Mon",date:"Nov 16",time:"11:00 AM"},
+  62:{show:"Marine OCS Blog",host:"",day:"Mon",date:"Nov 16",time:"12:00 PM"},
+  68:{show:"The Hard to Kill Podcast",host:"Dave Morrow",day:"Mon",date:"Nov 16",time:"2:30 PM"},
+  67:{show:"History On The Road",host:"Daniel Tobias Flint",day:"Mon",date:"Nov 16",time:"7–8 PM"},
+  71:{show:"Talking With Heroes Podcast",host:"Carmen White",day:"Tue",date:"Nov 17",time:"12:00 PM"},
+  70:{show:"The ToosDay Crüe",host:"Rich LaMonica",day:"Tue",date:"Nov 17",time:"8–9 PM"},
+  66:{show:"Bounce Back in Business & Life",host:"Frank Zaccari",day:"Wed",date:"Nov 18",time:"11:30 AM"},
+  72:{show:"Houston Business Radio: Beyond the Uniform",host:"Trisha Stetzel",day:"Wed",date:"Nov 18",time:"12:00 PM"},
+  69:{show:"The Hard to Kill Podcast",host:"Dave Morrow",day:"Fri",date:"Nov 20",time:"2:00 PM"},
+};
+const ORDER=[63,65,62,68,67,71,70,66,72,"thu",69];
+const URL_="militaryvoices.ai/radio";
+const TAGS="#MilitaryVoicesRadio #VeteranPodcasters #LiveFromAnywhere";
+const dayName={Mon:"Monday",Tue:"Tuesday",Wed:"Wednesday",Fri:"Friday"};
+const longT=t=>t.replace(":00","").replace(" AM"," am").replace(" PM"," pm");
+const spotCap=id=>{const s=SHOWS[id];const w=s.host?` with ${s.host}`:"";return `On the air: ${s.show}${w}, live on MilitaryVoices Radio ${dayName[s.day]}, ${s.date} at ${longT(s.time)} ET.\n\nListen or watch live from anywhere: ${URL_}?show=${id}\n\n${TAGS}`;};
+const storyCap=id=>{const s=SHOWS[id];return `${s.show} goes live at ${longT(s.time)} ET. Tap in: ${URL_}?show=${id}`;};
+const IMG={"day-friday-square": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812782224-day-friday-square.jpg", "day-friday-story": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812782583-day-friday-story.jpg", "day-monday-square": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812783134-day-monday-square.jpg", "day-monday-story": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812783797-day-monday-story.jpg", "day-tuesday-square": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812784161-day-tuesday-square.jpg", "day-tuesday-story": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812784891-day-tuesday-story.jpg", "day-wednesday-square": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812785441-day-wednesday-square.jpg", "day-wednesday-story": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812785960-day-wednesday-story.jpg", "on-air-now": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812786416-on-air-now.jpg", "spot-62-square": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812787465-spot-62-square.jpg", "spot-62-story": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812789516-spot-62-story.jpg", "spot-63-square": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812790325-spot-63-square.jpg", "spot-63-story": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812790833-spot-63-story.jpg", "spot-65-square": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812791659-spot-65-square.jpg", "spot-65-story": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812792183-spot-65-story.jpg", "spot-66-square": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812792808-spot-66-square.jpg", "spot-66-story": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812793240-spot-66-story.jpg", "spot-67-square": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812793758-spot-67-square.jpg", "spot-67-story": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812794138-spot-67-story.jpg", "spot-68-square": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812794805-spot-68-square.jpg", "spot-68-story": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812795143-spot-68-story.jpg", "spot-69-square": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812795854-spot-69-square.jpg", "spot-69-story": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812796209-spot-69-story.jpg", "spot-70-square": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812796902-spot-70-square.jpg", "spot-70-story": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812797465-spot-70-story.jpg", "spot-71-square": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812797953-spot-71-square.jpg", "spot-71-story": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812798749-spot-71-story.jpg", "spot-72-square": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812799136-spot-72-square.jpg", "spot-72-story": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812799535-spot-72-story.jpg", "book-your-show": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812891439-book-your-show.jpg", "countdown-1": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812892439-countdown-1.jpg", "countdown-3": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812892891-countdown-3.jpg", "countdown-7": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812893373-countdown-7.jpg", "partner-poster": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812893898-partner-poster.jpg", "partner-riccoh": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812946904-partner-riccoh.jpg", "partner-square": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812948065-partner-square.jpg", "partner-story": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812948666-partner-story.jpg", "partner-wide": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812949240-partner-wide.jpg", "week-lineup": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/show-assets/gtm/radio-launch-1793812950022-week-lineup.jpg"};
+const PHOTO={"63": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/signup-photos/1793373899767-7945d765e49a.jpg", "65": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/signup-photos/1789242806853-dff35807e0ff.jpg", "62": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/signup-photos/1789400478974-ea3f84a377fc.jpg", "68": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/signup-photos/1789815584277-41707b447cd6.jpg", "67": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/signup-photos/1789948217411-7409d23a8386.jpg", "71": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/signup-photos/1790970539080-f7b425877c29.jpg", "70": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/signup-photos/1793406605154-03123bad3a9b.jpg", "66": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/signup-photos/1789242806853-dff35807e0ff.jpg", "72": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/signup-photos/1789435181853-95b2612d3f20.jpg", "69": "https://npprvgnojjgfrvsbedkc.supabase.co/storage/v1/object/public/signup-photos/1789815584277-41707b447cd6.jpg"};
+const img=n=>IMG[n];
+
+const PHASES=[
+ {title:"Build-up",note:"Nov 5 – 15 · one feed post and one story a day",days:[
+  {d:"Thu",n:5,key:true,posts:[{t:"Announce the station",tag:"feed",when:"12 pm",imgs:["week-lineup"],cap:`Introducing MilitaryVoices Radio: the live station for military and veteran voices.\n\nOur first week is Nov 16–20, on the air Monday to Friday from 7 am to 10 pm ET. Here's who's live. Listen or watch from anywhere at ${URL_}\n\n${TAGS}`}]},
+  {d:"Fri",n:6,posts:[{t:"Spotlight: The Warriors' Voice",tag:"feed",when:"12 pm",imgs:["spot-63-square","spot-63-story"],cap:`Opening the station: The Warriors' Voice with Riccoh Player, live on MilitaryVoices Radio Monday, Nov 16 at 7 am ET. The first voice on the air.\n\n${URL_}?show=63\n\n${TAGS}`}]},
+  {d:"Sat",n:7,posts:[{t:"Spotlight: Bounce Back in Business & Life",tag:"feed",when:"10 am",imgs:["spot-65-square","spot-65-story"],cap:`Frank Zaccari brings Bounce Back in Business & Life to MilitaryVoices Radio twice: Monday, Nov 16 at 11 am ET and Wednesday, Nov 18 at 11:30 am ET.\n\n${URL_}?show=65\n\n${TAGS}`}]},
+  {d:"Sun",n:8,posts:[{t:"Call for shows",tag:"feed",when:"6 pm",imgs:["book-your-show"],cap:`Military and veteran podcasters: put your show on the radio.\n\nBook a free 30 or 60-minute slot during our first week, Nov 16–20, and go live from anywhere, right from your browser. Thursday, Nov 19 is wide open.\n\nBook at ${URL_}/book\n\n${TAGS}`}]},
+  {d:"Mon",n:9,posts:[{t:"One week to go",tag:"feed",when:"8 am",imgs:["countdown-7"],cap:`One week until MilitaryVoices Radio goes live. Monday, Nov 16, on the air from 7 am ET.\n\n${URL_}\n\n${TAGS}`},{t:"Spotlight: Marine OCS Blog",tag:"story",when:"12 pm",imgs:["spot-62-story"],cap:storyCap(62)}]},
+  {d:"Tue",n:10,posts:[{t:"Spotlight: The Hard to Kill Podcast",tag:"feed",when:"12 pm",imgs:["spot-68-square","spot-68-story"],cap:`Dave Morrow and The Hard to Kill Podcast are live on MilitaryVoices Radio twice: Monday, Nov 16 at 2:30 pm ET and Friday, Nov 20 at 2 pm ET.\n\n${URL_}?show=68\n\n${TAGS}`},{t:"Note to every host",tag:"email",when:"",imgs:[],cap:"Ask each host to post their own share kit from the dashboard, and to reshare our spotlight."}]},
+  {d:"Wed",n:11,key:true,posts:[{t:"Veterans Day",tag:"feed",when:"9 am",imgs:["week-lineup"],cap:`To every veteran: thank you for your service.\n\nThis Veterans Day we're counting down to MilitaryVoices Radio, a live station built for military and veteran voices. Starting Monday, Nov 16, here's who's on the air.\n\n${URL_}\n\n#VeteransDay ${TAGS}`}]},
+  {d:"Thu",n:12,posts:[{t:"Spotlight: History On The Road",tag:"feed",when:"12 pm",imgs:["spot-67-square","spot-67-story"],cap:spotCap(67)},{t:"Thursday's still open",tag:"story",when:"5 pm",imgs:["book-your-show"],cap:`One week from today, Thursday Nov 19, the schedule is wide open. Book your show: ${URL_}/book`}]},
+  {d:"Fri",n:13,posts:[{t:"Three days",tag:"feed",when:"8 am",imgs:["countdown-3"],cap:`Three days. MilitaryVoices Radio goes live Monday at 7 am ET.\n\n${URL_}\n\n${TAGS}`},{t:"Spotlight: Talking With Heroes Podcast",tag:"feed",when:"2 pm",imgs:["spot-71-square","spot-71-story"],cap:spotCap(71)}]},
+  {d:"Sat",n:14,posts:[{t:"Spotlight: Beyond the Uniform",tag:"feed",when:"10 am",imgs:["spot-72-square","spot-72-story"],cap:spotCap(72)},{t:"Spotlight: The ToosDay Crüe",tag:"feed",when:"4 pm",imgs:["spot-70-square","spot-70-story"],cap:spotCap(70)}]},
+  {d:"Sun",n:15,key:true,posts:[{t:"Tomorrow",tag:"feed",when:"6 pm",imgs:["countdown-1"],cap:`Tomorrow. MilitaryVoices Radio goes live at 7 am ET, Monday to Friday this week. Set a reminder.\n\n${URL_}\n\n${TAGS}`},{t:"Monday's lineup",tag:"story",when:"7 pm",imgs:["day-monday-story"],cap:`Here's Monday's lineup. First voice on at 7 am ET. ${URL_}`}]},
+ ]},
+ {title:"Live week",note:"Nov 16 – 20 · lineup at 7 am, a story 30 minutes before each show",days:[
+  {d:"Mon",n:16,key:true,posts:[{t:"We're on the air",tag:"feed",when:"6:55 am",imgs:["on-air-now"],cap:`We're on the air. MilitaryVoices Radio is live now: the live station for military and veteran voices.\n\nListen or watch: ${URL_}\n\n${TAGS}`},{t:"Today's lineup",tag:"feed",when:"7:15 am",imgs:["day-monday-square","day-monday-story"],cap:`On the air today: The Warriors' Voice at 7 am, Bounce Back in Business & Life at 11 am, Marine OCS Blog at noon, The Hard to Kill Podcast at 2:30 pm and History On The Road from 7 to 8 pm. All times ET.\n\n${URL_}\n\n${TAGS}`},{t:"Show stories",tag:"story",when:"6:30 am · 10:30 am · 11:30 am · 2 pm · 6:30 pm",imgs:["spot-63-story","spot-65-story","spot-62-story","spot-68-story","spot-67-story"],cap:"Post each one 30 minutes before the show, with its own link (militaryvoices.ai/radio?show=…)."}]},
+  {d:"Tue",n:17,posts:[{t:"Today's lineup",tag:"feed",when:"7 am",imgs:["day-tuesday-square","day-tuesday-story"],cap:`On the air today: Talking With Heroes Podcast at noon and The ToosDay Crüe from 8 to 9 pm ET.\n\n${URL_}\n\n${TAGS}`},{t:"Show stories",tag:"story",when:"11:30 am · 7:30 pm",imgs:["spot-71-story","spot-70-story"],cap:"Thirty minutes before each show."},{t:"Monday's best moment",tag:"feed",when:"5 pm",imgs:[],cap:"A Pōstify clip from Monday's shows, tagging the host."}]},
+  {d:"Wed",n:18,posts:[{t:"Today's lineup",tag:"feed",when:"7 am",imgs:["day-wednesday-square","day-wednesday-story"],cap:`On the air today: Bounce Back in Business & Life at 11:30 am and Houston Business Radio: Beyond the Uniform at noon ET.\n\n${URL_}\n\n${TAGS}`},{t:"Show stories",tag:"story",when:"11 am · 11:30 am",imgs:["spot-66-story","spot-72-story"],cap:"Thirty minutes before each show."}]},
+  {d:"Thu",n:19,posts:[{t:"Station day",tag:"feed",when:"7 am",imgs:["on-air-now"],cap:`MilitaryVoices Radio is on the air all day, 7 am – 10 pm ET.\n\n${URL_}\n\n${TAGS}`},{t:"Clips from the week",tag:"feed",when:"12 pm",imgs:[],cap:"Two or three Pōstify clips from Monday to Wednesday, each tagging its host."}]},
+  {d:"Fri",n:20,key:true,posts:[{t:"Today's lineup",tag:"feed",when:"7 am",imgs:["day-friday-square","day-friday-story"],cap:`Last day of our first week. The Hard to Kill Podcast with Dave Morrow is live at 2 pm ET.\n\n${URL_}?show=69\n\n${TAGS}`},{t:"Show story",tag:"story",when:"1:30 pm",imgs:["spot-69-story"],cap:storyCap(69)},{t:"Thank you",tag:"feed",when:"6 pm",imgs:[],cap:"Thank the hosts and listeners, with a short reel of the week's clips."}]},
+ ]},
+];
+
+const esc=s=>String(s).replace(/[&<>"]/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+
+// Lineup table
+const tb=document.querySelector("#lineup-table tbody");
+let last="";
+for(const id of ORDER){
+  if(id==="thu"){tb.insertAdjacentHTML("beforeend",`<tr class="open"><td>Thu Nov 19</td><td class="t">—</td><td colspan="2">Open: book at militaryvoices.ai/radio/book</td></tr>`);continue;}
+  const s=SHOWS[id];const dl=`${s.day} ${s.date}`;
+  tb.insertAdjacentHTML("beforeend",`<tr><td>${dl===last?"":esc(dl)}</td><td class="t">${esc(s.time)}</td><td><div class="who"><img src="${PHOTO[id]}" alt="">${esc(s.show)}</div></td><td>${esc(s.host||"—")}</td></tr>`);
+  last=dl;
+}
+
+// Calendar
+const ph=document.getElementById("phases");
+let capN=0;
+for(const p of PHASES){
+  const days=p.days.map(d=>{
+    const posts=d.posts.map(x=>{
+      const id=`cap-${capN++}`;
+      const th=x.imgs.map(n=>`<img src="${img(n)}" alt="${esc(n)}" data-full="${img(n)}" loading="lazy">`).join("");
+      return `<div class="post"><div class="thumbs">${th}</div><div class="ptext">
+        <div class="ptitle"><span class="tag ${x.tag==="story"?"story":""}">${x.tag}</span>${esc(x.t)}${x.when?`<span class="when">${esc(x.when)} ET</span>`:""}</div>
+        <div class="cap" id="${id}">${esc(x.cap)}</div>
+        <button class="copy" type="button" data-copy="${id}">Copy caption</button></div></div>`;
+    }).join("");
+    return `<div class="day${d.key?" key":""}"><div class="date"><span class="dow">${d.d.toUpperCase()}</span><span class="dn">Nov ${d.n}</span></div><div class="posts">${posts}</div></div>`;
+  }).join("");
+  ph.insertAdjacentHTML("beforeend",`<div class="phase"><h3>${esc(p.title)} <small>${esc(p.note)}</small></h3><div class="days">${days}</div></div>`);
+}
+
+// Gallery
+const GROUPS=[
+  ["With PodcastOne and LiveOne",["partner-poster","partner-riccoh","partner-square","partner-story","partner-wide"]],
+  ["Launch and countdown",["week-lineup","countdown-7","countdown-3","countdown-1","book-your-show","on-air-now"]],
+  ["Daily lineups",["day-monday-square","day-tuesday-square","day-wednesday-square","day-friday-square","day-monday-story","day-tuesday-story","day-wednesday-story","day-friday-story"]],
+  ["Show spotlights · square",[63,65,62,68,67,71,70,66,72,69].map(i=>`spot-${i}-square`)],
+  ["Show spotlights · story",[63,65,62,68,67,71,70,66,72,69].map(i=>`spot-${i}-story`)],
+];
+const g=document.getElementById("gallery");
+for(const [name,list] of GROUPS){
+  g.insertAdjacentHTML("beforeend",`<div class="gal-group"><h3>${esc(name)}</h3><div class="gal">${list.map(n=>`<figure><button type="button" data-full="${img(n)}" aria-label="View ${esc(n)} full size"><img src="${img(n)}" alt="${esc(n)}" loading="lazy"></button><figcaption>${esc(n)}.jpg</figcaption></figure>`).join("")}</div></div>`);
+}
+
+// Copy and lightbox
+document.addEventListener("click",e=>{
+  const c=e.target.closest(".copy");
+  if(c){const el=document.getElementById(c.dataset.copy);const txt=el.textContent;
+    const done=()=>{c.textContent="Copied";setTimeout(()=>c.textContent="Copy caption",1800);};
+    if(navigator.clipboard&&navigator.clipboard.writeText){navigator.clipboard.writeText(txt).then(done,()=>sel(el));}else sel(el);
+    return;}
+  const f=e.target.closest("[data-full]");
+  if(f){const lb=document.getElementById("lb");document.getElementById("lb-img").src=f.dataset.full;lb.hidden=false;return;}
+  if(e.target.closest("#lb")) document.getElementById("lb").hidden=true;
+});
+document.addEventListener("keydown",e=>{if(e.key==="Escape")document.getElementById("lb").hidden=true;});
+function sel(el){const r=document.createRange();r.selectNodeContents(el);const s=getSelection();s.removeAllRanges();s.addRange(r);}
+</script>
+
+</body>
+</html>
