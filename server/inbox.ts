@@ -192,13 +192,19 @@ export function looksAutomatic(m: { subject: string; fromEmail: string; bodyText
 export async function firstNameFor(m: { fromName: string; fromEmail: string }): Promise<string> {
   const given = (m.fromName || "").trim().split(/\s+/)[0];
   if (given && /^[A-Za-z]/.test(given)) return given;
-  // Mail forwarded through Google arrives without a display name; the
-  // lineup knows who they are.
+  // Mail forwarded through Google arrives without a display name. The
+  // address is the writer's own, so its first.last wins; the booked host
+  // only when the address carries their name, since a producer often books
+  // for the host (Carmen White's mail was greeted "Hi Justin").
   const e = m.fromEmail.trim().toLowerCase();
+  const local = e.split("@")[0];
+  const parts = local.match(/^([a-z]{2,})[._-]([a-z]{2,})$/);
+  if (parts) return parts[1][0].toUpperCase() + parts[1].slice(1);
   const ev = await storage.getFeaturedEvent();
   const sg = (await storage.listSignups(ev.id)).find((x) => x.email.trim().toLowerCase() === e);
   const name = sg?.hostName || (await storage.getProfileByEmail(e))?.hostName || "";
-  return name.trim().split(/\s+/)[0] || "";
+  const first = name.trim().split(/\s+/)[0] || "";
+  return first.length >= 2 && local.includes(first.toLowerCase()) ? first : "";
 }
 
 export function composeAck(m: InboundEmailRow, ack: string, first = (m.fromName || "").trim().split(/\s+/)[0] || "", followUp = false): { subject: string; text: string; html: string } {
