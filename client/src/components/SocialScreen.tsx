@@ -93,7 +93,11 @@ export function SocialScreen() {
   const gone = posts.filter((p) => !(p.status === "scheduled" && p.at > now) && p.status !== "sending").sort((a, b) => b.at - a.at);
   // Each clip's standing: waiting in the queue, or out.
   const usedClips = new Map<number, "Scheduled" | "Posted">();
-  for (const p of posts) if (p.kind === "clip" && p.status !== "failed") usedClips.set(p.refId, usedClips.get(p.refId) === "Posted" || !(p.status === "scheduled" && p.at > Date.now()) ? "Posted" : "Scheduled");
+  const usedEpisodes = new Map<number, "Scheduled" | "Posted">();
+  for (const p of posts) {
+    const used = p.kind === "clip" ? usedClips : p.kind === "recording" ? usedEpisodes : null;
+    if (used && p.status !== "failed") used.set(p.refId, used.get(p.refId) === "Posted" || !(p.status === "scheduled" && p.at > Date.now()) ? "Posted" : "Scheduled");
+  }
   const ready = clipList.filter((c) => !usedClips.has(c.id));
 
   // A posting goal for the week, as Buffer does it: small, visible, theirs.
@@ -229,6 +233,7 @@ export function SocialScreen() {
             clips={clipList}
             episodes={episodes}
             used={usedClips}
+            usedEpisodes={usedEpisodes}
             onClip={(c) => { const at = picking || undefined; setPicking(null); postClip(c, at); }}
             onEpisode={(r) => { const at = picking || undefined; setPicking(null); postEpisode(r, at); }}
             onPhoto={(ph) => { const at = picking || undefined; setPicking(null); setTargetAt(at); setTarget({ kind: "photo", id: 0, title: ph.title, storageKey: ph.storageKey, preview: ph.preview }); }}
@@ -423,7 +428,13 @@ function Calendar({ posts, slots, onOpen, onSlot, onMove, onRemove }: { posts: P
   );
 }
 
-function LibraryPicker({ initial = "clips", initialFile = null, clips, episodes, used, onClip, onEpisode, onPhoto, onVideo }: { initial?: "clips" | "episodes" | "upload"; initialFile?: File | null; clips: ClipRow[]; episodes: RecordingRow[]; used: Map<number, "Scheduled" | "Posted">; onClip: (c: ClipRow) => void; onEpisode: (r: RecordingRow) => void; onPhoto: (p: { storageKey: string; preview: string; title: string }) => void; onVideo: (id: number) => void }) {
+/** Posted or Scheduled, under the title: on top of the video, Safari paints the video over it as you scroll. */
+function UsedTag({ state }: { state?: "Scheduled" | "Posted" }) {
+  if (!state) return null;
+  return <span className={`mx-2 mt-2 inline-flex w-fit items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-bold text-white ${state === "Scheduled" ? "bg-[#053877]" : "bg-emerald-500"}`}><Check className="h-2.5 w-2.5" /> {state}</span>;
+}
+
+function LibraryPicker({ initial = "clips", initialFile = null, clips, episodes, used, usedEpisodes, onClip, onEpisode, onPhoto, onVideo }: { initial?: "clips" | "episodes" | "upload"; initialFile?: File | null; clips: ClipRow[]; episodes: RecordingRow[]; used: Map<number, "Scheduled" | "Posted">; usedEpisodes: Map<number, "Scheduled" | "Posted">; onClip: (c: ClipRow) => void; onEpisode: (r: RecordingRow) => void; onPhoto: (p: { storageKey: string; preview: string; title: string }) => void; onVideo: (id: number) => void }) {
   const [kind, setKind] = useState<"clips" | "episodes" | "upload">(initial);
   const { toast } = useToast();
   const [pct, setPct] = useState<number | null>(null);
@@ -473,8 +484,8 @@ function LibraryPicker({ initial = "clips", initialFile = null, clips, episodes,
               <button key={c.id} type="button" onClick={() => onClip(c)} className="group flex min-w-0 flex-col overflow-hidden rounded-xl border border-border text-left hover:border-[#053877]/50" data-testid={`social-pick-clip-${c.id}`}>
                 <span className="relative block aspect-[4/5] bg-black">
                   <video src={`${c.verticalUrl || c.squareUrl || c.url}#t=1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />
-                  {used.has(c.id) && <span className={`absolute left-1.5 top-1.5 inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[9px] font-bold text-white ${used.get(c.id) === "Scheduled" ? "bg-[#053877]" : "bg-emerald-500"}`}><Check className="h-2.5 w-2.5" /> {used.get(c.id)}</span>}
                 </span>
+                <UsedTag state={used.get(c.id)} />
                 <span className="line-clamp-2 p-2 text-xs font-semibold leading-snug">{c.title}</span>
               </button>
             ))}
@@ -485,6 +496,7 @@ function LibraryPicker({ initial = "clips", initialFile = null, clips, episodes,
           {episodes.map((r) => (
             <button key={r.id} type="button" onClick={() => onEpisode(r)} className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-border text-left hover:border-[#053877]/50" data-testid={`social-pick-episode-${r.id}`}>
               <span className="relative block aspect-video bg-black"><video src={`/api/host/recordings/${r.id}/video#t=8`} preload="metadata" muted playsInline className="h-full w-full object-cover" /></span>
+              <UsedTag state={usedEpisodes.get(r.id)} />
               <span className="line-clamp-2 p-2 text-xs font-semibold leading-snug">{r.title || "Session"}</span>
             </button>
           ))}
