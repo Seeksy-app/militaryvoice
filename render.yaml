@@ -10,8 +10,10 @@ services:
     # Starter's 512MB ran out on a full episode (24 Sep 2026), and Standard's
     # 2GB on two caption renders at once (27 Sep). Clips render here since
     # then, and encoding is CPU-bound: more CPUs is what makes them faster.
+    # 4c-8g ($175/mo) sat mostly idle after the Marathon, so 2c-4g since
+    # 6 Nov 2026; move it up in the dashboard for big event weeks.
     # Keep this in step with the dashboard, or a sync puts it back.
-    plan: 4c-8g
+    plan: 2c-4g
     branch: main
     autoDeploy: true
     buildFilter:
