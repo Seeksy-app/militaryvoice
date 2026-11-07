@@ -11,6 +11,10 @@
       "destination": "/radio-plan.html"
     },
     {
+      "source": "/radio-sponsors",
+      "destination": "/radio-sponsors.html"
+    },
+    {
       "source": "/api/(.*)",
       "destination": "/api"
     },
