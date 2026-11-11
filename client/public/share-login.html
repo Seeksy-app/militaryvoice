@@ -1,0 +1,74 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<meta name="referrer" content="no-referrer">
+<title>Share your login · MilitaryVoices.ai</title>
+<style>
+  :root{--navy:#000741;--blue:#053877;--gold:#F0A71F;--ink:#0f172a;--mute:#475569;--line:#e2e8f0}
+  *{box-sizing:border-box}
+  body{margin:0;min-height:100vh;background:linear-gradient(160deg,#05175a,#000741 70%);font:16px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;color:var(--ink);display:flex;align-items:center;justify-content:center;padding:24px 16px}
+  .card{width:100%;max-width:460px;background:#fff;border-radius:20px;padding:28px 26px 24px;box-shadow:0 24px 70px rgba(0,0,0,.45)}
+  .brand{display:flex;align-items:center;gap:10px;font-weight:800;letter-spacing:.14em;font-size:12px;color:var(--blue);margin-bottom:18px}
+  .brand img{height:22px}
+  h1{margin:0 0 8px;font-size:24px;line-height:1.2;letter-spacing:-.01em;text-wrap:balance}
+  p{margin:0 0 14px;color:var(--mute)}
+  .safe{background:#f1f5f9;border-radius:12px;padding:12px 14px;font-size:14px;color:var(--ink);margin:16px 0 18px}
+  .safe b{display:block;margin-bottom:2px}
+  label{display:block;font-weight:600;font-size:14px;margin:14px 0 6px}
+  input{width:100%;font:inherit;padding:12px 14px;border:1.5px solid var(--line);border-radius:12px;background:#fff}
+  input:focus{outline:none;border-color:var(--blue);box-shadow:0 0 0 3px rgba(5,56,119,.15)}
+  .pw{position:relative}
+  .pw button{position:absolute;right:8px;top:50%;transform:translateY(-50%);border:0;background:none;color:var(--blue);font-weight:600;font-size:13px;cursor:pointer;padding:6px 8px}
+  .go{width:100%;margin-top:20px;border:0;border-radius:99px;background:var(--blue);color:#fff;font:inherit;font-weight:700;padding:14px;cursor:pointer}
+  .go:disabled{opacity:.6;cursor:default}
+  .err{color:#b91c1c;font-size:14px;margin-top:12px;min-height:1em}
+  .done{text-align:center;padding:12px 0}
+  .done .tick{width:54px;height:54px;border-radius:50%;background:#dcfce7;color:#15803d;display:inline-flex;align-items:center;justify-content:center;font-size:28px;margin-bottom:10px}
+  .small{font-size:12.5px;color:var(--mute);text-align:center;margin:16px 0 0}
+</style>
+</head>
+<body>
+<main class="card" id="card">
+  <div class="brand"><img src="/logo-wave.png" alt="">MILITARYVOICES.AI</div>
+  <div id="view"><p>One moment…</p></div>
+</main>
+<script>
+(function(){
+  var token = location.pathname.split("/").filter(Boolean).pop() || "";
+  var view = document.getElementById("view");
+  function esc(s){return String(s).replace(/[&<>"]/g,function(c){return {"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+  function invalid(){ view.innerHTML = '<h1>This link isn’t working</h1><p>Please tell us and we’ll send you a new one: hello@militaryvoices.ai</p>'; }
+  fetch("/api/share-login/" + encodeURIComponent(token), {cache:"no-store"}).then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(function(info){
+    var who = info.name ? "Hi " + esc(info.name) + ", " : "";
+    var svc = esc(info.service);
+    view.innerHTML =
+      '<h1>' + who + 'share your ' + svc + ' login</h1>' +
+      '<p>This is so we can copy your episodes over to MilitaryVoices.ai.</p>' +
+      '<div class="safe"><b>Private and safe</b>Only the MilitaryVoices.ai team can read this, and we delete it when we’re done. We won’t close or change your ' + svc + ' account, and we won’t switch anything on without your OK. You can change your password afterwards.</div>' +
+      '<form id="f" autocomplete="off">' +
+        '<label for="e">' + svc + ' email</label><input id="e" type="email" required autocomplete="off" autocapitalize="off" spellcheck="false">' +
+        '<label for="p">' + svc + ' password</label><div class="pw"><input id="p" type="password" required autocomplete="off" spellcheck="false"><button type="button" id="t">Show</button></div>' +
+        '<button class="go" id="go" type="submit">Send it to the team</button>' +
+        '<div class="err" id="err" role="alert"></div>' +
+      '</form>' +
+      '<p class="small">Sent over a secure connection and stored encrypted.</p>';
+    document.getElementById("t").onclick = function(){ var p=document.getElementById("p"); var show=p.type==="password"; p.type=show?"text":"password"; this.textContent=show?"Hide":"Show"; };
+    document.getElementById("f").onsubmit = function(ev){
+      ev.preventDefault();
+      var go=document.getElementById("go"), err=document.getElementById("err"); err.textContent=""; go.disabled=true; go.textContent="Sending…";
+      fetch("/api/share-login/" + encodeURIComponent(token), {method:"POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify({loginEmail: document.getElementById("e").value, password: document.getElementById("p").value})})
+        .then(function(r){ return r.json().then(function(j){ return {ok:r.ok, j:j}; }); })
+        .then(function(x){
+          if(!x.ok){ err.textContent = x.j.message || "That didn’t go through. Please try again."; go.disabled=false; go.textContent="Send it to the team"; return; }
+          view.innerHTML = '<div class="done"><div class="tick">✓</div><h1>Thank you</h1><p>We have it. We’ll be in touch today with what happens next.</p></div>';
+        })
+        .catch(function(){ err.textContent="That didn’t go through. Please try again."; go.disabled=false; go.textContent="Send it to the team"; });
+    };
+  }).catch(invalid);
+})();
+</script>
+</body>
+</html>

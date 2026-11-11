@@ -141,6 +141,7 @@ import { registerPlatformAnalytics } from "./platformAnalytics.js";
 import { registerWorldLabs } from "./worldlabs.js";
 import { registerSite } from "./site.js";
 import { registerGtm } from "./gtm.js";
+import { registerShareLogin } from "./shareLogin.js";
 import { orgMemberEmails, registerOrgs } from "./orgs.js";
 import { registerProspects } from "./prospects.js";
 import { registerTravel } from "./travel.js";
@@ -6841,6 +6842,7 @@ export function registerRoutes(app: Express): void {
   registerWorldLabs(app, requireAdmin);
   registerSite(app);
   registerGtm(app, requireAdmin);
+  registerShareLogin(app, requireAdmin);
   registerHealth(app, requireAdmin);
   registerNotices(app, requireAdmin, requireHostSession);
   registerSurvey(app, requireAdmin);
