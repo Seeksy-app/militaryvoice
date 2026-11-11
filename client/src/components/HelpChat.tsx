@@ -57,7 +57,8 @@ function linkify(text: string) {
 }
 
 // Not on the studio or the watch page, where it would sit on the picture.
-const HIDDEN_ON = ["/promo", "/studio", "/watch", "/podcast/", "/magazine", "/booth", "/dx/", "/radio"];
+// /admin has its own Ask Alex button (AdminChatDock), in the same corner.
+const HIDDEN_ON = ["/promo", "/studio", "/watch", "/podcast/", "/magazine", "/booth", "/dx/", "/radio", "/admin"];
 
 const OPENER: Msg = {
   role: "assistant",

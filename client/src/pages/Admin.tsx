@@ -56,7 +56,7 @@ import { BonusCreditsButton } from "@/components/BonusCredits";
 import { SponsorLeads } from "@/components/SponsorLeads";
 import { SponsorFinder } from "@/components/SponsorFinder";
 import { ShowSponsorsCard } from "@/components/ShowSponsors";
-import { AdminChat } from "@/components/AdminChat";
+import { AdminChat, AdminChatDock } from "@/components/AdminChat";
 import { AdminMail } from "@/components/AdminMail";
 import { ContactProfile } from "@/components/AdminContact";
 import { AdminProjects } from "@/components/AdminProjects";
@@ -5252,6 +5252,7 @@ export default function Admin({ tab, eventId: eventParam }: { tab?: string; even
               </div>
             </Tabs>
           )}
+          {!eventOnly && <AdminChatDock eventId={selectedEventId} />}
         </div>
       )}
     </div>

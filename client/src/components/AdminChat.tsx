@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { Send, Loader2, Check, Pencil } from "lucide-react";
+import { Send, Loader2, Check, Pencil, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
@@ -162,5 +162,49 @@ export function AdminChat({ eventId }: { eventId: number | null }) {
         </Button>
       </form>
     </div>
+  );
+}
+
+/**
+ * Alex, one press away on every admin page (11 Nov: "an admin chat button so I can talk to you").
+ * The same chat as Inbox → Ask Alex, kept mounted while closed so the conversation survives
+ * moving between sections. It takes the public help bubble's corner on /admin.
+ */
+export function AdminChatDock({ eventId }: { eventId: number | null }) {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+  return (
+    <>
+      {!open && (
+        <button
+          type="button"
+          onClick={() => setOpen(true)}
+          className="fixed bottom-5 right-4 z-50 inline-flex items-center gap-2 rounded-full bg-[#053877] py-2 pl-2 pr-4 text-sm font-semibold text-white shadow-lg transition-transform hover:scale-[1.03] lg:right-5"
+          aria-label="Ask Alex"
+          data-testid="button-admin-chat"
+        >
+          <img src="/alex.jpg" alt="" className="h-8 w-8 rounded-full object-cover ring-2 ring-white/40" />
+          Ask Alex
+        </button>
+      )}
+      <div className={open ? "fixed bottom-5 right-4 z-50 w-[min(440px,calc(100vw-2rem))] rounded-2xl shadow-2xl lg:right-5" : "hidden"} data-testid="admin-chat-dock">
+        <div className="relative">
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            className="absolute right-3 top-3 z-10 inline-flex h-8 w-8 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground"
+            aria-label="Close chat"
+            data-testid="button-admin-chat-close"
+          >
+            <X className="h-4 w-4" />
+          </button>
+          <AdminChat eventId={eventId} />
+        </div>
+      </div>
+    </>
   );
 }
