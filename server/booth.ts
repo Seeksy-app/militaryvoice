@@ -179,7 +179,7 @@ export function registerBooth(app: Express): void {
     const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     const origin = `https://${req.get("host")}`;
     const url = `${origin}/radio${showId ? `?show=${showId}` : ""}`;
-    const title = n.host ? `${n.show} · MilitaryVoices Radio` : "MilitaryVoices Radio · Live From Anywhere";
+    const title = showId && n.host ? `${n.show} · MilitaryVoices Radio` : "MilitaryVoices Radio · Live From Anywhere";
     const img = `${origin}/og/radio.jpg?${showId ? `show=${showId}&` : ""}v=${Math.floor(Date.now() / 600_000)}`;
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "public, max-age=60, s-maxage=120");
