@@ -1,7 +1,7 @@
 import type { IconType } from "react-icons";
 import { SiApplepodcasts, SiIheartradio, SiPocketcasts, SiPodcastindex, SiSpotify, SiYoutubemusic } from "react-icons/si";
 import { FaAmazon } from "react-icons/fa";
-import { AlexPodcastGuide } from "@/components/AlexPodcastGuide";
+import { PodcastSetup, type SetupNext } from "@/components/PodcastSetup";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -40,12 +40,6 @@ export function PodcastHosting() {
   // Their real feed (an Apple link from sign-up resolved to the feed behind it), from Alex's intake.
   const { data: intake } = useQuery<{ known: { rss: string } }>({ queryKey: ["/api/host/podcast-intake"], queryFn: async () => (await apiRequest("GET", "/api/host/podcast-intake")).json() });
   const feedUrl = intake?.known.rss || profile?.rssUrl || "";
-  // Alex's plan can move a show here in one press.
-  const moveIn = useMutation({
-    mutationFn: async (feedUrl: string) => (await apiRequest("POST", "/api/host/hosting/import", { feedUrl })).json() as Promise<{ episodes: number }>,
-    onSuccess: (r) => { toast({ title: "Your show is here", description: `${r.episodes} episode${r.episodes === 1 ? "" : "s"} moved over. Next: turn on the redirect at your old host so your subscribers follow.` }); refresh(); },
-    onError: (e: Error) => toast({ title: "Couldn't move it", description: e.message.replace(/^\d+:\s*/, ""), variant: "destructive" }),
-  });
   // While an episode's audio is being made, check back every few seconds.
   const q = useQuery<Resp>({ queryKey: KEY, queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json(), refetchInterval: (qq) => ((qq.state.data as Resp | undefined)?.shows.some((x) => x.episodes.some((e) => e.audioJob === "queued" || e.audioJob === "running")) ? 5000 : false) });
   const refresh = () => { void qc.invalidateQueries({ queryKey: KEY }); void qc.invalidateQueries({ queryKey: ["/api/host/podcast-stats"] }); };
@@ -62,6 +56,8 @@ export function PodcastHosting() {
   const [focus, setFocus] = useState<"" | "title" | "description" | "ownerEmail">("");
   const [adding, setAdding] = useState(false);
   const [newShow, setNewShow] = useState(false);
+  // The setup screens stay up while a new show is made, even though the list now has one in it.
+  const [inSetup, setInSetup] = useState(false);
   const [editEp, setEditEp] = useState<Ep | null>(null);
   // From the Library ("Add to my podcast"): ?ep=<id> opens that episode, ready for its words.
   const [wantEp, setWantEp] = useState<number | null>(() => { try { return Number(new URLSearchParams(window.location.search).get("ep")) || null; } catch { return null; } });
@@ -78,38 +74,22 @@ export function PodcastHosting() {
   if (q.isLoading) return <div className="flex justify-center py-20"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
   const shows = q.data?.shows ?? [];
 
-  if (!shows.length) {
+  const finishSetup = (next: SetupNext, id: number | null) => {
+    setInSetup(false);
+    refresh();
+    if (id) setOpenId(id);
+    if (next === "rooms") { window.location.assign("/host/dashboard/rooms"); return; }
+    if (next === "zoom") { window.location.assign("/help/zoom"); return; }
+    go("episodes");
+    if (next === "upload") setAdding(true);
+  };
+
+  if (!shows.length || inSetup) {
     return (
       <section className="mt-2" data-testid="podcast-hosting">
-        {/* Their show first (the one from sign-up); Alex's questions open over it, and the plan sits under it (7 Oct). */}
-        {feedUrl && <YourShowElsewhere name={profile?.podcastName ?? ""} rss={feedUrl} onMoved={refresh} />}
-        <AlexPodcastGuide onMove={(rss) => moveIn.mutate(rss)} onStart={() => create.mutate()} moving={moveIn.isPending} />
-        <div className="rounded-2xl border border-border bg-card p-8 text-center shadow-sm">
-          <IconTile icon={Podcast} className="mx-auto" />
-          <h1 className="mt-4 text-2xl font-bold tracking-tight">Host your podcast on MilitaryVoices</h1>
-          <p className="mx-auto mt-2 max-w-xl text-balance text-muted-foreground">Your show's feed for Apple Podcasts, Spotify and every other app, with your downloads counted the way sponsors count them, and shown on your profile.</p>
-          <ul className="mx-auto mt-5 grid max-w-2xl gap-3 text-left text-sm sm:grid-cols-3">
-            {[
-              [Upload, "Publish from anywhere", "Upload the audio or the video, or use a recording from your Library."],
-              [Radio, "One feed, every app", "List it on Apple, Spotify and the rest once; new episodes go out on their own."],
-              [BarChart3, "Downloads sponsors trust", "Counted once per listener a day, bots left out, by app and episode."],
-            ].map(([I, t, d]) => {
-              const Icon = I as typeof Upload;
-              return (
-                <li key={t as string} className="rounded-xl border border-border p-3">
-                  <Icon className="h-4 w-4 text-[#053877] dark:text-[#8fb5e8]" />
-                  <p className="mt-1.5 font-semibold">{t as string}</p>
-                  <p className="text-xs text-muted-foreground">{d as string}</p>
-                </li>
-              );
-            })}
-          </ul>
-          <Button onClick={() => create.mutate()} disabled={create.isPending} className="mt-6 h-11 gap-2 rounded-full bg-[#053877] px-6 text-white hover:bg-[#0a4a99]" data-testid="hosting-start">
-            {create.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />} Set up your show
-          </Button>
-          <p className="mt-2 text-xs text-muted-foreground">Free while you're a MilitaryVoices podcaster.</p>
-        </div>
-        <ImportShow onDone={refresh} initialUrl={feedUrl} />
+        {/* Their show first (the one from sign-up): one press to move it here. Then the way in: have one, or starting one. */}
+        {feedUrl && !inSetup && <YourShowElsewhere name={profile?.podcastName ?? ""} rss={feedUrl} onMoved={refresh} />}
+        <PodcastSetup initialFeed={feedUrl} onImported={refresh} onCreating={() => setInSetup(true)} onFinish={finishSetup} />
       </section>
     );
   }

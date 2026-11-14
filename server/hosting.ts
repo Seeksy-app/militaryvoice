@@ -12,6 +12,7 @@ import { sendPodcastOwnerCodeEmail } from "./email.js";
 import { isUploadPostConfigured, publishVideo } from "./uploadPost.js";
 import { toTrash } from "./trash.js";
 import { XMLParser } from "fast-xml-parser";
+import Anthropic from "@anthropic-ai/sdk";
 import { waitUntil } from "@vercel/functions";
 import { isListenNotesConfigured, submitToListenNotes, spendListenNotes } from "./listenNotes.js";
 import { bioPages, hostPosts, hostedShows, hostedEpisodes, hostedDownloads, type HostedShowRow, type HostedEpisodeRow, type CleanResult, type PodcastStatsData } from "../shared/schema.js";
@@ -638,6 +639,84 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
     const profile = await storage.getProfileByEmail(email);
     const youtubeReady = !!profile?.uploadPostUsername && /youtube/i.test(profile.socialAccounts ?? "");
     res.json({ shows: out, categories: CATEGORIES, youtubeReady });
+  });
+
+  // ---- Podcast setup (15 Nov 2026): a new show starts from five plain answers ----------------------
+  // Claude writes the title ideas and the description from what they said; Ideogram draws three covers with
+  // the real title on them. Both are capped per person per day, so a stuck button can't run up a bill.
+  const setupRuns = new Map<string, number[]>();
+  const overLimit = (key: string, max: number) => {
+    const t = Date.now();
+    const hits = (setupRuns.get(key) ?? []).filter((x) => t - x < 24 * 3600_000);
+    if (hits.length >= max) return true;
+    setupRuns.set(key, [...hits, t]);
+    return false;
+  };
+
+  app.post("/api/host/hosting/setup/write", requireHostSession, async (req, res) => {
+    const email = emailOf(req);
+    const a = (req.body?.answers ?? {}) as Record<string, unknown>;
+    const clip = (k: string, n: number) => String(a[k] ?? "").trim().slice(0, n);
+    const about = clip("about", 800);
+    if (about.length < 8) return res.status(400).json({ message: "Tell us a little about your show first." });
+    if (overLimit(`w:${email}`, 20)) return res.status(429).json({ message: "That's plenty for today. Try again tomorrow." });
+    const profile = await storage.getProfileByEmail(email).catch(() => undefined);
+    const feel = Array.isArray(a.feel) ? (a.feel as unknown[]).map((x) => String(x).slice(0, 30)).slice(0, 4).join(", ") : "";
+    try {
+      const client = new Anthropic();
+      const r = await client.messages.create({
+        model: "claude-sonnet-5",
+        max_tokens: 700,
+        system: `You name and describe podcasts for MilitaryVoices.ai, a platform for military and veteran creators. From the host's own words, write three title ideas and one description.
+Titles: 2 to 5 words, easy to say, easy to remember. Different from each other. Do not put "podcast" in them unless it is natural.
+Description: two to four plain sentences, under 500 characters, in the host's voice ("we" or "I" is fine). Say what the show is, who it is for, and what a listener gets.
+Use only what they told you. Invent no guests, ranks, branches, awards, numbers or claims. 8th-grade reading level. No em dashes. No hype words like "journey", "delve" or "unlock".
+Return JSON only: {"titles":["","",""],"description":""}`,
+        messages: [{ role: "user", content: `What the show is about: ${about}\nWho it is for: ${clip("who", 300) || "not said"}\nWho is talking: ${clip("hosts", 300) || profile?.hostName || "not said"}\nHow often: ${clip("often", 60) || "not said"}\nThe feel: ${feel || "not said"}` }],
+      });
+      const text = r.content.map((c) => ("text" in c ? c.text : "")).join("");
+      const json = JSON.parse(text.slice(text.indexOf("{"), text.lastIndexOf("}") + 1)) as { titles?: unknown; description?: unknown };
+      const titles = (Array.isArray(json.titles) ? json.titles : []).map((t) => String(t).replace(/^["']|["']$/g, "").trim().slice(0, 80)).filter(Boolean).slice(0, 3);
+      const description = String(json.description ?? "").trim().slice(0, 900);
+      if (!titles.length || !description) throw new Error("empty");
+      res.json({ titles, description });
+    } catch (err) {
+      console.error("Podcast setup write failed:", (err as Error).message);
+      res.status(502).json({ message: "Couldn't write that just now. Try again, or type your own." });
+    }
+  });
+
+  app.post("/api/host/hosting/setup/artwork", requireHostSession, async (req, res) => {
+    const email = emailOf(req);
+    const title = String(req.body?.title ?? "").replace(/["\n\r]/g, " ").trim().slice(0, 60);
+    const about = String(req.body?.about ?? "").replace(/["\n\r]/g, " ").trim().slice(0, 200);
+    if (!title) return res.status(400).json({ message: "Pick a name first." });
+    if (!process.env.FAL_KEY) return res.status(503).json({ message: "Cover ideas aren't switched on yet. You can upload your own." });
+    if (overLimit(`a:${email}`, 6)) return res.status(429).json({ message: "That's all the cover ideas for today. You can upload your own." });
+    try {
+      const r = await fetch("https://fal.run/fal-ai/ideogram/v3", {
+        method: "POST", headers: { Authorization: `Key ${process.env.FAL_KEY}`, "Content-Type": "application/json" }, signal: AbortSignal.timeout(80_000),
+        body: JSON.stringify({
+          prompt: `Square podcast cover. The title "${title.toUpperCase()}" in large, bold, clean letters, spelled exactly like that, and no other words anywhere. A simple, strong emblem that suits a show about: ${about || "military and veteran stories"}. Deep navy, gold and cream, flat, bold, professional and high contrast, with plenty of space around the letters.`,
+          image_size: { width: 1536, height: 1536 }, rendering_speed: "TURBO", num_images: 3, expand_prompt: false,
+        }),
+      });
+      const j = (await r.json().catch(() => ({}))) as { images?: { url: string }[] };
+      if (!r.ok || !j.images?.length) throw new Error(`fal ${r.status}`);
+      const tag = crypto.createHash("sha1").update(email).digest("hex").slice(0, 8);
+      const options: string[] = [];
+      const made = j.images.slice(0, 3);
+      for (let i = 0; i < made.length; i++) {
+        const im = made[i];
+        const raw = Buffer.from(await (await fetch(im.url, { signal: AbortSignal.timeout(30_000) })).arrayBuffer());
+        const img = await sharp(raw).resize(1500, 1500, { fit: "cover" }).jpeg({ quality: 90 }).toBuffer();
+        options.push(await uploadPhoto(`podcast-art/draft-${tag}-${Date.now()}-${i}.jpg`, img, "image/jpeg"));
+      }
+      res.json({ options });
+    } catch (err) {
+      console.error("Podcast setup art failed:", (err as Error).message);
+      res.status(502).json({ message: "Couldn't make covers just now. You can try again or upload your own." });
+    }
   });
 
   // A show: new, with what we already know about them filled in.
