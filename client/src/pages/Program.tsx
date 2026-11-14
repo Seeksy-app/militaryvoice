@@ -14,7 +14,7 @@ import { StageGrid, useStageRoom } from "@/components/StageView";
 // once ready to be filmed. ?eventId=N without a token previews the cards;
 // add &at=<ISO time> to see any moment of the day.
 
-type Booking = { id: number; show: string; host: string; photo: string; startAtUtc: string; endAtUtc: string; onAirAtUtc: string; offAirAtUtc: string };
+type Booking = { id: number; show: string; host: string; photo: string; mediaUrl?: string; startAtUtc: string; endAtUtc: string; onAirAtUtc: string; offAirAtUtc: string };
 type Program = { eventId: number; day: string; startAtUtc: string; endAtUtc: string; fillerUrl: string; bookings: Booking[] };
 
 const ET = "America/New_York";
@@ -44,6 +44,27 @@ function Card({ eyebrow, title, sub, photo, foot }: { eyebrow: string; title: st
       </div>
       <p className="absolute bottom-10 left-24 text-xl font-bold uppercase tracking-[0.18em] text-white/60">MilitaryVoices Radio · Live From Anywhere · M–F 7 am – 10 pm ET</p>
     </div>
+  );
+}
+
+/**
+ * A recorded episode rolling in its slot: the file plays from wherever the clock is (so every listener
+ * hears the same moment), and when it ends the thank-you card takes over until the slot closes.
+ */
+function Replay({ b, now, muted }: { b: Booking; now: number; muted: boolean }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  const [ended, setEnded] = useState(false);
+  const offset = Math.max(0, (now - Date.parse(b.onAirAtUtc)) / 1000);
+  const place = () => { const v = ref.current; if (v && Math.abs(v.currentTime - offset) > 2) v.currentTime = offset; };
+  useEffect(() => { setEnded(false); }, [b.id]);
+  // React sets `muted` only when the element is made, so a listener's tap has to reach the element itself.
+  useEffect(() => { const v = ref.current; if (v) { v.muted = muted; if (!muted) v.play().catch(() => undefined); } }, [muted, ended]);
+  if (ended) return <Card eyebrow="Thank you for listening" title={b.show} sub={`with ${b.host}`} photo={b.photo} />;
+  return (
+    <>
+      <video ref={ref} src={b.mediaUrl} autoPlay playsInline muted={muted} onLoadedMetadata={place} onEnded={() => setEnded(true)} className="absolute inset-0 h-full w-full bg-black object-contain" />
+      <div className="absolute bottom-8 left-8 rounded-2xl bg-[#000741]/85 px-7 py-4 text-3xl font-bold text-white">{b.show} · with {b.host}</div>
+    </>
   );
 }
 
@@ -94,8 +115,9 @@ export default function Program() {
   const nextLine = next ? `Up next at ${hm(next.startAtUtc)}: ${next.show}` : "Back weekdays at 7 am Eastern";
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-[#000741]">
-      {phase === "live" && tiles.length > 0 && <StageGrid tiles={tiles} meta={{ status: "Live" }} caption={caption} />}
-      {phase === "live" && tiles.length === 0 && <Card eyebrow="Live now" title={current!.show} sub={`with ${current!.host}`} photo={current!.photo} foot="Joining in a moment" />}
+      {phase === "live" && !current!.mediaUrl && tiles.length > 0 && <StageGrid tiles={tiles} meta={{ status: "Live" }} caption={caption} />}
+      {phase === "live" && current!.mediaUrl && <Replay b={current!} now={now} muted={muted} />}
+      {phase === "live" && !current!.mediaUrl && tiles.length === 0 && <Card eyebrow="Live now" title={current!.show} sub={`with ${current!.host}`} photo={current!.photo} foot="Joining in a moment" />}
       {phase === "intro" && <Card eyebrow="Coming up" title={current!.show} sub={`with ${current!.host}`} photo={current!.photo} foot={`Live in ${mmss(Date.parse(current!.onAirAtUtc) - now)}`} />}
       {phase === "outro" && <Card eyebrow="Thank you" title={current!.host} sub={current!.show} photo={current!.photo} foot={nextLine} />}
       {phase === "filler" && (program.data?.fillerUrl
@@ -111,7 +133,7 @@ export default function Program() {
           <span className="flex items-center gap-8 rounded-full bg-[#F0A71F] px-28 py-16 text-[8rem] font-black leading-none text-[#1a1200] shadow-2xl">▶ Tap to listen</span>
         </button>
       )}
-      {phase === "live" && (
+      {phase === "live" && !current!.mediaUrl && (
         <div className="pointer-events-none absolute left-6 top-5 flex items-center gap-2 rounded-full bg-[#ED1C24] px-4 py-1.5">
           <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-white" />
           <span className="text-sm font-bold uppercase tracking-[0.14em] text-white">Live</span>

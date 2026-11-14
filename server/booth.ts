@@ -12,6 +12,7 @@ import { getAdminEmail, getSessionEmail } from "./session.js";
 import { isLiveKitConfigured, publicLiveKitUrl, roomName, studioToken } from "./livekit.js";
 import { dxEventIds } from "./digitalExperience.js";
 import { buildShareCard } from "./shareCard.js";
+import { signedRecordingUrl } from "./recordingStorage.js";
 import type { EventRow, SignupRow } from "../shared/schema.js";
 
 /** How early the booth opens, and how long after their end it stays open. */
@@ -88,10 +89,13 @@ export function registerBooth(app: Express): void {
       startAtUtc: ev.startAtUtc,
       endAtUtc: new Date(ms(ev.startAtUtc) + ev.durationHours * 3600_000).toISOString(),
       fillerUrl: (await storage.getSetting("dx:filler-url")) ?? "",
-      bookings: list.map((s) => {
+      bookings: await Promise.all(list.map(async (s) => {
         const t = bookingTimes(ev!, s);
-        return { id: s.id, show: s.podcastName, host: s.hostName, photo: s.photoUrl, startAtUtc: new Date(t.start).toISOString(), endAtUtc: new Date(t.end).toISOString(), onAirAtUtc: new Date(t.onAirStart).toISOString(), offAirAtUtc: new Date(t.onAirEnd).toISOString() };
-      }),
+        // A recorded episode rolls in its slot: the page plays this file from where the clock is.
+        const key = s.showFormat === "prerecorded" ? s.recordingUrl.trim() : "";
+        const mediaUrl = key ? (/^https?:\/\//i.test(key) ? key : await signedRecordingUrl(key, 6 * 3600).catch(() => "")) : "";
+        return { id: s.id, show: s.podcastName, host: s.hostName, photo: s.photoUrl, mediaUrl, startAtUtc: new Date(t.start).toISOString(), endAtUtc: new Date(t.end).toISOString(), onAirAtUtc: new Date(t.onAirStart).toISOString(), offAirAtUtc: new Date(t.onAirEnd).toISOString() };
+      })),
     });
   });
 
