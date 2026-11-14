@@ -57,7 +57,7 @@ export function PodcastHosting() {
   const [adding, setAdding] = useState(false);
   const [newShow, setNewShow] = useState(false);
   // The setup screens stay up while a new show is made, even though the list now has one in it.
-  const [inSetup, setInSetup] = useState(() => { try { return new URLSearchParams(window.location.search).get("setup") === "1"; } catch { return false; } });
+  const [inSetup, setInSetup] = useState(() => { try { const u = new URL(window.location.href); const on = u.searchParams.get("setup") === "1"; if (on) { u.searchParams.delete("setup"); window.history.replaceState(null, "", u.pathname + u.search); } return on; } catch { return false; } });
   const [editEp, setEditEp] = useState<Ep | null>(null);
   // From the Library ("Add to my podcast"): ?ep=<id> opens that episode, ready for its words.
   const [wantEp, setWantEp] = useState<number | null>(() => { try { return Number(new URLSearchParams(window.location.search).get("ep")) || null; } catch { return null; } });

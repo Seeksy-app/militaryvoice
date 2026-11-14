@@ -694,21 +694,28 @@ Return JSON only: {"titles":["","",""],"description":""}`,
     if (!process.env.FAL_KEY) return res.status(503).json({ message: "Cover ideas aren't switched on yet. You can upload your own." });
     if (overLimit(`a:${email}`, 6)) return res.status(429).json({ message: "That's all the cover ideas for today. You can upload your own." });
     try {
-      const r = await fetch("https://fal.run/fal-ai/ideogram/v3", {
-        method: "POST", headers: { Authorization: `Key ${process.env.FAL_KEY}`, "Content-Type": "application/json" }, signal: AbortSignal.timeout(80_000),
-        body: JSON.stringify({
-          prompt: `Square podcast cover. The title "${title.toUpperCase()}" in large, bold, clean letters, spelled exactly like that, and no other words anywhere. A simple, strong emblem that suits a show about: ${about || "military and veteran stories"}. Deep navy, gold and cream, flat, bold, professional and high contrast, with plenty of space around the letters.`,
-          image_size: { width: 1536, height: 1536 }, rendering_speed: "TURBO", num_images: 3, expand_prompt: false,
-        }),
-      });
-      const j = (await r.json().catch(() => ({}))) as { images?: { url: string }[] };
-      if (!r.ok || !j.images?.length) throw new Error(`fal ${r.status}`);
+      // Three different looks, drawn at once, so the choice is a real one.
+      const looks = [
+        "A bold round badge or emblem that suits the show, with the title across it. Deep navy, gold and cream.",
+        "Huge, tight, poster-style title letters that fill most of the square, cream on deep navy, with one small gold detail. Minimal.",
+        "A strong flat illustration of a scene that suits the show, with the title in a clean banner. Deep red, navy and cream.",
+      ];
+      const made = await Promise.all(looks.map(async (look) => {
+        const r = await fetch("https://fal.run/fal-ai/ideogram/v3", {
+          method: "POST", headers: { Authorization: `Key ${process.env.FAL_KEY}`, "Content-Type": "application/json" }, signal: AbortSignal.timeout(80_000),
+          body: JSON.stringify({
+            prompt: `Square podcast cover. The title "${title.toUpperCase()}" in large, bold, clean letters, spelled exactly like that, and no other words anywhere. The show is about: ${about || "military and veteran stories"}. ${look} Flat, bold, professional, high contrast, plenty of space around the letters.`,
+            image_size: { width: 1536, height: 1536 }, rendering_speed: "TURBO", num_images: 1, expand_prompt: false,
+          }),
+        });
+        const j = (await r.json().catch(() => ({}))) as { images?: { url: string }[] };
+        if (!r.ok || !j.images?.[0]) throw new Error(`fal ${r.status}`);
+        return j.images[0].url;
+      }));
       const tag = crypto.createHash("sha1").update(email).digest("hex").slice(0, 8);
       const options: string[] = [];
-      const made = j.images.slice(0, 3);
       for (let i = 0; i < made.length; i++) {
-        const im = made[i];
-        const raw = Buffer.from(await (await fetch(im.url, { signal: AbortSignal.timeout(30_000) })).arrayBuffer());
+        const raw = Buffer.from(await (await fetch(made[i], { signal: AbortSignal.timeout(30_000) })).arrayBuffer());
         const img = await sharp(raw).resize(1500, 1500, { fit: "cover" }).jpeg({ quality: 90 }).toBuffer();
         options.push(await uploadPhoto(`podcast-art/draft-${tag}-${Date.now()}-${i}.jpg`, img, "image/jpeg"));
       }
