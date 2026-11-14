@@ -133,6 +133,12 @@ export default function Program() {
           <span className="flex items-center gap-8 rounded-full bg-[#F0A71F] px-28 py-16 text-[8rem] font-black leading-none text-[#1a1200] shadow-2xl">▶ Tap to listen</span>
         </button>
       )}
+      {phase === "live" && next && (
+        <div className="pointer-events-none absolute bottom-8 right-8 z-10 max-w-[760px] rounded-2xl bg-[#000741]/85 px-7 py-4 text-white shadow-2xl ring-1 ring-white/15" data-testid="radio-coming-up">
+          <p className="text-xl font-extrabold uppercase tracking-[0.2em] text-[#F0A71F]">Coming up next · {hm(next.startAtUtc)} ET</p>
+          <p className="mt-1 truncate text-3xl font-bold">{next.show}</p>
+        </div>
+      )}
       {phase === "live" && !current!.mediaUrl && (
         <div className="pointer-events-none absolute left-6 top-5 flex items-center gap-2 rounded-full bg-[#ED1C24] px-4 py-1.5">
           <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-white" />
