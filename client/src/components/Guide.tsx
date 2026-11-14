@@ -196,7 +196,6 @@ export const HOME_TOUR: GuideStep[] = [
     { sel: '[data-testid="todo-strip"]', text: "The things you'll do most, one click each." },
   ] },
   { title: "Your files", at: [{ sel: '[data-testid="dashboard-files"]', text: "Everything you've made: your show and SmartLink, episodes, clips and posts." }] },
-  { title: "Create", at: [{ sel: '[data-testid="nav-create-post"]', text: "Make a post, turn a video into clips, or add an episode. It all starts here." }] },
 ];
 
 const HOME_KEY = "mv_tour_home";
