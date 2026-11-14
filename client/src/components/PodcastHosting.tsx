@@ -560,7 +560,9 @@ function MoveSubscribers({ h, onDone }: { h: Hosted; onDone: () => void }) {
             <p className="mt-1 text-sm text-muted-foreground">Your old feed forwards here{s.redirectCheckedAt ? ` (checked ${dateOf(s.redirectCheckedAt)})` : ""}. Keep your old host's account open for four weeks while every app catches up, then you can close it.</p>
           ) : (
             <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-sm">
-              <li>At your old host, find <b>Redirect feed</b>, <b>301 redirect</b> or <b>Move to a new host</b> (usually in the show's settings, under RSS or Distribution).</li>
+              {/buzzsprout\.com/i.test(s.importedFrom ?? "")
+                ? <li>In Buzzsprout, go to <b>Settings</b>, then <b>Podcast Settings</b>, then the <b>Redirect</b> tab.</li>
+                : <li>At your old host, find <b>Redirect feed</b>, <b>301 redirect</b> or <b>Move to a new host</b> (usually in the show's settings, under RSS or Distribution).</li>}
               <li>Paste your new feed address: <button type="button" onClick={() => navigator.clipboard.writeText(h.feedUrl).then(() => t2({ title: "Copied" }))} className="inline-flex items-center gap-1 rounded bg-muted px-1.5 py-0.5 font-mono text-xs hover:bg-muted/70">{h.feedUrl.replace(/^https:\/\//, "")} <Copy className="h-3 w-3" /></button></li>
               <li>Save, then press <b>Check the redirect</b>. Keep the old account open for four weeks while the apps catch up.</li>
             </ol>
