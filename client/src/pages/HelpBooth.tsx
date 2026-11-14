@@ -9,10 +9,10 @@ import { Radio } from "lucide-react";
  * in Booth.tsx; the pictures are of the booth itself (the demo booking), with
  * the page's clock moved to show each state of the top bar.
  */
-function Shot({ src, alt, caption }: { src: string; alt: string; caption?: string }) {
+function Shot({ src, alt, caption, narrow }: { src: string; alt: string; caption?: string; narrow?: boolean }) {
   return (
     <figure className="my-4">
-      <img src={src} alt={alt} loading="lazy" className="w-full rounded-xl border border-border" />
+      <img src={src} alt={alt} loading="lazy" className={`rounded-xl border border-border ${narrow ? "w-full max-w-[280px]" : "w-full"}`} />
       {caption && <figcaption className="mt-2 text-sm text-muted-foreground">{caption}</figcaption>}
     </figure>
   );
@@ -46,7 +46,7 @@ export default function HelpBooth() {
           <p>Your booth opens <strong>an hour before your time</strong>. Before then, it tells you when it opens.</p>
           <HelpStep k="a">Open your reminder email and press <strong>Enter your booth</strong>. Or sign in to your dashboard with the email you booked with.</HelpStep>
           <HelpStep k="b">In the menu on the left, press <strong>Booth</strong>.</HelpStep>
-          <Shot src="/help/booth/menu.png" alt="The dashboard menu on the left, with Booth outlined" caption="Booth is in the menu on the left, under Events." />
+          <Shot narrow src="/help/booth/menu.png" alt="The dashboard menu on the left, with Booth outlined" caption="Booth is in the menu on the left, under Events." />
           <p>Your time is also on your dashboard, under <strong>Coming up</strong>, with buttons to add it to your calendar.</p>
           <Shot src="/help/booth/coming-up.png" alt="The Coming up section of the dashboard with a MilitaryVoices Radio time" />
         </HelpSection>
