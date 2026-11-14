@@ -49,6 +49,60 @@ Search the help, or ask Alex: militaryvoices.ai/help.
 Your invite link and where going live goes are on the Rooms screen.
 Open Rooms
 
+=== MILITARYVOICES.AI PLATFORM · www.militaryvoices.ai/help/booth ===
+All help Help · MilitaryVoices Radio
+Your Radio booth: how to go on air
+Your booth is your small studio on MilitaryVoices Radio. Check your sound, watch the countdown, and talk. The station brings you on and off, so there is nothing to press to go live. It's radio, so your voice is what matters. Your camera is optional.
+1 Find your booth
+Your booth opens an hour before your time. Before then, it tells you when it opens.
+a Open your reminder email and press Enter your booth. Or sign in to your dashboard with the email you booked with.
+b In the menu on the left, press Booth.
+Booth is in the menu on the left, under Events. Your time is also on your dashboard, under Coming up, with buttons to add it to your calendar.
+2 Check your sound
+Be here 10 minutes before your time. The first screen is your check-in.
+a Press Microphone and pick the one you'll use. Headphones with a mic are best.
+b Your camera is optional. Leave it on or turn it off.
+c Check Your name, then press Enter my booth.
+No sound? Your browser needs your OK. Press the lock or camera icon in the address bar, allow the microphone for this site, then reload the page.
+3 Inside your booth
+The bar across the top is your clock. It counts down, then turns red when you're on air.
+Your show name is under it. You see and hear only your own booth, never the next show warming up.
+Microphone and Camera at the bottom turn them on or off.
+Leave (the red button at the bottom) takes you out of the booth. You don't press it to go on air.
+4 What the top bar says
+You don't have to do anything. The station runs on the clock, and the bar tells you where you are. In a 30-minute slot, the station's intro plays for the first 3 minutes, you're live for the next 24, and a short thank-you plays for the last 3. A 60-minute slot works the same way, with 54 minutes live. The pictures below are a 9:30 to 10:00 PM slot.
+Before your time. It counts down to when you're live, and tells you when the station's intro starts and when you go live.
+Your time starts. A 3-minute countdown runs while the station plays a short intro on its own. The bar is gold. Get ready, you're next.
+You're live. The bar turns red and says ON AIR, with your time left and when you're live until. Just talk.
+Five minutes left. Time to head toward your close.
+Two minutes left. Start wrapping up.
+The last 30 seconds. The bar turns white. Say your goodbye now. The station's outro is about to play.
+You're off air. The station plays a short thank-you. Stay as long as you like, or leave.
+All done. You can close the tab. Thank you!
+The station takes you off on the clock, so plan to finish before your time is up.
+5 Bring a guest
+A guest joins with a link, with no account. In your booth, press Copy guest link, next to your show name. You'll find the same button before your booth opens.
+a Send the link to your guest by text or email.
+b They open it, check their sound, and press Enter my booth.
+Ask them to be there 10 minutes early too.
+6 Tips
+Use headphones with a mic. They stop echo and make you sound closer.
+A wired connection or strong Wi-Fi is best. Close other apps that use your microphone.
+Pick a quiet room and silence your phone.
+Use an up-to-date Chrome or Safari.
+7 If something goes wrong
+The booth says it isn't open yet
+It opens an hour before your time. The page tells you the exact time. Come back then.
+You got disconnected
+You'll see You've left the booth. Press Go back in. It's there until 10 minutes after your time ends.
+It says to sign in
+Sign in with the same email you booked with. A guest uses the guest link they were sent instead.
+8 Help and contact
+Email us: hello@militaryvoices.ai. A person reads every message and writes back.
+Search the help, or ask Alex: militaryvoices.ai/help.
+Your booth and your times are on your dashboard.
+Open my dashboard
+
 === MILITARYVOICES.AI PLATFORM · www.militaryvoices.ai/help/library ===
 All help Help · Your Library
 Your Library: every episode and every clip
