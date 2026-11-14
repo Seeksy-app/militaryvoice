@@ -27,6 +27,7 @@ import HelpZoomStory from "@/pages/HelpZoomStory";
 import HelpPodcast from "@/pages/HelpPodcast";
 import HelpIndex from "@/pages/HelpIndex";
 import HelpRooms from "@/pages/HelpRooms";
+import HelpBooth from "@/pages/HelpBooth";
 import HelpLibrary from "@/pages/HelpLibrary";
 import HelpPostify from "@/pages/HelpPostify";
 import HelpAccount from "@/pages/HelpAccount";
@@ -127,6 +128,7 @@ function AppRouter() {
       <Route path="/help/zoom-story">{() => <HelpZoomStory />}</Route>
       <Route path="/help/podcast">{() => <HelpPodcast />}</Route>
       <Route path="/help/rooms">{() => <HelpRooms />}</Route>
+      <Route path="/help/booth">{() => <HelpBooth />}</Route>
       <Route path="/help/library">{() => <HelpLibrary />}</Route>
       <Route path="/help/postify">{() => <HelpPostify />}</Route>
       <Route path="/help/account">{() => <HelpAccount />}</Route>
