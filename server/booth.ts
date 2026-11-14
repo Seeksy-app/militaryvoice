@@ -11,6 +11,7 @@ import { storage } from "./storage.js";
 import { getAdminEmail, getSessionEmail } from "./session.js";
 import { isLiveKitConfigured, publicLiveKitUrl, roomName, studioToken } from "./livekit.js";
 import { dxEventIds } from "./digitalExperience.js";
+import { buildShareCard } from "./shareCard.js";
 import type { EventRow, SignupRow } from "../shared/schema.js";
 
 /** How early the booth opens, and how long after their end it stays open. */
@@ -113,6 +114,76 @@ export function registerBooth(app: Express): void {
       liveone: (await storage.getSetting("dx:liveone-url")) ?? "",
       bookings: list.map((s) => { const t = bookingTimes(ev, s); return { id: s.id, show: s.podcastName, host: s.hostName, photo: s.photoUrl, about: s.notes, startAtUtc: new Date(t.start).toISOString(), endAtUtc: new Date(t.end).toISOString() }; }),
     });
+  });
+
+  /**
+   * What the station is doing right now, for the share card and the link preview: the show on
+   * air, else the next one up today, else the plain station line. Names and times only.
+   */
+  async function radioNow(showId = 0): Promise<{ show: string; host: string; photo: string; label: string; line: string }> {
+    const plain = { show: "MilitaryVoices Radio", host: "", photo: "", label: "Weekdays 7 am – 10 pm ET", line: "The live station for military and veteran voices, weekdays 7 am to 10 pm ET." };
+    const et = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" });
+    const day = (iso: string) => new Date(iso).toLocaleDateString("en-US", { timeZone: "America/New_York", weekday: "long" });
+    // A shared show: "come and hear this one".
+    if (showId) {
+      const b = await bookingFor(showId);
+      if (b) {
+        const t = bookingTimes(b.ev, b.s);
+        const when = `${day(new Date(t.start).toISOString())} at ${et(new Date(t.start).toISOString())} ET`;
+        return { show: b.s.podcastName, host: b.s.hostName, photo: b.s.photoUrl ?? "", label: `Live ${when}`, line: `${b.s.podcastName}, with ${b.s.hostName}. Live on MilitaryVoices Radio ${when}.` };
+      }
+    }
+    const ev = await radioDay();
+    if (!ev) return plain;
+    const list = (await storage.listSignups(ev.id)).filter((s) => s.status !== "cancelled").sort((a, b) => a.slotIndex - b.slotIndex);
+    const now = Date.now();
+    for (const s of list) {
+      const t = bookingTimes(ev, s);
+      if (now >= t.start && now < t.end) return { show: s.podcastName, host: s.hostName, photo: s.photoUrl ?? "", label: "ON AIR NOW", line: `On air now: ${s.podcastName}, with ${s.hostName}. Listen live on MilitaryVoices Radio.` };
+    }
+    const next = list.find((s) => bookingTimes(ev, s).start > now);
+    if (next) {
+      const iso = new Date(bookingTimes(ev, next).start).toISOString();
+      return { show: next.podcastName, host: next.hostName, photo: next.photoUrl ?? "", label: `Up next ${et(iso)} ET`, line: `Up next at ${et(iso)} ET: ${next.podcastName}, with ${next.hostName}. MilitaryVoices Radio, live.` };
+    }
+    return plain;
+  }
+
+  /** The picture that goes with a shared /radio link: what's on air now (or the show that was shared). */
+  app.get("/og/radio.jpg", async (req, res) => {
+    const n = await radioNow(Number(req.query.show) || 0);
+    const origin = `https://${req.get("host")}`;
+    const jpg = await buildShareCard({
+      podcastName: n.show,
+      hostName: n.host,
+      subline: n.host ? undefined : "Live From Anywhere",
+      whenLabel: n.label,
+      photoUrl: n.photo ? (n.photo.startsWith("http") ? n.photo : `${origin}${n.photo}`) : undefined,
+      eyebrow: "MilitaryVoices Radio",
+      footer: "militaryvoices.ai/radio",
+    }, "wide");
+    res.setHeader("Content-Type", "image/jpeg");
+    res.setHeader("Cache-Control", "public, max-age=120, s-maxage=300");
+    res.end(jpg);
+  });
+
+  /**
+   * Link previews for /radio: the preview robots (vercel.json sends only their user agents here)
+   * get a page with the right title and picture; people get the app as always.
+   */
+  const PREVIEW_BOT = /facebookexternalhit|facebot|twitterbot|slackbot|linkedinbot|whatsapp|telegrambot|discordbot|applebot|redditbot|pinterest|embedly|skypeuripreview|mastodon|bluesky|iframely|vkshare|quora link preview/i;
+  app.get("/radio", async (req, res, next) => {
+    if (!PREVIEW_BOT.test(String(req.get("user-agent") ?? ""))) return next();
+    const showId = Number(req.query.show) || 0;
+    const n = await radioNow(showId);
+    const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    const origin = `https://${req.get("host")}`;
+    const url = `${origin}/radio${showId ? `?show=${showId}` : ""}`;
+    const title = n.host ? `${n.show} · MilitaryVoices Radio` : "MilitaryVoices Radio · Live From Anywhere";
+    const img = `${origin}/og/radio.jpg?${showId ? `show=${showId}&` : ""}v=${Math.floor(Date.now() / 600_000)}`;
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=60, s-maxage=120");
+    res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8" /><title>${esc(title)}</title><meta name="description" content="${esc(n.line)}" /><meta property="og:type" content="website" /><meta property="og:site_name" content="MilitaryVoices.ai" /><meta property="og:title" content="${esc(title)}" /><meta property="og:description" content="${esc(n.line)}" /><meta property="og:url" content="${url}" /><meta property="og:image" content="${img}" /><meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" /><meta name="twitter:card" content="summary_large_image" /><meta name="twitter:title" content="${esc(title)}" /><meta name="twitter:description" content="${esc(n.line)}" /><meta name="twitter:image" content="${img}" /><link rel="canonical" href="${url}" /></head><body><h1>${esc(title)}</h1><p>${esc(n.line)}</p></body></html>`);
   });
 
   /** A listener's pass into the day's room: watch and hear only, while the day is on. */

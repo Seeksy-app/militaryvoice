@@ -108,7 +108,7 @@ export default function Program() {
       <img src="/logo-wave.png?v=2" alt="" className="pointer-events-none absolute right-6 top-5 h-10 w-auto opacity-90 drop-shadow-lg" />
       {listen && muted && (
         <button type="button" onClick={() => setMuted(false)} className="absolute inset-0 z-20 flex items-center justify-center bg-black/30" data-testid="radio-tap-to-listen">
-          <span className="flex items-center gap-4 rounded-full bg-[#F0A71F] px-12 py-7 text-5xl font-black text-[#1a1200] shadow-2xl">▶ Tap to listen</span>
+          <span className="flex items-center gap-8 rounded-full bg-[#F0A71F] px-28 py-16 text-[8rem] font-black leading-none text-[#1a1200] shadow-2xl">▶ Tap to listen</span>
         </button>
       )}
       {phase === "live" && (

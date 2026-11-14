@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { NavBar } from "@/components/NavBar";
 import { SiteFooter } from "@/components/SiteFooter";
-import { Radio as RadioIcon } from "lucide-react";
+import { Check, Link2, Radio as RadioIcon, Share2 } from "lucide-react";
 
 // MilitaryVoices Radio for listeners: tune in. The live player (the same
 // picture and sound the broadcast sends out, /dx/program?listen=1), what's on
@@ -17,7 +17,7 @@ const hm = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { timeZone
 const dayLabel = (iso: string) => new Date(iso).toLocaleDateString("en-US", { timeZone: ET, weekday: "long", month: "long", day: "numeric" });
 
 /** The program at 1920 wide, scaled into whatever width it's given. */
-function Player() {
+export function Player() {
   const box = useRef<HTMLDivElement>(null);
   const [scale, setScale] = useState(0.5);
   useEffect(() => {
@@ -36,7 +36,65 @@ function Player() {
   );
 }
 
+/** A phone's "Add to Home Screen" on this page makes a Radio icon that opens straight to the station. */
+function useRadioApp() {
+  useEffect(() => {
+    const link = document.querySelector<HTMLLinkElement>('link[rel="manifest"]');
+    const before = link?.getAttribute("href") ?? null;
+    link?.setAttribute("href", "/radio.webmanifest");
+    const title = document.querySelector<HTMLMetaElement>('meta[name="apple-mobile-web-app-title"]');
+    const titleBefore = title?.content ?? null;
+    if (title) title.content = "MV Radio";
+    return () => {
+      if (link && before) link.setAttribute("href", before);
+      if (title && titleBefore !== null) title.content = titleBefore;
+    };
+  }, []);
+}
+
+function ShareStation({ showId }: { showId: number }) {
+  const [done, setDone] = useState<"" | "link" | "embed">("");
+  const url = `https://www.militaryvoices.ai/radio${showId ? `?show=${showId}` : ""}`;
+  const snippet = `<iframe src="https://www.militaryvoices.ai/radio/embed" width="560" height="340" style="border:0;max-width:100%" allow="autoplay" title="MilitaryVoices Radio"></iframe>`;
+  const copy = async (text: string, what: "link" | "embed") => {
+    try { await navigator.clipboard.writeText(text); } catch { /* the address is on the screen to copy by hand */ }
+    setDone(what);
+    setTimeout(() => setDone(""), 2500);
+  };
+  const share = async () => {
+    if (navigator.share) {
+      try { await navigator.share({ title: "MilitaryVoices Radio", text: "Live From Anywhere: the live station for military and veteran voices.", url }); return; } catch { /* closed the sheet */ }
+    }
+    await copy(url, "link");
+  };
+  return (
+    <div className="mt-5 flex flex-wrap items-center gap-3" data-testid="radio-share">
+      <button type="button" onClick={share} className="inline-flex h-11 items-center gap-2 rounded-full bg-[#F0A71F] px-5 text-sm font-bold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="radio-share-button">
+        <Share2 className="h-4 w-4" /> Share the station
+      </button>
+      <button type="button" onClick={() => copy(url, "link")} className="inline-flex h-11 items-center gap-2 rounded-full bg-white/10 px-4 text-sm font-semibold hover:bg-white/20">
+        {done === "link" ? <><Check className="h-4 w-4" /> Link copied</> : <><Link2 className="h-4 w-4" /> Copy link</>}
+      </button>
+      <details className="w-full text-sm text-white/80">
+        <summary className="cursor-pointer font-semibold text-white/90">Put it on your phone, or on your website</summary>
+        <div className="mt-3 space-y-3 rounded-xl bg-white/[0.07] p-4">
+          <p><span className="font-bold text-white">On your phone:</span> on an iPhone, tap Share, then Add to Home Screen. On Android, open the menu, then Add to Home screen. You get a Radio icon that opens right to the station.</p>
+          <div>
+            <p className="font-bold text-white">On your website:</p>
+            <p className="mt-1">Paste this where the player should go.</p>
+            <code className="mt-2 block break-all rounded-lg bg-black/40 p-3 text-xs">{snippet}</code>
+            <button type="button" onClick={() => copy(snippet, "embed")} className="mt-2 inline-flex h-9 items-center gap-2 rounded-full bg-white/10 px-4 text-xs font-semibold hover:bg-white/20">
+              {done === "embed" ? <><Check className="h-3.5 w-3.5" /> Copied</> : "Copy the code"}
+            </button>
+          </div>
+        </div>
+      </details>
+    </div>
+  );
+}
+
 export default function RadioPage() {
+  useRadioApp();
   const { data } = useQuery<Radio>({ queryKey: ["/api/radio"], refetchInterval: 60_000 });
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 15_000); return () => clearInterval(t); }, []);
@@ -62,6 +120,7 @@ export default function RadioPage() {
             ) : day ? (
               <p className="mt-5 text-base text-white/85" data-testid="radio-next"><span className="font-bold text-[#F0A71F]">{live ? "On air now" : "Next on air"}:</span> {live ? "Live From Anywhere" : `${dayLabel(day.startAtUtc)} at ${hm(day.startAtUtc)} ET`}</p>
             ) : null}
+            <ShareStation showId={shared} />
             {(data?.youtube || data?.liveone) && (
               <p className="mt-4 flex flex-wrap items-center gap-2 text-sm">
                 <span className="text-white/70">Also live on</span>

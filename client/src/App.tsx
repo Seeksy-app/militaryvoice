@@ -12,6 +12,7 @@ import Home from "@/pages/Home";
 import Agenda from "@/pages/Agenda";
 import DigitalExperience from "@/pages/DigitalExperience";
 import RadioPage from "@/pages/Radio";
+import RadioEmbed from "@/pages/RadioEmbed";
 import Booth from "@/pages/Booth";
 import Program from "@/pages/Program";
 import Events from "@/pages/Events";
@@ -108,6 +109,7 @@ function AppRouter() {
       <Route path="/events">{() => <Events />}</Route>
       <Route path="/schedule">{() => <Home />}</Route>
       <Route path="/agenda">{() => <Agenda />}</Route>
+      <Route path="/radio/embed">{() => <RadioEmbed />}</Route>
       <Route path="/radio">{() => <RadioPage />}</Route>
       <Route path="/radio/book">{() => <DigitalExperience />}</Route>
       {/* Its earlier names (Digital Experience, Digital Bureau, Live From Anywhere): links already sent keep working. */}
