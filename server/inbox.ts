@@ -74,6 +74,26 @@ export async function inboundContext(m: InboundEmailRow): Promise<string> {
   } else {
     lines.push("Sender has no booking on the lineup.");
   }
+  // MilitaryVoices Radio (launch week 16–20 Nov 2026): its sessions are not the Marathon's slots.
+  try {
+    const ids = JSON.parse((await storage.getSetting("dx:events")) ?? "[]") as number[];
+    const me = m.fromEmail.trim().toLowerCase();
+    const sessions: string[] = [];
+    for (const id of ids) {
+      const rev = await storage.getEventById(id);
+      if (!rev) continue;
+      for (const s of (await storage.listSignups(id)).filter((x) => x.status !== "cancelled" && x.email.trim().toLowerCase() === me)) {
+        const startMs = Date.parse(rev.startAtUtc) + s.slotIndex * rev.slotMinutes * 60_000;
+        const endMs = startMs + (s.slotSpan || 1) * rev.slotMinutes * 60_000;
+        const dayLabel = new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", timeZone: ET }).format(new Date(startMs));
+        const clock = (ms: number) => new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: ET }).format(new Date(ms));
+        sessions.push(`${dayLabel}, ${clock(startMs)} to ${clock(endMs)} Eastern, "${s.podcastName}", booth https://www.militaryvoices.ai/booth/${s.id}`);
+      }
+    }
+    lines.push("MilitaryVoices Radio facts (for anything about Radio, its sessions or its booth; this is not the Marathon):");
+    lines.push("Radio is the live station for military and veteran voices, Monday to Friday, 7 am to 10 pm Eastern. Launch week is 16 to 20 November 2026. A free 30 or 60 minute session is booked at https://www.militaryvoices.ai/radio/book, and the lineup is at https://www.militaryvoices.ai/radio. The booth opens one hour before a session: sign in with the email booked with, or use the booth link. Join 10 minutes early to check the microphone; the camera is optional. At the start time a three-minute countdown runs, the radio manager plays a short introduction, then the host is live; the bar at the top of the booth turns red and says ON AIR with the time remaining. A guest joins with the Copy guest link button in the booth. How the booth works: https://www.militaryvoices.ai/help/booth.");
+    lines.push(sessions.length ? `Sender's Radio sessions: ${sessions.join("; ")}.` : "Sender has no Radio session booked.");
+  } catch { /* the Marathon facts above still stand */ }
   const hist = await storage.getContactHistory(m.fromEmail);
   const sent = await storage.listSentBroadcasts();
   const subjects = hist.sends.map((x) => sent.find((b) => b.id === x.broadcastId)?.subject).filter(Boolean) as string[];
@@ -100,16 +120,16 @@ export async function inboundContext(m: InboundEmailRow): Promise<string> {
 export async function draftReply(m: InboundEmailRow): Promise<InboundDraft> {
   const context = await inboundContext(m);
   const client = new Anthropic();
-  const system = `You draft replies for MilitaryVoices.ai, a year-round platform for military and veteran podcasters and creators (Rooms, Studio, the Library, Pōstify, podcast hosting, SmartLink, Discovery), which also runs The Podcast Marathon, a yearly one-day livestream of military and veteran shows. A person will read, edit and send your "reply" draft; it is not sent automatically.
+  const system = `You draft replies for MilitaryVoices.ai, a year-round platform for military and veteran podcasters and creators (Rooms, Studio, the Library, Pōstify, podcast hosting, SmartLink, Discovery), which also runs The Podcast Marathon, a yearly one-day livestream of military and veteran shows (the last one was 5 October and is over). It also runs MilitaryVoices Radio, the live station for military and veteran voices, Monday to Friday, 7 am to 10 pm Eastern; its launch week is 16 to 20 November 2026. A person will read, edit and send your "reply" draft; it is not sent automatically.
 
-First decide "topic": "marathon" when they're asking about the event — a slot, the agenda, show day, their segment, reminders, the day's sponsors — and "platform" for everything else (recording, Rooms, Studio, the Library, Pōstify, clips, posting, their podcast, SmartLink, their account). Never answer a platform question with Marathon details. If unsure, "platform".
+First decide "topic": "marathon" when they're asking about the event — a slot, the agenda, show day, their segment, reminders, the day's sponsors — and "platform" for everything else (recording, Rooms, Studio, the Library, Pōstify, clips, posting, their podcast, SmartLink, their account). Never answer a platform question with Marathon details. MilitaryVoices Radio (its sessions, times, the booth, guests, the lineup, replays) is "platform", never "marathon". If unsure, "platform".
 
 Voices:
 - "riccoh": Riccoh Player, USMC retired, the host of the Marathon. Host to host. Only for Marathon matters: a slot, a time change, a swap, co-hosting, an interview, a favour, a complaint about the day. Warm, direct, short sentences. Signs "Riccoh".
 - "team": everything else. Plain and helpful. Signs "The Podcast Marathon team" on Marathon matters and "The MilitaryVoices.ai team" on the platform.
 
 Rules:
-- 8th-grade reading level. Short. No corporate phrases. The event is "The Podcast Marathon"; the platform is "MilitaryVoices.ai".
+- 8th-grade reading level. Short. No corporate phrases. The event is "The Podcast Marathon"; the platform is "MilitaryVoices.ai"; the station is "MilitaryVoices Radio" and its time slots are "sessions". Never call anything about Radio "the Marathon".
 - Use only the facts in the context. Never invent times, links, names or promises.
 - Never say a change is done. Say what will happen and who will confirm ("I'll move you and confirm by tomorrow").
 - If they ask to cancel, acknowledge it kindly, do not argue, and say a person will confirm.
