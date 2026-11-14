@@ -18,13 +18,13 @@ function Shot({ src, alt, caption, narrow }: { src: string; alt: string; caption
   );
 }
 
-/** One state of the top bar: the picture, and what it means. */
-function Bar({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
+/** A small picture of one state of the top bar, with its name under it. */
+function Thumb({ src, alt, label }: { src: string; alt: string; label: string }) {
   return (
-    <div className="mt-5">
-      <img src={`/help/booth/bar-${n}.png`} alt={title} loading="lazy" className="w-full rounded-lg border border-border" />
-      <p className="mt-2 text-[15px]">{children}</p>
-    </div>
+    <figure>
+      <img src={src} alt={alt} loading="lazy" className="w-full rounded-lg border border-border" />
+      <figcaption className="mt-1.5 text-center text-sm font-medium text-muted-foreground">{label}</figcaption>
+    </figure>
   );
 }
 
@@ -71,31 +71,21 @@ export default function HelpBooth() {
         </HelpSection>
 
         <HelpSection n={4} id="bar" title="What the top bar says">
-          <p>You don't have to do anything. The station runs on the clock, and the bar tells you where you are. In a 30-minute slot, the station's intro plays for the first 3 minutes, you're live for the next 24, and a short thank-you plays for the last 3. A 60-minute slot works the same way, with 54 minutes live. The pictures below are a 9:30 to 10:00 PM slot.</p>
-          <Bar n={1} title="Countdown before your time">
-            <strong>Before your time.</strong> It counts down to when you're live, and tells you when the station's intro starts and when you go live.
-          </Bar>
-          <Bar n={2} title="Intro playing, gold bar">
-            <strong>Your time starts.</strong> A 3-minute countdown runs while the station plays a short intro on its own. The bar is gold. Get ready, you're next.
-          </Bar>
-          <Bar n={3} title="On air, red bar">
-            <strong>You're live.</strong> The bar turns red and says <strong>ON AIR</strong>, with your time left and when you're live until. Just talk.
-          </Bar>
-          <Bar n={4} title="Five minutes left">
-            <strong>Five minutes left.</strong> Time to head toward your close.
-          </Bar>
-          <Bar n={5} title="Two minutes left">
-            <strong>Two minutes left.</strong> Start wrapping up.
-          </Bar>
-          <Bar n={6} title="Say goodbye now">
-            <strong>The last 30 seconds.</strong> The bar turns white. Say your goodbye now. The station's outro is about to play.
-          </Bar>
-          <Bar n={7} title="Outro playing, blue bar">
-            <strong>You're off air.</strong> The station plays a short thank-you. Stay as long as you like, or leave.
-          </Bar>
-          <Bar n={8} title="That's a wrap">
-            <strong>All done.</strong> You can close the tab. Thank you!
-          </Bar>
+          <p>You don't have to do anything. The station runs on the clock, and the bar tells you where you are. In a 30-minute slot, the station's intro plays for the first 3 minutes, you're live for the next 24, and a short thank-you plays for the last 3. A 60-minute slot works the same way, with 54 minutes live.</p>
+          <div className="my-5 grid grid-cols-3 gap-3">
+            <Thumb src="/help/booth/thumb-intro.png" alt="Gold bar: Intro playing" label="Intro playing" />
+            <Thumb src="/help/booth/thumb-onair.png" alt="Red bar: On air" label="You're on air" />
+            <Thumb src="/help/booth/thumb-outro.png" alt="Blue bar: Outro playing" label="Thank-you playing" />
+          </div>
+          <ul className="list-disc space-y-2 pl-5">
+            <li><strong>Before your time.</strong> The bar counts down to when you're live, and tells you when the station's intro starts and when you go live.</li>
+            <li><strong>Your time starts (gold).</strong> A 3-minute countdown runs while the station plays a short intro on its own. Get ready, you're next.</li>
+            <li><strong>You're live (red).</strong> The bar says <strong>ON AIR</strong>, with your time left and when you're live until. Just talk.</li>
+            <li><strong>Five minutes left, then two.</strong> At two minutes it says to start wrapping up.</li>
+            <li><strong>The last 30 seconds (white).</strong> Say your goodbye now. The station's outro is about to play.</li>
+            <li><strong>You're off air (blue).</strong> The station plays a short thank-you. Stay as long as you like, or leave.</li>
+            <li><strong>That's a wrap.</strong> You can close the tab. Thank you!</li>
+          </ul>
           <HelpNote>The station takes you off on the clock, so plan to finish before your time is up.</HelpNote>
         </HelpSection>
 
