@@ -1058,7 +1058,8 @@ export function registerBioPage(app: Express) {
   app.get("/:handle", async (req, res, next) => {
     const ua = String(req.get("user-agent") ?? "");
     const h = String(req.params.handle).toLowerCase();
-    if (!PREVIEW_BOT.test(ua)) return next();
+    // /radio has its own preview (server/booth.ts): what's on air now.
+    if (!PREVIEW_BOT.test(ua) || h === "radio") return next();
     const origin = `https://${req.get("host")}`;
     const [row] = handleOk(h) ? await db.select().from(bioPages).where(eq(bioPages.handle, h)).limit(1) : [];
     if (!row || !row.published) {
