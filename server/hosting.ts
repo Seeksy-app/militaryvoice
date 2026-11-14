@@ -588,7 +588,12 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
   app.get("/feed/:slug", async (req, res) => {
     const slug = String(req.params.slug).replace(/\.(xml|rss)$/i, "");
     const [s] = await db.select().from(hostedShows).where(eq(hostedShows.slug, slug)).limit(1);
-    if (!s) return res.status(404).type("text/plain").send("No such feed.");
+    if (!s) {
+      // A feed name that was changed: the old address keeps working (setting "feed-alias:<old>" = new name), so nothing already submitted to Apple, Spotify or YouTube breaks.
+      const moved = (await storage.getSetting(`feed-alias:${slug}`).catch(() => null))?.trim();
+      if (moved && /^[a-z0-9-]+$/.test(moved)) return res.redirect(301, feedUrl(moved));
+      return res.status(404).type("text/plain").send("No such feed.");
+    }
     // Moved to another host: the apps follow a permanent redirect (and the tag, for the ones that read the feed first).
     if (s.newFeedUrl && req.query.preview !== "1") return res.redirect(301, s.newFeedUrl);
     const eps = await episodesOf(s.id);
