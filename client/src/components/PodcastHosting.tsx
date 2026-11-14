@@ -57,7 +57,7 @@ export function PodcastHosting() {
   const [adding, setAdding] = useState(false);
   const [newShow, setNewShow] = useState(false);
   // The setup screens stay up while a new show is made, even though the list now has one in it.
-  const [inSetup, setInSetup] = useState(false);
+  const [inSetup, setInSetup] = useState(() => { try { return new URLSearchParams(window.location.search).get("setup") === "1"; } catch { return false; } });
   const [editEp, setEditEp] = useState<Ep | null>(null);
   // From the Library ("Add to my podcast"): ?ep=<id> opens that episode, ready for its words.
   const [wantEp, setWantEp] = useState<number | null>(() => { try { return Number(new URLSearchParams(window.location.search).get("ep")) || null; } catch { return null; } });
@@ -129,7 +129,7 @@ export function PodcastHosting() {
               </button>
             );
           })}
-          <button type="button" onClick={() => setNewShow(true)} className="flex min-h-[16rem] flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border text-muted-foreground transition-colors hover:border-[#053877]/40 hover:text-[#053877] dark:hover:text-[#8fb5e8]" data-testid="hosting-add-show">
+          <button type="button" onClick={() => setInSetup(true)} className="flex min-h-[16rem] flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border text-muted-foreground transition-colors hover:border-[#053877]/40 hover:text-[#053877] dark:hover:text-[#8fb5e8]" data-testid="hosting-add-show">
             <Plus className="h-7 w-7" /><span className="font-semibold">Add a show</span>
           </button>
         </div>
@@ -184,7 +184,7 @@ export function PodcastHosting() {
             {h.episodes.some((e) => e.live) && <Button asChild variant="outline" size="sm" className="h-8 gap-1.5 rounded-full"><a href={`/podcast/${s.slug}`} target="_blank" rel="noreferrer" data-testid="hosting-public-page">Your show page <ExternalLink className="h-3 w-3" /></a></Button>}
           </div>
         </div>
-        {shows.length === 1 && <button type="button" onClick={() => setNewShow(true)} className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold text-[#053877] hover:bg-[#053877]/5 dark:text-[#8fb5e8]" data-testid="hosting-add-show"><Plus className="h-3.5 w-3.5" /> Add a show</button>}
+        {shows.length === 1 && <button type="button" onClick={() => setInSetup(true)} className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold text-[#053877] hover:bg-[#053877]/5 dark:text-[#8fb5e8]" data-testid="hosting-add-show"><Plus className="h-3.5 w-3.5" /> Add a show</button>}
       </div>
 
       {/* On a phone the last tabs run off the edge: closer together, and a fade that says there's more (8 Oct). */}
