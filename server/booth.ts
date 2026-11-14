@@ -89,6 +89,17 @@ export function registerBooth(app: Express): void {
       startAtUtc: ev.startAtUtc,
       endAtUtc: new Date(ms(ev.startAtUtc) + ev.durationHours * 3600_000).toISOString(),
       fillerUrl: (await storage.getSetting("dx:filler-url")) ?? "",
+      // Open time plays replays (setting "dx:replays": [{key, show, host, photo, durationSec}], in play order).
+      // The day's place in the week shifts where the rotation starts, so each day opens on something different.
+      dayIndex: Math.max(0, ids.slice().sort((a, b) => a - b).indexOf(ev.id)),
+      replays: await (async () => {
+        let list: Array<{ key?: string; show?: string; host?: string; photo?: string; durationSec?: number }> = [];
+        try { list = JSON.parse((await storage.getSetting("dx:replays")) ?? "[]"); } catch { list = []; }
+        return Promise.all(list.filter((r) => r.key).slice(0, 200).map(async (r, i) => ({
+          id: i, show: r.show ?? "", host: r.host ?? "", photo: r.photo ?? "", durationSec: r.durationSec ?? 0,
+          mediaUrl: await signedRecordingUrl(r.key!, 6 * 3600).catch(() => ""),
+        })));
+      })(),
       bookings: await Promise.all(list.map(async (s) => {
         const t = bookingTimes(ev!, s);
         // A recorded episode rolls in its slot: the page plays this file from where the clock is.

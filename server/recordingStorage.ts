@@ -140,6 +140,14 @@ export async function startMultipart(path: string, contentType: string): Promise
   return id;
 }
 
+/** The keys under a prefix (up to 1000), for housekeeping scripts: what is in the bucket, and how big. */
+export async function listRecordingObjects(prefix: string): Promise<Array<{ key: string; size: number }>> {
+  const r = await fetch(presignS3("GET", "", 300, { "list-type": "2", prefix, "max-keys": "1000" }));
+  const xml = await r.text();
+  if (!r.ok) throw new Error(`Storage wouldn't list (${r.status}).`);
+  return xml.split("<Contents>").slice(1).map((c) => ({ key: (c.match(/<Key>([^<]+)<\/Key>/) ?? [])[1] ?? "", size: Number((c.match(/<Size>(\d+)<\/Size>/) ?? [])[1] ?? 0) })).filter((o) => o.key);
+}
+
 export function signedPartUrl(path: string, uploadId: string, partNumber: number, expiresInSeconds = 6 * 3600): string {
   return presignS3("PUT", path, expiresInSeconds, { partNumber: String(partNumber), uploadId });
 }

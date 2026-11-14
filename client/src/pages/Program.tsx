@@ -15,7 +15,8 @@ import { StageGrid, useStageRoom } from "@/components/StageView";
 // add &at=<ISO time> to see any moment of the day.
 
 type Booking = { id: number; show: string; host: string; photo: string; mediaUrl?: string; startAtUtc: string; endAtUtc: string; onAirAtUtc: string; offAirAtUtc: string };
-type Program = { eventId: number; day: string; startAtUtc: string; endAtUtc: string; fillerUrl: string; bookings: Booking[] };
+type Replay_ = { id: number; show: string; host: string; photo: string; mediaUrl: string; durationSec: number };
+type Program = { eventId: number; day: string; startAtUtc: string; endAtUtc: string; fillerUrl: string; dayIndex?: number; replays?: Replay_[]; bookings: Booking[] };
 
 const ET = "America/New_York";
 const hm = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { timeZone: ET, hour: "numeric", minute: "2-digit" });
@@ -48,22 +49,23 @@ function Card({ eyebrow, title, sub, photo, foot }: { eyebrow: string; title: st
 }
 
 /**
- * A recorded episode rolling in its slot: the file plays from wherever the clock is (so every listener
- * hears the same moment), and when it ends the thank-you card takes over until the slot closes.
+ * A recorded episode rolling in its slot, or a replay in open time: the file plays from wherever the
+ * clock is (so every listener hears the same moment), and when it ends the thank-you card takes over
+ * until the slot closes.
  */
-function Replay({ b, now, muted }: { b: Booking; now: number; muted: boolean }) {
+function Replay({ id, src, show, host, photo, startedAt, now, muted, tag }: { id: string; src: string; show: string; host: string; photo: string; startedAt: number; now: number; muted: boolean; tag?: string }) {
   const ref = useRef<HTMLVideoElement>(null);
   const [ended, setEnded] = useState(false);
-  const offset = Math.max(0, (now - Date.parse(b.onAirAtUtc)) / 1000);
+  const offset = Math.max(0, (now - startedAt) / 1000);
   const place = () => { const v = ref.current; if (v && Math.abs(v.currentTime - offset) > 2) v.currentTime = offset; };
-  useEffect(() => { setEnded(false); }, [b.id]);
+  useEffect(() => { setEnded(false); }, [id]);
   // React sets `muted` only when the element is made, so a listener's tap has to reach the element itself.
   useEffect(() => { const v = ref.current; if (v) { v.muted = muted; if (!muted) v.play().catch(() => undefined); } }, [muted, ended]);
-  if (ended) return <Card eyebrow="Thank you for listening" title={b.show} sub={`with ${b.host}`} photo={b.photo} />;
+  if (ended) return <Card eyebrow="Thank you for listening" title={show} sub={host ? `with ${host}` : undefined} photo={photo} />;
   return (
     <>
-      <video ref={ref} src={b.mediaUrl} autoPlay playsInline muted={muted} onLoadedMetadata={place} onEnded={() => setEnded(true)} className="absolute inset-0 h-full w-full bg-black object-contain" />
-      <div className="absolute bottom-8 left-8 rounded-2xl bg-[#000741]/85 px-7 py-4 text-3xl font-bold text-white">{b.show} · with {b.host}</div>
+      <video ref={ref} src={src} autoPlay playsInline muted={muted} onLoadedMetadata={place} onEnded={() => setEnded(true)} className="absolute inset-0 h-full w-full bg-black object-contain" />
+      <div className="absolute bottom-8 left-8 rounded-2xl bg-[#000741]/85 px-7 py-4 text-3xl font-bold text-white">{tag ? `${tag} · ` : ""}{show}{host ? ` · with ${host}` : ""}</div>
     </>
   );
 }
@@ -112,15 +114,26 @@ export default function Program() {
     }
   }, [connected, failed, token, program.data]);
 
+  // Open time: the day's replays, one per half hour, the same one for every listener.
+  const fill = useMemo(() => {
+    const list = (program.data?.replays ?? []).filter((r) => r.mediaUrl);
+    const dayStart = Date.parse(program.data?.startAtUtc ?? "");
+    if (phase !== "filler" || !list.length || !Number.isFinite(dayStart) || now < dayStart) return null;
+    const slot = Math.floor((now - dayStart) / 1_800_000);
+    const g = (program.data?.dayIndex ?? 0) * 30 + slot;
+    return { r: list[g % list.length], slot, startedAt: dayStart + slot * 1_800_000 };
+  }, [program.data, phase, Math.floor(now / 60_000)]);
+
   const nextLine = next ? `Up next at ${hm(next.startAtUtc)}: ${next.show}` : "Back weekdays at 7 am Eastern";
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-[#000741]">
       {phase === "live" && !current!.mediaUrl && tiles.length > 0 && <StageGrid tiles={tiles} meta={{ status: "Live" }} caption={caption} />}
-      {phase === "live" && current!.mediaUrl && <Replay b={current!} now={now} muted={muted} />}
+      {phase === "live" && current!.mediaUrl && <Replay id={`b${current!.id}`} src={current!.mediaUrl} show={current!.show} host={current!.host} photo={current!.photo} startedAt={Date.parse(current!.onAirAtUtc)} now={now} muted={muted} />}
       {phase === "live" && !current!.mediaUrl && tiles.length === 0 && <Card eyebrow="Live now" title={current!.show} sub={`with ${current!.host}`} photo={current!.photo} foot="Joining in a moment" />}
       {phase === "intro" && <Card eyebrow="Coming up" title={current!.show} sub={`with ${current!.host}`} photo={current!.photo} foot={`Live in ${mmss(Date.parse(current!.onAirAtUtc) - now)}`} />}
       {phase === "outro" && <Card eyebrow="Thank you" title={current!.host} sub={current!.show} photo={current!.photo} foot={nextLine} />}
-      {phase === "filler" && (program.data?.fillerUrl
+      {phase === "filler" && fill && <Replay id={`f${fill.slot}`} src={fill.r.mediaUrl} show={fill.r.show} host={fill.r.host} photo={fill.r.photo} startedAt={fill.startedAt} now={now} muted={muted} tag="Replay" />}
+      {phase === "filler" && !fill && (program.data?.fillerUrl
         ? <>
             <video src={program.data.fillerUrl} autoPlay loop playsInline muted={muted} className="absolute inset-0 h-full w-full object-cover" />
             <div className="absolute bottom-8 left-8 rounded-2xl bg-[#000741]/85 px-7 py-4 text-3xl font-bold text-white">{nextLine}</div>
