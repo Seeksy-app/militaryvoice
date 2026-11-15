@@ -72,8 +72,12 @@ function Rail({ info }: { info: Info }) {
   else if (now < end) { tone = "bg-[#053877] text-white"; label = "You're off air"; clock = false; small = "The station's outro is playing. Stay as long as you like, or leave below."; }
   else { label = "That's a wrap"; clock = false; small = "You can close this tab."; }
   const onAir = now >= on && now < off;
+  // The whole rail flashes for eight seconds at five minutes, three, one, and thirty seconds left: no one misses it.
+  const leftSec = Math.ceil(left / 1000);
+  const flash = onAir && [300, 180, 60, 30].some((t) => leftSec <= t && leftSec > t - 8);
   return (
-    <aside className={`flex shrink-0 flex-col justify-start gap-3 px-5 pb-6 pt-5 text-center lg:w-[30rem] lg:gap-5 lg:px-6 lg:pt-8 ${tone}`} data-testid="booth-status">
+    <aside className={`flex shrink-0 flex-col justify-start gap-3 px-5 pb-6 pt-5 text-center lg:w-[30rem] lg:gap-5 lg:px-6 lg:pt-8 ${tone} ${flash ? "mv-booth-flash" : ""}`} data-testid="booth-status" data-flashing={flash || undefined}>
+      <style>{`@keyframes mv-booth-flash{0%,49%{filter:none}50%,100%{filter:invert(1) hue-rotate(180deg) brightness(1.1)}} .mv-booth-flash{animation:mv-booth-flash .7s steps(1) infinite}`}</style>
       <p className="flex items-center justify-center gap-2 text-sm font-extrabold uppercase tracking-[0.18em] sm:text-base lg:text-xl">{onAir && <Radio className="h-5 w-5 animate-pulse" />}{label}</p>
       {clock ? <Clock ms={ms} /> : <p className="text-6xl font-black leading-none lg:text-7xl">Thank you</p>}
       {onAir && (
