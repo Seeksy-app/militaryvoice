@@ -273,8 +273,9 @@ export function registerBooth(app: Express): void {
   app.get("/api/radio/voice/:id/:kind.mp3", async (req, res) => {
     const kind = req.params.kind === "outro" ? "outro" : "intro";
     const b = await bookingFor(Number(req.params.id));
-    const key = process.env.ELEVENLABS_API_KEY;
-    if (!b || !key) return res.status(404).end();
+    const key = (process.env.ELEVENLABS_API_KEY || process.env.ELEVEN_LABS_API_KEY || "").trim();
+    if (!b) return res.status(404).json({ message: "That booking isn't on MilitaryVoices Radio." });
+    if (!key) return res.status(503).json({ message: "No voice key on this server." });
     // Spoken spellings: Riccoh reads "Reeko", Pōstify "Post-ify" (written text keeps the real ones).
     const say = (v: string) => v.replace(/riccoh/gi, "Reeko").replace(/p[oō]stify/gi, "Post-ify");
     const show = say(b.s.podcastName), host = say(b.s.hostName);
