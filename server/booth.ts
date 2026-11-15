@@ -56,7 +56,25 @@ async function radioDay(): Promise<EventRow | undefined> {
   return days.find((e) => et(ms(e.startAtUtc)) === et(now) && end(e) > now) ?? days.find((e) => ms(e.startAtUtc) > now) ?? days[days.length - 1];
 }
 
+
+/** The station's spoken clips (made by scripts/radio-voice.ts, stored in R2): one welcome, one sign-off, an intro and an outro per booking. */
+type VoiceMap = { welcome?: { key: string; sec: number }; signoff?: { key: string; sec: number }; map: Record<string, { introKey?: string; outroKey?: string }> };
+async function readVoice(): Promise<VoiceMap> {
+  try { const j = JSON.parse((await storage.getSetting("dx:voice")) ?? "{}"); return { welcome: j.welcome, signoff: j.signoff, map: j.map ?? {} }; } catch { return { map: {} }; }
+}
+
 export function registerBooth(app: Express): void {
+  /** What the program page needs to play the welcome and the sign-off. */
+  async function voiceFor() {
+    const v = await readVoice();
+    return {
+      welcomeUrl: v.welcome?.key ? await signedRecordingUrl(v.welcome.key, 6 * 3600).catch(() => "") : "",
+      welcomeSec: v.welcome?.sec ?? 0,
+      signoffUrl: v.signoff?.key ? await signedRecordingUrl(v.signoff.key, 6 * 3600).catch(() => "") : "",
+      signoffSec: v.signoff?.sec ?? 0,
+    };
+  }
+
   /** Who they are to this booking, or nothing: the booking's owner or co-host signed in, an admin, or a guest with the link. */
   const roleOf = (req: Parameters<Parameters<Express["get"]>[1]>[0], s: SignupRow, g: unknown): "host" | "guest" | "admin" | null => {
     const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
@@ -84,6 +102,7 @@ export function registerBooth(app: Express): void {
       }
     } else if (ids.includes(Number(req.query.eventId))) ev = await storage.getEventById(Number(req.query.eventId));
     if (!ev) return res.status(404).json({ message: "Not a MilitaryVoices Radio room." });
+    const voice = await readVoice();
     const list = (await storage.listSignups(ev.id)).filter((s) => s.status !== "cancelled").sort((a, b) => a.slotIndex - b.slotIndex);
     res.json({
       eventId: ev.id,
@@ -91,6 +110,7 @@ export function registerBooth(app: Express): void {
       startAtUtc: ev.startAtUtc,
       endAtUtc: new Date(ms(ev.startAtUtc) + ev.durationHours * 3600_000).toISOString(),
       fillerUrl: (await storage.getSetting("dx:filler-url")) ?? "",
+      voice: await voiceFor(),
       // Open time plays replays (setting "dx:replays": [{key, show, host, photo, durationSec}], in play order).
       // The day's place in the week shifts where the rotation starts, so each day opens on something different.
       dayIndex: Math.max(0, ids.slice().sort((a, b) => a - b).indexOf(ev.id)),
@@ -107,7 +127,7 @@ export function registerBooth(app: Express): void {
         // A recorded episode rolls in its slot: the page plays this file from where the clock is.
         const key = s.showFormat === "prerecorded" ? s.recordingUrl.trim() : "";
         const mediaUrl = key ? (/^https?:\/\//i.test(key) ? key : await signedRecordingUrl(key, 6 * 3600).catch(() => "")) : "";
-        return { id: s.id, show: s.podcastName, host: s.hostName, photo: s.photoUrl, mediaUrl, startAtUtc: new Date(t.start).toISOString(), endAtUtc: new Date(t.end).toISOString(), onAirAtUtc: new Date(t.onAirStart).toISOString(), offAirAtUtc: new Date(t.onAirEnd).toISOString() };
+        return { id: s.id, show: s.podcastName, host: s.hostName, photo: s.photoUrl, mediaUrl, introUrl: voice.map[String(s.id)]?.introKey ? await signedRecordingUrl(voice.map[String(s.id)].introKey!, 6 * 3600).catch(() => "") : "", outroUrl: voice.map[String(s.id)]?.outroKey ? await signedRecordingUrl(voice.map[String(s.id)].outroKey!, 6 * 3600).catch(() => "") : "", startAtUtc: new Date(t.start).toISOString(), endAtUtc: new Date(t.end).toISOString(), onAirAtUtc: new Date(t.onAirStart).toISOString(), offAirAtUtc: new Date(t.onAirEnd).toISOString() };
       })),
     });
   });
@@ -143,6 +163,7 @@ export function registerBooth(app: Express): void {
     const adminEmail = getAdminEmail(req);
     if (!adminEmail || !(await storage.isAdminEmail(adminEmail))) return res.status(401).json({ message: "Sign in to the admin." });
     const ids = (await dxEventIds()).slice().sort((a, b) => a - b);
+    const voiceMap = await readVoice();
     let replays: Array<{ key?: string; show?: string; host?: string; durationSec?: number }> = [];
     try { replays = (JSON.parse((await storage.getSetting("dx:replays")) ?? "[]") as typeof replays).filter((r) => r.key); } catch { replays = []; }
     const now = Date.now();
@@ -179,7 +200,7 @@ export function registerBooth(app: Express): void {
           rows.push({
             slot: k, span: Math.max(1, b.slotSpan), startAtUtc: new Date(t.start).toISOString(), endAtUtc: new Date(t.end).toISOString(),
             kind: vod ? "vod" : "live", show: b.podcastName, host: b.hostName, note: b.notes, signupId: b.id,
-            intro: true, outro: true, introMin: (t.onAirStart - t.start) / 60_000, outroMin: (t.end - t.onAirEnd) / 60_000,
+            intro: true, outro: true, introAudio: !!voiceMap.map[String(b.id)]?.introKey, outroAudio: !!voiceMap.map[String(b.id)]?.outroKey, introMin: (t.onAirStart - t.start) / 60_000, outroMin: (t.end - t.onAirEnd) / 60_000,
             onAirAtUtc: new Date(t.onAirStart).toISOString(), offAirAtUtc: new Date(t.onAirEnd).toISOString(),
             durationSec, warning: vod && !b.recordingUrl ? "No file yet" : vod && durationSec && durationSec > liveWindow ? "Runs longer than its window" : "",
             opensAtUtc: new Date(t.start - OPENS_MIN * 60_000).toISOString(),
@@ -275,13 +296,21 @@ export function registerBooth(app: Express): void {
     const b = await bookingFor(Number(req.params.id));
     const key = (process.env.ELEVENLABS_API_KEY || process.env.ELEVEN_LABS_API_KEY || "").trim();
     if (!b) return res.status(404).json({ message: "That booking isn't on MilitaryVoices Radio." });
+    // The finished clip (voice over music), made by scripts/radio-voice.ts: use it when it is there.
+    const made = (await readVoice()).map[String(b.s.id)]?.[kind === "outro" ? "outroKey" : "introKey"];
+    if (made) {
+      res.setHeader("Cache-Control", "public, max-age=600");
+      return res.redirect(302, await signedRecordingUrl(made, 3 * 3600));
+    }
     if (!key) return res.status(503).json({ message: "No voice key on this server." });
     // Spoken spellings: Riccoh reads "Reeko", Pōstify "Post-ify" (written text keeps the real ones).
-    const say = (v: string) => v.replace(/riccoh/gi, "Reeko").replace(/p[oō]stify/gi, "Post-ify");
+    const say = (v: string) => v.replace(/riccoh/gi, "Reeko").replace(/p[oō]stify/gi, "Post-ify").replace(/&/g, "and");
     const show = say(b.s.podcastName), host = say(b.s.hostName);
+    const who = host.trim().toLowerCase() === show.trim().toLowerCase() ? show : `${show}, with ${host}`;
+    const recorded = b.s.showFormat === "prerecorded";
     const text = kind === "intro"
-      ? `This is MilitaryVoices Radio, live from anywhere. Coming up: ${show}, with ${host}.`
-      : `That was ${show}, with ${host}. Thank you for being on MilitaryVoices Radio.`;
+      ? `Coming up on MilitaryVoices Radio${recorded ? ", an encore of " : ": "}${who}. Starting in three minutes.`
+      : `That was ${who}. Thank you for listening to MilitaryVoices Radio.`;
     const hash = crypto.createHash("sha1").update(text).digest("hex").slice(0, 10);
     const path = `radio-voice/${b.s.id}-${kind}-${hash}.mp3`;
     try {
@@ -290,7 +319,7 @@ export function registerBooth(app: Express): void {
         const t = await fetch("https://api.elevenlabs.io/v1/text-to-speech/NUjosfEayZAdRcDmcHM8?output_format=mp3_44100_128", {
           method: "POST", signal: AbortSignal.timeout(45_000),
           headers: { "xi-api-key": key, "content-type": "application/json" },
-          body: JSON.stringify({ text, model_id: "eleven_turbo_v2_5", voice_settings: { stability: 0.5, similarity_boost: 0.8 } }),
+          body: JSON.stringify({ text, model_id: "eleven_multilingual_v2", voice_settings: { stability: 0.5, similarity_boost: 0.8, style: 0.25, speed: 1.0 } }),
         });
         if (!t.ok) return res.status(502).end();
         await putRecordingObject(path, Buffer.from(await t.arrayBuffer()), "audio/mpeg");

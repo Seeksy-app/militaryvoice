@@ -11,7 +11,7 @@ import { adminGet } from "@/lib/adminApi";
 type Row = {
   slot: number; span: number; startAtUtc: string; endAtUtc: string; kind: "live" | "vod" | "replay" | "open";
   show: string; host: string; note?: string; signupId?: number; intro: boolean; outro: boolean; introMin?: number; outroMin?: number;
-  onAirAtUtc?: string; offAirAtUtc?: string; durationSec: number; warning: string; opensAtUtc?: string;
+  onAirAtUtc?: string; offAirAtUtc?: string; introAudio?: boolean; outroAudio?: boolean; durationSec: number; warning: string; opensAtUtc?: string;
 };
 type Day = { eventId: number; name: string; startAtUtc: string; endAtUtc: string; status: string; recording: boolean; inRoom: { name: string; signupId: number }[]; rows: Row[] };
 type Ros = { now: string; days: Day[] };
@@ -165,8 +165,8 @@ export default function RadioROS() {
                           <p className="font-semibold">{r.show || <span className="text-white/45">Open: station card until booked</span>}</p>
                           {(r.host || r.note) && <p className="text-xs text-white/60">{r.host}{r.note ? ` · ${r.note.length > 90 ? r.note.slice(0, 90).trimEnd() + "…" : r.note}` : ""}{r.kind === "replay" ? " · replay filling open time" : ""}</p>}
                         </td>
-                        <td className="px-3 py-2.5 text-center">{r.intro ? <span className="font-bold text-[#4ade80]">✓ <span className="text-xs font-medium text-white/55">{r.introMin ?? 3}m</span></span> : <span className="text-white/30">—</span>}</td>
-                        <td className="px-3 py-2.5 text-center">{r.outro ? <span className="font-bold text-[#4ade80]">✓ <span className="text-xs font-medium text-white/55">{r.outroMin ?? 3}m</span></span> : <span className="text-white/30">—</span>}</td>
+                        <td className="px-3 py-2.5 text-center">{r.intro ? (r.introAudio ? <span className="font-bold text-[#4ade80]">✓ <span className="text-xs font-medium text-white/55">{r.introMin ?? 3}m</span></span> : <span className="text-xs font-bold text-[#F0A71F]" title="The card shows, but no voice clip is made yet">card only</span>) : <span className="text-white/30">—</span>}</td>
+                        <td className="px-3 py-2.5 text-center">{r.outro ? (r.outroAudio ? <span className="font-bold text-[#4ade80]">✓ <span className="text-xs font-medium text-white/55">{r.outroMin ?? 3}m</span></span> : <span className="text-xs font-bold text-[#F0A71F]" title="The card shows, but no voice clip is made yet">card only</span>) : <span className="text-white/30">—</span>}</td>
                         <td className="whitespace-nowrap px-3 py-2.5 font-mono text-xs text-white/70">{r.kind === "live" ? `${Math.round((Date.parse(r.offAirAtUtc!) - Date.parse(r.onAirAtUtc!)) / 60000)} min live` : r.durationSec ? mins(r.durationSec) : ""}</td>
                         <td className="px-3 py-2.5 text-xs">
                           {ph && <span className="mr-2 rounded bg-white/10 px-2 py-0.5 font-bold">{ph.name} {mmss(ph.leftMs)}</span>}

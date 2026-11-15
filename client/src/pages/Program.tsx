@@ -16,7 +16,8 @@ import { StageGrid, useStageRoom } from "@/components/StageView";
 
 type Booking = { id: number; show: string; host: string; photo: string; mediaUrl?: string; startAtUtc: string; endAtUtc: string; onAirAtUtc: string; offAirAtUtc: string };
 type Replay_ = { id: number; show: string; host: string; photo: string; mediaUrl: string; durationSec: number };
-type Program = { eventId: number; day: string; startAtUtc: string; endAtUtc: string; fillerUrl: string; dayIndex?: number; replays?: Replay_[]; bookings: Booking[] };
+type VoiceInfo = { welcomeUrl: string; welcomeSec: number; signoffUrl: string; signoffSec: number };
+type Program = { eventId: number; day: string; startAtUtc: string; endAtUtc: string; fillerUrl: string; voice?: VoiceInfo; dayIndex?: number; replays?: Replay_[]; bookings: Booking[] };
 
 const ET = "America/New_York";
 const hm = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { timeZone: ET, hour: "numeric", minute: "2-digit" });
@@ -53,7 +54,7 @@ function Card({ eyebrow, title, sub, photo, foot }: { eyebrow: string; title: st
  * clock is (so every listener hears the same moment), and when it ends the thank-you card takes over
  * until the slot closes.
  */
-function Replay({ id, src, show, host, photo, startedAt, now, muted, tag }: { id: string; src: string; show: string; host: string; photo: string; startedAt: number; now: number; muted: boolean; tag?: string }) {
+function Replay({ id, src, show, host, photo, startedAt, now, muted, tag, duck }: { id: string; src: string; show: string; host: string; photo: string; startedAt: number; now: number; muted: boolean; tag?: string; duck?: boolean }) {
   const ref = useRef<HTMLVideoElement>(null);
   const [ended, setEnded] = useState(false);
   const offset = Math.max(0, (now - startedAt) / 1000);
@@ -61,6 +62,8 @@ function Replay({ id, src, show, host, photo, startedAt, now, muted, tag }: { id
   useEffect(() => { setEnded(false); }, [id]);
   // React sets `muted` only when the element is made, so a listener's tap has to reach the element itself.
   useEffect(() => { const v = ref.current; if (v) { v.muted = muted; if (!muted) v.play().catch(() => undefined); } }, [muted, ended]);
+  // The station's voice talks over it: turn it down while she does.
+  useEffect(() => { const v = ref.current; if (v) v.volume = duck ? 0.12 : 1; }, [duck, ended]);
   if (ended) return <Card eyebrow="Thank you for listening" title={show} sub={host ? `with ${host}` : undefined} photo={photo} />;
   return (
     <>
@@ -70,12 +73,12 @@ function Replay({ id, src, show, host, photo, startedAt, now, muted, tag }: { id
   );
 }
 
-/** The station's voice over the intro and outro cards: starts with the card, from wherever the clock is. */
-function Voice({ id, kind, startedAt, now, muted }: { id: number; kind: "intro" | "outro"; startedAt: number; now: number; muted: boolean }) {
+/** The station's voice (Alex, with a little music under her): a clip that starts at a given moment and is joined from wherever the clock is. */
+function Voice({ src, startedAt, now, muted }: { src: string; startedAt: number; now: number; muted: boolean }) {
   const ref = useRef<HTMLAudioElement>(null);
   const place = () => { const a = ref.current; const off = Math.max(0, (now - startedAt) / 1000); if (a && off < (a.duration || 1e9) && Math.abs(a.currentTime - off) > 1.5) a.currentTime = off; };
   useEffect(() => { const a = ref.current; if (a) { a.muted = muted; if (!muted) a.play().catch(() => undefined); } }, [muted]);
-  return <audio ref={ref} src={`/api/radio/voice/${id}/${kind}.mp3`} autoPlay muted={muted} onLoadedMetadata={place} />;
+  return <audio ref={ref} src={src} autoPlay muted={muted} onLoadedMetadata={place} />;
 }
 
 export default function Program() {
@@ -132,17 +135,29 @@ export default function Program() {
     return { r: list[g % list.length], slot, startedAt: dayStart + slot * 1_800_000 };
   }, [program.data, phase, Math.floor(now / 60_000)]);
 
+  // The day's spoken welcome at go-time (a booking's intro waits for it) and the sign-off that ends the day.
+  const voice = program.data?.voice;
+  const dayStart = Date.parse(program.data?.startAtUtc ?? "");
+  const dayEnd = Date.parse(program.data?.endAtUtc ?? "");
+  const welcomeMs = voice?.welcomeUrl ? (voice.welcomeSec + 1) * 1000 : 0;
+  const welcomeOn = !!voice?.welcomeUrl && Number.isFinite(dayStart) && now >= dayStart && now < dayStart + welcomeMs;
+  const signoffAt = dayEnd - ((voice?.signoffSec ?? 0) + 1) * 1000;
+  const signoffOn = !!voice?.signoffUrl && Number.isFinite(dayEnd) && now >= signoffAt && now < dayEnd;
+  const introAt = current ? Date.parse(current.startAtUtc) + (Date.parse(current.startAtUtc) === dayStart ? welcomeMs : 0) : 0;
+
   const nextLine = next ? `Up next at ${hm(next.startAtUtc)}: ${next.show}` : "Back weekdays at 7 am Eastern";
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-[#000741]">
       {phase === "live" && !current!.mediaUrl && tiles.length > 0 && <StageGrid tiles={tiles} meta={{ status: "Live" }} caption={caption} />}
       {phase === "live" && current!.mediaUrl && <Replay id={`b${current!.id}`} src={current!.mediaUrl} show={current!.show} host={current!.host} photo={current!.photo} startedAt={Date.parse(current!.onAirAtUtc)} now={now} muted={muted} />}
       {phase === "live" && !current!.mediaUrl && tiles.length === 0 && <Card eyebrow="Live now" title={current!.show} sub={`with ${current!.host}`} photo={current!.photo} foot="Joining in a moment" />}
-      {phase === "intro" && <Voice key={`i${current!.id}`} id={current!.id} kind="intro" startedAt={Date.parse(current!.startAtUtc)} now={now} muted={muted} />}
-      {phase === "outro" && <Voice key={`o${current!.id}`} id={current!.id} kind="outro" startedAt={Date.parse(current!.offAirAtUtc)} now={now} muted={muted} />}
-      {phase === "intro" && <Card eyebrow="Coming up" title={current!.show} sub={`with ${current!.host}`} photo={current!.photo} foot={`Live in ${mmss(Date.parse(current!.onAirAtUtc) - now)}`} />}
+      {phase === "intro" && now >= introAt && <Voice key={`i${current!.id}`} src={`/api/radio/voice/${current!.id}/intro.mp3`} startedAt={introAt} now={now} muted={muted} />}
+      {phase === "outro" && <Voice key={`o${current!.id}`} src={`/api/radio/voice/${current!.id}/outro.mp3`} startedAt={Date.parse(current!.offAirAtUtc)} now={now} muted={muted} />}
+      {welcomeOn && <Voice key="welcome" src={voice!.welcomeUrl} startedAt={dayStart} now={now} muted={muted} />}
+      {signoffOn && <Voice key="signoff" src={voice!.signoffUrl} startedAt={signoffAt} now={now} muted={muted} />}
+      {phase === "intro" && <Card eyebrow="Coming up" title={current!.show} sub={`with ${current!.host}`} photo={current!.photo} foot={`${current!.mediaUrl ? "Starts" : "Live"} in ${mmss(Date.parse(current!.onAirAtUtc) - now)}`} />}
       {phase === "outro" && <Card eyebrow="Thank you" title={current!.host} sub={current!.show} photo={current!.photo} foot={nextLine} />}
-      {phase === "filler" && fill && <Replay id={`f${fill.slot}`} src={fill.r.mediaUrl} show={fill.r.show} host={fill.r.host} photo={fill.r.photo} startedAt={fill.startedAt} now={now} muted={muted} tag="Replay" />}
+      {phase === "filler" && fill && <Replay id={`f${fill.slot}`} src={fill.r.mediaUrl} show={fill.r.show} host={fill.r.host} photo={fill.r.photo} startedAt={fill.startedAt} now={now} muted={muted} tag="Replay" duck={welcomeOn || signoffOn} />}
       {phase === "filler" && !fill && (program.data?.fillerUrl
         ? <>
             <video src={program.data.fillerUrl} autoPlay loop playsInline muted={muted} className="absolute inset-0 h-full w-full object-cover" />
