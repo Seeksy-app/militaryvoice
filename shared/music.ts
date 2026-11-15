@@ -19,4 +19,6 @@ export const MUSIC_SEEDS: MusicSeed[] = [
   { key: "sunrise-pt", name: "Sunrise PT", mood: "Upbeat", seconds: 90, prompt: "Instrumental upbeat funky pop, slap bass, bright horns, handclaps, fun and energetic morning vibe, 118 bpm, no vocals, feel-good social video" },
   { key: "field-notes", name: "Field Notes", mood: "Ambient", seconds: 90, prompt: "Instrumental ambient soundscape, soft evolving pads, gentle piano notes, airy and calm, no drums, no vocals, unobtrusive background under talking" },
   { key: "last-light", name: "Last Light", mood: "Cinematic", seconds: 90, prompt: "Instrumental epic cinematic trailer music, deep taiko drums, soaring strings and choir-like pads without words, heroic and grand, 95 bpm, no vocals" },
+  { key: "easy-morning", name: "Easy Morning", mood: "Soft pop", seconds: 90, prompt: "Instrumental soft modern pop, warm electric piano, light fingerpicked acoustic guitar, gentle finger-snap beat, airy synth pad, bright and hopeful, relaxed 100 bpm, no vocals, sits quietly under a speaking voice" },
+  { key: "soft-landing", name: "Soft Landing", mood: "Soft pop", seconds: 90, prompt: "Instrumental soft modern chill pop, mellow piano chords, warm bass, brushed drums, dreamy pad, calm and grateful, slow 85 bpm, no vocals, gentle background under a speaking voice" },
 ];
