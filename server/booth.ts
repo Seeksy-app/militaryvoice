@@ -7,9 +7,11 @@
 // clock and each booth only shows its own people.
 import crypto from "node:crypto";
 import type { Express } from "express";
-import { storage } from "./storage.js";
+import { storage, db } from "./storage.js";
+import { eq } from "drizzle-orm";
+import { recordings as recordingsTable } from "../shared/schema.js";
 import { getAdminEmail, getSessionEmail } from "./session.js";
-import { isLiveKitConfigured, publicLiveKitUrl, roomName, studioToken } from "./livekit.js";
+import { isLiveKitConfigured, publicLiveKitUrl, roomName, studioToken, rooms, egressIsActive } from "./livekit.js";
 import { dxEventIds } from "./digitalExperience.js";
 import { buildShareCard } from "./shareCard.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
@@ -129,6 +131,69 @@ export function registerBooth(app: Express): void {
       liveone: (await storage.getSetting("dx:liveone-url")) ?? "",
       bookings: list.map((s) => { const t = bookingTimes(ev, s); return { id: s.id, show: s.podcastName, host: s.hostName, photo: s.photoUrl, about: s.notes, startAtUtc: new Date(t.start).toISOString(), endAtUtc: new Date(t.end).toISOString() }; }),
     });
+  });
+
+  /**
+   * The producer's run of show (Admin → /admin/radio-ros): all five days, every half hour, what is in it
+   * (LIVE booth, VOD recorded episode, REPLAY filling open time, or nothing yet), whether it has the station's
+   * intro and outro, and what the room looks like right now. Admins only.
+   */
+  app.get("/api/admin/radio/ros", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const adminEmail = getAdminEmail(req);
+    if (!adminEmail || !(await storage.isAdminEmail(adminEmail))) return res.status(401).json({ message: "Sign in to the admin." });
+    const ids = (await dxEventIds()).slice().sort((a, b) => a - b);
+    let replays: Array<{ key?: string; show?: string; host?: string; durationSec?: number }> = [];
+    try { replays = (JSON.parse((await storage.getSetting("dx:replays")) ?? "[]") as typeof replays).filter((r) => r.key); } catch { replays = []; }
+    const now = Date.now();
+    const days = [];
+    for (let di = 0; di < ids.length; di++) {
+      const ev = await storage.getEventById(ids[di]);
+      if (!ev) continue;
+      const studio = await storage.getOrCreateStudio(ev.id);
+      const slots = Math.floor((ev.durationHours * 60) / ev.slotMinutes);
+      const list = (await storage.listSignups(ev.id)).filter((x) => x.status !== "cancelled" && x.id !== 60).sort((a, b) => a.slotIndex - b.slotIndex);
+      // Who is in the room now (only worth asking for the day that is on).
+      let inRoom: Array<{ name: string; signupId: number }> = [];
+      const dayStart = ms(ev.startAtUtc), dayEnd = dayStart + ev.durationHours * 3600_000;
+      let recording = false;
+      if (isLiveKitConfigured() && now >= dayStart - 3600_000 && now < dayEnd) {
+        try { inRoom = (await rooms().listParticipants(roomName(studio.id))).map((p) => ({ name: p.name || p.identity, signupId: Number((p.attributes as Record<string, string> | undefined)?.signupId) || 0 })); } catch { /* the room is not up */ }
+        try { recording = studio.recordingEgressId ? await egressIsActive(studio.recordingEgressId) : false; } catch { /* unknown */ }
+      }
+      const rows: Array<Record<string, unknown>> = [];
+      for (let k = 0; k < slots; k++) {
+        const b = list.find((x) => x.slotIndex === k);
+        const covered = list.find((x) => x.slotIndex < k && k < x.slotIndex + Math.max(1, x.slotSpan));
+        if (covered) continue;
+        const slotStart = dayStart + k * ev.slotMinutes * 60_000;
+        if (b) {
+          const t = bookingTimes(ev, b);
+          const vod = b.showFormat === "prerecorded";
+          let durationSec = 0;
+          if (vod && b.recordingUrl) {
+            const [rec] = await db.select({ d: recordingsTable.durationSec }).from(recordingsTable).where(eq(recordingsTable.url, b.recordingUrl)).limit(1);
+            durationSec = rec?.d ?? 0;
+          }
+          const liveWindow = (t.onAirEnd - t.onAirStart) / 1000;
+          rows.push({
+            slot: k, span: Math.max(1, b.slotSpan), startAtUtc: new Date(t.start).toISOString(), endAtUtc: new Date(t.end).toISOString(),
+            kind: vod ? "vod" : "live", show: b.podcastName, host: b.hostName, note: b.notes, signupId: b.id,
+            intro: true, outro: true, introMin: (t.onAirStart - t.start) / 60_000, outroMin: (t.end - t.onAirEnd) / 60_000,
+            onAirAtUtc: new Date(t.onAirStart).toISOString(), offAirAtUtc: new Date(t.onAirEnd).toISOString(),
+            durationSec, warning: vod && !b.recordingUrl ? "No file yet" : vod && durationSec && durationSec > liveWindow ? "Runs longer than its window" : "",
+            opensAtUtc: new Date(t.start - OPENS_MIN * 60_000).toISOString(),
+          });
+        } else if (replays.length) {
+          const r = replays[(di * 30 + k) % replays.length];
+          rows.push({ slot: k, span: 1, startAtUtc: new Date(slotStart).toISOString(), endAtUtc: new Date(slotStart + ev.slotMinutes * 60_000).toISOString(), kind: "replay", show: r.show ?? "", host: r.host ?? "", intro: false, outro: false, durationSec: r.durationSec ?? 0, warning: "" });
+        } else {
+          rows.push({ slot: k, span: 1, startAtUtc: new Date(slotStart).toISOString(), endAtUtc: new Date(slotStart + ev.slotMinutes * 60_000).toISOString(), kind: "open", show: "", host: "", intro: false, outro: false, durationSec: 0, warning: "" });
+        }
+      }
+      days.push({ eventId: ev.id, name: ev.name, startAtUtc: ev.startAtUtc, endAtUtc: new Date(dayEnd).toISOString(), status: studio.status, recording, inRoom, rows });
+    }
+    res.json({ now: new Date(now).toISOString(), days });
   });
 
   /**
