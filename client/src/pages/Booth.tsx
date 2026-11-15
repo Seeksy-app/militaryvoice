@@ -55,8 +55,8 @@ function Clock({ ms, big = true }: { ms: number; big?: boolean }) {
  * (it is radio, so the picture matters little and the clock matters most). On a phone it runs across the top.
  * On air, the big clock counts DOWN the time left; the time already used counts UP underneath.
  */
-function Rail({ info }: { info: Info }) {
-  const now = useNow();
+function Rail({ info, shift = 0 }: { info: Info; shift?: number }) {
+  const now = useNow() + shift;
   const on = Date.parse(info.onAirAtUtc), off = Date.parse(info.offAirAtUtc), start = Date.parse(info.startAtUtc), end = Date.parse(info.endAtUtc);
   const left = off - now;
   let tone = "bg-[#1a2150] text-white", label = "", small = "", ms = 0, clock = true;
@@ -133,6 +133,8 @@ export default function Booth({ id }: { id: string }) {
   const [error, setError] = useState("");
   const [left, setLeft] = useState(false);
   const now = useNow();
+  // An admin can preview any moment: ?at=2026-11-16T21:03:00Z plays the clock as if it were then.
+  const previewShift = useMemo(() => { const at = Date.parse(new URLSearchParams(window.location.search).get("at") ?? ""); return Number.isFinite(at) ? at - Date.now() : 0; }, []);
 
   const join = async (c: LocalUserChoices) => {
     setError("");
@@ -210,7 +212,7 @@ export default function Booth({ id }: { id: string }) {
         {d.role === "host" && <GuestLink link={d.guestLink} />}
       </div>
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row-reverse">
-        <Rail info={d} />
+        <Rail info={d} shift={d.anytime ? previewShift : 0} />
         <div className="min-h-0 flex-1"><BookingStage signupId={d.signupId} /></div>
       </div>
       <ControlBar controls={{ microphone: true, camera: true, screenShare: false, chat: false, leave: true }} />
