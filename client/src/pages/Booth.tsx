@@ -31,26 +31,36 @@ function useNow() {
   return now;
 }
 
-/** Where they are against the clock, in words they can act on. */
-function Status({ info }: { info: Info }) {
+/**
+ * Where they are against the clock: a rail down the right with one big countdown to the next thing that happens
+ * (it is radio, so the picture matters little and the clock matters most). On a phone it runs across the top.
+ */
+function Rail({ info }: { info: Info }) {
   const now = useNow();
   const on = Date.parse(info.onAirAtUtc), off = Date.parse(info.offAirAtUtc), start = Date.parse(info.startAtUtc), end = Date.parse(info.endAtUtc);
   const left = off - now;
-  let tone = "bg-white/10 text-white", big = "", small = "";
-  if (now < start) { big = `On air in ${mmss(on - now)}`; small = `The station's intro starts at ${hm(info.startAtUtc)} ET, then you're live at ${hm(info.onAirAtUtc)}.`; }
-  else if (now < on) { tone = "bg-[#F0A71F] text-[#1a1200]"; big = `Intro playing · live in ${mmss(on - now)}`; small = "Get ready: you're next."; }
+  let tone = "bg-[#1a2150] text-white", label = "", big = "", small = "", sub = "";
+  let pct = -1;
+  if (now < start) { label = "You're on air in"; big = mmss(on - now); small = `The station's intro starts at ${hm(info.startAtUtc)} ET, then you're live at ${hm(info.onAirAtUtc)}.`; }
+  else if (now < on) { tone = "bg-[#F0A71F] text-[#1a1200]"; label = "Intro playing. Live in"; big = mmss(on - now); small = "Get ready: you're next."; }
   else if (now < off) {
     tone = left <= 30_000 ? "bg-white text-[#ED1C24]" : "bg-[#ED1C24] text-white";
-    big = `ON AIR · ${mmss(now - on)} elapsed · ${mmss(left)} left`;
+    label = "ON AIR · time left"; big = mmss(left);
+    sub = `${mmss(now - on)} elapsed`;
+    pct = Math.min(100, Math.max(0, ((now - on) / (off - on)) * 100));
     small = left <= 30_000 ? "Say goodbye now: the outro is about to play." : left <= 120_000 ? "Two minutes: start wrapping up." : left <= 300_000 ? "Five minutes left." : `You're live until ${hm(info.offAirAtUtc)} ET.`;
   }
-  else if (now < end) { tone = "bg-[#053877] text-white"; big = "Outro playing · thank you!"; small = "You're off air. Stay as long as you like, or leave below."; }
-  else { big = "That's a wrap. Thank you!"; small = "You can close this tab."; }
+  else if (now < end) { tone = "bg-[#053877] text-white"; label = "You're off air"; big = "Thank you"; small = "The station's outro is playing. Stay as long as you like, or leave below."; }
+  else { label = "That's a wrap"; big = "Thank you"; small = "You can close this tab."; }
+  const long = big.length > 5;
   return (
-    <div className={`flex flex-wrap items-center justify-between gap-2 px-5 py-3 ${tone}`} data-testid="booth-status">
-      <p className="flex items-center gap-2 text-xl font-black tracking-tight sm:text-2xl">{now >= on && now < off && <Radio className="h-6 w-6 animate-pulse" />}{big}</p>
-      <p className="text-sm font-semibold opacity-90">{small}</p>
-    </div>
+    <aside className={`flex shrink-0 flex-col justify-center gap-2 px-5 py-4 text-center lg:w-[28rem] lg:gap-4 lg:px-8 ${tone}`} data-testid="booth-status">
+      <p className="flex items-center justify-center gap-2 text-sm font-extrabold uppercase tracking-[0.18em] sm:text-base lg:text-lg">{now >= on && now < off && <Radio className="h-5 w-5 animate-pulse" />}{label}</p>
+      <p className={`font-black leading-none tabular-nums tracking-tight ${long ? "text-5xl sm:text-6xl lg:text-7xl" : "text-7xl sm:text-8xl lg:text-[8rem]"}`}>{big}</p>
+      {sub && <p className="text-lg font-bold opacity-90">{sub}</p>}
+      {pct >= 0 && <div className="mx-auto h-2 w-full max-w-xs overflow-hidden rounded-full bg-black/20"><div className="h-full rounded-full bg-current" style={{ width: `${pct}%` }} /></div>}
+      <p className="text-base font-semibold opacity-90 lg:text-lg">{small}</p>
+    </aside>
   );
 }
 
@@ -167,12 +177,14 @@ export default function Booth({ id }: { id: string }) {
       onDisconnected={() => setLeft(true)}
       style={{ height: "100dvh", display: "flex", flexDirection: "column", background: "#000741" }}
     >
-      <Status info={d} />
       <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-2 text-white">
         <p className="text-sm font-semibold">{d.show} <span className="font-normal text-white/60">· you see and hear only your own booth</span></p>
         {d.role === "host" && <GuestLink link={d.guestLink} />}
       </div>
-      <div className="min-h-0 flex-1"><BookingStage signupId={d.signupId} /></div>
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+        <Rail info={d} />
+        <div className="min-h-0 flex-1"><BookingStage signupId={d.signupId} /></div>
+      </div>
       <ControlBar controls={{ microphone: true, camera: true, screenShare: false, chat: false, leave: true }} />
     </LiveKitRoom>
   );
