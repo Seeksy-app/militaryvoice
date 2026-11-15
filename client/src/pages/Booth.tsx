@@ -3,7 +3,7 @@ import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ControlBar, GridLayout, LiveKitRoom, ParticipantTile, PreJoin, RoomAudioRenderer, useRemoteParticipants, useRoomContext, useTracks, type LocalUserChoices } from "@livekit/components-react";
 import { RoomEvent, Track, type RemoteParticipant } from "livekit-client";
-import { Check, Copy, Radio } from "lucide-react";
+import { Check, Copy, Mic, Radio, Square, Timer } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
 // MilitaryVoices Radio booth: one booking's own simple studio. Check the
@@ -34,15 +34,16 @@ function useNow() {
 /** A clock face: hours, minutes and seconds, each with its word under it, ticking every second. */
 function Clock({ ms, big = true }: { ms: number; big?: boolean }) {
   const t = Math.max(0, Math.ceil(ms / 1000));
-  const parts = [["hours", Math.floor(t / 3600)], ["min", Math.floor((t % 3600) / 60)], ["sec", t % 60]] as const;
+  const parts = [["hours", Math.floor(t / 3600)], ["minutes", Math.floor((t % 3600) / 60)], ["seconds", t % 60]] as const;
+  const dot = big ? "h-2 w-2" : "h-1.5 w-1.5";
   return (
-    <div className="flex items-start justify-center gap-1.5 font-black tabular-nums leading-none" role="timer" aria-label={`${parts[0][1]} hours ${parts[1][1]} minutes ${parts[2][1]} seconds`}>
+    <div className="flex items-start justify-center gap-2 font-black tabular-nums leading-none" role="timer" aria-label={`${parts[0][1]} hours ${parts[1][1]} minutes ${parts[2][1]} seconds`}>
       {parts.map(([word, n], i) => (
-        <div key={word} className="flex items-start gap-1.5">
-          {i > 0 && <span className={`${big ? "text-[3.5rem] lg:text-[4.5rem]" : "text-3xl"} -mt-1 opacity-60`}>:</span>}
+        <div key={word} className="flex items-start gap-2">
+          {i > 0 && <span className={`flex flex-col gap-2 ${big ? "mt-[1.9rem] lg:mt-[2.4rem]" : "mt-[0.95rem]"}`} aria-hidden><i className={`${dot} rounded-full bg-white/55`} /><i className={`${dot} rounded-full bg-white/55`} /></span>}
           <div className="flex flex-col items-center">
-            <span className={big ? "text-[4.25rem] lg:text-[5.5rem]" : "text-4xl"}>{String(n).padStart(2, "0")}</span>
-            <span className={`${big ? "mt-1 text-xs lg:text-sm" : "mt-0.5 text-[10px]"} font-bold uppercase tracking-[0.16em] opacity-70`}>{word}</span>
+            <span className={big ? "text-[4.4rem] tracking-tight [text-shadow:0_0_24px_rgba(255,255,255,0.25)] lg:text-[5.4rem]" : "text-[2.6rem] lg:text-[3rem]"}>{String(n).padStart(2, "0")}</span>
+            <span className={`${big ? "mt-1.5 text-[11px] lg:text-xs" : "mt-1 text-[10px]"} font-bold uppercase tracking-[0.14em] text-white/60`}>{word}</span>
           </div>
         </div>
       ))}
@@ -51,9 +52,10 @@ function Clock({ ms, big = true }: { ms: number; big?: boolean }) {
 }
 
 /**
- * Where they are against the clock: a rail down the right, with the countdown at the top where it can't be missed
+ * Where they are against the clock: a rail down the right with the countdown at the top where it can't be missed
  * (it is radio, so the picture matters little and the clock matters most). On a phone it runs across the top.
- * On air, the big clock counts DOWN the time left; the time already used counts UP underneath.
+ * On air, the big clock counts DOWN the time left; the time already used counts UP in the green card below.
+ * Design: Andrew's mockup, 15 Nov 2026 (dark navy glass, red ON AIR segment, green time-so-far card, red stop button).
  */
 function Rail({ info, shift = 0, onEnd }: { info: Info; shift?: number; onEnd?: () => Promise<void> }) {
   const [asking, setAsking] = useState(false);
@@ -61,46 +63,70 @@ function Rail({ info, shift = 0, onEnd }: { info: Info; shift?: number; onEnd?: 
   const now = useNow() + shift;
   const on = Date.parse(info.onAirAtUtc), off = Date.parse(info.offAirAtUtc), start = Date.parse(info.startAtUtc), end = Date.parse(info.endAtUtc);
   const left = off - now;
-  // One solid blue rail all the way through; the state lives in the pill at the top (red when on air).
-  let pill = "bg-white/20 text-white", label = "", small = "", ms = 0, clock = true;
+  // The pill is a two-part switch: the state on the left (red when on air), what the clock means on the right.
+  let seg = "bg-white/15 text-white", word = "", what = "", small = "", ms = 0, clock = true;
   let pct = -1;
-  if (now < start) { label = "You're on air in"; ms = on - now; small = `The station's intro starts at ${hm(info.startAtUtc)} ET, then you're live at ${hm(info.onAirAtUtc)}.`; }
-  else if (now < on) { pill = "bg-[#F0A71F] text-[#1a1200]"; label = "Intro playing. You're live in"; ms = on - now; small = "Get ready: you're next."; }
+  if (now < start) { word = "Soon"; what = "On air in"; ms = on - now; small = `The station's intro starts at ${hm(info.startAtUtc)} ET, then you're live at ${hm(info.onAirAtUtc)}.`; }
+  else if (now < on) { seg = "bg-gradient-to-b from-[#f7b733] to-[#d98b0a] text-[#1a1200]"; word = "Intro"; what = "Live in"; ms = on - now; small = "Get ready: you're next."; }
   else if (now < off) {
-    pill = "bg-[#ED1C24] text-white";
-    label = "ON AIR · time left"; ms = left;
+    seg = "bg-gradient-to-b from-[#f0434b] to-[#c8151c] text-white shadow-[0_0_18px_rgba(237,28,36,0.55)]";
+    word = "On air"; what = "Time left"; ms = left;
     pct = Math.min(100, Math.max(0, ((now - on) / (off - on)) * 100));
     small = left <= 30_000 ? "Say goodbye now: the outro is about to play." : left <= 120_000 ? "Two minutes: start wrapping up." : left <= 300_000 ? "Five minutes left." : `You're live until ${hm(info.offAirAtUtc)} ET.`;
   }
-  else if (now < end) { pill = "bg-[#16a34a] text-white"; label = "You're off air"; clock = false; small = "The station's outro is playing. Stay as long as you like, or leave below."; }
-  else { pill = "bg-[#16a34a] text-white"; label = "That's a wrap"; clock = false; small = "You can close this tab."; }
+  else if (now < end) { seg = "bg-gradient-to-b from-[#34d058] to-[#16a34a] text-white"; word = "Off air"; what = "Thank you"; clock = false; small = "The station's outro is playing. Stay as long as you like, or leave below."; }
+  else { seg = "bg-gradient-to-b from-[#34d058] to-[#16a34a] text-white"; word = "Done"; what = "Thank you"; clock = false; small = "You can close this tab."; }
   const onAir = now >= on && now < off;
   // The rail flashes three times, and stops, at five minutes, three, one, and thirty seconds left.
   const leftSec = Math.ceil(left / 1000);
   const flash = onAir && [300, 180, 60, 30].some((t) => leftSec <= t && leftSec > t - 2);
   return (
-    <aside className={`flex shrink-0 flex-col justify-start gap-3 bg-[#0a3a8f] px-5 pb-6 pt-5 text-center text-white lg:w-[30rem] lg:gap-5 lg:px-6 lg:pt-8 ${flash ? "mv-booth-flash" : ""}`} data-testid="booth-status" data-flashing={flash || undefined}>
-      <style>{`@keyframes mv-booth-flash{0%,49%{background-color:#0a3a8f}50%,100%{background-color:#ED1C24}} .mv-booth-flash{animation:mv-booth-flash .6s steps(1) 3}`}</style>
-      <p className={`mx-auto flex items-center justify-center gap-2 rounded-full px-6 py-2.5 text-sm font-extrabold uppercase tracking-[0.18em] sm:text-base lg:text-lg ${pill}`}>{onAir && <Radio className="h-5 w-5 animate-pulse" />}{label}</p>
-      {clock ? <Clock ms={ms} /> : <p className="text-6xl font-black leading-none lg:text-7xl">Thank you</p>}
+    <aside className="relative flex shrink-0 flex-col justify-start gap-4 overflow-hidden bg-[linear-gradient(180deg,#0b1d4a_0%,#071331_55%,#040b22_100%)] px-5 pb-8 pt-6 text-center text-white lg:w-[30rem] lg:gap-6 lg:px-8 lg:pt-9" data-testid="booth-status" data-flashing={flash || undefined}>
+      <style>{`@keyframes mv-flash{0%,100%{opacity:0}35%{opacity:.75}} .mv-flash{animation:mv-flash .6s ease-in-out 3}`}</style>
+      {/* The arc of light over the top, and the waves under the bottom */}
+      <svg className="pointer-events-none absolute inset-x-0 top-0 h-40 w-full" viewBox="0 0 480 160" preserveAspectRatio="none" aria-hidden>
+        <defs><linearGradient id="mvArc" x1="0" x2="1"><stop offset="0" stopColor="#2f6bff" stopOpacity="0.9" /><stop offset="0.55" stopColor="#2f6bff" stopOpacity="0.15" /><stop offset="1" stopColor="#ff3b3b" stopOpacity="0.95" /></linearGradient></defs>
+        <path d="M-10 160 C 40 20, 440 20, 490 160" fill="none" stroke="url(#mvArc)" strokeWidth="2.5" style={{ filter: "drop-shadow(0 0 8px rgba(80,120,255,0.6))" }} />
+      </svg>
+      <svg className="pointer-events-none absolute inset-x-0 bottom-0 h-40 w-full" viewBox="0 0 480 160" preserveAspectRatio="none" aria-hidden>
+        <defs><linearGradient id="mvWave" x1="0" x2="1"><stop offset="0" stopColor="#1b4fd8" stopOpacity="0.1" /><stop offset="0.5" stopColor="#4aa3ff" stopOpacity="0.9" /><stop offset="1" stopColor="#2f6bff" stopOpacity="0.15" /></linearGradient></defs>
+        <path d="M0 120 C 90 70, 170 150, 260 105 S 420 60, 480 90" fill="none" stroke="url(#mvWave)" strokeWidth="2" />
+        <path d="M0 135 C 100 95, 180 160, 270 125 S 420 85, 480 110" fill="none" stroke="url(#mvWave)" strokeWidth="1.2" opacity="0.6" />
+      </svg>
+      {flash && <div className="mv-flash pointer-events-none absolute inset-0 z-20 bg-[#ED1C24]" aria-hidden />}
+
+      <div className="relative z-10 mx-auto inline-flex items-stretch overflow-hidden rounded-full border border-white/25 bg-white/[0.06] text-sm font-extrabold uppercase tracking-[0.14em] lg:text-base">
+        <span className={`flex items-center gap-2 rounded-full px-5 py-2.5 ${seg}`}>{onAir && <Radio className="h-4 w-4 animate-pulse" />}{word}</span>
+        <span className="flex items-center px-5 text-white/75">{what}</span>
+      </div>
+
+      <div className="relative z-10">{clock ? <Clock ms={ms} /> : <p className="py-4 text-6xl font-black leading-none lg:text-7xl">Thank you</p>}</div>
+
       {onAir && (
-        <div className="mx-auto mt-1 w-full max-w-sm rounded-xl bg-[#14532d] px-4 py-3 text-white ring-1 ring-white/25">
-          <p className="text-xs font-extrabold uppercase tracking-[0.16em] opacity-90">Time on air so far</p>
+        <div className="relative z-10 mx-auto w-full max-w-sm rounded-2xl border border-[#4ade80]/50 bg-gradient-to-b from-[#14532d]/80 to-[#0b2b1a]/85 px-4 py-4 shadow-[0_0_30px_rgba(74,222,128,0.12)]">
+          <p className="flex items-center justify-center gap-2 text-xs font-extrabold uppercase tracking-[0.14em] text-white/90 lg:text-sm"><Mic className="h-4 w-4" />Time on air so far</p>
           <div className="mt-2"><Clock ms={now - on} big={false} /></div>
-          {pct >= 0 && <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-black/30"><div className="h-full rounded-full bg-white" style={{ width: `${pct}%` }} /></div>}
+          {pct >= 0 && <div className="mt-3 h-2.5 w-full overflow-hidden rounded-full bg-white/15"><div className="h-full rounded-full bg-gradient-to-r from-[#65e34a] to-[#9be04a]" style={{ width: `${pct}%` }} /></div>}
         </div>
       )}
-      <p className="text-xl font-bold text-white lg:text-2xl">{small}</p>
+
+      <div className="relative z-10 flex items-center gap-3 text-lg font-semibold lg:text-xl">
+        <span className="h-px flex-1 bg-white/20" />
+        {onAir && <Timer className="h-5 w-5 shrink-0 text-white/80" />}
+        <span>{small}</span>
+        <span className="h-px flex-1 bg-white/20" />
+      </div>
+
       {onAir && onEnd && (asking ? (
-        <div className="mx-auto flex w-full max-w-sm flex-col gap-2 rounded-xl bg-black/30 p-3" data-testid="booth-end-confirm">
+        <div className="relative z-10 mx-auto flex w-full max-w-sm flex-col gap-2 rounded-2xl border border-white/20 bg-black/35 p-3" data-testid="booth-end-confirm">
           <p className="text-sm font-bold">End your show now? The station plays your outro right away.</p>
           <div className="flex gap-2">
-            <button type="button" disabled={ending} onClick={() => { setEnding(true); void onEnd().finally(() => { setEnding(false); setAsking(false); }); }} className="flex-1 rounded-full bg-[#ED1C24] px-4 py-2 text-sm font-extrabold text-white">{ending ? "Ending…" : "Yes, end it"}</button>
-            <button type="button" onClick={() => setAsking(false)} className="flex-1 rounded-full border border-white/60 px-4 py-2 text-sm font-bold text-white">Keep going</button>
+            <button type="button" disabled={ending} onClick={() => { setEnding(true); void onEnd().finally(() => { setEnding(false); setAsking(false); }); }} className="flex-1 rounded-full bg-gradient-to-b from-[#f0434b] to-[#b3121a] px-4 py-2.5 text-sm font-extrabold text-white">{ending ? "Ending…" : "Yes, end it"}</button>
+            <button type="button" onClick={() => setAsking(false)} className="flex-1 rounded-full border border-white/50 px-4 py-2.5 text-sm font-bold text-white">Keep going</button>
           </div>
         </div>
       ) : (
-        <button type="button" onClick={() => setAsking(true)} className="mx-auto mt-2 rounded-full bg-[#ED1C24] px-7 py-3 text-base font-extrabold text-white shadow-lg ring-2 ring-white/70 hover:bg-[#c8151c]" data-testid="booth-end">End my show early</button>
+        <button type="button" onClick={() => setAsking(true)} className="relative z-10 mx-auto inline-flex items-center gap-3 rounded-full border border-white/30 bg-gradient-to-b from-[#f0434b] to-[#b3121a] px-8 py-3.5 text-base font-extrabold text-white shadow-[0_8px_26px_rgba(237,28,36,0.4)] hover:brightness-110 lg:text-lg" data-testid="booth-end"><Square className="h-5 w-5 fill-white" />End my show early</button>
       ))}
     </aside>
   );
