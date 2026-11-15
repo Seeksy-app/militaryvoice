@@ -81,10 +81,10 @@ function Rail({ info, shift = 0, onEnd }: { info: Info; shift?: number; onEnd?: 
   return (
     <aside className={`flex shrink-0 flex-col justify-start gap-3 px-5 pb-6 pt-5 text-center lg:w-[30rem] lg:gap-5 lg:px-6 lg:pt-8 ${tone} ${flash ? "mv-booth-flash" : ""}`} data-testid="booth-status" data-flashing={flash || undefined} style={{ ["--mv-tone" as string]: left <= 30_000 ? "#c81e25" : left <= 300_000 ? "#b45309" : "#14532d" }}>
       <style>{`@keyframes mv-booth-flash{0%,49%{background-color:var(--mv-tone);color:#fff}50%,100%{background-color:#fff;color:#14532d}} .mv-booth-flash{animation:mv-booth-flash .7s steps(1) infinite} .mv-booth-flash *{color:inherit !important}`}</style>
-      <p className="flex items-center justify-center gap-2 text-sm font-extrabold uppercase tracking-[0.18em] sm:text-base lg:text-xl">{onAir && <Radio className="h-5 w-5 animate-pulse" />}{label}</p>
+      <p className="mx-auto flex items-center justify-center gap-2 rounded-full bg-black/30 px-5 py-2 text-sm font-extrabold uppercase tracking-[0.18em] sm:text-base lg:text-lg">{onAir && <Radio className="h-5 w-5 animate-pulse" />}{label}</p>
       {clock ? <Clock ms={ms} /> : <p className="text-6xl font-black leading-none lg:text-7xl">Thank you</p>}
       {onAir && (
-        <div className="mx-auto mt-1 w-full max-w-sm rounded-xl bg-black/25 px-4 py-3">
+        <div className="mx-auto mt-1 w-full max-w-sm rounded-xl bg-[#04140a]/60 px-4 py-3 ring-1 ring-white/20">
           <p className="text-xs font-extrabold uppercase tracking-[0.16em] opacity-80">Time on air so far</p>
           <div className="mt-2 text-white/95"><Clock ms={now - on} big={false} /></div>
           {pct >= 0 && <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-black/20"><div className="h-full rounded-full bg-current" style={{ width: `${pct}%` }} /></div>}
@@ -100,7 +100,7 @@ function Rail({ info, shift = 0, onEnd }: { info: Info; shift?: number; onEnd?: 
           </div>
         </div>
       ) : (
-        <button type="button" onClick={() => setAsking(true)} className="mx-auto rounded-full border border-white/40 px-5 py-2 text-sm font-bold opacity-90 hover:opacity-100" data-testid="booth-end">End my show early</button>
+        <button type="button" onClick={() => setAsking(true)} className="mx-auto mt-2 rounded-full bg-white px-7 py-3 text-base font-extrabold text-[#0b1230] shadow-lg hover:bg-white/90" data-testid="booth-end">End my show early</button>
       ))}
     </aside>
   );
