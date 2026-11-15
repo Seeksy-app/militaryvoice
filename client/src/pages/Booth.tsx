@@ -31,35 +31,59 @@ function useNow() {
   return now;
 }
 
+/** A clock face: hours, minutes and seconds, each with its word under it, ticking every second. */
+function Clock({ ms, big = true }: { ms: number; big?: boolean }) {
+  const t = Math.max(0, Math.ceil(ms / 1000));
+  const parts = [["hours", Math.floor(t / 3600)], ["min", Math.floor((t % 3600) / 60)], ["sec", t % 60]] as const;
+  return (
+    <div className="flex items-start justify-center gap-1.5 font-black tabular-nums leading-none" role="timer" aria-label={`${parts[0][1]} hours ${parts[1][1]} minutes ${parts[2][1]} seconds`}>
+      {parts.map(([word, n], i) => (
+        <div key={word} className="flex items-start gap-1.5">
+          {i > 0 && <span className={`${big ? "text-[3.5rem] lg:text-[4.5rem]" : "text-3xl"} -mt-1 opacity-60`}>:</span>}
+          <div className="flex flex-col items-center">
+            <span className={big ? "text-[4.25rem] lg:text-[5.5rem]" : "text-4xl"}>{String(n).padStart(2, "0")}</span>
+            <span className={`${big ? "mt-1 text-xs lg:text-sm" : "mt-0.5 text-[10px]"} font-bold uppercase tracking-[0.16em] opacity-70`}>{word}</span>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /**
- * Where they are against the clock: a rail down the right with one big countdown to the next thing that happens
+ * Where they are against the clock: a rail down the right, with the countdown at the top where it can't be missed
  * (it is radio, so the picture matters little and the clock matters most). On a phone it runs across the top.
+ * On air, the big clock counts DOWN the time left; the time already used counts UP underneath.
  */
 function Rail({ info }: { info: Info }) {
   const now = useNow();
   const on = Date.parse(info.onAirAtUtc), off = Date.parse(info.offAirAtUtc), start = Date.parse(info.startAtUtc), end = Date.parse(info.endAtUtc);
   const left = off - now;
-  let tone = "bg-[#1a2150] text-white", label = "", big = "", small = "", sub = "";
+  let tone = "bg-[#1a2150] text-white", label = "", small = "", ms = 0, clock = true;
   let pct = -1;
-  if (now < start) { label = "You're on air in"; big = mmss(on - now); small = `The station's intro starts at ${hm(info.startAtUtc)} ET, then you're live at ${hm(info.onAirAtUtc)}.`; }
-  else if (now < on) { tone = "bg-[#F0A71F] text-[#1a1200]"; label = "Intro playing. Live in"; big = mmss(on - now); small = "Get ready: you're next."; }
+  if (now < start) { label = "You're on air in"; ms = on - now; small = `The station's intro starts at ${hm(info.startAtUtc)} ET, then you're live at ${hm(info.onAirAtUtc)}.`; }
+  else if (now < on) { tone = "bg-[#F0A71F] text-[#1a1200]"; label = "Intro playing. You're live in"; ms = on - now; small = "Get ready: you're next."; }
   else if (now < off) {
     tone = left <= 30_000 ? "bg-white text-[#ED1C24]" : "bg-[#ED1C24] text-white";
-    label = "ON AIR · time left"; big = mmss(left);
-    sub = `${mmss(now - on)} elapsed`;
+    label = "ON AIR · time left"; ms = left;
     pct = Math.min(100, Math.max(0, ((now - on) / (off - on)) * 100));
     small = left <= 30_000 ? "Say goodbye now: the outro is about to play." : left <= 120_000 ? "Two minutes: start wrapping up." : left <= 300_000 ? "Five minutes left." : `You're live until ${hm(info.offAirAtUtc)} ET.`;
   }
-  else if (now < end) { tone = "bg-[#053877] text-white"; label = "You're off air"; big = "Thank you"; small = "The station's outro is playing. Stay as long as you like, or leave below."; }
-  else { label = "That's a wrap"; big = "Thank you"; small = "You can close this tab."; }
-  const long = big.length > 5;
+  else if (now < end) { tone = "bg-[#053877] text-white"; label = "You're off air"; clock = false; small = "The station's outro is playing. Stay as long as you like, or leave below."; }
+  else { label = "That's a wrap"; clock = false; small = "You can close this tab."; }
+  const onAir = now >= on && now < off;
   return (
-    <aside className={`flex shrink-0 flex-col justify-center gap-2 px-5 py-4 text-center lg:w-[28rem] lg:gap-4 lg:px-8 ${tone}`} data-testid="booth-status">
-      <p className="flex items-center justify-center gap-2 text-sm font-extrabold uppercase tracking-[0.18em] sm:text-base lg:text-lg">{now >= on && now < off && <Radio className="h-5 w-5 animate-pulse" />}{label}</p>
-      <p className={`font-black leading-none tabular-nums tracking-tight ${long ? "text-5xl sm:text-6xl lg:text-7xl" : "text-7xl sm:text-8xl lg:text-[8rem]"}`}>{big}</p>
-      {sub && <p className="text-lg font-bold opacity-90">{sub}</p>}
-      {pct >= 0 && <div className="mx-auto h-2 w-full max-w-xs overflow-hidden rounded-full bg-black/20"><div className="h-full rounded-full bg-current" style={{ width: `${pct}%` }} /></div>}
-      <p className="text-base font-semibold opacity-90 lg:text-lg">{small}</p>
+    <aside className={`flex shrink-0 flex-col justify-start gap-3 px-5 pb-6 pt-5 text-center lg:w-[30rem] lg:gap-5 lg:px-6 lg:pt-8 ${tone}`} data-testid="booth-status">
+      <p className="flex items-center justify-center gap-2 text-sm font-extrabold uppercase tracking-[0.18em] sm:text-base lg:text-xl">{onAir && <Radio className="h-5 w-5 animate-pulse" />}{label}</p>
+      {clock ? <Clock ms={ms} /> : <p className="text-6xl font-black leading-none lg:text-7xl">Thank you</p>}
+      {onAir && (
+        <div className="mx-auto mt-1 w-full max-w-sm rounded-xl bg-black/15 px-4 py-3">
+          <p className="text-xs font-extrabold uppercase tracking-[0.16em] opacity-80">Time on air so far</p>
+          <div className="mt-2"><Clock ms={now - on} big={false} /></div>
+          {pct >= 0 && <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-black/20"><div className="h-full rounded-full bg-current" style={{ width: `${pct}%` }} /></div>}
+        </div>
+      )}
+      <p className="text-base font-semibold opacity-90 lg:text-xl">{small}</p>
     </aside>
   );
 }
