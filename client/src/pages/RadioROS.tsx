@@ -112,10 +112,12 @@ export default function RadioROS() {
           <div className="rounded-xl bg-white/[0.06] p-3 ring-1 ring-white/10" data-testid="ros-next">
             <p className="text-[11px] font-black uppercase tracking-[0.2em] text-white/50">Next</p>
             {nxt ? (
-              <div className="mt-1 flex items-center gap-3">
+              <div className="mt-1 flex items-start gap-3">
                 <Kind r={nxt.r} />
-                <span className="min-w-0 flex-1 truncate text-base font-semibold">{nxt.r.show || "Open time"}</span>
-                <span className="font-mono text-sm tabular-nums text-white/75">{dayShort(nxt.r.startAtUtc)} {hm(nxt.r.startAtUtc)} · in {mmss(Date.parse(nxt.r.startAtUtc) - now)}</span>
+                <div className="min-w-0 flex-1">
+                  <p className="truncate text-base font-semibold">{nxt.r.show || "Open time"}</p>
+                  <p className="font-mono text-sm tabular-nums text-white/75">{dayShort(nxt.r.startAtUtc)} {hm(nxt.r.startAtUtc)} · in {mmss(Date.parse(nxt.r.startAtUtc) - now)}</p>
+                </div>
               </div>
             ) : <p className="mt-1 text-white/60">Nothing more this week.</p>}
           </div>
@@ -161,7 +163,7 @@ export default function RadioROS() {
                         <td className="px-3 py-2.5"><Kind r={r} /></td>
                         <td className="px-3 py-2.5">
                           <p className="font-semibold">{r.show || <span className="text-white/45">Open: station card until booked</span>}</p>
-                          {(r.host || r.note) && <p className="text-xs text-white/60">{r.host}{r.note ? ` · ${r.note}` : ""}{r.kind === "replay" ? " · replay filling open time" : ""}</p>}
+                          {(r.host || r.note) && <p className="text-xs text-white/60">{r.host}{r.note ? ` · ${r.note.length > 90 ? r.note.slice(0, 90).trimEnd() + "…" : r.note}` : ""}{r.kind === "replay" ? " · replay filling open time" : ""}</p>}
                         </td>
                         <td className="px-3 py-2.5 text-center">{r.intro ? <span className="font-bold text-[#4ade80]">✓ <span className="text-xs font-medium text-white/55">{r.introMin ?? 3}m</span></span> : <span className="text-white/30">—</span>}</td>
                         <td className="px-3 py-2.5 text-center">{r.outro ? <span className="font-bold text-[#4ade80]">✓ <span className="text-xs font-medium text-white/55">{r.outroMin ?? 3}m</span></span> : <span className="text-white/30">—</span>}</td>
