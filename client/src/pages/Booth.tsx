@@ -1,5 +1,5 @@
 import "@livekit/components-styles";
-import { useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ControlBar, GridLayout, LiveKitRoom, ParticipantTile, PreJoin, RoomAudioRenderer, useRemoteParticipants, useRoomContext, useTracks, type LocalUserChoices } from "@livekit/components-react";
 import { RoomEvent, Track, type RemoteParticipant } from "livekit-client";
@@ -138,6 +138,20 @@ function BookingStage({ signupId }: { signupId: number }) {
   );
 }
 
+/** Props that never change, so the page ticking its clock twice a second doesn't hand LiveKit a "new" setting each time. */
+const CONNECT_OPTS = { autoSubscribe: false } as const;
+const ROOM_STYLE = { height: "100dvh", display: "flex", flexDirection: "column", background: "#000741" } as const;
+const CONTROLS = { microphone: true, camera: true, screenShare: false, chat: false, leave: true } as const;
+
+/**
+ * The camera and mic check. Memoised on purpose: the booth page re-renders every half second for its clock, and a
+ * pre-join that got fresh props each time restarted its camera preview, so the picture blinked on and off.
+ */
+const PreJoinBox = memo(function PreJoinBox({ username, onJoin, onError }: { username: string; onJoin: (c: LocalUserChoices) => void; onError: (e: Error) => void }) {
+  const defaults = useMemo(() => ({ username }), [username]);
+  return <PreJoin defaults={defaults} persistUserChoices={false} joinLabel="Enter my booth" userLabel="Your name" onSubmit={onJoin} onError={onError} />;
+});
+
 export default function Booth({ id }: { id: string }) {
   const g = useMemo(() => new URLSearchParams(window.location.search).get("g") ?? "", []);
   const info = useQuery<Info>({ queryKey: ["/api/booth", id, g], queryFn: async () => (await apiRequest("GET", `/api/booth/${id}${g ? `?g=${encodeURIComponent(g)}` : ""}`)).json(), retry: false });
@@ -149,14 +163,19 @@ export default function Booth({ id }: { id: string }) {
   // An admin can preview any moment: ?at=2026-11-16T21:03:00Z plays the clock as if it were then.
   const previewShift = useMemo(() => { const at = Date.parse(new URLSearchParams(window.location.search).get("at") ?? ""); return Number.isFinite(at) ? at - Date.now() : 0; }, []);
 
-  const join = async (c: LocalUserChoices) => {
+  const join = useCallback(async (c: LocalUserChoices) => {
     setError("");
     try {
       const r = await apiRequest("POST", `/api/booth/${id}/token`, { name: c.username, g: g || undefined });
       setChoices(c);
       setConn(await r.json());
     } catch (e) { setError(say(e)); }
-  };
+  }, [id, g]);
+  const onDisconnected = useCallback(() => setLeft(true), []);
+  const onJoin = useCallback((c: LocalUserChoices) => { void join(c); }, [join]);
+  const onPreJoinError = useCallback((e: Error) => setError(/permission/i.test(e.message) ? "Allow your camera and microphone for this site (the icon in the address bar), then reload." : e.message), []);
+  const videoOpt = useMemo(() => (choices?.videoEnabled ? { deviceId: choices.videoDeviceId } : false), [choices]);
+  const audioOpt = useMemo(() => (choices?.audioEnabled ? { deviceId: choices.audioDeviceId } : false), [choices]);
 
   const shell = "flex min-h-screen flex-col items-center justify-center gap-5 bg-[#000741] p-4 text-white";
   if (info.isLoading) return <div className={shell} />;
@@ -205,7 +224,7 @@ export default function Booth({ id }: { id: string }) {
           </div>
         ) : (
           <div className="w-full max-w-xl" data-testid="booth-prejoin">
-            <PreJoin defaults={{ username: d.role === "host" ? d.host : "" }} persistUserChoices={false} joinLabel="Enter my booth" userLabel="Your name" onSubmit={(c) => void join(c)} onError={(e) => setError(/permission/i.test(e.message) ? "Allow your camera and microphone for this site (the icon in the address bar), then reload." : e.message)} />
+            <PreJoinBox username={d.role === "host" ? d.host : ""} onJoin={onJoin} onError={onPreJoinError} />
           </div>
         )}
         {error && <p className="max-w-md text-center text-sm text-red-300">{error}</p>}
@@ -219,11 +238,11 @@ export default function Booth({ id }: { id: string }) {
       serverUrl={conn.url}
       token={conn.token}
       connect
-      connectOptions={{ autoSubscribe: false }}
-      video={choices?.videoEnabled ? { deviceId: choices.videoDeviceId } : false}
-      audio={choices?.audioEnabled ? { deviceId: choices.audioDeviceId } : false}
-      onDisconnected={() => setLeft(true)}
-      style={{ height: "100dvh", display: "flex", flexDirection: "column", background: "#000741" }}
+      connectOptions={CONNECT_OPTS}
+      video={videoOpt}
+      audio={audioOpt}
+      onDisconnected={onDisconnected}
+      style={ROOM_STYLE}
     >
       <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-2 text-white">
         <p className="text-sm font-semibold">{d.show} <span className="font-normal text-white/60">· you see and hear only your own booth</span></p>
@@ -233,7 +252,7 @@ export default function Booth({ id }: { id: string }) {
         <Rail info={eff} shift={d.anytime ? previewShift : 0} onEnd={d.role === "host" || d.role === "admin" ? endShow : undefined} />
         <div className="min-h-0 flex-1"><BookingStage signupId={d.signupId} /></div>
       </div>
-      <ControlBar controls={{ microphone: true, camera: true, screenShare: false, chat: false, leave: true }} />
+      <ControlBar controls={CONTROLS} />
     </LiveKitRoom>
   );
 }
