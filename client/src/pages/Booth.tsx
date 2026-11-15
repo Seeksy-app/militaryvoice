@@ -57,7 +57,7 @@ function Clock({ ms, big = true }: { ms: number; big?: boolean }) {
  * On air, the big clock counts DOWN the time left; the time already used counts UP in the green card below.
  * Design: Andrew's mockup, 15 Nov 2026 (dark navy glass, red ON AIR segment, green time-so-far card, red stop button).
  */
-function Rail({ info, shift = 0, onEnd }: { info: Info; shift?: number; onEnd?: () => Promise<void> }) {
+function Rail({ info, shift = 0, onEnd, error = "" }: { info: Info; shift?: number; onEnd?: () => Promise<void>; error?: string }) {
   const [asking, setAsking] = useState(false);
   const [ending, setEnding] = useState(false);
   const now = useNow() + shift;
@@ -117,6 +117,7 @@ function Rail({ info, shift = 0, onEnd }: { info: Info; shift?: number; onEnd?: 
         <span className="h-px flex-1 bg-white/20" />
       </div>
 
+      {error && <p className="relative z-10 mx-auto max-w-sm rounded-xl bg-black/40 px-3 py-2 text-sm font-semibold text-[#ffb4b4]" role="alert">{error}</p>}
       {onAir && onEnd && (asking ? (
         <div className="relative z-10 mx-auto flex w-full max-w-sm flex-col gap-2 rounded-2xl border border-white/20 bg-black/35 p-3" data-testid="booth-end-confirm">
           <p className="text-sm font-bold">End your show now? The station plays your outro right away.</p>
@@ -186,6 +187,7 @@ export default function Booth({ id }: { id: string }) {
   const [choices, setChoices] = useState<LocalUserChoices | null>(null);
   const [error, setError] = useState("");
   const [left, setLeft] = useState(false);
+  const [previewEnd, setPreviewEnd] = useState("");
   const now = useNow();
   // An admin can preview any moment: ?at=2026-11-16T21:03:00Z plays the clock as if it were then.
   const previewShift = useMemo(() => { const at = Date.parse(new URLSearchParams(window.location.search).get("at") ?? ""); return Number.isFinite(at) ? at - Date.now() : 0; }, []);
@@ -217,8 +219,12 @@ export default function Booth({ id }: { id: string }) {
   }
   const d = info.data;
   // A show ended early: the clock moves on to the outro now.
-  const eff: Info = d.endedAtUtc && Date.parse(d.endedAtUtc) < Date.parse(d.offAirAtUtc) ? { ...d, offAirAtUtc: d.endedAtUtc, endAtUtc: new Date(Math.min(Date.parse(d.endAtUtc), Date.parse(d.endedAtUtc) + 45_000)).toISOString() } : d;
+  const endedAt = d.endedAtUtc || previewEnd;
+  const eff: Info = endedAt && Date.parse(endedAt) < Date.parse(d.offAirAtUtc) ? { ...d, offAirAtUtc: endedAt, endAtUtc: new Date(Math.min(Date.parse(d.endAtUtc), Date.parse(endedAt) + 45_000)).toISOString() } : d;
   const endShow = async () => {
+    setError("");
+    // Previewing a moment (?at=): show what ending does on this screen only, without touching the real show.
+    if (d.anytime && previewShift) { setPreviewEnd(new Date(Date.now() + previewShift).toISOString()); return; }
     try { await apiRequest("POST", `/api/booth/${id}/end`, { g: g || undefined }); await info.refetch(); } catch (e) { setError(say(e)); }
   };
   if (left) {
@@ -276,7 +282,7 @@ export default function Booth({ id }: { id: string }) {
         {d.role === "host" && <GuestLink link={d.guestLink} />}
       </div>
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row-reverse">
-        <Rail info={eff} shift={d.anytime ? previewShift : 0} onEnd={d.role === "host" || d.role === "admin" ? endShow : undefined} />
+        <Rail info={eff} shift={d.anytime ? previewShift : 0} onEnd={d.role === "host" || d.role === "admin" ? endShow : undefined} error={error} />
         <div className="min-h-0 flex-1"><BookingStage signupId={d.signupId} /></div>
       </div>
       <ControlBar controls={CONTROLS} />
