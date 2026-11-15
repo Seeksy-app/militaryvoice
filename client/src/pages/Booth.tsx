@@ -181,7 +181,7 @@ export default function Booth({ id }: { id: string }) {
         <p className="text-sm font-semibold">{d.show} <span className="font-normal text-white/60">· you see and hear only your own booth</span></p>
         {d.role === "host" && <GuestLink link={d.guestLink} />}
       </div>
-      <div className="flex min-h-0 flex-1 flex-col lg:flex-row">
+      <div className="flex min-h-0 flex-1 flex-col lg:flex-row-reverse">
         <Rail info={d} />
         <div className="min-h-0 flex-1"><BookingStage signupId={d.signupId} /></div>
       </div>
