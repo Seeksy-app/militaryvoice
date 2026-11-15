@@ -1922,9 +1922,9 @@ export function registerRoutes(app: Express): void {
     const target = dx ? `/radio?show=${signup.id}` : `/agenda?slot=${signup.slotIndex}`;
     const title = `${signup.podcastName} · ${whenLabel}`;
     const desc = dx
-      ? `${signup.hostName} is live on MilitaryVoices Radio, a live channel of military and veteran voices. Tune in.`
+      ? `${signup.podcastName}, with ${signup.hostName}, on MilitaryVoices Radio: the voices of veterans, service members, and military families, around the world. Tune in.`
       : `${signup.hostName} is live on ${event.name} for National Military Podcast Day. Tune in, or set a reminder.`;
-    const img = dx ? `${origin}/dx/hero.jpg?v=nov` : `${origin}/og/slot/${id}.jpg`;
+    const img = dx ? `${origin}/og/radio.jpg?show=${id}&v=2` : `${origin}/og/slot/${id}.jpg`;
     const esc = (v: string) =>
       v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 

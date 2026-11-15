@@ -6,7 +6,7 @@
 // booking's id as an attribute, so the program shows only the booking on the
 // clock and each booth only shows its own people.
 import crypto from "node:crypto";
-import type { Express } from "express";
+import type { Express, RequestHandler } from "express";
 import { storage, db } from "./storage.js";
 import { eq } from "drizzle-orm";
 import { recordings as recordingsTable } from "../shared/schema.js";
@@ -278,19 +278,22 @@ export function registerBooth(app: Express): void {
    * get a page with the right title and picture; people get the app as always.
    */
   const PREVIEW_BOT = /facebookexternalhit|facebot|twitterbot|slackbot|linkedinbot|whatsapp|telegrambot|discordbot|applebot|redditbot|pinterest|embedly|skypeuripreview|mastodon|bluesky|iframely|vkshare|quora link preview/i;
-  app.get("/radio", async (req, res, next) => {
+  const radioPreview = (book: boolean): RequestHandler => async (req, res, next) => {
     if (!PREVIEW_BOT.test(String(req.get("user-agent") ?? ""))) return next();
     const showId = Number(req.query.show) || 0;
     const n = await radioNow(showId);
     const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
     const origin = `https://${req.get("host")}`;
-    const url = `${origin}/radio${showId ? `?show=${showId}` : ""}`;
-    const title = showId && n.host ? `${n.show} · MilitaryVoices Radio` : "MilitaryVoices Radio · Live From Anywhere";
+    const url = `${origin}/radio${book ? "/book" : ""}${showId ? `?show=${showId}` : ""}`;
+    const title = showId && n.host ? `${n.show} · MilitaryVoices Radio` : book ? "Book your slot · MilitaryVoices Radio" : "MilitaryVoices Radio · Live From Anywhere";
     const img = `${origin}/og/radio.jpg?${showId ? `show=${showId}&` : ""}v=${Math.floor(Date.now() / 600_000)}`;
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "public, max-age=60, s-maxage=120");
     res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8" /><title>${esc(title)}</title><meta name="description" content="${esc(n.line)}" /><meta property="og:type" content="website" /><meta property="og:site_name" content="MilitaryVoices.ai" /><meta property="og:title" content="${esc(title)}" /><meta property="og:description" content="${esc(n.line)}" /><meta property="og:url" content="${url}" /><meta property="og:image" content="${img}" /><meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" /><meta name="twitter:card" content="summary_large_image" /><meta name="twitter:title" content="${esc(title)}" /><meta name="twitter:description" content="${esc(n.line)}" /><meta name="twitter:image" content="${img}" /><link rel="canonical" href="${url}" /></head><body><h1>${esc(title)}</h1><p>${esc(n.line)}</p></body></html>`);
-  });
+  };
+  app.get("/radio", radioPreview(false));
+  // The link hosts are sent and share ("Your graphics, caption and link"): its preview used to be the Marathon's.
+  app.get("/radio/book", radioPreview(true));
 
   /**
    * The station's voice (Alex, in Madison's voice) for a booking's intro and outro. Made once with
