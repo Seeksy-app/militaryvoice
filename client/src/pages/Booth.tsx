@@ -41,7 +41,7 @@ function Status({ info }: { info: Info }) {
   else if (now < on) { tone = "bg-[#F0A71F] text-[#1a1200]"; big = `Intro playing · live in ${mmss(on - now)}`; small = "Get ready: you're next."; }
   else if (now < off) {
     tone = left <= 30_000 ? "bg-white text-[#ED1C24]" : "bg-[#ED1C24] text-white";
-    big = `ON AIR · ${mmss(left)} left`;
+    big = `ON AIR · ${mmss(now - on)} elapsed · ${mmss(left)} left`;
     small = left <= 30_000 ? "Say goodbye now: the outro is about to play." : left <= 120_000 ? "Two minutes: start wrapping up." : left <= 300_000 ? "Five minutes left." : `You're live until ${hm(info.offAirAtUtc)} ET.`;
   }
   else if (now < end) { tone = "bg-[#053877] text-white"; big = "Outro playing · thank you!"; small = "You're off air. Stay as long as you like, or leave below."; }

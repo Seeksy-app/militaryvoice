@@ -70,6 +70,14 @@ function Replay({ id, src, show, host, photo, startedAt, now, muted, tag }: { id
   );
 }
 
+/** The station's voice over the intro and outro cards: starts with the card, from wherever the clock is. */
+function Voice({ id, kind, startedAt, now, muted }: { id: number; kind: "intro" | "outro"; startedAt: number; now: number; muted: boolean }) {
+  const ref = useRef<HTMLAudioElement>(null);
+  const place = () => { const a = ref.current; const off = Math.max(0, (now - startedAt) / 1000); if (a && off < (a.duration || 1e9) && Math.abs(a.currentTime - off) > 1.5) a.currentTime = off; };
+  useEffect(() => { const a = ref.current; if (a) { a.muted = muted; if (!muted) a.play().catch(() => undefined); } }, [muted]);
+  return <audio ref={ref} src={`/api/radio/voice/${id}/${kind}.mp3`} autoPlay muted={muted} onLoadedMetadata={place} />;
+}
+
 export default function Program() {
   (window as unknown as { __mvBroadcast?: boolean }).__mvBroadcast = true;
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
@@ -130,6 +138,8 @@ export default function Program() {
       {phase === "live" && !current!.mediaUrl && tiles.length > 0 && <StageGrid tiles={tiles} meta={{ status: "Live" }} caption={caption} />}
       {phase === "live" && current!.mediaUrl && <Replay id={`b${current!.id}`} src={current!.mediaUrl} show={current!.show} host={current!.host} photo={current!.photo} startedAt={Date.parse(current!.onAirAtUtc)} now={now} muted={muted} />}
       {phase === "live" && !current!.mediaUrl && tiles.length === 0 && <Card eyebrow="Live now" title={current!.show} sub={`with ${current!.host}`} photo={current!.photo} foot="Joining in a moment" />}
+      {phase === "intro" && <Voice key={`i${current!.id}`} id={current!.id} kind="intro" startedAt={Date.parse(current!.startAtUtc)} now={now} muted={muted} />}
+      {phase === "outro" && <Voice key={`o${current!.id}`} id={current!.id} kind="outro" startedAt={Date.parse(current!.offAirAtUtc)} now={now} muted={muted} />}
       {phase === "intro" && <Card eyebrow="Coming up" title={current!.show} sub={`with ${current!.host}`} photo={current!.photo} foot={`Live in ${mmss(Date.parse(current!.onAirAtUtc) - now)}`} />}
       {phase === "outro" && <Card eyebrow="Thank you" title={current!.host} sub={current!.show} photo={current!.photo} foot={nextLine} />}
       {phase === "filler" && fill && <Replay id={`f${fill.slot}`} src={fill.r.mediaUrl} show={fill.r.show} host={fill.r.host} photo={fill.r.photo} startedAt={fill.startedAt} now={now} muted={muted} tag="Replay" />}

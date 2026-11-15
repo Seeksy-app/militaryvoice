@@ -14,7 +14,7 @@ import { getAdminEmail, getSessionEmail } from "./session.js";
 import { isLiveKitConfigured, publicLiveKitUrl, roomName, studioToken, rooms, egressIsActive } from "./livekit.js";
 import { dxEventIds } from "./digitalExperience.js";
 import { buildShareCard } from "./shareCard.js";
-import { signedRecordingUrl } from "./recordingStorage.js";
+import { signedRecordingUrl, putRecordingObject } from "./recordingStorage.js";
 import type { EventRow, SignupRow } from "../shared/schema.js";
 
 /** How early the booth opens, and how long after their end it stays open. */
@@ -264,6 +264,42 @@ export function registerBooth(app: Express): void {
     res.setHeader("Content-Type", "text/html; charset=utf-8");
     res.setHeader("Cache-Control", "public, max-age=60, s-maxage=120");
     res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8" /><title>${esc(title)}</title><meta name="description" content="${esc(n.line)}" /><meta property="og:type" content="website" /><meta property="og:site_name" content="MilitaryVoices.ai" /><meta property="og:title" content="${esc(title)}" /><meta property="og:description" content="${esc(n.line)}" /><meta property="og:url" content="${url}" /><meta property="og:image" content="${img}" /><meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" /><meta name="twitter:card" content="summary_large_image" /><meta name="twitter:title" content="${esc(title)}" /><meta name="twitter:description" content="${esc(n.line)}" /><meta name="twitter:image" content="${img}" /><link rel="canonical" href="${url}" /></head><body><h1>${esc(title)}</h1><p>${esc(n.line)}</p></body></html>`);
+  });
+
+  /**
+   * The station's voice (Alex, in Madison's voice) for a booking's intro and outro. Made once with
+   * ElevenLabs and kept in the bucket; the program page plays it as the intro or outro card starts.
+   */
+  app.get("/api/radio/voice/:id/:kind.mp3", async (req, res) => {
+    const kind = req.params.kind === "outro" ? "outro" : "intro";
+    const b = await bookingFor(Number(req.params.id));
+    const key = process.env.ELEVENLABS_API_KEY;
+    if (!b || !key) return res.status(404).end();
+    // Spoken spellings: Riccoh reads "Reeko", Pōstify "Post-ify" (written text keeps the real ones).
+    const say = (v: string) => v.replace(/riccoh/gi, "Reeko").replace(/p[oō]stify/gi, "Post-ify");
+    const show = say(b.s.podcastName), host = say(b.s.hostName);
+    const text = kind === "intro"
+      ? `This is MilitaryVoices Radio, live from anywhere. Coming up: ${show}, with ${host}.`
+      : `That was ${show}, with ${host}. Thank you for being on MilitaryVoices Radio.`;
+    const hash = crypto.createHash("sha1").update(text).digest("hex").slice(0, 10);
+    const path = `radio-voice/${b.s.id}-${kind}-${hash}.mp3`;
+    try {
+      const have = await fetch(await signedRecordingUrl(path, 300), { method: "HEAD" });
+      if (!have.ok) {
+        const t = await fetch("https://api.elevenlabs.io/v1/text-to-speech/NUjosfEayZAdRcDmcHM8?output_format=mp3_44100_128", {
+          method: "POST", signal: AbortSignal.timeout(45_000),
+          headers: { "xi-api-key": key, "content-type": "application/json" },
+          body: JSON.stringify({ text, model_id: "eleven_turbo_v2_5", voice_settings: { stability: 0.5, similarity_boost: 0.8 } }),
+        });
+        if (!t.ok) return res.status(502).end();
+        await putRecordingObject(path, Buffer.from(await t.arrayBuffer()), "audio/mpeg");
+      }
+      res.setHeader("Cache-Control", "public, max-age=3600");
+      res.redirect(302, await signedRecordingUrl(path, 3 * 3600));
+    } catch (err) {
+      console.error("Radio voice failed:", err);
+      res.status(502).end();
+    }
   });
 
   /** A listener's pass into the day's room: watch and hear only, while the day is on. */
