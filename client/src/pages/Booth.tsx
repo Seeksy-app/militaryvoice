@@ -61,46 +61,46 @@ function Rail({ info, shift = 0, onEnd }: { info: Info; shift?: number; onEnd?: 
   const now = useNow() + shift;
   const on = Date.parse(info.onAirAtUtc), off = Date.parse(info.offAirAtUtc), start = Date.parse(info.startAtUtc), end = Date.parse(info.endAtUtc);
   const left = off - now;
-  let tone = "bg-[#1a2150] text-white", label = "", small = "", ms = 0, clock = true;
+  // One solid blue rail all the way through; the state lives in the pill at the top (red when on air).
+  let pill = "bg-white/20 text-white", label = "", small = "", ms = 0, clock = true;
   let pct = -1;
   if (now < start) { label = "You're on air in"; ms = on - now; small = `The station's intro starts at ${hm(info.startAtUtc)} ET, then you're live at ${hm(info.onAirAtUtc)}.`; }
-  else if (now < on) { tone = "bg-[#F0A71F] text-[#1a1200]"; label = "Intro playing. You're live in"; ms = on - now; small = "Get ready: you're next."; }
+  else if (now < on) { pill = "bg-[#F0A71F] text-[#1a1200]"; label = "Intro playing. You're live in"; ms = on - now; small = "Get ready: you're next."; }
   else if (now < off) {
-    // Green while there's time, amber for the last five minutes, red only for the last thirty seconds.
-    tone = left <= 30_000 ? "bg-[#c81e25] text-white" : left <= 300_000 ? "bg-[#b45309] text-white" : "bg-[#14532d] text-white";
+    pill = "bg-[#ED1C24] text-white";
     label = "ON AIR · time left"; ms = left;
     pct = Math.min(100, Math.max(0, ((now - on) / (off - on)) * 100));
     small = left <= 30_000 ? "Say goodbye now: the outro is about to play." : left <= 120_000 ? "Two minutes: start wrapping up." : left <= 300_000 ? "Five minutes left." : `You're live until ${hm(info.offAirAtUtc)} ET.`;
   }
-  else if (now < end) { tone = "bg-[#053877] text-white"; label = "You're off air"; clock = false; small = "The station's outro is playing. Stay as long as you like, or leave below."; }
-  else { label = "That's a wrap"; clock = false; small = "You can close this tab."; }
+  else if (now < end) { pill = "bg-[#16a34a] text-white"; label = "You're off air"; clock = false; small = "The station's outro is playing. Stay as long as you like, or leave below."; }
+  else { pill = "bg-[#16a34a] text-white"; label = "That's a wrap"; clock = false; small = "You can close this tab."; }
   const onAir = now >= on && now < off;
-  // The whole rail flashes for eight seconds at five minutes, three, one, and thirty seconds left: no one misses it.
+  // The rail flashes for eight seconds at five minutes, three, one, and thirty seconds left: no one misses it.
   const leftSec = Math.ceil(left / 1000);
   const flash = onAir && [300, 180, 60, 30].some((t) => leftSec <= t && leftSec > t - 8);
   return (
-    <aside className={`flex shrink-0 flex-col justify-start gap-3 px-5 pb-6 pt-5 text-center lg:w-[30rem] lg:gap-5 lg:px-6 lg:pt-8 ${tone} ${flash ? "mv-booth-flash" : ""}`} data-testid="booth-status" data-flashing={flash || undefined} style={{ ["--mv-tone" as string]: left <= 30_000 ? "#c81e25" : left <= 300_000 ? "#b45309" : "#14532d" }}>
-      <style>{`@keyframes mv-booth-flash{0%,49%{background-color:var(--mv-tone);color:#fff}50%,100%{background-color:#fff;color:#14532d}} .mv-booth-flash{animation:mv-booth-flash .7s steps(1) infinite} .mv-booth-flash *{color:inherit !important}`}</style>
-      <p className="mx-auto flex items-center justify-center gap-2 rounded-full bg-black/30 px-5 py-2 text-sm font-extrabold uppercase tracking-[0.18em] sm:text-base lg:text-lg">{onAir && <Radio className="h-5 w-5 animate-pulse" />}{label}</p>
+    <aside className={`flex shrink-0 flex-col justify-start gap-3 bg-[#0a3a8f] px-5 pb-6 pt-5 text-center text-white lg:w-[30rem] lg:gap-5 lg:px-6 lg:pt-8 ${flash ? "mv-booth-flash" : ""}`} data-testid="booth-status" data-flashing={flash || undefined}>
+      <style>{`@keyframes mv-booth-flash{0%,49%{background-color:#0a3a8f}50%,100%{background-color:#ED1C24}} .mv-booth-flash{animation:mv-booth-flash .6s steps(1) infinite}`}</style>
+      <p className={`mx-auto flex items-center justify-center gap-2 rounded-full px-6 py-2.5 text-sm font-extrabold uppercase tracking-[0.18em] sm:text-base lg:text-lg ${pill}`}>{onAir && <Radio className="h-5 w-5 animate-pulse" />}{label}</p>
       {clock ? <Clock ms={ms} /> : <p className="text-6xl font-black leading-none lg:text-7xl">Thank you</p>}
       {onAir && (
-        <div className="mx-auto mt-1 w-full max-w-sm rounded-xl bg-[#04140a]/60 px-4 py-3 ring-1 ring-white/20">
-          <p className="text-xs font-extrabold uppercase tracking-[0.16em] opacity-80">Time on air so far</p>
-          <div className="mt-2 text-white/95"><Clock ms={now - on} big={false} /></div>
-          {pct >= 0 && <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-black/20"><div className="h-full rounded-full bg-current" style={{ width: `${pct}%` }} /></div>}
+        <div className="mx-auto mt-1 w-full max-w-sm rounded-xl bg-[#14532d] px-4 py-3 text-white ring-1 ring-white/25">
+          <p className="text-xs font-extrabold uppercase tracking-[0.16em] opacity-90">Time on air so far</p>
+          <div className="mt-2"><Clock ms={now - on} big={false} /></div>
+          {pct >= 0 && <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-black/30"><div className="h-full rounded-full bg-white" style={{ width: `${pct}%` }} /></div>}
         </div>
       )}
-      <p className="text-base font-semibold opacity-90 lg:text-xl">{small}</p>
+      <p className="text-xl font-bold text-white lg:text-2xl">{small}</p>
       {onAir && onEnd && (asking ? (
-        <div className="mx-auto flex w-full max-w-sm flex-col gap-2 rounded-xl bg-black/20 p-3" data-testid="booth-end-confirm">
+        <div className="mx-auto flex w-full max-w-sm flex-col gap-2 rounded-xl bg-black/30 p-3" data-testid="booth-end-confirm">
           <p className="text-sm font-bold">End your show now? The station plays your outro right away.</p>
           <div className="flex gap-2">
-            <button type="button" disabled={ending} onClick={() => { setEnding(true); void onEnd().finally(() => { setEnding(false); setAsking(false); }); }} className="flex-1 rounded-full bg-white px-4 py-2 text-sm font-extrabold text-[#ED1C24]">{ending ? "Ending…" : "Yes, end it"}</button>
-            <button type="button" onClick={() => setAsking(false)} className="flex-1 rounded-full border border-white/50 px-4 py-2 text-sm font-bold">Keep going</button>
+            <button type="button" disabled={ending} onClick={() => { setEnding(true); void onEnd().finally(() => { setEnding(false); setAsking(false); }); }} className="flex-1 rounded-full bg-[#ED1C24] px-4 py-2 text-sm font-extrabold text-white">{ending ? "Ending…" : "Yes, end it"}</button>
+            <button type="button" onClick={() => setAsking(false)} className="flex-1 rounded-full border border-white/60 px-4 py-2 text-sm font-bold text-white">Keep going</button>
           </div>
         </div>
       ) : (
-        <button type="button" onClick={() => setAsking(true)} className="mx-auto mt-2 rounded-full bg-white px-7 py-3 text-base font-extrabold text-[#0b1230] shadow-lg hover:bg-white/90" data-testid="booth-end">End my show early</button>
+        <button type="button" onClick={() => setAsking(true)} className="mx-auto mt-2 rounded-full bg-[#ED1C24] px-7 py-3 text-base font-extrabold text-white shadow-lg ring-2 ring-white/70 hover:bg-[#c8151c]" data-testid="booth-end">End my show early</button>
       ))}
     </aside>
   );
