@@ -12,7 +12,7 @@ import { apiRequest } from "@/lib/queryClient";
 // and plays the people on this booking (their signupId attribute); the
 // station's intro and outro play on air around them (see Program.tsx).
 
-type Info = { signupId: number; role: "host" | "guest" | "admin"; show: string; host: string; day: string; startAtUtc: string; endAtUtc: string; onAirAtUtc: string; offAirAtUtc: string; opensAtUtc: string; closesAtUtc: string; guestLink: string; ready: boolean; anytime?: boolean };
+type Info = { signupId: number; role: "host" | "guest" | "admin"; show: string; host: string; day: string; startAtUtc: string; endAtUtc: string; onAirAtUtc: string; offAirAtUtc: string; opensAtUtc: string; closesAtUtc: string; guestLink: string; ready: boolean; anytime?: boolean; endedAtUtc?: string };
 
 const ET = "America/New_York";
 const hm = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { timeZone: ET, hour: "numeric", minute: "2-digit" });
@@ -55,7 +55,9 @@ function Clock({ ms, big = true }: { ms: number; big?: boolean }) {
  * (it is radio, so the picture matters little and the clock matters most). On a phone it runs across the top.
  * On air, the big clock counts DOWN the time left; the time already used counts UP underneath.
  */
-function Rail({ info, shift = 0 }: { info: Info; shift?: number }) {
+function Rail({ info, shift = 0, onEnd }: { info: Info; shift?: number; onEnd?: () => Promise<void> }) {
+  const [asking, setAsking] = useState(false);
+  const [ending, setEnding] = useState(false);
   const now = useNow() + shift;
   const on = Date.parse(info.onAirAtUtc), off = Date.parse(info.offAirAtUtc), start = Date.parse(info.startAtUtc), end = Date.parse(info.endAtUtc);
   const left = off - now;
@@ -83,11 +85,22 @@ function Rail({ info, shift = 0 }: { info: Info; shift?: number }) {
       {onAir && (
         <div className="mx-auto mt-1 w-full max-w-sm rounded-xl bg-black/15 px-4 py-3">
           <p className="text-xs font-extrabold uppercase tracking-[0.16em] opacity-80">Time on air so far</p>
-          <div className="mt-2"><Clock ms={now - on} big={false} /></div>
+          <div className="mt-2 text-[#86efac]"><Clock ms={now - on} big={false} /></div>
           {pct >= 0 && <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-black/20"><div className="h-full rounded-full bg-current" style={{ width: `${pct}%` }} /></div>}
         </div>
       )}
       <p className="text-base font-semibold opacity-90 lg:text-xl">{small}</p>
+      {onAir && onEnd && (asking ? (
+        <div className="mx-auto flex w-full max-w-sm flex-col gap-2 rounded-xl bg-black/20 p-3" data-testid="booth-end-confirm">
+          <p className="text-sm font-bold">End your show now? The station plays your outro right away.</p>
+          <div className="flex gap-2">
+            <button type="button" disabled={ending} onClick={() => { setEnding(true); void onEnd().finally(() => { setEnding(false); setAsking(false); }); }} className="flex-1 rounded-full bg-white px-4 py-2 text-sm font-extrabold text-[#ED1C24]">{ending ? "Ending…" : "Yes, end it"}</button>
+            <button type="button" onClick={() => setAsking(false)} className="flex-1 rounded-full border border-white/50 px-4 py-2 text-sm font-bold">Keep going</button>
+          </div>
+        </div>
+      ) : (
+        <button type="button" onClick={() => setAsking(true)} className="mx-auto rounded-full border border-white/40 px-5 py-2 text-sm font-bold opacity-90 hover:opacity-100" data-testid="booth-end">End my show early</button>
+      ))}
     </aside>
   );
 }
@@ -157,6 +170,11 @@ export default function Booth({ id }: { id: string }) {
     );
   }
   const d = info.data;
+  // A show ended early: the clock moves on to the outro now.
+  const eff: Info = d.endedAtUtc && Date.parse(d.endedAtUtc) < Date.parse(d.offAirAtUtc) ? { ...d, offAirAtUtc: d.endedAtUtc, endAtUtc: new Date(Math.min(Date.parse(d.endAtUtc), Date.parse(d.endedAtUtc) + 45_000)).toISOString() } : d;
+  const endShow = async () => {
+    try { await apiRequest("POST", `/api/booth/${id}/end`, { g: g || undefined }); await info.refetch(); } catch (e) { setError(say(e)); }
+  };
   if (left) {
     return (
       <div className={shell}>
@@ -212,7 +230,7 @@ export default function Booth({ id }: { id: string }) {
         {d.role === "host" && <GuestLink link={d.guestLink} />}
       </div>
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row-reverse">
-        <Rail info={d} shift={d.anytime ? previewShift : 0} />
+        <Rail info={eff} shift={d.anytime ? previewShift : 0} onEnd={d.role === "host" || d.role === "admin" ? endShow : undefined} />
         <div className="min-h-0 flex-1"><BookingStage signupId={d.signupId} /></div>
       </div>
       <ControlBar controls={{ microphone: true, camera: true, screenShare: false, chat: false, leave: true }} />

@@ -98,7 +98,7 @@ export default function Program() {
   const program = useQuery<Program>({
     queryKey: ["/api/booth/program", room, eventId],
     queryFn: async () => (await fetch(`/api/booth/program?${room ? `room=${encodeURIComponent(room)}` : `eventId=${eventId ?? ""}`}`)).json(),
-    refetchInterval: 30_000,
+    refetchInterval: 10_000,
   });
 
   // Preview only (no recorder token): ?at=2026-10-26T13:01:00Z plays the day as if it were then.
@@ -132,7 +132,10 @@ export default function Program() {
     if (phase !== "filler" || !list.length || !Number.isFinite(dayStart) || now < dayStart) return null;
     const slot = Math.floor((now - dayStart) / 1_800_000);
     const g = (program.data?.dayIndex ?? 0) * 30 + slot;
-    return { r: list[g % list.length], slot, startedAt: dayStart + slot * 1_800_000 };
+    // A show that ended early inside this slot: the replay starts when its outro is done, not from the half hour.
+    const slotStart = dayStart + slot * 1_800_000;
+    const lastEnd = Math.max(0, ...bookings.map((b) => Date.parse(b.endAtUtc)).filter((e) => e > slotStart && e <= now));
+    return { r: list[g % list.length], slot, startedAt: Math.max(slotStart, lastEnd) };
   }, [program.data, phase, Math.floor(now / 60_000)]);
 
   // The day's spoken welcome at go-time (a booking's intro waits for it) and the sign-off that ends the day.

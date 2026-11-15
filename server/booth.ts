@@ -127,7 +127,12 @@ export function registerBooth(app: Express): void {
         // A recorded episode rolls in its slot: the page plays this file from where the clock is.
         const key = s.showFormat === "prerecorded" ? s.recordingUrl.trim() : "";
         const mediaUrl = key ? (/^https?:\/\//i.test(key) ? key : await signedRecordingUrl(key, 6 * 3600).catch(() => "")) : "";
-        return { id: s.id, show: s.podcastName, host: s.hostName, photo: s.photoUrl, mediaUrl, introUrl: voice.map[String(s.id)]?.introKey ? await signedRecordingUrl(voice.map[String(s.id)].introKey!, 6 * 3600).catch(() => "") : "", outroUrl: voice.map[String(s.id)]?.outroKey ? await signedRecordingUrl(voice.map[String(s.id)].outroKey!, 6 * 3600).catch(() => "") : "", startAtUtc: new Date(t.start).toISOString(), endAtUtc: new Date(t.end).toISOString(), onAirAtUtc: new Date(t.onAirStart).toISOString(), offAirAtUtc: new Date(t.onAirEnd).toISOString() };
+        // Ended early from the booth: the outro plays now, and the rest of the slot goes to open time.
+        const endedRaw = await storage.getSetting(`dx:ended:${s.id}`);
+        const endedMs = endedRaw ? Date.parse(endedRaw) : NaN;
+        const early = Number.isFinite(endedMs) && endedMs >= t.onAirStart && endedMs < t.onAirEnd;
+        if (early) { t.onAirEnd = endedMs; t.end = Math.min(t.end, endedMs + 45_000); }
+        return { id: s.id, endedEarly: early, show: s.podcastName, host: s.hostName, photo: s.photoUrl, mediaUrl, introUrl: voice.map[String(s.id)]?.introKey ? await signedRecordingUrl(voice.map[String(s.id)].introKey!, 6 * 3600).catch(() => "") : "", outroUrl: voice.map[String(s.id)]?.outroKey ? await signedRecordingUrl(voice.map[String(s.id)].outroKey!, 6 * 3600).catch(() => "") : "", startAtUtc: new Date(t.start).toISOString(), endAtUtc: new Date(t.end).toISOString(), onAirAtUtc: new Date(t.onAirStart).toISOString(), offAirAtUtc: new Date(t.onAirEnd).toISOString() };
       })),
     });
   });
@@ -362,11 +367,25 @@ export function registerBooth(app: Express): void {
       offAirAtUtc: new Date(t.onAirEnd).toISOString(),
       opensAtUtc: new Date(t.start - OPENS_MIN * 60_000).toISOString(),
       closesAtUtc: new Date(t.end + CLOSES_MIN * 60_000).toISOString(),
+      endedAtUtc: (await storage.getSetting(`dx:ended:${b.s.id}`)) || "",
       guestLink: role === "guest" ? "" : `${origin}/booth/${b.s.id}?g=${boothGuestKey(b.s.id)}`,
       // An admin can open any booth at any time (to see it, or to help); so can a developer's machine.
       anytime: !!getAdminEmail(req) || (process.env.NODE_ENV === "development" && !process.env.VERCEL),
       ready: isLiveKitConfigured(),
     });
+  });
+
+  /** The host ends their show early, from the booth: the station plays the outro now and moves on. Only while they are on air. */
+  app.post("/api/booth/:id/end", async (req, res) => {
+    const b = await bookingFor(Number(req.params.id));
+    if (!b) return res.status(404).json({ message: "That booking isn't on MilitaryVoices Radio." });
+    const role = roleOf(req, b.s, req.body?.g);
+    if (role !== "host" && role !== "admin") return res.status(403).json({ message: "Only the host can end the show." });
+    const t = bookingTimes(b.ev, b.s);
+    const now = Date.now();
+    if (now < t.onAirStart || now >= t.onAirEnd) return res.status(409).json({ message: "You can end your show while you're on air." });
+    await storage.setSetting(`dx:ended:${b.s.id}`, new Date(now).toISOString());
+    res.json({ ok: true, endedAtUtc: new Date(now).toISOString() });
   });
 
   /** Into the day's room, carrying the booking's id. Open from an hour before until ten minutes after. */
