@@ -1,6 +1,7 @@
 import { useToast } from "@/hooks/use-toast";
 import { useAdminAuth } from "@/lib/admin-auth";
-import { useState, type ComponentType, type ReactNode } from "react";
+import { useEffect, useState, type ComponentType, type ReactNode } from "react";
+import { showGuide } from "@/components/Guide";
 import { useQuery } from "@tanstack/react-query";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { LogoLockup } from "@/components/Logo";
@@ -29,6 +30,8 @@ interface Item {
   href?: string;
   /** A small word after the label, e.g. "Beta". */
   tag?: string;
+  /** What this door is doing right now, in a coloured chip (the Radio booth: Opens 6:00 am, Open now, On air). */
+  status?: { text: string; tone: "green" | "red" | "gold" };
   /** Not built yet: a click says when, and goes nowhere. */
   soon?: string;
 }
@@ -113,7 +116,34 @@ export function HostNav({
   // MilitaryVoices Radio booth joins the menu once they've booked (not as a button on pages, Andrew 20 Oct):
   // their next time's booth, which opens an hour before it.
   const dx = useQuery<{ bookings: { id: number; startAtUtc: string; endAtUtc: string }[] }>({ queryKey: ["/api/dx/mine"], retry: false, staleTime: 60_000 });
-  const nextBooth = (dx.data?.bookings ?? []).filter((b) => Date.parse(b.endAtUtc) + 10 * 60_000 > Date.now()).sort((a, b) => Date.parse(a.startAtUtc) - Date.parse(b.startAtUtc))[0];
+  const [tick, setTick] = useState(Date.now());
+  useEffect(() => { const t = setInterval(() => setTick(Date.now()), 30_000); return () => clearInterval(t); }, []);
+  const nextBooth = (dx.data?.bookings ?? []).filter((b) => Date.parse(b.endAtUtc) + 10 * 60_000 > tick).sort((a, b) => Date.parse(a.startAtUtc) - Date.parse(b.startAtUtc))[0];
+  // What the booth is doing: opens an hour before the time, is on air through the slot, then nothing.
+  const boothStatus: Item["status"] = nextBooth ? (() => {
+    const start = Date.parse(nextBooth.startAtUtc), end = Date.parse(nextBooth.endAtUtc), opens = start - 60 * 60_000;
+    if (tick >= start && tick < end) return { text: "On air", tone: "red" as const };
+    if (tick >= opens && tick < start) return { text: "Open now", tone: "green" as const };
+    if (tick < opens) {
+      const sameDay = new Date(opens).toLocaleDateString("en-US", { timeZone: "America/New_York" }) === new Date(tick).toLocaleDateString("en-US", { timeZone: "America/New_York" });
+      const when = new Date(opens).toLocaleString("en-US", { timeZone: "America/New_York", ...(sameDay ? {} : { weekday: "short" }), hour: "numeric", minute: "2-digit" });
+      return { text: `Opens ${when}`, tone: "gold" as const };
+    }
+    return undefined;
+  })() : undefined;
+  // The first time someone with a booking comes back to the dashboard (after the home tour): point at the booth, once.
+  useEffect(() => {
+    if (!nextBooth) return;
+    let seen = false, toured = false;
+    try { seen = localStorage.getItem("mv_guide_booth") === "1"; toured = localStorage.getItem("mv_tour_home") === "1"; } catch { /* private window: show it */ }
+    if (seen || !toured) return;
+    const t = window.setTimeout(() => {
+      try { localStorage.setItem("mv_guide_booth", "1"); } catch { /* fine */ }
+      showGuide([{ at: [{ sel: 'a[data-nav-label="Booth"]', text: "Your Radio booth is here. It opens an hour before your show." }] }]);
+    }, 1500);
+    return () => window.clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [!!nextBooth]);
   const groups: { title: string; items: Item[] }[] = brand ? brandGroups : [
     // Most-used first. Promotion lives inside Events (it's about an event);
     // Profile lives in the account card at the foot; Integrations is in both.
@@ -130,7 +160,7 @@ export function HostNav({
         { key: "dashboard", label: "Dashboard", hint: "Your home base: your events, your audience and what to do next", icon: LayoutDashboard },
         { key: "page", label: "SmartLink", hint: "Your SmartLink at militaryvoices.ai/you: your podcast, links, messages from listeners, and a media kit for brands", icon: Globe },
         { key: "events", label: "Events", hint: "The events you're part of: your show, your time slot and how to promote it", icon: CalendarDays, badge: eventsCount || undefined },
-        ...(nextBooth ? [{ key: "dashboard" as const, label: "Booth", hint: "Your MilitaryVoices Radio booth: it opens an hour before your time", icon: Radio, href: `/booth/${nextBooth.id}` }] : []),
+        ...(nextBooth ? [{ key: "dashboard" as const, label: "Booth", hint: "Your MilitaryVoices Radio booth: it opens an hour before your time", icon: Radio, href: `/booth/${nextBooth.id}`, status: boothStatus }] : []),
         { key: "opportunities", label: "Opportunities", hint: "Requests from brands: say you're interested with your rate, or pass", icon: Inbox, badge: opportunities || undefined },
         ...(cohostHours > 0 ? [{ key: "cohost" as const, label: "Co-host dashboard", hint: `The ${cohostHours} ${cohostHours === 1 ? "hour" : "hours"} you're co-hosting at the desk, and who's on with you`, icon: Mic2 }] : []),
       ],
@@ -200,10 +230,16 @@ export function HostNav({
           className={compact
             ? "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-[#053877]/[0.06] px-3 py-1.5 text-sm font-medium text-foreground"
             : "flex items-center gap-3 rounded-full px-4 py-2 text-left text-foreground/80 transition-colors hover:bg-muted hover:text-foreground"}
-          data-testid={`nav-host-help`}
+          data-testid={`nav-host-${it.label === "Booth" ? "booth" : "help"}`}
+          data-nav-label={it.label}
         >
           <Icon className={`h-4 w-4 shrink-0 ${compact ? "text-[#053877]" : "text-muted-foreground"}`} />
-          <span className="min-w-0 flex-1 text-[14px] font-medium">{it.label}</span>
+          <span className="flex min-w-0 flex-1 items-center gap-2 text-[14px] font-medium">
+            {it.label}
+            {it.status && (
+              <span className={`rounded-full px-2 py-px text-[11px] font-bold leading-4 ${it.status.tone === "red" ? "bg-[#ED1C24] text-white" : it.status.tone === "green" ? "bg-[#16a34a] text-white" : "bg-[#F0A71F]/25 text-[#8a5a00] dark:text-[#F0A71F]"}`} data-testid="booth-status-chip">{it.status.text}</span>
+            )}
+          </span>
         </Link>
       );
     }
