@@ -16,7 +16,7 @@ import { StageGrid, useStageRoom } from "@/components/StageView";
 
 type Booking = { id: number; show: string; host: string; photo: string; mediaUrl?: string; startAtUtc: string; endAtUtc: string; onAirAtUtc: string; offAirAtUtc: string };
 type Replay_ = { id: number; show: string; host: string; photo: string; mediaUrl: string; durationSec: number };
-type VoiceInfo = { welcomeUrl: string; welcomeSec: number; signoffUrl: string; signoffSec: number };
+type VoiceInfo = { welcomeUrl: string; welcomeSec: number; signoffUrl: string; signoffSec: number; bedUrl?: string };
 type Program = { eventId: number; day: string; startAtUtc: string; endAtUtc: string; fillerUrl: string; voice?: VoiceInfo; dayIndex?: number; replays?: Replay_[]; bookings: Booking[] };
 
 const ET = "America/New_York";
@@ -49,12 +49,20 @@ function Card({ eyebrow, title, sub, photo, foot }: { eyebrow: string; title: st
   );
 }
 
+/** Music for any stretch that would be silent: never dead air. Loops, and stays under the station's voice. */
+function Bed({ src, muted, duck }: { src: string; muted: boolean; duck?: boolean }) {
+  const ref = useRef<HTMLAudioElement>(null);
+  useEffect(() => { const a = ref.current; if (a) { a.muted = muted; a.volume = duck ? 0.1 : 0.45; if (!muted) a.play().catch(() => undefined); } }, [muted, duck]);
+  if (!src) return null;
+  return <audio ref={ref} src={src} autoPlay loop muted={muted} />;
+}
+
 /**
  * A recorded episode rolling in its slot, or a replay in open time: the file plays from wherever the
  * clock is (so every listener hears the same moment), and when it ends the thank-you card takes over
  * until the slot closes.
  */
-function Replay({ id, src, show, host, photo, startedAt, now, muted, tag, duck }: { id: string; src: string; show: string; host: string; photo: string; startedAt: number; now: number; muted: boolean; tag?: string; duck?: boolean }) {
+function Replay({ id, src, show, host, photo, startedAt, now, muted, tag, duck, bedUrl }: { id: string; src: string; show: string; host: string; photo: string; startedAt: number; now: number; muted: boolean; tag?: string; duck?: boolean; bedUrl?: string }) {
   const ref = useRef<HTMLVideoElement>(null);
   const [ended, setEnded] = useState(false);
   const offset = Math.max(0, (now - startedAt) / 1000);
@@ -64,7 +72,7 @@ function Replay({ id, src, show, host, photo, startedAt, now, muted, tag, duck }
   useEffect(() => { const v = ref.current; if (v) { v.muted = muted; if (!muted) v.play().catch(() => undefined); } }, [muted, ended]);
   // The station's voice talks over it: turn it down while she does.
   useEffect(() => { const v = ref.current; if (v) v.volume = duck ? 0.12 : 1; }, [duck, ended]);
-  if (ended) return <Card eyebrow="Thank you for listening" title={show} sub={host ? `with ${host}` : undefined} photo={photo} />;
+  if (ended) return <><Card eyebrow="Thank you for listening" title={show} sub={host ? `with ${host}` : undefined} photo={photo} /><Bed src={bedUrl ?? ""} muted={muted} duck={duck} /></>;
   return (
     <>
       <video ref={ref} src={src} autoPlay playsInline muted={muted} onLoadedMetadata={place} onEnded={() => setEnded(true)} className="absolute inset-0 h-full w-full bg-black object-contain" />
@@ -152,15 +160,15 @@ export default function Program() {
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-[#000741]">
       {phase === "live" && !current!.mediaUrl && tiles.length > 0 && <StageGrid tiles={tiles} meta={{ status: "Live" }} caption={caption} />}
-      {phase === "live" && current!.mediaUrl && <Replay id={`b${current!.id}`} src={current!.mediaUrl} show={current!.show} host={current!.host} photo={current!.photo} startedAt={Date.parse(current!.onAirAtUtc)} now={now} muted={muted} />}
-      {phase === "live" && !current!.mediaUrl && tiles.length === 0 && <Card eyebrow="Live now" title={current!.show} sub={`with ${current!.host}`} photo={current!.photo} foot="Joining in a moment" />}
-      {phase === "intro" && now >= introAt && <Voice key={`i${current!.id}`} src={`/api/radio/voice/${current!.id}/intro.mp3`} startedAt={introAt} now={now} muted={muted} />}
+      {phase === "live" && current!.mediaUrl && <Replay id={`b${current!.id}`} src={current!.mediaUrl} show={current!.show} host={current!.host} photo={current!.photo} startedAt={Date.parse(current!.onAirAtUtc)} now={now} muted={muted} bedUrl={voice?.bedUrl} />}
+      {phase === "live" && !current!.mediaUrl && tiles.length === 0 && <><Card eyebrow="Live now" title={current!.show} sub={`with ${current!.host}`} photo={current!.photo} foot="Joining in a moment" /><Bed src={voice?.bedUrl ?? ""} muted={muted} /></>}
+      {phase === "intro" && now >= introAt && <Voice key={`i${current!.id}`} src={`/api/radio/voice/${current!.id}/intro.mp3`} startedAt={Date.parse(current!.startAtUtc)} now={now} muted={muted} />}
       {phase === "outro" && <Voice key={`o${current!.id}`} src={`/api/radio/voice/${current!.id}/outro.mp3`} startedAt={Date.parse(current!.offAirAtUtc)} now={now} muted={muted} />}
       {welcomeOn && <Voice key="welcome" src={voice!.welcomeUrl} startedAt={dayStart} now={now} muted={muted} />}
       {signoffOn && <Voice key="signoff" src={voice!.signoffUrl} startedAt={signoffAt} now={now} muted={muted} />}
       {phase === "intro" && <Card eyebrow="Coming up" title={current!.show} sub={`with ${current!.host}`} photo={current!.photo} foot={`${current!.mediaUrl ? "Starts" : "Live"} in ${mmss(Date.parse(current!.onAirAtUtc) - now)}`} />}
       {phase === "outro" && <Card eyebrow="Thank you" title={current!.host} sub={current!.show} photo={current!.photo} foot={nextLine} />}
-      {phase === "filler" && fill && <Replay id={`f${fill.slot}`} src={fill.r.mediaUrl} show={fill.r.show} host={fill.r.host} photo={fill.r.photo} startedAt={fill.startedAt} now={now} muted={muted} tag="Replay" duck={welcomeOn || signoffOn} />}
+      {phase === "filler" && fill && <Replay id={`f${fill.slot}`} src={fill.r.mediaUrl} show={fill.r.show} host={fill.r.host} photo={fill.r.photo} startedAt={fill.startedAt} now={now} muted={muted} tag="Replay" duck={welcomeOn || signoffOn} bedUrl={voice?.bedUrl} />}
       {phase === "filler" && !fill && (program.data?.fillerUrl
         ? <>
             <video src={program.data.fillerUrl} autoPlay loop playsInline muted={muted} className="absolute inset-0 h-full w-full object-cover" />

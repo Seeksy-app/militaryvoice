@@ -72,6 +72,19 @@ async function make(text: string, bedKey: string, tailSec: number): Promise<{ bu
   return { buf: readFileSync(out), sec: Math.ceil(total) };
 }
 
+/** An intro that fills the whole three-minute window: music under it throughout, and the voice placed so it ends just before they go live. */
+async function makeIntro(text: string, bedKey: string, totalSec = 180, voiceAt?: number): Promise<{ buf: Buffer; sec: number }> {
+  const v = path.join(dir, `iv-${hash(text)}.mp3`);
+  writeFileSync(v, await tts(text));
+  const vsec = Number(execFileSync("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", v]).toString().trim());
+  const at = voiceAt ?? Math.max(2, totalSec - vsec - 3), vend = at + vsec;
+  const out = path.join(dir, `im-${hash(text + bedKey)}.mp3`);
+  execFileSync("ffmpeg", ["-y", "-v", "error", "-stream_loop", "-1", "-i", await bed(bedKey), "-i", v, "-filter_complex",
+    `[1:a]adelay=${Math.round(at * 1000)}|${Math.round(at * 1000)}[v];[0:a]atrim=0:${totalSec},asetpts=PTS-STARTPTS,volume='if(lt(t,${at}),0.45,if(lt(t,${vend}),0.14,0.45))':eval=frame,afade=t=in:st=0:d=1.5,afade=t=out:st=${totalSec - 3}:d=3[m];[v][m]amix=inputs=2:normalize=0:duration=longest,loudnorm=I=-16:TP=-1.5:LRA=11`,
+    "-t", String(totalSec), "-c:a", "libmp3lame", "-b:a", "160k", out]);
+  return { buf: readFileSync(out), sec: totalSec };
+}
+
 type Entry = { introKey?: string; introHash?: string; outroKey?: string; outroHash?: string };
 async function main() {
   const saved = JSON.parse((await storage.getSetting("dx:voice")) ?? "{}") as { welcome?: { key: string; sec: number; hash: string }; signoff?: { key: string; sec: number; hash: string }; map?: Record<string, Entry> };
@@ -109,13 +122,13 @@ async function main() {
         const nshow = say(nx.podcastName), nhost = say(nx.hostName);
         next = `Up next, at ${spokenTime(new Date(nt.start).toISOString())}: ${nhost.trim().toLowerCase() === nshow.trim().toLowerCase() ? nshow : `${nshow}, with ${nhost}`}.`;
       }
-      const introText = `Coming up on MilitaryVoices Radio${recorded ? ", an encore of " : ": "}${who}. Starting in three minutes.`;
+      const introText = `Now, on MilitaryVoices Radio${recorded ? ", an encore of " : ": "}${who}.`;
       const outroText = `That was ${who}. Thank you for listening to MilitaryVoices Radio. ${next}`;
       const e = state.map[String(s.id)] ?? {};
       for (const [kind, text, bedKey, tail] of [["intro", introText, "open-road", 25], ["outro", outroText, "soft-landing", 20]] as const) {
-        const h = hash(text + bedKey);
+        const h = hash(text + bedKey + "|full3" + (kind === "outro" ? "|voice-first" : ""));
         if (!FORCE && e[`${kind}Hash`] === h && e[`${kind}Key`]) continue;
-        const m = await make(text, bedKey, tail);
+        const m = kind === "intro" ? await makeIntro(text, bedKey) : await makeIntro(text, bedKey, 180, 2); // intro: music all window, voice at the end; outro: voice first, music all window
         const key = `radio-voice/${s.id}-${kind}-${h}.mp3`;
         await putRecordingObject(key, m.buf, "audio/mpeg");
         e[`${kind}Key`] = key; e[`${kind}Hash`] = h;

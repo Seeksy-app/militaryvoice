@@ -72,6 +72,8 @@ export function registerBooth(app: Express): void {
       welcomeSec: v.welcome?.sec ?? 0,
       signoffUrl: v.signoff?.key ? await signedRecordingUrl(v.signoff.key, 6 * 3600).catch(() => "") : "",
       signoffSec: v.signoff?.sec ?? 0,
+      // A soft music bed for any stretch that would otherwise be silent (a replay that ends before its slot does, a booth with no one in it).
+      bedUrl: await (async () => { const t = await storage.getMusic("soft-landing").catch(() => undefined); return t?.url ? await signedRecordingUrl(t.url, 6 * 3600).catch(() => "") : ""; })(),
     };
   }
 
