@@ -408,12 +408,15 @@ export function registerBooth(app: Express): void {
     if (!anytime && now > t.end + CLOSES_MIN * 60_000) return res.status(409).json({ message: "Your time has finished. Thank you for being on!" });
     const studio = await storage.getOrCreateStudio(b.ev.id);
     const name = String(req.body?.name ?? "").trim().slice(0, 60) || (role === "guest" ? "Guest" : b.s.hostName);
+    // An admin can watch a booth exactly as the host sees it, without being in the show: no camera, no mic, no signupId
+    // (so they don't appear on the station, and their presence doesn't hide a host who has left).
+    const watch = role === "admin" && req.body?.watch === true;
     const token = await studioToken({
       room: roomName(studio.id),
-      identity: `b-${b.s.id}-${crypto.randomBytes(4).toString("hex")}`,
-      name,
-      canPublish: true,
-      attributes: {
+      identity: `${watch ? "w" : "b"}-${b.s.id}-${crypto.randomBytes(4).toString("hex")}`,
+      name: watch ? "Admin watching" : name,
+      canPublish: !watch,
+      attributes: watch ? { role: "watcher" } : {
         signupId: String(b.s.id),
         role: role === "guest" ? "guest" : "host",
         displayTitle: role === "guest" ? `Guest · ${b.s.podcastName}` : b.s.podcastName,
