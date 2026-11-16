@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { useQuery } from "@tanstack/react-query";
 import { Moon, Sun, LogIn, LayoutDashboard, Menu, Bookmark } from "lucide-react";
@@ -36,6 +37,35 @@ const LINKS: { href: string; label: string; anchor?: boolean }[] = [
   { href: "/platform", label: "About Us" },
 ];
 
+
+/**
+ * The station, in the bar on every page: red and pulsing while MilitaryVoices Radio is on air (a click goes straight
+ * to the player), a quiet gold line with the next start when it isn't. Real: it reads the station's own clock.
+ */
+function RadioChip({ dark, compact = false }: { dark: boolean; compact?: boolean }) {
+  const { data } = useQuery<{ day: { startAtUtc: string; endAtUtc: string } | null }>({ queryKey: ["/api/radio"], refetchInterval: 60_000, staleTime: 30_000, retry: false });
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 30_000); return () => clearInterval(t); }, []);
+  const day = data?.day;
+  if (!day) return null;
+  const start = Date.parse(day.startAtUtc), end = Date.parse(day.endAtUtc);
+  const on = now >= start && now < end;
+  if (on) {
+    return (
+      <Link href="/radio" className={`inline-flex shrink-0 items-center gap-2 rounded-full bg-[#ED1C24] font-extrabold uppercase tracking-wider text-white shadow-[0_0_0_3px_rgba(237,28,36,0.25)] hover:bg-[#c8151c] ${compact ? "px-3 py-1.5 text-xs" : "px-4 py-2 text-sm"}`} data-testid="nav-radio-on-air">
+        <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-white" />
+        On air{compact ? "" : <span className="font-semibold normal-case tracking-normal"> · MilitaryVoices Radio</span>}
+      </Link>
+    );
+  }
+  if (compact || now > end) return null;
+  const when = new Date(start).toLocaleString("en-US", { timeZone: "America/New_York", weekday: "short", hour: "numeric", minute: "2-digit" });
+  return (
+    <Link href="/radio" className={`inline-flex shrink-0 items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm font-semibold ${dark ? "border-[#F0A71F]/60 text-[#F0A71F] hover:bg-[#F0A71F]/10" : "border-[#F0A71F] text-[#8a5a00] hover:bg-[#F0A71F]/10"}`} data-testid="nav-radio-next">
+      MilitaryVoices Radio · {when} ET
+    </Link>
+  );
+}
 
 export function NavBar({ product, account, tone = "light", bare = false }: { product?: "discovery"; account?: { label: string; onClick: () => void; icon?: "saved" | "signin" }; /** "dark": sits on a navy band (the homepage), white type, the dark logo. */ tone?: "light" | "dark"; /** Inside a band that already carries the logo: no logo, not sticky. */ bare?: boolean } = {}) {
   const dark = tone === "dark";
@@ -87,6 +117,7 @@ export function NavBar({ product, account, tone = "light", bare = false }: { pro
           <Link href="/for-brands" className={linkCls(location === "/for-brands" || location === "/sponsor")} data-testid="link-nav-sponsors">
             For brands
           </Link>
+          <RadioChip dark={dark} />
         </nav>
 
         <div className="flex items-center gap-1.5">
@@ -129,6 +160,7 @@ export function NavBar({ product, account, tone = "light", bare = false }: { pro
             {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
 
+          <span className="lg:hidden"><RadioChip dark={dark} compact /></span>
           {/* Mobile menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
