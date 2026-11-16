@@ -104,6 +104,7 @@ export default function RadioPage() {
   const list = data?.bookings ?? [];
   const current = list.find((b) => now >= Date.parse(b.startAtUtc) && now < Date.parse(b.endAtUtc));
   const sharedShow = list.find((b) => b.id === shared);
+  const upNext = list.find((b) => Date.parse(b.startAtUtc) > now);
 
   return (
     <div className="min-h-screen bg-background">
@@ -120,6 +121,9 @@ export default function RadioPage() {
             ) : day ? (
               <p className="mt-5 text-base text-white/85" data-testid="radio-next"><span className="font-bold text-[#F0A71F]">{live ? "On air now" : "Next on air"}:</span> {live ? "Live From Anywhere" : `${dayLabel(day.startAtUtc)} at ${hm(day.startAtUtc)} ET`}</p>
             ) : null}
+            {live && upNext && (
+              <p className="mt-1.5 text-base text-white/85" data-testid="radio-up-next"><span className="font-bold text-[#F0A71F]">Up next:</span> {upNext.show}{upNext.host && upNext.host !== upNext.show ? `, with ${upNext.host}` : ""} at {hm(upNext.startAtUtc)} ET</p>
+            )}
             <ShareStation showId={shared} />
             {(data?.youtube || data?.liveone) && (
               <p className="mt-4 flex flex-wrap items-center gap-2 text-sm">

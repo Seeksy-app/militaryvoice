@@ -178,6 +178,13 @@ export default function Program() {
           </>
         : <Card eyebrow="MilitaryVoices Radio" title="Live From Anywhere" sub={nextLine} />)}
 
+      {next && phase !== "intro" && (
+        <div className="pointer-events-none absolute bottom-10 right-10 z-10 max-w-[900px] rounded-3xl bg-[#000741]/85 px-9 py-5 text-white shadow-2xl ring-1 ring-white/20" data-testid="radio-up-next" style={listen && tapped ? { bottom: "11rem" } : undefined}>
+          <p className="text-2xl font-extrabold uppercase tracking-[0.2em] text-[#F0A71F]">Up next · {hm(next.startAtUtc)} ET</p>
+          <p className="mt-1 truncate text-5xl font-bold">{next.show}</p>
+          {next.host && next.host !== next.show && <p className="truncate text-3xl text-white/80">with {next.host}</p>}
+        </div>
+      )}
       <img src="/logo-wave.png?v=2" alt="" className="pointer-events-none absolute right-6 top-5 h-10 w-auto opacity-90 drop-shadow-lg" />
       {listen && tapped && (
         <button type="button" onClick={() => setMuted((m) => !m)} aria-label={muted ? "Unmute" : "Mute"} className={`absolute bottom-10 right-10 z-30 flex items-center gap-5 rounded-full px-12 py-7 text-6xl font-black shadow-2xl ${muted ? "bg-[#F0A71F] text-[#1a1200]" : "bg-[#000741]/85 text-white ring-4 ring-white/40"}`} data-testid="radio-mute">
