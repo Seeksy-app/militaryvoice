@@ -12,6 +12,7 @@ import { storage } from "./storage.js";
 import { isLiveKitConfigured, isRecordingConfigured, roomName, rooms, startBroadcast, startSegmentRecording, stopEgressById, updateBroadcastTargets, egressIsActive, type BroadcastTarget } from "./livekit.js";
 import { ensureRecordingsBucket } from "./recordingStorage.js";
 import { dxEventIds } from "./digitalExperience.js";
+import { bookingTimes } from "./booth.js";
 
 const LEAD_MS = 3 * 60_000;
 /** Before LiveKit's 12-hour stream cap: at 11 hours (6 pm on a 7 am start, a slot boundary, so the change lands on an intro card). */
@@ -80,6 +81,34 @@ export async function stopDay(id: number): Promise<string> {
 export { readAir };
 
 /** One pass over the week. Returns what it did, for the cron's log. */
+/**
+ * A host who leaves before their time is up (or never turns up): once nobody from their booking has been in the room for
+ * 90 seconds (three minutes if they never came), the show ends as if they'd pressed "End my show early": the outro plays
+ * and open time takes the rest of the slot, so the station never sits with an empty booth.
+ */
+async function watchHosts(ev: NonNullable<Awaited<ReturnType<typeof storage.getEventById>>>, room: string, now: number): Promise<string[]> {
+  const did: string[] = [];
+  const live = (await storage.listSignups(ev.id)).filter((s) => s.status !== "cancelled" && s.showFormat !== "prerecorded").filter((s) => {
+    const t = bookingTimes(ev, s);
+    return now >= t.onAirStart && now < t.onAirEnd;
+  });
+  if (!live.length) return did;
+  const present = new Set<string>();
+  try { for (const p of await rooms().listParticipants(room)) { const sid = p.attributes?.signupId; if (sid) present.add(String(sid)); } } catch { return did; }
+  for (const s of live) {
+    const key = `dx:seen:${s.id}`;
+    if (present.has(String(s.id))) { await storage.setSetting(key, new Date(now).toISOString()); continue; }
+    if (await storage.getSetting(`dx:ended:${s.id}`)) continue;
+    const seen = Date.parse((await storage.getSetting(key)) ?? "");
+    const base = Number.isFinite(seen) ? seen : bookingTimes(ev, s).onAirStart;
+    if (now - base > (Number.isFinite(seen) ? 90_000 : 180_000)) {
+      await storage.setSetting(`dx:ended:${s.id}`, new Date(now).toISOString());
+      did.push(`${s.podcastName}: ${Number.isFinite(seen) ? "host left" : "no one came"}, moving on`);
+    }
+  }
+  return did;
+}
+
 export async function runDxBroadcast(origin: string): Promise<string[]> {
   const did: string[] = [];
   if (!isLiveKitConfigured()) return did;
@@ -112,6 +141,7 @@ export async function runDxBroadcast(origin: string): Promise<string[]> {
         did.push(`${ev.name}: stream renewed`);
         continue;
       }
+      if (air.started && !air.done && now < end) did.push(...(await watchHosts(ev, room, now)));
       // Stop: a minute after 10 pm, once the last outro has played.
       if (air.started && !air.done && now > end + 60_000) did.push(await stopDay(id));
     } catch (err) {
