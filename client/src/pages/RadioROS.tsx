@@ -172,7 +172,7 @@ export default function RadioROS() {
                           {ph && <span className="mr-2 rounded bg-white/10 px-2 py-0.5 font-bold">{ph.name} {mmss(ph.leftMs)}</span>}
                           {r.warning && <span className="rounded bg-[#ED1C24]/25 px-2 py-0.5 font-bold text-[#ff8a8f]">{r.warning}</span>}
                           {soon && dayIsOn(day) && (here ? <span className="font-bold text-[#4ade80]">● In the booth</span> : <span className="font-bold text-[#F0A71F]">○ Not in the booth yet{r.opensAtUtc ? ` · opens ${hm(r.opensAtUtc)}` : ""}</span>)}
-                          {r.kind === "live" && r.signupId && <a href={`/booth/${r.signupId}`} target="_blank" rel="noreferrer" className="ml-2 text-white/50 underline hover:text-white">booth</a>}
+                          {r.kind === "live" && r.signupId && <><a href={`/booth/${r.signupId}?watch=1`} target="_blank" rel="noreferrer" className="ml-2 font-bold text-[#F0A71F] underline hover:text-white" data-testid={`ros-watch-${r.signupId}`}>Watch booth</a><a href={`/booth/${r.signupId}`} target="_blank" rel="noreferrer" className="ml-2 text-white/50 underline hover:text-white">booth</a></>}
                         </td>
                       </tr>
                     );

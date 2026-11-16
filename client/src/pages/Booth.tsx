@@ -170,6 +170,13 @@ function BookingStage({ signupId }: { signupId: number }) {
 const CONNECT_OPTS = { autoSubscribe: false } as const;
 const ROOM_STYLE = { height: "100dvh", display: "flex", flexDirection: "column", background: "#000741" } as const;
 const CONTROLS = { microphone: true, camera: true, screenShare: false, chat: false, leave: true } as const;
+const WATCH_CONTROLS = { microphone: false, camera: false, screenShare: false, chat: false, leave: true } as const;
+
+/** An admin watching: joins on its own, with nothing to set up. */
+function AutoWatch({ onJoin }: { onJoin: (c: LocalUserChoices) => void }) {
+  useEffect(() => { onJoin({ username: "Admin watching", videoEnabled: false, audioEnabled: false, videoDeviceId: "", audioDeviceId: "" } as LocalUserChoices); /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, []);
+  return <p className="text-lg font-semibold">Joining as a watcher…</p>;
+}
 
 /**
  * The camera and mic check. Memoised on purpose: the booth page re-renders every half second for its clock, and a
@@ -192,14 +199,15 @@ export default function Booth({ id }: { id: string }) {
   // An admin can preview any moment: ?at=2026-11-16T21:03:00Z plays the clock as if it were then.
   const previewShift = useMemo(() => { const at = Date.parse(new URLSearchParams(window.location.search).get("at") ?? ""); return Number.isFinite(at) ? at - Date.now() : 0; }, []);
 
+  const watchParam = useMemo(() => new URLSearchParams(window.location.search).get("watch") === "1", []);
   const join = useCallback(async (c: LocalUserChoices) => {
     setError("");
     try {
-      const r = await apiRequest("POST", `/api/booth/${id}/token`, { name: c.username, g: g || undefined });
+      const r = await apiRequest("POST", `/api/booth/${id}/token`, { name: c.username, g: g || undefined, watch: watchParam || undefined });
       setChoices(c);
       setConn(await r.json());
     } catch (e) { setError(say(e)); }
-  }, [id, g]);
+  }, [id, g, watchParam]);
   const onDisconnected = useCallback(() => setLeft(true), []);
   const onJoin = useCallback((c: LocalUserChoices) => { void join(c); }, [join]);
   const onPreJoinError = useCallback((e: Error) => setError(/permission/i.test(e.message) ? "Allow your camera and microphone for this site (the icon in the address bar), then reload." : e.message), []);
@@ -221,6 +229,7 @@ export default function Booth({ id }: { id: string }) {
   // A show ended early: the clock moves on to the outro now.
   const endedAt = d.endedAtUtc || previewEnd;
   const eff: Info = endedAt && Date.parse(endedAt) < Date.parse(d.offAirAtUtc) ? { ...d, offAirAtUtc: endedAt, endAtUtc: new Date(Math.min(Date.parse(d.endAtUtc), Date.parse(endedAt) + 45_000)).toISOString() } : d;
+  const watching = watchParam && d.role === "admin";
   const endShow = async () => {
     setError("");
     // Previewing a moment (?at=): show what ending does on this screen only, without touching the real show.
@@ -255,6 +264,8 @@ export default function Booth({ id }: { id: string }) {
             <p className="mt-1 text-sm text-white/70">An hour before your time. Come back then to check your camera and mic.</p>
             {d.role === "host" && <div className="mt-4"><p className="mb-2 text-xs text-white/60">Bringing a guest? Send them this link:</p><GuestLink link={d.guestLink} /></div>}
           </div>
+        ) : watchParam && d.role === "admin" ? (
+          <AutoWatch onJoin={onJoin} />
         ) : (
           <div className="w-full max-w-xl" data-testid="booth-prejoin">
             <PreJoinBox username={d.role === "host" ? d.host : ""} onJoin={onJoin} onError={onPreJoinError} />
@@ -278,14 +289,14 @@ export default function Booth({ id }: { id: string }) {
       style={ROOM_STYLE}
     >
       <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-2 text-white">
-        <p className="text-sm font-semibold">{d.show} <span className="font-normal text-white/60">· you see and hear only your own booth</span></p>
+        <p className="text-sm font-semibold">{d.show} <span className="font-normal text-white/60">· {watching ? "Watching only: this is what the host sees. You can't be seen or heard." : "you see and hear only your own booth"}</span></p>
         {d.role === "host" && <GuestLink link={d.guestLink} />}
       </div>
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row-reverse">
-        <Rail info={eff} shift={d.anytime ? previewShift : 0} onEnd={d.role === "host" || d.role === "admin" ? endShow : undefined} error={error} />
+        <Rail info={eff} shift={d.anytime ? previewShift : 0} onEnd={!watching && (d.role === "host" || d.role === "admin") ? endShow : undefined} error={error} />
         <div className="min-h-0 flex-1"><BookingStage signupId={d.signupId} /></div>
       </div>
-      <ControlBar controls={CONTROLS} />
+      <ControlBar controls={watching ? WATCH_CONTROLS : CONTROLS} />
     </LiveKitRoom>
   );
 }
