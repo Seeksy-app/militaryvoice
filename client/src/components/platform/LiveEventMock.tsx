@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
-import { Eye } from "lucide-react";
-import { PlatformIcon } from "@/components/SocialIcons";
+import { ArrowRight } from "lucide-react";
+import { Link } from "wouter";
+import { useQuery } from "@tanstack/react-query";
 
 // The hero's picture: a real event day, one room at a time — the keynote, a
 // panel, the ballroom camera, the expo floor — crossfading slowly, with just
@@ -46,46 +47,35 @@ function Rooms({ i }: { i: number }) {
   );
 }
 
-function useViewers(start: number) {
-  const [n, setN] = useState(start);
-  useEffect(() => {
-    const t = setInterval(() => setN((v) => v + Math.round(Math.random() * 9) - 2), 1800);
-    return () => clearInterval(t);
-  }, []);
-  return n;
-}
-
-function useClock(startSeconds: number) {
-  const [s, setS] = useState(startSeconds);
-  useEffect(() => {
-    const t = setInterval(() => setS((v) => v + 1), 1000);
-    return () => clearInterval(t);
-  }, []);
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  return `${h}:${String(m).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
-}
-
+/**
+ * The pill on the hero: real, and a link to the station. On air it is red with the station's own elapsed time for the
+ * day and a "Watch" arrow; off air it says when the station is next on. No made-up viewer counts.
+ */
 function LiveBar({ compact = false }: { compact?: boolean }) {
-  const viewers = useViewers(12480);
-  const clock = useClock(1 * 3600 + 14 * 60 + 41);
+  const { data } = useQuery<{ day: { startAtUtc: string; endAtUtc: string } | null }>({ queryKey: ["/api/radio"], refetchInterval: 60_000, staleTime: 30_000, retry: false });
+  const [now, setNow] = useState(Date.now());
+  useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
+  const day = data?.day;
+  const start = day ? Date.parse(day.startAtUtc) : 0, end = day ? Date.parse(day.endAtUtc) : 0;
+  const on = !!day && now >= start && now < end;
+  const s = on ? Math.floor((now - start) / 1000) : 0;
+  const clock = `${Math.floor(s / 3600)}:${String(Math.floor((s % 3600) / 60)).padStart(2, "0")}:${String(s % 60).padStart(2, "0")}`;
+  const next = day && !on && now < start ? new Date(start).toLocaleString("en-US", { timeZone: "America/New_York", weekday: "short", hour: "numeric", minute: "2-digit" }) : "";
   return (
-    <div className="inline-flex items-center gap-2.5 rounded-full border border-white/15 bg-[#000741]/70 py-1 pl-1 pr-3 text-white shadow-lg backdrop-blur-md">
-      <span className="inline-flex items-center gap-1.5 rounded-full bg-[#ED1C24] px-2 py-0.5 text-[10px] font-bold uppercase tracking-[0.14em] sm:text-[11px]">
-        <span className="relative flex h-1.5 w-1.5">
-          <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
-          <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-white" />
-        </span>
-        Live
+    <Link href="/radio" className="inline-flex items-center gap-2.5 rounded-full border border-white/20 bg-[#000741]/80 py-1.5 pl-1.5 pr-4 text-white shadow-lg backdrop-blur-md transition hover:border-white/50 hover:bg-[#000741]" data-testid="hero-live-pill" aria-label={on ? "MilitaryVoices Radio is on air. Open the player." : "Open MilitaryVoices Radio"}>
+      <span className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[11px] font-bold uppercase tracking-[0.14em] sm:text-xs ${on ? "bg-[#ED1C24]" : "bg-white/20"}`}>
+        {on && (
+          <span className="relative flex h-1.5 w-1.5">
+            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-white opacity-75" />
+            <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-white" />
+          </span>
+        )}
+        {on ? "On air" : "Radio"}
       </span>
-      {!compact && <span className="font-mono text-xs tabular-nums text-white/70">{clock}</span>}
-      <span className="inline-flex items-center gap-1.5 text-xs font-semibold tabular-nums">
-        <Eye className="h-3.5 w-3.5 text-[#F0A71F]" /> {viewers.toLocaleString("en-US")}
-      </span>
-      <span className="inline-flex items-center" title="Streaming to YouTube">
-        <PlatformIcon platform="youtube" className="h-4 w-4" />
-      </span>
-    </div>
+      {on && !compact && <span className="font-mono text-xs tabular-nums text-white/70">{clock}</span>}
+      <span className="text-xs font-semibold sm:text-sm">{on ? "MilitaryVoices Radio" : next ? `On ${next} ET` : "MilitaryVoices Radio"}</span>
+      <span className="inline-flex items-center gap-1 text-xs font-bold text-[#F0A71F] sm:text-sm">{on ? "Watch" : "Open"} <ArrowRight className="h-3.5 w-3.5" /></span>
+    </Link>
   );
 }
 
@@ -124,7 +114,7 @@ function Pip({ i, className = "" }: { i: number; className?: string }) {
 export function HeroBackdrop() {
   const i = useRoom();
   return (
-    <div className="absolute inset-y-0 right-0 hidden overflow-hidden w-[66%] lg:block xl:w-[68%]" aria-label="A live event on MilitaryVoices: keynote, panel, ballroom and expo floor" role="img">
+    <div className="absolute inset-y-0 right-0 hidden overflow-hidden w-[66%] lg:block xl:w-[68%]">
       <Rooms i={i} />
       {/* Navy under the words, a little vignette everywhere else. */}
       <div aria-hidden className="absolute inset-0 bg-[linear-gradient(90deg,#030b1f_0%,rgba(3,11,31,0.92)_22%,rgba(3,11,31,0.45)_46%,rgba(3,11,31,0)_68%)]" />
@@ -145,7 +135,7 @@ export function HeroBackdrop() {
 export function HeroCard() {
   const i = useRoom();
   return (
-    <div className="relative overflow-hidden rounded-2xl ring-1 ring-white/10 shadow-[0_40px_80px_-30px_rgba(0,0,0,0.85)] lg:hidden" aria-label="A live event on MilitaryVoices" role="img">
+    <div className="relative overflow-hidden rounded-2xl ring-1 ring-white/10 shadow-[0_40px_80px_-30px_rgba(0,0,0,0.85)] lg:hidden">
       <div className="relative aspect-[4/3] overflow-hidden sm:aspect-video">
         <Rooms i={i} />
         <div aria-hidden className="absolute inset-0 bg-[linear-gradient(180deg,rgba(3,11,31,0.45)_0%,rgba(3,11,31,0)_30%,rgba(3,11,31,0)_55%,rgba(3,11,31,0.85)_100%)]" />
