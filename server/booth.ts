@@ -373,6 +373,12 @@ export function registerBooth(app: Express): void {
       opensAtUtc: new Date(t.start - OPENS_MIN * 60_000).toISOString(),
       closesAtUtc: new Date(t.end + CLOSES_MIN * 60_000).toISOString(),
       endedAtUtc: (await storage.getSetting(`dx:ended:${b.s.id}`)) || "",
+      // Who is on the station after this booking (the next booked show of the day), so the booth can say so.
+      next: await (async () => {
+        const mine = bookingTimes(b.ev, b.s);
+        const later = (await storage.listSignups(b.ev.id)).filter((x) => x.status !== "cancelled" && x.id !== b.s.id && x.id !== 60 && bookingTimes(b.ev, x).start >= mine.end - 60_000).sort((x, y) => bookingTimes(b.ev, x).start - bookingTimes(b.ev, y).start)[0];
+        return later ? { show: later.podcastName, host: later.hostName, startAtUtc: new Date(bookingTimes(b.ev, later).start).toISOString() } : null;
+      })(),
       guestLink: role === "guest" ? "" : `${origin}/booth/${b.s.id}?g=${boothGuestKey(b.s.id)}`,
       // An admin can open any booth at any time (to see it, or to help); so can a developer's machine.
       anytime: !!getAdminEmail(req) || (process.env.NODE_ENV === "development" && !process.env.VERCEL),

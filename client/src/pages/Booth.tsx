@@ -12,7 +12,7 @@ import { apiRequest } from "@/lib/queryClient";
 // and plays the people on this booking (their signupId attribute); the
 // station's intro and outro play on air around them (see Program.tsx).
 
-type Info = { signupId: number; role: "host" | "guest" | "admin"; show: string; host: string; day: string; startAtUtc: string; endAtUtc: string; onAirAtUtc: string; offAirAtUtc: string; opensAtUtc: string; closesAtUtc: string; guestLink: string; ready: boolean; anytime?: boolean; endedAtUtc?: string };
+type Info = { signupId: number; role: "host" | "guest" | "admin"; show: string; host: string; day: string; startAtUtc: string; endAtUtc: string; onAirAtUtc: string; offAirAtUtc: string; opensAtUtc: string; closesAtUtc: string; guestLink: string; ready: boolean; anytime?: boolean; endedAtUtc?: string; next?: { show: string; host: string; startAtUtc: string } | null };
 
 const ET = "America/New_York";
 const hm = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { timeZone: ET, hour: "numeric", minute: "2-digit" });
@@ -116,6 +116,13 @@ function Rail({ info, shift = 0, onEnd, error = "" }: { info: Info; shift?: numb
         <span>{small}</span>
         <span className="h-px flex-1 bg-white/20" />
       </div>
+
+      {info.next && (
+        <p className="relative z-10 text-center text-base font-semibold text-white/80 lg:text-lg" data-testid="booth-up-next">
+          <span className="font-extrabold uppercase tracking-[0.14em] text-[#F0A71F]">Up next on the station</span><br />
+          {hm(info.next.startAtUtc)} ET · {info.next.show}{info.next.host && info.next.host !== info.next.show ? `, with ${info.next.host}` : ""}
+        </p>
+      )}
 
       {error && <p className="relative z-10 mx-auto max-w-sm rounded-xl bg-black/40 px-3 py-2 text-sm font-semibold text-[#ffb4b4]" role="alert">{error}</p>}
       {onAir && onEnd && (asking ? (
