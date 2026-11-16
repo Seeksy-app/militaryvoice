@@ -99,6 +99,8 @@ export default function Program() {
     queryFn: async () => (await fetch("/api/radio/token", { method: "POST" })).json(),
   });
   const [muted, setMuted] = useState(listen);
+  // The first tap starts the sound (browsers need one); after that the listener has a mute button of their own.
+  const [tapped, setTapped] = useState(!listen);
   const url = listen ? pass.data?.url ?? null : params.get("url");
   const token = listen ? pass.data?.token ?? null : params.get("token");
   const room = roomFromToken(token);
@@ -177,8 +179,13 @@ export default function Program() {
         : <Card eyebrow="MilitaryVoices Radio" title="Live From Anywhere" sub={nextLine} />)}
 
       <img src="/logo-wave.png?v=2" alt="" className="pointer-events-none absolute right-6 top-5 h-10 w-auto opacity-90 drop-shadow-lg" />
-      {listen && muted && (
-        <button type="button" onClick={() => setMuted(false)} className="absolute inset-0 z-20 flex items-center justify-center bg-black/30" data-testid="radio-tap-to-listen">
+      {listen && tapped && (
+        <button type="button" onClick={() => setMuted((m) => !m)} aria-label={muted ? "Unmute" : "Mute"} className={`absolute bottom-10 right-10 z-30 flex items-center gap-5 rounded-full px-12 py-7 text-6xl font-black shadow-2xl ${muted ? "bg-[#F0A71F] text-[#1a1200]" : "bg-[#000741]/85 text-white ring-4 ring-white/40"}`} data-testid="radio-mute">
+          <span aria-hidden>{muted ? "🔇" : "🔊"}</span>{muted ? "Unmute" : "Mute"}
+        </button>
+      )}
+      {listen && !tapped && (
+        <button type="button" onClick={() => { setTapped(true); setMuted(false); }} className="absolute inset-0 z-20 flex items-center justify-center bg-black/30" data-testid="radio-tap-to-listen">
           <span className="flex items-center gap-8 rounded-full bg-[#F0A71F] px-28 py-16 text-[8rem] font-black leading-none text-[#1a1200] shadow-2xl">▶ Tap to listen</span>
         </button>
       )}
