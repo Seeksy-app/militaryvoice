@@ -129,7 +129,8 @@ async function startersSince(trigger: string, since: string): Promise<{ email: s
       // Signed in with a code at least a day ago, and still no name saved.
       const dayAgo = new Date(Date.now() - 24 * 3600_000).toISOString();
       const signedIn = await db.select({ email: loginTokens.email }).from(loginTokens).where(and(gte(loginTokens.usedAt, since), lte(loginTokens.usedAt, dayAgo)));
-      const emails = Array.from(new Set(signedIn.map((r) => norm(r.email))));
+      // Admin sign-in codes are filed as "admin:<address>"; they are not podcasters, and mailing that is what failed every hour.
+      const emails = Array.from(new Set(signedIn.map((r) => norm(r.email)))).filter((e) => !e.startsWith("admin:"));
       if (!emails.length) return [];
       const done = new Set((await db.select({ email: podcasterProfiles.email, name: podcasterProfiles.hostName }).from(podcasterProfiles).where(inArray(podcasterProfiles.email, emails))).filter((r) => r.name.trim()).map((r) => norm(r.email)));
       return emails.filter((e) => !done.has(e)).map((email) => ({ email, firstName: "" }));
