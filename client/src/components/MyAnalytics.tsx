@@ -49,7 +49,18 @@ export function MyAnalytics({ onConnect }: { onConnect: () => void }) {
       </div>
     );
   }
-  if (q.error || q.data?.none || !q.data?.profile) {
+  // The index failing is not "you haven't connected": say so, and let them try again.
+  if (q.error && !q.data?.none) {
+    return (
+      <div className="rounded-2xl border border-dashed border-border p-8 text-center" data-testid="my-analytics-error">
+        <BarChart3 className="mx-auto h-8 w-8 text-[#053877]" />
+        <p className="mt-3 font-semibold text-foreground">We couldn't read your account just now</p>
+        <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">Your accounts are connected. The numbers didn't come back this time, so try again in a moment.</p>
+        <Button variant="outline" className="mt-4 rounded-full" onClick={() => void q.refetch()}>Try again</Button>
+      </div>
+    );
+  }
+  if (q.data?.none || !q.data?.profile) {
     return (
       <div className="rounded-2xl border border-dashed border-border p-8 text-center" data-testid="my-analytics-empty">
         <BarChart3 className="mx-auto h-8 w-8 text-[#053877]" />
@@ -77,7 +88,7 @@ export function MyAnalytics({ onConnect }: { onConnect: () => void }) {
 
   const toolbar = (
     <div className="sticky top-0 z-20 flex items-center gap-2 border-b border-border bg-background/95 px-6 py-2.5 backdrop-blur">
-      <span className="text-sm font-semibold text-foreground">Your analytics</span>
+      <span className="text-sm font-semibold text-foreground">Analytics</span>
       <span className="text-sm text-muted-foreground">· what a sponsor sees</span>
       <Button size="sm" variant="ghost" onClick={() => void share()} className="ml-auto h-8 gap-1.5 rounded-lg bg-muted/70 font-medium" data-testid="my-analytics-share">
         <Share2 className="h-4 w-4" /> Share

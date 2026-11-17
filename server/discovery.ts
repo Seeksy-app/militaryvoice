@@ -1156,11 +1156,14 @@ export function registerDiscoveryRoutes(app: Express): void {
       let handle = card?.handle ?? "";
       if (!handle) {
         const [prof] = await db.select().from(podcasterProfiles).where(eq(podcasterProfiles.email, email));
-        let accounts: { platform: string; username: string; followers?: number }[] = [];
+        let accounts: { platform: string; username?: string; url?: string; followers?: number }[] = [];
         try { accounts = JSON.parse(prof?.socialAccounts || "[]"); } catch { /* none */ }
-        const best = accounts.filter((a) => ["instagram", "youtube", "tiktok"].includes(String(a.platform))).sort((x, y) => (y.followers ?? 0) - (x.followers ?? 0))[0];
-        platform = best?.platform ?? "";
-        handle = best?.username ?? "";
+        // The index covers Instagram, YouTube, TikTok and X. A connected account may carry only its link, so the handle comes from there.
+        const handleOf = (a: { username?: string; url?: string }) => String(a.username || "").replace(/^@/, "").trim() || (String(a.url || "").match(/(?:instagram\.com|tiktok\.com|x\.com|twitter\.com|youtube\.com)\/(?:channel\/|c\/|user\/)?@?([A-Za-z0-9._-]+)/i)?.[1] ?? "");
+        const covered = (a: { platform: string }) => ["instagram", "youtube", "tiktok", "x", "twitter"].includes(String(a.platform));
+        const best = accounts.filter((a) => covered(a) && handleOf(a)).sort((x, y) => (y.followers ?? 0) - (x.followers ?? 0))[0];
+        platform = best ? (best.platform === "x" ? "twitter" : best.platform) : "";
+        handle = best ? handleOf(best) : "";
       }
       if (!handle) return { none: true };
       const loaded = await loadCreator(asPlatform(platform), handle, req);

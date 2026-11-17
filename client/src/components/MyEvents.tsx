@@ -160,7 +160,8 @@ function EventDetail({ ev, onBack, onChanged }: { ev: MyEvent; onBack: () => voi
   );
 }
 
-export function MyEvents() {
+/** Events: the ones they run, and (when they hold a slot in one) a way into the one they are part of. */
+export function MyEvents({ inCount = 0, onOpenIn }: { inCount?: number; onOpenIn?: () => void } = {}) {
   const qc = useQueryClient();
   const { data: list = [], isLoading } = useQuery<MyEvent[]>({ queryKey: ["/api/host/my-events"], queryFn: async () => (await apiRequest("GET", "/api/host/my-events")).json() });
   const [creating, setCreating] = useState(false);
@@ -172,11 +173,20 @@ export function MyEvents() {
     <div className="space-y-5" data-testid="my-events">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
-          <h2 className="text-2xl font-bold tracking-tight">My events</h2>
-          <p className="mt-1 text-sm text-muted-foreground">Create an event, send it to us to approve, then share its page and run it from the studio.</p>
+          <h2 className="text-2xl font-bold tracking-tight">Events</h2>
+          <p className="mt-1 text-sm text-muted-foreground">Create your own event, send it to us to approve, then share its page and run it from the studio.</p>
         </div>
         {!creating && list.length > 0 && <Button className="gap-2" onClick={() => setCreating(true)}><CalendarPlus className="h-4 w-4" /> New event</Button>}
       </div>
+      {inCount > 0 && onOpenIn && (
+        <button type="button" onClick={onOpenIn} className="flex w-full items-center justify-between gap-3 rounded-2xl border border-[#F0A71F]/50 bg-[#F0A71F]/[0.08] p-4 text-left transition hover:bg-[#F0A71F]/[0.14]" data-testid="my-events-in">
+          <span>
+            <span className="block font-semibold text-foreground">You're in {inCount === 1 ? "an event" : `${inCount} events`}</span>
+            <span className="block text-sm text-muted-foreground">Your time slot, your show details and how to promote it.</span>
+          </span>
+          <span className="shrink-0 text-sm font-semibold text-[#053877] dark:text-[#8fb5e8]">Open</span>
+        </button>
+      )}
       {(creating || (!isLoading && list.length === 0)) && (
         <EventForm onSaved={(e) => { setCreating(false); refresh(); setOpenId(e.id); }} onCancel={list.length ? () => setCreating(false) : undefined} />
       )}

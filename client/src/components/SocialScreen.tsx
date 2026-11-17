@@ -40,12 +40,10 @@ const sameDay = (a: number, b: number) => new Date(a).toDateString() === new Dat
 /** A datetime-local value for a time. */
 const local = (t: number) => { const d = new Date(t); const p = (n: number) => String(n).padStart(2, "0"); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`; };
 
-export function SocialScreen() {
+/** Three doors on one desk: Social (post, and what's queued), Calendar (the week), Analytics (how the posts did). */
+export function SocialScreen({ view = "social" }: { view?: "social" | "calendar" | "analytics" }) {
   const { toast } = useToast();
   const qc = useQueryClient();
-  type Tab = "calendar" | "analytics";
-  const [tab, setTab] = useState<Tab>(() => { try { return localStorage.getItem("mv_social_tab") === "analytics" ? "analytics" : "calendar"; } catch { return "calendar"; } });
-  const go = (t: Tab) => { setTab(t); try { localStorage.setItem("mv_social_tab", t); } catch { /* fine */ } };
   const [target, setTarget] = useState<PostTarget | null>(null);
   const [targetAt, setTargetAt] = useState<string | undefined>(undefined);
   const [picking, setPicking] = useState<string | null>(null); // Create post, optionally for a slot (datetime-local)
@@ -149,7 +147,7 @@ export function SocialScreen() {
     <section className="mt-2" data-testid="social-screen">
       {/* Header: one line of what matters, and the channels as small marks. */}
       <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
-        <h1 className="text-xl font-bold text-foreground">Social</h1>
+        {view === "analytics" ? <h2 className="text-lg font-bold text-foreground">How your posts did</h2> : <h1 className="text-xl font-bold text-foreground">{view === "calendar" ? "Calendar" : "Social"}</h1>}
         {accounts.length > 0 && (
           <span className="text-sm text-muted-foreground" data-testid="social-summary">
             <b className="font-semibold tabular-nums text-foreground">{compact(followersTotal)}</b> followers
@@ -179,20 +177,15 @@ export function SocialScreen() {
             <DropdownMenuItem onSelect={() => create("episodes")} className="gap-3 rounded-lg px-3 py-2.5 text-sm" data-testid="social-create-episode"><Film className="h-5 w-5" /> Choose an episode</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        {([["calendar", "Calendar", CalendarDays], ["analytics", "Analytics", BarChart3]] as const).map(([k, label, I]) => (
-          <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => go(k)} className={`-mb-px inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-sm font-semibold ${tab === k ? "border-[#F0A71F] text-foreground" : "border-transparent text-muted-foreground hover:text-foreground"}`} data-testid={`social-tab-${k}`}>
-            <I className="h-4 w-4" /> {label}
-          </button>
-        ))}
         <div className="mb-1.5 ml-auto flex items-center gap-2">
-          {fillN > 0 && (
+          {view !== "analytics" && fillN > 0 && (
             <Button onClick={() => fill.mutate()} disabled={fill.isPending || noAccounts} className="h-9 gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="social-fill-week">
               {fill.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Fill my week with {fillN} clip{fillN === 1 ? "" : "s"}
             </Button>
           )}
-          <Tip text="Your posting plan: your weekly goal, and the days and times posts go out">
+          {view !== "analytics" && <Tip text="Your posting plan: your weekly goal, and the days and times posts go out">
             <button type="button" onClick={() => setQueueOpen(true)} className="flex h-9 w-9 items-center justify-center rounded-lg border border-border bg-card hover:bg-muted" aria-label="Queue times" data-testid="social-queue-settings"><Settings2 className="h-4 w-4" /></button>
-          </Tip>
+          </Tip>}
         </div>
       </div>
 
@@ -204,8 +197,42 @@ export function SocialScreen() {
         </div>
       )}
 
-      {tab === "analytics" ? (
+      {view === "analytics" ? (
         <Analytics clips={clipList} onOpen={(id) => { const p = posts.find((x) => x.id === id); if (p) setOpen(p); }} />
+      ) : view === "social" ? (
+        <div className="grid gap-4 lg:grid-cols-2" data-testid="social-home">
+          <Card title="Up next" icon={CalendarClock} note={upcoming.length ? `${upcoming.length} queued` : undefined}>
+            {upcoming.length ? (
+              <ul className="divide-y divide-border">{upcoming.slice(0, 6).map((p) => <PostRow key={p.id} p={p} compactRow onOpen={() => setOpen(p)} onRemove={() => setRemoving(p)} />)}</ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">Nothing queued. Press Create to post a clip or an episode.</p>
+            )}
+            <a href="/host/dashboard/calendar" className="mt-3 inline-flex items-center gap-1 text-sm font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]" data-testid="social-see-calendar"><CalendarDays className="h-4 w-4" /> See the calendar</a>
+          </Card>
+          <Card title="Ready to post" icon={Clapperboard} note={ready.length ? `${ready.length} clip${ready.length === 1 ? "" : "s"}` : undefined}>
+            {ready.length ? (
+              <ul className="divide-y divide-border">
+                {ready.slice(0, 6).map((c) => (
+                  <li key={c.id} className="flex items-center gap-3 py-2">
+                    <span className="min-w-0 flex-1 truncate text-sm font-medium">{c.title || "Untitled clip"}</span>
+                    <Button size="sm" variant="outline" className="h-8 rounded-full" disabled={noAccounts} onClick={() => postClip(c)} data-testid={`social-post-clip-${c.id}`}>Post</Button>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p className="text-sm text-muted-foreground">No clips waiting. Make some in Pōstify and they show up here.</p>
+            )}
+          </Card>
+          <div className="lg:col-span-2">
+            <Card title="Recently posted" icon={Check}>
+              {gone.length ? (
+                <ul className="divide-y divide-border">{gone.slice(0, 8).map((p) => <PostRow key={p.id} p={p} onOpen={() => setOpen(p)} />)}</ul>
+              ) : (
+                <p className="text-sm text-muted-foreground">Nothing posted yet. Your first post will show up here, with where it went.</p>
+              )}
+            </Card>
+          </div>
+        </div>
       ) : (
         <Calendar
           posts={posts}

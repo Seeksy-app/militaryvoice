@@ -60,7 +60,7 @@ export default function HelpSmartlink() {
 
         <HelpSection n={4} id="fans" title="Email your fans">
           <p>Everyone who signs up with the <strong>Stay in touch</strong> block on your SmartLink is on your list, and you can write to them.</p>
-          <HelpStep k="a">In the menu, under <strong>Audience</strong>, press <strong>Email your fans</strong>. It shows how many fans have signed up.</HelpStep>
+          <HelpStep k="a">In the menu, under <strong>Audience</strong>, press <strong>Email</strong>. It shows how many fans have signed up.</HelpStep>
           <HelpStep k="b">Press <strong>New email</strong>. Start from a personal note, an announcement or a newsletter, or press <strong>Or have SI write it</strong> and say what it's about.</HelpStep>
           <HelpStep k="c">Add blocks (text, heading, picture, button, callout, divider) and watch the email on the right, on a phone or a computer. Press <strong>Send me a test</strong> to see it in your own inbox.</HelpStep>
           <HelpStep k="d">Press <strong>Review &amp; send</strong>, then <strong>Send now</strong> or <strong>Schedule</strong>.</HelpStep>

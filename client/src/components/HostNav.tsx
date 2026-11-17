@@ -7,13 +7,13 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { LogoLockup } from "@/components/Logo";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { GetTheApp } from "@/components/GetTheApp";
-import { LayoutDashboard, Plus, Podcast, Clapperboard, Film, Upload, Globe, ChevronRight, ChevronDown, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones, PanelLeftClose, PanelLeftOpen, Sun, Moon, Monitor, Check, MoreHorizontal, BadgeCheck, CreditCard, Trash2, Video, Radio, Building2, Send, Inbox } from "lucide-react";
+import { LayoutDashboard, Plus, Podcast, Clapperboard, Film, Upload, Globe, ChevronRight, ChevronDown, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones, PanelLeftClose, PanelLeftOpen, Sun, Moon, Monitor, Check, MoreHorizontal, BadgeCheck, CalendarClock, CreditCard, Trash2, Video, Radio, Building2, Send, Inbox } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { NotificationsMenuItem } from "@/components/Notifications";
 import { Link } from "wouter";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
-export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "greenroom" | "recordings" | "contacts" | "pro" | "cohost" | "analytics" | "postify" | "social" | "discovery" | "verified" | "podcast" | "page" | "billing" | "trash" | "studio" | "fans" | "myevents" | "organization" | "requests" | "opportunities";
+export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "greenroom" | "recordings" | "contacts" | "pro" | "cohost" | "analytics" | "postify" | "social" | "discovery" | "verified" | "podcast" | "page" | "billing" | "trash" | "studio" | "fans" | "myevents" | "organization" | "requests" | "opportunities" | "calendar";
 
 interface Item {
   key: HostScreen;
@@ -164,9 +164,7 @@ export function HostNav({
       items: [
         { key: "dashboard", label: "Dashboard", hint: "Your home base: your events, your audience and what to do next", icon: LayoutDashboard },
         { key: "page", label: "SmartLink", hint: "Your SmartLink at militaryvoices.ai/you: your podcast, links, messages from listeners, and a media kit for brands", icon: Globe },
-        { key: "events", label: "Events", hint: "The events you're part of: your show, your time slot and how to promote it", icon: CalendarDays, badge: eventsCount || undefined },
         ...(nextBooth ? [{ key: "dashboard" as const, label: "Booth", hint: "Your MilitaryVoices Radio booth: it opens an hour before your time", icon: Radio, href: `/booth/${nextBooth.id}`, status: boothStatus }] : []),
-        { key: "opportunities", label: "Opportunities", hint: "Requests from brands: say you're interested with your rate, or pass", icon: Inbox, badge: opportunities || undefined },
         ...(cohostHours > 0 ? [{ key: "cohost" as const, label: "Co-host dashboard", hint: `The ${cohostHours} ${cohostHours === 1 ? "hour" : "hours"} you're co-hosting at the desk, and who's on with you`, icon: Mic2 }] : []),
       ],
     },
@@ -176,9 +174,8 @@ export function HostNav({
       title: "Record & host",
       items: [
         { key: "pro", feature: "studio", label: "Studio", hint: "Your own full studio: scenes, layouts, lower thirds and a producer console. On Scale and Pro.", icon: MonitorPlay, tag: "Beta" },
-        { key: "studio", label: "Room", hint: "Quick, like Zoom: hop in with guests, record it or don't, and go live", icon: Video, tag: "Beta" },
         { key: "podcast", label: "Podcast", hint: "Host your show: your RSS feed for Apple and Spotify, episodes, and downloads sponsors trust", icon: Podcast },
-        ...(path !== "planner" ? [{ key: "myevents" as const, label: "Run an event", hint: "Put on your own live event: your page, your lineup, our studio", icon: CalendarDays }] : []),
+        ...(path !== "planner" ? [{ key: "myevents" as const, label: "Events", hint: "The events you're in, and your own: create one, build your page and lineup, and run it from our studio", icon: CalendarDays, badge: eventsCount || undefined }] : []),
         { key: "recordings", label: "Library", hint: "Every episode in one place: studio recordings, uploads, Zoom calls and cleaned-up versions", icon: Library },
       ],
     },
@@ -186,14 +183,15 @@ export function HostNav({
       title: "Clips & social",
       items: [
         { key: "postify", label: "Pōstify", hint: "Create short clips from your video podcast, and clean up the full episode", icon: Wand2, tag: "Beta" },
-        { key: "social", label: "Social", hint: "Post and schedule your clips to all your social accounts from one calendar", icon: Share2 },
+        { key: "social", label: "Social", hint: "Post your clips and episodes to all your social accounts, and see what's queued", icon: Share2 },
+        { key: "calendar", label: "Calendar", hint: "Your week of posts: drag to move one, and fill the open slots", icon: CalendarClock },
+        { key: "analytics", label: "Analytics", hint: "Your audience as sponsors see it, and how your posts did", icon: BarChart3 },
       ],
     },
     {
       title: "Audience",
       items: [
-        { key: "analytics", label: "Your analytics", hint: "Your followers, reach and engagement as sponsors see them, and what to charge", icon: BarChart3 },
-        { key: "fans", label: "Email your fans", hint: "Write to everyone who signed up on your SmartLink: blocks, live preview, schedule, opens and clicks", icon: Mail },
+        { key: "fans", label: "Email", hint: "Write to everyone who signed up on your SmartLink: blocks, live preview, schedule, opens and clicks", icon: Mail },
         { key: "discovery", label: "Discovery", hint: discoveryLocked ? "Search military and veteran creators to find guests, partners and sponsors. Comes with Scale and Pro." : "Search military and veteran creators to find guests, partners and sponsors", icon: Compass, ...(discoveryLocked ? { upsell: true, tag: "Upgrade" } : {}) },
         { key: "verified", label: "Verified creators", hint: discoveryLocked ? "Creators on MilitaryVoices we've checked ourselves, to invite as guests or collaborators. Comes with Scale and Pro." : verifiedLocked ? "Creators on MilitaryVoices we know personally. $10 a month, or included with Discovery Pro." : "Creators on MilitaryVoices we know personally, each one checked by our team", icon: BadgeCheck, ...(discoveryLocked || verifiedLocked ? { upsell: true, tag: "Upgrade" } : {}) },
         ...(contactsCount > 0 ? [{ key: "contacts" as const, label: "Contacts", hint: `${contactsCount} ${contactsCount === 1 ? "person wants" : "people want"} to hear from you`, icon: Users }] : []),
@@ -204,7 +202,7 @@ export function HostNav({
     {
       title: "Coming soon",
       // One quiet line: what's coming shouldn't take the space of what's here.
-      items: [{ key: "pro", label: "Pro tools", hint: "Email campaigns, a contacts CRM and your own studio, coming soon", icon: Lock, locked: true, feature: "campaigns", tag: "Soon" }],
+      items: [{ key: "pro", label: "Pro tools", hint: "A contacts CRM and email sequences, coming soon", icon: Lock, locked: true, feature: "campaigns", tag: "Soon" }],
     },
     {
       title: "Help",
@@ -249,7 +247,7 @@ export function HostNav({
       );
     }
     const adminThrough = isAdmin && (!!it.soon || it.feature === "studio");
-    const active = it.soon && !adminThrough ? false : it.locked ? screen === "pro" && (feature ?? "campaigns") === it.feature : screen === it.key || (it.key === "events" && (screen === "promotion" || (screen === "greenroom" && !compact)));
+    const active = it.soon && !adminThrough ? false : it.locked ? screen === "pro" && (feature ?? "campaigns") === it.feature : screen === it.key || (it.key === "myevents" && (screen === "events" || screen === "promotion" || (screen === "greenroom" && !compact)));
     const inert = !!it.locked && !proOpen;
     return (
       <a
@@ -328,7 +326,7 @@ export function HostNav({
         screen={screen}
         onGo={onGo}
         pathFor={pathFor}
-        more={[...groups.flatMap((g) => g.items).flatMap((it) => (it.key === "events" ? (eventsCount ? [it, greenRoomItem] : [it]) : [it]))].filter((it) => !it.soon && (it.href || !PHONE_TABS.some((t) => t.key === it.key)))}
+        more={[...groups.flatMap((g) => g.items).flatMap((it) => (it.key === "myevents" && path !== "planner" ? (eventsCount ? [it, greenRoomItem] : [it]) : [it]))].filter((it) => !it.soon && (it.href || !PHONE_TABS.some((t) => t.key === it.key)))}
         badge={eventsCount}
         proOpen={proOpen}
       />
@@ -338,7 +336,7 @@ export function HostNav({
           <div className="flex min-h-full w-[72px] flex-col items-center gap-1 py-3">
             {groups.flatMap((g) => g.items).map((it) => {
               const Icon = it.icon;
-              const active = screen === it.key || (it.key === "events" && (screen === "promotion" || screen === "greenroom"));
+              const active = screen === it.key || (it.key === "myevents" && (screen === "events" || screen === "promotion" || screen === "greenroom"));
               return (
                 <RailButton key={`r-${it.key}-${it.feature ?? ""}-${it.href ?? ""}`} tip={it.label} active={active} href={it.href} onClick={it.href ? undefined : () => { if (it.soon && !isAdmin) { toast({ title: it.soon }); return; } if (isAdmin && it.feature === "studio") { window.location.href = "/admin/studio"; return; } if (it.feature === "studio" && !it.locked) { window.location.href = "/studio/control"; return; } onGo(it.key, it.feature); }} testid={`nav-rail-${it.key}`}>
                   <Icon className="h-5 w-5" />

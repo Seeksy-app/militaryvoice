@@ -606,7 +606,7 @@ function BackToEvent({ onGo }: { onGo: (s: "events") => void }) {
 }
 
 /** The screens the dashboard nav switches between, and their URLs. */
-const SCREENS = ["dashboard", "editProfile", "events", "promotion", "greenroom", "discovery", "verified", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social", "podcast", "page", "billing", "trash", "studio", "fans", "myevents", "organization", "requests", "opportunities"] as const;
+const SCREENS = ["dashboard", "editProfile", "events", "promotion", "greenroom", "discovery", "verified", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social", "podcast", "page", "billing", "trash", "studio", "fans", "myevents", "organization", "requests", "opportunities", "calendar"] as const;
 type Screen = (typeof SCREENS)[number];
 
 /** /host/dashboard/<slug> ⇄ screen. Home has no slug; the rest are lowercase. */
@@ -623,6 +623,7 @@ const SCREEN_SLUG: Record<Screen, string> = {
   studio: "rooms",
   fans: "fans",
   social: "social",
+  calendar: "calendar",
   podcast: "podcast",
   page: "page",
   greenroom: "green-room",
@@ -1115,6 +1116,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   const newOpps = (oppsPeek ?? []).filter((o) => o.status === "new").length;
   const discoveryLocked = Boolean(discoverMe?.locked);
   const verifiedLocked = Boolean(discoverMe?.verifiedLocked);
+  const eventsCountNav = (hostEvents ?? []).filter((e) => e.slotIndex != null && (!e.event || Date.now() < new Date(e.event.startAtUtc).getTime() + e.event.durationHours * 3600_000)).length;
   // Which path they came in on (podcaster, creator, planner): the dashboard follows it.
   const path = pathOf(profile?.interests);
   const checklistState = {
@@ -1273,7 +1275,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
             onToggle={toggleNav}
             screen={screen === "claim" ? "dashboard" : screen}
             // Only events they're actually on and that haven't happened yet (7 Oct: a "1" showed for an event they'd never joined).
-            eventsCount={(hostEvents ?? []).filter((e) => e.slotIndex != null && (!e.event || Date.now() < new Date(e.event.startAtUtc).getTime() + e.event.durationHours * 3600_000)).length}
+            eventsCount={eventsCountNav}
             contactsCount={data?.contacts?.length ?? 0}
             pathFor={(sc) => hostScreenPath(sc)}
             onGo={(sc, feature) => { setProFeature(feature); goTo(sc); }}
@@ -1428,11 +1430,13 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
         ) : screen === "postify" ? (
           <PostStudio />
         ) : screen === "social" ? (
-          <SocialScreen />
+          <SocialScreen view="social" />
+        ) : screen === "calendar" ? (
+          <SocialScreen view="calendar" />
         ) : screen === "podcast" ? (
           <PodcastHosting />
         ) : screen === "myevents" ? (
-          <MyEvents />
+          <MyEvents inCount={eventsCountNav} onOpenIn={() => goTo("events")} />
         ) : screen === "requests" ? (
           <BrandRequests />
         ) : screen === "opportunities" ? (
@@ -1442,8 +1446,9 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
         ) : screen === "page" ? (
           <BioBuilder />
         ) : screen === "analytics" ? (
-          <section className="mt-6">
+          <section className="mt-6 space-y-8">
             <MyAnalytics onConnect={() => goTo("integrations")} />
+            <SocialScreen view="analytics" />
           </section>
         ) : screen === "pro" ? (
           <ProScreen feature={proFeature} />
