@@ -12249,6 +12249,13 @@ Watch at militaryvoices.ai/agenda
       const name = prof?.podcastName.trim() || prof?.hostName.trim() || e;
       out.set(e, { email: e, label: `${name} · ${postTesters().has(e) ? "Pōstify tester" : "Pōstify, paying"}`, kind: "crew" });
     }
+    // Customers the owner has chosen to be able to step into, to help them (setting viewas:extra, comma separated; Frank Zaccari, 17 Nov 2026,
+    // for his onboarding). Each step in is written to viewas:log.
+    for (const e of ((await storage.getSetting("viewas:extra")) ?? "").split(/[,\s]+/).map((x) => x.trim().toLowerCase()).filter((x) => x.includes("@"))) {
+      if (out.has(e)) continue;
+      const prof = profiles.find((p) => p.email.trim().toLowerCase() === e);
+      out.set(e, { email: e, label: `${prof?.podcastName.trim() || prof?.hostName.trim() || e} · Customer (support)`, kind: "crew" });
+    }
     return Array.from(out.values());
   }
 
@@ -12287,6 +12294,11 @@ Watch at militaryvoices.ai/agenda
     // browser, which is what sent them back for a code every morning.
     setSessionCookie(res, email, true);
     console.log(`Admin ${getAdminEmail(req)} viewing as ${email}`);
+    try {
+      const log = JSON.parse((await storage.getSetting("viewas:log")) || "[]") as unknown[];
+      log.unshift({ at: new Date().toISOString(), admin: getAdminEmail(req), as: email });
+      await storage.setSetting("viewas:log", JSON.stringify(log.slice(0, 200)));
+    } catch { /* the log is a convenience */ }
     res.json({ ok: true, to: "/host/dashboard" });
   });
 
