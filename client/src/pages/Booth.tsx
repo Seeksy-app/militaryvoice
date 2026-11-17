@@ -259,7 +259,7 @@ export default function Booth({ id }: { id: string }) {
       <div className={shell}>
         <p className="text-2xl font-bold">Your MilitaryVoices Radio booth</p>
         <p className="max-w-md text-center text-white/75">{say(info.error)}</p>
-        <a href="/host/dashboard" className="rounded-full bg-white px-5 py-2.5 font-semibold text-[#000741]">Sign in</a>
+        {!g && <a href="/host/dashboard" className="rounded-full bg-white px-5 py-2.5 font-semibold text-[#000741]">Sign in</a>}
       </div>
     );
   }

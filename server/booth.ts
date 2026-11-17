@@ -390,7 +390,7 @@ export function registerBooth(app: Express): void {
     const b = await bookingFor(Number(req.params.id));
     if (!b) return res.status(404).json({ message: "That booking isn't on MilitaryVoices Radio." });
     const role = roleOf(req, b.s, req.query.g);
-    if (!role) return res.status(401).json({ message: "Sign in with the email you booked with, or use the guest link you were sent." });
+    if (!role) return res.status(401).json({ message: req.query.g ? "This guest link isn't right. Ask your host to send it again from their booth." : "Sign in with the email you booked with, or use the guest link you were sent." });
     const t = bookingTimes(b.ev, b.s);
     const origin = `${req.protocol}://${req.get("host")}`;
     res.json({
@@ -437,7 +437,7 @@ export function registerBooth(app: Express): void {
     const b = await bookingFor(Number(req.params.id));
     if (!b) return res.status(404).json({ message: "That booking isn't on MilitaryVoices Radio." });
     const role = roleOf(req, b.s, req.body?.g);
-    if (!role) return res.status(401).json({ message: "Sign in with the email you booked with, or use the guest link you were sent." });
+    if (!role) return res.status(401).json({ message: req.body?.g ? "This guest link isn't right. Ask your host to send it again from their booth." : "Sign in with the email you booked with, or use the guest link you were sent." });
     if (!isLiveKitConfigured()) return res.status(503).json({ message: "The studio isn't switched on yet." });
     const t = bookingTimes(b.ev, b.s);
     const now = Date.now();
