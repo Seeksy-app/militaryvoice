@@ -8800,6 +8800,18 @@ export function registerRoutes(app: Express): void {
     const job = (async () => {
       const row = await storage.getInbound(rowId);
       if (!row) return;
+      // Anyone on the watch list (setting mail:watch, comma separated) gets Andrew an email the moment they write in.
+      try {
+        const watch = ((await storage.getSetting("mail:watch")) ?? "").split(/[,\s]+/).map((e) => e.trim().toLowerCase()).filter(Boolean);
+        if (watch.includes(row.fromEmail.trim().toLowerCase())) {
+          const who = row.fromName && row.fromName !== row.fromEmail ? row.fromName : row.fromEmail;
+          const body = String(row.bodyText ?? "").split(/\n>|\nOn .* wrote:/)[0].trim().slice(0, 1200);
+          const link = `${(process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "")}/admin/crm?with=${encodeURIComponent(row.fromEmail)}&focus=in-${row.id}`;
+          await sendOneOffEmail({ kind: "watch-alert", to: "andrew@podlogix.co", subject: `${who} replied: ${row.subject}`.slice(0, 200), text: `${who} <${row.fromEmail}> wrote:\n\n${body}\n\nOpen it in Mail: ${link}`, html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#1a1a1a;font-size:16px;line-height:1.5"><p><b>${who.replace(/</g, "&lt;")}</b> wrote:</p><blockquote style="margin:0;padding:0 0 0 14px;border-left:3px solid #ccd">${body.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/\n/g, "<br>")}</blockquote><p><a href="${link}">Open it in Mail</a></p></div>` });
+        }
+      } catch (err) {
+        console.warn("Watch alert failed:", (err as Error).message);
+      }
       let draft: Awaited<ReturnType<typeof draftReply>> | undefined;
       try {
         draft = await draftReply(row);
