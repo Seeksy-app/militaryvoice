@@ -641,7 +641,7 @@ const STUDIO_HOST_READS = /^\/api\/admin\/(signups|recordings|cohost-slots)(\/|$
  * recordings) must name one of their own.
  */
 const SCOPED_TABLES: Record<string, string> = { scenes: "scenes", media: "show_assets", destinations: "destinations", "lower-thirds": "lower_thirds", "run-of-show": "run_of_show", ingress: "ingresses", "studio/participants": "studio_participants", "studio/presentations": "presentations", studios: "studios" };
-async function studioHostScopeOk(req: Request, events: number[]): Promise<boolean> {
+export async function studioHostScopeOk(req: Request, events: number[]): Promise<boolean> {
   const byId = /^\/api\/admin\/(scenes|media|destinations|lower-thirds|run-of-show|ingress|studio\/participants|studio\/presentations|studios)\/(\d+)(\/|$)/.exec(req.path);
   if (byId) {
     const table = SCOPED_TABLES[byId[1]];
@@ -661,7 +661,18 @@ async function studioHostScopeOk(req: Request, events: number[]): Promise<boolea
   for (const id of studioNamed) { const st = await storage.getStudioById(id); if (!st || !events.includes(st.eventId)) return false; }
   // A list that would otherwise cover everyone's.
   if (req.method === "GET" && /^\/api\/admin\/(signups|recordings|cohost-slots)(\/|$)/.test(req.path) && !named.length) return false;
+  // Reaching past the studio: the house's YouTube channels, every studio on the platform, the Marathon's standby build.
+  if (/^\/api\/admin\/(studio\/youtube|studio\/youtube-channels|standby-build)(\/|$)/.test(req.path)) return false;
+  if (/^\/api\/admin\/studios(\/|$)/.test(req.path) && (req.method !== "GET" || String(req.query.all ?? "") === "1")) return false;
+  if (req.method !== "GET" && /^\/api\/admin\/scenes\/lock$/.test(req.path)) return false;
   return true;
+}
+
+/** For a member's personal studio, a request that does not name an event is about their own (the routes default to the Marathon). */
+function pinToOwnEvent(req: Request, eventId: number): void {
+  const q = { ...(req.query as Record<string, unknown>) };
+  if (!q.eventId) q.eventId = String(eventId);
+  Object.defineProperty(req, "query", { value: q, writable: true, configurable: true, enumerable: true });
 }
 function studioHostMay(req: Request): boolean {
   const path = req.path;
@@ -705,6 +716,11 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
     if (!(await studioHostScopeOk(req, studioHost.events))) {
       res.status(403).json({ message: "That isn't part of your studio." });
       return;
+    }
+    // A host whose events are all personal studios: pin the request to their own, and remember it for the handlers that list everything.
+    if ((await Promise.all(studioHost.events.map(async (id) => (await storage.getEventById(id))?.occasion === "Personal studio"))).every(Boolean)) {
+      pinToOwnEvent(req, studioHost.events[0]);
+      (req as any).personalStudio = studioHost.events[0];
     }
     (req as any).adminEmail = studioHost.email;
     (req as any).studioHost = true;
@@ -4861,7 +4877,8 @@ export function registerRoutes(app: Express): void {
     const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
     const signups = await storage.listSignups(eventId);
     const byEmail = new Map(signups.map((sg) => [sg.email.toLowerCase().trim(), sg]));
-    const assets = await storage.listAllAssets();
+    const personal = (req as any).personalStudio as number | undefined;
+    const assets = personal ? (await storage.listAllAssets()).filter((x) => Number((x as { eventId?: number }).eventId) === personal) : await storage.listAllAssets();
     res.json(
       assets
         // Clips are posts on the podcaster's dashboard, not scene material —
@@ -5069,17 +5086,17 @@ export function registerRoutes(app: Express): void {
   const clockUntil = async (): Promise<{ sceneId: number; at: string; label: string } | null> => {
     try { const raw = await storage.getSetting("clock_until"); return raw ? JSON.parse(raw) : null; } catch { return null; }
   };
-  const scenesLocked = async () => (await storage.getSetting("scenes_locked")) !== "false";
+  const scenesLocked = async (req?: Request) => (req as any)?.personalStudio ? false : (await storage.getSetting("scenes_locked")) !== "false";
   const lockedNo = (res: Response) => res.status(423).json({ message: "The scenes are locked for the show. Nothing can be moved, added or deleted." });
-  app.get("/api/admin/scenes/lock", requireAdmin, async (_req, res) => { noStore(res); res.json({ locked: await scenesLocked() }); });
+  app.get("/api/admin/scenes/lock", requireAdmin, async (req, res) => { noStore(res); res.json({ locked: await scenesLocked(req) }); });
   app.post("/api/admin/scenes/lock", requireAdmin, async (req, res) => {
     if ((req as any).studioHost) return res.status(403).json({ message: "Admins only." });
     await storage.setSetting("scenes_locked", req.body?.locked === false ? "false" : "true");
-    res.json({ locked: await scenesLocked() });
+    res.json({ locked: await scenesLocked(req) });
   });
 
   app.post("/api/admin/scenes", requireAdmin, async (req, res) => {
-    if (await scenesLocked()) return lockedNo(res);
+    if (await scenesLocked(req)) return lockedNo(res);
     const { studio } = await adminStudio(req);
     const existing = await storage.listScenes(studio.id);
 
@@ -5144,14 +5161,14 @@ export function registerRoutes(app: Express): void {
 
   /** Drag-and-drop, or the up/down buttons: the rail sends the order it wants. */
   app.post("/api/admin/scenes/reorder", requireAdmin, async (req, res) => {
-    if (await scenesLocked()) return lockedNo(res);
+    if (await scenesLocked(req)) return lockedNo(res);
     const { studio } = await adminStudio(req);
     const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).map(Number).filter(Number.isFinite);
     res.json(await storage.reorderScenes(studio.id, ids));
   });
 
   app.delete("/api/admin/scenes/:id", requireAdmin, async (req, res) => {
-    if (await scenesLocked()) return lockedNo(res);
+    if (await scenesLocked(req)) return lockedNo(res);
     const id = Number(req.params.id);
     const scene = await storage.getScene(id);
     await storage.deleteScene(id);
@@ -5167,7 +5184,7 @@ export function registerRoutes(app: Express): void {
   /** Auto-generate one scene per run-of-show item. Idempotent: existing scenes
    *  with the same name are skipped, not duplicated. */
   app.post("/api/admin/scenes/generate", requireAdmin, async (req, res) => {
-    if (await scenesLocked()) return lockedNo(res);
+    if (await scenesLocked(req)) return lockedNo(res);
     const { studio } = await adminStudio(req);
     const items = await storage.listRunOfShow(studio.eventId);
     const existing = await storage.listScenes(studio.id);
@@ -5196,7 +5213,7 @@ export function registerRoutes(app: Express): void {
 
   /** Create a scene from a specific run-of-show item. */
   app.post("/api/admin/scenes/from-agenda", requireAdmin, async (req, res) => {
-    if (await scenesLocked()) return lockedNo(res);
+    if (await scenesLocked(req)) return lockedNo(res);
     const { studio } = await adminStudio(req);
     const runItemId = Number(req.body?.runItemId);
     const item = await storage.getRunItem(runItemId);
@@ -5539,7 +5556,7 @@ export function registerRoutes(app: Express): void {
   app.post("/api/admin/scenes/:id/apply", requireAdmin, async (req, res) => {
     // Locked for the show: only the producer's own admin sign-in takes scenes,
     // so a co-host's click can't reset who's on stage (5 Oct, twice).
-    if ((req as any).studioHost && (await scenesLocked())) return res.status(423).json({ message: "Scenes are run by the producer tonight. Message the team if you need a change." });
+    if ((req as any).studioHost && (await scenesLocked(req))) return res.status(423).json({ message: "Scenes are run by the producer tonight. Message the team if you need a change." });
     const r = await applyScene(Number(req.params.id));
     res.status(r.status).json(r.body);
   });
@@ -5809,7 +5826,7 @@ export function registerRoutes(app: Express): void {
     const studio = scene ? await storage.getStudioById(scene.studioId) : null;
     if (!scene || !studio) return res.status(404).json({ message: "Not found" });
     if (!(await isCrew(req, studio.eventId))) return res.status(403).json({ message: "Only the crew can take scenes." });
-    if (await scenesLocked()) return res.status(423).json({ message: "Scenes are run by the producer tonight. Message the team if you need a change." });
+    if (await scenesLocked(req)) return res.status(423).json({ message: "Scenes are run by the producer tonight. Message the team if you need a change." });
     const r = await applyScene(scene.id, "crew");
     res.status(r.status).json(r.body);
   });
