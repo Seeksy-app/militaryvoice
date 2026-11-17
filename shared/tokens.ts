@@ -13,14 +13,16 @@ export const PLANS = {
   // "creator" so existing subscriptions and Stripe prices keep matching.
   creator: { key: "creator", name: "Scale", cents: 1995, yearCents: 19900, credits: 30, clipsPerEpisode: 4, overageCents: 60, blurb: "About 3 episodes a month with animated captions, or 6 with Classic." },
   // Pro: 6 clips an episode (12 credits animated, 7 Classic).
-  pro: { key: "pro", name: "Pro", cents: 4900, yearCents: 49000, credits: 90, clipsPerEpisode: 6, overageCents: 50, blurb: "6 clips an episode instead of 4: about 7 episodes a month with animated captions, or 12 with Classic.", popular: true },
+  pro: { key: "pro", name: "Pro", cents: 4900, quarterCents: 14700, yearCents: 49000, credits: 90, clipsPerEpisode: 6, overageCents: 50, blurb: "6 clips an episode instead of 4: about 7 episodes a month with animated captions, or 12 with Classic.", popular: true },
 } as const;
 /**
  * Yearly: two months free, and the year's credits (12 months' worth) the day
  * it's paid. No automatic extras — Stripe can't bill a monthly meter on a
  * yearly subscription — so a yearly plan tops up with credit packs.
  */
-export type PlanInterval = "month" | "year";
+export type PlanInterval = "month" | "year" | "quarter";
+/** Pro is paid every three months, no other way (Andrew, 17 Nov 2026): $49 a month, $147 a quarter, and its credits (90 a month) arrive three months at a time. */
+export const QUARTERLY_ONLY: readonly string[] = ["pro"];
 export type PlanKey = keyof typeof PLANS;
 export const planOf = (key: string) => (key in PLANS ? PLANS[key as PlanKey] : undefined);
 
@@ -66,6 +68,13 @@ export const ADDONS = {
     key: "discovery", name: "Discovery Pro", cents: 2900, reveals: 100, lookups: 1000,
     blurb: "Find military and veteran creators, guests and sponsors, and reach them.",
     features: ["100 contact reveals a month (10 free)", "1,000 profile look-ups a month (200 free)", "Plus everything in free Discovery: every filter, saved lists, full profiles"],
+  },
+  // Post-production for a show (17 Nov 2026): a Pro add-on of its own, $195 a month paid every three months ($585),
+  // a separate subscription so it can stop while Pro carries on.
+  production: {
+    key: "production", name: "Production", cents: 19500, quarterCents: 58500, quarterly: true,
+    blurb: "We make every episode: intro, outro and music, the guest card, and four clips, the moment your recording lands.",
+    features: ["The intro and outro, with music, on every episode", "A guest card with your guest's own name and photo", "Four clips an episode, in every shape", "Nothing posts until you've seen it"],
   },
 } as const;
 export type AddonKey = keyof typeof ADDONS;

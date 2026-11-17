@@ -1,5 +1,5 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import { tokenPack, PLANS, planOf, ADDONS, type PlanKey, type PlanInterval, type AddonKey } from "../shared/tokens.js";
+import { tokenPack, PLANS, planOf, ADDONS, QUARTERLY_ONLY, type PlanKey, type PlanInterval, type AddonKey } from "../shared/tokens.js";
 
 /**
  * Stripe Checkout for Pōstify tokens, over Stripe's REST API (no SDK: three
@@ -132,7 +132,7 @@ function ensureBilling(): Promise<Record<string, string>> {
       customer_mapping: { type: "by_id", event_payload_key: "stripe_customer_id" },
       value_settings: { event_payload_key: "value" },
     }));
-    const keys = Object.keys(PLANS).flatMap((k) => [`postify_${k}_monthly`, `postify_${k}_extra`, `postify_${k}_yearly`]);
+    const keys = Object.keys(PLANS).flatMap((k) => [`postify_${k}_monthly`, `postify_${k}_extra`, `postify_${k}_yearly`, `postify_${k}_quarterly`, `postify_${k}_extra_q`]);
     const found = await stripe("GET", `/prices?limit=20&${keys.map((k) => `lookup_keys[]=${k}`).join("&")}`);
     const ids: Record<string, string> = Object.fromEntries((found.data ?? []).map((p: any) => [p.lookup_key, p.id]));
     for (const plan of Object.values(PLANS)) {
@@ -147,6 +147,22 @@ function ensureBilling(): Promise<Record<string, string>> {
         const p = await stripe("POST", "/prices", flat({
           lookup_key: `postify_${plan.key}_yearly`, currency: "usd", unit_amount: plan.yearCents,
           recurring: { interval: "year" }, product_data: { name: `Pōstify ${plan.name} · yearly · ${plan.credits * 12} credits` },
+        }));
+        ids[p.lookup_key] = p.id;
+      }
+      // Paid every three months: the plan's price for the quarter, and its extra credits metered over the same quarter
+      // (a subscription's prices must share one billing period).
+      if ("quarterCents" in plan && plan.quarterCents && !ids[`postify_${plan.key}_quarterly`]) {
+        const p = await stripe("POST", "/prices", flat({
+          lookup_key: `postify_${plan.key}_quarterly`, currency: "usd", unit_amount: plan.quarterCents,
+          recurring: { interval: "month", interval_count: 3 }, product_data: { name: `Pōstify ${plan.name} · every 3 months · ${plan.credits * 3} credits` },
+        }));
+        ids[p.lookup_key] = p.id;
+      }
+      if ("quarterCents" in plan && plan.quarterCents && !ids[`postify_${plan.key}_extra_q`]) {
+        const p = await stripe("POST", "/prices", flat({
+          lookup_key: `postify_${plan.key}_extra_q`, currency: "usd", unit_amount: plan.overageCents,
+          recurring: { interval: "month", interval_count: 3, usage_type: "metered", meter: meter.id }, product_data: { name: `Pōstify ${plan.name} · extra credits (quarter)` },
         }));
         ids[p.lookup_key] = p.id;
       }
@@ -166,19 +182,23 @@ function ensureBilling(): Promise<Record<string, string>> {
 export async function createPlanCheckout(v: { email: string; plan: PlanKey; interval?: PlanInterval; origin: string; customerId?: string; addons?: AddonKey[] }): Promise<string> {
   const plan = planOf(v.plan);
   if (!plan) throw new Error("Which plan?");
-  const interval: PlanInterval = v.interval === "year" ? "year" : "month";
+  // Pro is paid every three months and no other way.
+  const interval: PlanInterval = QUARTERLY_ONLY.includes(plan.key) ? "quarter" : v.interval === "year" ? "year" : "month";
   const ids = await ensureBilling();
-  // Add-ons in the same payment (9 Oct): monthly only, on the plan's own subscription.
-  const addons = interval === "month" ? (v.addons ?? []).filter((a) => a in ADDONS) : [];
+  // Add-ons in the same payment (9 Oct): monthly only, on the plan's own subscription. Production is its own subscription, made after.
+  const addons = interval === "month" ? (v.addons ?? []).filter((a) => a in ADDONS && !("quarterly" in ADDONS[a])) : [];
+  const production = interval === "quarter" && (v.addons ?? []).includes("production" as AddonKey);
   const addonItems = await Promise.all(addons.map(async (a) => ({ price: await addonPrice(a), quantity: 1 })));
-  const meta = { kind: "postify_plan", email: v.email, plan: plan.key, interval, ...(addons.length ? { addons: addons.join(",") } : {}) };
+  const meta = { kind: "postify_plan", email: v.email, plan: plan.key, interval, ...(addons.length ? { addons: addons.join(",") } : {}), ...(production ? { production: "1" } : {}) };
   const s = await stripe("POST", "/checkout/sessions", flat({
     mode: "subscription",
     ...(v.customerId ? { customer: v.customerId } : { customer_email: v.email }),
     client_reference_id: v.email,
     line_items: interval === "year"
       ? [{ price: ids[`postify_${plan.key}_yearly`], quantity: 1 }]
-      : [{ price: ids[`postify_${plan.key}_monthly`], quantity: 1 }, { price: ids[`postify_${plan.key}_extra`] }, ...addonItems],
+      : interval === "quarter"
+        ? [{ price: ids[`postify_${plan.key}_quarterly`], quantity: 1 }, { price: ids[`postify_${plan.key}_extra_q`] }]
+        : [{ price: ids[`postify_${plan.key}_monthly`], quantity: 1 }, { price: ids[`postify_${plan.key}_extra`] }, ...addonItems],
     metadata: meta,
     subscription_data: { metadata: meta },
     success_url: `${v.origin}/host/dashboard/postify?subscribed={CHECKOUT_SESSION_ID}`,
@@ -203,7 +223,7 @@ export function planStateFrom(sub: any): PlanState | null {
   const iso = (t: unknown) => (Number(t) ? new Date(Number(t) * 1000).toISOString() : "");
   const item = sub.items?.data?.[0];
   return {
-    email, plan: plan.key, interval: sub.metadata?.interval === "year" ? "year" : "month", status: String(sub.status),
+    email, plan: plan.key, interval: sub.metadata?.interval === "year" ? "year" : sub.metadata?.interval === "quarter" ? "quarter" : "month", status: String(sub.status),
     customerId: String(sub.customer), subscriptionId: String(sub.id),
     periodStart: iso(sub.current_period_start ?? item?.current_period_start),
     periodEnd: iso(sub.current_period_end ?? item?.current_period_end),
@@ -225,11 +245,38 @@ export async function readPlanSession(sessionId: string): Promise<PlanState | nu
 
 async function addonPrice(addon: AddonKey): Promise<string> {
   const a = ADDONS[addon];
-  const key = `mv_addon_${a.key}_monthly`;
+  const quarterly = "quarterly" in a && a.quarterly && "quarterCents" in a;
+  const key = `mv_addon_${a.key}_${quarterly ? "quarterly" : "monthly"}`;
   const found = await stripe("GET", `/prices?limit=1&lookup_keys[]=${key}`);
   if (found.data?.[0]?.id) return String(found.data[0].id);
-  const p = await stripe("POST", "/prices", flat({ lookup_key: key, currency: "usd", unit_amount: a.cents, recurring: { interval: "month" }, product_data: { name: `MilitaryVoices ${a.name}` } }));
+  const p = await stripe("POST", "/prices", flat({
+    lookup_key: key, currency: "usd", unit_amount: quarterly ? (a as { quarterCents: number }).quarterCents : a.cents,
+    recurring: quarterly ? { interval: "month", interval_count: 3 } : { interval: "month" }, product_data: { name: `MilitaryVoices ${a.name}${quarterly ? " (every 3 months)" : ""}` },
+  }));
   return String(p.id);
+}
+
+/**
+ * Production, as a subscription of its own, made right after Pro's checkout with the card they just used (they ticked it on
+ * the page, so they've asked for it). Separate from Pro so it can stop while Pro carries on.
+ */
+export async function createProductionSubscription(v: { email: string; customerId: string; planSubscriptionId: string }): Promise<AddonState | null> {
+  const planSub = await stripe("GET", `/subscriptions/${encodeURIComponent(v.planSubscriptionId)}`);
+  const pm = typeof planSub.default_payment_method === "string" ? planSub.default_payment_method : planSub.default_payment_method?.id;
+  if (!pm) throw new Error("No card on that subscription to use.");
+  const meta = { kind: "mv_addon", email: v.email, addon: "production" };
+  const sub = await stripe("POST", "/subscriptions", flat({
+    customer: v.customerId, default_payment_method: pm, items: [{ price: await addonPrice("production" as AddonKey), quantity: 1 }],
+    payment_behavior: "error_if_incomplete", metadata: meta,
+  }));
+  return addonStateFrom(sub);
+}
+
+/** What a checkout session was asked for beyond the plan (read from our own metadata on it). */
+export async function readSessionMeta(sessionId: string): Promise<Record<string, string>> {
+  if (!/^cs_[\w]+$/.test(sessionId)) return {};
+  const s = await stripe("GET", `/checkout/sessions/${sessionId}`);
+  return (s?.metadata ?? {}) as Record<string, string>;
 }
 
 export async function createAddonCheckout(v: { email: string; addon: AddonKey; origin: string; customerId?: string }): Promise<string> {

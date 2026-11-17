@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { startPlanCheckout, startTokenCheckout, startAddonCheckout } from "@/lib/tokens";
-import { PLANS, ADDONS, TEST_PACK, cents, episodeCredits } from "@shared/tokens";
+import { PLANS, ADDONS, QUARTERLY_ONLY, TEST_PACK, cents, episodeCredits } from "@shared/tokens";
 import { Check, Coins, Loader2, Compass, Info, ChevronDown } from "lucide-react";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
@@ -113,8 +113,10 @@ export default function Pricing() {
   const [busy, setBusy] = useState<string | null>(null);
   const [yearly, setYearly] = useState(false);
   const [withDiscovery, setWithDiscovery] = useState<Record<string, boolean>>({});
+  const [withProduction, setWithProduction] = useState(false);
   const testing = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("test");
   const disc = ADDONS.discovery;
+  const prod = ADDONS.production;
 
   async function go(key: string, fn: () => Promise<void>) {
     setBusy(key);
@@ -159,12 +161,15 @@ export default function Pricing() {
 
           {Object.values(PLANS).map((p) => {
             const popular = "popular" in p && p.popular;
-            const addDisc = !yearly && !!withDiscovery[p.key];
+            const quarterly = QUARTERLY_ONLY.includes(p.key);
+            const showYearly = yearly && !quarterly;
+            const addDisc = !quarterly && !yearly && !!withDiscovery[p.key];
+            const addProd = quarterly && withProduction;
             return (
               <div key={p.key} className={`relative flex flex-col rounded-3xl border bg-card p-6 shadow-sm ${popular ? "border-[#053877] ring-2 ring-[#053877]/15" : "border-border"}`} data-testid={`plan-card-${p.key}`}>
                 {popular && <span className="absolute -top-3 left-6 rounded-full bg-[#053877] px-3 py-1 text-xs font-semibold text-white">Best value</span>}
                 <p className="flex items-center gap-2 text-sm font-semibold text-muted-foreground"><Coins className="h-4 w-4 text-[#F0A71F]" /> {p.name}</p>
-                {yearly ? (
+                {showYearly ? (
                   <>
                     <p className="mt-3 text-4xl font-bold tracking-tight text-foreground" style={HEADLINE_FONT}>{cents(Math.round(p.yearCents / 12))}<span className="text-base font-medium text-muted-foreground"> /month</span></p>
                     <p className="mt-1 text-xs text-muted-foreground"><span className="line-through">{cents(p.cents * 12)}</span> {cents(p.yearCents)} billed yearly, all {(p.credits * 12).toLocaleString()} credits at once</p>
@@ -172,12 +177,22 @@ export default function Pricing() {
                 ) : (
                   <>
                     <p className="mt-3 text-4xl font-bold tracking-tight text-foreground" style={HEADLINE_FONT}>{cents(p.cents)}<span className="text-base font-medium text-muted-foreground"> /month</span></p>
+                    {quarterly && <p className="mt-1 text-xs text-muted-foreground" data-testid="plan-pro-quarterly">Paid every 3 months: {cents("quarterCents" in p ? p.quarterCents : p.cents * 3)}, with all {(p.credits * 3).toLocaleString()} credits at once</p>}
                     <p className="mt-1 text-sm font-semibold text-foreground">Everything in {p.key === "pro" ? "Scale" : "Growth"}, plus</p>
                   </>
                 )}
                 <ul className="mt-4 flex-1 space-y-2 text-sm text-foreground/85">{(PLAN_FEATURES[p.key] ?? []).map((f) => <Line key={f.t} f={f} />)}</ul>
 
-                {/* Discovery Pro in the same payment (monthly plans). */}
+                {quarterly ? (
+                  /* Production: its own subscription, so it can stop while Pro carries on. */
+                  <label className="mt-5 flex cursor-pointer items-start gap-2.5 rounded-2xl border border-[#F0A71F]/60 bg-[#F0A71F]/[0.08] p-3 text-sm" data-testid="plan-pro-production">
+                    <Checkbox checked={withProduction} onCheckedChange={(v) => setWithProduction(v === true)} className="mt-0.5 border-[#b36b00] data-[state=checked]:bg-[#b36b00] data-[state=checked]:text-white" />
+                    <span className="min-w-0">
+                      <span className="flex items-center gap-1.5 font-semibold text-[#8a5200]">+ {prod.name} {cents(prod.cents)}/mo</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">Paid every 3 months ({cents(prod.quarterCents)}), on its own, so you can stop it and keep Pro. We make every episode: intro, outro and music, a guest card, and four clips. Nothing posts until you've seen it.</span>
+                    </span>
+                  </label>
+                ) : (
                 <label className={`mt-5 flex items-start gap-2.5 rounded-2xl border p-3 text-sm ${yearly ? "border-dashed border-border opacity-70" : "cursor-pointer border-[#F0A71F]/60 bg-[#F0A71F]/[0.08]"}`} data-testid={`plan-${p.key}-discovery`}>
                   <Checkbox checked={addDisc} disabled={yearly} onCheckedChange={(v) => setWithDiscovery((w) => ({ ...w, [p.key]: v === true }))} className="mt-0.5 border-[#b36b00] data-[state=checked]:bg-[#b36b00] data-[state=checked]:text-white" />
                   <span className="min-w-0">
@@ -186,15 +201,18 @@ export default function Pricing() {
                   </span>
                 </label>
 
+                )}
+
                 <Button
-                  onClick={() => void go(p.key, () => startPlanCheckout(p.key, yearly ? "year" : "month", addDisc ? ["discovery"] : []))}
+                  onClick={() => void go(p.key, () => startPlanCheckout(p.key, quarterly ? "quarter" : yearly ? "year" : "month", addProd ? ["production"] : addDisc ? ["discovery"] : []))}
                   disabled={busy !== null}
                   className={`mt-4 w-full gap-2 rounded-full ${popular ? "bg-[#053877] text-white hover:bg-[#0a4a99]" : ""}`}
                   variant={popular ? "default" : "outline"}
                 >
                   {busy === p.key && <Loader2 className="h-4 w-4 animate-spin" />}
-                  Choose {p.name}{yearly ? " yearly" : ""}{addDisc ? ` + Discovery Pro · ${cents(p.cents + disc.cents)}/mo` : ""}
+                  {quarterly ? `Choose ${p.name} · ${cents("quarterCents" in p ? p.quarterCents : 0)} every 3 months` : `Choose ${p.name}${yearly ? " yearly" : ""}`}{addDisc ? ` + Discovery Pro · ${cents(p.cents + disc.cents)}/mo` : ""}{addProd ? ` + ${prod.name}` : ""}
                 </Button>
+                {addProd && <p className="mt-2 text-center text-xs text-muted-foreground" data-testid="plan-pro-production-note">Today: Pro, {cents("quarterCents" in p ? p.quarterCents : 0)}. Then Production, {cents(prod.quarterCents)}, on the same card. Each renews every 3 months, and you can stop either one.</p>}
               </div>
             );
           })}

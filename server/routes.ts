@@ -184,7 +184,7 @@ import { registerMyStudio } from "./myStudio.js";
 import { registerCreatorCampaigns } from "./creatorCampaigns.js";
 import { registerContactProfile } from "./contactProfile.js";
 import { registerAskShow, claimTranscript } from "./askShow.js";
-import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, readSubscription, reportExtraCredits, billingPortal, createAddonCheckout, readAddonSession, addonStateFrom, bundledAddonStatesFrom, readPlanSessionAddons, type PlanState } from "./stripe.js";
+import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, createProductionSubscription, readSessionMeta, readSubscription, reportExtraCredits, billingPortal, createAddonCheckout, readAddonSession, addonStateFrom, bundledAddonStatesFrom, readPlanSessionAddons, type PlanState } from "./stripe.js";
 import { episodeCredits, SHORT_VIDEO_SEC, planOf, PLANS, ADDONS, DEFAULT_OVERAGE_CAP_CENTS, OVERAGE_CAP_CHOICES, type PlanKey, type AddonKey } from "../shared/tokens.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, getSession, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
 import {
@@ -8396,9 +8396,15 @@ export function registerRoutes(app: Express): void {
     const plan = planOf(state.plan);
     if (inv && plan && ["active", "trialing"].includes(state.status)) {
       // A yearly plan's year of credits comes the day it's paid.
-      const credits = plan.credits * (state.interval === "year" ? 12 : 1);
-      await storage.addTokens({ email: state.email, delta: credits, reason: `${plan.name} ${state.interval === "year" ? "yearly" : "monthly"}: ${credits} credits`, ref: `plan:${inv}` });
+      const credits = plan.credits * (state.interval === "year" ? 12 : state.interval === "quarter" ? 3 : 1);
+      await storage.addTokens({ email: state.email, delta: credits, reason: `${plan.name} ${state.interval === "year" ? "yearly" : state.interval === "quarter" ? "quarterly" : "monthly"}: ${credits} credits`, ref: `plan:${inv}` });
     }
+  }
+  /** Production on means the post-production package is on for them; off when the subscription stops. */
+  async function applyProduction(a: { email: string; addon: string; status: string }): Promise<void> {
+    if (a.addon !== "production") return;
+    const on = ["active", "trialing", "past_due", "comped"].includes(a.status);
+    await storage.setSetting(`package:${a.email.trim().toLowerCase()}`, JSON.stringify({ on, at: new Date().toISOString(), via: "production add-on" }));
   }
   async function canPost(_email: string): Promise<boolean> {
     return true;
@@ -8430,7 +8436,8 @@ export function registerRoutes(app: Express): void {
       // Never twice: an add-on they already pay for stays where it is.
       const addons: AddonKey[] = [];
       for (const a of asked) { const have = await storage.getAddon(email, a); if (!(have && ["active", "trialing", "past_due", "comped"].includes(have.status))) addons.push(a); }
-      res.json({ url: await createPlanCheckout({ email, plan: key as PlanKey, interval: req.body?.interval === "year" ? "year" : "month", origin: originOf(req), customerId: sub?.customerId || undefined, addons }) });
+      const want = key === "pro" ? addons : addons.filter((x) => x !== ("production" as AddonKey));
+      res.json({ url: await createPlanCheckout({ email, plan: key as PlanKey, interval: req.body?.interval === "year" ? "year" : "month", origin: originOf(req), customerId: sub?.customerId || undefined, addons: want }) });
     } catch (err: any) {
       console.error("Plan checkout failed:", err?.message);
       res.status(502).json({ message: "Checkout didn't open. Try again in a moment." });
@@ -8446,8 +8453,17 @@ export function registerRoutes(app: Express): void {
       if (!state || state.email !== email) return res.status(404).json({ message: "We couldn't find that subscription." });
       await syncPlan(state);
       for (const a of await readPlanSessionAddons(String(req.body?.sessionId ?? "")).catch(() => [])) await storage.upsertAddon(a);
+      // Production, ticked on the page: its own subscription on the same card, made once.
+      try {
+        const meta = await readSessionMeta(String(req.body?.sessionId ?? ""));
+        const haveProd = await storage.getAddon(email, "production" as AddonKey);
+        if (meta.production === "1" && state.plan === "pro" && !(haveProd && ["active", "trialing", "past_due", "comped"].includes(haveProd.status))) {
+          const prod = await createProductionSubscription({ email, customerId: state.customerId, planSubscriptionId: state.subscriptionId });
+          if (prod) { await storage.upsertAddon(prod); await applyProduction(prod); }
+        }
+      } catch (err: any) { console.error("Production subscription failed:", err?.message); }
       const plan = planOf(state.plan)!;
-      res.json({ plan: `${plan.name}${state.interval === "year" ? " (yearly)" : ""}`, credits: plan.credits * (state.interval === "year" ? 12 : 1), balance: await storage.tokenBalance(email) });
+      res.json({ plan: `${plan.name}${state.interval === "year" ? " (yearly)" : state.interval === "quarter" ? " (every 3 months)" : ""}`, credits: plan.credits * (state.interval === "year" ? 12 : state.interval === "quarter" ? 3 : 1), balance: await storage.tokenBalance(email) });
     } catch (err: any) {
       console.error("Plan confirm failed:", err?.message);
       res.status(502).json({ message: "We couldn't check that just now. Refresh in a moment." });
@@ -8498,6 +8514,7 @@ export function registerRoutes(app: Express): void {
     if (have?.subscriptionId && ["active", "trialing", "past_due"].includes(have.status)) return res.status(409).json({ message: "They pay for it already." });
     const on = req.body?.on !== false;
     const row = await storage.upsertAddon({ email, addon, status: on ? "comped" : "canceled", customerId: have?.customerId ?? "", subscriptionId: "", periodEnd: "" });
+    await applyProduction({ email, addon, status: row.status });
     console.log(`Admin ${getAdminEmail(req)} ${on ? "gave" : "took back"} ${addon} for ${email}`);
     res.json(row);
   });
@@ -8581,7 +8598,7 @@ export function registerRoutes(app: Express): void {
       }
       if (event.type.startsWith("customer.subscription.")) {
         const addon = addonStateFrom(obj);
-        if (addon) await storage.upsertAddon(addon);
+        if (addon) { await storage.upsertAddon(addon); await applyProduction(addon); }
         for (const a of bundledAddonStatesFrom(obj)) await storage.upsertAddon(a);
       }
       if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted" || event.type === "customer.subscription.created") {
