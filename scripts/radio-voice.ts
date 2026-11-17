@@ -122,7 +122,9 @@ async function main() {
         const nshow = say(nx.podcastName), nhost = say(nx.hostName);
         next = `Up next, at ${spokenTime(new Date(nt.start).toISOString())}: ${nhost.trim().toLowerCase() === nshow.trim().toLowerCase() ? nshow : `${nshow}, with ${nhost}`}.`;
       }
-      const introText = `Now, on MilitaryVoices Radio${recorded ? ", an encore of " : ": "}${who}.`;
+      // A booking whose notes read "Guest: Name, what they do" names its guest in the introduction.
+      const guest = /^guest:\s*(.+)$/i.exec(s.notes ?? "")?.[1]?.trim();
+      const introText = `Now, on MilitaryVoices Radio${recorded ? ", an encore of " : ": "}${who}.${guest && !recorded ? ` Today's guest: ${say(guest)}.` : ""}`;
       const outroText = `That was ${who}. Thank you for listening to MilitaryVoices Radio. ${next}`;
       const e = state.map[String(s.id)] ?? {};
       for (const [kind, text, bedKey, tail] of [["intro", introText, "open-road", 25], ["outro", outroText, "soft-landing", 20]] as const) {
