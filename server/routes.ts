@@ -1100,7 +1100,11 @@ export function registerRoutes(app: Express): void {
     if (fromRaw && !/@militaryvoices?\.(ai|io)$/.test(fromAddr)) return res.status(400).json({ message: "The sender has to be on our domain." });
     const headers: Record<string, string> = {};
     if (req.body?.inReplyTo) { headers["In-Reply-To"] = String(req.body.inReplyTo); headers["References"] = String(req.body.inReplyTo); }
-    const id = await sendOneOffEmail({ kind: "admin-send", to, subject, html, text, replyTo: String(req.body?.replyTo ?? "") || undefined, from: fromRaw || undefined, headers });
+    // Small files go along as base64 (a PDF); Resend takes the body itself.
+    const files = (Array.isArray(req.body?.files) ? req.body.files : []).slice(0, 3)
+      .map((f: { filename?: unknown; content?: unknown }) => ({ filename: String(f?.filename ?? "").replace(/[^\w.\- ]/g, "_").slice(-80), content: String(f?.content ?? "") }))
+      .filter((f: { filename: string; content: string }) => f.filename && /^[A-Za-z0-9+/=]+$/.test(f.content) && f.content.length < 8_000_000);
+    const id = await sendOneOffEmail({ kind: "admin-send", to, subject, html, text, replyTo: String(req.body?.replyTo ?? "") || undefined, from: fromRaw || undefined, headers, ...(files.length ? { attachments: files } : {}) });
     if (!id) return res.status(502).json({ message: "The mail provider didn't accept it." });
     console.log(`One-off email sent to ${to}: ${subject}`);
     // Filed under a campaign row so the activity log and each contact's

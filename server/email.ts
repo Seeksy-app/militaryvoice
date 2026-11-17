@@ -230,7 +230,7 @@ function buildText(input: ConfirmationEmailInput): string {
 /** Low-level Resend sender shared by every email type. Never throws — logs and
  *  returns false on failure so a flaky email provider never blocks a user flow. */
 /** A file sent with the email: Resend fetches it from the address. */
-export type MailAttachment = { filename: string; path: string };
+export type MailAttachment = { filename: string; path?: string; /** Base64 file body, instead of an address to fetch. */ content?: string };
 async function sendRawEmail(opts: { to: string; subject: string; html: string; text: string; replyTo?: string; from?: string; headers?: Record<string, string>; bcc?: string[]; kind?: string; attachments?: MailAttachment[] }): Promise<string | null> {
   let id: string | null = null;
   let error = "";
