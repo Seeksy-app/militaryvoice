@@ -9,6 +9,7 @@
 // State per day is in site_settings "dx:air:<eventId>": {started, egressAt, done}.
 import type { Express, RequestHandler } from "express";
 import { storage } from "./storage.js";
+import { slackNote } from "./slack.js";
 import { isLiveKitConfigured, isRecordingConfigured, roomName, rooms, startBroadcast, startSegmentRecording, stopEgressById, updateBroadcastTargets, egressIsActive, type BroadcastTarget } from "./livekit.js";
 import { ensureRecordingsBucket } from "./recordingStorage.js";
 import { dxEventIds } from "./digitalExperience.js";
@@ -18,7 +19,7 @@ const LEAD_MS = 3 * 60_000;
 /** Before LiveKit's 12-hour stream cap: at 11 hours (6 pm on a 7 am start, a slot boundary, so the change lands on an intro card). */
 const RENEW_MS = 11 * 3600_000;
 
-type Air = { started?: string; egressAt?: string; done?: string; error?: string };
+type Air = { started?: string; egressAt?: string; done?: string; error?: string; recRestartAt?: string };
 const readAir = async (id: number): Promise<Air> => { try { return JSON.parse((await storage.getSetting(`dx:air:${id}`)) ?? "{}") as Air; } catch { return {}; } };
 const writeAir = (id: number, a: Air) => storage.setSetting(`dx:air:${id}`, JSON.stringify(a));
 
@@ -140,6 +141,24 @@ export async function runDxBroadcast(origin: string): Promise<string[]> {
         await writeAir(id, { ...air, egressAt: new Date().toISOString() });
         did.push(`${ev.name}: stream renewed`);
         continue;
+      }
+      // The day's recording must never be left stopped: on 16 Nov it ended by itself at 11:34 am ET and nothing started another,
+      // so the afternoon and evening shows were never recorded. If it isn't running, start the next file (at most once in 5 minutes).
+      if (air.started && !air.done && now < end && isRecordingConfigured() && (!air.recRestartAt || now - Date.parse(air.recRestartAt) > 5 * 60_000)) {
+        const rid = studio.recordingEgressId;
+        // A recording that started in the last few minutes is still starting up, not stopped.
+        const cur = rid ? (await storage.listUnfinishedRecordings()).find((r) => r.egressId === rid) : undefined;
+        const young = !!cur && now - Date.parse(cur.startedAt) < 3 * 60_000;
+        const alive = young || (rid ? await egressIsActive(rid).catch(() => true) : false); // LiveKit unreachable is not evidence it stopped
+        if (!alive) {
+          const filepath = `event-${id}/${new Date().toISOString().replace(/[:.]/g, "-")}-continued.mp4`;
+          const egressId = await startSegmentRecording(room, filepath, programUrl(origin));
+          await storage.createRecording({ eventId: id, studioId: studio.id, signupId: null, email: "", title: `${ev.name} (continued)`, egressId, filepath });
+          await storage.updateStudio(studio.id, { recordingEgressId: egressId });
+          await writeAir(id, { ...air, recRestartAt: new Date().toISOString() });
+          await slackNote(`:movie_camera: The recording of ${ev.name} had stopped, so a new one started at ${new Date().toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" })} ET.`);
+          did.push(`${ev.name}: recording had stopped, started again`);
+        }
       }
       if (air.started && !air.done && now < end) did.push(...(await watchHosts(ev, room, now)));
       // Stop: a minute after 10 pm, once the last outro has played.
