@@ -293,6 +293,24 @@ export function registerBooth(app: Express): void {
     res.setHeader("Cache-Control", "public, max-age=60, s-maxage=120");
     res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8" /><title>${esc(title)}</title><meta name="description" content="${esc(n.line)}" /><meta property="og:type" content="website" /><meta property="og:site_name" content="MilitaryVoices.ai" /><meta property="og:title" content="${esc(title)}" /><meta property="og:description" content="${esc(n.line)}" /><meta property="og:url" content="${url}" /><meta property="og:image" content="${img}" /><meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" /><meta name="twitter:card" content="summary_large_image" /><meta name="twitter:title" content="${esc(title)}" /><meta name="twitter:description" content="${esc(n.line)}" /><meta name="twitter:image" content="${img}" /><link rel="canonical" href="${url}" /></head><body><h1>${esc(title)}</h1><p>${esc(n.line)}</p></body></html>`);
   };
+  /** A booth link (host or guest) shared in a message: its own show and time, not the Marathon. The access key never goes in the page. */
+  app.get("/booth/:id", async (req, res, next) => {
+    if (!PREVIEW_BOT.test(String(req.get("user-agent") ?? ""))) return next();
+    const id = Number(req.params.id);
+    const s = Number.isInteger(id) ? await storage.getSignupById(id) : undefined;
+    const ev = s ? await storage.getEventById(s.eventId) : undefined;
+    if (!s || !ev || !(await dxEventIds()).includes(ev.id)) return next();
+    const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+    const t = bookingTimes(ev, s);
+    const when = `${new Date(t.start).toLocaleDateString("en-US", { timeZone: "America/New_York", weekday: "long", month: "short", day: "numeric" })} at ${new Date(t.start).toLocaleTimeString("en-US", { timeZone: "America/New_York", hour: "numeric", minute: "2-digit" })} ET`;
+    const origin = `https://${req.get("host")}`;
+    const title = `${s.podcastName} · MilitaryVoices Radio`;
+    const line = `Join ${s.hostName}${s.hostName === s.podcastName ? "" : ` on ${s.podcastName}`}, live on MilitaryVoices Radio, ${when}. Open the link to check your camera and mic.`;
+    const img = `${origin}/og/radio.jpg?show=${s.id}&v=${Math.floor(Date.now() / 600_000)}`;
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=60, s-maxage=120");
+    res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8" /><title>${esc(title)}</title><meta name="description" content="${esc(line)}" /><meta property="og:type" content="website" /><meta property="og:site_name" content="MilitaryVoices Radio" /><meta property="og:title" content="${esc(title)}" /><meta property="og:description" content="${esc(line)}" /><meta property="og:image" content="${esc(img)}" /><meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" /><meta property="og:url" content="${esc(`${origin}/booth/${s.id}`)}" /><meta name="twitter:card" content="summary_large_image" /><meta name="twitter:title" content="${esc(title)}" /><meta name="twitter:description" content="${esc(line)}" /><meta name="twitter:image" content="${esc(img)}" /></head><body><p>${esc(line)}</p></body></html>`);
+  });
   app.get("/radio", radioPreview(false));
   // The link hosts are sent and share ("Your graphics, caption and link"): its preview used to be the Marathon's.
   app.get("/radio/book", radioPreview(true));
