@@ -177,7 +177,10 @@ export function BioBuilder() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [social.data, draft?.id]);
 
-  const flush = async () => {
+  // One save at a time, in the order they were made: two in flight could land the wrong way round and put an older choice back.
+  const chain = useRef<Promise<void>>(Promise.resolve());
+  const flush = () => { const run = chain.current.then(flushNow, flushNow); chain.current = run; return run; };
+  const flushNow = async () => {
     const body = pending.current;
     pending.current = {};
     if (!Object.keys(body).length) return;
