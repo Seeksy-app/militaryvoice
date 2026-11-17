@@ -215,7 +215,7 @@ export default function Pricing() {
                   {busy === p.key && <Loader2 className="h-4 w-4 animate-spin" />}
                   {quarterly ? `Choose ${p.name} · ${cents("quarterCents" in p ? p.quarterCents : 0)} every 3 months` : `Choose ${p.name}${yearly ? " yearly" : ""}`}{addDisc ? ` + Discovery Pro · ${cents(p.cents + disc.cents)}/mo` : ""}{addProd ? ` + ${prod.name}` : ""}
                 </Button>
-                {addProd && <p className="mt-2 text-center text-xs text-muted-foreground" data-testid="plan-pro-production-note">Today: Pro, {cents("quarterCents" in p ? p.quarterCents : 0)}. Then Production, {cents(prod.quarterCents)}, on the same card. Each renews every 3 months, and you can stop either one.</p>}
+                {addProd && <p className="mt-2 text-center text-xs text-muted-foreground" data-testid="plan-pro-production-note">On one payment page: Pro, {cents("quarterCents" in p ? p.quarterCents : 0)}, and Production, {cents(prod.quarterCents)}, together {cents(("quarterCents" in p ? p.quarterCents : 0) + prod.quarterCents)} every 3 months. Want to stop just one? Write to us.</p>}
               </div>
             );
           })}

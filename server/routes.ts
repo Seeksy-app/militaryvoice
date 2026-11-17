@@ -8466,8 +8466,8 @@ export function registerRoutes(app: Express): void {
       const state = await readPlanSession(String(req.body?.sessionId ?? ""));
       if (!state || state.email !== email) return res.status(404).json({ message: "We couldn't find that subscription." });
       await syncPlan(state);
-      for (const a of await readPlanSessionAddons(String(req.body?.sessionId ?? "")).catch(() => [])) await storage.upsertAddon(a);
-      // Production, ticked on the page: its own subscription on the same card, made once.
+      for (const a of await readPlanSessionAddons(String(req.body?.sessionId ?? "")).catch(() => [])) { await storage.upsertAddon(a); await applyProduction(a); }
+      // Older checkouts (before 17 Nov, afternoon): Production was its own subscription on the same card, made here once.
       try {
         const meta = await readSessionMeta(String(req.body?.sessionId ?? ""));
         const haveProd = await storage.getAddon(email, "production" as AddonKey);
@@ -8640,7 +8640,7 @@ export function registerRoutes(app: Express): void {
       if (event.type.startsWith("customer.subscription.")) {
         const addon = addonStateFrom(obj);
         if (addon) { await storage.upsertAddon(addon); await applyProduction(addon); }
-        for (const a of bundledAddonStatesFrom(obj)) await storage.upsertAddon(a);
+        for (const a of bundledAddonStatesFrom(obj)) { await storage.upsertAddon(a); await applyProduction(a); }
       }
       if (event.type === "customer.subscription.updated" || event.type === "customer.subscription.deleted" || event.type === "customer.subscription.created") {
         const state = planStateFrom(obj);

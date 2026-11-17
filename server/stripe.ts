@@ -186,10 +186,11 @@ export async function createPlanCheckout(v: { email: string; plan: PlanKey; inte
   const interval: PlanInterval = QUARTERLY_ONLY.includes(plan.key) ? "quarter" : v.interval === "year" ? "year" : "month";
   const ids = await ensureBilling();
   // Add-ons in the same payment (9 Oct): monthly only, on the plan's own subscription. Production is its own subscription, made after.
-  const addons = interval === "month" ? (v.addons ?? []).filter((a) => a in ADDONS && !("quarterly" in ADDONS[a])) : [];
-  const production = interval === "quarter" && (v.addons ?? []).includes("production" as AddonKey);
+  // Production (paid every 3 months like Pro) rides on the same checkout page, as its own line, so both prices are in front of them;
+  // monthly add-ons ride only on a monthly plan.
+  const addons = (v.addons ?? []).filter((a) => a in ADDONS && (interval === "month" ? !("quarterly" in ADDONS[a]) : interval === "quarter" ? "quarterly" in ADDONS[a] : false));
   const addonItems = await Promise.all(addons.map(async (a) => ({ price: await addonPrice(a), quantity: 1 })));
-  const meta = { kind: "postify_plan", email: v.email, plan: plan.key, interval, ...(addons.length ? { addons: addons.join(",") } : {}), ...(production ? { production: "1" } : {}) };
+  const meta = { kind: "postify_plan", email: v.email, plan: plan.key, interval, ...(addons.length ? { addons: addons.join(",") } : {}) };
   const s = await stripe("POST", "/checkout/sessions", flat({
     mode: "subscription",
     ...(v.customerId ? { customer: v.customerId } : { customer_email: v.email }),
@@ -197,7 +198,7 @@ export async function createPlanCheckout(v: { email: string; plan: PlanKey; inte
     line_items: interval === "year"
       ? [{ price: ids[`postify_${plan.key}_yearly`], quantity: 1 }]
       : interval === "quarter"
-        ? [{ price: ids[`postify_${plan.key}_quarterly`], quantity: 1 }, { price: ids[`postify_${plan.key}_extra_q`] }]
+        ? [{ price: ids[`postify_${plan.key}_quarterly`], quantity: 1 }, { price: ids[`postify_${plan.key}_extra_q`] }, ...addonItems]
         : [{ price: ids[`postify_${plan.key}_monthly`], quantity: 1 }, { price: ids[`postify_${plan.key}_extra`] }, ...addonItems],
     metadata: meta,
     subscription_data: { metadata: meta },
