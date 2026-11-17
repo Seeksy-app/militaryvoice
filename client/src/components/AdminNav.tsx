@@ -97,6 +97,7 @@ export const TOP_GROUPS: { title: string; items: AdminSection[] }[] = [
     title: "Running it",
     items: [
       { key: "team", label: "Team", icon: Contact },
+      { key: "desk", label: "Team desk", icon: MessagesSquare },
       { key: "finances", label: "Finances", icon: DollarSign },
       { key: "aar", label: "AAR", icon: NotebookPen },
       { key: "health", label: "System health", icon: Activity },

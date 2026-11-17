@@ -59,6 +59,13 @@ const save = (token: string, r: Record_) => storage.setSetting(PREFIX + token, J
 
 const tokenOf = (req: { params: Record<string, unknown> }) => String(req.params.token ?? "");
 
+/** A fresh private link for one person and one service (the team desk makes these too). */
+export async function createShareLogin(name: string, service: string): Promise<string> {
+  const token = crypto.randomBytes(24).toString("base64url");
+  await save(token, { name: str(name, 80), service: str(service, 40) || "Buzzsprout", createdAt: new Date().toISOString(), status: "open" });
+  return `${ORIGIN}/share-login/${token}`;
+}
+
 export function registerShareLogin(app: Express, requireAdmin: RequestHandler): void {
   // ── The customer's side ────────────────────────────────────────────────
   app.get("/api/share-login/:token", async (req, res) => {

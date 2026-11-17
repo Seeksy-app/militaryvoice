@@ -57,6 +57,7 @@ import { SponsorLeads } from "@/components/SponsorLeads";
 import { SponsorFinder } from "@/components/SponsorFinder";
 import { ShowSponsorsCard } from "@/components/ShowSponsors";
 import { AdminChat, AdminChatDock } from "@/components/AdminChat";
+import { AdminTeamDesk } from "@/components/AdminTeamDesk";
 import { AdminMail } from "@/components/AdminMail";
 import { ContactProfile } from "@/components/AdminContact";
 import { AdminProjects } from "@/components/AdminProjects";
@@ -5017,7 +5018,7 @@ export default function Admin({ tab, eventId: eventParam }: { tab?: string; even
               <Tabs value={eventTab} onValueChange={setEventTab}>
                 <div className="flex flex-col gap-4 lg:flex-row lg:gap-7">
                   <AdminNav
-                    groups={eventOnly ? EVENT_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => i.key !== "crm" && i.key !== "health") })) : EVENT_GROUPS}
+                    groups={eventOnly ? EVENT_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => i.key !== "crm" && i.key !== "health") })) : admin?.noFinance ? EVENT_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => i.key !== "finances") })) : EVENT_GROUPS}
                     value={eventTab}
                     onChange={setEventTab}
                     isMobile={isMobile}
@@ -5141,7 +5142,7 @@ export default function Admin({ tab, eventId: eventParam }: { tab?: string; even
                   </>}
                 </TabsContent>
                 <TabsContent value="finances" className="mt-2 lg:mt-0">
-                  <FinancesCard event={selectedEvent} />
+                  {admin?.noFinance ? <p className="text-sm text-muted-foreground">Finances aren't part of your access.</p> : <FinancesCard event={selectedEvent} />}
                 </TabsContent>
                 <TabsContent value="aar" className="mt-2 lg:mt-0">
                   <AdminAar
@@ -5193,7 +5194,7 @@ export default function Admin({ tab, eventId: eventParam }: { tab?: string; even
           ) : (
             <Tabs value={topTab} onValueChange={setEventTab}>
               <div className="flex flex-col gap-4 lg:flex-row lg:gap-7">
-                <AdminNav groups={TOP_GROUPS} value={topTab} onChange={setEventTab} isMobile={isMobile} />
+                <AdminNav groups={admin?.noFinance ? TOP_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => i.key !== "finances") })) : TOP_GROUPS} value={topTab} onChange={setEventTab} isMobile={isMobile} />
                 <div className="min-w-0 flex-1">
                   <TabsContent value="overview" className="mt-2 lg:mt-0">
                     <PlatformOverview />
@@ -5226,7 +5227,7 @@ export default function Admin({ tab, eventId: eventParam }: { tab?: string; even
                     <TeamCard />
                   </TabsContent>
                   <TabsContent value="finances" className="mt-2 lg:mt-0">
-                    <PlatformFinances />
+                    {admin?.noFinance ? <p className="text-sm text-muted-foreground">Finances aren't part of your access.</p> : <PlatformFinances />}
                   </TabsContent>
                   <TabsContent value="orgs" className="mt-2 lg:mt-0">
                     <AdminOrgs />
@@ -5239,6 +5240,9 @@ export default function Admin({ tab, eventId: eventParam }: { tab?: string; even
                   </TabsContent>
                   <TabsContent value="projects" className="mt-2 lg:mt-0">
                     <AdminProjects />
+                  </TabsContent>
+                  <TabsContent value="desk" className="mt-2 lg:mt-0">
+                    <AdminTeamDesk />
                   </TabsContent>
                   <TabsContent value="aar" className="mt-2 lg:mt-0">
                     <AdminAar

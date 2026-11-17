@@ -21,11 +21,11 @@ const FROM_LABEL: Record<Draft["from"], string> = { alex: "Alex", team: "the tea
  * button. Nothing goes out until that button. She answers questions about
  * the day too, from the same facts the help desk uses.
  */
-export function AdminChat({ eventId }: { eventId: number | null }) {
+export function AdminChat({ eventId, endpoint = "/api/admin/chat", greeting, title = "Alex", subtitle = "Drafts what you say; you press Send.", placeholder, froms = ["alex", "riccoh", "michael", "team"] }: { eventId: number | null; endpoint?: string; greeting?: string; title?: string; subtitle?: string; placeholder?: string; froms?: readonly Draft["from"][] }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
   const [msgs, setMsgs] = useState<Msg[]>([
-    { role: "assistant", content: "Hi — tell me who to write to and what to say, and I'll draft it for you to send. Or ask me anything about the day." },
+    { role: "assistant", content: greeting ?? "Hi — tell me who to write to and what to say, and I'll draft it for you to send. Or ask me anything about the day." },
   ]);
   const [input, setInput] = useState("");
   const [editing, setEditing] = useState<number | null>(null);
@@ -39,7 +39,7 @@ export function AdminChat({ eventId }: { eventId: number | null }) {
   const ask = useMutation({
     mutationFn: async (text: string) => {
       const history: Turn[] = [...msgs.map(({ role, content }) => ({ role, content })), { role: "user", content: text }];
-      const r = await adminSend("POST", "/api/admin/chat", { eventId, messages: history });
+      const r = await adminSend("POST", endpoint, { eventId, messages: history });
       return (await r.json()) as { reply: string; draft: Draft | null };
     },
     onMutate: (text) => {
@@ -78,8 +78,8 @@ export function AdminChat({ eventId }: { eventId: number | null }) {
       <div className="flex items-center gap-3 border-b border-border px-4 py-3">
         <img src="/alex.jpg" alt="" className="h-9 w-9 rounded-full object-cover" />
         <div>
-          <p className="text-sm font-semibold">Alex</p>
-          <p className="text-[11px] text-muted-foreground">Drafts what you say; you press Send.</p>
+          <p className="text-sm font-semibold">{title}</p>
+          <p className="text-[11px] text-muted-foreground">{subtitle}</p>
         </div>
       </div>
 
@@ -100,7 +100,7 @@ export function AdminChat({ eventId }: { eventId: number | null }) {
                       <Textarea value={edit.text} onChange={(e) => setEdit({ ...edit, text: e.target.value })} rows={8} className="text-sm" />
                       <div className="flex items-center gap-2">
                         <select value={edit.from} onChange={(e) => setEdit({ ...edit, from: e.target.value as Draft["from"] })} className="h-8 rounded-md border border-border bg-background px-2 text-xs">
-                          {(["alex", "riccoh", "michael", "team"] as const).map((f) => <option key={f} value={f}>From {FROM_LABEL[f]}</option>)}
+                          {froms.map((f) => <option key={f} value={f}>From {FROM_LABEL[f]}</option>)}
                         </select>
                         <Button size="sm" className="h-8 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" disabled={send.isPending} onClick={() => send.mutate({ index: i, draft: edit })}>
                           <Send className="mr-1.5 h-3.5 w-3.5" /> Send
@@ -153,7 +153,7 @@ export function AdminChat({ eventId }: { eventId: number | null }) {
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }}
           rows={1}
-          placeholder='Send Frank an email saying "Thanks for your patience…"'
+          placeholder={placeholder ?? 'Send Frank an email saying "Thanks for your patience…"'}
           className="min-h-[40px] resize-none text-sm"
           data-testid="admin-chat-input"
         />

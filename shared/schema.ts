@@ -871,6 +871,8 @@ export const adminUsers = pgTable("admin_users", {
   email: text("email").notNull().unique(),
   name: text("name").notNull().default(""),
   isOwner: boolean("is_owner").notNull().default(false),
+  /** Full admin except Finances and accounting (the team desk hire, 17 Nov 2026). */
+  noFinance: boolean("no_finance").notNull().default(false),
   /** Their picture in the admin and the studio, when they're not on the event team. */
   photoUrl: text("photo_url").notNull().default(""),
   createdAt: text("created_at").notNull(),

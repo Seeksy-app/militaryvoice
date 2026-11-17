@@ -135,6 +135,7 @@ import { logSceneTake, registerSceneLog } from "./sceneLog.js";
 import { audienceRecipients, registerPeople } from "./people.js";
 import { registerOrganizer } from "./organizer.js";
 import { registerProjects } from "./projects.js";
+import { registerTeamDesk } from "./teamDesk.js";
 import { registerAdminOverview } from "./adminOverview.js";
 import { registerBioPrefill } from "./bioPrefill.js";
 import { registerMagazineStats } from "./magazineStats.js";
@@ -643,6 +644,11 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
   // Preferred: a signed admin session from the email-code sign-in.
   const sessionEmail = getAdminEmail(req);
   if (sessionEmail && (await storage.isAdminEmail(sessionEmail))) {
+    // Full admin except Finances and accounting, for the team members set up that way.
+    if (/^\/api\/admin\/(finance-[\w-]+|production-costs)(\/|$)/.test(req.path) && (await storage.adminNoFinance(sessionEmail))) {
+      res.status(403).json({ message: "Finances aren't part of your access." });
+      return;
+    }
     (req as any).adminEmail = sessionEmail;
     next();
     return;
@@ -2281,7 +2287,7 @@ export function registerRoutes(app: Express): void {
     const admins = await storage.listAdmins();
     const me = admins.find((a) => a.email === email);
     const person = await studioPerson(email);
-    res.json({ email, name: me?.name ?? "", isOwner: !!me?.isOwner, displayName: person.name, title: person.title, photoUrl: person.photoUrl });
+    res.json({ email, name: me?.name ?? "", isOwner: !!me?.isOwner, noFinance: !!me?.noFinance, displayName: person.name, title: person.title, photoUrl: person.photoUrl });
   });
 
   /**
@@ -6858,6 +6864,7 @@ export function registerRoutes(app: Express): void {
   registerPeople(app, requireAdmin);
   registerOrganizer(app, requireHostSession, requireAdmin);
   registerProjects(app, requireAdmin);
+  registerTeamDesk(app, requireAdmin);
   registerAdminOverview(app, requireAdmin);
   registerOrgs(app, requireHostSession, requireAdmin);
   registerProspects(app, requireAdmin);

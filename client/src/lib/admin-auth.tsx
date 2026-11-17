@@ -8,6 +8,8 @@ export interface AdminIdentity {
   email: string;
   name: string;
   isOwner: boolean;
+  /** Full admin except Finances and accounting. */
+  noFinance?: boolean;
   /** An event admin: runs these events in admin and nothing of the platform. */
   eventAdmin?: boolean;
   events?: number[];

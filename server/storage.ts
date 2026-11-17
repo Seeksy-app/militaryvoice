@@ -247,6 +247,7 @@ async function ensureSchema() {
   await sql`ALTER TABLE recordings ADD COLUMN IF NOT EXISTS clip_progress TEXT NOT NULL DEFAULT ''`;
   await sql`ALTER TABLE recordings ADD COLUMN IF NOT EXISTS clean TEXT NOT NULL DEFAULT ''`;
   await sql`ALTER TABLE recordings ADD COLUMN IF NOT EXISTS postify_beta BOOLEAN NOT NULL DEFAULT false`;
+  await sql`ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS no_finance BOOLEAN NOT NULL DEFAULT false`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS run_of_show (
@@ -703,6 +704,8 @@ export interface IStorage {
   deleteSponsorPackage(id: number): Promise<void>;
   listAdmins(): Promise<AdminUserRow[]>;
   isAdminEmail(email: string): Promise<boolean>;
+  adminNoFinance(email: string): Promise<boolean>;
+  setAdminNoFinance(email: string, v: boolean): Promise<void>;
   addAdmin(email: string, name: string): Promise<AdminUserRow>;
   removeAdmin(id: number): Promise<{ removed: boolean; reason?: string }>;
   createSponsorInquiry(data: InsertSponsorInquiry): Promise<SponsorInquiryRow>;
@@ -2917,6 +2920,17 @@ class DatabaseStorage implements IStorage {
     await ready();
     const [row] = await db.select().from(adminUsers).where(eq(adminUsers.email, email.trim().toLowerCase()));
     return !!row;
+  }
+
+  async adminNoFinance(email: string): Promise<boolean> {
+    await ready();
+    const [row] = await db.select({ v: adminUsers.noFinance }).from(adminUsers).where(eq(adminUsers.email, email.trim().toLowerCase()));
+    return !!row?.v;
+  }
+
+  async setAdminNoFinance(email: string, v: boolean): Promise<void> {
+    await ready();
+    await db.update(adminUsers).set({ noFinance: v }).where(eq(adminUsers.email, email.trim().toLowerCase()));
   }
 
   async addAdmin(email: string, name: string): Promise<AdminUserRow> {
