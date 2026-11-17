@@ -10,7 +10,8 @@ import { Check, Link2, Radio as RadioIcon, Share2 } from "lucide-react";
 // (/radio/book). Server: /api/radio in server/booth.ts.
 
 type Booking = { id: number; show: string; host: string; photo: string; about: string; startAtUtc: string; endAtUtc: string };
-type Radio = { day: { eventId: number; name: string; startAtUtc: string; endAtUtc: string } | null; onAir: boolean; youtube: string; liveone: string; bookings: Booking[] };
+type Radio = { day: { eventId: number; name: string; startAtUtc: string; endAtUtc: string } | null; onAir: boolean; youtube: string; liveone: string; bookings: Booking[]; open?: OpenSlot[] };
+type OpenSlot = { eventId: number; slotIndex: number; startAtUtc: string; endAtUtc: string; encore: { show: string; host: string; photo: string } | null };
 
 const ET = "America/New_York";
 const hm = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { timeZone: ET, hour: "numeric", minute: "2-digit" });
@@ -104,6 +105,11 @@ export default function RadioPage() {
   const list = data?.bookings ?? [];
   const current = list.find((b) => now >= Date.parse(b.startAtUtc) && now < Date.parse(b.endAtUtc));
   const sharedShow = list.find((b) => b.id === shared);
+  // Booked shows and open half hours in time order.
+  const rows = useMemo(() => [
+    ...list.map((b) => ({ kind: "show" as const, at: Date.parse(b.startAtUtc), b })),
+    ...(data?.open ?? []).map((o) => ({ kind: "open" as const, at: Date.parse(o.startAtUtc), o })),
+  ].sort((a, b) => a.at - b.at) as Array<{ kind: "show"; at: number; b: Booking; o?: never } | { kind: "open"; at: number; o: OpenSlot; b?: never }>, [data]); // eslint-disable-line react-hooks/exhaustive-deps
   const upNext = list.find((b) => Date.parse(b.startAtUtc) > now);
 
   return (
@@ -157,11 +163,29 @@ export default function RadioPage() {
           </div>
           <a href="/radio/book" className="inline-flex h-10 items-center rounded-full bg-[#F0A71F] px-5 text-sm font-bold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="radio-book">Podcasters: book your slot</a>
         </div>
-        {list.length === 0 ? (
+        {rows.length === 0 ? (
           <p className="mt-4 rounded-2xl border border-dashed border-border p-8 text-center text-muted-foreground">The lineup is filling up. Check back soon, or book a slot for your own show.</p>
         ) : (
           <ul className="mt-4 divide-y divide-border rounded-2xl border border-border bg-card">
-            {list.map((b) => {
+            {rows.map((r) => {
+              if (r.kind === "open") {
+                const o = r.o;
+                const past = Date.parse(o.endAtUtc) <= now;
+                const isNow = live && now >= Date.parse(o.startAtUtc) && !past;
+                return (
+                  <li key={`o${o.slotIndex}`} className={`flex items-center gap-4 p-4 ${isNow ? "bg-[#ED1C24]/5" : ""} ${past ? "opacity-60" : ""}`} data-testid={`radio-open-${o.slotIndex}`}>
+                    <span className="w-24 shrink-0 text-sm font-bold tabular-nums">{hm(o.startAtUtc)}</span>
+                    {o.encore?.photo ? <img src={o.encore.photo} alt="" className="h-11 w-11 shrink-0 rounded-full object-cover" /> : <span className="h-11 w-11 shrink-0 rounded-full bg-muted" />}
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate font-semibold">{o.encore ? o.encore.show : "Open time"}</span>
+                      <span className="block truncate text-sm text-muted-foreground">{o.encore ? `Encore${o.encore.host && o.encore.host !== o.encore.show ? ` · ${o.encore.host}` : ""} · ` : ""}This spot is open</span>
+                    </span>
+                    {isNow && <span className="rounded-full bg-[#ED1C24] px-2.5 py-1 text-xs font-bold text-white">On air</span>}
+                    {!past && <a href={`/radio/book?claim=${o.eventId}.${o.slotIndex}`} className="shrink-0 rounded-full border-2 border-[#F0A71F] px-4 py-1.5 text-sm font-bold text-foreground hover:bg-[#F0A71F] hover:text-[#1a1200]" data-testid={`radio-claim-${o.slotIndex}`}>Claim this spot</a>}
+                  </li>
+                );
+              }
+              const b = r.b;
               const isNow = current?.id === b.id && live;
               const past = Date.parse(b.endAtUtc) <= now;
               return (

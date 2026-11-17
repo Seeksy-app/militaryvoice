@@ -192,6 +192,15 @@ export default function DigitalExperience() {
   useEffect(() => { if (sharedDay && dayId === null) setDayId(sharedDay.eventId); }, [sharedDay, dayId]);
   const day = days.find((d) => d.eventId === dayId) ?? days.find((d) => d.slots.some((s) => !s.taken && !s.past)) ?? days[0];
   const [pick, setPick] = useState<Slot | null>(null);
+  // "Claim this spot" from the Radio lineup (?claim=<day>.<slot>): open that half hour, ready to book.
+  useEffect(() => {
+    const c = new URLSearchParams(window.location.search).get("claim");
+    if (!c || !days.length) return;
+    const [d, k] = c.split(".").map(Number);
+    const dd = days.find((x) => x.eventId === d);
+    const sl = dd?.slots.find((x) => x.index === k && !x.taken && !x.past);
+    if (dd && sl) { setDayId(dd.eventId); setPick(sl); }
+  }, [days.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const open = (d: Day) => d.slots.filter((s) => !s.taken && !s.past).length;
   const first = days[0]?.startAtUtc, last = days[days.length - 1]?.startAtUtc;
   const range = useMemo(() => (first && last ? `${shortDay(first).replace(/^\w+, /, "")}–${new Date(last).toLocaleDateString("en-US", { timeZone: ET, day: "numeric" })}` : ""), [first, last]);

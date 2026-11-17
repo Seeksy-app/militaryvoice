@@ -157,6 +157,21 @@ export function registerBooth(app: Express): void {
       youtube: (await storage.getSetting("dx:youtube-url")) ?? "",
       liveone: (await storage.getSetting("dx:liveone-url")) ?? "",
       bookings: list.map((s) => { const t = bookingTimes(ev, s); return { id: s.id, show: s.podcastName, host: s.hostName, photo: s.photoUrl, about: s.notes, startAtUtc: new Date(t.start).toISOString(), endAtUtc: new Date(t.end).toISOString() }; }),
+      // Half hours nobody has booked: the encore that plays there (same pick as the player), and the slot to claim.
+      open: await (async () => {
+        let replays: Array<{ key?: string; show?: string; host?: string; photo?: string }> = [];
+        try { replays = (JSON.parse((await storage.getSetting("dx:replays")) ?? "[]") as typeof replays).filter((r) => r.key); } catch { replays = []; }
+        const di = Math.max(0, (await dxEventIds()).slice().sort((a, b) => a - b).indexOf(ev.id));
+        const slots = Math.floor((ev.durationHours * 60) / ev.slotMinutes);
+        const out: Array<Record<string, unknown>> = [];
+        for (let k = 0; k < slots; k++) {
+          if (list.some((x) => k >= x.slotIndex && k < x.slotIndex + Math.max(1, x.slotSpan))) continue;
+          const a = start + k * ev.slotMinutes * 60_000;
+          const r = replays.length ? replays[(di * 30 + k) % replays.length] : null;
+          out.push({ eventId: ev.id, slotIndex: k, startAtUtc: new Date(a).toISOString(), endAtUtc: new Date(a + ev.slotMinutes * 60_000).toISOString(), encore: r ? { show: r.show ?? "", host: r.host ?? "", photo: r.photo ?? "" } : null });
+        }
+        return out;
+      })(),
     });
   });
 
