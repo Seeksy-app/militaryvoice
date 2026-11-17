@@ -231,7 +231,7 @@ function buildText(input: ConfirmationEmailInput): string {
  *  returns false on failure so a flaky email provider never blocks a user flow. */
 /** A file sent with the email: Resend fetches it from the address. */
 export type MailAttachment = { filename: string; path?: string; /** Base64 file body, instead of an address to fetch. */ content?: string };
-async function sendRawEmail(opts: { to: string; subject: string; html: string; text: string; replyTo?: string; from?: string; headers?: Record<string, string>; bcc?: string[]; kind?: string; attachments?: MailAttachment[] }): Promise<string | null> {
+async function sendRawEmail(opts: { to: string; subject: string; html: string; text: string; replyTo?: string; from?: string; headers?: Record<string, string>; bcc?: string[]; cc?: string[]; kind?: string; attachments?: MailAttachment[] }): Promise<string | null> {
   let id: string | null = null;
   let error = "";
   try {
@@ -250,7 +250,7 @@ let mailLogger: ((m: SentMail) => Promise<void>) | null = null;
 /** The server hands its database writer in here (this file keeps no database of its own). */
 export function setMailLogger(fn: (m: SentMail) => Promise<void>) { mailLogger = fn; }
 
-async function sendRawEmailNow(opts: { to: string; subject: string; html: string; text: string; replyTo?: string; from?: string; headers?: Record<string, string>; bcc?: string[]; attachments?: MailAttachment[] }): Promise<string | null> {
+async function sendRawEmailNow(opts: { to: string; subject: string; html: string; text: string; replyTo?: string; from?: string; headers?: Record<string, string>; bcc?: string[]; cc?: string[]; attachments?: MailAttachment[] }): Promise<string | null> {
   try {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (RESEND_API_KEY) {
@@ -269,6 +269,7 @@ async function sendRawEmailNow(opts: { to: string; subject: string; html: string
         text: opts.text,
         ...(opts.replyTo ? { reply_to: opts.replyTo } : {}),
         ...(opts.bcc?.length ? { bcc: opts.bcc } : {}),
+        ...(opts.cc?.length ? { cc: opts.cc } : {}),
         ...(opts.headers && Object.keys(opts.headers).length ? { headers: opts.headers } : {}),
         ...(opts.attachments?.length ? { attachments: opts.attachments } : {}),
       }),
@@ -315,6 +316,8 @@ export async function sendOneOffEmail(o: {
   from?: string;
   /** Hidden copies: whoever the mail speaks for sees what was said in their name. */
   bcc?: string[];
+  /** Visible copies, for an introduction. */
+  cc?: string[];
   /** What kind of email it is, for the mail log (a reply, an acknowledgement…). */
   kind?: string;
   /** Files to send with it (a video to post, a flyer). */
