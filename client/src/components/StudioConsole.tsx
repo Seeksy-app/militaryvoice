@@ -58,6 +58,8 @@ interface Props {
   simple?: boolean;
   /** Who's looking (their own sign-in), so their hand-offs say "That's you". */
   viewerEmail?: string;
+  /** A podcaster's own studio: no "We'll be right back" button. */
+  personal?: boolean;
   adminGet: <T>(path: string) => Promise<T>;
   adminSend: (method: string, path: string, body?: unknown) => Promise<Response>;
   /**
@@ -555,7 +557,7 @@ function StandbyFreshness({ adminGet, eventId }: { adminGet: <T>(path: string) =
   );
 }
 
-export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedStudioId, onLeave, simple = false, viewerEmail }: Props) {
+export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedStudioId, onLeave, simple = false, viewerEmail, personal = false }: Props) {
   const { toast } = useToast();
   const queryClient = useQueryClient();
   // Eastern, like the cards on air: a producer in Pacific read 9:55 next to
@@ -1493,6 +1495,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
             studioId={studioId ?? undefined}
             onChat={() => setChatOpen((n) => n + 1)}
             chatWaiting={deskWaiting}
+            canCover={!personal}
           />
         );
       })()}

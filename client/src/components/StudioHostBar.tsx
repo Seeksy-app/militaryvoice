@@ -24,6 +24,7 @@ export function StudioHostBar({
   studioId,
   onChat,
   chatWaiting = 0,
+  canCover = true,
 }: {
   meOnStage: boolean;
   stageBusy: boolean;
@@ -39,6 +40,8 @@ export function StudioHostBar({
   onChat?: () => void;
   /** Messages waiting on Michael, shown on the card. */
   chatWaiting?: number;
+  /** False in a podcaster's own studio: no "We'll be right back" card, no OH SH#T! button. */
+  canCover?: boolean;
 }) {
   const [chatOpen, setChatOpen] = useState(false);
   const [alerted, setAlerted] = useState(false);
@@ -79,7 +82,7 @@ export function StudioHostBar({
           </span>
         </button>
 
-        {covered ? (
+        {!canCover ? null : covered ? (
           <button type="button" onClick={onUncover} className={`${big} bg-[#F0A71F] text-[#000741] hover:bg-[#f5b94a]`} data-testid="host-bar-uncover">
             <Radio className="h-8 w-8 shrink-0" />
             <span>

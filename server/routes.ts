@@ -2249,7 +2249,9 @@ export function registerRoutes(app: Express): void {
     // The event whose studio opens: theirs (the featured one when they host several), or the featured one for an admin.
     const featured = (await storage.getFeaturedEvent()).id;
     const eventId = isAdmin ? (adminOf.length && !adminOf.includes(featured) ? adminOf[0] : featured) : host!.events.includes(featured) ? featured : host!.events[0];
-    res.json({ access: true, role: isAdmin ? "admin" : "studio-host", email, hostEmail: (getSessionEmail(req) ?? "").trim().toLowerCase(), eventId, displayName: person.name, title: person.title, photoUrl: person.photoUrl });
+    // Their own studio has no team to tell and no "We'll be right back" card to put up.
+    const personal = (await storage.getEventById(eventId))?.occasion === "Personal studio";
+    res.json({ access: true, role: isAdmin ? "admin" : "studio-host", email, hostEmail: (getSessionEmail(req) ?? "").trim().toLowerCase(), eventId, personal, displayName: person.name, title: person.title, photoUrl: person.photoUrl });
   });
 
   /** Admin → Team: who are studio hosts. */
