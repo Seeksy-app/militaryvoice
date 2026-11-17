@@ -8548,7 +8548,7 @@ export function registerRoutes(app: Express): void {
   app.post("/api/host/plan/portal", requireHostSession, async (req, res) => {
     const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
     const sub = await storage.getSubscription(email);
-    const addon = await storage.getAddon(email, "discovery");
+    const addon = (await storage.getAddon(email, "discovery")) ?? (await storage.getAddon(email, "verified"));
     const customerId = sub?.customerId || addon?.customerId;
     if (!customerId) return res.status(404).json({ message: "No plan yet." });
     try {

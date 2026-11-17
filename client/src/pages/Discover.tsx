@@ -190,7 +190,7 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
     window.history.replaceState(null, "", url.pathname + url.search);
     apiRequest("POST", "/api/host/addon/confirm", { sessionId: sid })
       .then(() => {
-        toast({ title: "Discovery Pro is on", description: "100 contact reveals and 1,000 look-ups a month." });
+        toast({ title: "Discovery Pro is on", description: "100 searches, 25 full profiles and 50 contact emails a month, and Verified creators." });
         void queryClient.invalidateQueries({ queryKey: ["/api/discover/me"] });
       })
       .catch((e: Error) => toast({ title: "Paid — switching it on", description: e.message, variant: "destructive" }));

@@ -64,10 +64,18 @@ export const CREDIT_PACKS = [
  * reveals, 200 look-ups).
  */
 export const ADDONS = {
+  // Repriced 17 Nov 2026 from Influencers Club's list price (about 42¢ a credit): a search page 0.24 credits, a full profile
+  // about 0.83, a contact 0.2. At $50 a month the worst case is about $23 of cost; the old 1,000 look-ups could have cost far more.
   discovery: {
-    key: "discovery", name: "Discovery Pro", cents: 2900, reveals: 100, lookups: 1000,
+    key: "discovery", name: "Discovery Pro", cents: 5000, reveals: 50, lookups: 25, searches: 100,
     blurb: "Find military and veteran creators, guests and sponsors, and reach them.",
-    features: ["100 contact reveals a month (10 free)", "1,000 profile look-ups a month (200 free)", "Plus everything in free Discovery: every filter, saved lists, full profiles"],
+    features: ["100 searches a month", "25 full creator profiles a month", "50 contact emails a month", "Every filter, saved lists, and Verified creators included"],
+  },
+  // The creators we know: our own lineup, with their real numbers (Andrew, 17 Nov 2026). Cost to us is near nothing.
+  verified: {
+    key: "verified", name: "Verified creators", cents: 1000,
+    blurb: "The creators MilitaryVoices knows: everyone who has been on our events, with their real reach.",
+    features: ["Every creator on our lineup, with pictures and real numbers", "Their shows, branches and audiences", "Included with Discovery Pro"],
   },
   // Post-production for a show (17 Nov 2026): a Pro add-on of its own, $195 a month paid every three months ($585),
   // a separate subscription so it can stop while Pro carries on.
@@ -80,7 +88,10 @@ export const ADDONS = {
   },
 } as const;
 export type AddonKey = keyof typeof ADDONS;
-export const FREE_DISCOVERY = { reveals: 10, lookups: 200 } as const;
+/** What Scale and Pro get of Discovery without the add-on: a taste. */
+export const FREE_DISCOVERY = { reveals: 10, lookups: 5, searches: 10 } as const;
+/** Brands, agencies and event planners: Discovery is free for them, as it always was. */
+export const HOUSE_DISCOVERY = { reveals: 10, lookups: 200 } as const;
 
 /** Not on the page: /pricing?test shows it, for trying a real payment for $1. */
 export const TEST_PACK = { key: "tokens-2", tokens: 2, price: 1, blurb: "Test pack: a real $1 payment." } as const;

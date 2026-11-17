@@ -246,7 +246,8 @@ export async function readPlanSession(sessionId: string): Promise<PlanState | nu
 async function addonPrice(addon: AddonKey): Promise<string> {
   const a = ADDONS[addon];
   const quarterly = "quarterly" in a && a.quarterly && "quarterCents" in a;
-  const key = `mv_addon_${a.key}_${quarterly ? "quarterly" : "monthly"}`;
+  // The amount is in the key, so a repriced add-on gets a new price and older subscribers keep theirs.
+  const key = `mv_addon_${a.key}_${quarterly ? "quarterly" : "monthly"}${quarterly ? "" : `_${a.cents}`}`;
   const found = await stripe("GET", `/prices?limit=1&lookup_keys[]=${key}`);
   if (found.data?.[0]?.id) return String(found.data[0].id);
   const p = await stripe("POST", "/prices", flat({

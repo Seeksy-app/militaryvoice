@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, CreditCard, Loader2, Sparkles, Search, Coins } from "lucide-react";
+import { Check, CreditCard, Loader2, Sparkles, Search, Coins, BadgeCheck } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { PLANS, ADDONS, FREE_DISCOVERY, CREDIT_PACKS, cents } from "@shared/tokens";
@@ -12,7 +12,7 @@ type Features = {
   /** comp: a gift from us (no Stripe behind it, so no billing page to manage). */
   plan: { key: string; name: string; comp?: boolean; interval: "month" | "year"; credits: number; periodEnd: string; status: string } | null;
 };
-type DiscoverMe = { member: object | null; discoveryPro?: boolean; reveals: { used: number; allowance: number } | null };
+type DiscoverMe = { member: object | null; discoveryPro?: boolean; verifiedLocked?: boolean; reveals: { used: number; allowance: number } | null; searches?: { used: number; allowance: number | null } | null; lookups?: { used: number; allowance: number } | null };
 
 const day = (iso: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" }) : "");
 
@@ -105,8 +105,10 @@ export function PlanBilling() {
           <div className="min-w-0">
             <p className="font-semibold">{ADDONS.discovery.name}{pro ? " · on" : ""}</p>
             <p className="text-sm text-muted-foreground">
-              {pro ? `${ADDONS.discovery.reveals} contact emails a month` : `${ADDONS.discovery.reveals} contact emails a month instead of ${FREE_DISCOVERY.reveals}, for ${cents(ADDONS.discovery.cents)}/month`}
-              {reveals ? ` · ${Math.max(0, reveals.allowance - reveals.used)} left this month` : ""}
+              {pro ? `${ADDONS.discovery.searches} searches, ${ADDONS.discovery.lookups} full profiles and ${ADDONS.discovery.reveals} contact emails a month` : `${ADDONS.discovery.searches} searches, ${ADDONS.discovery.lookups} full profiles, ${ADDONS.discovery.reveals} contact emails and Verified creators, for ${cents(ADDONS.discovery.cents)}/month`}
+              {me.data?.searches?.allowance ? ` · ${Math.max(0, me.data.searches.allowance - me.data.searches.used)} searches` : ""}
+              {me.data?.lookups ? ` · ${Math.max(0, me.data.lookups.allowance - me.data.lookups.used)} profiles` : ""}
+              {reveals ? ` · ${Math.max(0, reveals.allowance - reveals.used)} contacts left this month` : ""}
             </p>
           </div>
         </div>
@@ -116,6 +118,24 @@ export function PlanBilling() {
           <Button onClick={() => void go("discovery", () => startAddonCheckout("discovery"))} disabled={busy !== null} className="gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="billing-add-discovery">{spin("discovery")} Add {ADDONS.discovery.name}</Button>
         )}
       </section>
+
+      {/* Verified creators: $10 on its own, included with Discovery Pro. */}
+      {!pro && (
+        <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-card p-5 shadow-sm" data-testid="billing-verified">
+          <div className="flex min-w-0 items-center gap-3">
+            <IconTile icon={BadgeCheck} />
+            <div className="min-w-0">
+              <p className="font-semibold">{ADDONS.verified.name}{me.data?.verifiedLocked === false ? " · on" : ""}</p>
+              <p className="text-sm text-muted-foreground">{ADDONS.verified.blurb} {cents(ADDONS.verified.cents)}/month, or included with {ADDONS.discovery.name}.</p>
+            </div>
+          </div>
+          {me.data?.verifiedLocked === false ? (
+            <Button variant="outline" onClick={() => void go("portal-v", openBillingPortal)} disabled={busy !== null} className="gap-2 rounded-full">{spin("portal-v")} Manage</Button>
+          ) : (
+            <Button onClick={() => void go("verified", () => startAddonCheckout("verified"))} disabled={busy !== null} className="gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="billing-add-verified">{spin("verified")} Add {ADDONS.verified.name}</Button>
+          )}
+        </section>
+      )}
 
       <p className="text-center text-sm text-muted-foreground">Compare everything on the <a href="/pricing" className="font-medium text-[#053877] hover:underline dark:text-white">pricing page</a>.</p>
     </div>

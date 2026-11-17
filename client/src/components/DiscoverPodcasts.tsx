@@ -502,9 +502,9 @@ function GuestActions({ person, saved, onSave, reveals, onRevealed }: { person: 
         <p className="text-xs text-muted-foreground">
           {!handle ? "No X account on file, so their email can't be looked up here. Their shows below list how to reach them."
             : left == null ? `Find their email looks them up by their X account (@${handle}).`
-            : left > 0 ? <>Find their email looks them up by their X account (@{handle}). It uses one of your contact reveals: <b className="text-foreground">{left} of {reveals!.allowance}</b> left this month{me.data?.discoveryPro ? "" : " (Discovery Pro: 100 a month)"}.</>
+            : left > 0 ? <>Find their email looks them up by their X account (@{handle}). It uses one of your contact reveals: <b className="text-foreground">{left} of {reveals!.allowance}</b> left this month{me.data?.discoveryPro ? "" : " (Discovery Pro: 50 a month)"}.</>
             : credits >= 1 ? <>This month's contact reveals are used, so this one is <b className="text-foreground">1 credit</b> (you have {credits}).</>
-            : <>This month's contact reveals are used. <a href="/pricing#discovery" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Discovery Pro</a> gives 100 a month, or <a href="/host/dashboard/postify" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">add credits</a> (1 a contact).</>}
+            : <>This month's contact reveals are used. <a href="/pricing#discovery" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Discovery Pro</a> gives 50 a month, or <a href="/host/dashboard/postify" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">add credits</a> (1 a contact).</>}
         </p>
       )}
       {contact && (

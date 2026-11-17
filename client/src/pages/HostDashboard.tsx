@@ -1064,7 +1064,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     refetchInterval: 120_000,
   });
   // Discovery is a paid tool for creators (7 Oct): on Growth it shows Upgrade instead.
-  const { data: discoverMe } = useQuery<{ locked?: boolean }>({
+  const { data: discoverMe } = useQuery<{ locked?: boolean; verifiedLocked?: boolean }>({
     queryKey: ["/api/discover/me"],
     queryFn: async () => (await apiRequest("GET", "/api/discover/me")).json(),
     enabled: !!data && hasProfile,
@@ -1114,6 +1114,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   const workspace = !!data && hasProfile && !inSetup;
   const newOpps = (oppsPeek ?? []).filter((o) => o.status === "new").length;
   const discoveryLocked = Boolean(discoverMe?.locked);
+  const verifiedLocked = Boolean(discoverMe?.verifiedLocked);
   // Which path they came in on (podcaster, creator, planner): the dashboard follows it.
   const path = pathOf(profile?.interests);
   const checklistState = {
@@ -1267,6 +1268,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
             path={pathOf(profile?.interests)}
             opportunities={newOpps}
             discoveryLocked={discoveryLocked}
+            verifiedLocked={verifiedLocked}
             collapsed={navTucked}
             onToggle={toggleNav}
             screen={screen === "claim" ? "dashboard" : screen}
@@ -1447,8 +1449,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           <ProScreen feature={proFeature} />
         ) : screen === "contacts" ? (
           <ContactsScreen contacts={data?.contacts ?? []} />
-        ) : (screen === "discovery" || screen === "verified") && discoveryLocked ? (
-          <DiscoveryUpgrade which={screen} onUpgrade={() => goTo("billing")} />
+        ) : (screen === "discovery" && discoveryLocked) || (screen === "verified" && (discoveryLocked || verifiedLocked)) ? (
+          <DiscoveryUpgrade which={screen} onPlans={discoveryLocked} onUpgrade={() => goTo("billing")} />
         ) : screen === "discovery" ? (
           <Discover embedded part="search" />
         ) : screen === "verified" ? (
@@ -1741,7 +1743,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
 }
 
 /** Discovery on the free plan (7 Oct): the real page underneath, greyed and still, with the way to it on top. */
-function DiscoveryUpgrade({ which, onUpgrade }: { which: "discovery" | "verified"; onUpgrade: () => void }) {
+function DiscoveryUpgrade({ which, onUpgrade, onPlans = true }: { which: "discovery" | "verified"; onUpgrade: () => void; onPlans?: boolean }) {
   return (
     <section className="relative mt-6" data-testid="discovery-upgrade">
       <div aria-hidden className="pointer-events-none max-h-[78vh] select-none overflow-hidden opacity-45 grayscale-[35%] [mask-image:linear-gradient(to_bottom,black_55%,transparent)]">
@@ -1752,9 +1754,9 @@ function DiscoveryUpgrade({ which, onUpgrade }: { which: "discovery" | "verified
       <div className="absolute inset-x-0 top-24 flex justify-center px-4">
         <div className="max-w-lg rounded-3xl border border-border bg-card/95 p-8 text-center shadow-2xl backdrop-blur">
           <span className="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-[#F0A71F]/15 text-[#8a5a00] dark:text-[#F0A71F]"><Compass className="h-6 w-6" /></span>
-          <h1 className="mt-4 text-2xl font-bold tracking-tight">{which === "verified" ? "Verified creators" : "Discovery"} comes with Scale and Pro</h1>
-          <p className="mx-auto mt-2 text-muted-foreground [text-wrap:pretty]">Search military and veteran podcasters and creators by topic, branch and audience, with their real reach on every profile. Find guests for your show, partners to collaborate with, and sponsors who fit.</p>
-          <Button onClick={onUpgrade} className="mt-6 h-11 gap-2 rounded-full bg-[#F0A71F] px-6 font-semibold text-[#1a1200] hover:bg-[#f5b944]" data-testid="discovery-upgrade-go">See plans</Button>
+          <h1 className="mt-4 text-2xl font-bold tracking-tight">{onPlans ? `${which === "verified" ? "Verified creators" : "Discovery"} comes with Scale and Pro` : "Verified creators is $10 a month"}</h1>
+          <p className="mx-auto mt-2 text-muted-foreground [text-wrap:pretty]">{onPlans ? "Search military and veteran podcasters and creators by topic, branch and audience, with their real reach on every profile. Find guests for your show, partners to collaborate with, and sponsors who fit." : "Everyone MilitaryVoices knows, with their pictures and real numbers, ready to invite as guests or collaborators. It comes included with Discovery Pro ($50 a month, with 100 searches, 25 full profiles and 50 contact emails)."}</p>
+          <Button onClick={onUpgrade} className="mt-6 h-11 gap-2 rounded-full bg-[#F0A71F] px-6 font-semibold text-[#1a1200] hover:bg-[#f5b944]" data-testid="discovery-upgrade-go">{onPlans ? "See plans" : "Add it in Plan & billing"}</Button>
         </div>
       </div>
     </section>

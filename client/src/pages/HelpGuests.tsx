@@ -38,7 +38,7 @@ export default function HelpGuests() {
         <HelpSection n={2} id="email" title="Find their email">
           <p><strong>Find their email</strong> looks a person up by their X account. Each one uses a contact email from your month:</p>
           <ul className="mt-3 list-disc space-y-2 pl-5">
-            <li>{FREE_DISCOVERY.reveals} a month free, or {ADDONS.discovery.reveals} with {ADDONS.discovery.name}.</li>
+            <li>{FREE_DISCOVERY.reveals} a month with Scale or Pro, or {ADDONS.discovery.reveals} with {ADDONS.discovery.name}.</li>
             <li>Used them all? Each one after that is <strong>1 credit</strong>. Once you've paid for one, it's free to see again.</li>
             <li>No X account on file for them? The button is greyed out.</li>
           </ul>

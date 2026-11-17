@@ -24,7 +24,7 @@ import { ensureOrg, orgIdsOf, orgsOf } from "./orgs.js";
 import { slackNote } from "./slack.js";
 import { bioPages, pathOf, postifySubscriptions } from "../shared/schema.js";
 import { parseBrands } from "../shared/bio.js";
-import { ADDONS, FREE_DISCOVERY } from "../shared/tokens.js";
+import { ADDONS, FREE_DISCOVERY, HOUSE_DISCOVERY } from "../shared/tokens.js";
 import {
   discoveryMembers,
   discoveryCache,
@@ -46,13 +46,39 @@ type Platform = (typeof PLATFORMS)[number];
 const FREE_REVEALS_PER_MONTH = FREE_DISCOVERY.reveals;
 /** Credits a contact costs once the month's allowance is used. */
 const REVEAL_CREDITS = 1;
-/** This member's monthly allowances: the free ones, or Discovery Pro's. */
-async function allowanceFor(email: string): Promise<{ reveals: number; lookups: number; pro: boolean }> {
+/** Brands, agencies, event planners and admins: Discovery is free for them (the first four checks of discoveryOpenTo). */
+async function isHouse(e: string): Promise<boolean> {
+  if (await storage.isAdminEmail(e)) return true;
+  if ((await orgsOf(e)).length) return true;
+  const profile = await storage.getProfileByEmail(e).catch(() => undefined);
+  const path = pathOf(profile?.interests);
+  if (path === "brand" || path === "planner") return true;
+  const [m] = await db.select({ role: discoveryMembers.role }).from(discoveryMembers).where(eq(discoveryMembers.email, e));
+  return !!m && ["brand", "agency", "event"].includes(m.role);
+}
+/** This member's monthly allowances: Discovery Pro's, the house's, or the taste that comes with Scale and Pro. */
+async function allowanceFor(email: string): Promise<{ reveals: number; lookups: number; searches: number; pro: boolean }> {
   const a = await storage.getAddon(email, "discovery");
   // "comped": given by an admin, no Stripe subscription behind it.
-  return a && ["active", "trialing", "comped"].includes(a.status)
-    ? { reveals: ADDONS.discovery.reveals, lookups: ADDONS.discovery.lookups, pro: true }
-    : { reveals: FREE_DISCOVERY.reveals, lookups: FREE_DISCOVERY.lookups, pro: false };
+  if (a && ["active", "trialing", "comped"].includes(a.status)) return { reveals: ADDONS.discovery.reveals, lookups: ADDONS.discovery.lookups, searches: ADDONS.discovery.searches, pro: true };
+  if (await isHouse(email.trim().toLowerCase())) return { reveals: HOUSE_DISCOVERY.reveals, lookups: HOUSE_DISCOVERY.lookups, searches: Number.POSITIVE_INFINITY, pro: false };
+  return { reveals: FREE_DISCOVERY.reveals, lookups: FREE_DISCOVERY.lookups, searches: FREE_DISCOVERY.searches, pro: false };
+}
+async function searchesThisMonth(email: string): Promise<number> {
+  const start = new Date(); start.setUTCDate(1); start.setUTCHours(0, 0, 0, 0);
+  const rows = await db.select({ id: discoverySearches.id }).from(discoverySearches).where(and(eq(discoverySearches.who, email), eq(discoverySearches.kind, "creators"), gte(discoverySearches.createdAt, start.toISOString())));
+  return rows.length;
+}
+/** Verified creators: the house, Discovery Pro (it includes them), or the $10 add-on. */
+export async function verifiedOpenTo(email: string): Promise<boolean> {
+  const e = email.trim().toLowerCase();
+  if (!e) return false;
+  if (await isHouse(e)) return true;
+  for (const key of ["discovery", "verified"] as const) {
+    const a = await storage.getAddon(e, key);
+    if (a && ["active", "trialing", "comped"].includes(a.status)) return true;
+  }
+  return false;
 }
 /**
  * May this person use Discovery (7 Oct)? It's a paid tool for creators: brands,
@@ -751,6 +777,9 @@ export function registerDiscoveryRoutes(app: Express): void {
         reveals: member ? { used: await revealsThisMonth(email), allowance: (await allowanceFor(email)).reveals, unlimited: !!adminEmail } : null,
         credits: member ? await storage.tokenBalance(email) : 0,
         discoveryPro: member ? (await allowanceFor(email)).pro : false,
+        searches: member && member.role !== "admin" ? { used: await searchesThisMonth(email), allowance: Number.isFinite((await allowanceFor(email)).searches) ? (await allowanceFor(email)).searches : null } : null,
+        // Verified creators: the house, Discovery Pro, or its own $10 add-on.
+        verifiedLocked: getSessionEmail(req) ? !(await verifiedOpenTo(String(getSessionEmail(req)))) : false,
         lookups: member && member.role !== "admin" ? { used: await lookupsThisMonth(email), allowance: (await allowanceFor(email)).lookups } : null,
         // Signed in to the admin too: they can spend credits on filling a page.
         isAdmin: !!adminEmail,
@@ -968,8 +997,14 @@ export function registerDiscoveryRoutes(app: Express): void {
       // from the cache, so the cap only bites on new questions.
       let preview = false;
       try {
-        await requireMember(req);
-      } catch {
+        const m = await requireMember(req);
+        // A new search (page 0) counts against the month's searches, unless it is the house's or an admin's.
+        if (m.member.role !== "admin" && (Number(req.body?.page) || 0) === 0) {
+          const lim = (await allowanceFor(m.email)).searches;
+          if (Number.isFinite(lim) && (await searchesThisMonth(m.email)) >= lim) throw new HttpError(402, `You've used this month's ${lim} searches. Discovery Pro has ${ADDONS.discovery.searches} a month.`);
+        }
+      } catch (err) {
+        if (err instanceof HttpError && err.status === 402 && /searches/.test(err.message)) throw err;
         preview = true;
         if ((Number(req.body?.page) || 0) > 0) throw new HttpError(403, "Create a free account to see more.");
       }
@@ -1067,8 +1102,17 @@ export function registerDiscoveryRoutes(app: Express): void {
       // Share link is for — but only from what we already hold: a visitor never
       // spends a credit. Everything else needs Discovery.
       try {
-        await requireMember(req);
+        const m = await requireMember(req);
+        if (m.member.role !== "admin") {
+          const lim = (await allowanceFor(m.email)).lookups;
+          const held = await isFresh(`analytics:${platform}:${handle.toLowerCase()}`, 30 * DAY);
+          if (!held) {
+            if ((await lookupsThisMonth(m.email)) >= lim) throw new HttpError(402, `You've used this month's ${lim} full profiles. Discovery Pro has ${ADDONS.discovery.lookups} a month.`);
+            await db.insert(discoveryLookups).values({ email: m.email, kind: "profile", subject: `${platform}:${handle.toLowerCase()}`, createdAt: new Date().toISOString() });
+          }
+        }
       } catch (err) {
+        if (err instanceof HttpError && err.status === 402 && /full profiles/.test(err.message)) throw err;
         const ours = (await verifiedCreators()).some((c) => c.platform === platform && c.handle.toLowerCase() === handle.toLowerCase()) || (await inSample(platform, handle));
         const held = ours && (await db.select().from(discoveryCache).where(eq(discoveryCache.key, `analytics:${platform}:${handle.toLowerCase()}`))).length > 0;
         if (!held) throw err;
