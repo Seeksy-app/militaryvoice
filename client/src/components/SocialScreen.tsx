@@ -147,7 +147,7 @@ export function SocialScreen({ view = "social" }: { view?: "social" | "calendar"
     <section className="mt-2" data-testid="social-screen">
       {/* Header: one line of what matters, and the channels as small marks. */}
       <div className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1">
-        {view === "analytics" ? <h2 className="text-lg font-bold text-foreground">How your posts did</h2> : <h1 className="text-xl font-bold text-foreground">{view === "calendar" ? "Calendar" : "Social"}</h1>}
+        {view === "analytics" ? <h2 className="text-lg font-bold text-foreground">Social Media Analytics</h2> : <h1 className="text-xl font-bold text-foreground">{view === "calendar" ? "Calendar" : "Social"}</h1>}
         {accounts.length > 0 && (
           <span className="text-sm text-muted-foreground" data-testid="social-summary">
             <b className="font-semibold tabular-nums text-foreground">{compact(followersTotal)}</b> followers

@@ -1466,8 +1466,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           <BioBuilder />
         ) : screen === "analytics" ? (
           <section className="mt-6 space-y-8">
-            <MyAnalytics onConnect={() => goTo("integrations")} />
-            <SocialScreen view="analytics" />
+            <MyAnalytics onConnect={() => goTo("integrations")} socialSection={<SocialScreen view="analytics" />} />
           </section>
         ) : screen === "pro" ? (
           <ProScreen feature={proFeature} />

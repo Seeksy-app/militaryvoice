@@ -26,7 +26,7 @@ interface Mine {
 const compact = (n: number | null | undefined) =>
   n == null ? "–" : n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(n);
 
-export function MyAnalytics({ onConnect }: { onConnect: () => void }) {
+export function MyAnalytics({ onConnect, socialSection }: { onConnect: () => void; /** The social media analytics, shown as the first section under the name and photo. */ socialSection?: React.ReactNode }) {
   const { toast } = useToast();
   const scroller = useRef<HTMLDivElement>(null);
   const q = useQuery<Mine>({
@@ -62,6 +62,7 @@ export function MyAnalytics({ onConnect }: { onConnect: () => void }) {
   }
   if (q.data?.none || !q.data?.profile) {
     return (
+      <div className="space-y-8">
       <div className="rounded-2xl border border-dashed border-border p-8 text-center" data-testid="my-analytics-empty">
         <BarChart3 className="mx-auto h-8 w-8 text-[#053877]" />
         {(() => {
@@ -85,6 +86,8 @@ export function MyAnalytics({ onConnect }: { onConnect: () => void }) {
         })()}
         <Button className="mt-4 gap-1.5 rounded-full" onClick={onConnect}><Link2 className="h-4 w-4" /> Connect accounts</Button>
       </div>
+      {socialSection}
+      </div>
     );
   }
 
@@ -103,8 +106,6 @@ export function MyAnalytics({ onConnect }: { onConnect: () => void }) {
 
   const toolbar = (
     <div className="sticky top-0 z-20 flex items-center gap-2 border-b border-border bg-background/95 px-6 py-2.5 backdrop-blur">
-      <span className="text-sm font-semibold text-foreground">Analytics</span>
-      <span className="text-sm text-muted-foreground">· what a sponsor sees</span>
       <Button size="sm" variant="ghost" onClick={() => void share()} className="ml-auto h-8 gap-1.5 rounded-lg bg-muted/70 font-medium" data-testid="my-analytics-share">
         <Share2 className="h-4 w-4" /> Share
       </Button>
@@ -158,7 +159,7 @@ export function MyAnalytics({ onConnect }: { onConnect: () => void }) {
         <CreatorProfileSections
           profile={p}
           toolbar={toolbar}
-          header={<>{header}{worth}</>}
+          header={<>{header}{socialSection && <div className="border-b-8 border-muted/60 bg-card px-6 py-6 sm:px-8" data-testid="my-analytics-social">{socialSection}</div>}{worth}</>}
           cardEngagement={null}
           scrollRoot={scroller}
           onOpenCreator={() => {}}
