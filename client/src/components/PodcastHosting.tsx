@@ -1,3 +1,4 @@
+import { GuestInvites } from "@/components/GuestInvites";
 import type { IconType } from "react-icons";
 import { SiApplepodcasts, SiIheartradio, SiPocketcasts, SiPodcastindex, SiSpotify, SiYoutubemusic } from "react-icons/si";
 import { FaAmazon } from "react-icons/fa";
@@ -50,7 +51,7 @@ export function PodcastHosting() {
   });
   // Which show is open (none: the grid of shows), and which of its tabs.
   const [openId, setOpenId] = useState<number | null>(null);
-  const [tab, setTab] = useState<PodTab>(() => { try { const t = localStorage.getItem("mv_pod_tab"); return t === "directories" || t === "details" || t === "guests" || t === "pitch" ? t : "episodes"; } catch { return "episodes"; } });
+  const [tab, setTab] = useState<PodTab>(() => { try { const t = localStorage.getItem("mv_pod_tab"); return t === "directories" || t === "details" || t === "guests" || t === "invite" || t === "pitch" ? t : "episodes"; } catch { return "episodes"; } });
   const go = (t: PodTab) => { setTab(t); try { localStorage.setItem("mv_pod_tab", t); } catch { /* fine */ } };
   // The field Show details opens on (from the checklist): the description, the name, the owner email.
   const [focus, setFocus] = useState<"" | "title" | "description" | "ownerEmail">("");
@@ -192,6 +193,7 @@ export function PodcastHosting() {
         {tabBtn("episodes", "Episodes")}
         {tabBtn("directories", ready ? "Directories" : "Directories · to do")}
         {tabBtn("details", "Show details")}
+        {tabBtn("invite", "Invite a guest")}
         {tabBtn("guests", "Book a guest")}
         {tabBtn("pitch", "Be a guest")}
       </div>
@@ -264,6 +266,7 @@ export function PodcastHosting() {
         </>
       )}
 
+      {tab === "invite" && <GuestInvites />}
       {tab === "guests" && <GuestFinder showTitle={s.title} />}
       {tab === "pitch" && <ShowFinder topics={[s.category, s.subcategory].filter(Boolean) as string[]} />}
 
@@ -276,7 +279,7 @@ export function PodcastHosting() {
   );
 }
 
-type PodTab = "episodes" | "directories" | "details" | "guests" | "pitch";
+type PodTab = "episodes" | "directories" | "details" | "guests" | "pitch" | "invite";
 type DirState = { state: "" | "submitted" | "live" | "rejected"; url: string; at?: string };
 const parseDirs = (raw: string | null | undefined): Record<string, DirState> => { try { const v = raw ? JSON.parse(raw) : {}; return v && typeof v === "object" ? v : {}; } catch { return {}; } };
 

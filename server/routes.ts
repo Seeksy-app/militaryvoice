@@ -175,6 +175,7 @@ import { decideAdvance } from "../shared/showClock.js";
 import type { StageThanks } from "../shared/stageMeta.js";
 import { registerBioPage, registerBioAgent, claimLivingSqueeze, subscribersFor, publishedBioUrl } from "./bioPage.js";
 import { registerGuests, guestByToken, markGuestJoined, publicGuestsFor } from "./guests.js";
+import { registerGuestInvites, takeAnsweredInvite } from "./guestInvites.js";
 import { registerCaptures, onCaptureWebhook } from "./captures.js";
 import { registerMail } from "./mail.js";
 import { registerAutomations } from "./automations.js";
@@ -6916,6 +6917,7 @@ export function registerRoutes(app: Express): void {
   registerHosting(app, requireAgent);
   registerBioAgent(app, requireAgent);
   registerGuests(app, requireAdmin);
+  registerGuestInvites(app, requireHostSession);
   registerCaptures(app, requireAdmin, (req) => getAdminEmail(req) ?? "");
   registerMail(app, requireAdmin);
   registerContactProfile(app, requireAdmin);
@@ -7776,12 +7778,15 @@ export function registerRoutes(app: Express): void {
       await storage.setClipStatus(rec.id, "queued", "");
     }
     let next: { name?: string; photoKey?: string } = {};
-    try { next = JSON.parse((await storage.getSetting(`nextguest:${email}`)) ?? "{}"); } catch { next = {}; }
+    // The guest who answered the invitation closest to this interview; failing that, the one set ahead as "next guest".
+    const invited = await takeAnsweredInvite(email, rec.startedAt, rec.id).catch(() => null);
+    if (invited) next = { name: invited.name, photoKey: invited.photoKey };
+    else { try { next = JSON.parse((await storage.getSetting(`nextguest:${email}`)) ?? "{}"); } catch { next = {}; } }
     if (next.name && next.photoKey) {
       try {
         const photo = Buffer.from(await (await fetch(await signedRecordingUrl(next.photoKey, 600))).arrayBuffer());
         await attachGuest(rec, next.name, photo);
-        await storage.setSetting(`nextguest:${email}`, ""); // used: the next episode needs its own guest
+        if (!invited) await storage.setSetting(`nextguest:${email}`, ""); // used: the next episode needs its own guest
         console.log(`Package: ${rec.id} for ${email} started with guest ${next.name}`);
         return;
       } catch (err) { console.error("Package guest card failed:", (err as Error).message); }

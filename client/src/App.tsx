@@ -16,6 +16,7 @@ import RadioEmbed from "@/pages/RadioEmbed";
 import RadioROS from "@/pages/RadioROS";
 import Booth from "@/pages/Booth";
 import Program from "@/pages/Program";
+import GuestInvite from "@/pages/GuestInvite";
 import Events from "@/pages/Events";
 import Admin from "@/pages/Admin";
 import MyStudio from "@/pages/MyStudio";
@@ -158,6 +159,7 @@ function AppRouter() {
       <Route path="/rethink">{() => <Rethink />}</Route>
       <Route path="/text-alerts">{() => <TextAlerts />}</Route>
       <Route path="/survey/:token">{(p) => <Survey token={p.token} />}</Route>
+      <Route path="/guest-invite/:token">{(p) => <GuestInvite token={p.token} />}</Route>
       <Route path="/podcast-one-press-release">{() => <PressRelease />}</Route>
       <Route path="/magazine">{() => <Magazine />}</Route>
       <Route path="/magazine/:slug">{(p) => <Magazine slug={p.slug} />}</Route>

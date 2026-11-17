@@ -1410,3 +1410,44 @@ export async function sendOpportunityEmail(input: { to: string; name: string; br
     text: `Hi ${first},\n\n${input.brand} sent you a request on MilitaryVoices.ai: ${input.title} (${input.kind.toLowerCase()}).\n\nRead it, and say you're interested (with your rate) or pass. Your email and number stay private until you both want to connect.\n\n${input.link}\n`,
   }).then((id) => Boolean(id));
 }
+
+/**
+ * A podcaster invites a guest to their interview (17 Nov 2026): from us on the host's behalf, "Frank Zaccari via MilitaryVoices.ai",
+ * with the host's own address as the reply-to, so the guest writes back to the host. The link is the guest's private questionnaire.
+ */
+export async function sendInterviewInvite(input: { to: string; guestName: string; hostName: string; hostEmail: string; show: string; whenText: string; zoomLink: string; note: string; link: string }): Promise<boolean> {
+  const first = input.guestName.trim().split(/\s+/)[0] || "there";
+  const who = input.hostName || input.show || "Your host";
+  const details = [
+    input.whenText ? `<p style="margin:0 0 6px;"><b>When:</b> ${escapeHtml(input.whenText)}</p>` : "",
+    input.zoomLink ? `<p style="margin:0 0 6px;"><b>Zoom:</b> <a href="${escapeHtml(input.zoomLink)}">${escapeHtml(input.zoomLink)}</a></p>` : "",
+    input.note ? `<p style="margin:10px 0 0;white-space:pre-line;">${escapeHtml(input.note)}</p>` : "",
+  ].join("");
+  return sendRawEmail({
+    kind: "interview-invite", to: input.to, from: `${who} via MilitaryVoices.ai <hello@militaryvoices.ai>`, replyTo: input.hostEmail,
+    subject: `${who} invites you to be a guest on ${input.show || "their podcast"}`,
+    html: emailShell({
+      banner: EMAIL_BANNERS.conversation, bannerAlt: "MilitaryVoices.ai",
+      eyebrow: "You're invited", heading: `Hi ${escapeHtml(first)}, you're invited to ${escapeHtml(input.show || "the podcast")}`,
+      body: `<p style="margin:0 0 10px;">${escapeHtml(who)} would like you as a guest.</p>${details}<p style="margin:12px 0 0;">To get ready, please answer a few quick questions and add the photo you'd like shown with your name. It takes about five minutes.</p>`,
+      cta: { href: input.link, label: "Answer a few questions" },
+      footerNote: `Sent for ${escapeHtml(who)} through MilitaryVoices.ai. Reply to this email to reach them.`,
+    }),
+    text: `Hi ${first},\n\n${who} would like you as a guest on ${input.show || "their podcast"}.${input.whenText ? `\nWhen: ${input.whenText}` : ""}${input.zoomLink ? `\nZoom: ${input.zoomLink}` : ""}${input.note ? `\n\n${input.note}` : ""}\n\nTo get ready, please answer a few quick questions and add the photo you'd like shown with your name (about five minutes):\n${input.link}\n\nReply to this email to reach ${who}.\n\nSent for ${who} through MilitaryVoices.ai`,
+  }).then((id) => Boolean(id));
+}
+
+/** The host hears the moment their guest has answered. */
+export async function sendInterviewAnswered(input: { to: string; guestName: string; show: string; summary: string; link: string }): Promise<boolean> {
+  return sendRawEmail({
+    kind: "interview-answered", to: input.to,
+    subject: `${input.guestName} answered your interview questions`,
+    html: emailShell({
+      banner: EMAIL_BANNERS.conversation, bannerAlt: "MilitaryVoices.ai",
+      eyebrow: "Guest ready", heading: `${escapeHtml(input.guestName)} is ready`,
+      body: `<p style="margin:0 0 10px;">Their answers and photo are in, ready for your interview and for the guest card on your episode.</p><div style="background:#f5f7fb;border-radius:10px;padding:14px 16px;white-space:pre-line;font-size:14px;">${escapeHtml(input.summary)}</div>`,
+      cta: { href: input.link, label: "See their answers" },
+    }),
+    text: `${input.guestName} answered your interview questions for ${input.show}.\n\n${input.summary}\n\nSee them: ${input.link}`,
+  }).then((id) => Boolean(id));
+}
