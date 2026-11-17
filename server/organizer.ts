@@ -4,7 +4,7 @@
 // studio for it as its studio host. Everything here is scoped to events whose
 // ownerEmail is the signed-in person — nothing else on the platform is theirs.
 import type { Express, RequestHandler, Request } from "express";
-import { and, desc, eq, inArray, ne, or } from "drizzle-orm";
+import { and, desc, eq, inArray, or } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { slackNote } from "./slack.js";
 import { events, signups } from "../shared/schema.js";
@@ -51,9 +51,7 @@ export function registerOrganizer(app: Express, requireHostSession: RequestHandl
   // Theirs: made by them, or run by an organization they're on the team of.
   const whose = async (req: Request) => {
     const orgIds = await orgIdsOf(meOf(req));
-    // Not the personal studio every member has: that is a studio, not an event they run.
-    const notStudio = ne(events.occasion, "Personal studio");
-    return orgIds.length ? and(notStudio, or(eq(events.ownerEmail, meOf(req)), inArray(events.orgId, orgIds))) : and(notStudio, eq(events.ownerEmail, meOf(req)));
+    return orgIds.length ? or(eq(events.ownerEmail, meOf(req)), inArray(events.orgId, orgIds)) : eq(events.ownerEmail, meOf(req));
   };
   const mine = async (req: Request, id: number) => {
     const [e] = await db.select().from(events).where(and(eq(events.id, id), await whose(req))).limit(1);
@@ -79,7 +77,7 @@ export function registerOrganizer(app: Express, requireHostSession: RequestHandl
     if (!d.name) return res.status(400).json({ message: "Give your event a name." });
     if (!d.startAtUtc) return res.status(400).json({ message: "Pick when it starts." });
     // A planner can have a few drafts going, not hundreds.
-    const count = (await db.select({ id: events.id }).from(events).where(and(eq(events.ownerEmail, me), ne(events.occasion, "Personal studio")))).length;
+    const count = (await db.select({ id: events.id }).from(events).where(eq(events.ownerEmail, me))).length;
     if (count >= 10) return res.status(429).json({ message: "That's ten events. Finish or remove one first, or write to hello@militaryvoices.ai." });
     // It belongs to their organizer account (made now, the first time).
     const org = await organizerOrgFor(me, typeof req.body?.orgName === "string" ? req.body.orgName.slice(0, 120) : undefined);
@@ -137,7 +135,7 @@ export function registerOrganizer(app: Express, requireHostSession: RequestHandl
     res.setHeader("Cache-Control", "no-store");
     if ((req as { studioHost?: unknown }).studioHost) return res.status(403).json({ message: "Admins only." });
     await schemaIsReady();
-    const rows = (await db.select().from(events).orderBy(desc(events.id))).filter((e) => e.ownerEmail && e.occasion !== "Personal studio");
+    const rows = (await db.select().from(events).orderBy(desc(events.id))).filter((e) => e.ownerEmail);
     res.json(rows.map((e) => ({ ...view(e, 0), ownerEmail: e.ownerEmail })));
   });
   app.post("/api/admin/planner-events/:id/approve", requireAdmin, async (req, res) => {

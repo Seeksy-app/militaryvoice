@@ -265,7 +265,7 @@ export function registerOrgs(app: Express, requireHostSession: RequestHandler, r
   app.post("/api/admin/orgs/backfill", requireAdmin, platformOnly, async (_req, res) => {
     await schemaIsReady();
     let made = 0, eventsMoved = 0, listsMoved = 0;
-    for (const e of await db.select().from(events).where(and(ne(events.ownerEmail, ""), eq(events.orgId, 0), ne(events.occasion, "Personal studio")))) {
+    for (const e of await db.select().from(events).where(and(ne(events.ownerEmail, ""), eq(events.orgId, 0)))) {
       const before = (await orgsOf(e.ownerEmail)).length;
       const org = await organizerOrgFor(norm(e.ownerEmail));
       if ((await orgsOf(e.ownerEmail)).length > before) made++;
