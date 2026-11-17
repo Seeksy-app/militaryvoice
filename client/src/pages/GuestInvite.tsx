@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
-type Invite = { hostName: string; hostPhoto: string; show: string; guestName: string; whenText: string; zoomLink: string; note: string; answered: boolean };
+type Invite = { questions?: string[]; hostName: string; hostPhoto: string; show: string; guestName: string; whenText: string; zoomLink: string; note: string; answered: boolean };
 
 /**
  * The guest's side of an interview invitation: a few questions before the interview and the photo they want shown with their name.
@@ -17,6 +17,7 @@ export default function GuestInvite({ token }: { token: string }) {
   const q = useQuery<Invite>({ queryKey: ["/api/public/guest-invite", token], retry: false, queryFn: async () => { const r = await fetch(`/api/public/guest-invite/${token}`); if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || "That link isn't working."); return r.json(); } });
   const [f, setF] = useState({ name: "", title: "", bio: "", topics: "", links: "", avoid: "" });
   const [photo, setPhoto] = useState<File | null>(null);
+  const [extra, setExtra] = useState<Record<string, string>>({});
   const [consent, setConsent] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
@@ -35,6 +36,7 @@ export default function GuestInvite({ token }: { token: string }) {
       const body = new FormData();
       for (const [k, v] of Object.entries(f)) body.append(k, v);
       body.append("consent", consent ? "yes" : "no");
+      for (const [k, v] of Object.entries(extra)) body.append(k, v);
       if (photo) body.append("photo", photo);
       const r = await fetch(`/api/public/guest-invite/${token}`, { method: "POST", body });
       const j = await r.json().catch(() => ({}));
@@ -79,6 +81,9 @@ export default function GuestInvite({ token }: { token: string }) {
             <div className="space-y-1.5"><Label htmlFor="gi-topics">What would you like to talk about?</Label><Textarea id="gi-topics" value={f.topics} onChange={set("topics")} rows={3} maxLength={1200} /></div>
             <div className="space-y-1.5"><Label htmlFor="gi-links">Where can people find you? (website, book, social)</Label><Textarea id="gi-links" value={f.links} onChange={set("links")} rows={2} maxLength={600} /></div>
             <div className="space-y-1.5"><Label htmlFor="gi-avoid">Anything you'd rather not discuss?</Label><Textarea id="gi-avoid" value={f.avoid} onChange={set("avoid")} rows={2} maxLength={600} /></div>
+            {(d.questions ?? []).map((qq, i) => (
+              <div key={i} className="space-y-1.5"><Label htmlFor={`gi-q${i}`}>{qq}</Label><Textarea id={`gi-q${i}`} value={extra[`q${i}`] ?? ""} onChange={(e) => setExtra((x) => ({ ...x, [`q${i}`]: e.target.value }))} rows={3} maxLength={2000} /></div>
+            ))}
             <div className="space-y-1.5">
               <Label htmlFor="gi-photo">The photo you'd like shown with your name</Label>
               <input id="gi-photo" type="file" accept="image/*" className="block w-full text-sm" onChange={(e) => setPhoto(e.target.files?.[0] ?? null)} />

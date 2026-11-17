@@ -8,7 +8,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
-type Invite = { id: number; guestName: string; guestEmail: string; whenText: string; zoomLink: string; note: string; status: "invited" | "answered"; answers: Record<string, string>; hasPhoto: boolean; invitedAt: string; answeredAt: string; usedRec: number; link: string };
+type Invite = { id: number; guestName: string; guestEmail: string; whenText: string; zoomLink: string; note: string; status: "invited" | "answered"; answers: Record<string, string> & { custom?: { q: string; a: string }[] }; hasPhoto: boolean; invitedAt: string; answeredAt: string; usedRec: number; link: string };
 const say = (e: unknown) => ((e as Error).message ?? "").replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, "") || "Try again in a moment.";
 
 /** The guest's name for the card is theirs to type: an invitation from the host asks them, with the photo they want shown. */
@@ -18,14 +18,15 @@ export function GuestInvites() {
   const list = useQuery<Invite[]>({ queryKey: ["/api/host/guest-invites"], queryFn: async () => (await apiRequest("GET", "/api/host/guest-invites")).json() });
   const [f, setF] = useState({ guestName: "", guestEmail: "", when: "", zoomLink: "", note: "" });
   const [open, setOpen] = useState<number | null>(null);
+  const [questions, setQuestions] = useState<string[]>([]);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF((x) => ({ ...x, [k]: e.target.value }));
   const send = useMutation({
     mutationFn: async () => {
       const whenIso = f.when ? new Date(f.when).toISOString() : "";
       const whenText = f.when ? new Date(f.when).toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }) : "";
-      return (await apiRequest("POST", "/api/host/guest-invites", { guestName: f.guestName, guestEmail: f.guestEmail, whenText, whenIso, zoomLink: f.zoomLink, note: f.note })).json();
+      return (await apiRequest("POST", "/api/host/guest-invites", { guestName: f.guestName, guestEmail: f.guestEmail, whenText, whenIso, zoomLink: f.zoomLink, note: f.note, questions: questions.map((q) => q.trim()).filter(Boolean) })).json();
     },
-    onSuccess: () => { setF({ guestName: "", guestEmail: "", when: "", zoomLink: "", note: "" }); void qc.invalidateQueries({ queryKey: ["/api/host/guest-invites"] }); toast({ title: "Invitation sent", description: "They'll get an email from you through MilitaryVoices.ai, and you'll hear when they answer." }); },
+    onSuccess: () => { setF({ guestName: "", guestEmail: "", when: "", zoomLink: "", note: "" }); setQuestions([]); void qc.invalidateQueries({ queryKey: ["/api/host/guest-invites"] }); toast({ title: "Invitation sent", description: "They'll get an email from you through MilitaryVoices.ai, and you'll hear when they answer." }); },
     onError: (e) => toast({ title: "Couldn't send that", description: say(e), variant: "destructive" }),
   });
   const del = useMutation({ mutationFn: async (id: number) => apiRequest("DELETE", `/api/host/guest-invites/${id}`), onSuccess: () => void qc.invalidateQueries({ queryKey: ["/api/host/guest-invites"] }) });
@@ -42,6 +43,17 @@ export function GuestInvites() {
           <div className="space-y-1.5"><Label htmlFor="gi-f-when">When is the interview?</Label><Input id="gi-f-when" type="datetime-local" value={f.when} onChange={set("when")} /></div>
           <div className="space-y-1.5"><Label htmlFor="gi-f-zoom">Zoom link</Label><Input id="gi-f-zoom" value={f.zoomLink} onChange={set("zoomLink")} placeholder="Paste the link from Zoom" /><p className="text-xs text-muted-foreground">Make the meeting in Zoom and paste its link here.</p></div>
           <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="gi-f-note">A note to your guest (optional)</Label><Textarea id="gi-f-note" value={f.note} onChange={set("note")} rows={3} maxLength={1200} placeholder="What the interview is about, how long it runs, what to have ready." /></div>
+          <div className="space-y-2 sm:col-span-2" data-testid="guest-invite-questions">
+            <Label>Your own questions for the guest (optional)</Label>
+            <p className="text-xs text-muted-foreground">We already ask their name, bio, topics, links and photo. Add anything else you want to know before the interview.</p>
+            {questions.map((q, i) => (
+              <div key={i} className="flex items-center gap-2">
+                <Input value={q} onChange={(e) => setQuestions((qs) => qs.map((x, j) => (j === i ? e.target.value : x)))} maxLength={300} placeholder="For example: What's the story you've never told on a podcast?" aria-label={`Question ${i + 1}`} />
+                <Button type="button" variant="ghost" size="sm" onClick={() => setQuestions((qs) => qs.filter((_, j) => j !== i))} aria-label={`Remove question ${i + 1}`}><Trash2 className="h-4 w-4" /></Button>
+              </div>
+            ))}
+            {questions.length < 10 && <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={() => setQuestions((qs) => [...qs, ""])} data-testid="guest-invite-add-question">+ Add a question</Button>}
+          </div>
           <div className="sm:col-span-2"><Button type="submit" disabled={send.isPending || !f.guestName.trim() || !f.guestEmail.trim()} className="rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="guest-invite-submit">{send.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}Send the invitation</Button></div>
         </form>
       </div>
@@ -69,6 +81,9 @@ export function GuestInvites() {
                   <dl className="mt-3 space-y-2 border-t border-border pt-3 text-sm">
                     {([["title", "What they do"], ["bio", "Bio"], ["topics", "Topics"], ["links", "Where to find them"], ["avoid", "Rather not discuss"]] as const).filter(([k]) => g.answers[k]).map(([k, label]) => (
                       <div key={k}><dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{label}</dt><dd className="whitespace-pre-line">{g.answers[k]}</dd></div>
+                    ))}
+                    {(g.answers.custom ?? []).filter((c) => c.a).map((c, i) => (
+                      <div key={`c${i}`}><dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{c.q}</dt><dd className="whitespace-pre-line">{c.a}</dd></div>
                     ))}
                   </dl>
                 )}

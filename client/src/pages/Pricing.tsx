@@ -43,6 +43,8 @@ const PLAN_FEATURES: Record<string, Feature[]> = {
     { t: "6 clips an episode instead of 4", tip: "Two more moments from every episode, in every shape." },
     { t: "Room for a weekly show", tip: "A weekly 60-minute show uses 48 credits a month on Pro, so you have room for more." },
     { t: "Extra credits 50¢ each, up to a limit you set", tip: "Run out, and Pōstify keeps going. Extras go on your next bill, never past the limit you set." },
+    { t: "Book a guest", tip: "Search people who have been guests on podcasts, the most-booked first. Invite them onto your show, find their email, or save them for later." },
+    { t: "Be a guest", tip: "Find shows that take guests in your field, and have SI help write your pitch." },
     { t: "Live Studio hours (soon)", tip: "When the MilitaryVoices Studio opens to every show, Pro includes live studio hours for yours." },
   ],
 };
