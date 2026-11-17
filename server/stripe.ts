@@ -133,20 +133,27 @@ function ensureBilling(): Promise<Record<string, string>> {
       value_settings: { event_payload_key: "value" },
     }));
     const keys = Object.keys(PLANS).flatMap((k) => [`postify_${k}_monthly`, `postify_${k}_extra`, `postify_${k}_yearly`, `postify_${k}_quarterly`, `postify_${k}_extra_q`]);
-    const found = await stripe("GET", `/prices?limit=20&${keys.map((k) => `lookup_keys[]=${k}`).join("&")}`);
+    const found = await stripe("GET", `/prices?limit=20&expand[]=data.product&${keys.map((k) => `lookup_keys[]=${k}`).join("&")}`);
+    // 17 Nov 2026: the plans read "MilitaryVoices Pro" on the payment page, not "Pōstify Pro". Rename the products made before then, once.
+    for (const pr of found.data ?? []) {
+      const prod = pr.product;
+      if (prod && typeof prod === "object" && /^Pōstify /.test(String(prod.name))) {
+        await stripe("POST", `/products/${prod.id}`, flat({ name: String(prod.name).replace(/^Pōstify /, "MilitaryVoices ") })).catch((e: any) => console.error("Product rename failed:", e?.message));
+      }
+    }
     const ids: Record<string, string> = Object.fromEntries((found.data ?? []).map((p: any) => [p.lookup_key, p.id]));
     for (const plan of Object.values(PLANS)) {
       if (!ids[`postify_${plan.key}_monthly`]) {
         const p = await stripe("POST", "/prices", flat({
           lookup_key: `postify_${plan.key}_monthly`, currency: "usd", unit_amount: plan.cents,
-          recurring: { interval: "month" }, product_data: { name: `Pōstify ${plan.name} · ${plan.credits} credits a month` },
+          recurring: { interval: "month" }, product_data: { name: `MilitaryVoices ${plan.name} · ${plan.credits} credits a month` },
         }));
         ids[p.lookup_key] = p.id;
       }
       if (!ids[`postify_${plan.key}_yearly`]) {
         const p = await stripe("POST", "/prices", flat({
           lookup_key: `postify_${plan.key}_yearly`, currency: "usd", unit_amount: plan.yearCents,
-          recurring: { interval: "year" }, product_data: { name: `Pōstify ${plan.name} · yearly · ${plan.credits * 12} credits` },
+          recurring: { interval: "year" }, product_data: { name: `MilitaryVoices ${plan.name} · yearly · ${plan.credits * 12} credits` },
         }));
         ids[p.lookup_key] = p.id;
       }
@@ -155,21 +162,21 @@ function ensureBilling(): Promise<Record<string, string>> {
       if ("quarterCents" in plan && plan.quarterCents && !ids[`postify_${plan.key}_quarterly`]) {
         const p = await stripe("POST", "/prices", flat({
           lookup_key: `postify_${plan.key}_quarterly`, currency: "usd", unit_amount: plan.quarterCents,
-          recurring: { interval: "month", interval_count: 3 }, product_data: { name: `Pōstify ${plan.name} · every 3 months · ${plan.credits * 3} credits` },
+          recurring: { interval: "month", interval_count: 3 }, product_data: { name: `MilitaryVoices ${plan.name} · every 3 months · ${plan.credits * 3} credits` },
         }));
         ids[p.lookup_key] = p.id;
       }
       if ("quarterCents" in plan && plan.quarterCents && !ids[`postify_${plan.key}_extra_q`]) {
         const p = await stripe("POST", "/prices", flat({
           lookup_key: `postify_${plan.key}_extra_q`, currency: "usd", unit_amount: plan.overageCents,
-          recurring: { interval: "month", interval_count: 3, usage_type: "metered", meter: meter.id }, product_data: { name: `Pōstify ${plan.name} · extra credits (quarter)` },
+          recurring: { interval: "month", interval_count: 3, usage_type: "metered", meter: meter.id }, product_data: { name: `MilitaryVoices ${plan.name} · extra credits (quarter)` },
         }));
         ids[p.lookup_key] = p.id;
       }
       if (!ids[`postify_${plan.key}_extra`]) {
         const p = await stripe("POST", "/prices", flat({
           lookup_key: `postify_${plan.key}_extra`, currency: "usd", unit_amount: plan.overageCents,
-          recurring: { interval: "month", usage_type: "metered", meter: meter.id }, product_data: { name: `Pōstify ${plan.name} · extra credits` },
+          recurring: { interval: "month", usage_type: "metered", meter: meter.id }, product_data: { name: `MilitaryVoices ${plan.name} · extra credits` },
         }));
         ids[p.lookup_key] = p.id;
       }
