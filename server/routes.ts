@@ -4,7 +4,8 @@ import type { Express, Request, Response, NextFunction, RequestHandler } from "e
 import crypto from "node:crypto";
 import multer from "multer";
 import sharp from "sharp";
-import { storage } from "./storage.js";
+import { storage, db } from "./storage.js";
+import { sql } from "drizzle-orm";
 import { requireHuman, turnstileSiteKey } from "./turnstile.js";
 import { answerHelp, isHelpAgentConfigured, type HelpTurn } from "./help.js";
 import { KINDS, effectiveSchedule, cardInput, caption as campaignCaption, isKind, type CampaignContext } from "./campaign.js";
@@ -633,6 +634,35 @@ async function studioHostEmail(req: Request): Promise<{ email: string; events: n
  */
 const STUDIO_HOST_PATHS = /^\/api\/admin\/(studio|studios|scenes|run-of-show|media|destinations|ingress|lower-thirds|standby-build)(\/|$)/;
 const STUDIO_HOST_READS = /^\/api\/admin\/(signups|recordings|cohost-slots)(\/|$)/;
+/**
+ * A studio host reaches the studios of their own events and nothing of anyone else's. The routes that take a row by its number
+ * (a scene, a destination with its stream key, a lower third…) are checked here against the event the row belongs to; for a host
+ * whose events are all personal studios (every member's own), a list that would default to the Marathon (the signups, the
+ * recordings) must name one of their own.
+ */
+const SCOPED_TABLES: Record<string, string> = { scenes: "scenes", media: "show_assets", destinations: "destinations", "lower-thirds": "lower_thirds", "run-of-show": "run_of_show", ingress: "ingresses", "studio/participants": "studio_participants", "studio/presentations": "presentations", studios: "studios" };
+async function studioHostScopeOk(req: Request, events: number[]): Promise<boolean> {
+  const byId = /^\/api\/admin\/(scenes|media|destinations|lower-thirds|run-of-show|ingress|studio\/participants|studio\/presentations|studios)\/(\d+)(\/|$)/.exec(req.path);
+  if (byId) {
+    const table = SCOPED_TABLES[byId[1]];
+    const r = (await db.execute(sql.raw(`select to_jsonb(t) as j from ${table} t where id = ${Number(byId[2])}`))) as unknown as { rows?: { j: Record<string, unknown> }[] } & { j: Record<string, unknown> }[];
+    const row = ((r.rows ?? r) as { j: Record<string, unknown> }[])[0]?.j;
+    if (!row) return true; // nothing there: the route answers "not found" itself
+    let eventId = Number(row.event_id ?? 0);
+    if (!eventId && row.studio_id) eventId = (await storage.getStudioById(Number(row.studio_id)))?.eventId ?? 0;
+    return events.includes(eventId);
+  }
+  const personal = (await Promise.all(events.map(async (id) => (await storage.getEventById(id))?.occasion === "Personal studio"))).every(Boolean);
+  if (!personal) return true;
+  // Anything that names an event or a studio must name their own.
+  const named = [req.query.eventId, req.body?.eventId].map(Number).filter((n) => Number.isFinite(n) && n > 0);
+  if (named.some((id) => !events.includes(id))) return false;
+  const studioNamed = [req.query.studioId, req.body?.studioId].map(Number).filter((n) => Number.isFinite(n) && n > 0);
+  for (const id of studioNamed) { const st = await storage.getStudioById(id); if (!st || !events.includes(st.eventId)) return false; }
+  // A list that would otherwise cover everyone's.
+  if (req.method === "GET" && /^\/api\/admin\/(signups|recordings|cohost-slots)(\/|$)/.test(req.path) && !named.length) return false;
+  return true;
+}
 function studioHostMay(req: Request): boolean {
   const path = req.path;
   if (req.method === "DELETE" && /^\/api\/admin\/studios\//.test(path)) return false;
@@ -672,6 +702,10 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
   // money or settings.
   const studioHost = await studioHostEmail(req);
   if (studioHost && studioHostMay(req)) {
+    if (!(await studioHostScopeOk(req, studioHost.events))) {
+      res.status(403).json({ message: "That isn't part of your studio." });
+      return;
+    }
     (req as any).adminEmail = studioHost.email;
     (req as any).studioHost = true;
     (req as any).studioHostEvents = studioHost.events;
