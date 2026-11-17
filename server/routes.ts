@@ -6987,6 +6987,8 @@ export function registerRoutes(app: Express): void {
         // And to their editor, if they asked for that.
         const editors = sendToEditors(moved);
         try { waitUntil(editors); } catch { /* not on Vercel */ }
+        // A post-production package account: clips and the guest card start by themselves.
+        if (src.provider === "zoom") { const pkg = startPackage(moved).catch((err) => console.error("Package start failed:", (err as Error).message)); try { waitUntil(pkg); } catch { /* not on Vercel */ } }
       }
     }
   });
@@ -7738,6 +7740,88 @@ export function registerRoutes(app: Express): void {
   });
 
   // ---- Guest card: a show's own card (host and this episode's guest) for the intro and outro -------------------------------
+  // ---- Post-production package (17 Nov 2026) -----------------------------------------------------------------------------
+  //      For an account with the package on (setting package:<email>): when a recording comes in by itself from Zoom, the clips
+  //      start at once (covered by the package, no credits taken) and the edited episode is made with the guest card as the
+  //      intro and outro and the show's music. The guest comes from the member's "next guest" if they set one before recording;
+  //      if not, we ask them for it by email and the edit starts the moment they add it. Nothing is posted anywhere.
+  const packageOn = async (email: string) => { try { return !!(JSON.parse((await storage.getSetting(`package:${email.trim().toLowerCase()}`)) ?? "{}") as { on?: boolean }).on; } catch { return false; } };
+
+  /** The guest card for this recording, made and queued as the edit's intro and outro. */
+  async function attachGuest(rec: { id: number; email: string; clean: string; url: string }, guestName: string, guestPhoto: Buffer): Promise<void> {
+    const email = rec.email.trim().toLowerCase();
+    const profile = await storage.getProfileByEmail(email);
+    if (!profile?.photoUrl) throw new Error("Add your own photo to your profile first: it goes on the left of the card.");
+    const hostPhoto = Buffer.from(await (await fetch(profile.photoUrl)).arrayBuffer());
+    const gc = await guestCardSettings(email);
+    const png = await renderGuestCard({ hostName: profile.hostName || "Host", hostPhoto, guestName, guestPhoto, footerLeft: gc.footerLeft, footerRight: gc.footerRight });
+    const key = `show-assets/gc-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.png`;
+    await putRecordingObject(key, png, "image/png");
+    const e: EpisodeEdit = {
+      source: "original", trimStart: 0, trimEnd: 0,
+      introKey: key, introName: `Guest card: ${guestName}`, outroKey: key, outroName: `Guest card: ${guestName}`,
+      cardMusicKey: gc.musicKey || undefined, cardSec: gc.sec, status: "queued", at: new Date().toISOString(),
+    };
+    await storage.setEpisodeEdit(rec.id, JSON.stringify(e));
+    await storage.setSetting(`pkgwait:${rec.id}`, "");
+  }
+
+  /** A new recording on a package account: clips now, the guest card as soon as there is a guest. */
+  async function startPackage(rec: NonNullable<Awaited<ReturnType<typeof storage.getRecording>>>): Promise<void> {
+    const email = rec.email.trim().toLowerCase();
+    if (!(await packageOn(email)) || rec.status !== "Ready") return;
+    if (rec.clipStatus === "none" || !rec.clipStatus) {
+      await storage.markPostifyBeta(rec.id); // covered by the package: no credits taken
+      await storage.setClipOptions(rec.id, JSON.stringify(allShapes(parseClipOptions(rec.clipOptions))));
+      await storage.setClipStatus(rec.id, "queued", "");
+    }
+    let next: { name?: string; photoKey?: string } = {};
+    try { next = JSON.parse((await storage.getSetting(`nextguest:${email}`)) ?? "{}"); } catch { next = {}; }
+    if (next.name && next.photoKey) {
+      try {
+        const photo = Buffer.from(await (await fetch(await signedRecordingUrl(next.photoKey, 600))).arrayBuffer());
+        await attachGuest(rec, next.name, photo);
+        await storage.setSetting(`nextguest:${email}`, ""); // used: the next episode needs its own guest
+        console.log(`Package: ${rec.id} for ${email} started with guest ${next.name}`);
+        return;
+      } catch (err) { console.error("Package guest card failed:", (err as Error).message); }
+    }
+    await storage.setSetting(`pkgwait:${rec.id}`, new Date().toISOString());
+    const link = `${PUBLIC_ORIGIN}/host/dashboard/postify?rec=${rec.id}`;
+    const subject = `Your episode is in. Who was your guest?`;
+    const text = `Hi,\n\nYour recording "${rec.title || "your episode"}" is in your Library, and we've started making your clips.\n\nTo finish the edited episode, we need your guest's name and photo for the card at the start and end. Open the episode, choose Edit episode, then Guest card, and add them. It only takes a minute.\n\n${link}\n\nThe MilitaryVoices.ai team\nhello@militaryvoices.ai`;
+    const html = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#1a1a1a;font-size:16px;line-height:1.5"><p>Hi,</p><p>Your recording <b>${(rec.title || "your episode").replace(/</g, "&lt;")}</b> is in your Library, and we've started making your clips.</p><p>To finish the edited episode, we need <b>your guest's name and photo</b> for the card at the start and end. Open the episode, choose <b>Edit episode</b>, then <b>Guest card</b>, and add them. It only takes a minute.</p><p style="margin:16px 0"><a href="${link}" style="display:inline-block;background:#053877;color:#fff;text-decoration:none;font-weight:bold;padding:11px 20px;border-radius:8px">Open my episode</a></p><p>The MilitaryVoices.ai team<br>hello@militaryvoices.ai</p></div>`;
+    void sendOneOffEmail({ kind: "package-guest", to: email, subject, html, text }).catch((err) => console.error("Package guest email failed:", (err as Error).message));
+  }
+
+  /** The guest for the next episode, entered ahead of the recording (name and photo). */
+  app.post("/api/host/next-guest", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    const guestName = String(req.body?.guestName ?? "").trim().slice(0, 60);
+    const m = /^data:image\/(?:jpeg|png|webp);base64,(.+)$/i.exec(String(req.body?.photo ?? ""));
+    if (!guestName || !m) return res.status(400).json({ message: "Add the guest's name and photo." });
+    const body = Buffer.from(m[1], "base64");
+    if (body.length > 6 * 1024 * 1024) return res.status(413).json({ message: "That photo is too big. Try a smaller one." });
+    const photoKey = `show-assets/ng-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.jpg`;
+    await putRecordingObject(photoKey, body, "image/jpeg");
+    await storage.setSetting(`nextguest:${email}`, JSON.stringify({ name: guestName, photoKey }));
+    // An episode already waiting for its guest starts now.
+    const waiting = (await storage.listRecordingsByEmail(email)).find((r) => r.status === "Ready" && !r.episodeEdit && r.egressId.startsWith("ZOOM_"));
+    if (waiting && (await storage.getSetting(`pkgwait:${waiting.id}`))) {
+      try { await attachGuest(waiting, guestName, body); await storage.setSetting(`nextguest:${email}`, ""); return res.json({ ok: true, started: waiting.title }); } catch (err) { return res.status(409).json({ message: (err as Error).message }); }
+    }
+    res.json({ ok: true });
+  });
+
+  /** Admin: switch a member's package on or off (the template: settings guestcard:<email>). */
+  app.post("/api/admin/package", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost || (req as any).eventAdmin) return res.status(403).json({ message: "Admins only." });
+    const email = String(req.body?.email ?? "").trim().toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) return res.status(400).json({ message: "Whose package?" });
+    await storage.setSetting(`package:${email}`, JSON.stringify({ on: req.body?.on !== false, since: new Date().toISOString() }));
+    res.json({ ok: true, email, on: req.body?.on !== false });
+  });
+
   /** A show's card settings: the foot of the card and the music under it. Defaults come from the show; a person can have their own (setting guestcard:<email>). */
   async function guestCardSettings(email: string): Promise<{ footerLeft: string; footerRight: { strong: string; soft: string }; musicKey: string; sec: number }> {
     let saved: Partial<{ footerLeft: string; footerRight: { strong: string; soft: string }; musicKey: string; sec: number }> = {};

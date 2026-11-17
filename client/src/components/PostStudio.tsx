@@ -741,7 +741,8 @@ function GuestCardButton({ onUse }: { onUse: (b: Bookend) => void }) {
           </div>
           <DialogFooter className="gap-2 sm:gap-2">
             <Button type="button" variant={made ? "outline" : "default"} disabled={!name.trim() || !photo || busy} onClick={() => void make()} data-testid="guest-card-make">{busy ? "Making it…" : made ? "Make it again" : "Show me the card"}</Button>
-            {made && <Button type="button" onClick={() => { onUse({ key: made.key, name: `Guest card: ${name.trim()}`, dur: made.sec }); setOpen(false); toast({ title: "Guest card added", description: "It's the intro and the outro. Save the edited episode when you're ready." }); }} data-testid="guest-card-use">Use it as the intro and outro</Button>}
+            <Button type="button" variant="outline" disabled={!name.trim() || !photo || busy} title="For a show that records on Zoom: we use them for the next episode that comes in" onClick={async () => { setBusy(true); try { await apiRequest("POST", "/api/host/next-guest", { guestName: name.trim(), photo }); toast({ title: "Saved for your next episode", description: "When your next recording comes in, we'll make their card and start the edit." }); setOpen(false); } catch (e) { toast({ title: "Couldn't save that", description: ((e as Error).message ?? "").replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, ""), variant: "destructive" }); } finally { setBusy(false); } }} data-testid="guest-card-next">For my next episode</Button>
+                        {made && <Button type="button" onClick={() => { onUse({ key: made.key, name: `Guest card: ${name.trim()}`, dur: made.sec }); setOpen(false); toast({ title: "Guest card added", description: "It's the intro and the outro. Save the edited episode when you're ready." }); }} data-testid="guest-card-use">Use it as the intro and outro</Button>}
           </DialogFooter>
         </DialogContent>
       </Dialog>
