@@ -1746,6 +1746,8 @@ function DiscoveryUpgrade({ which, onUpgrade }: { which: "discovery" | "verified
     <section className="relative mt-6" data-testid="discovery-upgrade">
       <div aria-hidden className="pointer-events-none max-h-[78vh] select-none overflow-hidden opacity-45 grayscale-[35%] [mask-image:linear-gradient(to_bottom,black_55%,transparent)]">
         <Discover embedded part={which === "verified" ? "verified" : "search"} />
+        {/* A real set of results to look at: our own verified creators, their pictures and numbers, which cost nothing to show. */}
+        {which === "discovery" && <div className="mt-6"><Discover embedded part="verified" /></div>}
       </div>
       <div className="absolute inset-x-0 top-24 flex justify-center px-4">
         <div className="max-w-lg rounded-3xl border border-border bg-card/95 p-8 text-center shadow-2xl backdrop-blur">
