@@ -121,7 +121,8 @@ async function again<T>(go: () => Promise<T>): Promise<T> {
 export function BioBuilder() {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const q = useQuery<Resp>({ queryKey: KEY, queryFn: async () => (await apiRequest("GET", "/api/host/bio")).json() });
+  // Always read it fresh on opening: an old copy from the last visit must never stand in for what's saved.
+  const q = useQuery<Resp>({ queryKey: KEY, queryFn: async () => (await apiRequest("GET", "/api/host/bio")).json(), refetchOnMount: "always", staleTime: 0 });
   const social = useQuery<{ accounts?: { platform: string; username?: string; url?: string }[] }>({ queryKey: ["/api/host/social"], queryFn: async () => (await apiRequest("GET", "/api/host/social")).json(), staleTime: 5 * 60_000 });
   const [tab, setTab] = useState<Tab>(() => {
     try {
@@ -153,10 +154,19 @@ export function BioBuilder() {
   const [famSrv, setFamSrv] = useState<BioFamilyPublic | null>(null);
   const [url, setUrl] = useState("");
   const [saving, setSaving] = useState(false);
+  // Changes made and not yet sent, or a send that failed: the label says so instead of "Saved".
+  const [unsaved, setUnsaved] = useState(false);
+  const [failed, setFailed] = useState(false);
   const pending = useRef<Partial<Page>>({});
   const timer = useRef<number>();
 
-  useEffect(() => { if (q.data && !draft) { setDraft(q.data.page); setPreview(q.data.preview); setUrl(q.data.url); } }, [q.data, draft]);
+  // Start from what's saved on the server (after the fresh read), never from last visit's cached copy.
+  useEffect(() => { if (q.data && !draft && q.isFetchedAfterMount) { setDraft(q.data.page); setPreview(q.data.preview); setUrl(q.data.url); } }, [q.data, draft, q.isFetchedAfterMount]);
+  // The cache follows what's on screen, so leaving and coming back never shows an older page.
+  useEffect(() => {
+    if (!draft) return;
+    qc.setQueryData<Resp>(KEY, (old) => (old ? { ...old, page: draft, preview: preview ?? old.preview, url: url || old.url, brandsPreview: kitSrv ?? old.brandsPreview, familyPreview: famSrv ?? old.familyPreview } : old));
+  }, [draft, preview, url, kitSrv, famSrv, qc]);
 
   // Their connected accounts join the social icons (on, in the order they come), once each.
   useEffect(() => {
@@ -173,7 +183,9 @@ export function BioBuilder() {
     if (!Object.keys(body).length) return;
     setSaving(true);
     try {
-      const r = (await (await apiRequest("PATCH", "/api/host/bio", body)).json()) as Omit<Resp, "stats" | "questions">;
+      const r = (await (await again(() => apiRequest("PATCH", "/api/host/bio", body))).json()) as Omit<Resp, "stats" | "questions">;
+      setFailed(false);
+      if (!Object.keys(pending.current).length) setUnsaved(false);
       setPreview(r.preview);
       if (r.brandsPreview) setKitSrv(r.brandsPreview);
       if (r.familyPreview) setFamSrv(r.familyPreview);
@@ -182,6 +194,8 @@ export function BioBuilder() {
     } catch (e) {
       toast({ title: "Not saved", description: (e as Error).message.replace(/^\d+:\s*/, ""), variant: "destructive" });
       if (body.handle) setDraft((d) => (d && q.data ? { ...d, handle: q.data.page.handle } : d));
+      // Keep it to send again with the next change (or the Retry beside the link), instead of dropping it.
+      else { pending.current = { ...body, ...pending.current }; setUnsaved(true); setFailed(true); }
     } finally {
       setSaving(false);
     }
@@ -190,10 +204,22 @@ export function BioBuilder() {
   const change = (patch: Partial<Page>, now = false) => {
     setDraft((d) => (d ? { ...d, ...patch } : d));
     pending.current = { ...pending.current, ...patch };
+    setUnsaved(true);
     window.clearTimeout(timer.current);
     timer.current = window.setTimeout(() => void flush(), now ? 0 : 700);
   };
-  useEffect(() => () => window.clearTimeout(timer.current), []);
+  // Leaving the page (another screen, a closed tab) sends what's waiting instead of dropping it.
+  useEffect(() => {
+    const sendNow = () => {
+      window.clearTimeout(timer.current);
+      const body = pending.current;
+      if (!Object.keys(body).length) return;
+      pending.current = {};
+      void fetch("/api/host/bio", { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body), keepalive: true, credentials: "include" }).catch(() => { /* nothing more to do on the way out */ });
+    };
+    window.addEventListener("pagehide", sendNow);
+    return () => { window.removeEventListener("pagehide", sendNow); sendNow(); };
+  }, []);
 
   const view: BioPublic | null = useMemo(() => draft && preview ? {
     ...preview, handle: draft.handle, displayName: draft.displayName, bio: draft.bio, avatarUrl: draft.avatarUrl, heroUrl: draft.heroUrl,
@@ -316,7 +342,11 @@ export function BioBuilder() {
         <div className="flex items-center gap-1.5">
           <Button size="sm" onClick={() => void navigator.clipboard.writeText(url).then(() => toast({ title: "Link copied", description: "Paste it in your bio, your show notes, anywhere." }))} className="h-8 gap-1.5 rounded-full bg-[#F0A71F] px-3 font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="bio-copy"><Copy className="h-3.5 w-3.5" /> Copy link</Button>
           <Button asChild size="sm" variant="outline" className="h-8 gap-1.5 rounded-full px-3"><a href={url} target="_blank" rel="noreferrer" data-testid="bio-open"><ExternalLink className="h-3.5 w-3.5" /> Open</a></Button>
-          <span className="pl-1 text-[11px] text-muted-foreground">{saving ? "Saving…" : "Saved"}</span>
+          {failed && !saving ? (
+            <button type="button" onClick={() => void flush()} className="pl-1 text-[11px] font-semibold text-destructive underline" data-testid="bio-retry">Not saved. Retry</button>
+          ) : (
+            <span className="pl-1 text-[11px] text-muted-foreground" data-testid="bio-saved">{saving || unsaved ? "Saving…" : "All changes saved"}</span>
+          )}
         </div>
         <div className="ml-auto flex flex-wrap items-center gap-1.5" data-testid="bio-stats" title="Last 30 days">
           {([["view", "Views", Eye, "#053877"], ["click", "Link taps", Link2, "#7c3aed"], ["play", "Plays", Play, "#059669"], ["share", "Shares", Share2, "#0284c7"], ["ask", "Messages", MessageCircle, "#b36b00"]] as const).map(([k, l, I, c]) => (
