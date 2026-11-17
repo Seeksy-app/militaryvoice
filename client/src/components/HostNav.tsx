@@ -97,7 +97,10 @@ export function HostNav({
 }) {
   const { toast } = useToast();
   // Admins get into the studio now (to run the Marathon and test it); everyone else sees Oct 5.
-  const { isAuthenticated: isAdmin } = useAdminAuth();
+  // Not when an admin is looking at a customer's account (View as): the customer's own menu, with no shortcut into the admin studio.
+  const { isAuthenticated: adminSignedIn, admin: adminMe } = useAdminAuth();
+  const viewingAsOther = !!adminMe?.email && !!account?.email && adminMe.email.trim().toLowerCase() !== account.email.trim().toLowerCase();
+  const isAdmin = adminSignedIn && !viewingAsOther;
   const brand = path === "brand";
   // A brand's menu (7 Oct): finding creators and its team, none of the making-content tools.
   const brandGroups: { title: string; items: Item[] }[] = [
