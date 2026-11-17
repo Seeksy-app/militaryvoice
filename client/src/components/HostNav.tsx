@@ -252,10 +252,11 @@ export function HostNav({
     return (
       <a
         key={`${it.key}-${it.feature ?? ""}`}
-        href={adminThrough ? (it.feature === "studio" ? "/admin/studio" : pathFor(it.key)) : inert || it.soon ? undefined : it.locked ? `${pathFor("pro")}#${it.feature}` : pathFor(it.key)}
+        href={adminThrough ? (it.feature === "studio" ? "/admin/studio" : pathFor(it.key)) : it.feature === "studio" && !it.locked ? "/studio/control" : inert || it.soon ? undefined : it.locked ? `${pathFor("pro")}#${it.feature}` : pathFor(it.key)}
         aria-disabled={inert || undefined}
         onClick={(e) => {
           if (adminThrough && it.feature === "studio") return;
+          if (it.feature === "studio" && !it.locked) return; // everyone has a studio of their own: the link takes them there
           if (it.soon && !adminThrough) { e.preventDefault(); toast({ title: it.soon, description: "Opening on National Military Podcast Day. Until then, you can still upload episodes to your Library and make clips in Pōstify." }); return; }
           if (inert) { e.preventDefault(); return; }
           if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
@@ -337,7 +338,7 @@ export function HostNav({
               const Icon = it.icon;
               const active = screen === it.key || (it.key === "events" && (screen === "promotion" || screen === "greenroom"));
               return (
-                <RailButton key={`r-${it.key}-${it.feature ?? ""}-${it.href ?? ""}`} tip={it.label} active={active} href={it.href} onClick={it.href ? undefined : () => { if (it.soon && !isAdmin) { toast({ title: it.soon }); return; } if (isAdmin && it.feature === "studio") { window.location.href = "/admin/studio"; return; } onGo(it.key, it.feature); }} testid={`nav-rail-${it.key}`}>
+                <RailButton key={`r-${it.key}-${it.feature ?? ""}-${it.href ?? ""}`} tip={it.label} active={active} href={it.href} onClick={it.href ? undefined : () => { if (it.soon && !isAdmin) { toast({ title: it.soon }); return; } if (isAdmin && it.feature === "studio") { window.location.href = "/admin/studio"; return; } if (it.feature === "studio" && !it.locked) { window.location.href = "/studio/control"; return; } onGo(it.key, it.feature); }} testid={`nav-rail-${it.key}`}>
                   <Icon className="h-5 w-5" />
                 </RailButton>
               );

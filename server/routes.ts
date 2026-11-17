@@ -2249,13 +2249,34 @@ export function registerRoutes(app: Express): void {
   });
 
   // ---- Admin auth: one-time email code, no shared password ---------------------
+  /**
+   * Everyone's own studio, empty: a private event of their own (not listed anywhere, owned by them, approved so they run its
+   * studio) with a studio and nothing in it. The Marathon's scenes are the event's, not everyone's. Made the first time they open Studio.
+   */
+  async function ensurePersonalStudio(email: string): Promise<void> {
+    const e = email.trim().toLowerCase();
+    const have = (await storage.listEvents()).find((x) => x.occasion === "Personal studio" && x.ownerEmail.trim().toLowerCase() === e);
+    if (have) { await storage.getOrCreateStudio(have.id); return; }
+    const profile = await storage.getProfileByEmail(e);
+    const name = (profile?.podcastName || profile?.hostName || e.split("@")[0]).trim();
+    const made = await storage.createEvent({
+      slug: `studio-${crypto.randomBytes(5).toString("hex")}`, isFeatured: false, visible: false, closed: true,
+      name: `${name} studio`, startAtUtc: new Date().toISOString(), durationHours: 24 * 365, slotMinutes: 30,
+      occasion: "Personal studio", ownerEmail: e, review: "approved",
+    } as never);
+    await storage.getOrCreateStudio(made.id);
+  }
+
   /** May this visitor run the studio console? Admins, and studio hosts signed in as themselves. */
   app.get("/api/host/studio-access", async (req, res) => {
     noStore(res);
     const admin = getAdminEmail(req);
     const adminOf = await eventAdminEvents(admin);
     const isAdmin = Boolean(admin && ((await storage.isAdminEmail(admin)) || adminOf.length));
-    const host = await studioHostEmail(req);
+    let host = await studioHostEmail(req);
+    // A signed-in member with a profile gets a studio of their own, empty, the first time.
+    const me = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    if (!isAdmin && !host && me && (await storage.getProfileByEmail(me))) { await ensurePersonalStudio(me); host = await studioHostEmail(req); }
     const email = isAdmin ? admin! : host?.email ?? (getSessionEmail(req) ?? "");
     if (!isAdmin && !host) return res.json({ access: false, signedIn: Boolean(getSessionEmail(req)), email });
     const person = await studioPerson(email);
@@ -9848,7 +9869,7 @@ export function registerRoutes(app: Express): void {
   app.get("/api/admin/events", requireAdmin, async (req, res) => {
     const rows = await storage.listEvents();
     const only: number[] | undefined = (req as any).eventAdmin ? (req as any).studioHostEvents : undefined;
-    res.json(rows.filter((e) => !only || only.includes(e.id)).map(toPublicEvent));
+    res.json(rows.filter((e) => (!only || only.includes(e.id)) && e.occasion !== "Personal studio").map(toPublicEvent));
   });
 
   app.post("/api/admin/events", requireAdmin, async (req, res) => {
