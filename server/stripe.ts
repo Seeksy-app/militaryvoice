@@ -262,8 +262,17 @@ async function addonPrice(addon: AddonKey): Promise<string> {
  */
 export async function createProductionSubscription(v: { email: string; customerId: string; planSubscriptionId: string }): Promise<AddonState | null> {
   const planSub = await stripe("GET", `/subscriptions/${encodeURIComponent(v.planSubscriptionId)}`);
-  const pm = typeof planSub.default_payment_method === "string" ? planSub.default_payment_method : planSub.default_payment_method?.id;
-  if (!pm) throw new Error("No card on that subscription to use.");
+  let pm: string | undefined = typeof planSub.default_payment_method === "string" ? planSub.default_payment_method : planSub.default_payment_method?.id;
+  // Checkout may keep the card on the customer rather than on the subscription.
+  if (!pm) {
+    const cust = await stripe("GET", `/customers/${encodeURIComponent(v.customerId)}`);
+    pm = typeof cust?.invoice_settings?.default_payment_method === "string" ? cust.invoice_settings.default_payment_method : cust?.invoice_settings?.default_payment_method?.id;
+  }
+  if (!pm) {
+    const list = await stripe("GET", `/customers/${encodeURIComponent(v.customerId)}/payment_methods?type=card&limit=1`);
+    pm = list?.data?.[0]?.id;
+  }
+  if (!pm) throw new Error("No card on that customer to use.");
   const meta = { kind: "mv_addon", email: v.email, addon: "production" };
   const sub = await stripe("POST", "/subscriptions", flat({
     customer: v.customerId, default_payment_method: pm, items: [{ price: await addonPrice("production" as AddonKey), quantity: 1 }],
