@@ -179,6 +179,37 @@ function ensureBilling(): Promise<Record<string, string>> {
   return billing;
 }
 
+/**
+ * Pro hosting and post-production as one line, for the people we sell them to together: the payment page then reads
+ * "Subscribe to MilitaryVoices Pro hosting + post-production, every 3 months" with the whole amount, not "and 1 more".
+ */
+async function packagePrice(): Promise<string> {
+  const plan = planOf("pro")!;
+  const cents = ("quarterCents" in plan ? plan.quarterCents : 0) + ADDONS.production.quarterCents;
+  const key = `mv_package_pro_production_quarterly_${cents}`;
+  const found = await stripe("GET", `/prices?limit=1&lookup_keys[]=${key}`);
+  if (found.data?.[0]?.id) return String(found.data[0].id);
+  const p = await stripe("POST", "/prices", flat({
+    lookup_key: key, currency: "usd", unit_amount: cents, recurring: { interval: "month", interval_count: 3 },
+    product_data: { name: "MilitaryVoices Pro hosting + post-production" },
+  }));
+  return String(p.id);
+}
+
+/**
+ * The plan's extra credits are a metered line of $0 until they're used. On the payment page it showed as "and 1 more",
+ * so it is added to the subscription right after, instead. Safe to call again.
+ */
+export async function ensureExtraItem(subscriptionId: string, planKey: PlanKey, interval: PlanInterval): Promise<void> {
+  if (interval === "year") return;
+  const ids = await ensureBilling();
+  const price = ids[`postify_${planKey}_${interval === "quarter" ? "extra_q" : "extra"}`];
+  if (!price) return;
+  const sub = await stripe("GET", `/subscriptions/${encodeURIComponent(subscriptionId)}`);
+  if ((sub.items?.data ?? []).some((i: any) => i.price?.id === price)) return;
+  await stripe("POST", "/subscription_items", flat({ subscription: subscriptionId, price }));
+}
+
 export async function createPlanCheckout(v: { email: string; plan: PlanKey; interval?: PlanInterval; origin: string; customerId?: string; addons?: AddonKey[] }): Promise<string> {
   const plan = planOf(v.plan);
   if (!plan) throw new Error("Which plan?");
@@ -190,6 +221,7 @@ export async function createPlanCheckout(v: { email: string; plan: PlanKey; inte
   // monthly add-ons ride only on a monthly plan.
   const addons = (v.addons ?? []).filter((a) => a in ADDONS && (interval === "month" ? !("quarterly" in ADDONS[a]) : interval === "quarter" ? "quarterly" in ADDONS[a] : false));
   const addonItems = await Promise.all(addons.map(async (a) => ({ price: await addonPrice(a), quantity: 1 })));
+  const asPackage = interval === "quarter" && plan.key === "pro" && addons.includes("production" as AddonKey);
   const meta = { kind: "postify_plan", email: v.email, plan: plan.key, interval, ...(addons.length ? { addons: addons.join(",") } : {}) };
   const s = await stripe("POST", "/checkout/sessions", flat({
     mode: "subscription",
@@ -198,8 +230,8 @@ export async function createPlanCheckout(v: { email: string; plan: PlanKey; inte
     line_items: interval === "year"
       ? [{ price: ids[`postify_${plan.key}_yearly`], quantity: 1 }]
       : interval === "quarter"
-        ? [{ price: ids[`postify_${plan.key}_quarterly`], quantity: 1 }, { price: ids[`postify_${plan.key}_extra_q`] }, ...addonItems]
-        : [{ price: ids[`postify_${plan.key}_monthly`], quantity: 1 }, { price: ids[`postify_${plan.key}_extra`] }, ...addonItems],
+        ? (asPackage ? [{ price: await packagePrice(), quantity: 1 }] : [{ price: ids[`postify_${plan.key}_quarterly`], quantity: 1 }, ...addonItems])
+        : [{ price: ids[`postify_${plan.key}_monthly`], quantity: 1 }, ...addonItems],
     metadata: meta,
     subscription_data: { metadata: meta },
     success_url: `${v.origin}/host/dashboard/postify?subscribed={CHECKOUT_SESSION_ID}`,

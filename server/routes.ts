@@ -184,7 +184,7 @@ import { registerMyStudio } from "./myStudio.js";
 import { registerCreatorCampaigns } from "./creatorCampaigns.js";
 import { registerContactProfile } from "./contactProfile.js";
 import { registerAskShow, claimTranscript } from "./askShow.js";
-import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, createProductionSubscription, readSessionMeta, readSubscription, reportExtraCredits, billingPortal, createAddonCheckout, readAddonSession, addonStateFrom, bundledAddonStatesFrom, readPlanSessionAddons, type PlanState } from "./stripe.js";
+import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, createProductionSubscription, readSessionMeta, readSubscription, reportExtraCredits, billingPortal, createAddonCheckout, readAddonSession, addonStateFrom, bundledAddonStatesFrom, readPlanSessionAddons, ensureExtraItem, type PlanState } from "./stripe.js";
 import { episodeCredits, SHORT_VIDEO_SEC, planOf, PLANS, ADDONS, DEFAULT_OVERAGE_CAP_CENTS, OVERAGE_CAP_CHOICES, type PlanKey, type AddonKey } from "../shared/tokens.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, getSession, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
 import {
@@ -8466,6 +8466,7 @@ export function registerRoutes(app: Express): void {
       const state = await readPlanSession(String(req.body?.sessionId ?? ""));
       if (!state || state.email !== email) return res.status(404).json({ message: "We couldn't find that subscription." });
       await syncPlan(state);
+      await ensureExtraItem(state.subscriptionId, state.plan, state.interval).catch((e: any) => console.error("Extra-credits item failed:", e?.message));
       for (const a of await readPlanSessionAddons(String(req.body?.sessionId ?? "")).catch(() => [])) { await storage.upsertAddon(a); await applyProduction(a); }
       // Older checkouts (before 17 Nov, afternoon): Production was its own subscription on the same card, made here once.
       try {
@@ -8636,6 +8637,10 @@ export function registerRoutes(app: Express): void {
       if (event.type === "invoice.paid" && obj?.subscription && ["subscription_create", "subscription_cycle", "subscription_update"].includes(obj.billing_reason)) {
         const state = await readSubscription(String(obj.subscription));
         if (state) await syncPlan(state, String(obj.id));
+      }
+      if (event.type === "customer.subscription.created") {
+        const st = planStateFrom(obj);
+        if (st) await ensureExtraItem(st.subscriptionId, st.plan, st.interval).catch((e: any) => console.error("Extra-credits item failed:", e?.message));
       }
       if (event.type.startsWith("customer.subscription.")) {
         const addon = addonStateFrom(obj);
