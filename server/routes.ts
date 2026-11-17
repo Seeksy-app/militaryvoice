@@ -7778,6 +7778,20 @@ export function registerRoutes(app: Express): void {
   async function startPackage(rec: NonNullable<Awaited<ReturnType<typeof storage.getRecording>>>): Promise<void> {
     const email = rec.email.trim().toLowerCase();
     if (!(await packageOn(email)) || rec.status !== "Ready") return;
+    // The package covers up to two episodes a week, up to 60 minutes each. Past that we hold it for the team to look at,
+    // rather than quietly doing more (or quietly doing nothing): Slack hears about it.
+    const lim = ADDONS.production;
+    let used: { id: number; at: string }[] = [];
+    try { used = JSON.parse((await storage.getSetting(`pkgused:${email}`)) || "[]"); } catch { used = []; }
+    const weekAgo = Date.now() - 7 * 24 * 3600_000;
+    const thisWeek = used.filter((u) => Date.parse(u.at) > weekAgo && u.id !== rec.id);
+    const tooLong = rec.durationSec > (lim.maxMinutes + 5) * 60;
+    if (thisWeek.length >= lim.weeklyEpisodes || tooLong) {
+      await slackNote(`:hourglass: ${email}'s new recording "${rec.title || rec.id}" is past the Production package (${tooLong ? `${Math.round(rec.durationSec / 60)} minutes, over ${lim.maxMinutes}` : `already ${thisWeek.length} this week`}). It is in their Library; nothing started.`).catch(() => undefined);
+      return;
+    }
+    used.push({ id: rec.id, at: new Date().toISOString() });
+    await storage.setSetting(`pkgused:${email}`, JSON.stringify(used.slice(-20)));
     if (rec.clipStatus === "none" || !rec.clipStatus) {
       await storage.markPostifyBeta(rec.id); // covered by the package: no credits taken
       await storage.setClipOptions(rec.id, JSON.stringify(allShapes(parseClipOptions(rec.clipOptions))));

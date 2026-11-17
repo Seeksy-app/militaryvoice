@@ -189,7 +189,7 @@ export default function Pricing() {
                     <Checkbox checked={withProduction} onCheckedChange={(v) => setWithProduction(v === true)} className="mt-0.5 border-[#b36b00] data-[state=checked]:bg-[#b36b00] data-[state=checked]:text-white" />
                     <span className="min-w-0">
                       <span className="flex items-center gap-1.5 font-semibold text-[#8a5200]">+ {prod.name} {cents(prod.cents)}/mo</span>
-                      <span className="mt-0.5 block text-xs text-muted-foreground">Paid every 3 months ({cents(prod.quarterCents)}), on its own, so you can stop it and keep Pro. We make every episode: intro, outro and music, a guest card, and four clips. Nothing posts until you've seen it.</span>
+                      <span className="mt-0.5 block text-xs text-muted-foreground">Paid every 3 months ({cents(prod.quarterCents)}), on its own, so you can stop it and keep Pro. Up to 2 episodes a week, up to 60 minutes each: we add the intro, outro and music, a guest card, and four clips. Nothing posts until you've seen it.</span>
                     </span>
                   </label>
                 ) : (

@@ -73,8 +73,10 @@ export const ADDONS = {
   // a separate subscription so it can stop while Pro carries on.
   production: {
     key: "production", name: "Production", cents: 19500, quarterCents: 58500, quarterly: true,
-    blurb: "We make every episode: intro, outro and music, the guest card, and four clips, the moment your recording lands.",
-    features: ["The intro and outro, with music, on every episode", "A guest card with your guest's own name and photo", "Four clips an episode, in every shape", "Nothing posts until you've seen it"],
+    // Up to two episodes a week of up to 60 minutes each (Andrew, 17 Nov 2026).
+    weeklyEpisodes: 2, maxMinutes: 60,
+    blurb: "We make your episodes: intro, outro and music, the guest card, and four clips, the moment your recording lands. Up to 2 episodes a week, up to 60 minutes each.",
+    features: ["Up to 2 episodes a week, up to 60 minutes each", "The intro and outro, with music, on every episode", "A guest card with your guest's own name and photo", "Four clips an episode, in every shape", "Nothing posts until you've seen it"],
   },
 } as const;
 export type AddonKey = keyof typeof ADDONS;
