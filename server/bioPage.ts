@@ -823,6 +823,7 @@ export function registerBioPage(app: Express) {
       res.json({ url: await uploadPhoto(`bio/${row.id}-${kind}-styled-${key}-${Date.now()}.jpg`, img, "image/jpeg") });
     } catch (err) {
       console.error("Style failed:", (err as Error).message);
+      if (/fal 40[13]/.test((err as Error).message)) return res.status(503).json({ message: "Photo styles are paused for a short while. We've been told, and they'll be back." });
       res.status(502).json({ message: "Couldn't make that style. Try again in a moment." });
     }
   });
@@ -927,6 +928,8 @@ export function registerBioPage(app: Express) {
       res.json({ cutoutUrl: url, preview: await publicOf(out) });
     } catch (err) {
       console.error("Cutout failed:", (err as Error).message);
+      // Our account with the photo service out of balance is ours to fix, not the photo's fault (System health shows it red too).
+      if (/fal 40[13]/.test((err as Error).message)) return res.status(503).json({ message: "Photo cut-outs are paused for a short while. We've been told, and they'll be back." });
       res.status(502).json({ message: "Couldn't cut out that photo. Try a clearer one of just you." });
     }
   });
