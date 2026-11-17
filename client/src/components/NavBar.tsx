@@ -117,7 +117,6 @@ export function NavBar({ product, account, tone = "light", bare = false }: { pro
           <Link href="/for-brands" className={linkCls(location === "/for-brands" || location === "/sponsor")} data-testid="link-nav-sponsors">
             For brands
           </Link>
-          <RadioChip dark={dark} />
         </nav>
 
         <div className="flex items-center gap-1.5">
@@ -160,7 +159,6 @@ export function NavBar({ product, account, tone = "light", bare = false }: { pro
             {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
           </Button>
 
-          <span className="lg:hidden"><RadioChip dark={dark} compact /></span>
           {/* Mobile menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
