@@ -165,6 +165,7 @@ export function MyAnalytics({ onConnect, socialSection }: { onConnect: () => voi
           onOpenCreator={() => {}}
           similar={null}
           own
+          groupTitle="Discovery"
           media={{ title: "Media", sections: [{ key: "podcast", title: "Podcast", sub: "your downloads and listens, from every host", body: <PodcastListens bare onConnect={() => { window.location.hash = "section-podcast-stats"; onConnect(); }} /> }] }}
         />
       </div>

@@ -176,6 +176,8 @@ export function CreatorProfileSections(props: {
   own?: boolean;
   /** Sections of the page's own (their podcast): after the social ones, a group of their own in the menu. */
   media?: MediaGroup;
+  /** A name for the numbered sections as a group (their own analytics call it Discovery); a heading over them and the contents' label. */
+  groupTitle?: string;
 }) {
   const { profile, toolbar, header, placeholder } = props;
   if (!profile) {
@@ -199,7 +201,7 @@ export function CreatorProfileSections(props: {
   return <ProfileBody {...props} profile={profile} />;
 }
 
-function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onOpenCreator, similar, own, media }: {
+function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onOpenCreator, similar, own, media, groupTitle }: {
   profile: Profile;
   toolbar: ReactNode;
   header: ReactNode;
@@ -211,6 +213,7 @@ function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onO
   similar: ReactNode;
   own?: boolean;
   media?: MediaGroup;
+  groupTitle?: string;
 }) {
   // The profile's sections (social), then the page's own (media), numbered as one list.
   const extra = media?.sections ?? [];
@@ -288,7 +291,7 @@ function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onO
       {/* contents */}
       <nav aria-label="Profile sections" className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur lg:h-[100dvh] lg:border-b-0 lg:border-r lg:bg-muted/30 lg:backdrop-blur-0">
         <div className="flex gap-1 overflow-x-auto px-3 py-2 [scrollbar-width:none] lg:flex-col lg:gap-0.5 lg:overflow-visible lg:px-4 lg:py-6 [&::-webkit-scrollbar]:hidden">
-          <div className="hidden px-2 pb-2 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground lg:block">Sections</div>
+          <div className="hidden px-2 pb-2 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground lg:block">{groupTitle ?? "Sections"}</div>
           {ALL.slice(0, SECTIONS.length).map(([k, title], i) => (
             <button key={k} type="button" onClick={() => jump(k)} className={`flex shrink-0 items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors ${active === k ? "bg-[#053877]/[0.08] font-medium text-[#053877] dark:bg-white/10 dark:text-white" : "text-foreground/70 hover:text-foreground"}`} data-testid={`toc-${k}`}>
               <span className="text-xs tabular-nums opacity-70">{String(i + 1).padStart(2, "0")}</span>
@@ -321,6 +324,12 @@ function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onO
       <div className="min-w-0 bg-muted/40">
         {toolbar}
         {header}
+        {groupTitle && (
+          <div className="bg-card px-5 pt-7 sm:px-8" data-testid="profile-group-title">
+            <h2 className="text-2xl font-bold tracking-tight">{groupTitle}</h2>
+            <p className="mt-0.5 text-sm text-muted-foreground">Your reach and audience, the way a sponsor sees them.</p>
+          </div>
+        )}
         {section("signals", 0, (
           <TileGrid>
             <Tile keep label="Engagement rate" value={pctText(engagement, 2)} sub={cardEngagement != null ? "as the index measures it" : s.engagementBasis || "per post"} tone={engagement == null ? undefined : engagement >= 3 ? "good" : engagement >= 1 ? undefined : "warn"} />
