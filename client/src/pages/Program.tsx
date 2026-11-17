@@ -77,6 +77,8 @@ function Replay({ id, src, show, host, photo, startedAt, now, muted, tag, duck, 
     <>
       <video ref={ref} src={src} autoPlay playsInline muted={muted} onLoadedMetadata={place} onEnded={() => setEnded(true)} className="absolute inset-0 h-full w-full bg-black object-contain" />
       <div className="absolute bottom-8 left-8 rounded-2xl bg-[#000741]/85 px-7 py-4 text-3xl font-bold text-white">{tag ? `${tag} · ` : ""}{show}{host ? ` · with ${host}` : ""}</div>
+      {/* The Marathon's own picture has a red LIVE badge in this corner. An encore is not live: cover it and say so. */}
+      <div className="pointer-events-none absolute left-[1%] top-[2%] flex h-[6.8%] w-[9.8%] items-center justify-center rounded-full bg-[#0b1d4a] font-black uppercase tracking-[0.16em] text-white ring-1 ring-white/30 [font-size:1.1cqw]" data-testid="encore-tag">Encore</div>
     </>
   );
 }
@@ -227,7 +229,7 @@ export default function Program() {
   const demoAudio = !token && !listen && params.get("demo") === "audio" && !!current;
   const nextLine = next ? `Up next at ${hm(next.startAtUtc)}: ${next.show}` : "Back weekdays at 7 am Eastern";
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-[#000741]">
+    <div className="relative h-screen w-screen overflow-hidden bg-[#000741] [container-type:size]">
       {phase === "live" && !current!.mediaUrl && tiles.length > 0 && <StageGrid tiles={tiles} meta={{ status: "Live" }} caption={caption} />}
       {audioOnlyOk && <AudioOnAir tiles={tiles} show={current!.show} host={current!.host} photo={current!.photo} about={current!.about} />}
       {demoAudio && <AudioOnAir demo tiles={[]} show={current!.show} host={current!.host} photo={current!.photo} about={current!.about || "Veterans, service members and their families, telling their own stories."} />}

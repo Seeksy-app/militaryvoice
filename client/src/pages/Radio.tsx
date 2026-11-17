@@ -153,7 +153,7 @@ export default function RadioPage() {
         <div className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h2 className="text-lg font-bold">{day ? (live ? "Today's lineup" : `Lineup · ${dayLabel(day.startAtUtc)}`) : "Lineup"}</h2>
-            <p className="text-sm text-muted-foreground">All times Eastern. Every show is live, with the station's intro and outro around it.</p>
+            <p className="text-sm text-muted-foreground">All times Eastern. Live shows and recorded episodes, with the station's intro and outro around them. Open time plays encores.</p>
           </div>
           <a href="/radio/book" className="inline-flex h-10 items-center rounded-full bg-[#F0A71F] px-5 text-sm font-bold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="radio-book">Podcasters: book your slot</a>
         </div>
