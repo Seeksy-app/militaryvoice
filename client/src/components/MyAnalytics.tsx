@@ -49,18 +49,14 @@ export function MyAnalytics({ onConnect, socialSection }: { onConnect: () => voi
       </div>
     );
   }
-  // Without an account the index can read, the page keeps its shape: Social Media Analytics, then Discovery (with what to connect), then Media: Podcast.
+  // Without an account the index can read, the page keeps its shape: Social Media, then Discovery (with what to connect).
   const frame = (discovery: React.ReactNode) => (
     <div className="overflow-hidden rounded-2xl border border-border bg-background shadow-sm" data-testid="my-analytics">
       {socialSection && <div className="border-b-8 border-muted/60 bg-card px-6 py-6 sm:px-8" data-testid="my-analytics-social">{socialSection}</div>}
-      <section className="border-b-8 border-muted/60 bg-card px-5 py-7 sm:px-8" data-testid="profile-group-title">
+      <section className="bg-card px-5 py-7 sm:px-8" data-testid="profile-group-title">
         <h2 className="text-2xl font-bold tracking-tight">Discovery</h2>
         <p className="mb-5 mt-0.5 text-sm text-muted-foreground">Your reach and audience, the way a sponsor sees them.</p>
         {discovery}
-      </section>
-      <section className="bg-card px-5 py-7 sm:px-8">
-        <h3 className="mb-5 text-lg font-semibold tracking-tight">Media <span className="text-sm font-normal text-muted-foreground">Podcast: your downloads and listens, from every host</span></h3>
-        <PodcastListens bare onConnect={() => { window.location.hash = "section-podcast-stats"; onConnect(); }} />
       </section>
     </div>
   );
@@ -169,14 +165,14 @@ export function MyAnalytics({ onConnect, socialSection }: { onConnect: () => voi
         <CreatorProfileSections
           profile={p}
           toolbar={toolbar}
-          header={<>{header}{socialSection && <div className="border-b-8 border-muted/60 bg-card px-6 py-6 sm:px-8" data-testid="my-analytics-social">{socialSection}</div>}{worth}</>}
+          header={<>{header}{worth}</>}
           cardEngagement={null}
           scrollRoot={scroller}
           onOpenCreator={() => {}}
           similar={null}
           own
-          groupTitle="Discovery"
-          media={{ title: "Media", sections: [{ key: "podcast", title: "Podcast", sub: "your downloads and listens, from every host", body: <PodcastListens bare onConnect={() => { window.location.hash = "section-podcast-stats"; onConnect(); }} /> }] }}
+          groupTitle="Social Media and Discovery"
+          lead={socialSection ? { key: "social", title: "Social Media", sub: "how your posts are doing", body: <div data-testid="my-analytics-social">{socialSection}</div> } : undefined}
         />
       </div>
     </div>

@@ -176,6 +176,8 @@ export function CreatorProfileSections(props: {
   own?: boolean;
   /** Sections of the page's own (their podcast): after the social ones, a group of their own in the menu. */
   media?: MediaGroup;
+  /** A section of their own ahead of the profile's, numbered 01 (their social media analytics, on their own page). */
+  lead?: LeadSection;
   /** A name for the numbered sections as a group (their own analytics call it Discovery); a heading over them and the contents' label. */
   groupTitle?: string;
 }) {
@@ -185,7 +187,7 @@ export function CreatorProfileSections(props: {
       <div className="min-h-full lg:grid lg:grid-cols-[14rem_minmax(0,1fr)]">
         <nav aria-label="Profile sections" className="hidden border-r border-border bg-muted/30 px-4 py-6 lg:block">
           <div className="px-2 pb-2 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground">Sections</div>
-          {[...SECTIONS.map(([k, t]) => [k, t] as const), ...(props.media?.sections ?? []).map((l) => [l.key, l.title] as const)].map(([k, title], i) => (
+          {[...(props.lead ? [[props.lead.key, props.lead.title] as const] : []), ...SECTIONS.map(([k, t]) => [k, t] as const), ...(props.media?.sections ?? []).map((l) => [l.key, l.title] as const)].map(([k, title], i) => (
             <div key={k} className="flex items-center gap-2.5 px-2.5 py-1.5 text-sm text-muted-foreground/60"><span className="text-xs tabular-nums">{String(i + 1).padStart(2, "0")}</span>{title}</div>
           ))}
         </nav>
@@ -201,7 +203,7 @@ export function CreatorProfileSections(props: {
   return <ProfileBody {...props} profile={profile} />;
 }
 
-function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onOpenCreator, similar, own, media, groupTitle }: {
+function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onOpenCreator, similar, own, media, groupTitle, lead }: {
   profile: Profile;
   toolbar: ReactNode;
   header: ReactNode;
@@ -214,10 +216,12 @@ function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onO
   own?: boolean;
   media?: MediaGroup;
   groupTitle?: string;
+  lead?: LeadSection;
 }) {
   // The profile's sections (social), then the page's own (media), numbered as one list.
   const extra = media?.sections ?? [];
-  const ALL: (readonly [string, string, string])[] = [...SECTIONS, ...extra.map((l) => [l.key, l.title, l.sub] as const)];
+  const L = lead ? 1 : 0;
+  const ALL: (readonly [string, string, string])[] = [...(lead ? [[lead.key, lead.title, lead.sub] as const] : []), ...SECTIONS, ...extra.map((l) => [l.key, l.title, l.sub] as const)];
   const sources = (["followers", "likers", "commenters"] as const).filter((k) => profile.audiences[k]);
   const [source, setSource] = useState<(typeof sources)[number] | undefined>(sources[0]);
   useEffect(() => setSource(sources[0]), [profile.handle]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -255,7 +259,7 @@ function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onO
   const credTone = aud?.credibility == null ? undefined : aud.credibility >= 80 ? "good" : aud.credibility >= 60 ? "warn" : "bad";
 
   const section = (k: SectionKey, idx: number, body: ReactNode) => {
-    const i = idx;
+    const i = idx + L;
     const [, title, sub] = ALL[i];
     return (
       <section key={k} ref={(el) => { refs.current[k] = el; }} className="scroll-mt-16 border-b-8 border-muted/60 bg-card px-5 py-7 last:border-b-0 sm:px-8" data-testid={`profile-section-${k}`}>
@@ -292,7 +296,7 @@ function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onO
       <nav aria-label="Profile sections" className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur lg:h-[100dvh] lg:border-b-0 lg:border-r lg:bg-muted/30 lg:backdrop-blur-0">
         <div className="flex gap-1 overflow-x-auto px-3 py-2 [scrollbar-width:none] lg:flex-col lg:gap-0.5 lg:overflow-visible lg:px-4 lg:py-6 [&::-webkit-scrollbar]:hidden">
           <div className="hidden px-2 pb-2 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground lg:block">{groupTitle ?? "Sections"}</div>
-          {ALL.slice(0, SECTIONS.length).map(([k, title], i) => (
+          {ALL.slice(0, SECTIONS.length + L).map(([k, title], i) => (
             <button key={k} type="button" onClick={() => jump(k)} className={`flex shrink-0 items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors ${active === k ? "bg-[#053877]/[0.08] font-medium text-[#053877] dark:bg-white/10 dark:text-white" : "text-foreground/70 hover:text-foreground"}`} data-testid={`toc-${k}`}>
               <span className="text-xs tabular-nums opacity-70">{String(i + 1).padStart(2, "0")}</span>
               <span className="whitespace-nowrap">{title}</span>
@@ -308,7 +312,7 @@ function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onO
             <>
               <div className="hidden px-2 pb-2 pt-6 text-[10px] font-medium uppercase tracking-[0.16em] text-muted-foreground lg:block">{media!.title}</div>
               {extra.map((l, j) => {
-                const i = SECTIONS.length + j;
+                const i = SECTIONS.length + L + j;
                 return (
                   <button key={l.key} type="button" onClick={() => jump(l.key)} className={`flex shrink-0 items-center gap-2.5 rounded-lg px-2.5 py-1.5 text-left text-sm transition-colors ${active === l.key ? "bg-[#053877]/[0.08] font-medium text-[#053877] dark:bg-white/10 dark:text-white" : "text-foreground/70 hover:text-foreground"}`} data-testid={`toc-${l.key}`}>
                     <span className="text-xs tabular-nums opacity-70">{String(i + 1).padStart(2, "0")}</span>
@@ -324,12 +328,7 @@ function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onO
       <div className="min-w-0 bg-muted/40">
         {toolbar}
         {header}
-        {groupTitle && (
-          <div className="bg-card px-5 pt-7 sm:px-8" data-testid="profile-group-title">
-            <h2 className="text-2xl font-bold tracking-tight">{groupTitle}</h2>
-            <p className="mt-0.5 text-sm text-muted-foreground">Your reach and audience, the way a sponsor sees them.</p>
-          </div>
-        )}
+        {lead && section(lead.key, -1, lead.body)}
         {section("signals", 0, (
           <TileGrid>
             <Tile keep label="Engagement rate" value={pctText(engagement, 2)} sub={cardEngagement != null ? "as the index measures it" : s.engagementBasis || "per post"} tone={engagement == null ? undefined : engagement >= 3 ? "good" : engagement >= 1 ? undefined : "warn"} />

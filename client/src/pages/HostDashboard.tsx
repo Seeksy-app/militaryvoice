@@ -89,7 +89,7 @@ import { ContactsScreen } from "@/components/ContactsScreen";
 import { CommandCenter } from "@/components/CommandCenter";
 import { IntentPicker } from "@/components/IntentPicker";
 import { MyAnalytics } from "@/components/MyAnalytics";
-import { PodcastChips, usePodcastSources, ListingChips, useListings } from "@/components/PodcastStats";
+import { PodcastChips, PodcastListens, usePodcastSources, ListingChips, useListings } from "@/components/PodcastStats";
 import { ConnectedAccountsStrip } from "@/components/ConnectedAccountsStrip";
 import { HomeFiles } from "@/components/HomeFiles";
 import { PodcastHosting } from "@/components/PodcastHosting";
@@ -625,7 +625,7 @@ function BackToEvent({ onGo }: { onGo: (s: "events") => void }) {
 }
 
 /** The screens the dashboard nav switches between, and their URLs. */
-const SCREENS = ["dashboard", "editProfile", "events", "promotion", "greenroom", "discovery", "verified", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social", "podcast", "page", "billing", "trash", "studio", "fans", "myevents", "organization", "requests", "opportunities", "calendar"] as const;
+const SCREENS = ["dashboard", "editProfile", "events", "promotion", "greenroom", "discovery", "verified", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social", "podcast", "page", "billing", "trash", "studio", "fans", "myevents", "organization", "requests", "opportunities", "calendar", "podcaststats"] as const;
 type Screen = (typeof SCREENS)[number];
 
 /** /host/dashboard/<slug> ⇄ screen. Home has no slug; the rest are lowercase. */
@@ -643,6 +643,7 @@ const SCREEN_SLUG: Record<Screen, string> = {
   fans: "fans",
   social: "social",
   calendar: "calendar",
+  podcaststats: "podcast-analytics",
   podcast: "podcast",
   page: "page",
   greenroom: "green-room",
@@ -1450,6 +1451,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           <PostStudio />
         ) : screen === "social" ? (
           <SocialScreen view="social" />
+        ) : screen === "podcaststats" ? (
+          <section className="mt-6" data-testid="podcast-analytics"><h1 className="mb-4 text-xl font-bold text-foreground">Podcast analytics</h1><PodcastListens bare onConnect={() => goTo("integrations")} /></section>
         ) : screen === "calendar" ? (
           <SocialScreen view="calendar" />
         ) : screen === "podcast" ? (
@@ -1649,7 +1652,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                   />
                   <div className="mt-5">
                     {social?.configured && (social.accounts?.length ?? 0) > 0 ? (
-                      <ConnectedAccountsStrip accounts={social.accounts} onManage={() => goTo("integrations")} extra={<><PodcastChips onOpen={() => goTo("analytics")} hostName={profile?.hostName} /><ListingChips /></>} extraCount={podcastSources.length + listings.length} />
+                      <ConnectedAccountsStrip accounts={social.accounts} onManage={() => goTo("integrations")} extra={<><PodcastChips onOpen={() => goTo("podcaststats")} hostName={profile?.hostName} /><ListingChips /></>} extraCount={podcastSources.length + listings.length} />
                     ) : (
                       <button type="button" onClick={() => goTo("integrations")} className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-left text-sm text-muted-foreground hover:text-foreground" data-testid="button-connect-accounts">
                         <Link2 className="h-4 w-4 text-[#053877]" /> Connect the accounts you post from — they show as follow buttons on your card, and we post your promo cards for you.

@@ -151,7 +151,7 @@ export function IntegrationsScreen({
         id="section-podcast-stats"
         icon={<Headphones className="h-4 w-4" />}
         title="Podcast stats"
-        line="Your downloads and streams, in Analytics, with where your show fits among MilitaryVoices podcasts. Only you see your numbers."
+        line="Your downloads and streams, in Podcast analytics, with where your show fits among MilitaryVoices podcasts. Only you see your numbers."
       >
         <PodcastStatsRows Row={Row} />
       </Group>

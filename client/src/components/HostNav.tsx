@@ -13,7 +13,7 @@ import { NotificationsMenuItem } from "@/components/Notifications";
 import { Link } from "wouter";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 
-export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "greenroom" | "recordings" | "contacts" | "pro" | "cohost" | "analytics" | "postify" | "social" | "discovery" | "verified" | "podcast" | "page" | "billing" | "trash" | "studio" | "fans" | "myevents" | "organization" | "requests" | "opportunities" | "calendar";
+export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "greenroom" | "recordings" | "contacts" | "pro" | "cohost" | "analytics" | "postify" | "social" | "discovery" | "verified" | "podcast" | "page" | "billing" | "trash" | "studio" | "fans" | "myevents" | "organization" | "requests" | "opportunities" | "calendar" | "podcaststats";
 
 interface Item {
   key: HostScreen;
@@ -34,6 +34,8 @@ interface Item {
   status?: { text: string; tone: "green" | "red" | "gold" };
   /** Not built yet: a click says when, and goes nowhere. */
   soon?: string;
+  /** A line under the one above it, indented and always shown (Podcast, then its analytics). */
+  sub?: boolean;
 }
 
 /**
@@ -175,6 +177,7 @@ export function HostNav({
       items: [
         { key: "pro", feature: "studio", label: "Studio", hint: "Your own full studio: scenes, layouts, lower thirds and a producer console. On Scale and Pro.", icon: MonitorPlay, tag: "Beta" },
         { key: "podcast", label: "Podcast", hint: "Host your show: your RSS feed for Apple and Spotify, episodes, and downloads sponsors trust", icon: Podcast },
+        { key: "podcaststats", label: "Analytics", hint: "Your downloads and listens, from every place your podcast is heard", icon: BarChart3, sub: true },
         ...(path !== "planner" ? [{ key: "myevents" as const, label: "Events", hint: "The events you're in, and your own: create one, build your page and lineup, and run it from our studio", icon: CalendarDays, badge: eventsCount || undefined }] : []),
         { key: "recordings", label: "Library", hint: "Every episode in one place: studio recordings, uploads, Zoom calls and cleaned-up versions", icon: Library },
       ],
@@ -269,7 +272,7 @@ export function HostNav({
             ? `flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-3 py-1.5 text-sm font-medium ${
                 active ? "bg-[#053877] text-white" : it.locked || it.upsell ? "bg-muted text-muted-foreground" : "bg-[#053877]/[0.06] text-foreground"
               }`
-            : `relative flex items-center gap-3 rounded-full px-4 py-2 text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#053877]/30 ${
+            : `relative flex items-center gap-3 rounded-full ${it.sub ? "pl-10 pr-4 py-1.5" : "px-4 py-2"} text-left outline-none transition-colors focus-visible:ring-2 focus-visible:ring-[#053877]/30 ${
                 active
                   ? "bg-[#053877]/[0.12] font-semibold text-[#053877] dark:bg-white/[0.14] dark:text-white"
                   : it.upsell

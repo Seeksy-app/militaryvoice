@@ -52,7 +52,7 @@ export function PodcastStatsRows({ Row }: { Row: (p: { icon: ReactNode; name: st
   const done = () => { setForm({}); setOpen(null); void qc.invalidateQueries({ queryKey: KEY }); };
   const connect = useMutation({
     mutationFn: async (source: "buzzsprout" | "podbean" | "transistor") => (await apiRequest("POST", `/api/host/podcast-stats/${source}`, form)).json(),
-    onSuccess: (r: SourceView) => { toast({ title: `${NAME[r.source]} connected`, description: r.showName || "Your numbers are in Analytics." }); done(); },
+    onSuccess: (r: SourceView) => { toast({ title: `${NAME[r.source]} connected`, description: r.showName || "Your numbers are in Podcast analytics." }); done(); },
     onError: (e: Error) => toast({ title: "Couldn't connect", description: e.message.replace(/^\d+:\s*/, ""), variant: "destructive" }),
   });
   const upload = useMutation({
@@ -68,7 +68,7 @@ export function PodcastStatsRows({ Row }: { Row: (p: { icon: ReactNode; name: st
     onSettled: () => { if (file.current) file.current.value = ""; },
   });
   const remove = async (source: Source) => {
-    if (!window.confirm(`Disconnect ${NAME[source]}? Its numbers leave Analytics.`)) return;
+    if (!window.confirm(`Disconnect ${NAME[source]}? Its numbers leave Podcast analytics.`)) return;
     await apiRequest("DELETE", `/api/host/podcast-stats/${source}`);
     void qc.invalidateQueries({ queryKey: KEY });
   };
