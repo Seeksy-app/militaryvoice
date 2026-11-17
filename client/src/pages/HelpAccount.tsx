@@ -57,7 +57,7 @@ export default function HelpAccount() {
           <p>Discovery comes with Scale and Pro (and is free for brands and event planners), with a taste each month: {FREE_DISCOVERY.searches} searches, {FREE_DISCOVERY.lookups} full creator profiles and {FREE_DISCOVERY.reveals} contact emails. <strong>{pro.name}</strong> raises that to {pro.searches} searches, {pro.lookups} full profiles and {pro.reveals} contact emails a month, and includes Verified creators, for {cents(pro.cents)} a month. You don't need a Pōstify plan for it. Verified creators on its own (everyone MilitaryVoices knows, with real numbers) is {cents(ADDONS.verified.cents)} a month.</p>
           <HelpStep k="a">In Plan &amp; billing, press <strong>Add {pro.name}</strong>.</HelpStep>
           <HelpStep k="b">Once it's on, the same card shows how many contact emails you have left this month, and <strong>Manage</strong>.</HelpStep>
-          <p className="mt-3">Past your monthly contact emails, each one is 1 credit. See <Link href="/help/guests" className="font-medium text-primary hover:underline">Book a guest, or be one</Link>.</p>
+          <p className="mt-3">Past your monthly contact emails or full profiles, each one is 1 credit, and once you've paid for one it's free to open again. See <Link href="/help/guests" className="font-medium text-primary hover:underline">Book a guest, or be one</Link>.</p>
         </HelpSection>
 
         <HelpSection n={5} id="manage" title="Manage billing">

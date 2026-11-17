@@ -46,6 +46,7 @@ type Platform = (typeof PLATFORMS)[number];
 const FREE_REVEALS_PER_MONTH = FREE_DISCOVERY.reveals;
 /** Credits a contact costs once the month's allowance is used. */
 const REVEAL_CREDITS = 1;
+const PROFILE_CREDITS = 1;
 /** Brands, agencies, event planners and admins: Discovery is free for them (the first four checks of discoveryOpenTo). */
 async function isHouse(e: string): Promise<boolean> {
   if (await storage.isAdminEmail(e)) return true;
@@ -1101,14 +1102,27 @@ export function registerDiscoveryRoutes(app: Express): void {
       // A lineup podcaster's own profile opens for anyone — that's what their
       // Share link is for — but only from what we already hold: a visitor never
       // spends a credit. Everything else needs Discovery.
+      let payRef = "";
+      let paidEmail = "";
       try {
         const m = await requireMember(req);
         if (m.member.role !== "admin") {
           const lim = (await allowanceFor(m.email)).lookups;
           const held = await isFresh(`analytics:${platform}:${handle.toLowerCase()}`, 30 * DAY);
           if (!held) {
-            if ((await lookupsThisMonth(m.email)) >= lim) throw new HttpError(402, `You've used this month's ${lim} full profiles. Discovery Pro has ${ADDONS.discovery.lookups} a month.`);
-            await db.insert(discoveryLookups).values({ email: m.email, kind: "profile", subject: `${platform}:${handle.toLowerCase()}`, createdAt: new Date().toISOString() });
+            const ref = `profile:${m.email}:${platform}:${handle.toLowerCase()}`;
+            const [paid] = await db.select({ id: postifyTokens.id }).from(postifyTokens).where(eq(postifyTokens.ref, ref)).limit(1);
+            if (!paid) {
+              if ((await lookupsThisMonth(m.email)) < lim) {
+                await db.insert(discoveryLookups).values({ email: m.email, kind: "profile", subject: `${platform}:${handle.toLowerCase()}`, createdAt: new Date().toISOString() });
+              } else if ((await storage.tokenBalance(m.email)) >= PROFILE_CREDITS) {
+                // Past the month's profiles: one credit, taken once we have the profile to show; theirs to see again free.
+                payRef = ref;
+                paidEmail = m.email;
+              } else {
+                throw new HttpError(402, `You've used this month's ${lim} full profiles. Each one after that is ${PROFILE_CREDITS} credit, and you're out of credits: add some under Pōstify, Plan. Discovery Pro has ${ADDONS.discovery.lookups} a month.`);
+              }
+            }
           }
         }
       } catch (err) {
@@ -1116,6 +1130,11 @@ export function registerDiscoveryRoutes(app: Express): void {
         const ours = (await verifiedCreators()).some((c) => c.platform === platform && c.handle.toLowerCase() === handle.toLowerCase()) || (await inSample(platform, handle));
         const held = ours && (await db.select().from(discoveryCache).where(eq(discoveryCache.key, `analytics:${platform}:${handle.toLowerCase()}`))).length > 0;
         if (!held) throw err;
+      }
+      if (payRef) {
+        const out = await loadCreator(platform, handle, req);
+        await storage.addTokens({ email: paidEmail, delta: -PROFILE_CREDITS, reason: `Full profile: @${handle} (${platform})`, ref: payRef });
+        return out;
       }
       return loadCreator(platform, handle, req);
     }),
