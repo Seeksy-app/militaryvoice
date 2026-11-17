@@ -173,8 +173,8 @@ export function HostNav({
     {
       title: "Record & host",
       items: [
-        { key: "pro", feature: "studio", label: "Studio", hint: "The full marathon studio for your own show: scenes, layouts, lower thirds and a producer console. In beta: ask for early access.", icon: MonitorPlay, tag: "Beta" },
-        { key: "studio", label: "Rooms", hint: "Quick, like Zoom: hop in with guests, record it or don't, and go live", icon: Video, tag: "Beta" },
+        { key: "pro", feature: "studio", label: "Studio", hint: "Your own full studio: scenes, layouts, lower thirds and a producer console. On Scale and Pro.", icon: MonitorPlay, tag: "Beta" },
+        { key: "studio", label: "Room", hint: "Quick, like Zoom: hop in with guests, record it or don't, and go live", icon: Video, tag: "Beta" },
         { key: "podcast", label: "Podcast", hint: "Host your show: your RSS feed for Apple and Spotify, episodes, and downloads sponsors trust", icon: Podcast },
         ...(path !== "planner" ? [{ key: "myevents" as const, label: "Run an event", hint: "Put on your own live event: your page, your lineup, our studio", icon: CalendarDays }] : []),
         { key: "recordings", label: "Library", hint: "Every episode in one place: studio recordings, uploads, Zoom calls and cleaned-up versions", icon: Library },

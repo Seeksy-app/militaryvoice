@@ -2284,6 +2284,7 @@ export function registerRoutes(app: Express): void {
     await storage.getOrCreateStudio(made.id);
   }
 
+  const rows2 = (r: unknown) => ((r as { rows?: unknown[] }).rows ?? (r as unknown[]));
   /** May this visitor run the studio console? Admins, and studio hosts signed in as themselves. */
   app.get("/api/host/studio-access", async (req, res) => {
     noStore(res);
@@ -2293,7 +2294,12 @@ export function registerRoutes(app: Express): void {
     let host = await studioHostEmail(req);
     // A signed-in member with a profile gets a studio of their own, empty, the first time.
     const me = (getSessionEmail(req) ?? "").trim().toLowerCase();
-    if (!isAdmin && !host && me && (await storage.getProfileByEmail(me))) { await ensurePersonalStudio(me); host = await studioHostEmail(req); }
+    if (!isAdmin && !host && me && (await storage.getProfileByEmail(me))) {
+      // The studio is part of Scale and Pro (and of the post-production package): Growth members are pointed to the plans.
+      const paid = rows2(await db.execute(sql`select 1 from postify_subscriptions where lower(email)=${me} and status='active' limit 1`)).length > 0 || (await packageOn(me));
+      if (!paid) return res.json({ access: false, signedIn: true, email: me, needsPlan: true });
+      await ensurePersonalStudio(me); host = await studioHostEmail(req);
+    }
     const email = isAdmin ? admin! : host?.email ?? (getSessionEmail(req) ?? "");
     if (!isAdmin && !host) return res.json({ access: false, signedIn: Boolean(getSessionEmail(req)), email });
     const person = await studioPerson(email);

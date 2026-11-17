@@ -7,7 +7,7 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useToast } from "@/hooks/use-toast";
 import { startPlanCheckout, startTokenCheckout, startAddonCheckout } from "@/lib/tokens";
-import { PLANS, CREDIT_PACKS, ADDONS, TEST_PACK, cents, episodeCredits } from "@shared/tokens";
+import { PLANS, ADDONS, TEST_PACK, cents, episodeCredits } from "@shared/tokens";
 import { Check, Coins, Loader2, Compass, Info, ChevronDown } from "lucide-react";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
@@ -24,7 +24,6 @@ const GROWTH: Feature[] = [
   { t: "Podcast hosting + directory", tip: "We host your show and its feed, so it plays on Apple Podcasts, Spotify and every podcast app, and it's listed in the MilitaryVoices directory." },
   { t: "SmartChat for your listeners", tip: "Listeners ask your show a question and get an answer from your own episodes, any time of day." },
   { t: "Zoom recordings, straight in", tip: "Connect Zoom once. Every cloud recording comes in on its own, ready for clips and a clean episode." },
-  { t: "Discovery: 10 contacts a month", tip: "Discovery: search military and veteran creators, guests and sponsors, and reveal up to 10 contact emails a month." },
   { t: "Events with an SI co-host", tip: "Take a slot in live events like the Podcast Marathon. Alex, our SI co-host, introduces you and keeps the hand-offs moving." },
 ];
 
@@ -35,14 +34,15 @@ const PLAN_FEATURES: Record<string, Feature[]> = {
     { t: "A clean episode, every time", tip: "Ums, false starts and dead air taken out, as MP3 and MP4. Your original is never changed." },
     { t: "Music and title edits included", tip: "Add a track from our library to every clip, and change a title or subtitle, at no extra cost." },
     { t: "Animated captions", tip: "Word-by-word captions, framed on whoever is talking. Or Classic captions for fewer credits." },
-    { t: "Extra credits 60¢, capped by you", tip: "Run out, and Pōstify keeps going. Extras go on your next bill, never past the limit you set." },
+    { t: "Invite a guest", tip: "Send your guest an invitation from your Podcast page. They answer a few questions and add the photo they want shown, and you get it all before the interview." },
+    { t: "Your own Studio", tip: "A full studio for your show: scenes, layouts, lower thirds and a producer console, empty and yours. Room, for a quick jump in and out, is on every plan." },
+    { t: "Extra credits 60¢ each, up to a limit you set", tip: "Run out, and Pōstify keeps going. Extras go on your next bill, never past the limit you set." },
   ],
   pro: [
     { t: "90 Pōstify credits a month", tip: "About 7 episodes a month with animated captions, or 12 with Classic." },
     { t: "6 clips an episode instead of 4", tip: "Two more moments from every episode, in every shape." },
     { t: "Room for a weekly show", tip: "A weekly 60-minute show uses 48 credits a month on Pro, so you have room for more." },
-    { t: "Credits at 54¢ each, not 67¢", tip: "The more you make, the less each clip costs." },
-    { t: "Extra credits 50¢, capped by you", tip: "Run out, and Pōstify keeps going. Extras go on your next bill, never past the limit you set." },
+    { t: "Extra credits 50¢ each, up to a limit you set", tip: "Run out, and Pōstify keeps going. Extras go on your next bill, never past the limit you set." },
     { t: "Live Studio hours (soon)", tip: "When the MilitaryVoices Studio opens to every show, Pro includes live studio hours for yours." },
   ],
 };
@@ -75,8 +75,8 @@ const STACKS = [
 function Comparison() {
   return (
     <section className="mt-14" data-testid="pricing-compare">
-      <h2 className="text-center text-2xl font-bold tracking-tight text-foreground" style={HEADLINE_FONT}>What a weekly show pays</h2>
-      <p className="mx-auto mt-1 max-w-xl text-center text-sm text-muted-foreground">Hosting plus clips, every month. Elsewhere that's two bills.</p>
+      <h2 className="text-center text-2xl font-bold tracking-tight text-foreground" style={HEADLINE_FONT}>How we compare</h2>
+      <p className="mx-auto mt-1 max-w-xl text-center text-sm text-muted-foreground">What a weekly show pays each month.</p>
       <div className="mt-6 grid gap-4 md:grid-cols-3">
         {STACKS.map((s) => (
           <div key={s.name} className={`flex flex-col rounded-3xl border p-5 ${s.ours ? "border-[#053877] bg-[#053877] text-white shadow-lg" : "border-border bg-card"}`}>
@@ -96,7 +96,7 @@ function Comparison() {
           </div>
         ))}
       </div>
-      <p className="mt-3 text-center text-[11px] text-muted-foreground">A weekly show: 4 episodes a month. Prices as listed on buzzsprout.com, podbean.com and opus.pro on 9 October 2026. On Scale, a fourth animated episode uses 2 extra credits ($1.20). Buzzsprout, Podbean and OpusClip are trademarks of their owners.</p>
+      <p className="mt-3 text-center text-[11px] text-muted-foreground">A weekly show is 4 episodes a month. Prices as listed on buzzsprout.com, podbean.com and opus.pro on 9 October 2026. Buzzsprout, Podbean and OpusClip are trademarks of their owners.</p>
     </section>
   );
 }
@@ -200,16 +200,6 @@ export default function Pricing() {
           })}
         </div>
 
-        {/* No subscription: credits bought once, in one line. */}
-        <div className="mx-auto mt-8 flex max-w-4xl flex-wrap items-center justify-center gap-2 text-sm">
-          <span className="mr-1 font-semibold text-foreground">Rather not subscribe? Buy credits once:</span>
-          {CREDIT_PACKS.map((p) => (
-            <Button key={p.key} variant="outline" size="sm" onClick={() => void go(p.key, () => startTokenCheckout(p.key))} disabled={busy !== null} className="gap-1.5 rounded-full" data-testid={`pack-card-${p.key}`}>
-              {busy === p.key && <Loader2 className="h-3.5 w-3.5 animate-spin" />} {p.tokens} for ${p.price}
-            </Button>
-          ))}
-        </div>
-
         {testing && (
           <div className="mx-auto mt-6 flex max-w-md items-center justify-between gap-4 rounded-2xl border border-dashed border-[#F0A71F] bg-[#F0A71F]/10 px-5 py-4">
             <div>
@@ -241,7 +231,7 @@ export default function Pricing() {
         </section>
 
         {/* Everything about credits, folded away until someone wants it. */}
-        <details className="group mx-auto mt-10 max-w-3xl rounded-3xl border border-border bg-card p-6" data-testid="pricing-how-credits">
+        <details open className="group mx-auto mt-10 max-w-3xl rounded-3xl border border-border bg-card p-6" data-testid="pricing-how-credits">
           <summary className="flex cursor-pointer list-none items-center justify-between gap-3 font-semibold text-foreground">
             <span className="flex items-center gap-2"><Info className="h-4 w-4 text-[#053877]" /> How credits work</span>
             <ChevronDown className="h-4 w-4 text-muted-foreground transition-transform group-open:rotate-180" />

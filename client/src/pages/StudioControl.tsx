@@ -8,7 +8,7 @@ import { LoginCard } from "@/pages/HostDashboard";
 import { IconTile } from "@/components/ui/icon-tile";
 import { adminGet, adminSend } from "@/lib/adminApi";
 
-type Access = { access: boolean; signedIn?: boolean; role?: "admin" | "studio-host"; email?: string; hostEmail?: string; eventId?: number; personal?: boolean; displayName?: string };
+type Access = { access: boolean; needsPlan?: boolean; signedIn?: boolean; role?: "admin" | "studio-host"; email?: string; hostEmail?: string; eventId?: number; personal?: boolean; displayName?: string };
 
 /**
  * The studio console on its own page, for studio hosts (Amy, Enrique): the
@@ -30,6 +30,21 @@ export default function StudioControl() {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#04102b] text-white/70">
         <Loader2 className="h-6 w-6 animate-spin" />
+      </div>
+    );
+  }
+  if (access.data?.needsPlan) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="mx-auto max-w-md px-4 pt-12 text-center" data-testid="studio-needs-plan">
+          <div className="mx-auto w-fit"><IconTile icon={MonitorPlay} /></div>
+          <h1 className="mt-4 text-2xl font-bold tracking-tight [text-wrap:balance]">Your own studio is on Scale and Pro</h1>
+          <p className="mt-2 text-sm text-muted-foreground [text-wrap:pretty]">A full studio for your show: scenes, layouts, lower thirds and a producer console. For a quick jump in and out with a guest, Room is on every plan.</p>
+          <div className="mt-5 flex justify-center gap-3">
+            <a href="/pricing" className="rounded-full bg-[#053877] px-5 py-2.5 text-sm font-semibold text-white">See the plans</a>
+            <a href="/host/dashboard" className="rounded-full border border-border px-5 py-2.5 text-sm font-semibold">Back to my dashboard</a>
+          </div>
+        </div>
       </div>
     );
   }
