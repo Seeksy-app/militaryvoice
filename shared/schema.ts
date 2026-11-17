@@ -1626,6 +1626,9 @@ export interface EpisodeEdit {
   cuts?: [number, number][];
   introKey?: string;
   introName?: string;
+  /** A guest card (a .png in show-assets) as intro or outro: the clipper turns it into a few seconds of video, with this track under it. */
+  cardMusicKey?: string;
+  cardSec?: number;
   outroKey?: string;
   outroName?: string;
   /** How the intro hands over to the episode, and the episode to the outro. Fade when not said. */

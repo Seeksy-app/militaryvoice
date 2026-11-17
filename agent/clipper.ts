@@ -126,7 +126,7 @@ interface Job {
   episodeStill?: { episodeId: number };
   /** A SmartLink's living photo (downloadUrl) made small enough for phones. */
   livingSqueeze?: { pageId: number; kind?: "living" | "intro" };
-  episodeEdit?: { trimStart: number; trimEnd: number; cuts?: [number, number][]; introUrl?: string; outroUrl?: string; introTransition?: "fade" | "black" | "cut"; outroTransition?: "fade" | "black" | "cut"; music?: { url: string; from: number; to: number; level: "under" | "full" }[] };
+  episodeEdit?: { trimStart: number; trimEnd: number; cuts?: [number, number][]; cardSec?: number; cardMusicUrl?: string; introUrl?: string; outroUrl?: string; introTransition?: "fade" | "black" | "cut"; outroTransition?: "fade" | "black" | "cut"; music?: { url: string; from: number; to: number; level: "under" | "full" }[] };
   /** Bring a recording in from elsewhere (Zoom): fetch downloadUrl with these headers, store it, report. */
   importFrom?: { headers: Record<string, string> };
   /** Clips to make from this episode (Pro: 6). Absent = CLIP_COUNT. */
@@ -1726,6 +1726,26 @@ async function handleEpisodeEdit(job: Job): Promise<void> {
       const j = JSON.parse(out) as { format?: { duration?: string }; streams?: { codec_type: string }[] };
       return { dur: Number(j.format?.duration) || 0, audio: (j.streams ?? []).some((x) => x.codec_type === "audio") };
     };
+    // A guest card (a picture) as intro or outro becomes a few seconds of video: faded in and out, with the show's music under it.
+    const isCard = (u?: string) => !!u && /\.png(\?|$)/i.test(u);
+    const cardClips = new Map<string, string>();
+    const cardClip = async (u: string): Promise<string> => {
+      const have = cardClips.get(u); if (have) return have;
+      const sec = Math.min(12, Math.max(4, e.cardSec || 8));
+      const png = path.join(dir, `card-${cardClips.size}.png`);
+      const r = await fetch(u); if (!r.ok) throw new Error("couldn't open the guest card");
+      await fs.writeFile(png, Buffer.from(await r.arrayBuffer()));
+      const clip = path.join(dir, `card-${cardClips.size}.mp4`);
+      const sound = e.cardMusicUrl ? ["-stream_loop", "-1", "-i", e.cardMusicUrl] : ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"];
+      await run("ffmpeg", ["-y", "-loglevel", "error", "-loop", "1", "-framerate", "30", "-i", png, ...sound, "-t", String(sec),
+        "-vf", `scale=1280:720,format=yuv420p,fade=t=in:st=0:d=0.7,fade=t=out:st=${sec - 0.7}:d=0.7`,
+        "-af", `aresample=48000,afade=t=in:st=0:d=0.7,afade=t=out:st=${sec - 1.4}:d=1.4`,
+        "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-r", "30", "-c:a", "aac", "-b:a", "160k", "-shortest", clip]);
+      cardClips.set(u, clip);
+      return clip;
+    };
+    if (isCard(e.introUrl)) e.introUrl = await cardClip(e.introUrl!);
+    if (isCard(e.outroUrl)) e.outroUrl = await cardClip(e.outroUrl!);
     const parts: { url: string; ss?: number; t?: number }[] = [];
     if (e.introUrl) parts.push({ url: e.introUrl });
     // The episode as the pieces that are kept: the trim, less any sections cut from the middle.

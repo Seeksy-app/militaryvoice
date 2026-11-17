@@ -680,6 +680,75 @@ function BookendTile({ label, value, onChange }: { label: "Intro" | "Outro"; val
   );
 }
 
+
+/** A phone photo down to a size the card needs (1000px on the long side), as a data URL. */
+function shrinkPhoto(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const k = Math.min(1, 1000 / Math.max(img.width, img.height));
+      const c = document.createElement("canvas");
+      c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+      c.getContext("2d")!.drawImage(img, 0, 0, c.width, c.height);
+      URL.revokeObjectURL(url);
+      resolve(c.toDataURL("image/jpeg", 0.88));
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error("That file isn't a photo.")); };
+    img.src = url;
+  });
+}
+
+/**
+ * The guest card: type the guest's name, add their photo, and the show's card (host on one side, guest on the other, the
+ * show's name along the foot) goes on the front and the back of the episode with the show's music under it.
+ */
+function GuestCardButton({ onUse }: { onUse: (b: Bookend) => void }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [name, setName] = useState("");
+  const [photo, setPhoto] = useState("");
+  const [made, setMade] = useState<{ key: string; sec: number; preview: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const file = useRef<HTMLInputElement>(null);
+  const make = async () => {
+    setBusy(true);
+    try { setMade(await (await apiRequest("POST", "/api/host/guest-card", { guestName: name.trim(), photo })).json()); }
+    catch (e) { toast({ title: "Couldn't make the card", description: ((e as Error).message ?? "").replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, ""), variant: "destructive" }); }
+    finally { setBusy(false); }
+  };
+  return (
+    <>
+      <TimelineButton tip="Guest card: put this episode's guest, with their name and photo, at the start and end of the episode." onClick={() => setOpen(true)} testid="tool-guest-card">
+        <Clapperboard className="h-4 w-4" /> Guest card
+      </TimelineButton>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-xl">
+          <DialogHeader>
+            <DialogTitle>Guest card</DialogTitle>
+            <DialogDescription>Add this episode's guest. Their card goes at the start and the end, with your music.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4">
+            <div className="space-y-1.5">
+              <Label htmlFor="guest-card-name">Guest's name</Label>
+              <Input id="guest-card-name" value={name} onChange={(e) => { setName(e.target.value); setMade(null); }} placeholder="Mike and Karen Burkhard" maxLength={60} />
+            </div>
+            <div className="space-y-1.5">
+              <Label htmlFor="guest-card-photo">Guest's photo</Label>
+              <input id="guest-card-photo" ref={file} type="file" accept="image/*" className="block w-full text-sm" onChange={async (e) => { const f = e.target.files?.[0]; if (!f) return; try { setPhoto(await shrinkPhoto(f)); setMade(null); } catch (err) { toast({ title: (err as Error).message, variant: "destructive" }); } }} />
+            </div>
+            {made && <img src={made.preview} alt="The guest card" className="w-full rounded-lg border" data-testid="guest-card-preview" />}
+          </div>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button type="button" variant={made ? "outline" : "default"} disabled={!name.trim() || !photo || busy} onClick={() => void make()} data-testid="guest-card-make">{busy ? "Making it…" : made ? "Make it again" : "Show me the card"}</Button>
+            {made && <Button type="button" onClick={() => { onUse({ key: made.key, name: `Guest card: ${name.trim()}`, dur: made.sec }); setOpen(false); toast({ title: "Guest card added", description: "It's the intro and the outro. Save the edited episode when you're ready." }); }} data-testid="guest-card-use">Use it as the intro and outro</Button>}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
 const TRANSITIONS: { key: EditTransition; label: string; hint: string }[] = [
   { key: "fade", label: "Fade", hint: "One blends into the other" },
   { key: "black", label: "Dip to black", hint: "Fades out to black, then in" },
@@ -784,8 +853,8 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
   const [intro, setIntroState] = useState(() => (draft0 ? draft0.intro : remember("mv_intro")));
   const [outro, setOutroState] = useState(() => (draft0 ? draft0.outro : remember("mv_outro")));
   const keep = (k: string, v: Bookend | null) => { try { v ? localStorage.setItem(k, JSON.stringify(v)) : localStorage.removeItem(k); } catch { /* private mode */ } };
-  const setIntro = (v: Bookend | null) => { setIntroState(v); keep("mv_intro", v); };
-  const setOutro = (v: Bookend | null) => { setOutroState(v); keep("mv_outro", v); };
+  const setIntro = (v: Bookend | null) => { setIntroState(v); if (!v || !/\.png$/i.test(v.key)) keep("mv_intro", v); };
+  const setOutro = (v: Bookend | null) => { setOutroState(v); if (!v || !/\.png$/i.test(v.key)) keep("mv_outro", v); };
   const [introT, setIntroT] = useState<EditTransition>(() => draft0?.introT ?? "fade");
   const [outroT, setOutroT] = useState<EditTransition>(() => draft0?.outroT ?? "fade");
   const [trim, setTrim] = useState<{ start: number; end: number }>(() => ({ start: draft0?.trimStart ?? 0, end: draft0?.trimEnd ?? 0 }));
@@ -1200,6 +1269,7 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
                 <TimelineButton tip="Trim: only the start and end. Drag the yellow handles to where it should begin and finish." on={trimming} onClick={() => { setTrimming((v) => !v); setSel(null); }} testid="tool-trim">
                   <Brackets className="h-4 w-4" /> Trim start & end
                 </TimelineButton>
+                <GuestCardButton onUse={(b) => { setIntro(b); setOutro(b); }} />
                 <span className="ml-1 text-sm tabular-nums text-muted-foreground" title="How long it will be" data-testid="tool-length">Length {hms(Math.max(0, keepLen - cutTotal))}</span>
               </>
             }

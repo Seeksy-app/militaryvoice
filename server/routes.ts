@@ -101,6 +101,7 @@ import {
   listIngressForRoom,
   webhooks,
 } from "./livekit.js";
+import { renderGuestCard } from "./guestCard.js";
 import { ensureRecordingsBucket, signedRecordingUrl, signedRecordingUpload, putRecordingObject, startMultipart, signedPartUrl, completeMultipart, abortMultipart } from "./recordingStorage.js";
 import {
   isYoutubeConfigured,
@@ -7047,6 +7048,7 @@ export function registerRoutes(app: Express): void {
               recordingId: ed.id, title: ed.title, durationSec: ed.durationSec, downloadUrl: src, show: "", host: "", transcript: [],
               episodeEdit: {
                 trimStart: e.trimStart, trimEnd: e.trimEnd, cuts: e.cuts ?? [], introUrl: await sign(e.introKey), outroUrl: await sign(e.outroKey), introTransition: e.introTransition ?? "fade", outroTransition: e.outroTransition ?? "fade",
+                cardSec: e.cardSec, cardMusicUrl: e.cardMusicKey ? await sign((await storage.getMusic(e.cardMusicKey))?.url) : "",
                 // Music under parts of it: each track's file, signed, with where it goes in the episode.
                 music: (await Promise.all((e.music ?? []).map(async (m) => { const t = await storage.getMusic(m.key); const url = t?.url ? await sign(t.url) : ""; return url ? { url, from: m.from, to: m.to, level: m.level } : null; }))).filter(Boolean),
               },
@@ -7654,6 +7656,46 @@ export function registerRoutes(app: Express): void {
     res.json({ ok: true });
   });
 
+  // ---- Guest card: a show's own card (host and this episode's guest) for the intro and outro -------------------------------
+  /** A show's card settings: the foot of the card and the music under it. Defaults come from the show; a person can have their own (setting guestcard:<email>). */
+  async function guestCardSettings(email: string): Promise<{ footerLeft: string; footerRight: { strong: string; soft: string }; musicKey: string; sec: number }> {
+    let saved: Partial<{ footerLeft: string; footerRight: { strong: string; soft: string }; musicKey: string; sec: number }> = {};
+    try { saved = JSON.parse((await storage.getSetting(`guestcard:${email}`)) ?? "{}"); } catch { saved = {}; }
+    const profile = await storage.getProfileByEmail(email);
+    const show = (profile?.podcastName ?? "").trim();
+    const words = show.split(/\s+/).filter(Boolean);
+    return {
+      footerLeft: saved.footerLeft ?? "militaryvoices.ai",
+      footerRight: saved.footerRight ?? { strong: words[0] ?? "", soft: words.slice(1).join(" ") },
+      musicKey: saved.musicKey ?? "open-road",
+      sec: Math.min(12, Math.max(4, Number(saved.sec) || 8)),
+    };
+  }
+  /** Makes the card for one guest: stored for the edit, and a small picture back to show on screen. */
+  app.post("/api/host/guest-card", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    const guestName = String(req.body?.guestName ?? "").trim().slice(0, 60);
+    const m = /^data:image\/(?:jpeg|png|webp);base64,(.+)$/i.exec(String(req.body?.photo ?? ""));
+    if (!guestName) return res.status(400).json({ message: "Add the guest's name." });
+    if (!m) return res.status(400).json({ message: "Add the guest's photo." });
+    const guestPhoto = Buffer.from(m[1], "base64");
+    if (guestPhoto.length > 6 * 1024 * 1024) return res.status(413).json({ message: "That photo is too big. Try a smaller one." });
+    const profile = await storage.getProfileByEmail(email);
+    if (!profile?.photoUrl) return res.status(409).json({ message: "Add your own photo to your profile first: it goes on the left of the card." });
+    const hostPhoto = Buffer.from(await (await fetch(profile.photoUrl)).arrayBuffer());
+    const gc = await guestCardSettings(email);
+    try {
+      const png = await renderGuestCard({ hostName: profile.hostName || "Host", hostPhoto, guestName, guestPhoto, footerLeft: gc.footerLeft, footerRight: gc.footerRight });
+      const key = `show-assets/gc-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.png`;
+      await putRecordingObject(key, png, "image/png");
+      const preview = await sharp(png).resize(960).jpeg({ quality: 82 }).toBuffer();
+      res.json({ key, sec: gc.sec, preview: `data:image/jpeg;base64,${preview.toString("base64")}` });
+    } catch (err) {
+      console.error("Guest card failed:", err);
+      res.status(500).json({ message: "Couldn't make the card. Check the photos and try again." });
+    }
+  });
+
   /** "Edit episode": trim, intro, outro — made by the clipper into a new copy in the Library. */
   app.post("/api/host/recordings/:id/episode-edit", requireHostSession, async (req, res) => {
     const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
@@ -7706,6 +7748,11 @@ export function registerRoutes(app: Express): void {
       })(),
       status: "queued", at: new Date().toISOString(),
     };
+    if ((e.introKey && /\.png$/i.test(e.introKey)) || (e.outroKey && /\.png$/i.test(e.outroKey))) {
+      const gc = await guestCardSettings(email);
+      e.cardMusicKey = gc.musicKey || undefined;
+      e.cardSec = gc.sec;
+    }
     if (!e.trimStart && !e.trimEnd && !e.cuts && !e.introKey && !e.outroKey && !e.music) return res.status(400).json({ message: "Trim it, cut a section, add music, or add an intro or outro, first." });
     await storage.setEpisodeEdit(rec.id, JSON.stringify(e));
     res.json(e);
