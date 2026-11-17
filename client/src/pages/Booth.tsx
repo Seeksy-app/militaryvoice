@@ -1,9 +1,9 @@
 import "@livekit/components-styles";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { ControlBar, GridLayout, LiveKitRoom, ParticipantTile, PreJoin, RoomAudioRenderer, useRemoteParticipants, useRoomContext, useTracks, type LocalUserChoices } from "@livekit/components-react";
+import { ControlBar, GridLayout, LiveKitRoom, ParticipantTile, PreJoin, RoomAudioRenderer, useLocalParticipant, useRemoteParticipants, useRoomContext, useTracks, type LocalUserChoices } from "@livekit/components-react";
 import { RoomEvent, Track, type RemoteParticipant } from "livekit-client";
-import { Check, Copy, Mic, Radio, Square, Timer } from "lucide-react";
+import { Check, Copy, Mic, Radio, Square, Timer, Video, VideoOff } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 
 // MilitaryVoices Radio booth: one booking's own simple studio. Check the
@@ -137,6 +137,37 @@ function Rail({ info, shift = 0, onEnd, error = "" }: { info: Info; shift?: numb
         <button type="button" onClick={() => setAsking(true)} className="relative z-10 mx-auto inline-flex items-center gap-3 rounded-full border border-white/30 bg-gradient-to-b from-[#f0434b] to-[#b3121a] px-8 py-3.5 text-base font-extrabold text-white shadow-[0_8px_26px_rgba(237,28,36,0.4)] hover:brightness-110 lg:text-lg" data-testid="booth-end"><Square className="h-5 w-5 fill-white" />End my show early</button>
       ))}
     </aside>
+  );
+}
+
+
+/**
+ * Tells the host what the audience gets: with the camera on, their video goes out on the station; with it off, listeners
+ * see their photo, the show's name and a sound bar. One tap switches. Before they go live it warns, so no one is surprised.
+ */
+function OnAirNotice({ info, shift = 0 }: { info: Info; shift?: number }) {
+  const { localParticipant, isCameraEnabled } = useLocalParticipant();
+  const now = useNow() + shift;
+  const [busy, setBusy] = useState(false);
+  const on = Date.parse(info.onAirAtUtc), off = Date.parse(info.offAirAtUtc);
+  if (now >= off) return null;
+  const live = now >= on;
+  const toggle = async () => { setBusy(true); try { await localParticipant.setCameraEnabled(!isCameraEnabled); } finally { setBusy(false); } };
+  const tone = isCameraEnabled ? (live ? "border-[#ED1C24] bg-[#ED1C24]/20" : "border-[#F0A71F] bg-[#F0A71F]/15") : "border-[#4ade80]/60 bg-[#14532d]/40";
+  return (
+    <div className={`mx-4 mb-2 flex flex-wrap items-center justify-between gap-3 rounded-xl border px-4 py-3 text-white ${tone}`} role="status" data-testid="booth-onair-notice">
+      <p className="flex min-w-0 flex-1 items-center gap-3 text-base font-semibold lg:text-lg">
+        {isCameraEnabled ? <Video className="h-6 w-6 shrink-0" /> : <VideoOff className="h-6 w-6 shrink-0" />}
+        <span>
+          {isCameraEnabled
+            ? (live ? <><b>Your video is being broadcast right now.</b> For audio only, turn your camera off.</> : <>Your camera is on. At {hm(info.onAirAtUtc)} ET your video goes out on the station. For audio only, turn it off.</>)
+            : (live ? <><b>You're on air, audio only.</b> Listeners see your photo, your show's name and a sound bar.</> : <>Your camera is off. At {hm(info.onAirAtUtc)} ET you go on air as audio only: listeners see your photo, your show's name and a sound bar.</>)}
+        </span>
+      </p>
+      <button type="button" disabled={busy} onClick={() => void toggle()} className="shrink-0 rounded-full border border-white/60 bg-white/10 px-5 py-2 text-sm font-extrabold hover:bg-white/20 disabled:opacity-60" data-testid="booth-camera-toggle">
+        {isCameraEnabled ? "Turn camera off" : "Turn camera on"}
+      </button>
+    </div>
   );
 }
 
@@ -301,7 +332,10 @@ export default function Booth({ id }: { id: string }) {
       </div>
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row-reverse">
         <Rail info={eff} shift={d.anytime ? previewShift : 0} onEnd={!watching && (d.role === "host" || d.role === "admin") ? endShow : undefined} error={error} />
-        <div className="min-h-0 flex-1"><BookingStage signupId={d.signupId} /></div>
+        <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+          {!watching && <OnAirNotice info={eff} shift={d.anytime ? previewShift : 0} />}
+          <div className="min-h-0 flex-1"><BookingStage signupId={d.signupId} /></div>
+        </div>
       </div>
       <ControlBar controls={watching ? WATCH_CONTROLS : CONTROLS} />
     </LiveKitRoom>

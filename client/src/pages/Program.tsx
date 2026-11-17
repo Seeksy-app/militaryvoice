@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { StageGrid, useStageRoom } from "@/components/StageView";
+import { StageGrid, useStageRoom, type StageTile } from "@/components/StageView";
 
 // MilitaryVoices Radio on air: what the broadcast films all day.
 //
@@ -14,7 +14,7 @@ import { StageGrid, useStageRoom } from "@/components/StageView";
 // once ready to be filmed. ?eventId=N without a token previews the cards;
 // add &at=<ISO time> to see any moment of the day.
 
-type Booking = { id: number; show: string; host: string; photo: string; mediaUrl?: string; startAtUtc: string; endAtUtc: string; onAirAtUtc: string; offAirAtUtc: string };
+type Booking = { id: number; show: string; host: string; photo: string; about?: string; mediaUrl?: string; startAtUtc: string; endAtUtc: string; onAirAtUtc: string; offAirAtUtc: string };
 type Replay_ = { id: number; show: string; host: string; photo: string; mediaUrl: string; durationSec: number };
 type VoiceInfo = { welcomeUrl: string; welcomeSec: number; signoffUrl: string; signoffSec: number; bedUrl?: string };
 type Program = { eventId: number; day: string; startAtUtc: string; endAtUtc: string; fillerUrl: string; voice?: VoiceInfo; dayIndex?: number; replays?: Replay_[]; bookings: Booking[] };
@@ -89,6 +89,67 @@ function Voice({ src, startedAt, now, muted }: { src: string; startedAt: number;
   return <audio ref={ref} src={src} autoPlay muted={muted} onLoadedMetadata={place} />;
 }
 
+
+/**
+ * The host is on air with the camera off: an On Air badge, a sound bar that moves with their voice, and who they are
+ * (the show, the host and their title, and what the show is about). Sits over the stage, which stays mounted
+ * underneath because it is what plays the voices.
+ */
+function AudioOnAir({ tiles, show, host, photo, about, demo = false }: { tiles: StageTile[]; show: string; host: string; photo: string; about?: string; demo?: boolean }) {
+  const canvas = useRef<HTMLCanvasElement>(null);
+  const tracks = useMemo(() => tiles.map((t) => t.audio?.mediaStreamTrack).filter((t): t is MediaStreamTrack => !!t), [tiles]);
+  useEffect(() => {
+    const AC = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+    if (!AC) return;
+    const ctx = new AC();
+    const an = ctx.createAnalyser();
+    an.fftSize = 256; an.smoothingTimeConstant = 0.8;
+    // Listened to, never played: the stage's own tiles are what the audience hears.
+    const srcs = tracks.map((t) => { const s = ctx.createMediaStreamSource(new MediaStream([t])); s.connect(an); return s; });
+    const data = new Uint8Array(an.frequencyBinCount);
+    const BARS = 48;
+    let raf = 0;
+    const draw = () => {
+      raf = requestAnimationFrame(draw);
+      const c = canvas.current; const g = c?.getContext("2d");
+      if (!c || !g) return;
+      an.getByteFrequencyData(data);
+      // A preview with no room: a made-up voice, so the bar can be seen moving.
+      if (demo) { const t = performance.now() / 1000; for (let i = 0; i < data.length; i++) data[i] = Math.max(0, 140 + 100 * Math.sin(t * 5 + i * 0.35) * Math.sin(t * 1.7 + i * 0.1) - i * 1.4); }
+      g.clearRect(0, 0, c.width, c.height);
+      const slot = c.width / BARS, w = slot * 0.62;
+      for (let i = 0; i < BARS; i++) {
+        // Voice lives in the low bins: use the first 70 % of them, mirrored so it grows from the middle.
+        const k = Math.floor((Math.abs(i - BARS / 2) / (BARS / 2)) * data.length * 0.7);
+        const v = data[Math.min(k, data.length - 1)] / 255;
+        const h = Math.max(10, v * c.height * 0.95);
+        g.fillStyle = i % 2 ? "#F0A71F" : "#ffd36b";
+        g.fillRect(i * slot + (slot - w) / 2, (c.height - h) / 2, w, h);
+      }
+    };
+    draw();
+    return () => { cancelAnimationFrame(raf); srcs.forEach((s) => { try { s.disconnect(); } catch { /* gone */ } }); void ctx.close().catch(() => undefined); };
+  }, [tracks]);
+  const title = tiles.find((t) => t.displayTitle)?.displayTitle ?? "";
+  return (
+    <div className="absolute inset-0 z-10 flex flex-col items-start justify-center bg-[radial-gradient(ellipse_at_top,#0a2a6b_0%,#000741_60%)] px-24 text-white" data-testid="radio-audio-only">
+      <div className="flex items-center gap-16">
+        <Face photo={photo || tiles.find((t) => t.photoUrl)?.photoUrl || ""} size={300} />
+        <div className="max-w-[1100px]">
+          <p className="inline-flex items-center gap-4 rounded-full bg-[#ED1C24] px-8 py-3 text-4xl font-black uppercase tracking-[0.2em] shadow-[0_0_40px_rgba(237,28,36,0.55)]">
+            <span className="h-5 w-5 animate-pulse rounded-full bg-white" />On air
+          </p>
+          <p className="mt-6 text-7xl font-black leading-[1.05] [text-wrap:balance]">{show}</p>
+          <p className="mt-4 text-4xl font-semibold text-white/90">with {host}{title ? <span className="text-[#F0A71F]"> · {title}</span> : null}</p>
+          {about && <p className="mt-5 line-clamp-3 text-3xl font-medium leading-snug text-white/75 [text-wrap:pretty]">{about}</p>}
+        </div>
+      </div>
+      <canvas ref={canvas} width={1000} height={150} className="mt-12 h-[150px] w-[1000px] max-w-full" aria-hidden />
+      <p className="absolute bottom-10 left-24 text-xl font-bold uppercase tracking-[0.18em] text-white/60">MilitaryVoices Radio · M–F 7 am – 10 pm ET</p>
+    </div>
+  );
+}
+
 export default function Program() {
   (window as unknown as { __mvBroadcast?: boolean }).__mvBroadcast = true;
   const params = useMemo(() => new URLSearchParams(window.location.search), []);
@@ -158,10 +219,18 @@ export default function Program() {
   const signoffOn = !!voice?.signoffUrl && Number.isFinite(dayEnd) && now >= signoffAt && now < dayEnd;
   const introAt = current ? Date.parse(current.startAtUtc) + (Date.parse(current.startAtUtc) === dayStart ? welcomeMs : 0) : 0;
 
+  // Everyone on air has their camera off: audio only, with a sound bar and who they are.
+  const audioOnly = phase === "live" && !current!.mediaUrl && tiles.length > 0 && tiles.every((t) => !t.video);
+  // Not at the first instant: a camera that is on takes a second or two to arrive, and must not flash the audio card.
+  const [audioOnlyOk, setAudioOnlyOk] = useState(false);
+  useEffect(() => { if (!audioOnly) { setAudioOnlyOk(false); return; } const t = setTimeout(() => setAudioOnlyOk(true), 2500); return () => clearTimeout(t); }, [audioOnly]);
+  const demoAudio = !token && !listen && params.get("demo") === "audio" && !!current;
   const nextLine = next ? `Up next at ${hm(next.startAtUtc)}: ${next.show}` : "Back weekdays at 7 am Eastern";
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-[#000741]">
       {phase === "live" && !current!.mediaUrl && tiles.length > 0 && <StageGrid tiles={tiles} meta={{ status: "Live" }} caption={caption} />}
+      {audioOnlyOk && <AudioOnAir tiles={tiles} show={current!.show} host={current!.host} photo={current!.photo} about={current!.about} />}
+      {demoAudio && <AudioOnAir demo tiles={[]} show={current!.show} host={current!.host} photo={current!.photo} about={current!.about || "Veterans, service members and their families, telling their own stories."} />}
       {phase === "live" && current!.mediaUrl && <Replay id={`b${current!.id}`} src={current!.mediaUrl} show={current!.show} host={current!.host} photo={current!.photo} startedAt={Date.parse(current!.onAirAtUtc)} now={now} muted={muted} bedUrl={voice?.bedUrl} />}
       {phase === "live" && !current!.mediaUrl && tiles.length === 0 && <><Card eyebrow="Live now" title={current!.show} sub={`with ${current!.host}`} photo={current!.photo} foot="Joining in a moment" /><Bed src={voice?.bedUrl ?? ""} muted={muted} /></>}
       {phase === "intro" && now >= introAt && <Voice key={`i${current!.id}`} src={`/api/radio/voice/${current!.id}/intro.mp3`} startedAt={Date.parse(current!.startAtUtc)} now={now} muted={muted} />}
@@ -196,7 +265,7 @@ export default function Program() {
           <span className="flex items-center gap-8 rounded-full bg-[#F0A71F] px-28 py-16 text-[8rem] font-black leading-none text-[#1a1200] shadow-2xl">▶ Tap to listen</span>
         </button>
       )}
-      {phase === "live" && !current!.mediaUrl && (
+      {phase === "live" && !current!.mediaUrl && !audioOnlyOk && (
         <div className="pointer-events-none absolute left-6 top-5 flex items-center gap-2 rounded-full bg-[#ED1C24] px-4 py-1.5">
           <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-white" />
           <span className="text-sm font-bold uppercase tracking-[0.14em] text-white">Live</span>

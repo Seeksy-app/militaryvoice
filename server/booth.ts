@@ -134,7 +134,7 @@ export function registerBooth(app: Express): void {
         const endedMs = endedRaw ? Date.parse(endedRaw) : NaN;
         const early = Number.isFinite(endedMs) && endedMs >= t.onAirStart && endedMs < t.onAirEnd;
         if (early) { t.onAirEnd = endedMs; t.end = Math.min(t.end, endedMs + 45_000); }
-        return { id: s.id, endedEarly: early, show: s.podcastName, host: s.hostName, photo: s.photoUrl, mediaUrl, introUrl: voice.map[String(s.id)]?.introKey ? await signedRecordingUrl(voice.map[String(s.id)].introKey!, 6 * 3600).catch(() => "") : "", outroUrl: voice.map[String(s.id)]?.outroKey ? await signedRecordingUrl(voice.map[String(s.id)].outroKey!, 6 * 3600).catch(() => "") : "", startAtUtc: new Date(t.start).toISOString(), endAtUtc: new Date(t.end).toISOString(), onAirAtUtc: new Date(t.onAirStart).toISOString(), offAirAtUtc: new Date(t.onAirEnd).toISOString() };
+        return { id: s.id, endedEarly: early, show: s.podcastName, host: s.hostName, photo: s.photoUrl, about: s.notes ?? "", mediaUrl, introUrl: voice.map[String(s.id)]?.introKey ? await signedRecordingUrl(voice.map[String(s.id)].introKey!, 6 * 3600).catch(() => "") : "", outroUrl: voice.map[String(s.id)]?.outroKey ? await signedRecordingUrl(voice.map[String(s.id)].outroKey!, 6 * 3600).catch(() => "") : "", startAtUtc: new Date(t.start).toISOString(), endAtUtc: new Date(t.end).toISOString(), onAirAtUtc: new Date(t.onAirStart).toISOString(), offAirAtUtc: new Date(t.onAirEnd).toISOString() };
       })),
     });
   });
