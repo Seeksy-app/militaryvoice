@@ -64,10 +64,25 @@ export function MyAnalytics({ onConnect }: { onConnect: () => void }) {
     return (
       <div className="rounded-2xl border border-dashed border-border p-8 text-center" data-testid="my-analytics-empty">
         <BarChart3 className="mx-auto h-8 w-8 text-[#053877]" />
-        <p className="mt-3 font-semibold text-foreground">Connect the account you post from</p>
-        <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
-          We read your Instagram, YouTube or TikTok and show you what a sponsor sees: real reach, audience quality, who's watching and where.
-        </p>
+        {(() => {
+          const have = (social.data?.accounts ?? []).map((x) => x.platform);
+          const names = Array.from(new Set(have)).map((x) => (x === "x" ? "X" : x === "linkedin" ? "LinkedIn" : x.charAt(0).toUpperCase() + x.slice(1)));
+          return have.length ? (
+            <>
+              <p className="mt-3 font-semibold text-foreground">Add an account we can read</p>
+              <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+                You've connected {names.join(", ")}. Audience numbers come from Instagram, YouTube, TikTok or X, so connect one of those to see what a sponsor sees: real reach, audience quality, who's watching and where. Your post numbers are below.
+              </p>
+            </>
+          ) : (
+            <>
+              <p className="mt-3 font-semibold text-foreground">Connect the account you post from</p>
+              <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">
+                We read your Instagram, YouTube, TikTok or X and show you what a sponsor sees: real reach, audience quality, who's watching and where.
+              </p>
+            </>
+          );
+        })()}
         <Button className="mt-4 gap-1.5 rounded-full" onClick={onConnect}><Link2 className="h-4 w-4" /> Connect accounts</Button>
       </div>
     );
