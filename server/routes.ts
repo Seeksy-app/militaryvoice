@@ -8502,6 +8502,33 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  // ---- Pay links: a plan, made for one person, that opens its own checkout when they click it ----------
+  // Stripe's own checkout links die after a day. This one is signed with SESSION_SECRET (nothing stored) and makes a fresh
+  // checkout each time it's opened, for 30 days. The payment attaches to the email it was made for.
+  const payLinkSig = (body: string) => crypto.createHmac("sha256", process.env.SESSION_SECRET || "mv-pay").update(`pay:${body}`).digest("base64url").slice(0, 32);
+  app.post("/api/admin/pay-link", requireAdmin, async (req, res) => {
+    const email = String(req.body?.email ?? "").trim().toLowerCase();
+    const plan = String(req.body?.plan ?? "pro");
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || !planOf(plan)) return res.status(400).json({ message: "An email and a plan." });
+    const body = Buffer.from(JSON.stringify({ e: email, p: plan, x: req.body?.production ? 1 : 0, t: Date.now() + 30 * 86_400_000 })).toString("base64url");
+    res.json({ url: `${originOf(req)}/api/pay/${body}.${payLinkSig(body)}` });
+  });
+  app.get("/api/pay/:t", async (req, res) => {
+    try {
+      const [body, sig] = String(req.params.t).split(".");
+      if (!body || !sig || payLinkSig(body) !== sig) return res.status(404).send("That link isn't valid. Ask us for a new one.");
+      const v = JSON.parse(Buffer.from(body, "base64url").toString()) as { e: string; p: string; x: number; t: number };
+      if (Date.now() > v.t) return res.status(410).send("That link has expired. Ask us for a new one.");
+      if (!stripeReady()) return res.status(503).send("Payments aren't switched on yet. Try again soon.");
+      const sub = await storage.getSubscription(v.e);
+      const url = await createPlanCheckout({ email: v.e, plan: v.p as PlanKey, origin: originOf(req), customerId: sub?.customerId || undefined, addons: v.x ? (["production"] as AddonKey[]) : [] });
+      res.redirect(303, url);
+    } catch (err: any) {
+      console.error("Pay link failed:", err?.message);
+      res.status(502).send("The payment page didn't open. Try again in a moment, or reply to our email.");
+    }
+  });
+
   app.post("/api/host/addon/confirm", requireHostSession, async (req, res) => {
     noStore(res);
     const email = (getSessionEmail(req) ?? "").trim().toLowerCase();

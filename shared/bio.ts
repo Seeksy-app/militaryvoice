@@ -394,9 +394,9 @@ export interface BioPublic {
 }
 
 export const TEMPLATES: Record<BioTemplate, { label: string; note: string; theme: Partial<BioTheme> }> = {
-  classic: { label: "Classic", note: "Light and clean", theme: { shade: "light", font: "sans", linkShape: "rounded", linkStyle: "fill", layout: "portrait" } },
+  classic: { label: "Classic", note: "Light and clean", theme: { shade: "light", font: "sans", linkShape: "rounded", linkStyle: "fill", layout: "portrait", podcastStyle: "list" } },
   bold: { label: "Bold", note: "Dark, your photo across the top", theme: { shade: "dark", font: "sans", linkShape: "pill", linkStyle: "fill", layout: "blend" } },
-  minimal: { label: "Minimal", note: "White, outlines, no fuss", theme: { shade: "light", font: "sans", linkShape: "square", linkStyle: "outline", layout: "portrait" } },
+  minimal: { label: "Minimal", note: "White, outlines, no fuss", theme: { shade: "light", font: "sans", linkShape: "square", linkStyle: "outline", layout: "portrait", podcastStyle: "list" } },
   vibrant: { label: "Vibrant", note: "Your colour behind everything", theme: { shade: "dark", font: "sans", linkShape: "pill", linkStyle: "soft", layout: "landscape" } },
   portrait: { label: "Portrait", note: "Your photo, full screen", theme: { shade: "dark", font: "sans", linkShape: "pill", linkStyle: "soft", layout: "hero" } },
 };

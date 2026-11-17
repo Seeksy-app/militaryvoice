@@ -1397,6 +1397,8 @@ function TemplatePicker({ view, theme, onClose, onApply }: { view: BioPublic; th
   const [accent, setAccent] = useState<string | null>(null);
   const [bgc, setBgc] = useState<string | null>(null);
   const [font, setFont] = useState<BioFont | null>(null);
+  // How the latest episode shows: the big photo is only one choice, and a template shouldn't force it.
+  const [pod, setPod] = useState<"spotlight" | "list" | "carousel" | null>(null);
   const n = keys.length;
   const shift = (dir: -1 | 1) => setI((x) => (x + dir + n) % n);
   useEffect(() => {
@@ -1409,6 +1411,7 @@ function TemplatePicker({ view, theme, onClose, onApply }: { view: BioPublic; th
     ...theme, ...TEMPLATES[k].theme, template: k,
     color: centre && accent ? accent : theme.color,
     font: centre && font ? font : (TEMPLATES[k].theme.font ?? theme.font),
+    podcastStyle: centre && pod ? pod : (TEMPLATES[k].theme.podcastStyle ?? theme.podcastStyle),
     background: centre && bgc ? { mode: "solid", color: bgc, image: "" } : { mode: "solid", color: "", image: "" },
     bgTint: 0, bgBrightness: 0,
   });
@@ -1471,8 +1474,16 @@ function TemplatePicker({ view, theme, onClose, onApply }: { view: BioPublic; th
             </select>
           </div>
           <div className="flex items-center gap-2">
+            <span className="text-xs font-medium text-muted-foreground">Episodes:</span>
+            <select value={pod ?? (TEMPLATES[cur].theme.podcastStyle ?? theme.podcastStyle ?? "spotlight")} onChange={(e) => setPod(e.target.value as "spotlight" | "list" | "carousel")} className="h-9 rounded-lg border border-border bg-card px-2 text-sm" data-testid="template-episodes">
+              <option value="list">In rows (classic)</option>
+              <option value="spotlight">Big latest episode</option>
+              <option value="carousel">Cards to swipe</option>
+            </select>
+          </div>
+          <div className="flex items-center gap-2">
             <Button variant="outline" onClick={onClose} className="rounded-full">Cancel</Button>
-            <Button onClick={() => { const th = themed(cur, true); onApply({ ...TEMPLATES[cur].theme, template: cur, color: th.color, font: th.font, background: th.background, bgTint: 0, bgBrightness: 0 }); }} className="rounded-full bg-[#053877] hover:bg-[#0a4a99]" data-testid="template-apply">Apply template</Button>
+            <Button onClick={() => { const th = themed(cur, true); onApply({ ...TEMPLATES[cur].theme, template: cur, color: th.color, font: th.font, podcastStyle: th.podcastStyle, background: th.background, bgTint: 0, bgBrightness: 0 }); }} className="rounded-full bg-[#053877] hover:bg-[#0a4a99]" data-testid="template-apply">Apply template</Button>
           </div>
         </div>
       </div>

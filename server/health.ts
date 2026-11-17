@@ -194,7 +194,19 @@ const DEFS: Def[] = [
       return { state: "down", detail: `${res.status}: ${body.slice(0, 120)}` };
     },
   },
-  { key: "fal", name: "fal", group: "SI", powers: "Photo cut-outs on SmartLinks", run: keyOnly(["FAL_KEY"], "no free status call") },
+  {
+    key: "fal", name: "fal", group: "SI", powers: "Photo cut-outs, styles and living photos on SmartLinks",
+    // No status call, but an empty request is refused before it costs anything, and a locked account says so (Exhausted balance, 17 Nov).
+    run: async () => {
+      const k = env("FAL_KEY");
+      if (!k) return { state: "off", detail: "Not set up (FAL_KEY)" };
+      const res = await fetch("https://fal.run/fal-ai/birefnet", { method: "POST", headers: { Authorization: `Key ${k}`, "Content-Type": "application/json" }, body: "{}", signal: AbortSignal.timeout(8_000) });
+      const body = await res.text().catch(() => "");
+      if (res.status === 403 && /balance|locked/i.test(body)) return { state: "down", detail: "Out of balance: cut-outs and styles are failing. Top up at fal.ai/dashboard/billing" };
+      if (res.status === 401 || res.status === 403) return { state: "down", detail: `${res.status} (the key was refused)` };
+      return { state: "ok", detail: "Key set, balance available" };
+    },
+  },
   {
     key: "elevenlabs", name: "ElevenLabs", group: "SI", powers: "Voice in clips and reads",
     run: async () => {
