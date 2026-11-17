@@ -207,6 +207,24 @@ async function uploadFile(file: string, contentType: string): Promise<string> {
 // restarting the 8.6GB worker every five minutes with four at once.
 const FFMPEG_SLOTS = Math.max(1, Number(process.env.FFMPEG_SLOTS || Math.min(Math.floor(memoryLimit() / 2.6e9), cpuLimit())));
 
+// Render gives this worker 2GB of temporary disk for everything it writes. Two big sources at once (or one 2.5GB
+// full-day recording) filled it, and Render stopped the whole instance ("/tmp exceeded the limit of 2GB", 17 Nov 2026),
+// which is the restart every few minutes since the Marathon. Sources now reserve their size against one shared budget:
+// a source that can never fit fails with a plain reason, and one that would not fit beside the others waits its turn.
+const TMP_BUDGET = Number(process.env.TMP_BUDGET_BYTES || 1.3e9);
+let tmpHeld = 0;
+async function reserveTmp(bytes: number, tag: string): Promise<() => void> {
+  if (bytes > TMP_BUDGET) throw new Error(`the recording is ${(bytes / 1e9).toFixed(1)}GB, more than this worker's 2GB temporary disk can hold`);
+  let told = false;
+  while (tmpHeld + bytes > TMP_BUDGET) {
+    if (!told) { console.log(`${tag}: waiting for temporary disk (${(tmpHeld / 1e6).toFixed(0)}MB in use)`); told = true; }
+    await new Promise((r) => setTimeout(r, 5000));
+  }
+  tmpHeld += bytes;
+  let freed = false;
+  return () => { if (!freed) { freed = true; tmpHeld -= bytes; } };
+}
+
 /** The container's CPUs (cgroup quota), not the host's. */
 function cpuLimit(): number {
   try {
@@ -2146,6 +2164,7 @@ async function handle(job: Job): Promise<void> {
   if (job.clipEdit) return handleEdit(job);
   if (job.cleanOnly) return handleClean(job);
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), `clip-${job.recordingId}-`));
+  let releaseTmp: () => void = () => {};
   try {
     console.log(`[${job.recordingId}] ${job.show} — ${Math.round(job.durationSec)}s`);
 
@@ -2158,6 +2177,7 @@ async function handle(job: Job): Promise<void> {
     const res = await fetch(job.downloadUrl);
     if (!res.ok || !res.body) throw new Error(`couldn't download the recording: ${res.status}`);
     const total = Number(res.headers.get("content-length") || 0);
+    releaseTmp = await reserveTmp(total, `[${job.recordingId}]`);
     const started = Date.now();
     let got = 0;
     let shown = 0;
@@ -2403,6 +2423,7 @@ async function handle(job: Job): Promise<void> {
     // "Generate more" is clips only: the clean episode is already made.
     if (!silent && !job.options?.more && !cleanedAlready) await cleanEpisode(job, source, dir);
   } finally {
+    releaseTmp();
     await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
   }
 }
