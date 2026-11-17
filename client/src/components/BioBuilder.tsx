@@ -1066,6 +1066,13 @@ function DesignTab({ d, change, view, cutting = false, cutError = "", living, st
           </div>
           <p className="mb-1.5 mt-5 text-xs font-medium text-muted-foreground">Top of the page</p>
         <LayoutTiles d={d} value={t.layout} onPick={(v) => v && set({ layout: v })} cutting={cutting} />
+          {/* Cutout tops need a photo of one person. When the cut fails the page shows a round photo, so say why, here, where they just clicked. */}
+          {cutError && CUTOUT_LAYOUTS.includes(t.layout) && (
+            <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl border border-destructive/30 bg-destructive/10 px-3 py-2 text-xs text-destructive" data-testid="bio-cutout-error">
+              <span className="min-w-0 flex-1">{cutError} Cut-out tops work best with a photo of just one person.</span>
+              <button type="button" onClick={() => set({ layout: "hero" })} className="shrink-0 font-semibold underline" data-testid="bio-cutout-use-hero">Use Hero instead</button>
+            </div>
+          )}
           <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-border p-3">
             <div><p className="text-sm font-semibold">Show my name</p><p className="text-xs text-muted-foreground">Turn it off when your photo or logo already says it.</p></div>
             <Switch checked={!(t.hideName ?? false)} onCheckedChange={(v) => set({ hideName: !v })} data-testid="bio-show-name" />
@@ -1107,7 +1114,6 @@ function DesignTab({ d, change, view, cutting = false, cutError = "", living, st
                 </div>
               </div>
             ) : null}
-          {cutError && CUTOUT_LAYOUTS.includes(t.layout) && <p className="mt-2 rounded-xl bg-destructive/10 px-3 py-2 text-xs text-destructive">{cutError}</p>}
           {hasPhoto && !CUTOUT_LAYOUTS.includes(t.layout) && t.layout !== "hero" && (
             <div className="mt-5">
               {/* The top crops the picture to fit; this picks which part shows (0 the top of it, 100 the bottom). */}
