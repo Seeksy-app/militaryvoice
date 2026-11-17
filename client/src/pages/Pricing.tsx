@@ -21,7 +21,8 @@ type Feature = { t: string; tip: string };
 
 const GROWTH: Feature[] = [
   { t: "SmartLink for every bio", tip: "Your page at militaryvoices.ai/you: your show, your links, your latest episodes and a way for listeners to reach you." },
-  { t: "Podcast hosting + directory", tip: "We host your show and its feed, so it plays on Apple Podcasts, Spotify and every podcast app, and it's listed in the MilitaryVoices directory." },
+  { t: "Podcast hosting + directory", tip: "We host your show and its feed, and it's listed in the MilitaryVoices directory." },
+  { t: "Publish to 10+ podcast apps", tip: "One feed, listed once in each: Apple Podcasts, Spotify, Amazon Music and Audible, iHeartRadio, YouTube Music, Pocket Casts, TuneIn, Deezer, Player FM, Castbox and Podcast Index, which feeds dozens more. We copy your feed and walk you through each one." },
   { t: "SmartChat for your listeners", tip: "Listeners ask your show a question and get an answer from your own episodes, any time of day." },
   { t: "Zoom recordings, straight in", tip: "Connect Zoom once. Every cloud recording comes in on its own, ready for clips and a clean episode." },
   { t: "Events with an SI co-host", tip: "Take a slot in live events like the Podcast Marathon. Alex, our SI co-host, introduces you and keeps the hand-offs moving." },

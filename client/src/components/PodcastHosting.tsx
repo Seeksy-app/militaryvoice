@@ -261,8 +261,7 @@ export function PodcastHosting() {
           ) : null}
           {/* A moved show is in the apps already, by its old feed: forwarding that feed moves them all here. */}
           {s.importedFrom && <MoveSubscribers h={h} onDone={refresh} />}
-          <Directories h={h} ready={ready} onSaved={refresh} />
-          <YouTubeEpisodes h={h} ready={!!q.data?.youtubeReady} onDone={refresh} />
+          <Directories h={h} ready={ready} onSaved={refresh} youtube={<YouTubeEpisodes embedded h={h} ready={!!q.data?.youtubeReady} onDone={refresh} />} />
         </>
       )}
 
@@ -300,12 +299,16 @@ const FIND: Record<string, (t: string) => string> = {
 const DIRS: { key: string; name: string; reach: string; url: string; steps: string[]; link: string; auto?: boolean }[] = [
   { key: "apple", name: "Apple Podcasts", reach: "Apple Podcasts, and the apps that read Apple's list (Overcast, Castro)", url: "https://podcastsconnect.apple.com/my-podcasts/new-feed", steps: ["Sign in with your Apple ID.", "Choose to add a show with an RSS feed, and paste your feed (it's copied).", "Submit. Apple reviews it, usually in a day or two, and writes to your owner email."], link: "https://podcasts.apple.com/…" },
   { key: "spotify", name: "Spotify", reach: "Spotify", url: "https://creators.spotify.com/", steps: ["Sign in to Spotify for Creators (it opens in a new tab).", "Choose to add a podcast you already have on another host, and paste your feed.", "Spotify emails a code to your owner email: type it in. It's live within hours."], link: "https://open.spotify.com/show/…" },
-  { key: "youtube", name: "YouTube Music", reach: "YouTube and YouTube Music, as an audio podcast", url: "https://studio.youtube.com", steps: ["Open YouTube Studio on your channel.", "Create, then New podcast, then submit an RSS feed. Paste your feed.", "Confirm with the code YouTube emails to your owner email."], link: "https://music.youtube.com/playlist?list=…" },
   { key: "amazon", name: "Amazon Music & Audible", reach: "Amazon Music, Audible and Alexa", url: "https://podcasters.amazon.com/", steps: ["Sign in with an Amazon account.", "Add your podcast and paste your feed.", "Confirm with the code sent to your owner email."], link: "https://music.amazon.com/podcasts/…" },
-  { key: "iheart", name: "iHeartRadio", reach: "iHeartRadio", url: "https://www.iheart.com/content/submit-your-podcast/", steps: ["Open iHeart's podcast submission page and sign in.", "Paste your feed and submit."], link: "https://www.iheart.com/podcast/…" },
+  { key: "iheart", name: "iHeartRadio", reach: "iHeartRadio", url: "https://podcasters.iheart.com/", steps: ["Open iHeart's podcast submission page and sign in.", "Paste your feed and submit."], link: "https://www.iheart.com/podcast/…" },
   { key: "pocketcasts", name: "Pocket Casts", reach: "Pocket Casts", url: "https://pocketcasts.com/submit/", steps: ["Paste your feed and press Submit. No account needed."], link: "https://pca.st/…" },
-  { key: "listennotes", name: "Listen Notes", reach: "The podcast search engine. We list your show there for you once an episode is out.", url: "https://www.listennotes.com", steps: [], link: "https://www.listennotes.com/podcasts/…", auto: true },
+  { key: "tunein", name: "TuneIn", reach: "TuneIn and the radios and smart speakers that use it", url: "https://help.tunein.com/contact/add-your-podcast-S19TR3Sdf", steps: ["Open TuneIn's form to add a podcast (your feed is copied).", "Paste your feed, and your show's name, then send it.", "TuneIn reviews it and lists it, usually within a few days."], link: "https://tunein.com/podcasts/…" },
+  { key: "deezer", name: "Deezer", reach: "Deezer", url: "https://podcasters.deezer.com/", steps: ["Sign in to Deezer for Creators, or make a free account.", "Add a podcast and paste your feed.", "Confirm with the code Deezer emails to your owner email."], link: "https://www.deezer.com/show/…" },
+  { key: "playerfm", name: "Player FM", reach: "Player FM", url: "https://player.fm/importer/feed", steps: ["Paste your feed and press Import. No account needed."], link: "https://player.fm/series/…" },
+  { key: "castbox", name: "Castbox", reach: "Castbox", url: "https://castbox.fm/", steps: ["Open Castbox and search for your show. If it isn't there, choose Submit a podcast and paste your feed.", "Confirm with the code Castbox emails to your owner email."], link: "https://castbox.fm/channel/…" },
   { key: "podcastindex", name: "Podcast Index", reach: "Dozens of newer apps (Fountain, Podverse, Castamatic and more)", url: "https://podcastindex.org/add", steps: ["Paste your feed and press Submit. That's all."], link: "https://podcastindex.org/podcast/…" },
+  { key: "youtube", name: "YouTube Music", reach: "YouTube and YouTube Music, as an audio podcast", url: "https://studio.youtube.com", steps: ["Open YouTube Studio on your channel.", "Create, then New podcast, then submit an RSS feed. Paste your feed.", "Confirm with the code YouTube emails to your owner email."], link: "https://music.youtube.com/playlist?list=…" },
+  { key: "listennotes", name: "Listen Notes", reach: "The podcast search engine. We list your show there for you once an episode is out.", url: "https://www.listennotes.com", steps: [], link: "https://www.listennotes.com/podcasts/…", auto: true },
 ];
 
 /** Each app's own mark, so it's recognisable at a glance (7 Oct). */
@@ -319,7 +322,7 @@ const DIR_ICON: Record<string, { icon: IconType; color: string }> = {
   podcastindex: { icon: SiPodcastindex, color: "#F90000" },
 };
 
-function Directories({ h, ready, onSaved }: { h: Hosted; ready: boolean; onSaved: () => void }) {
+function Directories({ h, ready, onSaved, youtube }: { h: Hosted; ready: boolean; onSaved: () => void; youtube?: React.ReactNode }) {
   const { toast } = useToast();
   const s = h.show;
   const moved = !!s.importedFrom;
@@ -351,17 +354,7 @@ function Directories({ h, ready, onSaved }: { h: Hosted; ready: boolean; onSaved
     toast({ title: "Your feed is copied", description: `Paste it into ${d.name}.` });
   };
   const listed = DIRS.filter((d) => dirs[d.key]?.state === "live").length;
-  return (
-    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm" data-testid="hosting-directories">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-        <div>
-          <h2 className="text-sm font-semibold">Where your show is listed</h2>
-          <p className="text-xs text-muted-foreground">{moved ? "Your show is in these already, by your old feed: forwarding it (above) moves each one here. List it only where it isn't yet." : "List it once in each; new episodes reach them on their own."} {listed ? `Live on ${listed} of ${DIRS.length}.` : ""}</p>
-        </div>
-        <FeedLink url={h.feedUrl} />
-      </div>
-      <ul className="divide-y divide-border">
-        {DIRS.map((d) => {
+  const renderRow = (d: (typeof DIRS)[number]) => {
           const st = dirs[d.key];
           const isOpen = open === d.key;
           return (
@@ -411,14 +404,34 @@ function Directories({ h, ready, onSaved }: { h: Hosted; ready: boolean; onSaved
               )}
             </li>
           );
-        })}
+  };
+  return (
+    <>
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm" data-testid="hosting-directories">
+      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <h2 className="text-sm font-semibold">Where your show is listed</h2>
+          <p className="text-xs text-muted-foreground">{moved ? "Your show is in these already, by your old feed: forwarding it (above) moves each one here. List it only where it isn't yet." : "List it once in each; new episodes reach them on their own."} {listed ? `Live on ${listed} of ${DIRS.length}.` : ""}</p>
+        </div>
+        <FeedLink url={h.feedUrl} />
+      </div>
+      <ul className="divide-y divide-border">
+        {DIRS.filter((d) => d.key !== "youtube").map(renderRow)}
       </ul>
     </div>
+    {/* YouTube, in one place: the audio podcast on YouTube Music, and the episodes as videos on the channel. */}
+    <div className="mt-4 rounded-2xl border border-border bg-card p-4 shadow-sm" data-testid="hosting-youtube-section">
+      <h2 className="text-sm font-semibold">YouTube</h2>
+      <p className="text-xs text-muted-foreground">Your show on YouTube two ways: as an audio podcast on YouTube Music, and your episodes as videos on your channel.</p>
+      <ul className="mt-1 divide-y divide-border">{renderRow(DIRS.find((d) => d.key === "youtube")!)}</ul>
+      {youtube}
+    </div>
+    </>
   );
 }
 
 /** Episodes to their YouTube channel as videos (Upload-Post; their channel is connected on the Social screen). */
-function YouTubeEpisodes({ h, ready, onDone }: { h: Hosted; ready: boolean; onDone: () => void }) {
+function YouTubeEpisodes({ h, ready, onDone, embedded = false }: { h: Hosted; ready: boolean; onDone: () => void; embedded?: boolean }) {
   const { toast } = useToast();
   const [busy, setBusy] = useState<number | null>(null);
   const s = h.show;
@@ -440,7 +453,7 @@ function YouTubeEpisodes({ h, ready, onDone }: { h: Hosted; ready: boolean; onDo
   };
   const sel = "h-9 rounded-md border border-input bg-background px-2 text-sm";
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm" data-testid="hosting-youtube">
+    <div className={embedded ? "mt-3 border-t border-border pt-3" : "rounded-2xl border border-border bg-card p-4 shadow-sm"} data-testid="hosting-youtube">
       <h2 className="text-sm font-semibold">Your episodes as videos on YouTube</h2>
       <p className="text-xs text-muted-foreground">Posted to your channel with their title, notes and picture. {ready ? "Your channel is connected on the " : "Connect your channel on the "}<a href="/host/dashboard/social" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Social</a> screen.</p>
       {/* The choice, once: ask each time (a tick box when publishing) or always post. */}
