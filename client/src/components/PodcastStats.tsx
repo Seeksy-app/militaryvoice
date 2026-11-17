@@ -183,7 +183,7 @@ export function usePodcastSources() {
 }
 
 /** A podcast host in the Dashboard's Connected accounts row: its mark, the show, and its downloads. */
-export function PodcastChips({ onOpen }: { onOpen: () => void }) {
+export function PodcastChips({ onOpen, hostName }: { onOpen: () => void; /** The person it belongs to: the line under the show's name until it has listens to count. */ hostName?: string }) {
   const sources = usePodcastSources();
   return (
     <>
@@ -200,7 +200,7 @@ export function PodcastChips({ onOpen }: { onOpen: () => void }) {
           </span>
           <span className="min-w-0">
             <span className="hidden max-w-[9.5rem] truncate text-sm font-medium leading-tight text-foreground sm:block">{s.showName || NAME[s.source]}</span>
-            <span className="block truncate text-xs font-semibold leading-tight text-foreground sm:font-normal sm:text-muted-foreground">{s.data!.total > 0 ? `${compact(s.data!.total)} ${s.data!.unit}` : NAME[s.source]}</span>
+            <span className="block truncate text-xs font-semibold leading-tight text-foreground sm:font-normal sm:text-muted-foreground">{s.data!.total > 0 ? `${compact(s.data!.total)} ${s.data!.unit}` : (s.source === "militaryvoices" && hostName ? hostName : NAME[s.source])}</span>
           </span>
         </button>
       ))}

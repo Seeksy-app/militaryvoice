@@ -3213,9 +3213,42 @@ function ViewAs() {
     staleTime: 300_000,
   });
   const { toast } = useToast();
-  if (seats.length === 0) return null;
+  const [find, setFind] = useState("");
+  const { data: found = [] } = useQuery<{ email: string; name: string; show: string }[]>({
+    queryKey: ["/api/admin/view-as/search", find],
+    queryFn: () => adminGet<{ email: string; name: string; show: string }[]>(`/api/admin/view-as/search?q=${encodeURIComponent(find.trim())}`),
+    enabled: find.trim().length >= 2,
+    staleTime: 30_000,
+  });
+  const go = async (email: string) => {
+    try {
+      const r = (await adminSend("POST", "/api/admin/view-as", { email }).then((x) => x.json())) as { to: string };
+      window.location.href = r.to;
+    } catch (err) {
+      toast({ title: "Couldn't switch", description: (err as Error).message, variant: "destructive" });
+    }
+  };
+  // Type a name, show or email; picking a match opens their dashboard as them. The list of seats stays for the crew.
   return (
-    <select
+    <>
+    <input
+      list="view-as-found"
+      value={find}
+      onChange={(e) => {
+        const v = e.target.value;
+        setFind(v);
+        const hit = found.find((f) => `${f.name}${f.show ? ` · ${f.show}` : ""} · ${f.email}` === v);
+        if (hit) void go(hit.email);
+      }}
+      onKeyDown={(e) => { if (e.key === "Enter" && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(find.trim())) void go(find.trim().toLowerCase()); }}
+      placeholder="View as any podcaster…"
+      className="ml-1 h-8 w-48 rounded-full border border-border bg-background px-3 text-xs font-medium"
+      data-testid="input-view-as"
+    />
+    <datalist id="view-as-found">
+      {found.map((f) => <option key={f.email} value={`${f.name}${f.show ? ` · ${f.show}` : ""} · ${f.email}`} />)}
+    </datalist>
+    {seats.length > 0 && <select
       value=""
       onChange={async (e) => {
         const email = e.target.value;
@@ -3233,7 +3266,8 @@ function ViewAs() {
     >
       <option value="">View as…</option>
       {seats.map((s) => <option key={s.email} value={s.email}>{s.label}</option>)}
-    </select>
+    </select>}
+    </>
   );
 }
 

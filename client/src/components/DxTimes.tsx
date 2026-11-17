@@ -73,7 +73,8 @@ export function EditTopic({ id, about }: { id: number; about: string }) {
 export function DxTimes({ extra }: { extra?: React.ReactNode } = {}) {
   const [open, setOpen] = useState<{ id: number; what: "share" | "cal" } | null>(null);
   const { data } = useQuery<{ bookings: Booking[] }>({ queryKey: ["/api/dx/mine"], queryFn: async () => (await apiRequest("GET", "/api/dx/mine")).json(), retry: false });
-  const bookings = data?.bookings ?? [];
+  // A time that has finished is gone from Coming up (Andrew, 17 Nov): only what is still ahead, or on right now.
+  const bookings = (data?.bookings ?? []).filter((b) => Date.parse(b.endAtUtc) > Date.now());
   if (!bookings.length && !extra) return null;
   const pill = "inline-flex h-8 items-center gap-1.5 rounded-full border border-border bg-background px-3 text-xs font-semibold hover:bg-muted";
   const toggle = (id: number, what: "share" | "cal") => setOpen((o) => (o?.id === id && o.what === what ? null : { id, what }));

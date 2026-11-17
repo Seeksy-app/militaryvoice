@@ -12513,11 +12513,24 @@ Watch at militaryvoices.ai/agenda
     res.json(await seatsFor(req));
   });
 
+  /** Find any podcaster to step into: by name, show or email. */
+  app.get("/api/admin/view-as/search", requireAdmin, async (req, res) => {
+    noStore(res);
+    const q = String(req.query.q ?? "").trim().toLowerCase();
+    if (q.length < 2) return res.json([]);
+    const out = (await storage.listAllProfiles())
+      .filter((p) => `${p.hostName} ${p.podcastName} ${p.email}`.toLowerCase().includes(q))
+      .slice(0, 12)
+      .map((p) => ({ email: p.email.trim().toLowerCase(), name: p.hostName.trim() || p.podcastName.trim() || p.email, show: p.podcastName.trim() }));
+    res.json(out);
+  });
+
   app.post("/api/admin/view-as", requireAdmin, async (req, res) => {
     const email = String(req.body?.email ?? "").trim().toLowerCase();
     const seats = await seatsFor(req);
-    const seat = seats.find((x) => x.email === email);
-    if (!seat) return res.status(400).json({ message: "That isn't one of your seats." });
+    // Any podcaster with an account (17 Nov 2026): the admin steps into whoever they are helping, no list to maintain. Each step is logged below.
+    const seat = seats.find((x) => x.email === email) ?? ((await storage.getProfileByEmail(email)) ? { email } : undefined);
+    if (!seat) return res.status(400).json({ message: "We don't have an account for that email." });
     // Leaving your own account for a seat: remember it, so it's a seat too.
     const current = (getSessionEmail(req) ?? "").trim().toLowerCase();
     if (current && current !== email && !seats.some((x) => x.email === current)) await storage.setSetting(homeKey(req), current);

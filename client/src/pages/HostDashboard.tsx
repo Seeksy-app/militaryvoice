@@ -233,6 +233,7 @@ function SeatSwitcher({ current }: { current: string }) {
   if (!me) return null;
   const others = seats.filter((s) => s.email !== current.trim().toLowerCase());
   const viewingAs = me.email.trim().toLowerCase() !== current.trim().toLowerCase();
+
   return (
     <div className="flex flex-wrap items-center gap-1.5" data-testid="seat-switcher">
       {/* Viewing as somebody else: the way back is the loudest thing in the row. */}
@@ -282,6 +283,14 @@ function SeatSwitcher({ current }: { current: string }) {
 function SeatMenuItems({ current }: { current: string }) {
   const { data: me } = useQuery<{ email: string }>({ queryKey: ["/api/admin/me"], retry: false, staleTime: 300_000 });
   const { data: seats = [] } = useQuery<{ email: string; label: string; kind: string }[]>({ queryKey: ["/api/admin/view-as"], enabled: !!me, retry: false, staleTime: 300_000 });
+  const [find, setFind] = useState("");
+  const { data: found = [] } = useQuery<{ email: string; name: string; show: string }[]>({
+    queryKey: ["/api/admin/view-as/search", find],
+    queryFn: async () => (await apiRequest("GET", `/api/admin/view-as/search?q=${encodeURIComponent(find.trim())}`)).json(),
+    enabled: find.trim().length >= 2,
+    staleTime: 30_000,
+  });
+  const stepInto = async (email: string) => { await apiRequest("POST", "/api/admin/view-as", { email }); window.location.href = "/host/dashboard"; };
   if (!me) return null;
   const others = seats.filter((s) => s.email !== current.trim().toLowerCase());
   const viewingAs = me.email.trim().toLowerCase() !== current.trim().toLowerCase();
@@ -290,16 +299,26 @@ function SeatMenuItems({ current }: { current: string }) {
       <DropdownMenuItem onSelect={() => { window.location.href = "/admin"; }} className={`gap-2 font-semibold ${viewingAs ? "text-[#8a5a00] dark:text-[#F0A71F]" : ""}`} data-testid="seat-admin">
         <ArrowLeft className="h-4 w-4" /> {viewingAs ? "Back to admin" : "Admin"}
       </DropdownMenuItem>
-      {others.length > 0 && (
+      {(
         <DropdownMenuSub>
           <DropdownMenuSubTrigger className="gap-2" data-testid="seat-menu"><Users className="h-4 w-4" /> View as</DropdownMenuSubTrigger>
           <DropdownMenuSubContent className="max-h-96 w-72 overflow-y-auto">
-            {others.map((s) => {
+            <div className="p-1.5" onKeyDown={(e) => e.stopPropagation()}>
+              <input value={find} onChange={(e) => setFind(e.target.value)} placeholder="Any podcaster: name, show or email" className="h-9 w-full rounded-lg border border-border bg-background px-3 text-sm" data-testid="seat-search" autoFocus />
+            </div>
+            {find.trim().length >= 2 && found.filter((f) => f.email !== current.trim().toLowerCase()).map((f) => (
+              <DropdownMenuItem key={`f-${f.email}`} onSelect={() => void stepInto(f.email)} className="flex flex-col items-start gap-0.5 py-2" data-testid={`seat-found-${f.email}`}>
+                <span className="text-sm font-semibold text-foreground">{f.name}</span>
+                <span className="text-xs text-muted-foreground">{f.show ? `${f.show} · ` : ""}{f.email}</span>
+              </DropdownMenuItem>
+            ))}
+            {find.trim().length >= 2 && !found.length && <p className="px-3 py-2 text-xs text-muted-foreground">No one found.</p>}
+            {find.trim().length < 2 && others.map((s) => {
               const [name, role] = s.label.split(" · ");
               return (
                 <DropdownMenuItem
                   key={s.email}
-                  onSelect={async () => { await apiRequest("POST", "/api/admin/view-as", { email: s.email }); window.location.href = "/host/dashboard"; }}
+                  onSelect={() => void stepInto(s.email)}
                   className="flex flex-col items-start gap-0.5 py-2"
                   data-testid={`seat-${s.email}`}
                 >
@@ -1631,7 +1650,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                   />
                   <div className="mt-5">
                     {social?.configured && (social.accounts?.length ?? 0) > 0 ? (
-                      <ConnectedAccountsStrip accounts={social.accounts} onManage={() => goTo("integrations")} extra={<><PodcastChips onOpen={() => goTo("analytics")} /><ListingChips /></>} extraCount={podcastSources.length + listings.length} />
+                      <ConnectedAccountsStrip accounts={social.accounts} onManage={() => goTo("integrations")} extra={<><PodcastChips onOpen={() => goTo("analytics")} hostName={profile?.hostName} /><ListingChips /></>} extraCount={podcastSources.length + listings.length} />
                     ) : (
                       <button type="button" onClick={() => goTo("integrations")} className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-left text-sm text-muted-foreground hover:text-foreground" data-testid="button-connect-accounts">
                         <Link2 className="h-4 w-4 text-[#053877]" /> Connect the accounts you post from — they show as follow buttons on your card, and we post your promo cards for you.
