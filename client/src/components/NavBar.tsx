@@ -117,6 +117,9 @@ export function NavBar({ product, account, tone = "light", bare = false }: { pro
           <Link href="/for-brands" className={linkCls(location === "/for-brands" || location === "/sponsor")} data-testid="link-nav-sponsors">
             For brands
           </Link>
+          <Link href="/radio" className={linkCls(location === "/radio" || location.startsWith("/radio/"))} data-testid="link-nav-radio">
+            Radio
+          </Link>
         </nav>
 
         <div className="flex items-center gap-1.5">
@@ -181,6 +184,9 @@ export function NavBar({ product, account, tone = "light", bare = false }: { pro
               <DropdownMenuSeparator />
               <DropdownMenuItem asChild>
                 <Link href="/for-brands">For brands</Link>
+              </DropdownMenuItem>
+              <DropdownMenuItem asChild>
+                <Link href="/radio">Radio</Link>
               </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
