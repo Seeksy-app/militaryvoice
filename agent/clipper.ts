@@ -120,7 +120,7 @@ interface Job {
   episodeAudio?: { episodeId: number; copy?: boolean; mime?: string };
   episodeBookends?: { episodeId: number; introUrl: string; outroUrl: string; sig: string };
   /** The episode with whatever goes before and after it (intro, sponsor spots, outro), in play order; the parts are download addresses. */
-  episodeStitch?: { episodeId: number; parts: string[]; sig: string; spots: string };
+  episodeStitch?: { episodeId: number; parts: string[]; sig: string; spots: string; /** When the episode is cut for a mid-roll: the files, and the pieces in order (which file, from and to in seconds). */ sources?: string[]; segments?: { src: number; start?: number; end?: number }[] };
   /** The magazine: one show's segment, cut from the day's recording (downloadUrl) from startSec for durationSec, as an MP3. */
   segmentCut?: { id: number; startSec: number; durationSec: number };
   /** Ask my show: transcribe this episode (downloadUrl) so the AI can answer from it. recordingId is the transcript's id. */
@@ -2021,18 +2021,32 @@ async function handleEpisodeStitch(job: Job): Promise<void> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), `epstitch-${id}-`));
   try {
     console.log(`${tag}: ${job.title}`);
+    const urls = b.sources?.length ? b.sources : b.parts;
     const files: string[] = [];
-    for (let i = 0; i < b.parts.length; i++) {
+    for (let i = 0; i < urls.length; i++) {
       const file = path.join(dir, `part-${i}.audio`);
-      await run("curl", ["-s", "-f", "-L", "--retry", "3", "--max-time", "1800", "-o", file, b.parts[i]]);
+      await run("curl", ["-s", "-f", "-L", "--retry", "3", "--max-time", "1800", "-A", "MilitaryVoices.ai host", "-o", file, urls[i]]);
       if ((await fs.stat(file)).size < 1024) throw new Error(`part ${i + 1} came back empty`);
       files.push(file);
     }
+    // The pieces in play order: a whole file, or a stretch of one (the episode cut where a mid-roll goes).
+    const segs = b.segments?.length ? b.segments : files.map((_, i) => ({ src: i } as { src: number; start?: number; end?: number }));
     const out = path.join(dir, `episode-${id}-full.mp3`);
     const args: string[] = [];
     for (const f of files) args.push("-i", f);
-    const norm = files.map((_, i) => `[${i}:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo[a${i}]`).join(";");
-    const join = `${files.map((_, i) => `[a${i}]`).join("")}concat=n=${files.length}:v=0:a=1,loudnorm=I=-16:TP=-1.5:LRA=11[out]`;
+    // A file used for more than one piece (the episode, cut around a mid-roll) is split first: a filter input can be read once.
+    const uses = new Map<number, number>();
+    for (const g of segs) uses.set(g.src, (uses.get(g.src) ?? 0) + 1);
+    const split = Array.from(uses).filter(([, n]) => n > 1).map(([src, n]) => `[${src}:a]asplit=${n}${Array.from({ length: n }, (_, k) => `[s${src}_${k}]`).join("")}`);
+    const seen = new Map<number, number>();
+    const norm = [...split, ...segs.map((g, i) => {
+      const k = seen.get(g.src) ?? 0;
+      seen.set(g.src, k + 1);
+      const label = (uses.get(g.src) ?? 1) > 1 ? `[s${g.src}_${k}]` : `[${g.src}:a]`;
+      const cut = g.start != null || g.end != null ? `atrim=${g.start != null ? `start=${g.start}` : ""}${g.start != null && g.end != null ? ":" : ""}${g.end != null ? `end=${g.end}` : ""},asetpts=PTS-STARTPTS,` : "";
+      return `${label}${cut}aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo[a${i}]`;
+    })].join(";");
+    const join = `${segs.map((_, i) => `[a${i}]`).join("")}concat=n=${segs.length}:v=0:a=1,loudnorm=I=-16:TP=-1.5:LRA=11[out]`;
     await ffmpeg([...args, "-filter_complex", `${norm};${join}`, "-map", "[out]", "-c:a", "libmp3lame", "-b:a", "128k", "-ar", "44100", "-id3v2_version", "3", out]);
     const sizeBytes = (await fs.stat(out)).size;
     const durationSec = Math.round(Number((await run("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", out]).catch(() => "0")).trim()) || job.durationSec);
@@ -2593,7 +2607,7 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
 async function tick(quick = false): Promise<boolean> {
   const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", quick
     ? { can: ["edit", "music"], quickOnly: true }
-    : { can: ["edit", "episode-edit", "segment-cut", "episode-audio", "episode-bookends", "episode-stitch", "episode-copy", "episode-still", "living-squeeze", "transcript", "import", "music", "suggest"] });
+    : { can: ["edit", "episode-edit", "segment-cut", "episode-audio", "episode-bookends", "episode-stitch", "episode-segments", "episode-copy", "episode-still", "living-squeeze", "transcript", "import", "music", "suggest"] });
   if (!job) return false;
   // An edit is one clip, not the recording: a shutdown mid-edit leaves it to
   // the 15-minute reclaim rather than requeuing the whole episode.

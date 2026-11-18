@@ -81,20 +81,32 @@ export const wantsBookends = (s: HostedShowRow, e: HostedEpisodeRow) =>
   !!(s.introKey || s.outroKey) && !!e.audioKey && e.bookends !== "off" && (e.bookends === "on" || (!!s.bookendsSince && e.createdAt >= s.bookendsSince));
 const spotLive = (sp: HostedSpotRow, day: string) => sp.active && (!sp.startsOn || sp.startsOn <= day) && (!sp.endsOn || sp.endsOn >= day);
 const spotApplies = (sp: HostedSpotRow, e: HostedEpisodeRow) =>
-  !e.spotsOff && !!e.audioKey && (sp.scope === "all" || (sp.scope === "full" ? e.episodeType === "full" : e.createdAt >= sp.createdAt));
-/** In play order: intro, the before-spot, the episode ("main"), the after-spot, outro. One spot at a time in each place (the newest). */
+  !e.spotsOff && !!e.audioKey && (sp.episodeId ? sp.episodeId === e.id : sp.scope === "all" || (sp.scope === "full" ? e.episodeType === "full" : e.createdAt >= sp.createdAt));
+type Seg = { key: string; start?: number; end?: number };
+/** In play order: intro, the before-spot, the episode (cut where mid-roll spots go), the after-spot, outro. One before and one after at a time (the newest). */
 function planOf(s: HostedShowRow, e: HostedEpisodeRow, spots: HostedSpotRow[]) {
   const day = new Date().toISOString().slice(0, 10);
-  const pick = (kind: string) => spots.filter((x) => x.showId === s.id && x.kind === kind && spotLive(x, day) && spotApplies(x, e)).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
+  const mine = spots.filter((x) => x.showId === s.id && spotLive(x, day) && spotApplies(x, e));
+  const pick = (kind: string) => mine.filter((x) => x.kind === kind).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
   const pre = pick("pre"), post = pick("post");
+  // Mid-rolls sit inside this episode's own audio; one per moment, none at the very start or end.
+  const mids = mine.filter((x) => x.kind === "mid" && x.atSec > 0 && (!e.durationSec || x.atSec < e.durationSec - 5)).sort((a, b) => a.atSec - b.atSec).slice(0, 3);
   const bk = wantsBookends(s, e);
-  const parts = [bk ? s.introKey : "", pre?.audioKey ?? "", "main", post?.audioKey ?? "", bk ? s.outroKey : ""].filter(Boolean);
-  const any = parts.length > 1;
-  const sig = crypto.createHash("sha1").update([...parts.map((x) => (x === "main" ? e.audioKey : x))].join("|")).digest("hex").slice(0, 16);
-  return { any, parts, sig, spotIds: [pre?.id, post?.id].filter((x): x is number => !!x).join(",") };
+  const segs: Seg[] = [];
+  if (bk && s.introKey) segs.push({ key: s.introKey });
+  if (pre) segs.push({ key: pre.audioKey });
+  let at = 0;
+  for (const m of mids) { segs.push({ key: "main", start: at, end: m.atSec }); segs.push({ key: m.audioKey }); at = m.atSec; }
+  segs.push(mids.length ? { key: "main", start: at } : { key: "main" });
+  if (post) segs.push({ key: post.audioKey });
+  if (bk && s.outroKey) segs.push({ key: s.outroKey });
+  const any = segs.length > 1;
+  const parts = segs.map((x) => x.key);
+  const sig = crypto.createHash("sha1").update(segs.map((x) => `${x.key === "main" ? e.audioKey : x.key}@${x.start ?? ""}-${x.end ?? ""}`).join("|")).digest("hex").slice(0, 16);
+  return { any, parts, segs, hasMid: mids.length > 0, sig, spotIds: [pre?.id, ...mids.map((m) => m.id), post?.id].filter((x): x is number => !!x).join(",") };
 }
 /** The finished episode (with whatever goes before and after it) when it is ready and still current; null: serve the original. */
-const served = (s: HostedShowRow, e: HostedEpisodeRow, spots: HostedSpotRow[] = []) => { const p = planOf(s, e, spots); return p.any && e.servedKey && e.servedSig === p.sig ? { key: e.servedKey, size: e.servedSize, sec: e.servedSec } : null; };
+const served = (s: HostedShowRow, e: HostedEpisodeRow, spots: HostedSpotRow[] = []) => { const p = planOf(s, e, spots); return p.any && e.servedKey && e.servedSig === p.sig ? { key: e.servedKey, size: e.servedSize, sec: e.servedSec, v: e.servedSig.slice(0, 8) } : null; };
 const plainDesc = (d: string) => (/<[a-z!/][^>]*>|&(nbsp|amp|#\d+);/i.test(d) ? notesText(d) : d);
 const extOf = (mime: string) => (/mp4|m4a|aac/.test(mime) ? (mime.startsWith("video") ? "mp4" : "m4a") : "mp3");
 
@@ -317,7 +329,7 @@ export function feedXml(s: HostedShowRow, eps: HostedEpisodeRow[], spots: Hosted
     : `<itunes:category text="${esc(s.category)}"/>`;
   const items = eps.filter(live).map((e) => {
     const sv = served(s, e, spots);
-    const url = `${ORIGIN}/e/${e.id}.${extOf(sv ? "audio/mpeg" : e.mime)}`;
+    const url = `${ORIGIN}/e/${e.id}${sv ? `-${sv.v}` : ""}.${extOf(sv ? "audio/mpeg" : e.mime)}`;
     return `
     <item>
       <title>${esc(e.title)}</title>
@@ -415,7 +427,7 @@ const num = (v: unknown) => (v === "" || v === null || v === undefined || !Numbe
 
 let lastBookendScan = 0;
 /** An episode that wants the show's intro, outro or a sponsor spot and doesn't have them yet: the worker joins them (original untouched). */
-export async function claimEpisodeBookends(canStitch = false): Promise<{ id: number; title: string; durationSec: number; audioUrl: string; introUrl: string; outroUrl: string; sig: string; parts: string[]; spots: string } | null> {
+export async function claimEpisodeBookends(canStitch = false, canSegments = false): Promise<{ id: number; title: string; durationSec: number; audioUrl: string; introUrl: string; outroUrl: string; sig: string; parts: string[]; spots: string; sources: string[]; segments: { src: number; start?: number; end?: number }[] } | null> {
   await schemaIsReady();
   // Looking through every episode on every poll would be wasteful: once every 15 seconds is plenty.
   if (Date.now() - lastBookendScan < 15_000) return null;
@@ -428,16 +440,21 @@ export async function claimEpisodeBookends(canStitch = false): Promise<{ id: num
       if (!plan.any || served(sh, e, spots)) continue;
       // A worker that doesn't know sponsor spots yet only does intro and outro.
       if (!canStitch && plan.parts.length > (wantsBookends(sh, e) ? 1 + (sh.introKey ? 1 : 0) + (sh.outroKey ? 1 : 0) : 1)) continue;
+      // Only a worker that can cut the episode where a mid-roll goes does those.
+      if (plan.hasMid && !canSegments) continue;
       if (e.bookendJob === "failed" || (e.bookendJob === "running" && e.bookendJobAt > stale)) continue;
       const got = await db.update(hostedEpisodes).set({ bookendJob: "running", bookendJobAt: now() })
         .where(and(eq(hostedEpisodes.id, e.id), eq(hostedEpisodes.bookendJob, e.bookendJob))).returning({ id: hostedEpisodes.id });
       if (!got.length) continue;
+      const keys = Array.from(new Set(plan.segs.map((x) => (x.key === "main" ? e.audioKey : x.key))));
+      const sources = await Promise.all(keys.map((k) => signedRecordingUrl(k, 6 * 3600)));
+      const segments = plan.segs.map((x) => ({ src: keys.indexOf(x.key === "main" ? e.audioKey : x.key), start: x.start, end: x.end }));
       const urls = await Promise.all(plan.parts.map((x) => signedRecordingUrl(x === "main" ? e.audioKey : x, 6 * 3600)));
       const bk = wantsBookends(sh, e);
       return {
         id: e.id, title: e.title, durationSec: e.durationSec, audioUrl: await signedRecordingUrl(e.audioKey, 6 * 3600),
         introUrl: bk && sh.introKey ? await signedRecordingUrl(sh.introKey, 6 * 3600) : "", outroUrl: bk && sh.outroKey ? await signedRecordingUrl(sh.outroKey, 6 * 3600) : "",
-        sig: plan.sig, parts: urls, spots: plan.spotIds,
+        sig: plan.sig, parts: urls, spots: plan.spotIds, sources, segments,
       };
     }
   }
@@ -683,12 +700,12 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
 
   // The audio: count it, then send the app to the file.
   app.get("/e/:file", async (req, res) => {
-    const id = Number(String(req.params.file).split(".")[0]);
+    const id = Number(String(req.params.file).match(/^\d+/)?.[0]);
     const [e] = Number.isInteger(id) ? await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.id, id)).limit(1) : [];
     if (!e || !(e.audioKey || e.audioUrl)) return res.status(404).type("text/plain").send("Not found.");
     // With the show's intro, outro and sponsor spots on, when that version is ready; otherwise the original.
     const [sh] = e.audioKey ? await db.select().from(hostedShows).where(eq(hostedShows.id, e.showId)).limit(1) : [];
-    const sv = sh ? served(sh, e, await db.select().from(hostedSpots).where(eq(hostedSpots.showId, sh.id))) : null;
+    const sv = sh && !req.query.original ? served(sh, e, await db.select().from(hostedSpots).where(eq(hostedSpots.showId, sh.id))) : null;
     const ua = String(req.get("user-agent") ?? "");
     const range = String(req.get("range") ?? "");
     const counts = req.method === "GET" && !req.query.preview && (!range || /^bytes=0-/.test(range)) && ua && !BOT.test(ua) && e.status === "published";
@@ -1049,8 +1066,17 @@ Return JSON only: {"titles":["","",""],"description":""}`,
     if (sec > 300) return res.status(400).json({ message: "Keep a spot under 5 minutes." });
     const sponsor = String(b.sponsor ?? "").trim().slice(0, 120);
     if (!sponsor) return res.status(400).json({ message: "Who is the sponsor?" });
+    // For one episode (and a mid-roll is always for one): it has to be this show's.
+    let forEpisode = 0;
+    if (b.episodeId) {
+      const [ep] = await db.select().from(hostedEpisodes).where(and(eq(hostedEpisodes.id, Number(b.episodeId)), eq(hostedEpisodes.showId, s.id))).limit(1);
+      if (!ep) return res.status(404).json({ message: "That episode isn't in this show." });
+      forEpisode = ep.id;
+    }
+    const atSec = Math.max(0, Math.round(Number(b.atSec) || 0));
+    if (b.kind === "mid" && (!forEpisode || atSec < 5)) return res.status(400).json({ message: "A spot in the middle needs one episode and a time in it." });
     const [row] = await db.insert(hostedSpots).values({
-      showId: s.id, sponsor, kind: b.kind === "post" ? "post" : "pre", audioKey: key, audioName: String(b.name ?? "").slice(0, 120), audioSec: sec,
+      showId: s.id, sponsor, kind: b.kind === "post" ? "post" : b.kind === "mid" ? "mid" : "pre", episodeId: forEpisode, atSec: b.kind === "mid" ? atSec : 0, audioKey: key, audioName: String(b.name ?? "").slice(0, 120), audioSec: sec,
       script: String(b.script ?? "").slice(0, 1500), voice: String(b.voice ?? "").slice(0, 20), startsOn: ymd(b.startsOn), endsOn: ymd(b.endsOn),
       scope: ["future", "all", "full"].includes(b.scope) ? b.scope : "future", active: true, createdAt: now(),
     }).returning();

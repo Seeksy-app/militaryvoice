@@ -2875,7 +2875,7 @@ export const hostedSpots = pgTable("hosted_spots", {
   id: serial("id").primaryKey(),
   showId: integer("show_id").notNull(),
   sponsor: text("sponsor").notNull().default(""),
-  /** pre | post */
+  /** pre | mid | post */
   kind: text("kind").notNull().default("pre"),
   audioKey: text("audio_key").notNull(),
   audioName: text("audio_name").notNull().default(""),
@@ -2886,6 +2886,10 @@ export const hostedSpots = pgTable("hosted_spots", {
   /** yyyy-mm-dd, inclusive; "" for no limit. */
   startsOn: text("starts_on").notNull().default(""),
   endsOn: text("ends_on").notNull().default(""),
+  /** One episode (its id) the spot is for; 0 for the whole show (then "scope" says which episodes). */
+  episodeId: integer("episode_id").notNull().default(0),
+  /** For a mid-roll ("mid"): where in the episode's own audio it plays, in seconds. */
+  atSec: integer("at_sec").notNull().default(0),
   /** future (episodes made from now on) | all | full (every full episode, not trailers or bonuses) */
   scope: text("scope").notNull().default("future"),
   active: boolean("active").notNull().default(true),

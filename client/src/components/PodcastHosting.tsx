@@ -79,6 +79,8 @@ export function PodcastHosting() {
   // The setup screens stay up while a new show is made, even though the list now has one in it.
   const [inSetup, setInSetup] = useState(() => { try { const u = new URL(window.location.href); const on = u.searchParams.get("setup") === "1"; if (on) { u.searchParams.delete("setup"); window.history.replaceState(null, "", u.pathname + u.search); } return on; } catch { return false; } });
   const [editEp, setEditEp] = useState<Ep | null>(null);
+  // An episode a sponsor spot is being added for (from that episode's page).
+  const [spotFor, setSpotFor] = useState<number | null>(null);
   // From the Library ("Add to my podcast"): ?ep=<id> opens that episode, ready for its words.
   const [wantEp, setWantEp] = useState<number | null>(() => { try { return Number(new URLSearchParams(window.location.search).get("ep")) || null; } catch { return null; } });
   useEffect(() => {
@@ -168,6 +170,7 @@ export function PodcastHosting() {
     setFocus(/description/i.test(m) ? "description" : /show name/i.test(m) ? "title" : /owner email/i.test(m) ? "ownerEmail" : "");
     go("details");
   };
+  const inSettings = tab === "details" || tab === "defaults" || tab === "sponsors";
   const tabBtn = (t: PodTab, label: string) => (
     <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => go(t)} className={`border-b-2 px-1 pb-2.5 text-sm font-semibold transition-colors ${tab === t ? "border-[#053877] text-foreground dark:border-[#8fb5e8]" : "border-transparent text-muted-foreground hover:text-foreground"}`} data-testid={`hosting-tab-${t}`}>{label}</button>
   );
@@ -193,13 +196,12 @@ export function PodcastHosting() {
       {/* On a phone the last tabs run off the edge: closer together, and a fade that says there's more (8 Oct). */}
       <div className="flex gap-4 overflow-x-auto whitespace-nowrap border-b border-border pr-6 [mask-image:linear-gradient(to_right,black_82%,transparent)] [scrollbar-width:none] sm:gap-6 sm:pr-0 sm:[mask-image:none]" role="tablist">
         {tabBtn("episodes", "Episodes")}
-        {tabBtn("defaults", "Defaults")}
-        {tabBtn("sponsors", "Sponsors")}
         {tabBtn("directories", ready ? "Directories" : "Directories · to do")}
-        {tabBtn("details", "Show details")}
         {tabBtn("invite", "Invite a guest")}
         {tabBtn("guests", "Book a guest")}
         {tabBtn("pitch", "Be a guest")}
+        {/* Settings: the show's details, what every episode starts with, and its sponsors (one place, to the right). */}
+        <button type="button" role="tab" aria-selected={inSettings} onClick={() => go(inSettings ? tab : "defaults")} className={`ml-auto border-b-2 px-1 pb-2.5 text-sm font-semibold transition-colors ${inSettings ? "border-[#053877] text-foreground dark:border-[#8fb5e8]" : "border-transparent text-muted-foreground hover:text-foreground"}`} data-testid="hosting-tab-settings">Settings</button>
       </div>
 
       {s.newFeedUrl && (
@@ -209,7 +211,7 @@ export function PodcastHosting() {
       )}
 
       {tab === "episodes" && editEp && (
-        <EpisodePage ep={h.episodes.find((x) => x.id === editEp.id) ?? editEp} show={s} youtubeReady={!!q.data?.youtubeReady} onBack={() => setEditEp(null)} onSaved={refresh} />
+        <EpisodePage ep={h.episodes.find((x) => x.id === editEp.id) ?? editEp} show={s} youtubeReady={!!q.data?.youtubeReady} onBack={() => setEditEp(null)} onSaved={refresh} onAddSpot={(id) => { setSpotFor(id); setEditEp(null); go("sponsors"); }} />
       )}
       {tab === "episodes" && !editEp && adding && (
         <NewEpisodePage show={s} onBack={() => setAdding(false)} onCreated={(e) => { refresh(); setAdding(false); setEditEp({ ...e, downloads: 0, live: false }); }} />
@@ -249,8 +251,15 @@ export function PodcastHosting() {
         </>
       )}
 
+      {inSettings && (
+        <div className="flex flex-wrap gap-2" role="tablist" data-testid="hosting-settings-nav">
+          {([["defaults", "Defaults"], ["sponsors", "Sponsors"], ["details", "Show details"]] as const).map(([k, l]) => (
+            <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => go(k)} className={`rounded-full border px-4 py-1.5 text-sm font-semibold ${tab === k ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:bg-muted"}`} data-testid={`hosting-settings-${k}`}>{l}</button>
+          ))}
+        </div>
+      )}
       {tab === "defaults" && <DefaultsPanel key={s.id} h={h} onSaved={refresh} />}
-      {tab === "sponsors" && <SponsorsPanel key={s.id} h={h} onSaved={refresh} />}
+      {tab === "sponsors" && <SponsorsPanel key={`${s.id}-${spotFor ?? 0}`} h={h} onSaved={refresh} preset={spotFor} onPresetUsed={() => setSpotFor(null)} />}
 
       {tab === "directories" && (
         <>
@@ -791,7 +800,7 @@ function ShowForm({ show, categories, onSaved, onDeleted, focus = "" }: { show: 
 
 /** A new episode: the audio first (a file, or a clean episode from the Library), then its words. */
 /** One episode, a whole page (borrowed from the best of what hosts offer, then made plainer): the player, the words, when it goes out, where it is. */
-function EpisodePage({ ep, show, youtubeReady, onBack, onSaved }: { ep: Ep; show: HostedShowRow; youtubeReady: boolean; onBack: () => void; onSaved: () => void }) {
+function EpisodePage({ ep, show, youtubeReady, onBack, onSaved, onAddSpot }: { ep: Ep; show: HostedShowRow; youtubeReady: boolean; onBack: () => void; onSaved: () => void; onAddSpot: (episodeId: number) => void }) {
   const { toast } = useToast();
   const [f, setF] = useState<Record<string, unknown>>({});
   const [when, setWhen] = useState<"now" | "later">("now");
@@ -918,7 +927,7 @@ function EpisodePage({ ep, show, youtubeReady, onBack, onSaved }: { ep: Ep; show
               </div>
             )}
             {hasAudio && (
-              <label className="mt-3 flex items-center gap-2 rounded-xl border border-border px-3 py-2.5 text-sm" data-testid="hosting-ep-spots"><input type="checkbox" checked={!(v.spotsOff as boolean)} onChange={(e) => set("spotsOff", !e.target.checked)} /> Play your sponsor spots on this episode</label>
+              <label className="mt-3 flex items-center gap-2 rounded-xl border border-border px-3 py-2.5 text-sm" data-testid="hosting-ep-spots"><input type="checkbox" checked={!(v.spotsOff as boolean)} onChange={(e) => set("spotsOff", !e.target.checked)} /> Play your sponsor spots on this episode<button type="button" onClick={() => onAddSpot(ep.id)} className="ml-auto text-xs font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]" data-testid="episode-add-spot">+ Add a sponsor or shout-out to this episode</button></label>
             )}
             {(show.episodeFooter ?? "").trim() && (
               <div className="mt-3 rounded-xl border border-border px-3 py-2.5 text-sm" data-testid="hosting-ep-footer">
@@ -1030,15 +1039,16 @@ type SpotRow = HostedSpotRow & { state: "live" | "scheduled" | "ended" | "paused
 type SpotsResp = { spots: SpotRow[]; voices: { key: string; name: string }[] };
 
 /** A sponsor's message before or after the episodes. The episode itself is never changed; a spot can be paused, dated or swapped any time. */
-function SponsorsPanel({ h, onSaved }: { h: Hosted; onSaved: () => void }) {
+function SponsorsPanel({ h, onSaved, preset = null, onPresetUsed }: { h: Hosted; onSaved: () => void; preset?: number | null; onPresetUsed?: () => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const show = h.show;
   const KEY = ["/api/host/hosting/spots", show.id];
   const q = useQuery<SpotsResp>({ queryKey: KEY, queryFn: async () => (await apiRequest("GET", `/api/host/hosting/shows/${show.id}/spots`)).json(), refetchInterval: 30_000 });
-  const [adding, setAdding] = useState(false);
-  const blank = { sponsor: "", kind: "pre" as "pre" | "post", mode: "write" as "write" | "upload", script: "", voice: "brian", startsOn: "", endsOn: "", scope: "future" as "future" | "all" | "full" };
-  const [f, setF] = useState(blank);
+  const blank = { sponsor: "", kind: "pre" as "pre" | "mid" | "post", mode: "write" as "write" | "upload", script: "", voice: "brian", startsOn: "", endsOn: "", target: "future" as string, at: "" };
+  const [adding, setAdding] = useState(preset != null);
+  const [f, setF] = useState(preset != null ? { ...blank, target: `ep:${preset}` } : blank);
+  const player = useRef<HTMLAudioElement>(null);
   const [rec, setRec] = useState<{ key: string; sec: number; url: string; name: string } | null>(null);
   const [busy, setBusy] = useState<"" | "record" | "upload" | "save">("");
   const [pct, setPct] = useState<number | null>(null);
@@ -1057,13 +1067,16 @@ function SponsorsPanel({ h, onSaved }: { h: Hosted; onSaved: () => void }) {
     try { setPct(0); const dur = await durationOf(file).catch(() => 0); const k = await uploadToStorage(file, setPct); setRec({ key: k, sec: Math.round(dur), url: URL.createObjectURL(file), name: file.name.replace(/\.[a-z0-9]+$/i, "") }); }
     catch (e) { toast({ title: "Couldn't upload that", description: msg(e), variant: "destructive" }); } finally { setBusy(""); setPct(null); if (fileIn.current) fileIn.current.value = ""; }
   };
+  const epId = f.target.startsWith("ep:") ? Number(f.target.slice(3)) : 0;
+  const parseAt = (t: string) => { const m = t.trim().match(/^(?:(\d+):)?(\d{1,2}):(\d{2})$|^(\d+)$/); if (!m) return 0; return m[4] ? Number(m[4]) : (Number(m[1] ?? 0) * 3600 + Number(m[2]) * 60 + Number(m[3])); };
+  const atSec = parseAt(f.at);
   const save = async () => {
     if (!rec) return;
     setBusy("save");
     try {
-      await apiRequest("POST", `/api/host/hosting/shows/${show.id}/spots`, { sponsor: f.sponsor, kind: f.kind, key: rec.key, name: rec.name, durationSec: rec.sec, script: f.mode === "write" ? f.script : "", voice: f.mode === "write" ? f.voice : "", startsOn: f.startsOn, endsOn: f.endsOn, scope: f.scope });
+      await apiRequest("POST", `/api/host/hosting/shows/${show.id}/spots`, { sponsor: f.sponsor, kind: f.kind, key: rec.key, name: rec.name, durationSec: rec.sec, script: f.mode === "write" ? f.script : "", voice: f.mode === "write" ? f.voice : "", startsOn: f.startsOn, endsOn: f.endsOn, scope: epId ? "future" : f.target, episodeId: epId || undefined, atSec: f.kind === "mid" ? atSec : 0 });
       toast({ title: "Sponsor spot added", description: "It's being put on your episodes now: a few minutes. The originals are kept." });
-      setAdding(false); setF(blank); setRec(null); reload();
+      setAdding(false); setF(blank); setRec(null); onPresetUsed?.(); reload();
     } catch (e) { toast({ title: "Couldn't save it", description: msg(e), variant: "destructive" }); } finally { setBusy(""); }
   };
   const patch = async (id: number, body: Record<string, unknown>) => { try { await apiRequest("PATCH", `/api/host/hosting/spots/${id}`, body); reload(); } catch (e) { toast({ title: "Couldn't change it", description: msg(e), variant: "destructive" }); } };
@@ -1071,6 +1084,7 @@ function SponsorsPanel({ h, onSaved }: { h: Hosted; onSaved: () => void }) {
     if (!window.confirm(`Take ${sp.sponsor}'s spot off your episodes? It stops playing, and your sponsor's numbers stay in your records.`)) return;
     await apiRequest("DELETE", `/api/host/hosting/spots/${sp.id}`); reload();
   };
+  const eps = h.episodes.slice().sort((a, b) => (b.episodeNumber ?? 0) - (a.episodeNumber ?? 0) || b.id - a.id);
   const working = h.episodes.filter((e) => (e as Ep & { bookend?: { state?: string } }).bookend?.state === "working").length;
   const label = "block text-xs font-semibold text-muted-foreground";
   const pill = (on: boolean) => `rounded-full border px-3 py-1 text-xs font-semibold ${on ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:bg-muted"}`;
@@ -1096,12 +1110,38 @@ function SponsorsPanel({ h, onSaved }: { h: Hosted; onSaved: () => void }) {
             <label className={label}>Sponsor<Input value={f.sponsor} onChange={(e) => set("sponsor", e.target.value)} className="mt-1" placeholder="Who is it for?" data-testid="spot-sponsor" /></label>
             <div>
               <span className={label}>Plays</span>
-              <div className="mt-1 flex gap-2">
+              <div className="mt-1 flex flex-wrap gap-2">
                 <button type="button" className={pill(f.kind === "pre")} onClick={() => set("kind", "pre")} data-testid="spot-kind-pre">Before the episode</button>
+                <button type="button" className={pill(f.kind === "mid")} onClick={() => { set("kind", "mid"); if (!epId && eps[0]) set("target", `ep:${eps[0].id}`); }} data-testid="spot-kind-mid">In the middle</button>
                 <button type="button" className={pill(f.kind === "post")} onClick={() => set("kind", "post")} data-testid="spot-kind-post">After the episode</button>
               </div>
             </div>
           </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className={label}>On which episodes
+              <select value={f.target} onChange={(e) => set("target", e.target.value)} className="mt-1 block h-9 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground" data-testid="spot-target">
+                {f.kind !== "mid" && <><option value="future">New episodes from now on</option><option value="all">Every episode</option><option value="full">Every full episode (no trailers or bonuses)</option></>}
+                <optgroup label="Just one episode">
+                  {eps.map((e) => <option key={e.id} value={`ep:${e.id}`}>{e.episodeNumber != null ? `${e.episodeNumber}. ` : ""}{e.title.slice(0, 70)}</option>)}
+                </optgroup>
+              </select>
+            </label>
+            {f.kind === "mid" && (
+              <label className={label}>At this point in the episode
+                <Input value={f.at} onChange={(e) => set("at", e.target.value)} className="mt-1" placeholder="12:30" data-testid="spot-at" />
+              </label>
+            )}
+          </div>
+          {f.kind === "mid" && epId > 0 && (
+            <div className="rounded-xl border border-border bg-muted/30 p-3" data-testid="spot-midpoint">
+              <p className="mb-2 text-xs text-muted-foreground">Play the episode here, and press the button where the spot should go. The episode picks up again right after it.</p>
+              <audio ref={player} key={epId} controls preload="metadata" src={`/e/${epId}.mp3?preview=1&original=1`} className="w-full" />
+              <div className="mt-2 flex flex-wrap items-center gap-2">
+                <Button type="button" size="sm" variant="outline" className="h-8 rounded-full" onClick={() => { const t = Math.round(player.current?.currentTime ?? 0); set("at", `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`); }} data-testid="spot-use-time">Use this time</Button>
+                <span className="text-xs text-muted-foreground">{atSec ? `The spot plays at ${hms(atSec)}.` : "Type a time, like 12:30, or use the player."}</span>
+              </div>
+            </div>
+          )}
           <div>
             <span className={label}>The spot</span>
             <div className="mt-1 flex gap-2">
@@ -1134,15 +1174,9 @@ function SponsorsPanel({ h, onSaved }: { h: Hosted; onSaved: () => void }) {
             <label className={label}>Starts (optional)<Input type="date" value={f.startsOn} onChange={(e) => set("startsOn", e.target.value)} className="mt-1" /></label>
             <label className={label}>Ends (optional)<Input type="date" value={f.endsOn} onChange={(e) => set("endsOn", e.target.value)} className="mt-1" /></label>
           </div>
-          <div>
-            <span className={label}>Plays on</span>
-            <div className="mt-1 flex flex-wrap gap-2">
-              {(["future", "all", "full"] as const).map((c) => <button key={c} type="button" className={pill(f.scope === c)} onClick={() => set("scope", c)} data-testid={`spot-scope-${c}`}>{c === "future" ? "New episodes" : c === "all" ? "Every episode" : "Full episodes only"}</button>)}
-            </div>
-            <p className="mt-1.5 text-xs text-muted-foreground">{scopeText(f.scope)}. {f.scope !== "future" && "Older episodes get a new copy with the spot on; the originals are kept. This takes a few minutes per episode."}</p>
-          </div>
+          {f.kind !== "mid" && !epId && f.target !== "future" && <p className="text-xs text-muted-foreground">Older episodes get a new copy with the spot on; the originals are kept. This takes a few minutes per episode.</p>}
           <div className="flex gap-2">
-            <Button onClick={() => void save()} disabled={!rec || !f.sponsor.trim() || busy === "save"} className="bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="spot-save">{busy === "save" ? "Saving…" : "Add this spot"}</Button>
+            <Button onClick={() => void save()} disabled={!rec || !f.sponsor.trim() || busy === "save" || (f.kind === "mid" && (!epId || atSec < 5))} className="bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="spot-save">{busy === "save" ? "Saving…" : "Add this spot"}</Button>
             <Button variant="ghost" onClick={() => { setAdding(false); setF(blank); setRec(null); }}>Cancel</Button>
           </div>
         </div>
@@ -1155,7 +1189,7 @@ function SponsorsPanel({ h, onSaved }: { h: Hosted; onSaved: () => void }) {
               <div className="flex flex-wrap items-center gap-2">
                 <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize ${STATE[sp.state]}`}>{sp.state}</span>
                 <span className="text-sm font-semibold">{sp.sponsor}</span>
-                <span className="text-xs text-muted-foreground">{sp.kind === "pre" ? "Before the episode" : "After the episode"} · {hms(sp.audioSec)}</span>
+                <span className="text-xs text-muted-foreground">{sp.kind === "pre" ? "Before the episode" : sp.kind === "post" ? "After the episode" : `At ${hms(sp.atSec)}`} · {hms(sp.audioSec)}</span>
                 <span className="ml-auto flex gap-1">
                   <Button size="sm" variant="outline" className="h-8 rounded-full" onClick={() => void patch(sp.id, { active: !sp.active })}>{sp.active ? "Pause" : "Turn on"}</Button>
                   <Button size="sm" variant="ghost" className="h-8 rounded-full text-muted-foreground" onClick={() => void remove(sp)} aria-label={`Remove ${sp.sponsor}'s spot`}><Trash2 className="h-4 w-4" /></Button>
@@ -1164,7 +1198,7 @@ function SponsorsPanel({ h, onSaved }: { h: Hosted; onSaved: () => void }) {
               <audio controls preload="none" src={`/api/host/hosting/spots/${sp.id}/audio`} className="mt-2 w-full" />
               <div className="mt-3 flex flex-wrap items-end gap-x-6 gap-y-2 text-xs text-muted-foreground">
                 <span><b className="text-base tabular-nums text-foreground">{compact(sp.delivered)}</b> plays delivered · <b className="tabular-nums text-foreground">{compact(sp.delivered30)}</b> in the last 30 days</span>
-                <span>{scopeText(sp.scope)}</span>
+                <span>{sp.episodeId ? (() => { const e = eps.find((x) => x.id === sp.episodeId); return e ? `Just episode ${e.episodeNumber ?? ""} ${e.title.slice(0, 40)}`.replace("  ", " ") : "Just one episode"; })() : scopeText(sp.scope)}</span>
                 <label className="flex items-center gap-1">Starts <Input type="date" defaultValue={sp.startsOn} onBlur={(e) => e.target.value !== sp.startsOn && void patch(sp.id, { startsOn: e.target.value })} className="h-7 w-36 text-xs" /></label>
                 <label className="flex items-center gap-1">Ends <Input type="date" defaultValue={sp.endsOn} onBlur={(e) => e.target.value !== sp.endsOn && void patch(sp.id, { endsOn: e.target.value })} className="h-7 w-36 text-xs" /></label>
               </div>

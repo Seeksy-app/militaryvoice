@@ -7110,8 +7110,8 @@ export function registerRoutes(app: Express): void {
     // A podcast episode that wants its show's intro, outro or a sponsor spot put on: quick; the original audio is never touched.
     if (Array.isArray(req.body?.can) && (req.body.can.includes("episode-bookends") || req.body.can.includes("episode-stitch"))) {
       const canStitch = req.body.can.includes("episode-stitch");
-      const eb = await claimEpisodeBookends(canStitch).catch((err) => { console.error("Episode bookends claim failed:", err); return null; });
-      if (eb && canStitch) return res.json({ job: { recordingId: eb.id, title: eb.title, durationSec: eb.durationSec, downloadUrl: eb.audioUrl, show: "", host: "", transcript: [], episodeStitch: { episodeId: eb.id, parts: eb.parts, sig: eb.sig, spots: eb.spots } } });
+      const eb = await claimEpisodeBookends(canStitch, req.body.can.includes("episode-segments")).catch((err) => { console.error("Episode bookends claim failed:", err); return null; });
+      if (eb && canStitch) return res.json({ job: { recordingId: eb.id, title: eb.title, durationSec: eb.durationSec, downloadUrl: eb.audioUrl, show: "", host: "", transcript: [], episodeStitch: { episodeId: eb.id, parts: eb.parts, sig: eb.sig, spots: eb.spots, sources: eb.sources, segments: eb.segments } } });
       if (eb) return res.json({ job: { recordingId: eb.id, title: eb.title, durationSec: eb.durationSec, downloadUrl: eb.audioUrl, show: "", host: "", transcript: [], episodeBookends: { episodeId: eb.id, introUrl: eb.introUrl, outroUrl: eb.outroUrl, sig: eb.sig } } });
     }
     // A recording to bring in (Zoom), if this worker can: quick, and someone's Library is waiting on it.
