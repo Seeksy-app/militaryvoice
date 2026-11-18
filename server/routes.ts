@@ -684,8 +684,14 @@ function studioHostMay(req: Request): boolean {
 }
 
 async function requireAdmin(req: Request, res: Response, next: NextFunction) {
+  // The members' studio page (/studio/control) runs as the member signed in there. An admin sign-in left in the same browser by another address
+  // must not turn it into the Marathon's admin studio (its scenes, library and people): the admin's own studio is /admin/studio.
+  const memberAddr = (getSessionEmail(req) ?? "").trim().toLowerCase();
+  const adminAddr = getAdminEmail(req);
+  const fromMemberStudio = /^https?:\/\/[^/]+\/studio\/control(\/|\?|#|$)/i.test(String(req.get("referer") ?? ""));
+  const leftoverAdmin = fromMemberStudio && !!memberAddr && !!adminAddr && memberAddr !== adminAddr.trim().toLowerCase();
   // Preferred: a signed admin session from the email-code sign-in.
-  const sessionEmail = getAdminEmail(req);
+  const sessionEmail = leftoverAdmin ? null : adminAddr;
   if (sessionEmail && (await storage.isAdminEmail(sessionEmail))) {
     // Full admin except Finances and accounting, for the team members set up that way.
     if (/^\/api\/admin\/(finance-[\w-]+|production-costs)(\/|$)/.test(req.path) && (await storage.adminNoFinance(sessionEmail))) {

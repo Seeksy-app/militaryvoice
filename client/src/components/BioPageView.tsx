@@ -427,11 +427,14 @@ function CutoutTop({ kind, src, name, bg, scene, paper, dark, bigName, nameY = 0
   // A scene behind them (an image) in place of the colour: the background, the circle, the blob, the cover.
   const fill = (fallback: string) => (scene ? `center/cover url(${scene})` : fallback);
   const onScene: React.CSSProperties = scene ? { color: "#ffffff", textShadow: "0 4px 24px rgba(0,0,0,0.45)" } : {};
-  const fade = <div className="absolute inset-x-0 bottom-0 z-20 h-24" style={{ background: `linear-gradient(to bottom, transparent, ${paper})` }} />;
+  // The foot of the top melts into the page in easy steps (a straight two-colour fade shows its start as a line), and the figure itself dissolves
+  // at the bottom, so the cut-out's flat edge (and a sticker's white outline) never shows.
+  const fade = <div className="absolute inset-x-0 -bottom-px z-20 h-44" style={{ background: `linear-gradient(to bottom, ${withAlpha(paper, 0)} 0%, ${withAlpha(paper, 0.12)} 22%, ${withAlpha(paper, 0.4)} 48%, ${withAlpha(paper, 0.78)} 74%, ${paper} 100%)` }} />;
+  const dissolve: React.CSSProperties = { WebkitMaskImage: "linear-gradient(to bottom, #000 0%, #000 62%, transparent 100%)", maskImage: "linear-gradient(to bottom, #000 0%, #000 62%, transparent 100%)" };
   if (kind === "popout") {
     // The head breaks out over the circle's top edge (a window 60% wide, 50px into the circle);
     // everything else, the shoulders included, shows only inside the circle.
-    const mask = "linear-gradient(#000, #000) top center / 60% 190px no-repeat, radial-gradient(circle 140px at 50% calc(100% - 140px), #000 99%, transparent 100%)";
+    const mask = "linear-gradient(to bottom, #000 0, #000 150px, transparent 215px) top center / 100% 215px no-repeat, radial-gradient(circle 140px at 50% calc(100% - 140px), #000 99%, transparent 100%)";
     return (
       <div className="flex justify-center pt-12" data-testid="bio-popout-header">
         <div className="relative h-[420px] w-[280px]">
@@ -447,7 +450,7 @@ function CutoutTop({ kind, src, name, bg, scene, paper, dark, bigName, nameY = 0
     // Them standing on a blob of colour: the head and shoulders rise out of its top.
     const blob = "M152 4c52-4 104 18 130 62 25 42 22 98-4 138-27 41-78 58-128 56-50-1-100-22-125-63C0 156 2 102 26 63 51 24 101 8 152 4z";
     const svg = (fill: string) => `url("data:image/svg+xml,${encodeURIComponent(`<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 300 260'><path d='${blob}' fill='${fill}'/></svg>`)}")`;
-    const mask = `linear-gradient(#000, #000) top center / 56% 190px no-repeat, ${svg("#000")} bottom center / 300px 260px no-repeat`;
+    const mask = `linear-gradient(to bottom, #000 0, #000 140px, transparent 205px) top center / 100% 205px no-repeat, ${svg("#000")} bottom center / 300px 260px no-repeat`;
     return (
       <div className="flex justify-center pt-10" data-testid="bio-shape-header">
         <div className="relative h-[400px] w-[300px]">
@@ -467,7 +470,7 @@ function CutoutTop({ kind, src, name, bg, scene, paper, dark, bigName, nameY = 0
     return (
       <div className="relative flex min-h-[470px] flex-col justify-end overflow-hidden" style={{ background: `repeating-linear-gradient(135deg, ${bg} 0 26px, ${bg}d9 26px 52px)` }} data-testid="bio-sticker-header">
         {name && <h1 className="absolute inset-x-0 top-14 z-0 -rotate-6 break-words px-4 text-center font-black uppercase leading-[0.86] tracking-tight" style={{ fontSize: bigName * 0.9, translate: `0 ${nameY}px`, color: onColor(bg), textShadow: onColor(bg) === "#ffffff" ? "0 4px 0 rgba(0,0,0,0.25)" : "0 3px 0 rgba(255,255,255,0.5)" }}>{name}</h1>}
-        <img src={src} alt="" className="relative z-10 mx-auto block h-[380px] w-auto max-w-[90%] object-contain object-bottom" style={{ ...move, filter: edge }} />
+        <img src={src} alt="" className="relative z-10 mx-auto block h-[380px] w-auto max-w-[90%] object-contain object-bottom" style={{ ...move, filter: edge, ...dissolve }} />
         {fade}
       </div>
     );
@@ -477,7 +480,7 @@ function CutoutTop({ kind, src, name, bg, scene, paper, dark, bigName, nameY = 0
     return (
       <div className="relative flex min-h-[520px] flex-col overflow-hidden" style={{ background: scene ? `linear-gradient(180deg, transparent 60%, ${paper} 100%), center/cover url(${scene})` : `linear-gradient(180deg, ${bg} 0%, ${bg} 70%, ${paper} 100%)` }} data-testid="bio-magazine-header">
         {name ? <h1 className="z-0 break-words px-3 pt-7 text-center font-black uppercase leading-[0.82] tracking-tight" style={{ fontSize: bigName * 1.05, translate: `0 ${nameY}px`, color: ink, fontFamily: FONTS.playfair.css, ...onScene }}>{name}</h1> : <div className="h-20" />}
-        <img src={src} alt="" className="relative z-10 mx-auto -mt-12 block h-[400px] w-auto max-w-[94%] object-contain object-bottom drop-shadow-[0_18px_30px_rgba(0,0,0,0.35)]" style={move} />
+        <img src={src} alt="" className="relative z-10 mx-auto -mt-12 block h-[400px] w-auto max-w-[94%] object-contain object-bottom drop-shadow-[0_18px_30px_rgba(0,0,0,0.35)]" style={{ ...move, ...dissolve }} />
         {fade}
       </div>
     );
@@ -485,7 +488,7 @@ function CutoutTop({ kind, src, name, bg, scene, paper, dark, bigName, nameY = 0
   return (
     <div className="relative flex min-h-[470px] flex-col justify-end overflow-hidden" style={{ background: scene ? `linear-gradient(180deg, transparent 55%, ${paper} 100%), center/cover url(${scene})` : `radial-gradient(120% 80% at 50% 30%, ${bg} 0%, ${bg} 45%, ${paper} 100%)` }} data-testid="bio-cutout-header">
       {name && <h1 className="absolute inset-x-0 top-16 z-0 break-words px-4 text-center font-black uppercase leading-[0.86] tracking-tight" style={{ fontSize: bigName, translate: `0 ${nameY}px`, color: onColor(bg), opacity: 0.92, ...onScene }}>{name}</h1>}
-      <img src={src} alt="" className="relative z-10 mx-auto block h-[400px] w-auto max-w-[94%] object-contain object-bottom drop-shadow-[0_18px_30px_rgba(0,0,0,0.35)]" style={move} />
+      <img src={src} alt="" className="relative z-10 mx-auto block h-[400px] w-auto max-w-[94%] object-contain object-bottom drop-shadow-[0_18px_30px_rgba(0,0,0,0.35)]" style={{ ...move, ...dissolve }} />
       {fade}
     </div>
   );
