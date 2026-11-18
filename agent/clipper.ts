@@ -118,6 +118,8 @@ interface Job {
   /** "Edit episode": the source is downloadUrl; cut to trimStart–trimEnd (0 = the end), with an intro and outro. */
   /** A hosted podcast episode: the Library video (downloadUrl) as its MP3. recordingId is the episode's id. */
   episodeAudio?: { episodeId: number; copy?: boolean; mime?: string };
+  /** A Radio show to cut out of the day's recording (read straight from storage): where it starts and how long it runs, in seconds. */
+  radioCut?: { signupId: number; ss: number; dur: number };
   episodeBookends?: { episodeId: number; introUrl: string; outroUrl: string; sig: string };
   /** The episode with whatever goes before and after it (intro, sponsor spots, outro), in play order; the parts are download addresses. */
   episodeStitch?: { episodeId: number; parts: string[]; sig: string; spots: string; /** When the episode is cut for a mid-roll: the files, and the pieces in order (which file, from and to in seconds). */ sources?: string[]; segments?: { src: number; start?: number; end?: number }[] };
@@ -2062,6 +2064,32 @@ async function handleEpisodeStitch(job: Job): Promise<void> {
 }
 
 /**
+ * A MilitaryVoices Radio show cut out of the day's recording: 720p mp4, the station's red LIVE badge covered, read from
+ * storage by ranged requests so the big file is never downloaded. It becomes a recording in the host's Library. Never throws.
+ */
+async function handleRadioCut(job: Job): Promise<void> {
+  const b = job.radioCut!;
+  const tag = `[radio show ${b.signupId}] cut`;
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `radiocut-${b.signupId}-`));
+  try {
+    console.log(`${tag}: ${job.title} (${Math.round(b.dur / 60)} min)`);
+    const out = path.join(dir, `show-${b.signupId}.mp4`);
+    await ffmpeg(["-ss", String(b.ss), "-i", job.downloadUrl, "-t", String(b.dur), "-vf", "scale=-2:720,drawbox=x=16:y=10:w=110:h=52:color=0x00053b:t=fill", "-c:v", "libx264", "-preset", "veryfast", "-crf", "23", "-pix_fmt", "yuv420p", "-c:a", "aac", "-b:a", "128k", "-ar", "44100", "-movflags", "+faststart", out]);
+    const sizeBytes = (await fs.stat(out)).size;
+    const durationSec = Math.round(Number((await run("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", out]).catch(() => "0")).trim()) || 0);
+    if (durationSec < 60) throw new Error(`the cut came out ${durationSec}s long`);
+    const key = await uploadBig(out, "video/mp4");
+    await api("POST", `/api/agent/radio-cut/${b.signupId}/done`, { key, sizeBytes, durationSec });
+    console.log(`${tag}: done (${Math.round(sizeBytes / 1048576)}MB, ${durationSec}s)`);
+  } catch (err) {
+    console.warn(`${tag} failed: ${(err as Error).message}`);
+    await api("POST", `/api/agent/radio-cut/${b.signupId}/failed`, {}).catch(() => {});
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+/**
  * A podcast episode from a Library video: the sound only, as a 128k stereo
  * MP3 at podcast loudness (-16 LUFS, what Apple and Spotify play at), then
  * into storage for the feed. Never throws.
@@ -2271,6 +2299,7 @@ async function handle(job: Job): Promise<void> {
   if (job.segmentCut) return handleSegmentCut(job);
   if (job.transcriptJob) return handleTranscript(job);
   if (job.episodeAudio) return handleEpisodeAudio(job);
+  if (job.radioCut) return handleRadioCut(job);
   if (job.episodeBookends) return handleEpisodeBookends(job);
   if (job.episodeStitch) return handleEpisodeStitch(job);
   if (job.episodeStill) return handleEpisodeStill(job);
@@ -2607,11 +2636,11 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
 async function tick(quick = false): Promise<boolean> {
   const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", quick
     ? { can: ["edit", "music"], quickOnly: true }
-    : { can: ["edit", "episode-edit", "segment-cut", "episode-audio", "episode-bookends", "episode-stitch", "episode-segments", "episode-copy", "episode-still", "living-squeeze", "transcript", "import", "music", "suggest"] });
+    : { can: ["edit", "episode-edit", "segment-cut", "episode-audio", "episode-bookends", "episode-stitch", "episode-segments", "radio-cut", "episode-copy", "episode-still", "living-squeeze", "transcript", "import", "music", "suggest"] });
   if (!job) return false;
   // An edit is one clip, not the recording: a shutdown mid-edit leaves it to
   // the 15-minute reclaim rather than requeuing the whole episode.
-  const clipJob = !(job.clipEdit || job.episodeEdit || job.segmentCut || job.episodeAudio || job.episodeBookends || job.episodeStitch || job.episodeStill || job.transcriptJob || job.importFrom || job.musicMix || job.suggestEdits);
+  const clipJob = !(job.clipEdit || job.episodeEdit || job.segmentCut || job.episodeAudio || job.radioCut || job.episodeBookends || job.episodeStitch || job.episodeStill || job.transcriptJob || job.importFrom || job.musicMix || job.suggestEdits);
   if (clipJob) holding.add(job.recordingId);
   if (job.episodeEdit) editing.add(job.recordingId);
   // "Still on it", every minute: a long quiet stretch (waiting on Creatomate)

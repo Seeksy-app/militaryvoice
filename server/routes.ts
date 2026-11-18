@@ -170,6 +170,7 @@ import { registerMusic } from "./music.js";
 import { registerReview } from "./review.js";
 import { registerSponsorFinder } from "./sponsorFinder.js";
 import { registerPodcastStats } from "./podcastStats.js";
+import { registerRadioLibrary, claimRadioShowCut } from "./radioLibrary.js";
 import { registerHosting, startEpisodeFromRecording, claimEpisodeAudio, claimEpisodeBookends, claimEpisodeStill, podcastYouTubeAt } from "./hosting.js";
 import { decideAdvance } from "../shared/showClock.js";
 import type { StageThanks } from "../shared/stageMeta.js";
@@ -6926,6 +6927,7 @@ export function registerRoutes(app: Express): void {
   registerSponsorFinder(app, requireAdmin);
   registerPodcastStats(app);
   registerHosting(app, requireAgent);
+  registerRadioLibrary(app, requireAgent);
   registerBioAgent(app, requireAgent);
   registerGuests(app, requireAdmin);
   registerGuestInvites(app, requireHostSession);
@@ -7118,6 +7120,11 @@ export function registerRoutes(app: Express): void {
       const eb = await claimEpisodeBookends(canStitch, req.body.can.includes("episode-segments")).catch((err) => { console.error("Episode bookends claim failed:", err); return null; });
       if (eb && canStitch) return res.json({ job: { recordingId: eb.id, title: eb.title, durationSec: eb.durationSec, downloadUrl: eb.audioUrl, show: "", host: "", transcript: [], episodeStitch: { episodeId: eb.id, parts: eb.parts, sig: eb.sig, spots: eb.spots, sources: eb.sources, segments: eb.segments } } });
       if (eb) return res.json({ job: { recordingId: eb.id, title: eb.title, durationSec: eb.durationSec, downloadUrl: eb.audioUrl, show: "", host: "", transcript: [], episodeBookends: { episodeId: eb.id, introUrl: eb.introUrl, outroUrl: eb.outroUrl, sig: eb.sig } } });
+    }
+    // A Radio show to cut out of the day's recording into its host's Library (once every half minute at most).
+    if (Array.isArray(req.body?.can) && req.body.can.includes("radio-cut")) {
+      const rc = await claimRadioShowCut().catch((err) => { console.error("Radio cut claim failed:", err); return null; });
+      if (rc) return res.json({ job: { recordingId: rc.signupId, title: rc.title, durationSec: rc.durationSec, downloadUrl: rc.srcUrl, show: "", host: "", transcript: [], radioCut: { signupId: rc.signupId, ss: rc.ss, dur: rc.dur } } });
     }
     // A recording to bring in (Zoom), if this worker can: quick, and someone's Library is waiting on it.
     if (Array.isArray(req.body?.can) && req.body.can.includes("import")) {

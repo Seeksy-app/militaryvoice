@@ -997,7 +997,7 @@ export interface ImportReadyInput {
   startedAt: string; // ISO
   durationSec: number;
   /** Where it came from: Zoom's recording.completed event, or their personal import link. */
-  provider: "zoom" | "link" | "studio";
+  provider: "zoom" | "link" | "studio" | "radio";
 }
 
 /**
@@ -1006,7 +1006,8 @@ export interface ImportReadyInput {
  */
 export async function sendImportReadyEmail(v: ImportReadyInput): Promise<boolean> {
   const zoom = v.provider === "zoom";
-  const studio = v.provider === "studio";
+  const studio = v.provider === "studio" || v.provider === "radio";
+  const radio = v.provider === "radio";
   const title = v.title.trim() || (zoom ? "Zoom recording" : studio ? "Studio recording" : "Imported recording");
   const when = Date.parse(v.startedAt);
   const date = Number.isFinite(when)
@@ -1016,8 +1017,10 @@ export async function sendImportReadyEmail(v: ImportReadyInput): Promise<boolean
   const libraryUrl = `${SITE}/host/dashboard/library`;
   const postifyUrl = `${SITE}/host/dashboard/postify?rec=${encodeURIComponent(String(v.recordingId))}`;
   const integrationsUrl = `${SITE}/host/dashboard/integrations`;
-  const subject = zoom ? "Your Zoom recording is in your Library" : studio ? "Your latest episode is in your Library" : "Your recording is in your Library";
-  const footer = studio
+  const subject = zoom ? "Your Zoom recording is in your Library" : radio ? "Your Radio show is in your Library" : studio ? "Your latest episode is in your Library" : "Your recording is in your Library";
+  const footer = radio
+    ? { lead: "You're getting this because you were on MilitaryVoices Radio.", link: "Your Library" }
+    : studio
     ? { lead: "You're getting this because you recorded in your MilitaryVoices studio.", link: "Your Library" }
     : zoom
     ? { lead: "You're getting this because automatic import is on.", link: "Turn it off on the Zoom card in Integrations" }
@@ -1032,7 +1035,7 @@ export async function sendImportReadyEmail(v: ImportReadyInput): Promise<boolean
       eyebrow: "Library",
       heading: subject,
       body: `
-        <p style="margin:0 0 14px;">${zoom ? "Your Zoom recording came in by itself" : studio ? "Your studio recording finished" : "The recording sent to your import link came in"} and it's ready in your Library.</p>
+        <p style="margin:0 0 14px;">${zoom ? "Your Zoom recording came in by itself" : radio ? "Your show on MilitaryVoices Radio is cut and ready" : studio ? "Your studio recording finished" : "The recording sent to your import link came in"} and it's ready in your Library.</p>
         <div style="background:#f3f6fb;border:1px solid #d8e2f0;border-radius:12px;padding:14px 18px;margin:0 0 14px;">
           <p style="margin:0;color:#0b1220;font-size:17px;font-weight:700;">${escapeHtml(title)}</p>
           ${facts.length ? `<p style="margin:4px 0 0;color:#6b7280;font-size:14px;">${escapeHtml(facts.join(" · "))}</p>` : ""}
