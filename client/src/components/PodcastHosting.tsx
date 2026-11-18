@@ -198,7 +198,13 @@ export function PodcastHosting() {
   const fix = (m: string) => {
     if (/cover art/i.test(m)) return document.getElementById(`hosting-art-input-${s.id}`)?.click();
     if (/published episode/i.test(m)) { go("episodes"); return setAdding(true); }
-    if (/confirm the owner/i.test(m)) return document.getElementById("hosting-owner")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    if (/confirm the owner/i.test(m)) {
+      // Up to the owner email, and send the code from here: one click, then the box for the code is right there.
+      document.getElementById("hosting-owner")?.scrollIntoView({ behavior: "smooth", block: "center" });
+      const send = document.querySelector<HTMLButtonElement>('[data-testid="hosting-owner-send"]');
+      if (send) send.click(); else document.querySelector<HTMLInputElement>('#hosting-owner input')?.focus();
+      return;
+    }
     setFocus(/description/i.test(m) ? "description" : /show name/i.test(m) ? "title" : /owner email/i.test(m) ? "ownerEmail" : "");
     go("details");
   };
@@ -308,7 +314,7 @@ export function PodcastHosting() {
                     <button type="button" onClick={() => fix(m)} className="group flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left text-sm text-foreground/85 transition-colors hover:bg-[#F0A71F]/15" data-testid="hosting-missing-item">
                       <span className="h-3.5 w-3.5 shrink-0 rounded-full border-2 border-[#b36b00]/60" />
                       <span className="min-w-0 flex-1">{m}</span>
-                      <span className="shrink-0 text-xs font-semibold text-[#b36b00] opacity-70 group-hover:opacity-100">Add it →</span>
+                      <span className="shrink-0 text-xs font-semibold text-[#b36b00] opacity-70 group-hover:opacity-100">{/confirm the owner/i.test(m) ? "Send me a code →" : "Add it →"}</span>
                     </button>
                   </li>
                 ))}
