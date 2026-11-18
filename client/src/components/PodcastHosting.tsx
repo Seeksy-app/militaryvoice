@@ -1,6 +1,6 @@
 import { GuestInvites } from "@/components/GuestInvites";
 import type { IconType } from "react-icons";
-import { SiApplepodcasts, SiIheartradio, SiPocketcasts, SiPodcastindex, SiSpotify, SiYoutubemusic } from "react-icons/si";
+import { SiApplepodcasts, SiCastbox, SiDeezer, SiIheartradio, SiPlayerfm, SiPocketcasts, SiPodcastindex, SiSpotify, SiYoutubemusic } from "react-icons/si";
 import { FaAmazon } from "react-icons/fa";
 import { PodcastSetup, type SetupNext } from "@/components/PodcastSetup";
 import { useEffect, useRef, useState } from "react";
@@ -50,6 +50,20 @@ function htmlToText(html: string): string {
   };
   return walk(doc.body).replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 }
+/** The three words an episode goes through: In post-production (we are still working on it, or its audio isn't here yet), Final draft (ready for them to publish), Live. */
+type Stage = "post" | "final" | "live" | "scheduled" | "failed";
+const stageOf = (e: Ep): Stage =>
+  e.status === "published" ? (e.live ? "live" : "scheduled")
+  : e.audioJob === "failed" ? "failed"
+  : e.stage === "post" || e.audioJob || !(e.audioKey || e.audioUrl) ? "post"
+  : "final";
+const STAGE: Record<Stage, { label: string; cls: string }> = {
+  post: { label: "In post-production", cls: "bg-[#053877]/10 text-[#053877] dark:bg-[#8fb5e8]/15 dark:text-[#8fb5e8]" },
+  final: { label: "Final draft", cls: "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" },
+  live: { label: "Live", cls: "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" },
+  scheduled: { label: "Scheduled", cls: "bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]" },
+  failed: { label: "Audio failed", cls: "bg-destructive/10 text-destructive" },
+};
 const dateOf = (iso: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "");
 
 export function PodcastHosting() {
@@ -187,21 +201,21 @@ export function PodcastHosting() {
           <div id="hosting-owner"><OwnerEmail h={h} onDone={refresh} /></div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <FeedLink url={h.feedUrl} />
+            <button type="button" onClick={() => setInSetup(true)} className="inline-flex h-8 items-center gap-1 rounded-full border border-dashed border-border px-3 text-xs font-semibold text-[#053877] hover:bg-[#053877]/5 dark:text-[#8fb5e8]" data-testid="hosting-add-show"><Plus className="h-3.5 w-3.5" /> Add a show</button>
             {h.episodes.some((e) => e.live) && <Button asChild variant="outline" size="sm" className="h-8 gap-1.5 rounded-full"><a href={`/podcast/${s.slug}`} target="_blank" rel="noreferrer" data-testid="hosting-public-page">Your show page <ExternalLink className="h-3 w-3" /></a></Button>}
           </div>
         </div>
-        {shows.length === 1 && <button type="button" onClick={() => setInSetup(true)} className="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold text-[#053877] hover:bg-[#053877]/5 dark:text-[#8fb5e8]" data-testid="hosting-add-show"><Plus className="h-3.5 w-3.5" /> Add a show</button>}
       </div>
 
       {/* On a phone the last tabs run off the edge: closer together, and a fade that says there's more (8 Oct). */}
       <div className="flex gap-4 overflow-x-auto whitespace-nowrap border-b border-border pr-6 [mask-image:linear-gradient(to_right,black_82%,transparent)] [scrollbar-width:none] sm:gap-6 sm:pr-0 sm:[mask-image:none]" role="tablist">
         {tabBtn("episodes", "Episodes")}
+        {/* Settings sits next to Episodes, where it is found: the show's details, how episodes go out, and its sponsors. */}
+        <button type="button" role="tab" aria-selected={inSettings} onClick={() => go(inSettings ? tab : "defaults")} className={`border-b-2 px-1 pb-2.5 text-sm font-semibold transition-colors ${inSettings ? "border-[#053877] text-foreground dark:border-[#8fb5e8]" : "border-transparent text-muted-foreground hover:text-foreground"}`} data-testid="hosting-tab-settings">Settings</button>
         {tabBtn("directories", ready ? "Directories" : "Directories · to do")}
         {tabBtn("invite", "Invite a guest")}
         {tabBtn("guests", "Book a guest")}
         {tabBtn("pitch", "Be a guest")}
-        {/* Settings: the show's details, what every episode starts with, and its sponsors (one place, to the right). */}
-        <button type="button" role="tab" aria-selected={inSettings} onClick={() => go(inSettings ? tab : "defaults")} className={`ml-auto border-b-2 px-1 pb-2.5 text-sm font-semibold transition-colors ${inSettings ? "border-[#053877] text-foreground dark:border-[#8fb5e8]" : "border-transparent text-muted-foreground hover:text-foreground"}`} data-testid="hosting-tab-settings">Settings</button>
       </div>
 
       {s.newFeedUrl && (
@@ -232,15 +246,15 @@ export function PodcastHosting() {
                   <li key={e.id} className="flex items-center gap-3 py-2.5" data-testid={`hosting-episode-${e.id}`}>
                     <EpisodeArt ep={e} fallback={s.artworkUrl} onDone={refresh} />
                     {/* On a phone the badge moves under the title, which gets the width (8 Oct: "8. MCDP 1 Warfig…"). */}
-                    <span className={`hidden shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold sm:inline-block ${e.audioJob === "failed" ? "bg-destructive/10 text-destructive" : e.audioJob ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : e.live ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : e.status === "published" ? "bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]" : "bg-muted text-muted-foreground"}`}>
-                      {e.audioJob === "failed" ? "Audio failed" : e.audioJob ? <span className="inline-flex items-center gap-1"><Loader2 className="h-3 w-3 animate-spin" /> Preparing audio</span> : e.live ? "Live" : e.status === "published" ? "Scheduled" : "Draft"}
+                    <span className={`hidden shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold sm:inline-flex sm:items-center sm:gap-1 ${STAGE[stageOf(e)].cls}`} data-testid={`hosting-stage-${e.id}`}>
+                      {e.audioJob && e.audioJob !== "failed" && <Loader2 className="h-3 w-3 animate-spin" />}{STAGE[stageOf(e)].label}
                     </span>
                     <button type="button" onClick={() => setEditEp(e)} className="min-w-0 flex-1 text-left">
                       <span className="line-clamp-2 text-sm font-medium sm:line-clamp-none sm:block sm:truncate">{e.episodeNumber != null ? `${e.episodeNumber}. ` : ""}{e.title}</span>
-                      <span className="block text-xs text-muted-foreground"><span className={`font-semibold sm:hidden ${e.audioJob === "failed" ? "text-destructive" : e.audioJob ? "text-[#8a5a00] dark:text-[#F0A71F]" : e.live ? "text-emerald-700 dark:text-emerald-400" : ""}`}>{e.audioJob === "failed" ? "Audio failed" : e.audioJob ? "Preparing audio" : e.live ? "Live" : e.status === "published" ? "Scheduled" : "Draft"} · </span>{e.publishedAt ? dateOf(e.publishedAt) : "Not published"}{e.durationSec ? ` · ${hms(e.durationSec)}` : ""}{e.youtube ? " · on YouTube" : ""}</span>
+                      <span className="block text-xs text-muted-foreground"><span className="font-semibold sm:hidden">{STAGE[stageOf(e)].label} · </span>{e.publishedAt ? dateOf(e.publishedAt) : "Not published"}{e.durationSec ? ` · ${hms(e.durationSec)}` : ""}{e.youtube ? " · on YouTube" : ""}</span>
                     </button>
                     <span className="hidden w-24 shrink-0 text-right text-xs tabular-nums text-muted-foreground sm:block"><b className="text-foreground">{compact(e.downloads)}</b> downloads</span>
-                    <Button size="sm" variant="outline" className="h-8 shrink-0 rounded-full" onClick={() => setEditEp(e)}>{e.status === "draft" ? "Publish" : "Edit"}</Button>
+                    <Button size="sm" variant="outline" className="h-8 shrink-0 rounded-full" onClick={() => setEditEp(e)}>{stageOf(e) === "final" ? "Publish" : stageOf(e) === "post" ? "Open" : "Edit"}</Button>
                   </li>
                 ))}
               </ul>
@@ -331,6 +345,13 @@ const DIRS: { key: string; name: string; reach: string; url: string; steps: stri
   { key: "listennotes", name: "Listen Notes", reach: "The podcast search engine. We list your show there for you once an episode is out.", url: "https://www.listennotes.com", steps: [], link: "https://www.listennotes.com/podcasts/…", auto: true },
 ];
 
+/** TuneIn and Listen Notes have no mark in the icon set: drawn here, in their colours. */
+const TuneInMark: IconType = (props) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" {...props}><path d="M12 2a10 10 0 1 0 0 20 10 10 0 0 0 0-20Zm-5 6h10v2h-4v7h-2v-7H7V8Z" /></svg>
+);
+const ListenNotesMark: IconType = (props) => (
+  <svg viewBox="0 0 24 24" fill="currentColor" {...props}><path d="M12 3a9 9 0 0 0-9 9v5a3 3 0 0 0 3 3h1v-7H5v-1a7 7 0 0 1 14 0v1h-2v7h1a3 3 0 0 0 3-3v-5a9 9 0 0 0-9-9Z" /></svg>
+);
 /** Each app's own mark, so it's recognisable at a glance (7 Oct). */
 const DIR_ICON: Record<string, { icon: IconType; color: string }> = {
   apple: { icon: SiApplepodcasts, color: "#9933CC" },
@@ -340,6 +361,11 @@ const DIR_ICON: Record<string, { icon: IconType; color: string }> = {
   iheart: { icon: SiIheartradio, color: "#C6002B" },
   pocketcasts: { icon: SiPocketcasts, color: "#F43E37" },
   podcastindex: { icon: SiPodcastindex, color: "#F90000" },
+  deezer: { icon: SiDeezer, color: "#A238FF" },
+  playerfm: { icon: SiPlayerfm, color: "#C8102E" },
+  castbox: { icon: SiCastbox, color: "#F65E3B" },
+  tunein: { icon: TuneInMark, color: "#14D8CC" },
+  listennotes: { icon: ListenNotesMark, color: "#2D6CDF" },
 };
 
 function Directories({ h, ready, onSaved, youtube }: { h: Hosted; ready: boolean; onSaved: () => void; youtube?: React.ReactNode }) {
@@ -879,7 +905,15 @@ function EpisodePage({ ep, show, youtubeReady, onBack, onSaved, onAddSpot }: { e
   };
   const copy = async (text: string, what: string) => { try { await navigator.clipboard.writeText(text); toast({ title: `${what} copied` }); } catch { toast({ title: what, description: text }); } };
   const origin = typeof window !== "undefined" ? window.location.origin : "";
-  const statusLine = ep.live ? `Live since ${dateOf(ep.publishedAt)}` : ep.status === "published" ? `Goes out ${dateOf(ep.publishedAt)}` : "Draft: not in your feed yet";
+  const stage = stageOf(ep);
+  const statusLine = ep.live ? `Live since ${dateOf(ep.publishedAt)}` : ep.status === "published" ? `Goes out ${dateOf(ep.publishedAt)}` : stage === "post" ? "We're still working on this one. It isn't in your feed." : "Ready for you to publish. It isn't in your feed yet.";
+  const setStage = async (st: "post" | "final") => {
+    try {
+      await apiRequest("PATCH", `/api/host/hosting/episodes/${ep.id}`, { stage: st });
+      onSaved();
+      toast(st === "final" ? { title: show.autoPublish ? "Final draft: it's going out" : "Final draft", description: show.autoPublish ? "Auto-post is on, so it's being published to your feed and YouTube." : "Press Publish when you're happy with it." } : { title: "Back in post-production" });
+    } catch (e) { toast({ title: "Couldn't change that", description: (e as Error).message.replace(/^\d+:\s*/, ""), variant: "destructive" }); }
+  };
   return (
     <div className="space-y-4" data-testid="episode-page">
       <button type="button" onClick={onBack} className="inline-flex items-center gap-1 text-sm font-semibold text-muted-foreground hover:text-foreground" data-testid="episode-back"><ChevronLeft className="h-4 w-4" /> All episodes</button>
@@ -920,7 +954,7 @@ function EpisodePage({ ep, show, youtubeReady, onBack, onSaved, onAddSpot }: { e
             )}
             <Textarea value={typeof f.description === "string" ? f.description : notesPlain} onChange={(e) => setF((x) => ({ ...x, description: e.target.value, notesFormat: "text" }))} rows={12} placeholder="What it's about, who's on it, and any links you mention." data-testid="hosting-ep-notes" />
             <label className={`${label} mt-3`}>Guest (fills {"{guest}"} in your footer)<Input value={(v.guest as string) ?? ""} onChange={(e) => set("guest", e.target.value)} className="mt-1" placeholder="Who was on it" data-testid="hosting-ep-guest" /></label>
-            {(show.introKey || show.outroKey) && hasAudio && (
+            {false && (show.introKey || show.outroKey) && hasAudio && (
               <div className="mt-3 rounded-xl border border-border px-3 py-2.5 text-sm" data-testid="hosting-ep-bookends">
                 <label className="flex items-center gap-2"><input type="checkbox" checked={bookendsOn} onChange={(e) => set("bookends", e.target.checked ? "on" : "off")} /> Add your intro{show.outroKey ? " and outro" : ""} to this episode</label>
                 <p className="mt-1 text-xs text-muted-foreground">{!bookendsOn ? "Plays as you uploaded it." : bookendState === "ready" ? "Added. The apps play it with your intro and outro." : bookendState === "failed" ? "Couldn't add them. Save again to retry." : "Being added now: a few minutes. Until then the apps play it as it is."}</p>
@@ -929,7 +963,7 @@ function EpisodePage({ ep, show, youtubeReady, onBack, onSaved, onAddSpot }: { e
             {hasAudio && (
               <label className="mt-3 flex items-center gap-2 rounded-xl border border-border px-3 py-2.5 text-sm" data-testid="hosting-ep-spots"><input type="checkbox" checked={!(v.spotsOff as boolean)} onChange={(e) => set("spotsOff", !e.target.checked)} /> Play your sponsor spots on this episode<button type="button" onClick={() => onAddSpot(ep.id)} className="ml-auto text-xs font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]" data-testid="episode-add-spot">+ Add a sponsor or shout-out to this episode</button></label>
             )}
-            {(show.episodeFooter ?? "").trim() && (
+            {false && (show.episodeFooter ?? "").trim() && (
               <div className="mt-3 rounded-xl border border-border px-3 py-2.5 text-sm" data-testid="hosting-ep-footer">
                 <label className="flex items-center gap-2"><input type="checkbox" checked={!(v.footerOff as boolean)} onChange={(e) => set("footerOff", !e.target.checked)} /> Add your show's footer to this episode</label>
                 {!(v.footerOff as boolean) && <p className="mt-2 whitespace-pre-line text-xs text-muted-foreground">{fillFooter(show.episodeFooter, { title: v.title, number: v.episodeNumber, season: v.season, guest: (v.guest as string) ?? "" })}</p>}
@@ -952,10 +986,18 @@ function EpisodePage({ ep, show, youtubeReady, onBack, onSaved, onAddSpot }: { e
         </div>
         <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
           <div className="rounded-2xl border border-border bg-card shadow-sm">
-            <div className={`rounded-t-2xl px-4 py-3 text-sm font-semibold ${ep.live ? "bg-emerald-600 text-white" : ep.status === "published" ? "bg-[#F0A71F] text-[#3a2600]" : "bg-muted text-foreground"}`}>{ep.live ? "Episode is live" : ep.status === "published" ? "Scheduled" : "Draft"}</div>
+            <div className={`rounded-t-2xl px-4 py-3 text-sm font-semibold ${stage === "live" ? "bg-emerald-600 text-white" : stage === "scheduled" ? "bg-[#053877] text-white" : stage === "final" ? "bg-[#F0A71F] text-[#3a2600]" : stage === "failed" ? "bg-destructive text-white" : "bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]"}`} data-testid="episode-stage">{stage === "live" ? "Live" : STAGE[stage].label}</div>
             <div className="space-y-3 p-4 text-sm">
               <p className="text-muted-foreground">{statusLine}</p>
-              {ep.status === "draft" && (
+              {ep.status === "draft" && stage === "post" && (
+                <>
+                  <p className="rounded-xl bg-[#053877]/[0.06] px-3 py-2.5 text-xs text-foreground/80">Your original recording is in your Library. We're editing this one: intro and outro, clean-up, the notes. When it's done it becomes a <b>Final draft</b> and you can publish it.</p>
+                  <Button onClick={() => void setStage("final")} disabled={!hasAudio || !!ep.audioJob} className="w-full bg-[#F0A71F] text-[#3a2600] hover:bg-[#d9941a]" data-testid="episode-mark-final">Mark as final draft</Button>
+                  {!hasAudio && !ep.audioJob && <p className="text-xs text-muted-foreground">Add the audio first.</p>}
+                  <Button variant="outline" onClick={() => void save()} disabled={!dirty} className="w-full">Save changes</Button>
+                </>
+              )}
+              {ep.status === "draft" && stage !== "post" && (
                 <>
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="text-xs font-semibold text-muted-foreground">Goes out</span>
@@ -971,6 +1013,7 @@ function EpisodePage({ ep, show, youtubeReady, onBack, onSaved, onAddSpot }: { e
                   <Button onClick={() => void save("published")} disabled={!v.title.trim() || (when === "later" && !at) || (!hasAudio && !ep.audioJob)} className="w-full gap-1.5 bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-publish"><Send className="h-4 w-4" /> {when === "later" ? "Schedule it" : "Publish now"}</Button>
                   {!hasAudio && !ep.audioJob && <p className="text-xs text-muted-foreground">Add the audio first, then you can publish.</p>}
                   <Button variant="outline" onClick={() => void save()} disabled={!dirty} className="w-full">Save draft</Button>
+                  <button type="button" onClick={() => void setStage("post")} className="w-full text-center text-xs font-semibold text-muted-foreground hover:text-foreground" data-testid="episode-back-to-post">Send back to post-production</button>
                 </>
               )}
               {ep.status !== "draft" && (
@@ -992,44 +1035,29 @@ function EpisodePage({ ep, show, youtubeReady, onBack, onSaved, onAddSpot }: { e
   );
 }
 
-/** What every episode of a show starts with: its intro and outro, and the footer under its notes. Per show, so two shows keep their own. */
+/** How the show's episodes go out. (The intro, outro and footer are done in post-production for now, so they are not here.) */
 function DefaultsPanel({ h, onSaved }: { h: Hosted; onSaved: () => void }) {
   const { toast } = useToast();
   const show = h.show;
-  const [foot, setFoot] = useState<string | null>(null);
-  const footer = foot ?? show.episodeFooter ?? "";
-  const saveFooter = async () => {
-    try { await apiRequest("PATCH", `/api/host/hosting/shows/${show.id}`, { episodeFooter: footer }); onSaved(); setFoot(null); toast({ title: "Footer saved", description: "It's under every episode's notes now." }); }
-    catch (e) { toast({ title: "Couldn't save", description: (e as Error).message, variant: "destructive" }); }
+  const [busy, setBusy] = useState(false);
+  const flip = async (on: boolean) => {
+    setBusy(true);
+    try { await apiRequest("PATCH", `/api/host/hosting/shows/${show.id}`, { autoPublish: on }); onSaved(); toast({ title: on ? "Auto-post is on" : "Auto-post is off", description: on ? "When post-production is done, an episode goes out by itself." : "You press Publish on each episode." }); }
+    catch (e) { toast({ title: "Couldn't change that", description: (e as Error).message, variant: "destructive" }); } finally { setBusy(false); }
   };
-  const working = h.episodes.filter((e) => (e as Ep & { bookend?: { state?: string } }).bookend?.state === "working").length;
   return (
     <div className="space-y-4" data-testid="hosting-defaults">
       <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-        <h2 className="text-sm font-semibold">Intro and outro</h2>
-        <p className="mt-0.5 text-sm text-muted-foreground">Added to every new episode for you, so you never edit them in. Episodes you've already put out are left as they are.</p>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
-          <BookendCard show={show} kind="intro" onSaved={onSaved} />
-          <BookendCard show={show} kind="outro" onSaved={onSaved} />
-        </div>
-        {working > 0 && <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Putting them on {working} episode{working === 1 ? "" : "s"} now. The original audio is kept.</p>}
-      </div>
-      <div className="rounded-2xl border border-border bg-card p-5 shadow-sm" data-testid="hosting-footer">
-        <h2 className="text-sm font-semibold">Episode footer</h2>
-        <p className="mt-0.5 text-sm text-muted-foreground">Written once. It goes at the end of every episode's notes in Apple, Spotify and your page, new and old. Tap a word to add it; each fills in from the episode. A line with nothing to fill in (no guest, say) is left out.</p>
-        <Textarea value={footer} onChange={(e) => setFoot(e.target.value)} rows={6} className="mt-3" placeholder={"Bounce Back in Business & Life, Episode #{number}\n{title}\nGuest: {guest}\n\n#Leadership #Veterans"} data-testid="hosting-footer-text" />
-        <div className="mt-2 flex flex-wrap gap-1.5">
-          {FOOTER_TOKENS.map((t) => (
-            <button key={t} type="button" onClick={() => setFoot(`${footer.replace(/\s+$/, "")}${footer.trim() ? " " : ""}{${t}}`)} className="rounded-full border border-border px-2.5 py-0.5 text-xs font-semibold text-foreground hover:bg-muted" data-testid={`hosting-footer-token-${t}`}>{`{${t}}`}</button>
-          ))}
-        </div>
-        {footer.trim() && (
-          <div className="mt-3 rounded-xl border border-border bg-muted/30 p-3" data-testid="hosting-footer-preview">
-            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">How it looks on an episode</p>
-            <p className="whitespace-pre-line text-sm text-foreground">{fillFooter(footer, { title: "Your episode's title", number: 12, season: null, guest: "Their guest" })}</p>
-          </div>
-        )}
-        <Button onClick={() => void saveFooter()} disabled={foot === null} className="mt-3 bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-footer-save">Save footer</Button>
+        <h2 className="text-sm font-semibold">How episodes go out</h2>
+        <p className="mt-0.5 text-sm text-muted-foreground">An episode goes from <b className="text-foreground">In post-production</b> to <b className="text-foreground">Final draft</b> to <b className="text-foreground">Live</b>. Publishing puts it in your feed, so Apple, Spotify and every directory pick it up, and on YouTube if it has video.</p>
+        <label className="mt-4 flex items-start gap-3 rounded-xl border border-border p-4" data-testid="hosting-autopublish">
+          <input type="checkbox" className="mt-1 h-4 w-4" checked={!!show.autoPublish} disabled={busy} onChange={(e) => void flip(e.target.checked)} />
+          <span className="min-w-0 text-sm">
+            <span className="block font-semibold">Post to directories and YouTube by itself</span>
+            <span className="mt-0.5 block text-muted-foreground">When post-production is done, the episode goes out without you pressing Publish.</span>
+            <span className="mt-1.5 block text-xs font-semibold text-[#8a5a00] dark:text-[#F0A71F]">We recommend publishing by hand for a while, so you see each one before it goes out.</span>
+          </span>
+        </label>
       </div>
     </div>
   );

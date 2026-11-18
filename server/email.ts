@@ -1415,7 +1415,7 @@ export async function sendOpportunityEmail(input: { to: string; name: string; br
  * A podcaster invites a guest to their interview (17 Nov 2026): from us on the host's behalf, "Frank Zaccari via MilitaryVoices.ai",
  * with the host's own address as the reply-to, so the guest writes back to the host. The link is the guest's private questionnaire.
  */
-export async function sendInterviewInvite(input: { to: string; guestName: string; hostName: string; hostEmail: string; show: string; whenText: string; zoomLink: string; note: string; link: string }): Promise<boolean> {
+export async function sendInterviewInvite(input: { fromLocal?: string; to: string; guestName: string; hostName: string; hostEmail: string; show: string; whenText: string; zoomLink: string; note: string; link: string }): Promise<boolean> {
   const first = input.guestName.trim().split(/\s+/)[0] || "there";
   const who = input.hostName || input.show || "Your host";
   const details = [
@@ -1424,7 +1424,7 @@ export async function sendInterviewInvite(input: { to: string; guestName: string
     input.note ? `<p style="margin:10px 0 0;white-space:pre-line;">${escapeHtml(input.note)}</p>` : "",
   ].join("");
   return sendRawEmail({
-    kind: "interview-invite", to: input.to, from: `${who} via MilitaryVoices.ai <hello@militaryvoices.ai>`, replyTo: input.hostEmail,
+    kind: "interview-invite", to: input.to, from: `${who} via MilitaryVoices.ai <${input.fromLocal && /^[a-z0-9-]{3,30}$/.test(input.fromLocal) ? input.fromLocal : "hello"}@militaryvoices.ai>`, replyTo: input.hostEmail,
     subject: `${who} invites you to be a guest on ${input.show || "their podcast"}`,
     html: emailShell({
       banner: EMAIL_BANNERS.conversation, bannerAlt: "MilitaryVoices.ai",

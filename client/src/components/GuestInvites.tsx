@@ -19,6 +19,13 @@ export function GuestInvites() {
   const [f, setF] = useState({ guestName: "", guestEmail: "", when: "", zoomLink: "", note: "" });
   const [open, setOpen] = useState<number | null>(null);
   const [questions, setQuestions] = useState<string[]>([]);
+  const sender = useQuery<{ slug: string; address: string; replyTo: string }>({ queryKey: ["/api/host/guest-invites/sender"], queryFn: async () => (await apiRequest("GET", "/api/host/guest-invites/sender")).json() });
+  const [editSlug, setEditSlug] = useState<string | null>(null);
+  const saveSlug = useMutation({
+    mutationFn: async () => (await apiRequest("PUT", "/api/host/guest-invites/sender", { slug: editSlug })).json(),
+    onSuccess: () => { setEditSlug(null); void qc.invalidateQueries({ queryKey: ["/api/host/guest-invites/sender"] }); toast({ title: "Saved", description: "Invitations come from that address now." }); },
+    onError: (e) => toast({ title: "Couldn't use that", description: say(e), variant: "destructive" }),
+  });
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF((x) => ({ ...x, [k]: e.target.value }));
   const send = useMutation({
     mutationFn: async () => {
@@ -37,13 +44,13 @@ export function GuestInvites() {
       <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
         <h3 className="text-lg font-semibold">Invite a guest</h3>
         <p className="mt-1 text-sm text-muted-foreground [text-wrap:pretty]">We email your guest from you. They answer a few questions and add the photo they want shown, and you get it all before the interview. Their name and photo go on your episode's guest card.</p>
-        <form className="mt-4 grid gap-4 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); send.mutate(); }}>
+        <form className="mt-5 grid gap-5 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); send.mutate(); }}>
           <div className="space-y-1.5"><Label htmlFor="gi-f-name">Guest's name</Label><Input id="gi-f-name" value={f.guestName} onChange={set("guestName")} maxLength={80} required /></div>
           <div className="space-y-1.5"><Label htmlFor="gi-f-email">Guest's email</Label><Input id="gi-f-email" type="email" value={f.guestEmail} onChange={set("guestEmail")} required /></div>
           <div className="space-y-1.5"><Label htmlFor="gi-f-when">When is the interview?</Label><Input id="gi-f-when" type="datetime-local" value={f.when} onChange={set("when")} /></div>
           <div className="space-y-1.5"><Label htmlFor="gi-f-zoom">Zoom link</Label><Input id="gi-f-zoom" value={f.zoomLink} onChange={set("zoomLink")} placeholder="Paste the link from Zoom" /><p className="text-xs text-muted-foreground">Make the meeting in Zoom and paste its link here.</p></div>
           <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="gi-f-note">A note to your guest (optional)</Label><Textarea id="gi-f-note" value={f.note} onChange={set("note")} rows={3} maxLength={1200} placeholder="What the interview is about, how long it runs, what to have ready." /></div>
-          <div className="space-y-2 sm:col-span-2" data-testid="guest-invite-questions">
+          <div className="space-y-3 rounded-xl border border-border/70 p-4 sm:col-span-2" data-testid="guest-invite-questions">
             <Label>Your own questions for the guest (optional)</Label>
             <p className="text-xs text-muted-foreground">We already ask their name, bio, topics, links and photo. Add anything else you want to know before the interview.</p>
             {questions.map((q, i) => (
@@ -55,6 +62,19 @@ export function GuestInvites() {
             {questions.length < 10 && <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={() => setQuestions((qs) => [...qs, ""])} data-testid="guest-invite-add-question">+ Add a question</Button>}
           </div>
           <div className="sm:col-span-2"><Button type="submit" disabled={send.isPending || !f.guestName.trim() || !f.guestEmail.trim()} className="rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="guest-invite-submit">{send.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}Send the invitation</Button></div>
+          <div className="space-y-1 sm:col-span-2 text-xs text-muted-foreground" data-testid="invite-sender">
+            {editSlug === null ? (
+              <p>* The email comes from <b className="text-foreground">{sender.data?.address ?? "…"}</b>. When your guest replies, it comes to you ({sender.data?.replyTo ?? "your email"}). <button type="button" onClick={() => setEditSlug(sender.data?.slug ?? "")} className="font-semibold text-[#053877] underline underline-offset-2 dark:text-[#8fb5e8]" data-testid="invite-sender-edit">Change the name</button></p>
+            ) : (
+              <div className="flex flex-wrap items-center gap-2">
+                <span>* From</span>
+                <Input value={editSlug} onChange={(e) => setEditSlug(e.target.value.toLowerCase())} className="h-8 w-48" maxLength={30} data-testid="invite-sender-input" />
+                <span>@militaryvoices.ai</span>
+                <Button type="button" size="sm" className="h-8 rounded-full" disabled={saveSlug.isPending || editSlug.trim().length < 3} onClick={() => saveSlug.mutate()}>Save</Button>
+                <Button type="button" size="sm" variant="ghost" className="h-8" onClick={() => setEditSlug(null)}>Cancel</Button>
+              </div>
+            )}
+          </div>
         </form>
       </div>
 

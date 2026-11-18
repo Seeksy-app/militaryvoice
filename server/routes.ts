@@ -170,7 +170,7 @@ import { registerMusic } from "./music.js";
 import { registerReview } from "./review.js";
 import { registerSponsorFinder } from "./sponsorFinder.js";
 import { registerPodcastStats } from "./podcastStats.js";
-import { registerHosting, claimEpisodeAudio, claimEpisodeBookends, claimEpisodeStill, podcastYouTubeAt } from "./hosting.js";
+import { registerHosting, startEpisodeFromRecording, claimEpisodeAudio, claimEpisodeBookends, claimEpisodeStill, podcastYouTubeAt } from "./hosting.js";
 import { decideAdvance } from "../shared/showClock.js";
 import type { StageThanks } from "../shared/stageMeta.js";
 import { registerBioPage, registerBioAgent, claimLivingSqueeze, subscribersFor, publishedBioUrl } from "./bioPage.js";
@@ -7799,6 +7799,8 @@ export function registerRoutes(app: Express): void {
     }
     used.push({ id: rec.id, at: new Date().toISOString() });
     await storage.setSetting(`pkgused:${email}`, JSON.stringify(used.slice(-20)));
+    // The episode shows up in their Episodes straight away, "In post-production", at the top.
+    await startEpisodeFromRecording(email, { id: rec.id, title: rec.title, durationSec: rec.durationSec, url: rec.url }).catch((err) => console.error("Episode from recording failed:", (err as Error).message));
     if (rec.clipStatus === "none" || !rec.clipStatus) {
       await storage.markPostifyBeta(rec.id); // covered by the package: no credits taken
       await storage.setClipOptions(rec.id, JSON.stringify(allShapes(parseClipOptions(rec.clipOptions))));

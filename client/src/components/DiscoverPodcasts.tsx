@@ -580,7 +580,7 @@ export function GuestFinder({ showTitle = "" }: { showTitle?: string }) {
       toast({ title: `${card.name} saved to Guests`, description: "Your Guests list is in Discovery, under Saved." });
     } catch (e) { toast({ title: "Couldn't save that", description: (e as Error).message, variant: "destructive" }); }
   };
-  const tries = ["Veteran authors", "Special operations", "Military historians", "Medal of Honor", showTitle && showTitle.split(/\s+/).slice(0, 3).join(" ")].filter(Boolean) as string[];
+  const tries = ["Authors", "Business leadership", "Special operations", "Military historians", "Medal of Honor", showTitle && showTitle.split(/\s+/).slice(0, 3).join(" ")].filter(Boolean) as string[];
   return (
     <div className="space-y-4" data-testid="book-a-guest">
       <ViewSwitch view={view} setView={setView} saved={guestList?.items.filter((i) => i.platform === "podperson").length ?? 0} label="Saved guests" />
@@ -698,7 +698,7 @@ export function ShowFinder({ topics = [] }: { topics?: string[] }) {
       toast({ title: `${card.name} saved to Shows to pitch` });
     } catch (e) { toast({ title: "Couldn't save that", description: (e as Error).message, variant: "destructive" }); }
   };
-  const tries = [...topics, "Leadership", "Transition", "Entrepreneurs", "Mental health", "Fitness"].filter((t, i, a) => t && a.indexOf(t) === i).slice(0, 6);
+  const tries = [...topics, "Author", "Business leadership", "Leadership", "Transition", "Entrepreneurs", "Mental health", "Fitness"].filter((t, i, a) => t && a.indexOf(t) === i).slice(0, 8);
   return (
     <div className="space-y-4" data-testid="be-a-guest">
       <ViewSwitch view={view} setView={setView} saved={pitchList?.items.filter((i) => i.platform === "podcast").length ?? 0} label="Saved shows" />

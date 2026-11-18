@@ -13,6 +13,22 @@ import { putRecordingObject, signedRecordingUrl } from "./recordingStorage.js";
 import { sendInterviewInvite, sendInterviewAnswered } from "./email.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
+
+/** The name before the @ on a host's invitations (bounce-back@militaryvoices.ai): theirs to choose, one each. */
+const RESERVED = new Set(["hello", "admin", "support", "info", "contact", "sales", "press", "billing", "noreply", "no-reply", "postmaster", "abuse", "michael", "riccoh", "andrew", "team", "help", "mail", "www"]);
+const slugOk = (v: string) => /^[a-z0-9][a-z0-9-]{2,29}$/.test(v) && !RESERVED.has(v);
+async function senderSlug(email: string): Promise<string> {
+  const saved = ((await storage.getSetting(`invite-slug:${email}`)) ?? "").trim();
+  if (saved && slugOk(saved)) return saved;
+  try {
+    const r = (await db.execute(sql`select slug from hosted_shows where lower(email)=${email} order by id limit 1`)) as unknown as { slug: string }[];
+    const s0 = String(r[0]?.slug ?? "");
+    if (slugOk(s0)) return s0;
+  } catch { /* no show yet */ }
+  const profile = await storage.getProfileByEmail(email);
+  const fromName = (profile?.podcastName ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 30);
+  return slugOk(fromName) ? fromName : "hello";
+}
 const str = (v: unknown, n: number) => String(v ?? "").trim().slice(0, n);
 const rows = (r: unknown) => ((r as { rows?: Record<string, unknown>[] }).rows ?? (r as Record<string, unknown>[]));
 const photos = multer({ storage: multer.memoryStorage(), limits: { fileSize: 12 * 1024 * 1024 } });
@@ -55,6 +71,22 @@ export function registerGuestInvites(app: Express, requireHostSession: RequestHa
     res.json(rows(await db.execute(sql`select * from guest_invites where owner_email=${mine(req)} order by id desc limit 100`)).map(view));
   });
 
+  /** Who the invitation email says it is from: <name>@militaryvoices.ai, replies to the host. */
+  app.get("/api/host/guest-invites/sender", requireHostSession, async (req, res) => {
+    const email = mine(req);
+    const slug = await senderSlug(email);
+    res.json({ slug, address: `${slug}@militaryvoices.ai`, replyTo: email });
+  });
+  app.put("/api/host/guest-invites/sender", requireHostSession, async (req, res) => {
+    const email = mine(req);
+    const slug = str(req.body?.slug, 40).toLowerCase().replace(/[^a-z0-9-]+/g, "-").replace(/^-+|-+$/g, "");
+    if (!slugOk(slug)) return res.status(400).json({ message: "Use 3 to 30 letters, numbers or dashes, like bounce-back." });
+    const taken = (await db.execute(sql`select key from site_settings where key like 'invite-slug:%' and value = ${slug} and key <> ${`invite-slug:${email}`} limit 1`)) as unknown as unknown[];
+    if (taken.length) return res.status(409).json({ message: "Someone already uses that one. Try another." });
+    await storage.setSetting(`invite-slug:${email}`, slug);
+    res.json({ slug, address: `${slug}@militaryvoices.ai`, replyTo: email });
+  });
+
   app.post("/api/host/guest-invites", requireHostSession, async (req, res) => {
     await ensure();
     const owner = mine(req);
@@ -71,7 +103,7 @@ export function registerGuestInvites(app: Express, requireHostSession: RequestHa
     const token = crypto.randomBytes(18).toString("base64url");
     const now = new Date().toISOString();
     const [r] = rows(await db.execute(sql`insert into guest_invites (token, owner_email, guest_email, guest_name, when_text, when_iso, zoom_link, note, questions, created_at, invited_at) values (${token}, ${owner}, ${guestEmail}, ${guestName}, ${whenText}, ${whenIso}, ${zoomLink}, ${note}, ${JSON.stringify(questions)}, ${now}, ${now}) returning *`));
-    const ok = await sendInterviewInvite({ to: guestEmail, guestName, hostName: profile?.hostName ?? "", hostEmail: owner, show: profile?.podcastName ?? "", whenText, zoomLink, note, link: `${ORIGIN}/guest-invite/${token}` });
+    const ok = await sendInterviewInvite({ fromLocal: await senderSlug(owner), to: guestEmail, guestName, hostName: profile?.hostName ?? "", hostEmail: owner, show: profile?.podcastName ?? "", whenText, zoomLink, note, link: `${ORIGIN}/guest-invite/${token}` });
     if (!ok) return res.status(502).json({ message: "The email didn't go. Try again in a moment.", invite: view(r) });
     res.status(201).json(view(r));
   });

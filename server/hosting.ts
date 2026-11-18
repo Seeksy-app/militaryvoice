@@ -462,6 +462,21 @@ export async function claimEpisodeBookends(canStitch = false, canSegments = fals
   return null;
 }
 
+/** A new recording from their Zoom (a package account): the episode appears in their Episodes at once, in post-production. */
+export async function startEpisodeFromRecording(email: string, rec: { id: number; title: string; durationSec: number; url: string }): Promise<void> {
+  await schemaIsReady();
+  const [show] = await showsOf(email.trim().toLowerCase());
+  if (!show || !rec.url) return;
+  const have = await db.select({ id: hostedEpisodes.id }).from(hostedEpisodes).where(eq(hostedEpisodes.recordingId, rec.id)).limit(1);
+  if (have.length) return;
+  const eps = await episodesOf(show.id);
+  await db.insert(hostedEpisodes).values({
+    showId: show.id, title: (rec.title || "New episode").slice(0, 300), recordingId: rec.id, durationSec: Math.round(rec.durationSec || 0),
+    episodeNumber: show.showType === "serial" ? null : eps.filter((x) => x.episodeType === "full").length + 1,
+    guid: crypto.randomUUID(), status: "draft", stage: "post", createdAt: now(), audioJob: "queued", audioJobAt: now(), bookends: "off",
+  });
+}
+
 /** The worker's next episode to turn from video into audio (a stuck one is taken back after 30 minutes). */
 export async function claimEpisodeAudio(mode: "convert" | "copy" = "convert"): Promise<{ id: number; title: string; durationSec: number; recordingUrl: string; copy?: boolean; mime?: string } | null> {
   await schemaIsReady();
@@ -872,6 +887,7 @@ Return JSON only: {"titles":["","",""],"description":""}`,
       ...(category ? { category, subcategory: subcategory ?? "" } : subcategory !== undefined ? { subcategory } : {}),
       ...(typeof b.explicit === "boolean" ? { explicit: b.explicit } : {}),
       ...(typeof b.aiVoice === "boolean" ? { aiVoice: b.aiVoice } : {}),
+      ...(typeof b.autoPublish === "boolean" ? { autoPublish: b.autoPublish } : {}),
       ...(b.youtubeMode === "ask" || b.youtubeMode === "always" ? { youtubeMode: b.youtubeMode } : {}),
       ...(["public", "unlisted", "private"].includes(b.youtubePrivacy) ? { youtubePrivacy: b.youtubePrivacy } : {}),
       ...(b.showType === "serial" || b.showType === "episodic" ? { showType: b.showType } : {}),
@@ -1191,6 +1207,10 @@ Return JSON only: {"titles":["","",""],"description":""}`,
     // Audio still being made (from a video, or copied in): it can be published now, and it joins
     // the feed by itself the moment its audio lands (the feed only lists episodes with audio).
     if (publish && !(e.audioKey || e.audioUrl) && (!e.audioJob || e.audioJob === "failed")) return res.status(400).json({ message: e.audioJob === "failed" ? "Its audio couldn't be made. Delete it and try again, or upload the audio." : "It needs its audio first." });
+    // "Final draft" is the team's (or their) word that post-production is done. With auto-post on, that is the moment it goes out.
+    const stageIn = b.stage === "post" || b.stage === "final" ? (b.stage as string) : undefined;
+    const readyToGo = !!(e.audioKey || e.audioUrl) && !e.audioJob;
+    const autoGo = stageIn === "final" && e.status === "draft" && readyToGo && !publish && !!(await ownShow(email, e.showId))?.autoPublish;
     const at = typeof b.publishedAt === "string" && !Number.isNaN(Date.parse(b.publishedAt)) ? new Date(b.publishedAt).toISOString() : undefined;
     const [out] = await db.update(hostedEpisodes).set({
       ...(typeof b.title === "string" ? { title: b.title.slice(0, 300) } : {}),
@@ -1210,6 +1230,8 @@ Return JSON only: {"titles":["","",""],"description":""}`,
       ...("season" in b ? { season: num(b.season) } : {}),
       ...(["full", "trailer", "bonus"].includes(b.episodeType) ? { episodeType: b.episodeType } : {}),
       ...(typeof b.explicit === "boolean" ? { explicit: b.explicit } : {}),
+      ...(stageIn ? { stage: stageIn } : {}),
+      ...(autoGo ? { status: "published", publishedAt: now(), youtubeWanted: false } : {}),
       ...(publish ? { status: "published", publishedAt: at ?? (e.publishedAt || now()) } : b.status === "draft" ? { status: "draft" } : {}),
       ...(!publish && at ? { publishedAt: at } : {}),
       ...(typeof b.youtube === "boolean" ? { youtubeWanted: b.youtube && hasVideo(e) } : {}),

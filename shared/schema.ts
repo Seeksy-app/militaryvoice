@@ -2777,6 +2777,8 @@ export const hostedShows = pgTable("hosted_shows", {
   youtubePrivacy: text("youtube_privacy").notNull().default("public"),
   /** Written once, added to the end of every episode's notes (feed and page): {title}, {number}, {season}, {guest} fill in per episode. */
   episodeFooter: text("episode_footer").notNull().default(""),
+  /** On: when post-production is done (the episode becomes a final draft) it goes out by itself, to the feed (so every directory) and to YouTube. Off: they press Publish. */
+  autoPublish: boolean("auto_publish").notNull().default(false),
   /** The show's own intro and outro (audio), added to episodes made after they were set. Keys are in our storage (show-assets/…). */
   introKey: text("intro_key").notNull().default(""),
   introName: text("intro_name").notNull().default(""),
@@ -2801,6 +2803,8 @@ export const hostedEpisodes = pgTable("hosted_episodes", {
   description: text("description").notNull().default(""),
   /** text | html */
   notesFormat: text("notes_format").notNull().default("text"),
+  /** For a draft: "post" (in post-production: we are still working on it), "final" (ready for them to publish), or "" (their own upload: ready as soon as it has audio). */
+  stage: text("stage").notNull().default(""),
   /** True when this one episode plays none of the show's sponsor spots. */
   spotsOff: boolean("spots_off").notNull().default(false),
   /** The ids of the sponsor spots baked into the finished file (so a download can be counted for them). */
