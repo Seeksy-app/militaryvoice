@@ -1397,8 +1397,6 @@ function TemplatePicker({ view, theme, onClose, onApply }: { view: BioPublic; th
   const [accent, setAccent] = useState<string | null>(null);
   const [bgc, setBgc] = useState<string | null>(null);
   const [font, setFont] = useState<BioFont | null>(null);
-  // How the latest episode shows: the big photo is only one choice, and a template shouldn't force it.
-  const [pod, setPod] = useState<"spotlight" | "list" | "carousel" | null>(null);
   const n = keys.length;
   const shift = (dir: -1 | 1) => setI((x) => (x + dir + n) % n);
   useEffect(() => {
@@ -1411,7 +1409,6 @@ function TemplatePicker({ view, theme, onClose, onApply }: { view: BioPublic; th
     ...theme, ...TEMPLATES[k].theme, template: k,
     color: centre && accent ? accent : theme.color,
     font: centre && font ? font : (TEMPLATES[k].theme.font ?? theme.font),
-    podcastStyle: centre && pod ? pod : (TEMPLATES[k].theme.podcastStyle ?? theme.podcastStyle),
     background: centre && bgc ? { mode: "solid", color: bgc, image: "" } : { mode: "solid", color: "", image: "" },
     bgTint: 0, bgBrightness: 0,
   });
@@ -1474,16 +1471,8 @@ function TemplatePicker({ view, theme, onClose, onApply }: { view: BioPublic; th
             </select>
           </div>
           <div className="flex items-center gap-2">
-            <span className="text-xs font-medium text-muted-foreground">Episodes:</span>
-            <select value={pod ?? (TEMPLATES[cur].theme.podcastStyle ?? theme.podcastStyle ?? "spotlight")} onChange={(e) => setPod(e.target.value as "spotlight" | "list" | "carousel")} className="h-9 rounded-lg border border-border bg-card px-2 text-sm" data-testid="template-episodes">
-              <option value="list">In rows (classic)</option>
-              <option value="spotlight">Big latest episode</option>
-              <option value="carousel">Cards to swipe</option>
-            </select>
-          </div>
-          <div className="flex items-center gap-2">
             <Button variant="outline" onClick={onClose} className="rounded-full">Cancel</Button>
-            <Button onClick={() => { const th = themed(cur, true); onApply({ ...TEMPLATES[cur].theme, template: cur, color: th.color, font: th.font, podcastStyle: th.podcastStyle, background: th.background, bgTint: 0, bgBrightness: 0 }); }} className="rounded-full bg-[#053877] hover:bg-[#0a4a99]" data-testid="template-apply">Apply template</Button>
+            <Button onClick={() => { const th = themed(cur, true); onApply({ ...TEMPLATES[cur].theme, template: cur, color: th.color, font: th.font, background: th.background, bgTint: 0, bgBrightness: 0 }); }} className="rounded-full bg-[#053877] hover:bg-[#0a4a99]" data-testid="template-apply">Apply template</Button>
           </div>
         </div>
       </div>
@@ -1598,7 +1587,12 @@ function ContentTab({ d, change, view, knowledge, onPeek }: { d: Page; change: (
   const items = useFold("content-items", false);
   const put = (s: BioSection[], now = false) => change({ sections: s }, now);
   const upd = (id: string, patch: Partial<BioSection>, now = false) => put(d.sections.map((x) => (x.id === id ? ({ ...x, ...patch } as BioSection) : x)), now);
-  const add = (type: BioSectionType) => { const s = blank(type); put([...d.sections, s], true); items.set(s.id, true); fold.set("list", true); };
+  const podcast = d.sections.find((x) => x.type === "podcast");
+  const add = (type: BioSectionType) => {
+    // One podcast block per page: if it's there (even hidden), the tile turns it on and opens it.
+    if (type === "podcast" && podcast) { put(d.sections.map((x) => (x.id === podcast.id ? { ...x, visible: true } : x)), true); items.set(podcast.id, true); fold.set("list", true); return; }
+    const s = blank(type); put([...d.sections, s], true); items.set(s.id, true); fold.set("list", true);
+  };
   const all = (open: boolean) => { fold.all(["add", "list"], open); items.all(d.sections.map((x) => x.id), open); };
   return (
     <div className="space-y-4">
@@ -1606,9 +1600,9 @@ function ContentTab({ d, change, view, knowledge, onPeek }: { d: Page; change: (
       <Card icon={Plus} tone="gold" title="Add to your page" fold={fold.of("add")}>
         <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
           {KINDS.map((k) => (
-            <button key={k.type} type="button" onClick={() => add(k.type)} disabled={k.type === "podcast" && d.sections.some((x) => x.type === "podcast")} className="group disabled:pointer-events-none disabled:opacity-40 flex items-center gap-3 rounded-2xl border-2 border-border bg-background p-2.5 text-left transition-all hover:-translate-y-0.5 hover:border-[#053877]/40 hover:shadow-md" data-testid={`bio-add-${k.type}`}>
+            <button key={k.type} type="button" onClick={() => add(k.type)} className="group flex items-center gap-3 rounded-2xl border-2 border-border bg-background p-2.5 text-left transition-all hover:-translate-y-0.5 hover:border-[#053877]/40 hover:shadow-md" data-testid={`bio-add-${k.type}`}>
               <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-xl ${k.tone}`}><k.icon className="h-[18px] w-[18px]" /></span>
-              <span className="min-w-0"><span className="block text-sm font-bold">{k.label}</span><span className="block text-[11px] leading-snug text-muted-foreground">{k.hint}</span></span>
+              <span className="min-w-0"><span className="block text-sm font-bold">{k.label}</span><span className="block text-[11px] leading-snug text-muted-foreground">{k.type === "podcast" && podcast ? (podcast.visible ? "On your page. Tap to open it" : "On your page, hidden. Tap to turn it on") : k.hint}</span></span>
             </button>
           ))}
         </div>
