@@ -776,6 +776,9 @@ export function registerBioPage(app: Express) {
       res.json({ url: await uploadPhoto(`bio/${row.id}-${kind}-fixed-${Date.now()}.jpg`, img, "image/jpeg") });
     } catch (err) {
       console.error("Fix-up failed:", (err as Error).message);
+      // A try that never ran doesn't count against the day's ten.
+      fixRuns.set(row.id, (fixRuns.get(row.id) ?? []).slice(0, -1));
+      if (/fal 40[23]/.test((err as Error).message)) return res.status(503).json({ message: "Photo fix-up is paused for a short while. We've been told, and it'll be back." });
       res.status(502).json({ message: "Couldn't fix up that photo. Try again in a moment." });
     }
   });
