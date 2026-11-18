@@ -216,6 +216,7 @@ export function PodcastListens({ onConnect, bare = false }: { onConnect: () => v
   const q = usePodcastStats();
   const qc = useQueryClient();
   const [refreshing, setRefreshing] = useState<string | null>(null);
+  const [tab, setTab] = useState<string>("all");
   if (q.isLoading) return null;
   const sources = (q.data?.sources ?? []).filter((s) => s.data);
   if (!sources.length) {
@@ -234,8 +235,41 @@ export function PodcastListens({ onConnect, bare = false }: { onConnect: () => v
     setRefreshing(s);
     try { await apiRequest("POST", `/api/host/podcast-stats/${s}/refresh`); await qc.invalidateQueries({ queryKey: KEY }); } finally { setRefreshing(null); }
   };
+  // Tabs across the top: everything together, then one for each place the numbers come from.
+  const merged: SourceView | null = (() => {
+    if (sources.length < 2) return null;
+    const eps = new Map<string, { title: string; published: string; count: number }>();
+    const days = new Map<string, number>();
+    const apps: Record<string, number> = {};
+    for (const x of sources) {
+      for (const e of x.data!.episodes) { const k = e.title.trim().toLowerCase(); const had = eps.get(k); eps.set(k, had ? { ...had, count: had.count + e.count } : { ...e }); }
+      for (const d of x.data!.series ?? []) days.set(d.date, (days.get(d.date) ?? 0) + d.count);
+      for (const [a, n] of Object.entries(x.data!.audience?.apps ?? {})) apps[a] = (apps[a] ?? 0) + n;
+    }
+    const first = sources[0];
+    return {
+      source: "all" as unknown as Source, showName: first.showName, status: "ok", error: "",
+      fetchedAt: sources.map((x) => x.fetchedAt).sort().slice(-1)[0] ?? "",
+      data: {
+        total: sources.reduce((a, x) => a + (x.data!.unit === "downloads" ? x.data!.total : 0), 0), unit: "downloads",
+        episodes: Array.from(eps.values()), series: Array.from(days, ([date, count]) => ({ date, count })).sort((a, b) => a.date.localeCompare(b.date)),
+        audience: Object.keys(apps).length ? { apps } : undefined, artwork: sources.find((x) => x.data!.artwork)?.data!.artwork,
+      },
+    };
+  })();
+  const pick = tab === "all" && merged ? "all" : sources.some((x) => x.source === tab) ? tab : sources[0].source;
+  const shown = pick === "all" && merged ? [merged] : sources.filter((x) => x.source === pick);
+  const tabs: { key: string; label: string }[] = [...(merged ? [{ key: "all", label: "All sources" }] : []), ...sources.map((x) => ({ key: x.source, label: x.source === "militaryvoices" ? "MilitaryVoices" : NAME[x.source] }))];
   return (
     <section className={`${bare ? "" : "mb-6 "}space-y-4`} data-testid="podcast-listens">
+      {tabs.length > 1 && (
+        <div role="tablist" className="flex gap-1 overflow-x-auto rounded-full bg-muted/60 p-1" data-testid="podcast-tabs">
+          {tabs.map((t) => (
+            <button key={t.key} role="tab" aria-selected={pick === t.key} type="button" onClick={() => setTab(t.key)} data-testid={`podcast-tab-${t.key}`}
+              className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${pick === t.key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>{t.label}</button>
+          ))}
+        </div>
+      )}
       {!bare && <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground"><Headphones className="h-4 w-4" /> Podcast listens</h3>}
       {(q.data?.benchmark ?? []).map((b) => (
         <div key={b.unit} className="flex items-center gap-3 rounded-2xl bg-[#053877] p-4 text-white" data-testid={`benchmark-${b.unit}`}>
@@ -248,8 +282,9 @@ export function PodcastListens({ onConnect, bare = false }: { onConnect: () => v
           </p>
         </div>
       ))}
-      {sources.map((s) => {
+      {shown.map((s) => {
         const d = s.data!;
+        const isAll = (s.source as string) === "all";
         const avg = d.episodes.length ? d.episodes.reduce((a, e) => a + e.count, 0) / d.episodes.length : 0;
         const recent = (d.series ?? []).slice(-30);
         const recentSum = recent.reduce((a, x) => a + x.count, 0);
@@ -262,18 +297,22 @@ export function PodcastListens({ onConnect, bare = false }: { onConnect: () => v
           ...(d.followers ? [["followers", compact(d.followers)] as [string, string]] : []),
         ];
         return (
-          <div key={s.source} className="rounded-2xl border border-border bg-card p-5" data-testid={`listens-${s.source}`}>
+          <div key={s.source} className="rounded-2xl border border-border bg-card p-5" data-testid={`listens-${isAll ? "all" : s.source}`}>
             <div className="mb-4 flex flex-wrap items-center gap-3">
-              <Badge source={s.source} />
+              <span className="relative shrink-0">
+                {d.artwork ? <img src={d.artwork} alt="" className="h-12 w-12 rounded-xl object-cover" /> : isAll ? <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#053877] text-white"><Headphones className="h-6 w-6" /></span> : <Badge source={s.source} />}
+                {!isAll && d.artwork && <img src={MARK[s.source]} alt="" className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-white object-contain p-px ring-2 ring-card" />}
+              </span>
               <div className="min-w-0 flex-1">
-                <p className="font-semibold text-foreground">{NAME[s.source]}{s.showName ? <span className="font-normal text-muted-foreground"> · {s.showName}</span> : null}</p>
+                <p className="font-semibold text-foreground">{s.showName || (isAll ? "Your show" : NAME[s.source])}</p>
                 <p className="text-xs text-muted-foreground">
-                  {s.source === "spotify" ? `Uploaded ${when(s.fetchedAt)}` : `Updated ${when(s.fetchedAt)}`}
+                  {isAll ? `All your sources together: ${sources.map((x) => NAME[x.source]).join(", ")}` : s.source === "militaryvoices" ? "Hosted on MilitaryVoices" : s.source === "spotify" ? "From Spotify for Creators" : `From ${NAME[s.source]}`}
+                  {" · "}{s.source === "spotify" ? `Uploaded ${when(s.fetchedAt)}` : `Updated ${when(s.fetchedAt)}`}
                   {stale && <span className="font-semibold text-amber-700 dark:text-amber-400"> · a month old: upload this month's in Integrations</span>}
                   {s.status === "failed" && <span className="text-destructive"> · {s.error}</span>}
                 </p>
               </div>
-              {s.source !== "spotify" && s.source !== "militaryvoices" && (
+              {!isAll && s.source !== "spotify" && s.source !== "militaryvoices" && (
                 <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs" onClick={() => void refresh(s.source)} disabled={refreshing === s.source}>
                   <RefreshCw className={`h-3.5 w-3.5 ${refreshing === s.source ? "animate-spin" : ""}`} /> Refresh
                 </Button>

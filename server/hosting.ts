@@ -141,6 +141,11 @@ const txt = (v: unknown): string => {
   if (typeof v === "object") return txt((v as Record<string, unknown>)["#text"] ?? (v as Record<string, unknown>)["__cdata"] ?? "");
   return "";
 };
+/** Some hosts write "Isn&#39;t" into a title; ours is plain text (the feed escapes it once), so read those back to real characters. */
+const plain = (s: string): string => s
+  .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => String.fromCodePoint(parseInt(h, 16)))
+  .replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)))
+  .replace(/&nbsp;/g, " ").replace(/&quot;/g, '"').replace(/&apos;/g, "'").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&");
 const attr = (v: unknown, k: string): string => (v && typeof v === "object" ? txt((Array.isArray(v) ? v[0] : v as Record<string, unknown>)?.[`@_${k}`]) : "");
 const list = <T,>(v: T | T[] | undefined): T[] => (v == null ? [] : Array.isArray(v) ? v : [v]);
 const yes = (v: unknown) => /^(yes|true|explicit)$/i.test(txt(v));
@@ -173,7 +178,7 @@ export async function readFeed(url: string): Promise<ParsedFeed> {
     if (!/^https?:\/\//.test(u)) return null;
     const pub = Date.parse(txt(it.pubDate));
     return {
-      title: txt(it.title) || "Untitled episode",
+      title: plain(txt(it.title)) || "Untitled episode",
       notes: txt(it["content:encoded"]) || txt(it.description) || txt(it["itunes:summary"]),
       url: u, mime: attr(enc, "type") || "audio/mpeg", length: Math.max(0, parseInt(attr(enc, "length"), 10) || 0),
       guid: txt(it.guid) || u,
@@ -186,7 +191,7 @@ export async function readFeed(url: string): Promise<ParsedFeed> {
   }).filter((x): x is ParsedItem => !!x);
   const owner = (ch["itunes:owner"] ?? {}) as Record<string, unknown>;
   return {
-    title: txt(ch.title), description: txt(ch.description) || txt(ch["itunes:summary"]), author: txt(ch["itunes:author"]),
+    title: plain(txt(ch.title)), description: txt(ch.description) || txt(ch["itunes:summary"]), author: txt(ch["itunes:author"]),
     ownerName: txt(owner["itunes:name"]), ownerEmail: txt(owner["itunes:email"]),
     artwork: attr(ch["itunes:image"], "href") || txt((ch.image as Record<string, unknown> | undefined)?.url),
     category: attr(cat, "text"), subcategory: attr(cat?.["itunes:category"], "text"),
