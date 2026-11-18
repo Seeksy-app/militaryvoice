@@ -382,6 +382,19 @@ async function slack(text: string): Promise<void> {
   await fetch(url, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ text }), signal: AbortSignal.timeout(8_000) }).catch(() => {});
 }
 
+/**
+ * fal.ai just refused a customer's request (no balance, or the key was refused): tell Slack at once, not after the five-minute check has missed twice.
+ * At most once every six hours, however many requests fail meanwhile.
+ */
+export async function noteFalRefused(where: string): Promise<void> {
+  try {
+    const [row] = await db.select().from(discoveryCache).where(eq(discoveryCache.key, "fal:alerted"));
+    if (row && Date.now() - Date.parse(row.createdAt) < 6 * 3600_000) return;
+    await db.insert(discoveryCache).values({ key: "fal:alerted", payload: where, createdAt: now() }).onConflictDoUpdate({ target: discoveryCache.key, set: { payload: where, createdAt: now() } });
+    await slack(`:red_circle: *fal.ai refused a request* (${where}). The balance is probably used up. Photo styles, Fix up, cut-outs and talking intros stop until it's topped up: fal.ai/dashboard/billing\n<${(env("PUBLIC_ORIGIN") || "https://www.militaryvoices.ai").replace(/\/+$/, "")}/admin/health|Open System health>`);
+  } catch { /* an alert that can't be sent must never break the customer's request */ }
+}
+
 /** Run the checks, remember them, and tell Slack what changed. */
 export async function healthAlerts(): Promise<{ down: string[]; alerted: string[]; recovered: string[] }> {
   const r = await runHealth(true);

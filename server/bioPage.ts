@@ -13,6 +13,7 @@ import { buildShareCard } from "./shareCard.js";
 import Anthropic from "@anthropic-ai/sdk";
 import { readFeed, hostedAsStats } from "./hosting.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
+import { noteFalRefused } from "./health.js";
 import { aiFor, knowledgeOf, syncKnowledge } from "./askShow.js";
 import { bioPages, bioEvents, bioSubscribers, listenerQuestions, hostedShows, hostedEpisodes, type BioPageRow } from "../shared/schema.js";
 import { DEFAULT_PODCAST, parseTheme, parseSections, parseSocials, parseBrands, parseFamily, type BioFamily, type BioFamilyPublic, handleOk, TEMPLATES, type BioPublic, type BioSection, type BioSocial, type BioTheme, type BioBrands, type BioBrandsPublic, type BioViewMedia, type BioLayout, BRANDS_SECTIONS, FAMILY_SECTIONS, INTRO_VOICES } from "../shared/bio.js";
@@ -703,7 +704,10 @@ export function registerBioPage(app: Express) {
           // A stock voice through fal (or, with no ElevenLabs key, the gravelly stock one standing in).
           const t = await fetch("https://fal.run/fal-ai/elevenlabs/tts/turbo-v2.5", { method: "POST", headers: FAL(), signal: AbortSignal.timeout(60_000), body: JSON.stringify({ text, voice: community ? "Callum" : voice, stability: 0.5, similarity_boost: 0.75, speed: 1 }) });
           const tj = (await t.json().catch(() => ({}))) as { audio?: { url?: string } };
-          if (!t.ok || !tj.audio?.url) throw Object.assign(new Error(`tts ${t.status}`), t.status === 402 || t.status === 403 ? { say: "The voice maker is out of credit (fal). Top it up, then try again." } : {});
+          if (!t.ok || !tj.audio?.url) {
+            if (t.status === 402 || t.status === 403) void noteFalRefused("talking intro voice");
+            throw Object.assign(new Error(`tts ${t.status}`), t.status === 402 || t.status === 403 ? { say: "The voice maker is out of credit (fal). Top it up, then try again." } : {});
+          }
           audio = tj.audio.url;
         }
       }
@@ -715,6 +719,7 @@ export function registerBioPage(app: Express) {
       const j = (await r.json().catch(() => ({}))) as { status_url?: string; response_url?: string };
       if (!r.ok || !j.status_url || !j.response_url) {
         console.error("Talking intro video failed to start:", r.status, JSON.stringify(j).slice(0, 400));
+        if (r.status === 402 || r.status === 403) void noteFalRefused("talking intro video");
         throw Object.assign(new Error(`fal ${r.status}`), { say: r.status === 402 || r.status === 403 ? "The video maker is out of credit (fal). Top it up, then try again." : `The video maker refused it (fal ${r.status}). Try a clear photo of your face, looking at the camera.` });
       }
       await db.update(bioPages).set({ introJob: JSON.stringify({ status: j.status_url, response: j.response_url, from: row.avatarUrl, at: Date.now() } satisfies LivingState) }).where(eq(bioPages.id, row.id));
@@ -778,6 +783,7 @@ export function registerBioPage(app: Express) {
       console.error("Fix-up failed:", (err as Error).message);
       // A try that never ran doesn't count against the day's ten.
       fixRuns.set(row.id, (fixRuns.get(row.id) ?? []).slice(0, -1));
+      if (/fal 40[23]/.test((err as Error).message)) void noteFalRefused("photo fix-up");
       if (/fal 40[23]/.test((err as Error).message)) return res.status(503).json({ message: "Photo fix-up is paused for a short while. We've been told, and it'll be back." });
       res.status(502).json({ message: "Couldn't fix up that photo. Try again in a moment." });
     }
@@ -826,6 +832,7 @@ export function registerBioPage(app: Express) {
       res.json({ url: await uploadPhoto(`bio/${row.id}-${kind}-styled-${key}-${Date.now()}.jpg`, img, "image/jpeg") });
     } catch (err) {
       console.error("Style failed:", (err as Error).message);
+      if (/fal 40[13]/.test((err as Error).message)) void noteFalRefused("photo styles");
       if (/fal 40[13]/.test((err as Error).message)) return res.status(503).json({ message: "Photo styles are paused for a short while. We've been told, and they'll be back." });
       res.status(502).json({ message: "Couldn't make that style. Try again in a moment." });
     }
@@ -932,6 +939,7 @@ export function registerBioPage(app: Express) {
     } catch (err) {
       console.error("Cutout failed:", (err as Error).message);
       // Our account with the photo service out of balance is ours to fix, not the photo's fault (System health shows it red too).
+      if (/fal 40[13]/.test((err as Error).message)) void noteFalRefused("photo cut-outs");
       if (/fal 40[13]/.test((err as Error).message)) return res.status(503).json({ message: "Photo cut-outs are paused for a short while. We've been told, and they'll be back." });
       res.status(502).json({ message: "Couldn't cut out that photo. Try a clearer one of just you." });
     }
