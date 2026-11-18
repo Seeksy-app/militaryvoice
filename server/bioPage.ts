@@ -296,7 +296,7 @@ function cleanFamily(v: unknown, prev: BioFamily): BioFamily {
   };
 }
 
-const LAYOUTS: BioLayout[] = ["portrait", "landscape", "blend", "hero", "shape", "cutout", "popout", "sticker", "magazine"];
+const LAYOUTS: BioLayout[] = ["portrait", "landscape", "blend", "hero", "shape", "cutout", "popout", "sticker", "magazine", "framed", "text"];
 const layoutOf = (v: unknown, prev: BioLayout | "" | undefined): BioLayout | "" => (v === "" || LAYOUTS.includes(v as BioLayout) ? (v as BioLayout | "") : prev ?? "");
 /** A list of section ids, only known ones, once each. */
 const idsOf = <T extends string>(v: unknown, all: readonly { id: T }[], prev: T[] | undefined): T[] =>
@@ -359,7 +359,7 @@ function cleanTheme(v: unknown, prev: BioTheme): BioTheme {
   const x = (v ?? {}) as Record<string, unknown>;
   const pick = <T extends string>(k: string, ok: readonly T[], d: T): T => (ok.includes(x[k] as T) ? (x[k] as T) : d);
   return {
-    template: pick("template", ["classic", "bold", "minimal", "vibrant", "portrait"] as const, prev.template),
+    template: pick("template", ["classic", "bold", "minimal", "vibrant", "portrait", "fullbleed", "poster", "framed", "banner", "cutout", "magazine", "textonly"] as const, prev.template),
     color: /^#[0-9a-f]{6}$/i.test(String(x.color)) ? String(x.color) : prev.color,
     shade: pick("shade", ["none", "minimal", "light", "tint", "dark"] as const, prev.shade),
     font: pick("font", ["sans", "serif", "mono", "playfair", "montserrat", "poppins"] as const, prev.font),
@@ -407,7 +407,7 @@ function cleanTheme(v: unknown, prev: BioTheme): BioTheme {
     nameSize: Number.isFinite(Number(x.nameSize)) && x.nameSize !== undefined ? Math.max(60, Math.min(150, Math.round(Number(x.nameSize)))) : prev.nameSize ?? 100,
     cutoutSize: Number.isFinite(Number(x.cutoutSize)) && x.cutoutSize !== undefined ? Math.max(60, Math.min(150, Math.round(Number(x.cutoutSize)))) : prev.cutoutSize ?? 100,
     bgWash: Number.isFinite(Number(x.bgWash)) && x.bgWash !== undefined ? Math.max(0, Math.min(100, Math.round(Number(x.bgWash)))) : prev.bgWash ?? 65,
-    layout: pick("layout", ["portrait", "landscape", "blend", "hero", "shape", "cutout", "popout", "sticker", "magazine"] as const, prev.layout),
+    layout: pick("layout", ["portrait", "landscape", "blend", "hero", "shape", "cutout", "popout", "sticker", "magazine", "framed", "text"] as const, prev.layout),
     podcastStyle: pick("podcastStyle", ["spotlight", "list", "carousel"] as const, prev.podcastStyle),
     podcastFrame: pick("podcastFrame", ["full", "card"] as const, prev.podcastFrame),
     podcast: (() => {

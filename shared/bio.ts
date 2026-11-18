@@ -4,7 +4,7 @@
  * the preview is what a listener gets.
  */
 
-export type BioTemplate = "classic" | "bold" | "minimal" | "vibrant" | "portrait";
+export type BioTemplate = "classic" | "bold" | "minimal" | "vibrant" | "portrait" | "fullbleed" | "poster" | "framed" | "banner" | "cutout" | "magazine" | "textonly";
 /** The page's tone: plain white, a hint of grey, light grey, a tint of their colour, or dark. */
 export type BioShade = "none" | "minimal" | "light" | "tint" | "dark";
 export type BioFont = "sans" | "serif" | "mono" | "playfair" | "montserrat" | "poppins";
@@ -12,7 +12,7 @@ export type BioLinkShape = "pill" | "rounded" | "square" | "squircle";
 /** soft = a white card with a soft shadow; hard = a card with a solid offset shadow in the link colour. */
 export type BioLinkStyle = "fill" | "outline" | "soft" | "hard";
 export interface BioBackground { mode: "solid" | "gradient" | "image"; /** "" = the shade's own */ color: string; image: string }
-export type BioLayout = "portrait" | "landscape" | "blend" | "hero" | "shape" | "cutout" | "popout" | "sticker" | "magazine";
+export type BioLayout = "portrait" | "landscape" | "blend" | "hero" | "shape" | "cutout" | "popout" | "sticker" | "magazine" | "framed" | "text";
 /** The tops that stand their cut-out photo on the page. */
 export const CUTOUT_LAYOUTS: BioLayout[] = ["cutout", "popout", "sticker", "magazine", "shape"];
 /** The podcast edge to edge (full) or in a card with a margin (card). */
@@ -399,7 +399,17 @@ export const TEMPLATES: Record<BioTemplate, { label: string; note: string; theme
   minimal: { label: "Minimal", note: "White, outlines, no fuss", theme: { shade: "light", font: "sans", linkShape: "square", linkStyle: "outline", layout: "portrait" } },
   vibrant: { label: "Vibrant", note: "Your colour behind everything", theme: { shade: "dark", font: "sans", linkShape: "pill", linkStyle: "soft", layout: "landscape" } },
   portrait: { label: "Portrait", note: "Your photo, full screen", theme: { shade: "dark", font: "sans", linkShape: "pill", linkStyle: "soft", layout: "hero" } },
+  // The templates people choose from (TEMPLATE_ORDER): each is only the top of the page. What goes under it is theirs, and works the same in all of them.
+  fullbleed: { label: "Full bleed", note: "Your photo edge to edge, fading into the page", theme: { shade: "dark", font: "sans", linkShape: "pill", linkStyle: "fill", layout: "blend" } },
+  poster: { label: "Poster", note: "Your photo fills the screen, your name on it", theme: { shade: "dark", font: "sans", linkShape: "pill", linkStyle: "soft", layout: "hero" } },
+  framed: { label: "Framed card", note: "A rounded portrait on a soft backdrop", theme: { shade: "tint", font: "sans", linkShape: "rounded", linkStyle: "fill", layout: "framed" } },
+  banner: { label: "Banner", note: "A cover across the top, your photo over it", theme: { shade: "light", font: "sans", linkShape: "rounded", linkStyle: "fill", layout: "landscape" } },
+  cutout: { label: "Cutout", note: "You, lifted off the photo, in front of your colour", theme: { shade: "light", font: "sans", linkShape: "pill", linkStyle: "fill", layout: "cutout" } },
+  magazine: { label: "Magazine", note: "Big headline type with you on the cover", theme: { shade: "light", font: "playfair", linkShape: "square", linkStyle: "outline", layout: "magazine" } },
+  textonly: { label: "Text only", note: "No photo needed: your name, big and clear", theme: { shade: "dark", font: "sans", linkShape: "pill", linkStyle: "fill", layout: "text" } },
 };
+/** The order the template picker shows them (the older ones still work on pages that use them). */
+export const TEMPLATE_ORDER: BioTemplate[] = ["fullbleed", "poster", "framed", "banner", "cutout", "magazine", "classic", "textonly"];
 
 export const DEFAULT_THEME: BioTheme = { template: "bold", color: "#F0A71F", shade: "dark", font: "sans", linkShape: "pill", linkStyle: "fill", layout: "blend", podcastStyle: "spotlight", podcastFrame: "full", podcast: DEFAULT_PODCAST, linkColor: "", background: { mode: "solid", color: "", image: "" }, imageY: 50, avatarSize: "m", branding: true, hideName: false, bgTint: 0, bgBrightness: 0, bgWash: 65, cutoutY: 0, cutoutSize: 100 };
 

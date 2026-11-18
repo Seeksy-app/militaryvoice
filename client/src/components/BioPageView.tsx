@@ -185,6 +185,9 @@ export function SocialRow({ socials, onPhoto = false, preview, onTap, onChat, ch
   );
 }
 
+/** A hex colour at an opacity, for fades that end in the page's own colour (no seam). */
+const withAlpha = (c: string, a: number) => (/^#[0-9a-f]{6}$/i.test(c) ? `rgba(${parseInt(c.slice(1, 3), 16)},${parseInt(c.slice(3, 5), 16)},${parseInt(c.slice(5, 7), 16)},${a})` : c);
+
 /**
  * The top of a page in any of the layouts: a wide cover photo (blend), a
  * full-screen photo with their name on it (hero), a banner with the photo over
@@ -220,10 +223,23 @@ export function PageTop({ t, avatar, hero, cutoutUrl, living = "", name, handle,
         </div>
       ) : (
         <>
-          {t.layout === "blend" && photo ? (
+          {t.layout === "framed" && photo ? (
+            // A rounded portrait card on the page: calm, and any photo shape works.
+            <div className="flex justify-center px-10 pt-10" data-testid="bio-framed-header">
+              <div className="relative w-full max-w-[300px] overflow-hidden" style={{ aspectRatio: "4 / 5", borderRadius: 28, boxShadow: "0 22px 44px -20px rgba(0,0,0,0.5)" }}>
+                {living ? moving("h-full w-full object-cover", { objectPosition: `center ${Y}%` }) : <img src={photo} alt="" className="h-full w-full object-cover" style={{ objectPosition: `center ${Y}%`, transform: `scale(${(t.imageZoom ?? 100) / 100})`, transformOrigin: `center ${Y}%` }} />}
+              </div>
+            </div>
+          ) : t.layout === "framed" || t.layout === "text" ? (
+            // No photo (or Text only): the name does the work, so nothing is left blank.
+            <div className="px-6 pt-16 text-center" data-testid="bio-text-header">
+              {name && <h1 className="text-balance font-bold leading-[1.05] tracking-tight" style={{ fontSize: Math.round(Math.min(60, Math.max(34, 300 / (Math.max(5, ...(name || "").split(/\s+/).map((w) => w.length)) * 0.62))) * (t.nameSize ?? 100) / 100) }}>{name}</h1>}
+            </div>
+          ) : t.layout === "blend" && photo ? (
+            // Edge to edge, about two thirds of a phone, fading into the page's own colour so the name, icons and Listen show without scrolling.
             <div className="relative">
-              {living ? moving("h-[340px] w-full object-cover", { objectPosition: `center ${Y}%` }) : <img src={photo} alt="" className="h-[340px] w-full object-cover" style={{ objectPosition: `center ${Y}%` }} />}
-              <div className="absolute inset-x-0 bottom-0 h-40" style={{ background: `linear-gradient(to bottom, transparent, ${t.template === "vibrant" && !t.background?.color ? theirs : paper})` }} />
+              {living ? moving("w-full object-cover", { height: "min(58svh, 440px)", objectPosition: `center ${Y}%` }) : <img src={photo} alt="" className="w-full object-cover" style={{ height: "min(58svh, 440px)", objectPosition: `center ${Y}%` }} />}
+              {(() => { const to = t.template === "vibrant" && !t.background?.color ? theirs : paper; return <div className="absolute inset-x-0 bottom-0" style={{ height: "55%", background: `linear-gradient(to bottom, ${withAlpha(to, 0)} 0%, ${withAlpha(to, 0)} 30%, ${withAlpha(to, 0.3)} 52%, ${withAlpha(to, 0.72)} 76%, ${to} 100%)` }} />; })()}
             </div>
           ) : t.layout === "landscape" ? (
             <div className="relative">
@@ -243,7 +259,7 @@ export function PageTop({ t, avatar, hero, cutoutUrl, living = "", name, handle,
               return living && !hero ? moving("rounded-full object-cover", round) : <img src={avatar} alt="" className="rounded-full object-cover" style={round} />;
             })()}</div>
           )}
-          <div className={`mx-auto max-w-[560px] px-5 text-center ${t.layout === "blend" && photo ? "-mt-12 relative" : t.layout === "landscape" ? "pt-14" : t.layout === "shape" ? "pt-7" : "pt-4"}`}>{children(false)}</div>
+          <div className={`mx-auto max-w-[560px] px-5 text-center ${t.layout === "blend" && photo ? "-mt-12 relative" : t.layout === "landscape" ? "pt-14" : t.layout === "shape" ? "pt-7" : t.layout === "framed" && photo ? "pt-6" : "pt-4"}`}>{children(false, t.layout === "text" || (t.layout === "framed" && !photo))}</div>
         </>
       )}
     </>

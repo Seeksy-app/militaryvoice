@@ -17,7 +17,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useBioFont } from "@/lib/bioFont";
 import { PlatformIcon, platformLabel, platformBackground } from "@/components/SocialIcons";
 import { ratesFor } from "@/components/BioBrandsView";
-import { BRANDS_SECTIONS, FAMILY_SECTIONS, arrange, type BioLayout, type BrandsSectionId, type FamilySectionId, CUTOUT_LAYOUTS, SWATCHES, TEMPLATES, FONTS, bioPalette, musicEmbed, videoEmbed, onColor, promoCodes, type BioAlign, type BioPromoCode, type BioBackground, type BioFont, type BioTemplate, DEFAULT_PODCAST, type BioPodcastOptions, INTRO_VOICES, INTRO_SAYS, DEFAULT_POPUPS, type BioPopup, DEFAULT_BRANDS, DEFAULT_FAMILY, type BioBrands, type BioBrandsPublic, type BioFamily, type BioFamilyPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
+import { BRANDS_SECTIONS, FAMILY_SECTIONS, arrange, type BioLayout, type BrandsSectionId, type FamilySectionId, CUTOUT_LAYOUTS, SWATCHES, TEMPLATES, TEMPLATE_ORDER, FONTS, bioPalette, musicEmbed, videoEmbed, onColor, promoCodes, type BioAlign, type BioPromoCode, type BioBackground, type BioFont, type BioTemplate, DEFAULT_PODCAST, type BioPodcastOptions, INTRO_VOICES, INTRO_SAYS, DEFAULT_POPUPS, type BioPopup, DEFAULT_BRANDS, DEFAULT_FAMILY, type BioBrands, type BioBrandsPublic, type BioFamily, type BioFamilyPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
 import type { ListenerQuestionRow, SocialPlatform } from "@shared/schema";
 import { LayoutTemplate, Contrast, Shapes, Paintbrush, Droplets, QrCode, ChevronLeft, ChevronRight, AtSign, X, Users, Heart, Lock, RefreshCw, Handshake, Droplet, Moon, Sun, Headphones, Sparkles, ArrowDown, ArrowUp, Calendar, Check, CheckCircle2, ChevronDown, Circle, Copy, ExternalLink, Eye, EyeOff, ImagePlus, Link2, Loader2, Mail, MessageCircle, Send, MessageSquare, Monitor, Palette, Play, Plus, Share2, Smartphone, Tablet, Tag, Trash2, Type, User, Video, Layers, Mic, Square, Smile, GripVertical, SeparatorHorizontal, AlignLeft, AlignCenter, AlignRight, Bold, Italic, Underline, Music, Crown } from "lucide-react";
 
@@ -630,7 +630,7 @@ function LayoutTiles({ d, value, onPick, cutting = false, own, photo }: { d: Pag
   return (
         <div className="grid grid-cols-3 gap-3">
           {own && <Tile on={value === ""} onClick={() => onPick("")} label={own.label} testid="bio-layout-own">{own.art}</Tile>}
-          {([["portrait", "Classic"], ["hero", "Hero"], ["cutout", "Cutout"], ["popout", "Pop-out"], ["sticker", "Sticker"], ["magazine", "Magazine"], ["blend", "Big photo"], ["landscape", "Banner"], ["shape", "Shape"]] as const).map(([v, l]) => {
+          {([["portrait", "Classic"], ["hero", "Hero"], ["cutout", "Cutout"], ["popout", "Pop-out"], ["sticker", "Sticker"], ["magazine", "Magazine"], ["blend", "Big photo"], ["landscape", "Banner"], ["shape", "Shape"], ["framed", "Framed card"], ["text", "Text only"]] as const).map(([v, l]) => {
             const face = avatar ? `center/cover url(${d.avatarUrl})` : "#888";
             return (
               <Tile key={v} on={value === v} onClick={() => onPick(v)} label={l} note={CUTOUT_LAYOUTS.includes(v) && cutting && value === v ? "Cutting you out…" : undefined} testid={`bio-layout-${v}`}>
@@ -639,6 +639,8 @@ function LayoutTiles({ d, value, onPick, cutting = false, own, photo }: { d: Pag
                     : v === "sticker" ? <><span className="absolute inset-0" style={{ background: `repeating-linear-gradient(135deg, ${cb} 0 6px, ${cb}cc 6px 12px)` }} /><span className="absolute left-1/2 top-1.5 -translate-x-1/2 -rotate-6 text-[12px] font-black uppercase leading-none" style={{ color: onColor(cb) }}>{(d.displayName || "Name").split(" ")[0].slice(0, 7)}</span><span className="absolute inset-0" style={{ filter: "drop-shadow(1.5px 0 0 #fff) drop-shadow(-1.5px 0 0 #fff) drop-shadow(0 1.5px 0 #fff) drop-shadow(0 -1.5px 0 #fff)" }}>{cut ? <img src={d.cutoutUrl} alt="" className="absolute bottom-0 left-1/2 h-[52px] -translate-x-1/2 object-contain" /> : <span className="absolute bottom-0 left-1/2 h-10 w-9 -translate-x-1/2 rounded-t-full" style={{ background: face }} />}</span></>
                     : v === "magazine" ? <><span className="absolute inset-0" style={{ background: cb }} /><span className="absolute left-1/2 top-1 -translate-x-1/2 text-[14px] font-black uppercase leading-none" style={{ color: onColor(cb), fontFamily: "Georgia, serif" }}>{(d.displayName || "Name").split(" ")[0].slice(0, 6)}</span>{cut ? <img src={d.cutoutUrl} alt="" className="absolute bottom-0 left-1/2 h-[52px] -translate-x-1/2 object-contain" /> : <span className="absolute bottom-0 left-1/2 h-10 w-9 -translate-x-1/2 rounded-t-full" style={{ background: face }} />}<span className="absolute bottom-1 left-1 h-1 w-6 rounded bg-white/90" /></>
                     : v === "cutout" ? <><span className="absolute inset-0" style={{ background: `radial-gradient(circle at 50% 35%, ${cb}, ${ground})` }} /><span className="absolute left-1/2 top-2 -translate-x-1/2 text-[13px] font-black uppercase leading-none" style={{ color: ink, opacity: 0.8 }}>{(d.displayName || "Name").split(" ")[0].slice(0, 7)}</span>{cut ? <img src={d.cutoutUrl} alt="" className="absolute bottom-0 left-1/2 h-[52px] -translate-x-1/2 object-contain" /> : <span className="absolute bottom-0 left-1/2 h-10 w-9 -translate-x-1/2 rounded-t-full" style={{ background: face }} />}</>
+                    : v === "framed" ? <span className="mt-2 h-9 w-7 rounded-lg" style={{ background: face, boxShadow: "0 3px 6px -2px rgba(0,0,0,0.4)" }} />
+                    : v === "text" ? <><span className="mt-3 h-2 w-12 rounded" style={{ background: ink }} /><span className="mt-1 h-2 w-8 rounded" style={{ background: ink, opacity: 0.6 }} /></>
                     : v === "hero" ? <><span className="absolute inset-0" style={{ background: face }} /><span className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/80" /><span className="absolute bottom-2 h-1.5 w-12 rounded bg-white" /></>
                     : v === "blend" ? <span className="h-11 w-full" style={{ background: avatar ? face : c, maskImage: "linear-gradient(to bottom, #000 50%, transparent)" }} />
                     : v === "landscape" ? <><span className="h-6 w-full" style={{ background: `linear-gradient(135deg, ${c}, #000741)` }} /><span className="-mt-3 h-6 w-6 rounded-full" style={{ background: face, boxShadow: `0 0 0 2px ${ground}` }} /></>
@@ -1392,7 +1394,7 @@ function RangeRow({ label, hint, value, min, max, onChange, unit = "", track, te
  * with the colours and font to try on it before applying.
  */
 function TemplatePicker({ view, theme, onClose, onApply }: { view: BioPublic; theme: BioTheme; onClose: () => void; onApply: (p: Partial<BioTheme>) => void }) {
-  const keys = Object.keys(TEMPLATES) as BioTemplate[];
+  const keys = TEMPLATE_ORDER;
   const [i, setI] = useState(() => Math.max(0, keys.indexOf(theme.template)));
   const [accent, setAccent] = useState<string | null>(null);
   const [bgc, setBgc] = useState<string | null>(null);
@@ -1413,6 +1415,18 @@ function TemplatePicker({ view, theme, onClose, onApply }: { view: BioPublic; th
     bgTint: 0, bgBrightness: 0,
   });
   const cur = keys[i];
+  // The top of the page only, on a photo that looks real: theirs, or a sample until they add one. Their content blocks aren't part of a template.
+  const hasPhoto = !!(view.avatarUrl || view.heroUrl);
+  const previewOf = (k: BioTemplate, centre: boolean): BioPublic => ({
+    ...view, sections: [], podcast: null,
+    ...(hasPhoto ? {} : { avatarUrl: "/samples/host-1.jpg", heroUrl: "", cutoutUrl: "/samples/host-1-cutout.png" }),
+    // A name, a line and the icons, so the whole top shows even if theirs isn't filled in yet.
+    displayName: view.displayName || "Your name",
+    bio: view.bio || "A line about your show goes here.",
+    socials: view.socials.length ? view.socials : (["youtube", "instagram", "facebook", "tiktok"] as const).map((platform) => ({ platform, username: "", url: "#", on: true })),
+    theme: { ...themed(k, centre), hideName: false, hideBio: false },
+  });
+  const needsCutout = TEMPLATES[cur].theme.layout === "cutout" || TEMPLATES[cur].theme.layout === "magazine";
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center" onClick={onClose} role="dialog" aria-label="Choose a template">
       <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" />
@@ -1438,7 +1452,7 @@ function TemplatePicker({ view, theme, onClose, onApply }: { view: BioPublic; th
                     <span className="absolute left-1/2 top-[16px] z-10 h-[18px] w-[76px] -translate-x-1/2 rounded-full bg-black" />
                     <div className="h-full w-full overflow-hidden rounded-[32px]" style={{ background: bioPalette(themed(k, ad === 0)).paper }}>
                       <div style={{ width: 402, transform: `scale(${k2})`, transformOrigin: "top left", pointerEvents: "none" }}>
-                        <BioPageView data={{ ...view, theme: themed(k, ad === 0) }} preview shareBase="" />
+                        <BioPageView data={previewOf(k, ad === 0)} preview shareBase="" />
                       </div>
                     </div>
                   </div>
@@ -1448,7 +1462,7 @@ function TemplatePicker({ view, theme, onClose, onApply }: { view: BioPublic; th
           </div>
           <div className="mt-3 flex items-center gap-3">
             <button type="button" onClick={() => shift(-1)} className="text-muted-foreground hover:text-foreground" aria-label="Previous"><ChevronLeft className="h-4 w-4" /></button>
-            <span className="min-w-[140px] text-center"><span className="block text-sm font-bold">{TEMPLATES[cur].label}</span><span className="block text-[11px] text-muted-foreground">{TEMPLATES[cur].note}</span></span>
+            <span className="min-w-[140px] text-center"><span className="block text-sm font-bold">{TEMPLATES[cur].label}</span><span className="block text-[11px] text-muted-foreground">{TEMPLATES[cur].note}</span>{needsCutout && hasPhoto && !view.cutoutUrl && <span className="mt-0.5 block text-[11px] text-[#8a5a00] dark:text-[#F0A71F]">Needs a photo of just you. We cut you out of it.</span>}{!hasPhoto && <span className="mt-0.5 block text-[11px] text-muted-foreground">Sample photo until you add yours</span>}</span>
             <button type="button" onClick={() => shift(1)} className="text-muted-foreground hover:text-foreground" aria-label="Next"><ChevronRight className="h-4 w-4" /></button>
           </div>
         </div>
