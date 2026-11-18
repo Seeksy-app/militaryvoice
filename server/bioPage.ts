@@ -703,7 +703,7 @@ export function registerBioPage(app: Express) {
           // A stock voice through fal (or, with no ElevenLabs key, the gravelly stock one standing in).
           const t = await fetch("https://fal.run/fal-ai/elevenlabs/tts/turbo-v2.5", { method: "POST", headers: FAL(), signal: AbortSignal.timeout(60_000), body: JSON.stringify({ text, voice: community ? "Callum" : voice, stability: 0.5, similarity_boost: 0.75, speed: 1 }) });
           const tj = (await t.json().catch(() => ({}))) as { audio?: { url?: string } };
-          if (!t.ok || !tj.audio?.url) throw new Error(`tts ${t.status}`);
+          if (!t.ok || !tj.audio?.url) throw Object.assign(new Error(`tts ${t.status}`), t.status === 402 || t.status === 403 ? { say: "The voice maker is out of credit (fal). Top it up, then try again." } : {});
           audio = tj.audio.url;
         }
       }

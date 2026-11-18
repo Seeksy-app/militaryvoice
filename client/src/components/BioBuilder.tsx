@@ -2312,10 +2312,11 @@ function IntroCard({ d, st, start, reset, on, setOn, at, setAt, patch }: { d: Pa
                 <select value={voice} onChange={(e) => { setVoice(e.target.value); if (hearing) hear(e.target.value); }} className="h-10 min-w-0 flex-1 rounded-md border border-input bg-background px-3 text-sm" aria-label="Voice" data-testid="bio-intro-voice">
                   {INTRO_VOICES.filter((v) => v.man === man).map((v) => <option key={v.id} value={v.id}>{v.id}: {v.note}</option>)}
                 </select>
-                <Button type="button" variant="outline" onClick={() => hear(voice)} className="h-10 shrink-0 gap-1.5 rounded-full" data-testid="bio-intro-hear">{hearing === voice ? <><Square className="h-3.5 w-3.5 fill-current" /> Stop</> : <><Play className="h-3.5 w-3.5 fill-current" /> Hear it</>}</Button>
+                <Button type="button" variant="outline" onClick={() => hear(voice)} className="h-10 shrink-0 gap-1.5 rounded-full" data-testid="bio-intro-hear">{hearing === voice ? <><Square className="h-3.5 w-3.5 fill-current" /> Stop</> : <><Play className="h-3.5 w-3.5 fill-current" /> Hear the voice</>}</Button>
               </div>
             </>
           )}
+          <p className="-mt-1 text-xs text-muted-foreground">"Hear the voice" plays a short sample of that voice. Your own words are spoken when you press Make my talking intro, and the on/off switch for it appears at the top of this card once it's made.</p>
           <Button onClick={make} disabled={!d.avatarUrl || st.status === "loading" || (mode === "voice" ? !voiceKey : script.trim().length < 10)} className="w-full gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="bio-intro-make"><Sparkles className="h-4 w-4" /> Make my talking intro</Button>
         </>
       )}
