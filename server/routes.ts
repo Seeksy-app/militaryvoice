@@ -1526,6 +1526,11 @@ export function registerRoutes(app: Express): void {
       const finished = await storage.finishRecording(egressId, { status: "Ready", url: o.filename || fallbackUrl, durationSec: o.durationSec, sizeBytes: o.size, error: "" });
       if (finished?.eventId) await planSegments(finished.eventId).catch((err) => console.error("Planning segments failed:", err));
       if (finished?.id && agentToken()) await storage.setClipStatus(finished.id, "queued", "");
+      // A recording in their own studio: they hear that it is in their Library.
+      if (finished?.id && finished.email && (await storage.getEventById(finished.eventId))?.occasion === "Personal studio") {
+        const mail = sendImportReadyEmail({ to: finished.email, recordingId: finished.id, title: finished.title, startedAt: finished.startedAt, durationSec: o.durationSec ?? finished.durationSec ?? 0, provider: "studio" }).catch((err) => { console.error("Library email failed:", (err as Error).message); return false; });
+        try { waitUntil(mail); } catch { /* not on Vercel */ }
+      }
       return "Ready";
     }
     await storage.finishRecording(egressId, { status: "Failed", error: o?.error || "Egress ended without a completion callback; reconciled from LiveKit." });
