@@ -7124,7 +7124,7 @@ export function registerRoutes(app: Express): void {
     // A Radio show to cut out of the day's recording into its host's Library (once every half minute at most).
     if (Array.isArray(req.body?.can) && req.body.can.includes("radio-cut")) {
       const rc = await claimRadioShowCut().catch((err) => { console.error("Radio cut claim failed:", err); return null; });
-      if (rc) return res.json({ job: { recordingId: rc.signupId, title: rc.title, durationSec: rc.durationSec, downloadUrl: rc.srcUrl, show: "", host: "", transcript: [], radioCut: { signupId: rc.signupId, ss: rc.ss, dur: rc.dur } } });
+      if (rc) return res.json({ job: { recordingId: rc.signupId, title: rc.title, durationSec: rc.durationSec, downloadUrl: rc.srcUrl, show: "", host: "", transcript: [], radioCut: { signupId: rc.signupId, ss: rc.ss, dur: rc.dur, copies: rc.copies } } });
     }
     // A recording to bring in (Zoom), if this worker can: quick, and someone's Library is waiting on it.
     if (Array.isArray(req.body?.can) && req.body.can.includes("import")) {

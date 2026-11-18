@@ -119,7 +119,7 @@ interface Job {
   /** A hosted podcast episode: the Library video (downloadUrl) as its MP3. recordingId is the episode's id. */
   episodeAudio?: { episodeId: number; copy?: boolean; mime?: string };
   /** A Radio show to cut out of the day's recording (read straight from storage): where it starts and how long it runs, in seconds. */
-  radioCut?: { signupId: number; ss: number; dur: number };
+  radioCut?: { signupId: number; ss: number; dur: number; copies?: number };
   episodeBookends?: { episodeId: number; introUrl: string; outroUrl: string; sig: string };
   /** The episode with whatever goes before and after it (intro, sponsor spots, outro), in play order; the parts are download addresses. */
   episodeStitch?: { episodeId: number; parts: string[]; sig: string; spots: string; /** When the episode is cut for a mid-roll: the files, and the pieces in order (which file, from and to in seconds). */ sources?: string[]; segments?: { src: number; start?: number; end?: number }[] };
@@ -2079,7 +2079,9 @@ async function handleRadioCut(job: Job): Promise<void> {
     const durationSec = Math.round(Number((await run("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", out]).catch(() => "0")).trim()) || 0);
     if (durationSec < 60) throw new Error(`the cut came out ${durationSec}s long`);
     const key = await uploadBig(out, "video/mp4");
-    await api("POST", `/api/agent/radio-cut/${b.signupId}/done`, { key, sizeBytes, durationSec });
+    // A co-host gets a file of their own.
+    const key2 = (b.copies ?? 1) > 1 ? await uploadBig(out, "video/mp4") : "";
+    await api("POST", `/api/agent/radio-cut/${b.signupId}/done`, { key, key2, sizeBytes, durationSec });
     console.log(`${tag}: done (${Math.round(sizeBytes / 1048576)}MB, ${durationSec}s)`);
   } catch (err) {
     console.warn(`${tag} failed: ${(err as Error).message}`);

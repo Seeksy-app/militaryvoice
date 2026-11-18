@@ -17,7 +17,7 @@ import { sendImportReadyEmail } from "./email.js";
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48);
 const stateKey = (id: number) => `dx:lib:${id}`;
 
-export type RadioCutJob = { signupId: number; title: string; durationSec: number; srcUrl: string; ss: number; dur: number };
+export type RadioCutJob = { signupId: number; title: string; durationSec: number; srcUrl: string; ss: number; dur: number; /** 2 when a co-host was in the booth too: they get a copy of their own. */ copies: number };
 
 let lastScan = 0;
 export async function claimRadioShowCut(): Promise<RadioCutJob | null> {
@@ -60,6 +60,7 @@ export async function claimRadioShowCut(): Promise<RadioCutJob | null> {
         signupId: s.id, title: `${s.podcastName} · MilitaryVoices Radio · ${day}`.slice(0, 160), durationSec: Math.round((showEnd - showStart) / 1000),
         srcUrl: /^https?:\/\//i.test(rec.url) ? rec.url : await signedRecordingUrl(rec.url, 3 * 3600),
         ss: Math.max(0, (showStart - rec.startMs) / 1000), dur: (showEnd - showStart) / 1000,
+        copies: s.coHostEmail && s.coHostEmail.trim().toLowerCase() !== s.email.trim().toLowerCase() ? 2 : 1,
       };
     }
   }
@@ -84,11 +85,22 @@ export function registerRadioLibrary(app: Express, requireAgent: RequestHandler)
     if (state.startsWith("done:")) return res.json({ ok: true });
     const ev = await storage.getEventById(s.eventId);
     const day = ev ? new Date(ev.startAtUtc).toLocaleDateString("en-US", { timeZone: "America/New_York", weekday: "short", month: "short", day: "numeric" }) : "";
-    const rec = await storage.createUploadedRecording({ email: s.email, title: `${s.podcastName} · MilitaryVoices Radio · ${day}`.slice(0, 160), storageKey: key, durationSec: Number(req.body?.durationSec) || 0, sizeBytes: Number(req.body?.sizeBytes) || 0, free: false, queue: false });
-    await storage.setSetting(stateKey(id), `done:${rec.id}`);
-    // The same note a Zoom recording gets: it's in your Library.
-    void sendImportReadyEmail({ to: s.email, recordingId: rec.id, title: rec.title, startedAt: new Date(Date.now() - (Number(req.body?.durationSec) || 0) * 1000).toISOString(), durationSec: rec.durationSec, provider: "radio" }).catch((err) => console.error("Radio library email failed:", (err as Error).message));
-    res.json({ ok: true, recordingId: rec.id });
+    // Everyone who was in the booth under their own name gets it in their own Library: the host, and the co-host if there was one.
+    // (A guest who joined by the link has no account to put it in.) Each gets a file of their own, so deleting one never touches the other.
+    const people = [{ email: s.email, key }];
+    const co = (s.coHostEmail ?? "").trim().toLowerCase();
+    const key2 = String(req.body?.key2 ?? "");
+    if (co && co !== s.email.trim().toLowerCase() && /^clean\/[\w.-]+$/.test(key2)) people.push({ email: co, key: key2 });
+    const title = `${s.podcastName} · MilitaryVoices Radio · ${day}`.slice(0, 160);
+    let rec = null as Awaited<ReturnType<typeof storage.createUploadedRecording>> | null;
+    for (const p of people) {
+      const row = await storage.createUploadedRecording({ email: p.email, title, storageKey: p.key, durationSec: Number(req.body?.durationSec) || 0, sizeBytes: Number(req.body?.sizeBytes) || 0, free: false, queue: false });
+      rec ??= row;
+      // The same note a Zoom recording gets: it's in your Library.
+      void sendImportReadyEmail({ to: p.email, recordingId: row.id, title: row.title, startedAt: new Date(Date.now() - (Number(req.body?.durationSec) || 0) * 1000).toISOString(), durationSec: row.durationSec, provider: "radio" }).catch((err) => console.error("Radio library email failed:", (err as Error).message));
+    }
+    await storage.setSetting(stateKey(id), `done:${rec!.id}`);
+    res.json({ ok: true, recordingId: rec!.id });
   });
   app.post("/api/agent/radio-cut/:id/failed", requireAgent, async (req, res) => {
     const id = Number(req.params.id);
