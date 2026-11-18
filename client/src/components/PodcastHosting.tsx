@@ -223,7 +223,13 @@ export function PodcastHosting() {
         </div>
       )}
 
-      {tab === "episodes" && (
+      {tab === "episodes" && editEp && (
+        <EpisodePage ep={h.episodes.find((x) => x.id === editEp.id) ?? editEp} show={s} youtubeReady={!!q.data?.youtubeReady} onBack={() => setEditEp(null)} onSaved={refresh} />
+      )}
+      {tab === "episodes" && !editEp && adding && (
+        <NewEpisodePage show={s} onBack={() => setAdding(false)} onCreated={(e) => { refresh(); setAdding(false); setEditEp({ ...e, downloads: 0, live: false }); }} />
+      )}
+      {tab === "episodes" && !editEp && !adding && (
         <>
           <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
@@ -291,8 +297,6 @@ export function PodcastHosting() {
       {tab === "details" && <ShowForm key={s.id} show={s} focus={focus} categories={q.data?.categories ?? {}} onSaved={() => { refresh(); setFocus(""); }} onDeleted={() => { setOpenId(null); refresh(); }} />}
 
       {addShowDialog}
-      <NewEpisodeDialog open={adding} onClose={() => setAdding(false)} show={s} onCreated={(e) => { refresh(); setAdding(false); setEditEp({ ...e, downloads: 0, live: false }); }} />
-      <EpisodeDialog ep={editEp} show={s} youtubeReady={!!q.data?.youtubeReady} onClose={() => setEditEp(null)} onSaved={refresh} />
     </section>
   );
 }
@@ -815,92 +819,26 @@ function ShowForm({ show, categories, onSaved, onDeleted, focus = "" }: { show: 
 }
 
 /** A new episode: the audio first (a file, or a clean episode from the Library), then its words. */
-function NewEpisodeDialog({ open, onClose, show, onCreated }: { open: boolean; onClose: () => void; show: HostedShowRow; onCreated: (e: HostedEpisodeRow) => void }) {
-  const { toast } = useToast();
-  const [from, setFrom] = useState<"upload" | "library">("upload");
-  const [pct, setPct] = useState<number | null>(null);
-  const input = useRef<HTMLInputElement>(null);
-  const recs = useQuery<RecordingRow[]>({ queryKey: ["/api/host/recordings"], queryFn: async () => (await apiRequest("GET", "/api/host/recordings")).json(), enabled: open });
-  const hasClean = (r: RecordingRow) => { try { const c = r.clean ? JSON.parse(r.clean) : null; return c?.status === "done" && !!c.audioKey; } catch { return false; } };
-  const usable = (recs.data ?? []).filter((r) => r.status === "Ready" && r.url);
-  const make = async (body: Record<string, unknown>) => {
-    const e = (await (await apiRequest("POST", `/api/host/hosting/shows/${show.id}/episodes`, body)).json()) as HostedEpisodeRow;
-    onCreated(e);
-  };
-  const upload = async (file: File) => {
-    if (!/^audio\/|^video\/mp4/.test(file.type)) return toast({ title: "That file won't play as an episode", description: "Choose an MP3 or M4A, or an MP4 video.", variant: "destructive" });
-    try {
-      setPct(0);
-      const dur = await durationOf(file).catch(() => 0);
-      const key = await uploadToStorage(file, setPct);
-      await make({ audioKey: key, mime: file.type === "audio/mp3" ? "audio/mpeg" : file.type, sizeBytes: file.size, durationSec: Math.round(dur), title: file.name.replace(/\.[a-z0-9]+$/i, "") });
-    } catch (e) {
-      toast({ title: "Couldn't upload that", description: (e as Error).message, variant: "destructive" });
-    } finally {
-      setPct(null);
-      if (input.current) input.current.value = "";
-    }
-  };
-  const pick = useMutation({ mutationFn: (id: number) => make({ recordingId: id }), onError: (e: Error) => toast({ title: "Couldn't use that", description: e.message, variant: "destructive" }) });
-  return (
-    <Dialog open={open} onOpenChange={(o) => !o && pct === null && onClose()}>
-      <DialogContent className="sm:max-w-xl">
-        <DialogHeader>
-          <DialogTitle>New episode</DialogTitle>
-          <DialogDescription>Start with the audio. You'll add the title and notes next, and choose when it goes out.</DialogDescription>
-        </DialogHeader>
-        <div className="flex gap-1 rounded-xl bg-muted/60 p-1" role="tablist">
-          {([["upload", "Upload audio or video", Upload], ["library", "From your Library", Film]] as const).map(([k, l, I]) => (
-            <button key={k} type="button" role="tab" aria-selected={from === k} onClick={() => setFrom(k)} className={`flex flex-1 items-center justify-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-semibold ${from === k ? "bg-card shadow-sm" : "text-muted-foreground hover:text-foreground"}`}><I className="h-4 w-4" /> {l}</button>
-          ))}
-        </div>
-        {from === "upload" ? (
-          <>
-            <input ref={input} type="file" accept="audio/mpeg,audio/mp4,audio/x-m4a,audio/aac,video/mp4,.mp3,.m4a,.mp4" className="hidden" onChange={(e) => e.target.files?.[0] && void upload(e.target.files[0])} />
-            <button type="button" onClick={() => input.current?.click()} disabled={pct !== null} className="flex h-40 w-full flex-col items-center justify-center gap-2 rounded-xl border-2 border-dashed border-border text-sm hover:border-[#053877]/50 hover:bg-[#053877]/[0.03]" data-testid="hosting-upload">
-              {pct === null ? <><Upload className="h-6 w-6 text-[#053877]" /><span className="font-semibold">Choose the episode's file</span><span className="text-xs text-muted-foreground">MP3 or M4A, or an MP4 video (the one you put on YouTube)</span></> : <><Loader2 className="h-6 w-6 animate-spin text-[#053877]" /><span className="font-semibold tabular-nums">Uploading… {pct}%</span><span className="text-xs text-muted-foreground">Keep this page open until it finishes.</span></>}
-            </button>
-          </>
-        ) : (
-          <div className="max-h-72 overflow-y-auto">
-            {recs.isLoading ? <Loader2 className="mx-auto my-8 h-5 w-5 animate-spin text-muted-foreground" /> : usable.length ? (
-              <ul className="divide-y divide-border">
-                {usable.map((r) => (
-                  <li key={r.id} className="flex items-center gap-3 py-2">
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-medium">{r.title || "Untitled"}</span>
-                      <span className="block text-xs text-muted-foreground">{hasClean(r) ? "Clean audio: ums and long pauses already out" : "We'll turn the video into audio (a minute or two)"}</span>
-                    </span>
-                    <Button size="sm" variant="outline" className="h-8 rounded-full" disabled={pick.isPending} onClick={() => pick.mutate(r.id)}>{pick.isPending && pick.variables === r.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Use this"}</Button>
-                  </li>
-                ))}
-              </ul>
-            ) : <p className="py-8 text-center text-sm text-muted-foreground">Nothing in your Library yet. Upload the audio instead.</p>}
-          </div>
-        )}
-      </DialogContent>
-    </Dialog>
-  );
-}
-
-/** An episode's words and when it goes out: publish now, schedule it, or keep it as a draft. */
-function EpisodeDialog({ ep, show, youtubeReady, onClose, onSaved }: { ep: Ep | null; show: HostedShowRow; youtubeReady: boolean; onClose: () => void; onSaved: () => void }) {
+/** One episode, a whole page (borrowed from the best of what hosts offer, then made plainer): the player, the words, when it goes out, where it is. */
+function EpisodePage({ ep, show, youtubeReady, onBack, onSaved }: { ep: Ep; show: HostedShowRow; youtubeReady: boolean; onBack: () => void; onSaved: () => void }) {
   const { toast } = useToast();
   const [f, setF] = useState<Record<string, unknown>>({});
   const [when, setWhen] = useState<"now" | "later">("now");
   const [at, setAt] = useState("");
-  // Also to YouTube? Ticked for them when the show says "Always post".
   const [yt, setYt] = useState<boolean | null>(null);
-  if (!ep) return null;
+  const [pull, setPull] = useState<{ open: boolean; url: string; busy: boolean }>({ open: false, url: "", busy: false });
+  const [pct, setPct] = useState<number | null>(null);
+  const fileIn = useRef<HTMLInputElement>(null);
   const ytState = (() => { try { return ep.youtube ? (JSON.parse(ep.youtube) as { state?: string }).state ?? "" : ""; } catch { return ""; } })();
-  // Already sent to YouTube from the Library: no second post.
   const offerYt = ep.status === "draft" && !!ep.hasVideo && ytState !== "sent" && !ep.ytLibrary;
   const ytOn = yt ?? (youtubeReady && show.youtubeMode === "always" && ytState !== "skipped");
   const v = { ...ep, ...f } as Ep;
+  const set = (k: string, val: unknown) => setF((x) => ({ ...x, [k]: val }));
   // People type notes in plain words: an imported episode's HTML is shown as text, and kept as it was unless they change it.
   const notesPlain = ep.notesFormat === "html" ? htmlToText(ep.description) : ep.description;
-  const set = (k: string, val: unknown) => setF((x) => ({ ...x, [k]: val }));
-  const close = () => { setF({}); setWhen("now"); setAt(""); setYt(null); onClose(); };
+  const hasAudio = !!(ep.audioKey || ep.audioUrl);
+  const dirty = Object.keys(f).length > 0;
+  const label = "block text-xs font-semibold text-muted-foreground";
   const save = async (status?: "published" | "draft") => {
     try {
       const body: Record<string, unknown> = { ...f };
@@ -911,96 +849,261 @@ function EpisodeDialog({ ep, show, youtubeReady, onClose, onSaved }: { ep: Ep | 
       const out = (await (await apiRequest("PATCH", `/api/host/hosting/episodes/${ep.id}`, body)).json()) as Ep & { youtubeError?: string };
       if (out.youtubeError) toast({ title: "Published, but not on YouTube", description: out.youtubeError, variant: "destructive" });
       onSaved();
+      setF({});
       const waiting = status === "published" && !out.audioKey && !out.audioUrl && !!out.audioJob;
       toast(waiting
         ? { title: when === "later" && at ? "Scheduled" : "It goes out as soon as it's ready", description: "Its audio is being made: a few minutes. It joins your feed by itself; nothing else to do." }
-        : { title: status === "published" ? (when === "later" && at ? "Scheduled" : "Published") : "Saved", description: status === "published" ? "It's in your feed. The apps pick it up within the hour." : undefined });
-      close();
+        : { title: status === "published" ? (when === "later" && at ? "Scheduled" : "Published") : status === "draft" ? "Unpublished" : "Saved", description: status === "published" ? "It's in your feed. The apps pick it up within the hour." : undefined });
     } catch (e) {
-      toast({ title: "Couldn't save", description: (e as Error).message, variant: "destructive" });
+      toast({ title: "Couldn't save", description: (e as Error).message.replace(/^\d+:\s*/, ""), variant: "destructive" });
     }
   };
   const remove = async () => {
     if (!window.confirm(`Delete "${ep.title}"? It leaves your feed, and the apps drop it on their next check. You can put it back from Recently deleted for 15 days.`)) return;
     await apiRequest("DELETE", `/api/host/hosting/episodes/${ep.id}`);
     onSaved();
-    close();
+    onBack();
   };
-  const label = "block text-xs font-semibold text-muted-foreground";
+  const addAudio = async (file: File) => {
+    if (!/^audio\/|^video\/mp4/.test(file.type)) return toast({ title: "That file won't play as an episode", description: "Choose an MP3 or M4A, or an MP4 video.", variant: "destructive" });
+    try {
+      setPct(0);
+      const dur = await durationOf(file).catch(() => 0);
+      const key = await uploadToStorage(file, setPct);
+      await apiRequest("PATCH", `/api/host/hosting/episodes/${ep.id}`, { audioKey: key, mime: file.type === "audio/mp3" ? "audio/mpeg" : file.type, sizeBytes: file.size, durationSec: Math.round(dur) });
+      onSaved();
+      toast({ title: "Audio added" });
+    } catch (e) {
+      toast({ title: "Couldn't upload that", description: (e as Error).message, variant: "destructive" });
+    } finally {
+      setPct(null);
+      if (fileIn.current) fileIn.current.value = "";
+    }
+  };
+  const pullNow = async (url?: string) => {
+    setPull((p) => ({ ...p, busy: true }));
+    try {
+      const r = (await (await apiRequest("POST", `/api/host/hosting/episodes/${ep.id}/pull-from-feed`, { url: url || undefined })).json()) as { found: boolean; title?: string; notes?: string };
+      if (!r.found) { toast({ title: "Couldn't find this episode in that feed", description: "Check the feed address, or that the episode is still there." }); return; }
+      setF((x) => ({ ...x, title: r.title ?? v.title, description: r.notes ?? "", notesFormat: "text" }));
+      setPull({ open: false, url: "", busy: false });
+      toast({ title: "Pulled from the feed", description: "The title and notes are filled in. Check them, then press Save." });
+    } catch (e) {
+      toast({ title: "Couldn't read that feed", description: (e as Error).message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, ""), variant: "destructive" });
+    } finally {
+      setPull((p) => ({ ...p, busy: false }));
+    }
+  };
+  const copy = async (text: string, what: string) => { try { await navigator.clipboard.writeText(text); toast({ title: `${what} copied` }); } catch { toast({ title: what, description: text }); } };
+  const origin = typeof window !== "undefined" ? window.location.origin : "";
+  const statusLine = ep.live ? `Live since ${dateOf(ep.publishedAt)}` : ep.status === "published" ? `Goes out ${dateOf(ep.publishedAt)}` : "Draft: not in your feed yet";
   return (
-    <Dialog open={!!ep} onOpenChange={(o) => !o && close()}>
-      <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{ep.status === "draft" ? "Publish an episode" : "Edit episode"}</DialogTitle>
-          <DialogDescription>{ep.durationSec ? `${hms(ep.durationSec)} long. ` : ""}{ep.live ? `Live since ${dateOf(ep.publishedAt)} · ${compact(ep.downloads)} downloads.` : ep.status === "published" ? `Goes out ${dateOf(ep.publishedAt)}.` : "A draft: only you can see it."}</DialogDescription>
-        </DialogHeader>
-        <div className="grid gap-3 sm:grid-cols-[1fr_6rem_6rem]">
-          {(ep.audioKey || ep.audioUrl) ? (
-            <audio key={ep.id} controls preload="none" src={`/e/${ep.id}.mp3?preview=1`} className="w-full sm:col-span-3" data-testid="hosting-ep-player" />
-          ) : (
-            <p className="rounded-xl border border-border px-3 py-2.5 text-sm text-muted-foreground sm:col-span-3">{ep.audioJob === "failed" ? "Its audio couldn't be made." : "Its audio is still being made. You can play it here in a few minutes."}</p>
-          )}
-          <label className={label}>Title<Input value={v.title} onChange={(e) => set("title", e.target.value)} className="mt-1" data-testid="hosting-ep-title" /></label>
-          <label className={label}>Episode<Input type="number" min={0} value={v.episodeNumber ?? ""} onChange={(e) => set("episodeNumber", e.target.value === "" ? null : Number(e.target.value))} className="mt-1" /></label>
-          <label className={label}>Season<Input type="number" min={0} value={v.season ?? ""} onChange={(e) => set("season", e.target.value === "" ? null : Number(e.target.value))} className="mt-1" /></label>
-          <label className={`${label} sm:col-span-3`}>Show notes<Textarea value={typeof f.description === "string" ? f.description : notesPlain} onChange={(e) => setF((x) => ({ ...x, description: e.target.value, notesFormat: "text" }))} rows={6} className="mt-1" placeholder="What it's about, who's on it, and any links you mentioned." /></label>
-          <label className={`${label} sm:col-span-3`}>Guest (fills {"{guest}"} in your footer)<Input value={(v.guest as string) ?? ""} onChange={(e) => set("guest", e.target.value)} className="mt-1" placeholder="Who was on it" data-testid="hosting-ep-guest" /></label>
-          {(show.episodeFooter ?? "").trim() && (
-            <div className="rounded-xl border border-border px-3 py-2.5 text-sm sm:col-span-3" data-testid="hosting-ep-footer">
-              <label className="flex items-center gap-2"><input type="checkbox" checked={!(v.footerOff as boolean)} onChange={(e) => set("footerOff", !e.target.checked)} /> Add your show's footer to this episode</label>
-              {!(v.footerOff as boolean) && <p className="mt-2 whitespace-pre-line text-xs text-muted-foreground">{fillFooter(show.episodeFooter, { title: v.title, number: v.episodeNumber, season: v.season, guest: (v.guest as string) ?? "" })}</p>}
-            </div>
-          )}
-          <div className="flex flex-wrap items-center gap-4 text-sm sm:col-span-3">
-            <label className="flex items-center gap-2">Type
-              <select value={v.episodeType} onChange={(e) => set("episodeType", e.target.value)} className="h-8 rounded-md border border-input bg-background px-2 text-sm">
-                <option value="full">Full episode</option><option value="trailer">Trailer</option><option value="bonus">Bonus</option>
-              </select>
-            </label>
-            <label className="flex items-center gap-2"><input type="checkbox" checked={v.explicit} onChange={(e) => set("explicit", e.target.checked)} /> Explicit</label>
-          </div>
-          {ep.status === "draft" && (
-            <div className="flex flex-wrap items-center gap-2 text-sm sm:col-span-3">
-              <span className="text-xs font-semibold text-muted-foreground">Goes out</span>
-              {(["now", "later"] as const).map((w) => (
-                <button key={w} type="button" onClick={() => setWhen(w)} className={`rounded-full border px-3 py-1 text-xs font-semibold ${when === w ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:bg-muted"}`}>{w === "now" ? "Now" : "Pick a time"}</button>
-              ))}
-              {when === "later" && <Input type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} className="h-8 w-56" />}
-            </div>
-          )}
-          {ep.status === "draft" && ep.ytLibrary && (
-            <p className="rounded-xl border border-border px-3 py-2.5 text-sm text-muted-foreground sm:col-span-3">Already on YouTube: you posted it from your Library on {dateOf(ep.ytLibrary)}, so it won't be posted again.</p>
-          )}
-          {offerYt && (
-            <div className="rounded-xl border border-border px-3 py-2.5 text-sm sm:col-span-3" data-testid="hosting-ep-youtube">
-              {youtubeReady ? (
-                <label className="flex items-center gap-2">
-                  <input type="checkbox" checked={ytOn} onChange={(e) => setYt(e.target.checked)} />
-                  <span>Also post it to YouTube <span className="text-muted-foreground">({show.youtubePrivacy === "unlisted" ? "unlisted" : "public"}{when === "later" ? ", when it goes out" : ""})</span></span>
-                </label>
-              ) : (
-                <span className="text-muted-foreground">Want it on YouTube too? <a href="/host/dashboard/social" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Connect YouTube</a> first.</span>
-              )}
-            </div>
-          )}
-        </div>
-        <DialogFooter className="flex-wrap gap-2 sm:justify-between">
-          <Button variant="ghost" onClick={() => void remove()} className="gap-1.5 text-destructive hover:text-destructive"><Trash2 className="h-4 w-4" /> Delete</Button>
-          <div className="flex gap-2">
-            {ep.status === "draft" ? (
-              <>
-                <Button variant="outline" onClick={() => void save()} disabled={!Object.keys(f).length}>Save draft</Button>
-                <Button onClick={() => void save("published")} disabled={!v.title.trim() || (when === "later" && !at)} className="gap-1.5 bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-publish"><Send className="h-4 w-4" /> {when === "later" ? "Schedule" : "Publish"}</Button>
-              </>
+    <div className="space-y-4" data-testid="episode-page">
+      <button type="button" onClick={onBack} className="inline-flex items-center gap-1 text-sm font-semibold text-muted-foreground hover:text-foreground" data-testid="episode-back"><ChevronLeft className="h-4 w-4" /> All episodes</button>
+      <div className="grid gap-5 lg:grid-cols-[1fr_20rem]">
+        <div className="min-w-0 space-y-4">
+          <Input value={v.title} onChange={(e) => set("title", e.target.value)} className="h-auto border-0 bg-transparent px-0 text-2xl font-bold tracking-tight shadow-none focus-visible:ring-0 sm:text-3xl" placeholder="Episode title" data-testid="hosting-ep-title" />
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm" data-testid="episode-player">
+            {hasAudio ? (
+              <audio key={ep.id} controls preload="none" src={`/e/${ep.id}.mp3?preview=1`} className="w-full" data-testid="hosting-ep-player" />
+            ) : ep.audioJob && ep.audioJob !== "failed" ? (
+              <p className="flex items-center gap-2 text-sm text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Its audio is being made. You can play it here in a few minutes.</p>
             ) : (
               <>
-                <Button variant="outline" onClick={() => void save("draft")}>Unpublish</Button>
-                <Button onClick={() => void save()} disabled={!Object.keys(f).length} className="bg-[#053877] text-white hover:bg-[#0a4a99]">Save</Button>
+                <input ref={fileIn} type="file" accept="audio/mpeg,audio/mp4,audio/x-m4a,audio/aac,video/mp4,.mp3,.m4a,.mp4" className="hidden" onChange={(e) => e.target.files?.[0] && void addAudio(e.target.files[0])} />
+                <button type="button" onClick={() => fileIn.current?.click()} disabled={pct !== null} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const x = e.dataTransfer.files?.[0]; if (x) void addAudio(x); }} className="flex h-28 w-full flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-border text-sm hover:border-[#053877]/50 hover:bg-muted/40 disabled:opacity-60" data-testid="episode-add-audio">
+                  {pct === null ? <><Upload className="h-5 w-5 text-[#053877]" /><span className="font-semibold">{ep.audioJob === "failed" ? "Its audio couldn't be made. Add the file again" : "Add the audio: drag the file here or choose it"}</span><span className="text-xs text-muted-foreground">MP3 or M4A, or an MP4 video</span></> : <span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Uploading… {Math.round(pct)}%</span>}
+                </button>
               </>
             )}
+            <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
+              <span><b className="tabular-nums">{compact(ep.downloads)}</b> <span className="text-muted-foreground">downloads</span></span>
+              {ep.durationSec > 0 && <span><b className="tabular-nums">{hms(ep.durationSec)}</b> <span className="text-muted-foreground">long</span></span>}
+              <span className="text-muted-foreground">{statusLine}</span>
+            </div>
           </div>
-        </DialogFooter>
-      </DialogContent>
-    </Dialog>
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+            <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+              <span className={label}>Description (show notes)</span>
+              <button type="button" onClick={() => (show.importedFrom ? void pullNow() : setPull((p) => ({ ...p, open: !p.open })))} disabled={pull.busy} className="inline-flex items-center gap-1 text-xs font-semibold text-[#053877] hover:underline disabled:opacity-60 dark:text-[#8fb5e8]" data-testid="episode-pull">
+                {pull.busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Radio className="h-3.5 w-3.5" />} Pull from RSS feed
+              </button>
+            </div>
+            {pull.open && !show.importedFrom && (
+              <div className="mb-3 flex gap-2">
+                <Input value={pull.url} onChange={(e) => setPull((p) => ({ ...p, url: e.target.value }))} placeholder="Your show's RSS feed address, or its Apple Podcasts link" className="h-9" data-testid="episode-pull-url" />
+                <Button size="sm" className="h-9 rounded-full" disabled={pull.busy || !pull.url.trim()} onClick={() => void pullNow(pull.url)}>Pull</Button>
+              </div>
+            )}
+            <Textarea value={typeof f.description === "string" ? f.description : notesPlain} onChange={(e) => setF((x) => ({ ...x, description: e.target.value, notesFormat: "text" }))} rows={12} placeholder="What it's about, who's on it, and any links you mention." data-testid="hosting-ep-notes" />
+            <label className={`${label} mt-3`}>Guest (fills {"{guest}"} in your footer)<Input value={(v.guest as string) ?? ""} onChange={(e) => set("guest", e.target.value)} className="mt-1" placeholder="Who was on it" data-testid="hosting-ep-guest" /></label>
+            {(show.episodeFooter ?? "").trim() && (
+              <div className="mt-3 rounded-xl border border-border px-3 py-2.5 text-sm" data-testid="hosting-ep-footer">
+                <label className="flex items-center gap-2"><input type="checkbox" checked={!(v.footerOff as boolean)} onChange={(e) => set("footerOff", !e.target.checked)} /> Add your show's footer to this episode</label>
+                {!(v.footerOff as boolean) && <p className="mt-2 whitespace-pre-line text-xs text-muted-foreground">{fillFooter(show.episodeFooter, { title: v.title, number: v.episodeNumber, season: v.season, guest: (v.guest as string) ?? "" })}</p>}
+              </div>
+            )}
+          </div>
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
+            <div className="flex flex-wrap items-end gap-4">
+              <div><span className={label}>Picture</span><div className="mt-1"><EpisodeArt ep={ep} fallback={show.artworkUrl} onDone={onSaved} /></div></div>
+              <label className={label}>Episode<Input type="number" min={0} value={v.episodeNumber ?? ""} onChange={(e) => set("episodeNumber", e.target.value === "" ? null : Number(e.target.value))} className="mt-1 w-24" /></label>
+              <label className={label}>Season<Input type="number" min={0} value={v.season ?? ""} onChange={(e) => set("season", e.target.value === "" ? null : Number(e.target.value))} className="mt-1 w-24" /></label>
+              <label className={label}>Type
+                <select value={v.episodeType} onChange={(e) => set("episodeType", e.target.value)} className="mt-1 block h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground">
+                  <option value="full">Full episode</option><option value="trailer">Trailer</option><option value="bonus">Bonus</option>
+                </select>
+              </label>
+              <label className="flex items-center gap-2 pb-2 text-sm"><input type="checkbox" checked={v.explicit} onChange={(e) => set("explicit", e.target.checked)} /> Explicit</label>
+            </div>
+          </div>
+        </div>
+        <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
+          <div className="rounded-2xl border border-border bg-card shadow-sm">
+            <div className={`rounded-t-2xl px-4 py-3 text-sm font-semibold ${ep.live ? "bg-emerald-600 text-white" : ep.status === "published" ? "bg-[#F0A71F] text-[#3a2600]" : "bg-muted text-foreground"}`}>{ep.live ? "Episode is live" : ep.status === "published" ? "Scheduled" : "Draft"}</div>
+            <div className="space-y-3 p-4 text-sm">
+              <p className="text-muted-foreground">{statusLine}</p>
+              {ep.status === "draft" && (
+                <>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-xs font-semibold text-muted-foreground">Goes out</span>
+                    {(["now", "later"] as const).map((w) => (
+                      <button key={w} type="button" onClick={() => setWhen(w)} className={`rounded-full border px-3 py-1 text-xs font-semibold ${when === w ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:bg-muted"}`}>{w === "now" ? "Now" : "Later"}</button>
+                    ))}
+                    {when === "later" && <Input type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} className="h-8 w-full" />}
+                  </div>
+                  {ep.ytLibrary && <p className="rounded-xl border border-border px-3 py-2 text-xs text-muted-foreground">Already on YouTube: you posted it from your Library on {dateOf(ep.ytLibrary)}.</p>}
+                  {offerYt && (youtubeReady
+                    ? <label className="flex items-center gap-2"><input type="checkbox" checked={ytOn} onChange={(e) => setYt(e.target.checked)} /> <span>Also post it to YouTube <span className="text-muted-foreground">({show.youtubePrivacy === "unlisted" ? "unlisted" : "public"})</span></span></label>
+                    : <span className="text-xs text-muted-foreground">Want it on YouTube too? <a href="/host/dashboard/social" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Connect YouTube</a> first.</span>)}
+                  <Button onClick={() => void save("published")} disabled={!v.title.trim() || (when === "later" && !at) || (!hasAudio && !ep.audioJob)} className="w-full gap-1.5 bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-publish"><Send className="h-4 w-4" /> {when === "later" ? "Schedule it" : "Publish now"}</Button>
+                  {!hasAudio && !ep.audioJob && <p className="text-xs text-muted-foreground">Add the audio first, then you can publish.</p>}
+                  <Button variant="outline" onClick={() => void save()} disabled={!dirty} className="w-full">Save draft</Button>
+                </>
+              )}
+              {ep.status !== "draft" && (
+                <>
+                  <Button onClick={() => void save()} disabled={!dirty} className="w-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="episode-save">Save changes</Button>
+                  <Button variant="outline" onClick={() => void save("draft")} className="w-full">Unpublish</Button>
+                </>
+              )}
+            </div>
+          </div>
+          <div className="space-y-1 rounded-2xl border border-border bg-card p-2 shadow-sm">
+            {ep.live && <a href={`/podcast/${show.slug}`} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-muted"><ExternalLink className="h-4 w-4 text-muted-foreground" /> Open your show's page</a>}
+            {hasAudio && <button type="button" onClick={() => void copy(`${origin}/e/${ep.id}.mp3`, "Audio link")} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm hover:bg-muted" data-testid="episode-copy-audio"><Copy className="h-4 w-4 text-muted-foreground" /> Copy the direct link to the audio</button>}
+            <button type="button" onClick={() => void remove()} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-destructive hover:bg-destructive/10" data-testid="episode-delete"><Trash2 className="h-4 w-4" /> Delete this episode</button>
+          </div>
+        </aside>
+      </div>
+    </div>
   );
 }
+
+/** A new episode: drop the file, or skip and add it later, or bring one in from an RSS feed or your Library. */
+function NewEpisodePage({ show, onBack, onCreated }: { show: HostedShowRow; onBack: () => void; onCreated: (e: HostedEpisodeRow) => void }) {
+  const { toast } = useToast();
+  const [pct, setPct] = useState<number | null>(null);
+  const [more, setMore] = useState<"" | "rss" | "library">("");
+  const [over, setOver] = useState(false);
+  const [feed, setFeed] = useState(show.importedFrom ?? "");
+  const [found, setFound] = useState<{ url: string; show: string; episodes: { guid: string; title: string; published: string; durationSec: number; have: boolean }[] } | null>(null);
+  const [busy, setBusy] = useState<string | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const recs = useQuery<RecordingRow[]>({ queryKey: ["/api/host/recordings"], queryFn: async () => (await apiRequest("GET", "/api/host/recordings")).json(), enabled: more === "library" });
+  const hasClean = (r: RecordingRow) => { try { const c = r.clean ? JSON.parse(r.clean) : null; return c?.status === "done" && !!c.audioKey; } catch { return false; } };
+  const usable = (recs.data ?? []).filter((r) => r.status === "Ready" && r.url);
+  const make = async (body: Record<string, unknown>) => {
+    const e = (await (await apiRequest("POST", `/api/host/hosting/shows/${show.id}/episodes`, body)).json()) as HostedEpisodeRow;
+    onCreated(e);
+  };
+  const fail = (title: string) => (e: Error) => toast({ title, description: e.message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, ""), variant: "destructive" });
+  const upload = async (file: File) => {
+    if (!/^audio\/|^video\/mp4/.test(file.type)) return toast({ title: "That file won't play as an episode", description: "Choose an MP3 or M4A, or an MP4 video.", variant: "destructive" });
+    try {
+      setPct(0);
+      const dur = await durationOf(file).catch(() => 0);
+      const key = await uploadToStorage(file, setPct);
+      await make({ audioKey: key, mime: file.type === "audio/mp3" ? "audio/mpeg" : file.type, sizeBytes: file.size, durationSec: Math.round(dur), title: file.name.replace(/\.[a-z0-9]+$/i, "") });
+    } catch (e) {
+      fail("Couldn't upload that")(e as Error);
+    } finally {
+      setPct(null);
+      if (input.current) input.current.value = "";
+    }
+  };
+  const later = async () => { setBusy("later"); try { await make({ later: true }); } catch (e) { fail("Couldn't start it")(e as Error); } finally { setBusy(null); } };
+  const find = async () => {
+    setBusy("find");
+    try { setFound((await (await apiRequest("GET", `/api/host/hosting/shows/${show.id}/feed-episodes?url=${encodeURIComponent(feed.trim())}`)).json())); } catch (e) { fail("Couldn't read that feed")(e as Error); } finally { setBusy(null); }
+  };
+  const importOne = async (guid: string) => { setBusy(guid); try { await make({ fromFeed: { url: found?.url, guid } }); } catch (e) { fail("Couldn't bring that in")(e as Error); } finally { setBusy(null); } };
+  const useRec = async (id: number) => { setBusy(`rec${id}`); try { await make({ recordingId: id }); } catch (e) { fail("Couldn't use that")(e as Error); } finally { setBusy(null); } };
+  return (
+    <div className="space-y-4" data-testid="new-episode-page">
+      <button type="button" onClick={onBack} className="inline-flex items-center gap-1 text-sm font-semibold text-muted-foreground hover:text-foreground"><ChevronLeft className="h-4 w-4" /> All episodes</button>
+      <h2 className="text-2xl font-bold tracking-tight">New episode</h2>
+      <input ref={input} type="file" accept="audio/mpeg,audio/mp4,audio/x-m4a,audio/aac,video/mp4,.mp3,.m4a,.mp4" className="hidden" onChange={(e) => e.target.files?.[0] && void upload(e.target.files[0])} />
+      <div
+        onDragOver={(e) => { e.preventDefault(); setOver(true); }} onDragLeave={() => setOver(false)}
+        onDrop={(e) => { e.preventDefault(); setOver(false); const x = e.dataTransfer.files?.[0]; if (x && pct === null) void upload(x); }}
+        className={`flex min-h-[18rem] flex-col items-center justify-center rounded-2xl border-2 border-dashed px-6 text-center transition-colors ${over ? "border-[#053877] bg-[#053877]/5" : "border-border bg-card"}`} data-testid="new-episode-drop"
+      >
+        {pct === null ? (
+          <>
+            <p className="text-2xl font-bold tracking-tight sm:text-3xl">Drag your audio or video here or <button type="button" onClick={() => input.current?.click()} className="underline decoration-2 underline-offset-4 hover:text-[#053877]" data-testid="new-episode-choose">choose a file</button></p>
+            <p className="mt-2 text-sm text-muted-foreground">MP3 or M4A, or an MP4 video (the one you put on YouTube).</p>
+            <button type="button" onClick={() => void later()} disabled={busy === "later"} className="mt-5 text-sm font-semibold text-muted-foreground underline underline-offset-4 hover:text-foreground disabled:opacity-60" data-testid="new-episode-later">{busy === "later" ? "Starting…" : "Skip and upload later"}</button>
+          </>
+        ) : (
+          <div className="w-full max-w-sm">
+            <p className="flex items-center justify-center gap-2 text-lg font-semibold"><Loader2 className="h-5 w-5 animate-spin" /> Uploading… {Math.round(pct)}%</p>
+            <div className="mt-3 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-[#053877] transition-all" style={{ width: `${pct}%` }} /></div>
+          </div>
+        )}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        {([["rss", "Import from an RSS feed", Radio], ["library", "From your Library", Film]] as const).map(([k, l, I]) => (
+          <button key={k} type="button" onClick={() => setMore(more === k ? "" : k)} className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-semibold ${more === k ? "border-[#053877] bg-[#053877] text-white" : "border-border bg-card hover:bg-muted"}`} data-testid={`new-episode-${k}`}><I className="h-4 w-4" /> {l}</button>
+        ))}
+      </div>
+      {more === "rss" && (
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm" data-testid="new-episode-rss">
+          <p className="mb-2 text-sm text-muted-foreground">Bring one episode over from a feed: its title, its notes and its audio.</p>
+          <div className="flex gap-2">
+            <Input value={feed} onChange={(e) => setFeed(e.target.value)} placeholder="Your RSS feed address, or your Apple Podcasts link" className="h-9" data-testid="new-episode-feed" />
+            <Button className="h-9 rounded-full" onClick={() => void find()} disabled={busy === "find" || !feed.trim()}>{busy === "find" ? <Loader2 className="h-4 w-4 animate-spin" /> : "Find episodes"}</Button>
+          </div>
+          {found && (
+            <ul className="mt-3 max-h-80 divide-y divide-border overflow-y-auto">
+              {found.episodes.length ? found.episodes.map((x) => (
+                <li key={x.guid} className="flex items-center gap-3 py-2">
+                  <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{x.title}</span><span className="block text-xs text-muted-foreground">{x.published ? dateOf(x.published) : ""}{x.durationSec ? ` · ${hms(x.durationSec)}` : ""}</span></span>
+                  {x.have ? <span className="text-xs font-semibold text-muted-foreground">Already here</span> : <Button size="sm" variant="outline" className="h-8 rounded-full" disabled={busy !== null} onClick={() => void importOne(x.guid)}>{busy === x.guid ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Bring it in"}</Button>}
+                </li>
+              )) : <li className="py-6 text-center text-sm text-muted-foreground">No episodes in that feed.</li>}
+            </ul>
+          )}
+        </div>
+      )}
+      {more === "library" && (
+        <div className="max-h-80 overflow-y-auto rounded-2xl border border-border bg-card p-4 shadow-sm" data-testid="new-episode-library">
+          {recs.isLoading ? <Loader2 className="mx-auto my-8 h-5 w-5 animate-spin text-muted-foreground" /> : usable.length ? (
+            <ul className="divide-y divide-border">
+              {usable.map((r) => (
+                <li key={r.id} className="flex items-center gap-3 py-2">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate text-sm font-medium">{r.title || "Untitled"}</span>
+                    <span className="block text-xs text-muted-foreground">{hasClean(r) ? "Clean audio: ums and long pauses already out" : "We'll turn the video into audio (a minute or two)"}</span>
+                  </span>
+                  <Button size="sm" variant="outline" className="h-8 rounded-full" disabled={busy !== null} onClick={() => void useRec(r.id)}>{busy === `rec${r.id}` ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Use this"}</Button>
+                </li>
+              ))}
+            </ul>
+          ) : <p className="py-8 text-center text-sm text-muted-foreground">Nothing in your Library yet. Upload the audio instead.</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+

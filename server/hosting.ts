@@ -855,16 +855,76 @@ Return JSON only: {"titles":["","",""],"description":""}`,
         durationSec = Math.round(rec.durationSec || 0);
       }
     }
-    if (!audioKey && !recordingId) return res.status(400).json({ message: "Add the episode's audio." });
+    // One episode from a feed (the old host's, say): its words and its audio, copied in as a draft.
+    if (b.fromFeed && typeof b.fromFeed === "object") {
+      const url = await resolveFeed(String(b.fromFeed.url ?? "").trim());
+      if (!safeFeedUrl(url)) return res.status(400).json({ message: "That isn't a feed address we can read." });
+      let feed: ParsedFeed;
+      try { feed = await readFeed(url); } catch (err) { return res.status(400).json({ message: (err as Error).message }); }
+      const it = feed.items.find((x) => x.guid && x.guid === String(b.fromFeed.guid ?? ""));
+      if (!it) return res.status(404).json({ message: "That episode isn't in the feed any more." });
+      const eps0 = await episodesOf(s.id);
+      const [e] = await db.insert(hostedEpisodes).values({
+        showId: s.id, title: it.title.slice(0, 300), description: it.notes.slice(0, 20000), notesFormat: "html",
+        audioUrl: it.url, mime: it.mime, sizeBytes: Math.min(2_000_000_000, it.length), durationSec: it.duration,
+        episodeNumber: it.episode ?? (s.showType === "serial" ? null : eps0.filter((x) => x.episodeType === "full").length + 1), season: it.season,
+        episodeType: it.episodeType, explicit: it.explicit, artworkUrl: it.image,
+        guid: it.guid, status: "draft", publishedAt: it.published || "", createdAt: now(), audioJob: "copy",
+      }).returning();
+      return res.status(201).json(e);
+    }
+    // "Skip and upload later": the episode starts as a draft with no audio; the audio goes on from its page.
+    if (!audioKey && !recordingId && b.later !== true) return res.status(400).json({ message: "Add the episode's audio." });
     const eps = await episodesOf(s.id);
     const [e] = await db.insert(hostedEpisodes).values({
       showId: s.id, title: title || "New episode", description: String(b.description ?? "").slice(0, 20000),
       audioKey, mime, sizeBytes: num(b.sizeBytes) ?? 0, durationSec, recordingId,
       episodeNumber: num(b.episodeNumber) ?? (s.showType === "serial" ? null : eps.filter((x) => x.episodeType === "full").length + 1),
       season: num(b.season), guid: crypto.randomUUID(), status: "draft", createdAt: now(),
-      audioJob: audioKey ? "" : "queued", audioJobAt: audioKey ? "" : now(),
+      audioJob: audioKey || !recordingId ? "" : "queued", audioJobAt: audioKey || !recordingId ? "" : now(),
     }).returning();
     res.status(201).json(e);
+  });
+
+  /** The episodes in a feed (the show's old host by default), newest first, to import one or to pull its words. */
+  app.get("/api/host/hosting/shows/:id/feed-episodes", requireHostSession, async (req, res) => {
+    const s = await ownShow(emailOf(req), Number(req.params.id));
+    if (!s) return res.status(404).json({ message: "No such show." });
+    const url = await resolveFeed(String(req.query.url ?? s.importedFrom ?? "").trim());
+    if (!safeFeedUrl(url)) return res.status(400).json({ message: "Paste the RSS feed address (https://…) or an Apple Podcasts link." });
+    let feed: ParsedFeed;
+    try { feed = await readFeed(url); } catch (err) { return res.status(400).json({ message: (err as Error).message }); }
+    const have = await episodesOf(s.id);
+    const norm = (t: string) => t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim();
+    const guids = new Set(have.map((x) => x.guid).filter(Boolean));
+    const titles = new Set(have.map((x) => norm(x.title)));
+    res.json({
+      url, show: feed.title,
+      episodes: feed.items.slice(0, 300).map((it) => ({ guid: it.guid, title: it.title, published: it.published, durationSec: it.duration, have: guids.has(it.guid) || titles.has(norm(it.title)) })).filter((x) => x.guid),
+    });
+  });
+
+  /** An episode's title and show notes as they are in the feed: found by its id there, else by its title. Nothing is saved; the page fills the fields. */
+  app.post("/api/host/hosting/episodes/:id/pull-from-feed", requireHostSession, async (req, res) => {
+    const [e] = await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.id, Number(req.params.id))).limit(1);
+    const s = e ? await ownShow(emailOf(req), e.showId) : undefined;
+    if (!e || !s) return res.status(404).json({ message: "No such episode." });
+    const url = await resolveFeed(String(req.body?.url ?? s.importedFrom ?? "").trim());
+    if (!safeFeedUrl(url)) return res.status(400).json({ message: "Paste the feed address (https://…) to pull from." });
+    let feed: ParsedFeed;
+    try { feed = await readFeed(url); } catch (err) { return res.status(400).json({ message: (err as Error).message }); }
+    const words = (t: string) => new Set(t.toLowerCase().replace(/[^a-z0-9]+/g, " ").trim().split(" ").filter((w) => w.length > 2));
+    const mine = words(e.title);
+    let best: { it: ParsedItem; score: number } | null = null;
+    for (const it of feed.items) {
+      if (e.guid && it.guid === e.guid) { best = { it, score: 2 }; break; }
+      const w = words(it.title);
+      const common = Array.from(mine).filter((x) => w.has(x)).length;
+      const score = common / Math.max(1, Math.max(mine.size, w.size));
+      if (!best || score > best.score) best = { it, score };
+    }
+    if (!best || best.score < 0.6) return res.json({ found: false });
+    res.json({ found: true, title: best.it.title, notes: notesText(best.it.notes), matchedBy: best.score >= 2 ? "id" : "title" });
   });
 
   // An episode's own picture (in place of the still from its video, or the show's art).
@@ -901,6 +961,12 @@ Return JSON only: {"titles":["","",""],"description":""}`,
       ...(typeof b.description === "string" ? { description: b.description.slice(0, 20000) } : {}),
       ...(b.notesFormat === "text" || b.notesFormat === "html" ? { notesFormat: b.notesFormat } : {}),
       ...(typeof b.guest === "string" ? { guest: b.guest.trim().slice(0, 200) } : {}),
+      // The audio, added after the episode was made ("upload later"): the file is already in our storage.
+      ...(typeof b.audioKey === "string" && /^show-assets\/[\w.-]+$/.test(b.audioKey) && !(e.audioKey || e.audioUrl) ? {
+        audioKey: b.audioKey, audioJob: "",
+        mime: typeof b.mime === "string" && /^(audio|video)\/[\w.+-]+$/.test(b.mime) ? b.mime : "audio/mpeg",
+        sizeBytes: num(b.sizeBytes) ?? 0, durationSec: num(b.durationSec) ?? 0,
+      } : {}),
       ...(typeof b.footerOff === "boolean" ? { footerOff: b.footerOff } : {}),
       ...("episodeNumber" in b ? { episodeNumber: num(b.episodeNumber) } : {}),
       ...("season" in b ? { season: num(b.season) } : {}),
