@@ -1328,7 +1328,7 @@ Return JSON only: {"titles":["","",""],"description":""}`,
       artworkUrl: feed.artwork, category: feed.category in CATEGORIES ? feed.category : "Government",
       subcategory: feed.category in CATEGORIES && (CATEGORIES[feed.category] ?? []).includes(feed.subcategory) ? feed.subcategory : "",
       language: /^[a-z]{2}(-[a-z]{2})?$/i.test(feed.language) ? feed.language.toLowerCase() : "en-us",
-      explicit: feed.explicit, showType: feed.type, website: feed.link.slice(0, 300), copyright: feed.copyright.slice(0, 300),
+      explicit: feed.explicit, showType: feed.type, website: (/(^|\.)(buzzsprout|libsyn|podbean|transistor|simplecast|megaphone|captivate|rss|spreaker|anchor|spotify|acast|omny|blubrry|castos|fireside|redcircle|podomatic)\.(com|fm|co|io)\b/i.test(feed.link) ? "" : feed.link).slice(0, 300), copyright: feed.copyright.slice(0, 300),
       guid: feed.guid || podcastGuid(url), importedFrom: url, redirectOk: false, redirectCheckedAt: "", updatedAt: now(),
     };
     const [show] = target

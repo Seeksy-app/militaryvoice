@@ -206,37 +206,6 @@ export function ConnectYoutube({ locked = false, lockedReason = "", row = false 
         <a href="https://security.google.com/settings/security/permissions" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">Google security settings</a>.
       </p>
 
-      {/* The one question, asked the moment they connect and answerable any
-          time after: their slot, or the day. */}
-      {data.connected && (
-        <div className="mt-4 border-t border-border pt-4" data-testid="youtube-scope">
-          <p className="text-sm font-semibold text-card-foreground">What goes to your channel?</p>
-          <div className="mt-2 grid gap-2 sm:grid-cols-2">
-            {([
-              ["segment", "Just my segment", "Your slot, opened on your channel when it comes up."],
-              ["show", "The entire show", "All sixteen hours, first show to last, on your channel too."],
-            ] as const).map(([value, title, body]) => {
-              const on = data.scope === value;
-              return (
-                <button
-                  key={value}
-                  type="button"
-                  aria-pressed={on}
-                  disabled={setScope.isPending}
-                  onClick={() => !on && setScope.mutate(value)}
-                  className={`rounded-xl border p-3 text-left transition-colors ${on ? "border-[#053877] bg-[#053877]/[0.06]" : "border-border hover:border-foreground/30"}`}
-                  data-testid={`youtube-scope-${value}`}
-                >
-                  <span className="flex items-center gap-2 text-sm font-medium text-card-foreground">
-                    {on && <Check className="h-3.5 w-3.5 text-[#053877]" />} {title}
-                  </span>
-                  <span className="mt-0.5 block text-xs text-muted-foreground">{body}</span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
     </section>
   );
 }
