@@ -9,7 +9,7 @@ import { PostDialog, type PostTarget } from "@/components/PostDialog";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { UploadRecording } from "@/components/UploadRecording";
 import { uploadToStorage } from "@/lib/upload";
-import { PlatformIcon, platformLabel } from "@/components/SocialIcons";
+import { PlatformIcon, platformLabel, platformBackground } from "@/components/SocialIcons";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -343,9 +343,10 @@ function Outcomes({ p }: { p: Post }) {
       {list.map((pl) => {
         const r = p.results_.find((x) => x.platform === pl);
         const cls = "inline-flex h-6 w-6 items-center justify-center rounded-full border";
-        if (r?.ok && r.url) return <a key={pl} href={r.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} title={`See it on ${platformLabel(pl)}`} className={`${cls} border-emerald-500/50 text-emerald-600 hover:bg-emerald-50 dark:text-emerald-400 dark:hover:bg-emerald-950`}><PlatformIcon platform={pl} className="h-3 w-3" /></a>;
+        const badge = "inline-flex h-6 w-6 items-center justify-center rounded-full text-white ring-1 ring-white/25";
+        if (r?.ok && r.url) return <a key={pl} href={r.url} target="_blank" rel="noreferrer" onClick={(e) => e.stopPropagation()} title={`See it on ${platformLabel(pl)}`} style={{ background: platformBackground(pl) }} className={`${badge} transition-transform hover:scale-110`}><PlatformIcon platform={pl} className="h-3 w-3" /></a>;
         if (r && !r.ok) return <span key={pl} title={`${platformLabel(pl)}: ${r.error || "didn't go out"}`} className={`${cls} border-red-400 text-red-600`}><PlatformIcon platform={pl} className="h-3 w-3" /></span>;
-        return <span key={pl} title={r?.inbox ? `${platformLabel(pl)}: in your drafts, publish it from the app` : platformLabel(pl)} className={`${cls} border-border text-muted-foreground`}><PlatformIcon platform={pl} className="h-3 w-3" /></span>;
+        return <span key={pl} title={r?.inbox ? `${platformLabel(pl)}: in your drafts, publish it from the app` : platformLabel(pl)} style={{ background: platformBackground(pl) }} className={`${badge} opacity-70`}><PlatformIcon platform={pl} className="h-3 w-3" /></span>;
       })}
     </span>
   );
@@ -364,7 +365,7 @@ function PostRow({ p, onOpen, onRemove, compactRow }: { p: Post; onOpen: () => v
           </span>
         </span>
         {!compactRow && <Outcomes p={p} />}
-        {compactRow && <span className="flex gap-0.5 text-muted-foreground">{(p.platforms.split(",").filter(Boolean) as SocialPlatform[]).map((pl) => <PlatformIcon key={pl} platform={pl} className="h-3.5 w-3.5" />)}</span>}
+        {compactRow && <span className="flex gap-1">{(p.platforms.split(",").filter(Boolean) as SocialPlatform[]).map((pl) => <span key={pl} title={platformLabel(pl)} style={{ background: platformBackground(pl) }} className="inline-flex h-5 w-5 items-center justify-center rounded-full text-white ring-1 ring-white/25"><PlatformIcon platform={pl} className="h-3 w-3" /></span>)}</span>}
       </button>
       {onRemove && (
         <Tip text="Delete from the queue">

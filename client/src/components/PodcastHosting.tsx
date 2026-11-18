@@ -31,6 +31,24 @@ type Resp = { shows: Hosted[]; categories: Record<string, string[]>; youtubeRead
 const KEY = ["/api/host/hosting"];
 const compact = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e4 ? `${Math.round(n / 1e3)}K` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(n));
 const hms = (sec: number) => { const s = Math.round(sec); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60; return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`; };
+/** Show notes as the plain words a person would type: tags out, paragraphs kept, a link written as "text (address)". */
+function htmlToText(html: string): string {
+  if (!/<[a-z!/]/i.test(html)) return html;
+  const doc = new DOMParser().parseFromString(html, "text/html");
+  const walk = (n: Node): string => {
+    if (n.nodeType === 3) return n.textContent ?? "";
+    if (n.nodeType !== 1) return "";
+    const el = n as HTMLElement;
+    const tag = el.tagName.toLowerCase();
+    const inner = Array.from(el.childNodes).map(walk).join("");
+    if (tag === "br") return "\n";
+    if (tag === "li") return `• ${inner.trim()}\n`;
+    if (tag === "a") { const href = el.getAttribute("href") ?? ""; const t = inner.trim(); return href && t && t !== href && !t.includes(href) ? `${t} (${href})` : inner; }
+    if (/^(p|div|h[1-6]|ul|ol|blockquote)$/.test(tag)) return `${inner.trim()}\n\n`;
+    return inner;
+  };
+  return walk(doc.body).replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+}
 const dateOf = (iso: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "");
 
 export function PodcastHosting() {
@@ -861,6 +879,8 @@ function EpisodeDialog({ ep, show, youtubeReady, onClose, onSaved }: { ep: Ep | 
   const offerYt = ep.status === "draft" && !!ep.hasVideo && ytState !== "sent" && !ep.ytLibrary;
   const ytOn = yt ?? (youtubeReady && show.youtubeMode === "always" && ytState !== "skipped");
   const v = { ...ep, ...f } as Ep;
+  // People type notes in plain words: an imported episode's HTML is shown as text, and kept as it was unless they change it.
+  const notesPlain = ep.notesFormat === "html" ? htmlToText(ep.description) : ep.description;
   const set = (k: string, val: unknown) => setF((x) => ({ ...x, [k]: val }));
   const close = () => { setF({}); setWhen("now"); setAt(""); setYt(null); onClose(); };
   const save = async (status?: "published" | "draft") => {
@@ -897,10 +917,15 @@ function EpisodeDialog({ ep, show, youtubeReady, onClose, onSaved }: { ep: Ep | 
           <DialogDescription>{ep.durationSec ? `${hms(ep.durationSec)} long. ` : ""}{ep.live ? `Live since ${dateOf(ep.publishedAt)} · ${compact(ep.downloads)} downloads.` : ep.status === "published" ? `Goes out ${dateOf(ep.publishedAt)}.` : "A draft: only you can see it."}</DialogDescription>
         </DialogHeader>
         <div className="grid gap-3 sm:grid-cols-[1fr_6rem_6rem]">
+          {(ep.audioKey || ep.audioUrl) ? (
+            <audio key={ep.id} controls preload="none" src={`/e/${ep.id}.mp3?preview=1`} className="w-full sm:col-span-3" data-testid="hosting-ep-player" />
+          ) : (
+            <p className="rounded-xl border border-border px-3 py-2.5 text-sm text-muted-foreground sm:col-span-3">{ep.audioJob === "failed" ? "Its audio couldn't be made." : "Its audio is still being made. You can play it here in a few minutes."}</p>
+          )}
           <label className={label}>Title<Input value={v.title} onChange={(e) => set("title", e.target.value)} className="mt-1" data-testid="hosting-ep-title" /></label>
           <label className={label}>Episode<Input type="number" min={0} value={v.episodeNumber ?? ""} onChange={(e) => set("episodeNumber", e.target.value === "" ? null : Number(e.target.value))} className="mt-1" /></label>
           <label className={label}>Season<Input type="number" min={0} value={v.season ?? ""} onChange={(e) => set("season", e.target.value === "" ? null : Number(e.target.value))} className="mt-1" /></label>
-          <label className={`${label} sm:col-span-3`}>Show notes<Textarea value={v.description} onChange={(e) => set("description", e.target.value)} rows={6} className="mt-1" placeholder="What it's about, who's on it, and any links you mentioned." /></label>
+          <label className={`${label} sm:col-span-3`}>Show notes<Textarea value={typeof f.description === "string" ? f.description : notesPlain} onChange={(e) => setF((x) => ({ ...x, description: e.target.value, notesFormat: "text" }))} rows={6} className="mt-1" placeholder="What it's about, who's on it, and any links you mentioned." /></label>
           <div className="flex flex-wrap items-center gap-4 text-sm sm:col-span-3">
             <label className="flex items-center gap-2">Type
               <select value={v.episodeType} onChange={(e) => set("episodeType", e.target.value)} className="h-8 rounded-md border border-input bg-background px-2 text-sm">

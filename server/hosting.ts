@@ -65,7 +65,7 @@ export const CATEGORIES: Record<string, string[]> = {
 
 const esc = (s: string) => s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 const cdata = (s: string) => `<![CDATA[${s.replace(/]]>/g, "]]]]><![CDATA[>")}]]>`;
-const notesHtml = (s: string) => s.split(/\n{2,}/).map((p) => `<p>${esc(p).replace(/\n/g, "<br>")}</p>`).join("");
+const notesHtml = (s: string) => s.split(/\n{2,}/).map((p) => `<p>${esc(p).replace(/\n/g, "<br>").replace(/(https?:\/\/[^\s<]+)/g, '<a href="$1">$1</a>')}</p>`).join("");
 const rfc822 = (iso: string) => new Date(iso).toUTCString();
 /** Show notes as plain text for the public page: tags out (an imported feed's HTML is never put on our page), paragraphs kept. */
 const notesText = (html: string) => html
@@ -614,7 +614,7 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
     if (!e || !(e.audioKey || e.audioUrl)) return res.status(404).type("text/plain").send("Not found.");
     const ua = String(req.get("user-agent") ?? "");
     const range = String(req.get("range") ?? "");
-    const counts = req.method === "GET" && (!range || /^bytes=0-/.test(range)) && ua && !BOT.test(ua) && e.status === "published";
+    const counts = req.method === "GET" && !req.query.preview && (!range || /^bytes=0-/.test(range)) && ua && !BOT.test(ua) && e.status === "published";
     if (counts) {
       const ip = String(req.ip ?? "");
       const day = today();
@@ -891,6 +891,7 @@ Return JSON only: {"titles":["","",""],"description":""}`,
     const [out] = await db.update(hostedEpisodes).set({
       ...(typeof b.title === "string" ? { title: b.title.slice(0, 300) } : {}),
       ...(typeof b.description === "string" ? { description: b.description.slice(0, 20000) } : {}),
+      ...(b.notesFormat === "text" || b.notesFormat === "html" ? { notesFormat: b.notesFormat } : {}),
       ...("episodeNumber" in b ? { episodeNumber: num(b.episodeNumber) } : {}),
       ...("season" in b ? { season: num(b.season) } : {}),
       ...(["full", "trailer", "bonus"].includes(b.episodeType) ? { episodeType: b.episodeType } : {}),
