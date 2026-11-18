@@ -217,6 +217,15 @@ export function PodcastListens({ onConnect, bare = false }: { onConnect: () => v
   const qc = useQueryClient();
   const [refreshing, setRefreshing] = useState<string | null>(null);
   const [tab, setTab] = useState<string>("all");
+  const { toast } = useToast();
+  const [adding, setAdding] = useState(false);
+  const [bz, setBz] = useState({ token: "", podcastId: "" });
+  const social = useQuery<{ accounts?: { platform: string; username?: string; followers?: number }[] }>({ queryKey: ["/api/host/social"], queryFn: async () => (await apiRequest("GET", "/api/host/social")).json(), staleTime: 5 * 60_000 });
+  const addBz = useMutation({
+    mutationFn: async () => (await apiRequest("POST", "/api/host/podcast-stats/buzzsprout", bz)).json(),
+    onSuccess: (r: SourceView) => { toast({ title: "Buzzsprout connected", description: `${r.showName || "Your show"}: its history is on this page now.` }); setBz({ token: "", podcastId: "" }); setAdding(false); setTab("all"); void qc.invalidateQueries({ queryKey: KEY }); },
+    onError: (e: Error) => toast({ title: "Couldn't connect", description: e.message.replace(/^\d+:\s*/, ""), variant: "destructive" }),
+  });
   if (q.isLoading) return null;
   const sources = (q.data?.sources ?? []).filter((s) => s.data);
   if (!sources.length) {
@@ -257,11 +266,40 @@ export function PodcastListens({ onConnect, bare = false }: { onConnect: () => v
       },
     };
   })();
-  const pick = tab === "all" && merged ? "all" : sources.some((x) => x.source === tab) ? tab : sources[0].source;
+  // Where they listen (counted from our own feed), for the Apple and Spotify tabs; the YouTube tab reads the connected channel.
+  const hosted = sources.find((x) => x.source === "militaryvoices");
+  const apps: Record<string, number> = merged?.data?.audience?.apps ?? hosted?.data?.audience?.apps ?? {};
+  const appSum = (re: RegExp) => Object.entries(apps).filter(([k]) => re.test(k)).reduce((a, [, n]) => a + n, 0);
+  const appTotal = Object.values(apps).reduce((a, n) => a + n, 0);
+  const yt = (social.data?.accounts ?? []).find((x) => x.platform === "youtube");
+  const tabs: { key: string; label: string }[] = [
+    ...(merged ? [{ key: "all", label: "All sources" }] : []),
+    ...sources.map((x) => ({ key: x.source, label: x.source === "militaryvoices" ? "MilitaryVoices" : NAME[x.source] })),
+    ...(hosted ? [{ key: "app:apple", label: "Apple Podcasts" }, ...(sources.some((x) => x.source === "spotify") ? [] : [{ key: "app:spotify", label: "Spotify" }])] : []),
+    ...(yt ? [{ key: "yt", label: "YouTube" }] : []),
+  ];
+  const pick = tabs.some((t) => t.key === tab) ? tab : tabs[0].key;
   const shown = pick === "all" && merged ? [merged] : sources.filter((x) => x.source === pick);
-  const tabs: { key: string; label: string }[] = [...(merged ? [{ key: "all", label: "All sources" }] : []), ...sources.map((x) => ({ key: x.source, label: x.source === "militaryvoices" ? "MilitaryVoices" : NAME[x.source] }))];
+  const appView = pick.startsWith("app:") ? (pick === "app:apple" ? { name: "Apple Podcasts", n: appSum(/apple/i) } : { name: "Spotify", n: appSum(/spotify/i) }) : null;
   return (
     <section className={`${bare ? "" : "mb-6 "}space-y-4`} data-testid="podcast-listens">
+      {!sources.some((x) => x.source === "buzzsprout") && (
+        <div className="rounded-2xl border border-dashed border-border p-4" data-testid="add-buzzsprout">
+          <div className="flex flex-wrap items-center gap-3">
+            <Link2 className="h-5 w-5 shrink-0 text-[#053877] dark:text-[#8ab4f8]" />
+            <p className="min-w-0 flex-1 text-sm"><span className="font-semibold text-foreground">Bring in your Buzzsprout history.</span> <span className="text-muted-foreground">Every episode's plays, from before the move.</span></p>
+            <Button variant="outline" size="sm" className="h-8 rounded-full px-3.5 text-xs" onClick={() => setAdding((v) => !v)} aria-expanded={adding} data-testid="button-add-buzzsprout">{adding ? "Close" : "Add Buzzsprout"}</Button>
+          </div>
+          {adding && (
+            <form onSubmit={(e) => { e.preventDefault(); addBz.mutate(); }} className="mt-4 grid gap-3 rounded-xl bg-muted/40 p-4 sm:grid-cols-[1fr_12rem_auto] sm:items-end">
+              <label className="block text-xs font-semibold text-muted-foreground">API token<Input type="password" autoComplete="off" value={bz.token} onChange={(e) => setBz((f) => ({ ...f, token: e.target.value }))} className="mt-1 h-9 text-sm" data-testid="input-bz-token" /></label>
+              <label className="block text-xs font-semibold text-muted-foreground">Podcast ID (optional)<Input autoComplete="off" value={bz.podcastId} onChange={(e) => setBz((f) => ({ ...f, podcastId: e.target.value }))} className="mt-1 h-9 text-sm" data-testid="input-bz-id" /></label>
+              <Button type="submit" disabled={addBz.isPending || !bz.token.trim()} className="h-9 gap-1.5 rounded-full" data-testid="button-bz-connect">{addBz.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />} Connect</Button>
+              <p className="text-xs text-muted-foreground sm:col-span-3">In Buzzsprout, open <span className="font-semibold text-foreground">Profile → API</span> and copy the token. With more than one show, add the podcast's ID (the number in its Buzzsprout address).</p>
+            </form>
+          )}
+        </div>
+      )}
       {tabs.length > 1 && (
         <div role="tablist" className="flex gap-1 overflow-x-auto rounded-full bg-muted/60 p-1" data-testid="podcast-tabs">
           {tabs.map((t) => (
@@ -282,6 +320,27 @@ export function PodcastListens({ onConnect, bare = false }: { onConnect: () => v
           </p>
         </div>
       ))}
+      {appView && (
+        <div className="rounded-2xl border border-border bg-card p-5" data-testid={`listens-${pick}`}>
+          <p className="font-semibold text-foreground">{appView.name}</p>
+          <p className="text-xs text-muted-foreground">Counted from your MilitaryVoices feed, by the app that asked for each episode.</p>
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-xl bg-muted/50 px-3 py-2.5"><p className="text-xl font-bold tabular-nums text-foreground">{compact(appView.n)}</p><p className="text-xs text-muted-foreground">downloads through {appView.name}</p></div>
+            <div className="rounded-xl bg-muted/50 px-3 py-2.5"><p className="text-xl font-bold tabular-nums text-foreground">{appTotal ? `${Math.round((appView.n / appTotal) * 100)}%` : "–"}</p><p className="text-xs text-muted-foreground">of all your downloads</p></div>
+          </div>
+          {appView.n === 0 && <p className="mt-4 text-sm text-muted-foreground">Nothing yet. Once your show's address in {appView.name} points at your MilitaryVoices feed, each listen shows here. Earlier history is in your Buzzsprout tab.</p>}
+          {appTotal > 0 && <div className="mt-5"><p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Where they listen</p><Bars items={top(apps, 6)} /></div>}
+        </div>
+      )}
+      {pick === "yt" && yt && (
+        <div className="rounded-2xl border border-border bg-card p-5" data-testid="listens-yt">
+          <p className="font-semibold text-foreground">YouTube{yt.username ? <span className="font-normal text-muted-foreground"> · @{yt.username.replace(/^@/, "")}</span> : null}</p>
+          <p className="text-xs text-muted-foreground">Your connected channel. Views and how each post did are under Social → Analytics.</p>
+          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+            <div className="rounded-xl bg-muted/50 px-3 py-2.5"><p className="text-xl font-bold tabular-nums text-foreground">{compact(yt.followers ?? 0)}</p><p className="text-xs text-muted-foreground">subscribers</p></div>
+          </div>
+        </div>
+      )}
       {shown.map((s) => {
         const d = s.data!;
         const isAll = (s.source as string) === "all";
