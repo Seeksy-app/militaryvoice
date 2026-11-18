@@ -15,6 +15,7 @@ import { BioFamilyView } from "@/components/BioFamilyView";
 import { uploadToStorage } from "@/lib/upload";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { useBioFont } from "@/lib/bioFont";
+import { topPhotoOf, useTopColor } from "@/lib/topColor";
 import { PlatformIcon, platformLabel, platformBackground } from "@/components/SocialIcons";
 import { ratesFor } from "@/components/BioBrandsView";
 import { BRANDS_SECTIONS, FAMILY_SECTIONS, arrange, type BioLayout, type BrandsSectionId, type FamilySectionId, CUTOUT_LAYOUTS, SWATCHES, TEMPLATES, TEMPLATE_ORDER, FONTS, bioPalette, musicEmbed, videoEmbed, onColor, promoCodes, type BioAlign, type BioPromoCode, type BioBackground, type BioFont, type BioTemplate, DEFAULT_PODCAST, type BioPodcastOptions, INTRO_VOICES, INTRO_SAYS, DEFAULT_POPUPS, type BioPopup, DEFAULT_BRANDS, DEFAULT_FAMILY, type BioBrands, type BioBrandsPublic, type BioFamily, type BioFamilyPublic, type BioPublic, type BioSection, type BioSectionType, type BioSocial, type BioTheme } from "@shared/bio";
@@ -57,7 +58,7 @@ type Phone = (typeof PHONES)[number];
  * hole-punch camera), the side buttons, the status bar and Safari's address
  * bar. The whole device is scaled to fit, never cropped, so it keeps its shape.
  */
-function PhoneFrame({ ph, scale, dark, url, children }: { ph: Phone; scale: number; dark: boolean; url: string; children: React.ReactNode }) {
+function PhoneFrame({ ph, scale, dark, url, statusBg, children }: { ph: Phone; scale: number; dark: boolean; url: string; /** The photo's top colour, tinting the bar as Safari does, so a full-bleed photo runs into it. */ statusBg?: string | null; children: React.ReactNode }) {
   // From Apple's iPhone 17 Pro Max drawing: a 72.86 × 158.31 mm active area is the 440 × 956 pt screen,
   // so 6.04 pt a millimetre; the housing is 2.56 mm past it all round (77.98 × 163.43 mm), buttons stand 0.45 mm proud.
   const MM = 440 / 72.86;
@@ -82,7 +83,7 @@ function PhoneFrame({ ph, scale, dark, url, children }: { ph: Phone; scale: numb
         <div className="absolute inset-0" style={{ borderRadius: ph.r + bezel, padding: bezel, background: "#0a0a0c", boxShadow: "0 0 0 1.5px #4a4a52, 0 0 0 3px #1d1d22, 0 40px 80px -30px rgba(11,16,32,0.55)" }}>
           <div className="relative h-full w-full overflow-hidden" style={{ borderRadius: ph.r, background: paper }}>
             {/* Status bar: the time, and signal, wifi and battery, over the page's own colour (as Safari tints it). */}
-            <div className="absolute inset-x-0 top-0 z-40 flex items-center justify-between px-8 text-[15px] font-semibold" style={{ height: statusH, background: paper, color: ink, paddingTop: ph.cam === "hole" ? 0 : 6 }}>
+            <div className="absolute inset-x-0 top-0 z-40 flex items-center justify-between px-8 text-[15px] font-semibold" style={{ height: statusH, background: statusBg ?? paper, color: statusBg ? onColor(statusBg) : ink, paddingTop: ph.cam === "hole" ? 0 : 6 }}>
               <span className={ph.cam === "hole" ? "text-[13px]" : ""}>9:41</span>
               <span className="flex items-center gap-1.5">
                 <svg width="18" height="11" viewBox="0 0 18 11" fill="currentColor" aria-hidden><rect x="0" y="7" width="3" height="4" rx="1" /><rect x="5" y="5" width="3" height="6" rx="1" /><rect x="10" y="2.5" width="3" height="8.5" rx="1" /><rect x="15" y="0" width="3" height="11" rx="1" /></svg>
@@ -324,11 +325,13 @@ export function BioBuilder() {
     return { ...srv, displayName: draft.displayName, avatarUrl: draft.avatarUrl, heroUrl: draft.heroUrl, theme: draft.theme, askEnabled: draft.askEnabled, family: { ...DEFAULT_FAMILY, ...family },
       socials: draft.socials.filter((s) => s.on && s.url), cutoutUrl: draft.cutoutFrom && draft.cutoutFrom === draft.avatarUrl ? draft.cutoutUrl : "" };
   }, [draft, q.data?.familyPreview, famSrv]);
+  // A full-bleed photo's top colour, tinting the phone's bar as Safari would.
+  const topColor = useTopColor(view ? topPhotoOf(view) : null);
   // Their pop-up, shown on the phone while they edit it.
   const [popPeek, setPopPeek] = useState(false);
   const page = () => tab === "brands" && kitView ? <BioBrandsView data={kitView} preview listenUrl={url} />
     : tab === "family" && famView ? <BioFamilyView data={famView} preview />
-    : <BioPageView data={view!} preview shareBase={url} popupPeek={popPeek && tab === "content"} onPopupClose={() => setPopPeek(false)} />;
+    : <BioPageView data={view!} preview shareBase={url} popupPeek={popPeek && tab === "content"} onPopupClose={() => setPopPeek(false)} onAddSocials={() => go("social")} />;
 
   if (q.isLoading || !draft || !view) return <div className="flex justify-center py-24"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
   const newQs = (q.data?.questions ?? []).filter((x) => x.status === "new").length;
@@ -433,7 +436,7 @@ export function BioBuilder() {
               }
               const bezel = ph.maker === "apple" ? 2.56 * (440 / 72.86) : 11;
               const sc = Math.min(1, avail.w / (ph.w + bezel * 2 + 8), avail.h / (ph.h + bezel * 2));
-              return <PhoneFrame ph={ph} scale={sc} dark={(draft.theme.shade ?? "dark") === "dark"} url={url}>{page()}</PhoneFrame>;
+              return <PhoneFrame ph={ph} scale={sc} dark={(draft.theme.shade ?? "dark") === "dark"} url={url} statusBg={topColor}>{page()}</PhoneFrame>;
             })()}
           </div>
         </div>

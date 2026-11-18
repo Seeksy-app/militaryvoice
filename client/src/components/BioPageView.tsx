@@ -3,6 +3,7 @@ import { Calendar, Check, Copy, ExternalLink, Mail, MessageCircle, Music, Pause,
 import { PlatformIcon, platformBackground } from "@/components/SocialIcons";
 import { CUTOUT_LAYOUTS, DEFAULT_PODCAST, FONTS, bioPalette, musicEmbed, onColor, promoCodes, standOut, videoEmbed, type BioChatAt, type BioPodcastOptions, type BioPopup, type BioPublic, type BioSection, type BioTheme } from "@shared/bio";
 import { useBioFont } from "@/lib/bioFont";
+import { topPhotoOf, useTopColor } from "@/lib/topColor";
 import type { SocialPlatform } from "@shared/schema";
 
 /**
@@ -27,7 +28,9 @@ export type AiAnswer = { answer: string; sources: { n: number; title: string; st
 export type ChatMsg = { token: string; question: string; reply: string; repliedAt: string; createdAt: string };
 type AskInput = { name: string; email: string; question: string; episode: string; website: string };
 
-export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, onLoadMessages, onSubscribe, shareBase, popupPeek = false, onPopupClose }: {
+export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, onLoadMessages, onSubscribe, shareBase, popupPeek = false, onPopupClose, onAddSocials }: {
+  /** In the builder, when no social accounts are added yet: shows a nudge to add them, and this opens where. */
+  onAddSocials?: () => void;
   data: BioPublic;
   /** In the builder: nothing is counted, nothing is sent. */
   preview?: boolean;
@@ -53,6 +56,17 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
   const bg = pal.background;
   useBioFont(t.font);
   useBioFont(t.layout === "magazine" ? "playfair" : t.font);
+  // Full bleed and Poster: tint the phone's browser bar with the photo's own top colour, so the picture runs into it rather than stopping at a band.
+  const topColor = useTopColor(topPhotoOf(data));
+  useEffect(() => {
+    if (preview || !topColor) return;
+    let m = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
+    const made = !m;
+    const was = m?.content ?? "";
+    if (!m) { m = document.createElement("meta"); m.name = "theme-color"; document.head.appendChild(m); }
+    m.content = topColor;
+    return () => { if (made) m!.remove(); else m!.content = was; };
+  }, [preview, topColor]);
   const btn = (primary = true): React.CSSProperties => t.linkStyle === "fill" && primary
     ? { background: link, color: onColor(link), borderRadius: radius }
     : t.linkStyle === "outline" ? { border: `2px solid ${link}`, color: ink, borderRadius: radius, background: "transparent" }
@@ -122,7 +136,7 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
       {/* The space to their icons is theirs to set. The icons' own top margin (16) merges with this one: past 16 this one wins, under it they add. */}
       {data.bio && !t.hideBio && <p className="mx-auto mt-3 max-w-md whitespace-pre-line text-[15px] leading-relaxed" style={{ color: onPhoto ? "rgba(255,255,255,0.88)" : sub, ...(t.socialsFirst ? { marginTop: t.bioGap ?? 16 } : { marginBottom: (t.bioGap ?? 16) >= 16 ? t.bioGap : (t.bioGap ?? 16) - 16 }) }}>{styled(data.bio)}</p>}
       {intro("bio")}
-      {!t.socialsFirst && <SocialRow socials={data.socials} onPhoto={onPhoto} preview={preview} onTap={(p) => ev("click", p)} onChat={data.askEnabled && chatAt === "socials" ? () => setChat(true) : undefined} chatColor={accent} />}
+      {!t.socialsFirst && <SocialRow socials={data.socials} onPhoto={onPhoto} preview={preview} onTap={(p) => ev("click", p)} onChat={data.askEnabled && chatAt === "socials" ? () => setChat(true) : undefined} chatColor={accent} nudge={onAddSocials} />}
     </>
   );
 
@@ -166,7 +180,22 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
 }
 
 /** Their social accounts, a row of round icons (a white ring over a photo). */
-export function SocialRow({ socials, onPhoto = false, preview, onTap, onChat, chatColor = "#053877" }: { socials: { platform: string; url: string }[]; onPhoto?: boolean; preview: boolean; onTap?: (platform: string) => void; onChat?: () => void; chatColor?: string }) {
+export function SocialRow({ socials, onPhoto = false, preview, onTap, onChat, chatColor = "#053877", nudge }: { socials: { platform: string; url: string }[]; onPhoto?: boolean; preview: boolean; onTap?: (platform: string) => void; onChat?: () => void; chatColor?: string; nudge?: () => void }) {
+  // In the builder with no accounts yet: faint icons where theirs will go, and a way to add them. Visitors never see this.
+  if (!socials.length && !onChat && nudge) {
+    return (
+      <button type="button" onClick={nudge} className="mx-auto mt-4 flex flex-col items-center gap-1.5" data-testid="social-nudge">
+        <span className="flex gap-2.5">
+          {(["instagram", "youtube", "facebook", "tiktok"] as const).map((p) => (
+            <span key={p} className="flex h-10 w-10 items-center justify-center rounded-full border-2 border-dashed" style={{ borderColor: onPhoto ? "rgba(255,255,255,0.6)" : "rgba(120,130,150,0.55)", color: onPhoto ? "rgba(255,255,255,0.75)" : "rgba(120,130,150,0.8)" }}>
+              <PlatformIcon platform={p} className="h-5 w-5" />
+            </span>
+          ))}
+        </span>
+        <span className="text-xs font-semibold underline underline-offset-2" style={{ color: onPhoto ? "#fff" : undefined }}>Add your social accounts</span>
+      </button>
+    );
+  }
   if (!socials.length && !onChat) return null;
   return (
     <div className="mt-4 flex flex-wrap justify-center gap-2.5" data-testid="social-row">
