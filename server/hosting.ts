@@ -71,8 +71,11 @@ const rfc822 = (iso: string) => new Date(iso).toUTCString();
 /** Show notes as plain text for the public page: tags out (an imported feed's HTML is never put on our page), paragraphs kept. */
 const notesText = (html: string) => html
   .replace(/<(br|\/p|\/div|\/li|\/h\d)\s*\/?>/gi, "\n").replace(/<li[^>]*>/gi, "• ").replace(/<[^>]+>/g, "")
-  .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;|&apos;/g, "'")
-  .replace(/\n{3,}/g, "\n\n").trim();
+  .replace(/&#x([0-9a-f]+);/gi, (_, h: string) => String.fromCodePoint(parseInt(h, 16))).replace(/&#(\d+);/g, (_, n: string) => String.fromCodePoint(Number(n)))
+  .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'")
+  .replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
+/** A show's description as plain words: one that came in with tags (from an old host) loses them; plain text is left alone. */
+const plainDesc = (d: string) => (/<[a-z!/][^>]*>|&(nbsp|amp|#\d+);/i.test(d) ? notesText(d) : d);
 const extOf = (mime: string) => (/mp4|m4a|aac/.test(mime) ? (mime.startsWith("video") ? "mp4" : "m4a") : "mp3");
 
 /** podcast:guid: a UUIDv5 of the feed address without its scheme, in the Podcasting 2.0 namespace. */
@@ -317,8 +320,8 @@ export function feedXml(s: HostedShowRow, eps: HostedEpisodeRow[]): string {
     <link>${esc(link)}</link>
     <atom:link href="${esc(self)}" rel="self" type="application/rss+xml"/>
     <language>${esc(s.language)}</language>
-    <description>${cdata(s.description)}</description>
-    <itunes:summary>${cdata(s.description)}</itunes:summary>
+    <description>${cdata(plainDesc(s.description))}</description>
+    <itunes:summary>${cdata(plainDesc(s.description))}</itunes:summary>
     <itunes:author>${esc(s.author || s.ownerName || s.title)}</itunes:author>
     <itunes:owner><itunes:name>${esc(s.ownerName || s.author)}</itunes:name><itunes:email>${esc(owner)}</itunes:email></itunes:owner>
     ${s.artworkUrl ? `<itunes:image href="${esc(s.artworkUrl)}"/>
@@ -592,7 +595,7 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
     res.json({
       chat: page?.published && page.askEnabled ? page.handle : null,
       chatWelcome: page?.welcome.trim() || "Hi! Thanks for listening. What's on your mind?",
-      show: { title: s.title, description: s.description, author: s.author || s.ownerName, artworkUrl: s.artworkUrl, category: s.category, website: s.website, appleUrl: s.appleUrl, spotifyUrl: s.spotifyUrl, feedUrl: feedUrl(s.slug) },
+      show: { title: s.title, description: plainDesc(s.description), author: s.author || s.ownerName, artworkUrl: s.artworkUrl, category: s.category, website: s.website, appleUrl: s.appleUrl, spotifyUrl: s.spotifyUrl, feedUrl: feedUrl(s.slug) },
       episodes: eps.map((e) => ({ id: e.id, title: e.title, notes: [e.notesFormat === "html" ? notesText(e.description) : e.description, footerText(s, e)].filter(Boolean).join("\n\n"), publishedAt: e.publishedAt, durationSec: e.durationSec, episodeNumber: e.episodeNumber, season: e.season, artworkUrl: e.artworkUrl, audio: `${ORIGIN}/e/${e.id}.${extOf(e.mime)}` })),
     });
   });
@@ -1084,7 +1087,7 @@ Return JSON only: {"titles":["","",""],"description":""}`,
     if (!feed.items.length) return res.status(400).json({ message: "That feed has no episodes we can play." });
     const slug = target?.slug ?? await uniqueSlug(slugify(feed.title || "show"));
     const fields = {
-      title: feed.title.slice(0, 200), description: feed.description.slice(0, 4000), author: feed.author.slice(0, 200),
+      title: feed.title.slice(0, 200), description: plainDesc(feed.description).slice(0, 4000), author: feed.author.slice(0, 200),
       ownerName: feed.ownerName.slice(0, 200), ownerEmail: (feed.ownerEmail || email).slice(0, 200),
       ownerEmailVerified: (feed.ownerEmail || email).toLowerCase() === email ? email : "",
       artworkUrl: feed.artwork, category: feed.category in CATEGORIES ? feed.category : "Government",
