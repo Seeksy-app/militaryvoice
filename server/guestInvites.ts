@@ -13,6 +13,7 @@ import { putRecordingObject, signedRecordingUrl } from "./recordingStorage.js";
 import { sendInterviewInvite, sendInterviewAnswered } from "./email.js";
 import { boothGuestKey, bookingTimes } from "./booth.js";
 import { dxEventIds } from "./digitalExperience.js";
+import { roomInviteLink } from "./myStudio.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 
@@ -120,6 +121,8 @@ export function registerGuestInvites(app: Express, requireHostSession: RequestHa
     let zoomLink = str(req.body?.zoomLink, 500);
     // "In my Radio booth": the guest's private link into that booking (made here, with our own key), and its time.
     let boothShow = "";
+    // "In my studio room": the guest joins the host's own room by its link; the time is the one they typed.
+    if (req.body?.where === "studio") zoomLink = await roomInviteLink(owner);
     if (req.body?.where === "booth") {
       const mineList = await boothBookings(owner);
       const b = mineList.find((x) => x.id === Number(req.body?.bookingId));

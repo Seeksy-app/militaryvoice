@@ -49,6 +49,12 @@ async function settle(s: PersonalStudioRow): Promise<PersonalStudioRow> {
   return out;
 }
 
+/** The link a guest uses to join this host's own studio room (made on first use). */
+export async function roomInviteLink(email: string): Promise<string> {
+  const s = await mine(email.trim().toLowerCase());
+  return `${ORIGIN}/room/join/${s.inviteToken}`;
+}
+
 export function registerMyStudio(app: Express, requireHostSession: RequestHandler, deps: { youtubeToken: (email: string) => Promise<string | null> }) {
   const view = (s: PersonalStudioRow, youtube: boolean) => ({
     id: s.id,
