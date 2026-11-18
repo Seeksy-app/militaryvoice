@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { durationOf, uploadToStorage } from "@/lib/upload";
 import { GuestFinder, ShowFinder } from "@/components/DiscoverPodcasts";
-import type { HostedEpisodeRow, HostedShowRow, RecordingRow } from "@shared/schema";
+import type { HostedEpisodeRow, HostedShowRow, HostedSpotRow, RecordingRow } from "@shared/schema";
 import { fillFooter, FOOTER_TOKENS } from "@shared/footer";
 import { AlertCircle, BarChart3, Check, ChevronLeft, Copy, ExternalLink, Film, ImagePlus, Loader2, Mic2, Pencil, Plus, Podcast, Radio, Send, Trash2, Upload } from "lucide-react";
 import { IconTile } from "@/components/ui/icon-tile";
@@ -70,7 +70,7 @@ export function PodcastHosting() {
   });
   // Which show is open (none: the grid of shows), and which of its tabs.
   const [openId, setOpenId] = useState<number | null>(null);
-  const [tab, setTab] = useState<PodTab>(() => { try { const t = localStorage.getItem("mv_pod_tab"); return t === "defaults" || t === "directories" || t === "details" || t === "guests" || t === "invite" || t === "pitch" ? t : "episodes"; } catch { return "episodes"; } });
+  const [tab, setTab] = useState<PodTab>(() => { try { const t = localStorage.getItem("mv_pod_tab"); return t === "defaults" || t === "sponsors" || t === "directories" || t === "details" || t === "guests" || t === "invite" || t === "pitch" ? t : "episodes"; } catch { return "episodes"; } });
   const go = (t: PodTab) => { setTab(t); try { localStorage.setItem("mv_pod_tab", t); } catch { /* fine */ } };
   // The field Show details opens on (from the checklist): the description, the name, the owner email.
   const [focus, setFocus] = useState<"" | "title" | "description" | "ownerEmail">("");
@@ -194,6 +194,7 @@ export function PodcastHosting() {
       <div className="flex gap-4 overflow-x-auto whitespace-nowrap border-b border-border pr-6 [mask-image:linear-gradient(to_right,black_82%,transparent)] [scrollbar-width:none] sm:gap-6 sm:pr-0 sm:[mask-image:none]" role="tablist">
         {tabBtn("episodes", "Episodes")}
         {tabBtn("defaults", "Defaults")}
+        {tabBtn("sponsors", "Sponsors")}
         {tabBtn("directories", ready ? "Directories" : "Directories · to do")}
         {tabBtn("details", "Show details")}
         {tabBtn("invite", "Invite a guest")}
@@ -249,6 +250,7 @@ export function PodcastHosting() {
       )}
 
       {tab === "defaults" && <DefaultsPanel key={s.id} h={h} onSaved={refresh} />}
+      {tab === "sponsors" && <SponsorsPanel key={s.id} h={h} onSaved={refresh} />}
 
       {tab === "directories" && (
         <>
@@ -287,7 +289,7 @@ export function PodcastHosting() {
   );
 }
 
-type PodTab = "episodes" | "defaults" | "directories" | "details" | "guests" | "pitch" | "invite";
+type PodTab = "episodes" | "defaults" | "sponsors" | "directories" | "details" | "guests" | "pitch" | "invite";
 type DirState = { state: "" | "submitted" | "live" | "rejected"; url: string; at?: string };
 const parseDirs = (raw: string | null | undefined): Record<string, DirState> => { try { const v = raw ? JSON.parse(raw) : {}; return v && typeof v === "object" ? v : {}; } catch { return {}; } };
 
@@ -915,6 +917,9 @@ function EpisodePage({ ep, show, youtubeReady, onBack, onSaved }: { ep: Ep; show
                 <p className="mt-1 text-xs text-muted-foreground">{!bookendsOn ? "Plays as you uploaded it." : bookendState === "ready" ? "Added. The apps play it with your intro and outro." : bookendState === "failed" ? "Couldn't add them. Save again to retry." : "Being added now: a few minutes. Until then the apps play it as it is."}</p>
               </div>
             )}
+            {hasAudio && (
+              <label className="mt-3 flex items-center gap-2 rounded-xl border border-border px-3 py-2.5 text-sm" data-testid="hosting-ep-spots"><input type="checkbox" checked={!(v.spotsOff as boolean)} onChange={(e) => set("spotsOff", !e.target.checked)} /> Play your sponsor spots on this episode</label>
+            )}
             {(show.episodeFooter ?? "").trim() && (
               <div className="mt-3 rounded-xl border border-border px-3 py-2.5 text-sm" data-testid="hosting-ep-footer">
                 <label className="flex items-center gap-2"><input type="checkbox" checked={!(v.footerOff as boolean)} onChange={(e) => set("footerOff", !e.target.checked)} /> Add your show's footer to this episode</label>
@@ -1017,6 +1022,162 @@ function DefaultsPanel({ h, onSaved }: { h: Hosted; onSaved: () => void }) {
         )}
         <Button onClick={() => void saveFooter()} disabled={foot === null} className="mt-3 bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-footer-save">Save footer</Button>
       </div>
+    </div>
+  );
+}
+
+type SpotRow = HostedSpotRow & { state: "live" | "scheduled" | "ended" | "paused"; delivered: number; delivered30: number };
+type SpotsResp = { spots: SpotRow[]; voices: { key: string; name: string }[] };
+
+/** A sponsor's message before or after the episodes. The episode itself is never changed; a spot can be paused, dated or swapped any time. */
+function SponsorsPanel({ h, onSaved }: { h: Hosted; onSaved: () => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const show = h.show;
+  const KEY = ["/api/host/hosting/spots", show.id];
+  const q = useQuery<SpotsResp>({ queryKey: KEY, queryFn: async () => (await apiRequest("GET", `/api/host/hosting/shows/${show.id}/spots`)).json(), refetchInterval: 30_000 });
+  const [adding, setAdding] = useState(false);
+  const blank = { sponsor: "", kind: "pre" as "pre" | "post", mode: "write" as "write" | "upload", script: "", voice: "brian", startsOn: "", endsOn: "", scope: "future" as "future" | "all" | "full" };
+  const [f, setF] = useState(blank);
+  const [rec, setRec] = useState<{ key: string; sec: number; url: string; name: string } | null>(null);
+  const [busy, setBusy] = useState<"" | "record" | "upload" | "save">("");
+  const [pct, setPct] = useState<number | null>(null);
+  const fileIn = useRef<HTMLInputElement>(null);
+  const set = <K extends keyof typeof blank>(k: K, v: (typeof blank)[K]) => setF((x) => ({ ...x, [k]: v }));
+  const msg = (e: unknown) => (e as Error).message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, "");
+  const reload = () => { void qc.invalidateQueries({ queryKey: KEY }); onSaved(); };
+  const record = async () => {
+    setBusy("record");
+    try { const r = (await (await apiRequest("POST", `/api/host/hosting/shows/${show.id}/spots/generate`, { text: f.script, voice: f.voice })).json()) as { key: string; durationSec: number; url: string }; setRec({ key: r.key, sec: r.durationSec, url: r.url, name: `${f.sponsor || "Sponsor"} spot` }); }
+    catch (e) { toast({ title: "Couldn't record that", description: msg(e), variant: "destructive" }); } finally { setBusy(""); }
+  };
+  const upload = async (file: File) => {
+    if (!/^audio\//.test(file.type)) return toast({ title: "That isn't an audio file", description: "Choose an MP3, M4A or WAV.", variant: "destructive" });
+    setBusy("upload");
+    try { setPct(0); const dur = await durationOf(file).catch(() => 0); const k = await uploadToStorage(file, setPct); setRec({ key: k, sec: Math.round(dur), url: URL.createObjectURL(file), name: file.name.replace(/\.[a-z0-9]+$/i, "") }); }
+    catch (e) { toast({ title: "Couldn't upload that", description: msg(e), variant: "destructive" }); } finally { setBusy(""); setPct(null); if (fileIn.current) fileIn.current.value = ""; }
+  };
+  const save = async () => {
+    if (!rec) return;
+    setBusy("save");
+    try {
+      await apiRequest("POST", `/api/host/hosting/shows/${show.id}/spots`, { sponsor: f.sponsor, kind: f.kind, key: rec.key, name: rec.name, durationSec: rec.sec, script: f.mode === "write" ? f.script : "", voice: f.mode === "write" ? f.voice : "", startsOn: f.startsOn, endsOn: f.endsOn, scope: f.scope });
+      toast({ title: "Sponsor spot added", description: "It's being put on your episodes now: a few minutes. The originals are kept." });
+      setAdding(false); setF(blank); setRec(null); reload();
+    } catch (e) { toast({ title: "Couldn't save it", description: msg(e), variant: "destructive" }); } finally { setBusy(""); }
+  };
+  const patch = async (id: number, body: Record<string, unknown>) => { try { await apiRequest("PATCH", `/api/host/hosting/spots/${id}`, body); reload(); } catch (e) { toast({ title: "Couldn't change it", description: msg(e), variant: "destructive" }); } };
+  const remove = async (sp: SpotRow) => {
+    if (!window.confirm(`Take ${sp.sponsor}'s spot off your episodes? It stops playing, and your sponsor's numbers stay in your records.`)) return;
+    await apiRequest("DELETE", `/api/host/hosting/spots/${sp.id}`); reload();
+  };
+  const working = h.episodes.filter((e) => (e as Ep & { bookend?: { state?: string } }).bookend?.state === "working").length;
+  const label = "block text-xs font-semibold text-muted-foreground";
+  const pill = (on: boolean) => `rounded-full border px-3 py-1 text-xs font-semibold ${on ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:bg-muted"}`;
+  const STATE: Record<SpotRow["state"], string> = { live: "bg-emerald-600 text-white", scheduled: "bg-[#F0A71F] text-[#3a2600]", ended: "bg-muted text-muted-foreground", paused: "bg-muted text-muted-foreground" };
+  const scopeText = (c: string) => (c === "all" ? "Every episode, old and new" : c === "full" ? "Every full episode (not trailers or bonuses)" : "Episodes from now on");
+  const canRecord = f.script.trim().length >= 10;
+  return (
+    <div className="space-y-4" data-testid="hosting-sponsors">
+      <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0 max-w-xl">
+            <h2 className="text-sm font-semibold">Sponsor spots</h2>
+            <p className="mt-0.5 text-sm text-muted-foreground">Play a sponsor's message before or after your episodes. Record it here from a few words, or upload one. Your own audio is never changed, and you can pause, date or swap a spot any time.</p>
+          </div>
+          {!adding && <Button onClick={() => setAdding(true)} className="gap-1.5 bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="spot-add"><Plus className="h-4 w-4" /> Add a sponsor spot</Button>}
+        </div>
+        {working > 0 && <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Putting it on {working} episode{working === 1 ? "" : "s"} now. The originals are kept.</p>}
+      </div>
+
+      {adding && (
+        <div className="space-y-4 rounded-2xl border border-[#053877]/30 bg-card p-5 shadow-sm" data-testid="spot-form">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className={label}>Sponsor<Input value={f.sponsor} onChange={(e) => set("sponsor", e.target.value)} className="mt-1" placeholder="Who is it for?" data-testid="spot-sponsor" /></label>
+            <div>
+              <span className={label}>Plays</span>
+              <div className="mt-1 flex gap-2">
+                <button type="button" className={pill(f.kind === "pre")} onClick={() => set("kind", "pre")} data-testid="spot-kind-pre">Before the episode</button>
+                <button type="button" className={pill(f.kind === "post")} onClick={() => set("kind", "post")} data-testid="spot-kind-post">After the episode</button>
+              </div>
+            </div>
+          </div>
+          <div>
+            <span className={label}>The spot</span>
+            <div className="mt-1 flex gap-2">
+              <button type="button" className={pill(f.mode === "write")} onClick={() => { set("mode", "write"); setRec(null); }}>Write it, we record it</button>
+              <button type="button" className={pill(f.mode === "upload")} onClick={() => { set("mode", "upload"); setRec(null); }}>Upload a recording</button>
+            </div>
+            {f.mode === "write" ? (
+              <div className="mt-3 space-y-3">
+                <Textarea value={f.script} onChange={(e) => { set("script", e.target.value); setRec(null); }} rows={4} maxLength={1500} placeholder="This episode is brought to you by… Say what they do and where to go. About 60 words is 30 seconds." data-testid="spot-script" />
+                <div className="flex flex-wrap items-end gap-3">
+                  <label className={label}>Voice
+                    <select value={f.voice} onChange={(e) => { set("voice", e.target.value); setRec(null); }} className="mt-1 block h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground" data-testid="spot-voice">
+                      {(q.data?.voices ?? [{ key: "brian", name: "Brian" }]).map((v) => <option key={v.key} value={v.key}>{v.name}</option>)}
+                    </select>
+                  </label>
+                  <Button variant="outline" className="h-9 rounded-full" disabled={!canRecord || busy === "record"} onClick={() => void record()} data-testid="spot-record">{busy === "record" ? <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Recording…</> : rec ? "Record it again" : "Hear it"}</Button>
+                </div>
+              </div>
+            ) : (
+              <div className="mt-3">
+                <input ref={fileIn} type="file" accept="audio/*,.mp3,.m4a,.wav" className="hidden" onChange={(e) => e.target.files?.[0] && void upload(e.target.files[0])} />
+                <button type="button" onClick={() => fileIn.current?.click()} disabled={busy === "upload"} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const x = e.dataTransfer.files?.[0]; if (x) void upload(x); }} className="flex h-24 w-full flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-border text-sm hover:border-[#053877]/50 hover:bg-muted/40 disabled:opacity-60" data-testid="spot-upload">
+                  {busy === "upload" ? <span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Uploading… {Math.round(pct ?? 0)}%</span> : <><Upload className="h-5 w-5 text-[#053877]" /><span className="font-semibold">{rec ? "Choose a different file" : "Drag the recording here or choose it"}</span><span className="text-xs text-muted-foreground">Up to 5 minutes</span></>}
+                </button>
+              </div>
+            )}
+            {rec && <div className="mt-3"><audio controls src={rec.url} className="w-full" data-testid="spot-preview" /><p className="mt-1 text-xs text-muted-foreground">{rec.name} · {hms(rec.sec)}</p></div>}
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <label className={label}>Starts (optional)<Input type="date" value={f.startsOn} onChange={(e) => set("startsOn", e.target.value)} className="mt-1" /></label>
+            <label className={label}>Ends (optional)<Input type="date" value={f.endsOn} onChange={(e) => set("endsOn", e.target.value)} className="mt-1" /></label>
+          </div>
+          <div>
+            <span className={label}>Plays on</span>
+            <div className="mt-1 flex flex-wrap gap-2">
+              {(["future", "all", "full"] as const).map((c) => <button key={c} type="button" className={pill(f.scope === c)} onClick={() => set("scope", c)} data-testid={`spot-scope-${c}`}>{c === "future" ? "New episodes" : c === "all" ? "Every episode" : "Full episodes only"}</button>)}
+            </div>
+            <p className="mt-1.5 text-xs text-muted-foreground">{scopeText(f.scope)}. {f.scope !== "future" && "Older episodes get a new copy with the spot on; the originals are kept. This takes a few minutes per episode."}</p>
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={() => void save()} disabled={!rec || !f.sponsor.trim() || busy === "save"} className="bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="spot-save">{busy === "save" ? "Saving…" : "Add this spot"}</Button>
+            <Button variant="ghost" onClick={() => { setAdding(false); setF(blank); setRec(null); }}>Cancel</Button>
+          </div>
+        </div>
+      )}
+
+      {q.isLoading ? null : (q.data?.spots ?? []).length ? (
+        <ul className="space-y-3">
+          {(q.data?.spots ?? []).map((sp) => (
+            <li key={sp.id} className="rounded-2xl border border-border bg-card p-4 shadow-sm" data-testid={`spot-${sp.id}`}>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className={`rounded-full px-2.5 py-0.5 text-[11px] font-semibold capitalize ${STATE[sp.state]}`}>{sp.state}</span>
+                <span className="text-sm font-semibold">{sp.sponsor}</span>
+                <span className="text-xs text-muted-foreground">{sp.kind === "pre" ? "Before the episode" : "After the episode"} · {hms(sp.audioSec)}</span>
+                <span className="ml-auto flex gap-1">
+                  <Button size="sm" variant="outline" className="h-8 rounded-full" onClick={() => void patch(sp.id, { active: !sp.active })}>{sp.active ? "Pause" : "Turn on"}</Button>
+                  <Button size="sm" variant="ghost" className="h-8 rounded-full text-muted-foreground" onClick={() => void remove(sp)} aria-label={`Remove ${sp.sponsor}'s spot`}><Trash2 className="h-4 w-4" /></Button>
+                </span>
+              </div>
+              <audio controls preload="none" src={`/api/host/hosting/spots/${sp.id}/audio`} className="mt-2 w-full" />
+              <div className="mt-3 flex flex-wrap items-end gap-x-6 gap-y-2 text-xs text-muted-foreground">
+                <span><b className="text-base tabular-nums text-foreground">{compact(sp.delivered)}</b> plays delivered · <b className="tabular-nums text-foreground">{compact(sp.delivered30)}</b> in the last 30 days</span>
+                <span>{scopeText(sp.scope)}</span>
+                <label className="flex items-center gap-1">Starts <Input type="date" defaultValue={sp.startsOn} onBlur={(e) => e.target.value !== sp.startsOn && void patch(sp.id, { startsOn: e.target.value })} className="h-7 w-36 text-xs" /></label>
+                <label className="flex items-center gap-1">Ends <Input type="date" defaultValue={sp.endsOn} onBlur={(e) => e.target.value !== sp.endsOn && void patch(sp.id, { endsOn: e.target.value })} className="h-7 w-36 text-xs" /></label>
+              </div>
+            </li>
+          ))}
+        </ul>
+      ) : !adding ? (
+        <div className="rounded-2xl border border-dashed border-border p-8 text-center">
+          <p className="font-semibold">No sponsor spots yet</p>
+          <p className="mx-auto mt-1 max-w-md text-sm text-muted-foreground">Add one, and it plays before or after your episodes. You'll see how many plays each sponsor got, so you can show them.</p>
+        </div>
+      ) : null}
+      <p className="text-xs text-muted-foreground">One spot plays in each place at a time: the newest live one. Plays are counted from your feed, once per listener per episode per day.</p>
     </div>
   );
 }

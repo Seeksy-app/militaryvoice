@@ -6,8 +6,9 @@ import sharp from "sharp";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { fillFooter } from "../shared/footer.js";
+import { hostedSpots, type HostedSpotRow } from "../shared/schema.js";
 import { requireHostSession, getSessionEmail } from "./session.js";
-import { signedRecordingUrl } from "./recordingStorage.js";
+import { putRecordingObject, signedRecordingUrl } from "./recordingStorage.js";
 import { uploadPhoto } from "./photoStorage.js";
 import { sendPodcastOwnerCodeEmail } from "./email.js";
 import { isUploadPostConfigured, publishVideo } from "./uploadPost.js";
@@ -75,12 +76,25 @@ const notesText = (html: string) => html
   .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'")
   .replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 /** A show's description as plain words: one that came in with tags (from an old host) loses them; plain text is left alone. */
-/** The show's intro and outro on an episode. What an episode is made from: when any part changes, the worker makes it again. */
-const sigOf = (s: HostedShowRow, e: HostedEpisodeRow) => crypto.createHash("sha1").update([s.introKey, s.outroKey, e.audioKey].join("|")).digest("hex").slice(0, 16);
+/** The show's intro, outro and sponsor spots on an episode. What an episode is made from: when any part changes, the worker makes it again. */
 export const wantsBookends = (s: HostedShowRow, e: HostedEpisodeRow) =>
   !!(s.introKey || s.outroKey) && !!e.audioKey && e.bookends !== "off" && (e.bookends === "on" || (!!s.bookendsSince && e.createdAt >= s.bookendsSince));
-/** The finished episode (intro and outro on) when it is ready and still current; null: serve the original. */
-const served = (s: HostedShowRow, e: HostedEpisodeRow) => (wantsBookends(s, e) && e.servedKey && e.servedSig === sigOf(s, e) ? { key: e.servedKey, size: e.servedSize, sec: e.servedSec } : null);
+const spotLive = (sp: HostedSpotRow, day: string) => sp.active && (!sp.startsOn || sp.startsOn <= day) && (!sp.endsOn || sp.endsOn >= day);
+const spotApplies = (sp: HostedSpotRow, e: HostedEpisodeRow) =>
+  !e.spotsOff && !!e.audioKey && (sp.scope === "all" || (sp.scope === "full" ? e.episodeType === "full" : e.createdAt >= sp.createdAt));
+/** In play order: intro, the before-spot, the episode ("main"), the after-spot, outro. One spot at a time in each place (the newest). */
+function planOf(s: HostedShowRow, e: HostedEpisodeRow, spots: HostedSpotRow[]) {
+  const day = new Date().toISOString().slice(0, 10);
+  const pick = (kind: string) => spots.filter((x) => x.showId === s.id && x.kind === kind && spotLive(x, day) && spotApplies(x, e)).sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
+  const pre = pick("pre"), post = pick("post");
+  const bk = wantsBookends(s, e);
+  const parts = [bk ? s.introKey : "", pre?.audioKey ?? "", "main", post?.audioKey ?? "", bk ? s.outroKey : ""].filter(Boolean);
+  const any = parts.length > 1;
+  const sig = crypto.createHash("sha1").update([...parts.map((x) => (x === "main" ? e.audioKey : x))].join("|")).digest("hex").slice(0, 16);
+  return { any, parts, sig, spotIds: [pre?.id, post?.id].filter((x): x is number => !!x).join(",") };
+}
+/** The finished episode (with whatever goes before and after it) when it is ready and still current; null: serve the original. */
+const served = (s: HostedShowRow, e: HostedEpisodeRow, spots: HostedSpotRow[] = []) => { const p = planOf(s, e, spots); return p.any && e.servedKey && e.servedSig === p.sig ? { key: e.servedKey, size: e.servedSize, sec: e.servedSec } : null; };
 const plainDesc = (d: string) => (/<[a-z!/][^>]*>|&(nbsp|amp|#\d+);/i.test(d) ? notesText(d) : d);
 const extOf = (mime: string) => (/mp4|m4a|aac/.test(mime) ? (mime.startsWith("video") ? "mp4" : "m4a") : "mp3");
 
@@ -293,7 +307,7 @@ function footerText(s: HostedShowRow, e: HostedEpisodeRow): string {
 }
 const footerHtml = (s: HostedShowRow, e: HostedEpisodeRow): string => { const t = footerText(s, e); return t ? notesHtml(t) : ""; };
 
-export function feedXml(s: HostedShowRow, eps: HostedEpisodeRow[]): string {
+export function feedXml(s: HostedShowRow, eps: HostedEpisodeRow[], spots: HostedSpotRow[] = []): string {
   const self = feedUrl(s.slug);
   const owner = feedOwnerEmail(s);
   const notes = (e: HostedEpisodeRow) => (e.notesFormat === "html" ? e.description : notesHtml(e.description)) + footerHtml(s, e);
@@ -302,7 +316,7 @@ export function feedXml(s: HostedShowRow, eps: HostedEpisodeRow[]): string {
     ? `<itunes:category text="${esc(s.category)}"><itunes:category text="${esc(s.subcategory)}"/></itunes:category>`
     : `<itunes:category text="${esc(s.category)}"/>`;
   const items = eps.filter(live).map((e) => {
-    const sv = served(s, e);
+    const sv = served(s, e, spots);
     const url = `${ORIGIN}/e/${e.id}.${extOf(sv ? "audio/mpeg" : e.mime)}`;
     return `
     <item>
@@ -399,24 +413,35 @@ const art = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1
 const emailOf = (req: Request) => (getSessionEmail(req) ?? "").trim().toLowerCase();
 const num = (v: unknown) => (v === "" || v === null || v === undefined || !Number.isFinite(Number(v)) ? null : Math.max(0, Math.round(Number(v))));
 
-/** An episode that wants the show's intro and outro and doesn't have them yet: the worker puts them on (original untouched). */
-export async function claimEpisodeBookends(): Promise<{ id: number; title: string; durationSec: number; audioUrl: string; introUrl: string; outroUrl: string; sig: string } | null> {
+let lastBookendScan = 0;
+/** An episode that wants the show's intro, outro or a sponsor spot and doesn't have them yet: the worker joins them (original untouched). */
+export async function claimEpisodeBookends(canStitch = false): Promise<{ id: number; title: string; durationSec: number; audioUrl: string; introUrl: string; outroUrl: string; sig: string; parts: string[]; spots: string } | null> {
   await schemaIsReady();
+  // Looking through every episode on every poll would be wasteful: once every 15 seconds is plenty.
+  if (Date.now() - lastBookendScan < 15_000) return null;
   const stale = new Date(Date.now() - 30 * 60_000).toISOString();
-  const shows = (await db.select().from(hostedShows)).filter((x) => x.introKey || x.outroKey);
+  const spots = await db.select().from(hostedSpots);
+  const shows = (await db.select().from(hostedShows)).filter((x) => x.introKey || x.outroKey || spots.some((p) => p.showId === x.id));
   for (const sh of shows) {
     for (const e of await episodesOf(sh.id)) {
-      if (!wantsBookends(sh, e) || served(sh, e)) continue;
+      const plan = planOf(sh, e, spots);
+      if (!plan.any || served(sh, e, spots)) continue;
+      // A worker that doesn't know sponsor spots yet only does intro and outro.
+      if (!canStitch && plan.parts.length > (wantsBookends(sh, e) ? 1 + (sh.introKey ? 1 : 0) + (sh.outroKey ? 1 : 0) : 1)) continue;
       if (e.bookendJob === "failed" || (e.bookendJob === "running" && e.bookendJobAt > stale)) continue;
       const got = await db.update(hostedEpisodes).set({ bookendJob: "running", bookendJobAt: now() })
         .where(and(eq(hostedEpisodes.id, e.id), eq(hostedEpisodes.bookendJob, e.bookendJob))).returning({ id: hostedEpisodes.id });
       if (!got.length) continue;
+      const urls = await Promise.all(plan.parts.map((x) => signedRecordingUrl(x === "main" ? e.audioKey : x, 6 * 3600)));
+      const bk = wantsBookends(sh, e);
       return {
         id: e.id, title: e.title, durationSec: e.durationSec, audioUrl: await signedRecordingUrl(e.audioKey, 6 * 3600),
-        introUrl: sh.introKey ? await signedRecordingUrl(sh.introKey, 6 * 3600) : "", outroUrl: sh.outroKey ? await signedRecordingUrl(sh.outroKey, 6 * 3600) : "", sig: sigOf(sh, e),
+        introUrl: bk && sh.introKey ? await signedRecordingUrl(sh.introKey, 6 * 3600) : "", outroUrl: bk && sh.outroKey ? await signedRecordingUrl(sh.outroKey, 6 * 3600) : "",
+        sig: plan.sig, parts: urls, spots: plan.spotIds,
       };
     }
   }
+  lastBookendScan = Date.now();
   return null;
 }
 
@@ -603,7 +628,7 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
   app.post("/api/agent/episode-bookends/:id/done", requireAgent, async (req, res) => {
     const key = String(req.body?.servedKey ?? "");
     if (!/^clean\/[\w.-]+$/.test(key)) return res.status(400).json({ message: "No audio." });
-    await db.update(hostedEpisodes).set({ servedKey: key, servedSize: num(req.body?.sizeBytes) ?? 0, servedSec: num(req.body?.durationSec) ?? 0, servedSig: String(req.body?.sig ?? "").slice(0, 40), bookendJob: "" }).where(eq(hostedEpisodes.id, Number(req.params.id)));
+    await db.update(hostedEpisodes).set({ servedKey: key, servedSize: num(req.body?.sizeBytes) ?? 0, servedSec: num(req.body?.durationSec) ?? 0, servedSig: String(req.body?.sig ?? "").slice(0, 40), servedSpots: String(req.body?.spots ?? "").replace(/[^0-9,]/g, "").slice(0, 60), bookendJob: "" }).where(eq(hostedEpisodes.id, Number(req.params.id)));
     res.json({ ok: true });
   });
   app.post("/api/agent/episode-bookends/:id/failed", requireAgent, async (req, res) => {
@@ -653,7 +678,7 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
     const eps = await episodesOf(s.id);
     res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
     res.setHeader("Cache-Control", "public, max-age=300, s-maxage=300");
-    res.send(feedXml(s, eps));
+    res.send(feedXml(s, eps, await db.select().from(hostedSpots).where(eq(hostedSpots.showId, s.id))));
   });
 
   // The audio: count it, then send the app to the file.
@@ -661,6 +686,9 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
     const id = Number(String(req.params.file).split(".")[0]);
     const [e] = Number.isInteger(id) ? await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.id, id)).limit(1) : [];
     if (!e || !(e.audioKey || e.audioUrl)) return res.status(404).type("text/plain").send("Not found.");
+    // With the show's intro, outro and sponsor spots on, when that version is ready; otherwise the original.
+    const [sh] = e.audioKey ? await db.select().from(hostedShows).where(eq(hostedShows.id, e.showId)).limit(1) : [];
+    const sv = sh ? served(sh, e, await db.select().from(hostedSpots).where(eq(hostedSpots.showId, sh.id))) : null;
     const ua = String(req.get("user-agent") ?? "");
     const range = String(req.get("range") ?? "");
     const counts = req.method === "GET" && !req.query.preview && (!range || /^bytes=0-/.test(range)) && ua && !BOT.test(ua) && e.status === "published";
@@ -668,13 +696,10 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
       const ip = String(req.ip ?? "");
       const day = today();
       const listenerHash = crypto.createHash("sha256").update(`${ip}|${ua}|${day}|${process.env.SESSION_SECRET ?? "mv"}`).digest("hex").slice(0, 40);
-      // Once per listener per episode per day: the unique index does the de-duplicating.
-      await db.insert(hostedDownloads).values({ showId: e.showId, episodeId: e.id, day, listenerHash, app: appOf(ua), createdAt: now() }).onConflictDoNothing().catch((err) => console.warn("Download not counted:", (err as Error).message));
+      // Once per listener per episode per day: the unique index does the de-duplicating. The sponsor spots in the file they got are noted with it.
+      await db.insert(hostedDownloads).values({ showId: e.showId, episodeId: e.id, day, listenerHash, app: appOf(ua), spots: sv ? e.servedSpots : "", createdAt: now() }).onConflictDoNothing().catch((err) => console.warn("Download not counted:", (err as Error).message));
     }
     res.setHeader("Cache-Control", "no-store");
-    // With the show's intro and outro on, when that version is ready; otherwise the original.
-    const [sh] = e.audioKey ? await db.select().from(hostedShows).where(eq(hostedShows.id, e.showId)).limit(1) : [];
-    const sv = sh ? served(sh, e) : null;
     res.redirect(302, sv ? await signedRecordingUrl(sv.key, 6 * 3600) : e.audioKey ? await signedRecordingUrl(e.audioKey, 6 * 3600) : e.audioUrl);
   });
 
@@ -687,13 +712,14 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
     const out = [];
     for (const s of shows) {
       const eps = await episodesOf(s.id);
+      const spotRows = await db.select().from(hostedSpots).where(eq(hostedSpots.showId, s.id));
       const st = await showStats(s.id, 30);
       out.push({
         show: s,
         feedUrl: feedUrl(s.slug),
         missing: readiness(s, eps),
         ownerConfirmed: feedOwnerEmail(s) === s.ownerEmail.trim(),
-        episodes: await Promise.all(eps.map(async (e) => ({ ...e, downloads: st.episodes.get(e.id) ?? 0, live: live(e), hasVideo: hasVideo(e), ytLibrary: await libraryYouTubeAt(e.recordingId), bookend: { wanted: wantsBookends(s, e), state: !wantsBookends(s, e) ? "" : served(s, e) ? "ready" : e.bookendJob === "failed" ? "failed" : "working" } }))),
+        episodes: await Promise.all(eps.map(async (e) => ({ ...e, downloads: st.episodes.get(e.id) ?? 0, live: live(e), hasVideo: hasVideo(e), ytLibrary: await libraryYouTubeAt(e.recordingId), bookend: { wanted: planOf(s, e, spotRows).any, state: !planOf(s, e, spotRows).any ? "" : served(s, e, spotRows) ? "ready" : e.bookendJob === "failed" ? "failed" : "working" } }))),
         stats: { total: st.total, last30: st.series.reduce((a, d) => a + d.count, 0), series: st.series, apps: st.apps },
       });
     }
@@ -955,6 +981,112 @@ Return JSON only: {"titles":["","",""],"description":""}`,
     res.json(out);
   });
 
+  // ---- Sponsor spots (18 Nov 2026): a sponsor's message before or after the episodes -------------------
+  const SPOT_VOICES: Record<string, { id: string; name: string }> = {
+    brian: { id: "nPczCjzI2devNBz1zQrb", name: "Brian: deep, resonant, comforting" },
+    adam: { id: "pNInz6obpgDQGcFmaJgB", name: "Adam: firm and confident" },
+    eric: { id: "cjVigY5qzO86Huf0OWal", name: "Eric: smooth, trustworthy" },
+    bill: { id: "sR8sxaLJeFSh308Gi6HS", name: "Bill: calm and friendly" },
+  };
+  const spotRuns = new Map<string, number[]>();
+  const failedJobsReset = (showId: number) => db.update(hostedEpisodes).set({ bookendJob: "" }).where(and(eq(hostedEpisodes.showId, showId), eq(hostedEpisodes.bookendJob, "failed")));
+  const ymd = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "");
+
+  app.get("/api/host/hosting/shows/:id/spots", requireHostSession, async (req, res) => {
+    const s = await ownShow(emailOf(req), Number(req.params.id));
+    if (!s) return res.status(404).json({ message: "No such show." });
+    res.setHeader("Cache-Control", "no-store");
+    const rows = (await db.select().from(hostedSpots).where(eq(hostedSpots.showId, s.id))).sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+    const since = new Date(Date.now() - 30 * 86400_000).toISOString().slice(0, 10);
+    const out = [];
+    for (const sp of rows) {
+      const like = `%,${sp.id},%`;
+      const [t] = (await db.execute(sql`select count(*)::int n from hosted_downloads where show_id = ${s.id} and (',' || spots || ',') like ${like}`)) as unknown as { n: number }[];
+      const [m] = (await db.execute(sql`select count(*)::int n from hosted_downloads where show_id = ${s.id} and day >= ${since} and (',' || spots || ',') like ${like}`)) as unknown as { n: number }[];
+      const day = new Date().toISOString().slice(0, 10);
+      const state = !sp.active ? "paused" : sp.endsOn && sp.endsOn < day ? "ended" : sp.startsOn && sp.startsOn > day ? "scheduled" : "live";
+      out.push({ ...sp, state, delivered: t?.n ?? 0, delivered30: m?.n ?? 0 });
+    }
+    res.json({ spots: out, voices: Object.entries(SPOT_VOICES).map(([k, v]) => ({ key: k, name: v.name })) });
+  });
+
+  /** A spot recorded from the words they wrote, in a voice they pick. Nothing is added to the show until they save it. */
+  app.post("/api/host/hosting/shows/:id/spots/generate", requireHostSession, async (req, res) => {
+    const email = emailOf(req);
+    const s = await ownShow(email, Number(req.params.id));
+    if (!s) return res.status(404).json({ message: "No such show." });
+    const text = String(req.body?.text ?? "").trim().slice(0, 1500);
+    const voice = SPOT_VOICES[String(req.body?.voice ?? "")] ?? SPOT_VOICES.brian;
+    if (text.length < 10) return res.status(400).json({ message: "Write the sponsor's message first (a sentence or two)." });
+    const key = (process.env.ELEVENLABS_API_KEY || process.env.ELEVEN_LABS_API_KEY || "").trim();
+    if (!key) return res.status(503).json({ message: "Recording isn't set up on this server." });
+    const hits = (spotRuns.get(email) ?? []).filter((t) => Date.now() - t < 24 * 3600_000);
+    if (hits.length >= 20) return res.status(429).json({ message: "That's a lot of recordings for today. Try again tomorrow, or upload one." });
+    spotRuns.set(email, [...hits, Date.now()]);
+    try {
+      const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice.id}?output_format=mp3_44100_128`, {
+        method: "POST", signal: AbortSignal.timeout(60_000), headers: { "xi-api-key": key, "content-type": "application/json" },
+        body: JSON.stringify({ text, model_id: "eleven_multilingual_v2", voice_settings: { stability: 0.5, similarity_boost: 0.8, style: 0.3, speed: 1.0 } }),
+      });
+      if (!r.ok) return res.status(502).json({ message: "The recording didn't come out. Try again." });
+      const buf = Buffer.from(await r.arrayBuffer());
+      const k = `show-assets/spot-${s.id}-${Date.now()}-${crypto.randomBytes(3).toString("hex")}.mp3`;
+      await putRecordingObject(k, buf, "audio/mpeg");
+      res.json({ key: k, durationSec: Math.max(1, Math.round(buf.length / 16000)), url: await signedRecordingUrl(k, 3600) });
+    } catch (err) {
+      console.error("Spot recording failed:", err);
+      res.status(502).json({ message: "The recording didn't come out. Try again." });
+    }
+  });
+
+  app.post("/api/host/hosting/shows/:id/spots", requireHostSession, async (req, res) => {
+    const s = await ownShow(emailOf(req), Number(req.params.id));
+    if (!s) return res.status(404).json({ message: "No such show." });
+    const b = req.body ?? {};
+    const key = typeof b.key === "string" && /^show-assets\/[\w.-]+$/.test(b.key) ? b.key : "";
+    if (!key) return res.status(400).json({ message: "Add the recording first." });
+    const sec = Math.max(0, Math.round(Number(b.durationSec) || 0));
+    if (sec > 300) return res.status(400).json({ message: "Keep a spot under 5 minutes." });
+    const sponsor = String(b.sponsor ?? "").trim().slice(0, 120);
+    if (!sponsor) return res.status(400).json({ message: "Who is the sponsor?" });
+    const [row] = await db.insert(hostedSpots).values({
+      showId: s.id, sponsor, kind: b.kind === "post" ? "post" : "pre", audioKey: key, audioName: String(b.name ?? "").slice(0, 120), audioSec: sec,
+      script: String(b.script ?? "").slice(0, 1500), voice: String(b.voice ?? "").slice(0, 20), startsOn: ymd(b.startsOn), endsOn: ymd(b.endsOn),
+      scope: ["future", "all", "full"].includes(b.scope) ? b.scope : "future", active: true, createdAt: now(),
+    }).returning();
+    await failedJobsReset(s.id);
+    res.status(201).json(row);
+  });
+
+  app.patch("/api/host/hosting/spots/:id", requireHostSession, async (req, res) => {
+    const [sp] = await db.select().from(hostedSpots).where(eq(hostedSpots.id, Number(req.params.id))).limit(1);
+    if (!sp || !(await ownShow(emailOf(req), sp.showId))) return res.status(404).json({ message: "No such spot." });
+    const b = req.body ?? {};
+    const [row] = await db.update(hostedSpots).set({
+      ...(typeof b.active === "boolean" ? { active: b.active } : {}),
+      ...("startsOn" in b ? { startsOn: ymd(b.startsOn) } : {}),
+      ...("endsOn" in b ? { endsOn: ymd(b.endsOn) } : {}),
+      ...(["future", "all", "full"].includes(b.scope) ? { scope: b.scope } : {}),
+      ...(typeof b.sponsor === "string" && b.sponsor.trim() ? { sponsor: b.sponsor.trim().slice(0, 120) } : {}),
+    }).where(eq(hostedSpots.id, sp.id)).returning();
+    await failedJobsReset(sp.showId);
+    res.json(row);
+  });
+
+  app.delete("/api/host/hosting/spots/:id", requireHostSession, async (req, res) => {
+    const [sp] = await db.select().from(hostedSpots).where(eq(hostedSpots.id, Number(req.params.id))).limit(1);
+    if (!sp || !(await ownShow(emailOf(req), sp.showId))) return res.status(404).json({ message: "No such spot." });
+    await db.delete(hostedSpots).where(eq(hostedSpots.id, sp.id));
+    res.json({ ok: true });
+  });
+
+  app.get("/api/host/hosting/spots/:id/audio", requireHostSession, async (req, res) => {
+    const [sp] = await db.select().from(hostedSpots).where(eq(hostedSpots.id, Number(req.params.id))).limit(1);
+    if (!sp || !(await ownShow(emailOf(req), sp.showId))) return res.status(404).json({ message: "No such spot." });
+    res.setHeader("Cache-Control", "no-store");
+    res.redirect(302, await signedRecordingUrl(sp.audioKey, 3600));
+  });
+
   /** Play the show's intro or outro (their own page's player). */
   app.get("/api/host/hosting/shows/:id/bookend/:kind", requireHostSession, async (req, res) => {
     const s = await ownShow(emailOf(req), Number(req.params.id));
@@ -1046,6 +1178,7 @@ Return JSON only: {"titles":["","",""],"description":""}`,
         sizeBytes: num(b.sizeBytes) ?? 0, durationSec: num(b.durationSec) ?? 0,
       } : {}),
       ...(typeof b.footerOff === "boolean" ? { footerOff: b.footerOff } : {}),
+      ...(typeof b.spotsOff === "boolean" ? { spotsOff: b.spotsOff } : {}),
       ...(b.bookends === "on" || b.bookends === "off" || b.bookends === "" ? { bookends: b.bookends, ...(e.bookendJob === "failed" ? { bookendJob: "" } : {}) } : {}),
       ...("episodeNumber" in b ? { episodeNumber: num(b.episodeNumber) } : {}),
       ...("season" in b ? { season: num(b.season) } : {}),

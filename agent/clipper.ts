@@ -119,6 +119,8 @@ interface Job {
   /** A hosted podcast episode: the Library video (downloadUrl) as its MP3. recordingId is the episode's id. */
   episodeAudio?: { episodeId: number; copy?: boolean; mime?: string };
   episodeBookends?: { episodeId: number; introUrl: string; outroUrl: string; sig: string };
+  /** The episode with whatever goes before and after it (intro, sponsor spots, outro), in play order; the parts are download addresses. */
+  episodeStitch?: { episodeId: number; parts: string[]; sig: string; spots: string };
   /** The magazine: one show's segment, cut from the day's recording (downloadUrl) from startSec for durationSec, as an MP3. */
   segmentCut?: { id: number; startSec: number; durationSec: number };
   /** Ask my show: transcribe this episode (downloadUrl) so the AI can answer from it. recordingId is the transcript's id. */
@@ -2008,6 +2010,44 @@ async function handleEpisodeBookends(job: Job): Promise<void> {
 }
 
 /**
+ * A podcast episode with everything that goes around it put on: the show's intro, a sponsor's spot before and after,
+ * the outro, in the order the server gave. One 128k stereo MP3 at podcast loudness; the original is never touched.
+ * Never throws.
+ */
+async function handleEpisodeStitch(job: Job): Promise<void> {
+  const b = job.episodeStitch!;
+  const id = b.episodeId;
+  const tag = `[episode ${id}] stitch (${b.parts.length} parts)`;
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `epstitch-${id}-`));
+  try {
+    console.log(`${tag}: ${job.title}`);
+    const files: string[] = [];
+    for (let i = 0; i < b.parts.length; i++) {
+      const file = path.join(dir, `part-${i}.audio`);
+      await run("curl", ["-s", "-f", "-L", "--retry", "3", "--max-time", "1800", "-o", file, b.parts[i]]);
+      if ((await fs.stat(file)).size < 1024) throw new Error(`part ${i + 1} came back empty`);
+      files.push(file);
+    }
+    const out = path.join(dir, `episode-${id}-full.mp3`);
+    const args: string[] = [];
+    for (const f of files) args.push("-i", f);
+    const norm = files.map((_, i) => `[${i}:a]aresample=44100,aformat=sample_fmts=fltp:channel_layouts=stereo[a${i}]`).join(";");
+    const join = `${files.map((_, i) => `[a${i}]`).join("")}concat=n=${files.length}:v=0:a=1,loudnorm=I=-16:TP=-1.5:LRA=11[out]`;
+    await ffmpeg([...args, "-filter_complex", `${norm};${join}`, "-map", "[out]", "-c:a", "libmp3lame", "-b:a", "128k", "-ar", "44100", "-id3v2_version", "3", out]);
+    const sizeBytes = (await fs.stat(out)).size;
+    const durationSec = Math.round(Number((await run("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", out]).catch(() => "0")).trim()) || job.durationSec);
+    const servedKey = await uploadBig(out, "audio/mpeg");
+    await api("POST", `/api/agent/episode-bookends/${id}/done`, { servedKey, sizeBytes, durationSec, sig: b.sig, spots: b.spots });
+    console.log(`${tag}: done (${Math.round(sizeBytes / 1048576)}MB)`);
+  } catch (err) {
+    console.warn(`${tag} failed: ${(err as Error).message}`);
+    await api("POST", `/api/agent/episode-bookends/${id}/failed`, {}).catch(() => {});
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
+/**
  * A podcast episode from a Library video: the sound only, as a 128k stereo
  * MP3 at podcast loudness (-16 LUFS, what Apple and Spotify play at), then
  * into storage for the feed. Never throws.
@@ -2218,6 +2258,7 @@ async function handle(job: Job): Promise<void> {
   if (job.transcriptJob) return handleTranscript(job);
   if (job.episodeAudio) return handleEpisodeAudio(job);
   if (job.episodeBookends) return handleEpisodeBookends(job);
+  if (job.episodeStitch) return handleEpisodeStitch(job);
   if (job.episodeStill) return handleEpisodeStill(job);
   if (job.livingSqueeze) return handleLivingSqueeze(job);
   if (job.musicMix) return handleMusic(job);
@@ -2552,11 +2593,11 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
 async function tick(quick = false): Promise<boolean> {
   const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", quick
     ? { can: ["edit", "music"], quickOnly: true }
-    : { can: ["edit", "episode-edit", "segment-cut", "episode-audio", "episode-bookends", "episode-copy", "episode-still", "living-squeeze", "transcript", "import", "music", "suggest"] });
+    : { can: ["edit", "episode-edit", "segment-cut", "episode-audio", "episode-bookends", "episode-stitch", "episode-copy", "episode-still", "living-squeeze", "transcript", "import", "music", "suggest"] });
   if (!job) return false;
   // An edit is one clip, not the recording: a shutdown mid-edit leaves it to
   // the 15-minute reclaim rather than requeuing the whole episode.
-  const clipJob = !(job.clipEdit || job.episodeEdit || job.segmentCut || job.episodeAudio || job.episodeBookends || job.episodeStill || job.transcriptJob || job.importFrom || job.musicMix || job.suggestEdits);
+  const clipJob = !(job.clipEdit || job.episodeEdit || job.segmentCut || job.episodeAudio || job.episodeBookends || job.episodeStitch || job.episodeStill || job.transcriptJob || job.importFrom || job.musicMix || job.suggestEdits);
   if (clipJob) holding.add(job.recordingId);
   if (job.episodeEdit) editing.add(job.recordingId);
   // "Still on it", every minute: a long quiet stretch (waiting on Creatomate)

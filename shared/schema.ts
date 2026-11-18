@@ -2801,6 +2801,10 @@ export const hostedEpisodes = pgTable("hosted_episodes", {
   description: text("description").notNull().default(""),
   /** text | html */
   notesFormat: text("notes_format").notNull().default("text"),
+  /** True when this one episode plays none of the show's sponsor spots. */
+  spotsOff: boolean("spots_off").notNull().default(false),
+  /** The ids of the sponsor spots baked into the finished file (so a download can be counted for them). */
+  servedSpots: text("served_spots").notNull().default(""),
   /** "" (the show's rule), "on" or "off": this one episode gets the show's intro and outro, or doesn't. */
   bookends: text("bookends").notNull().default(""),
   /** The episode with the intro and outro on (made by the worker); the original audio stays as it is. */
@@ -2860,9 +2864,34 @@ export const hostedDownloads = pgTable("hosted_downloads", {
   listenerHash: text("listener_hash").notNull(),
   /** Apple Podcasts, Spotify, Overcast… from the user agent. */
   app: text("app").notNull().default(""),
+  /** The sponsor spot ids that were in the file this listener got (comma separated), for each sponsor's delivered count. */
+  spots: text("spots").notNull().default(""),
   createdAt: text("created_at").notNull(),
 }, (t) => [uniqueIndex("hosted_downloads_once").on(t.episodeId, t.listenerHash, t.day), index("hosted_downloads_show_day").on(t.showId, t.day)]);
 export type HostedDownloadRow = typeof hostedDownloads.$inferSelect;
+
+/** A sponsor's message that plays before ("pre") or after ("post") a show's episodes. The episode's own audio is never changed. */
+export const hostedSpots = pgTable("hosted_spots", {
+  id: serial("id").primaryKey(),
+  showId: integer("show_id").notNull(),
+  sponsor: text("sponsor").notNull().default(""),
+  /** pre | post */
+  kind: text("kind").notNull().default("pre"),
+  audioKey: text("audio_key").notNull(),
+  audioName: text("audio_name").notNull().default(""),
+  audioSec: integer("audio_sec").notNull().default(0),
+  /** When we recorded it from words they wrote: the words and the voice (so it can be heard and changed). */
+  script: text("script").notNull().default(""),
+  voice: text("voice").notNull().default(""),
+  /** yyyy-mm-dd, inclusive; "" for no limit. */
+  startsOn: text("starts_on").notNull().default(""),
+  endsOn: text("ends_on").notNull().default(""),
+  /** future (episodes made from now on) | all | full (every full episode, not trailers or bonuses) */
+  scope: text("scope").notNull().default("future"),
+  active: boolean("active").notNull().default(true),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("hosted_spots_show").on(t.showId)]);
+export type HostedSpotRow = typeof hostedSpots.$inferSelect;
 
 // ---------------------------------------------------------------------------
 // Bio page: a podcaster's own page at militaryvoices.ai/<handle> (shared/bio.ts
