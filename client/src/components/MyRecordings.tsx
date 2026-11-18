@@ -9,6 +9,7 @@ import { PostDialog } from "@/components/PostDialog";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { DEFAULT_CLIP_OPTIONS, parseClipOptions, type LibraryFolderRow, type RecordingRow } from "@shared/schema";
 import { CalendarClock, Check, Download, Folder, FolderInput, FolderOpen, FolderPlus, Library, Loader2, Mic2, MoreHorizontal, Pencil, Play, Share2, Trash2, Wand2, X, Send } from "lucide-react";
+import { PodcastEpisodeGrid, usePodcastEpisodes } from "@/components/PodcastEpisodes";
 
 // A podcaster's own sessions. The studio writes them; nothing here is uploaded
 // by hand. The bucket is private, so every download is a fresh signed link.
@@ -101,6 +102,10 @@ export function MyRecordings({
   // Their podcast shows, so a recording becomes an episode in one step (then its words, on the Podcast screen).
   const showsQ = useQuery<{ shows: { show: { id: number; title: string } }[] }>({ queryKey: ["/api/host/hosting"], queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json(), staleTime: 60_000 });
   const podShows = showsQ.data?.shows ?? [];
+  // Their podcast's episodes live in the Library too: one chip, the same cards as in Pōstify and Social.
+  const podQ = usePodcastEpisodes();
+  const podCount = (podQ.data ?? []).filter((e) => e.status === "published").length;
+  const [showPod, setShowPod] = useState(false);
   const [makingEp, setMakingEp] = useState(false);
   const { toast: epToast } = useToast();
   async function toEpisode(recId: number, showId: number) {
@@ -154,7 +159,7 @@ export function MyRecordings({
   const eps = episodes(data ?? []);
   // A folder that was deleted elsewhere just stops being open.
   const current = openFolder != null && folders.some((f) => f.id === openFolder) ? openFolder : null;
-  const shown = current == null ? eps : eps.filter((e) => e.main.folderId === current);
+  const shown = showPod ? [] : current == null ? eps : eps.filter((e) => e.main.folderId === current);
   const inFolder = (id: number) => eps.filter((e) => e.main.folderId === id).length;
 
   async function fileIn(recId: number, folderId: number) {
@@ -188,6 +193,13 @@ export function MyRecordings({
 
   if (isLoading) return null;
   if (!data || data.length === 0) {
+    // Only a podcast, no recordings (an audio show, say): its episodes are the Library.
+    if (podCount > 0) return (
+      <section className="mt-2" data-testid="library-podcast-only">
+        <h3 className="mb-3 text-base font-bold text-foreground">Podcast episodes</h3>
+        <PodcastEpisodeGrid testid="library-podcast" min={240} onPick={(rec) => { window.location.href = `/host/dashboard/postify?rec=${rec.id}`; }} />
+      </section>
+    );
     if (!showEmpty) return null;
     return (
       <p className="rounded-2xl border border-border bg-card p-6 text-center text-sm text-muted-foreground">
@@ -240,16 +252,17 @@ export function MyRecordings({
     <section className="mt-2">
       {/* Folders: the podcaster's own. Click to open one; drag an episode onto one to file it. */}
       <div className="mb-4 flex flex-wrap items-center gap-2" data-testid="library-folders">
-        <FolderChip active={current == null} onClick={() => setOpenFolder(null)} icon={<Library className="h-3.5 w-3.5" />} label="All episodes" n={eps.length} />
+        <FolderChip active={current == null && !showPod} onClick={() => { setShowPod(false); setOpenFolder(null); }} icon={<Library className="h-3.5 w-3.5" />} label="All episodes" n={eps.length} />
+        {podCount > 0 && <FolderChip active={showPod} onClick={() => setShowPod(true)} icon={<Mic2 className="h-3.5 w-3.5" />} label="Podcast episodes" n={podCount} testId="folder-podcast" />}
         {folders.map((f) =>
           naming?.id === f.id ? (
             <NameInput key={f.id} value={naming.name} onChange={(name) => setNaming({ ...naming, name })} onSave={saveFolder} onCancel={() => setNaming(null)} />
           ) : (
             <FolderChip
               key={f.id}
-              active={current === f.id}
+              active={current === f.id && !showPod}
               over={dragOver === f.id}
-              onClick={() => setOpenFolder(f.id)}
+              onClick={() => { setShowPod(false); setOpenFolder(f.id); }}
               icon={current === f.id ? <FolderOpen className="h-3.5 w-3.5" /> : <Folder className="h-3.5 w-3.5" />}
               label={f.name}
               n={inFolder(f.id)}
@@ -279,7 +292,9 @@ export function MyRecordings({
         )}
       </div>
 
-      {shown.length === 0 && (
+      {showPod && <PodcastEpisodeGrid testid="library-podcast" min={240} onPick={(rec) => { window.location.href = `/host/dashboard/postify?rec=${rec.id}`; }} />}
+
+      {!showPod && shown.length === 0 && (
         <p className="rounded-2xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
           Nothing in this folder yet. Drag an episode onto it, or use an episode's ⋯ menu → Move to folder.
         </p>

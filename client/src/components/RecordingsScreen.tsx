@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { UploadRecording } from "@/components/UploadRecording";
 import { MyRecordings } from "@/components/MyRecordings";
 import { ClipsLibrary } from "@/components/ClipsLibrary";
+import { usePodcastEpisodes } from "@/components/PodcastEpisodes";
 import { apiRequest } from "@/lib/queryClient";
 import type { PublicEvent, RecordingRow, ClipRow, HostPostRow, CleanResult } from "@shared/schema";
 import { Clock3, Film, Library, Scissors, Send, Timer } from "lucide-react";
@@ -43,6 +44,9 @@ export function RecordingsScreen({ socialAccounts }: { socialAccounts?: string |
 
   // The Library at a glance. Everything counted is ours to count: podcast
   // downloads live with each show's own host, which we aren't connected to.
+  // Their podcast's episodes count too (a video one is already a recording once opened).
+  const { data: podEps } = usePodcastEpisodes();
+  const podOnly = (podEps ?? []).filter((e) => e.status === "published" && !e.recordingId).length;
   const originals = (recordings ?? []).filter((r) => r.status === "Ready" && !r.egressId.startsWith("CLEAN_"));
   const hours = originals.reduce((n, r) => n + r.durationSec, 0) / 3600;
   const saved = (recordings ?? []).reduce((n, r) => {
@@ -50,7 +54,7 @@ export function RecordingsScreen({ socialAccounts }: { socialAccounts?: string |
   }, 0);
   // The counts that lead somewhere are buttons: episodes, clips, and the posts on the Social calendar.
   const stats: { icon: typeof Film; n: string; label: string; go?: () => void }[] = [
-    { icon: Film, n: String(originals.length), label: originals.length === 1 ? "Episode" : "Episodes", go: () => setTab("episodes") },
+    { icon: Film, n: String(originals.length + podOnly), label: originals.length + podOnly === 1 ? "Episode" : "Episodes", go: () => setTab("episodes") },
     { icon: Clock3, n: hours >= 1 ? hours.toFixed(1) : `${Math.round(hours * 60)}m`, label: hours >= 1 ? "Hours recorded" : "Recorded" },
     { icon: Scissors, n: String(clips?.length ?? 0), label: "Clips made", go: () => showClips(null) },
     { icon: Send, n: String(posts?.filter((p) => p.status !== "failed").length ?? 0), label: "Posts sent", go: () => { window.location.href = "/host/dashboard/social"; } },
@@ -102,7 +106,7 @@ export function RecordingsScreen({ socialAccounts }: { socialAccounts?: string |
 
       {/* Two views of one Library: the episodes (with their folders), and every clip made from them. */}
       <div className="mb-4 inline-flex rounded-full border border-border bg-card p-1" role="tablist">
-        {([["episodes", "Episodes", originals.length], ["clips", "Clips", clips?.length ?? 0]] as const).map(([k, label, n]) => (
+        {([["episodes", "Episodes", originals.length + podOnly], ["clips", "Clips", clips?.length ?? 0]] as const).map(([k, label, n]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => (k === "clips" ? showClips(clipEp) : setTab("episodes"))} className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${tab === k ? "bg-[#053877] text-white" : "text-muted-foreground hover:text-foreground"}`} data-testid={`library-tab-${k}`}>
             {label} <span className={tab === k ? "text-white/70" : ""}>{n}</span>
           </button>

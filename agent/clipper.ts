@@ -129,6 +129,7 @@ interface Job {
   transcriptJob?: { id: number };
   /** A still from an episode's video, for its picture. */
   episodeStill?: { episodeId: number };
+  episodeVideo?: { episodeId: number; artUrl: string };
   /** A SmartLink's living photo (downloadUrl) made small enough for phones. */
   livingSqueeze?: { pageId: number; kind?: "living" | "intro" };
   episodeEdit?: { trimStart: number; trimEnd: number; cuts?: [number, number][]; cardSec?: number; cardMusicUrl?: string; introUrl?: string; outroUrl?: string; introTransition?: "fade" | "black" | "cut"; outroTransition?: "fade" | "black" | "cut"; music?: { url: string; from: number; to: number; level: "under" | "full" }[] };
@@ -2217,6 +2218,49 @@ async function handleEpisodeStill(job: Job): Promise<void> {
   }
 }
 
+/**
+ * An audio-only podcast episode as a video, so Pōstify can clip it and Social can post it: its cover art on a soft, darkened
+ * copy of itself, and a moving sound wave under it. 720p, H.264, plays as it loads. Never throws.
+ */
+async function handleEpisodeVideo(job: Job): Promise<void> {
+  const id = job.episodeVideo!.episodeId;
+  const tag = `[episode ${id}] video`;
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `epvideo-${id}-`));
+  try {
+    console.log(`${tag}: ${job.title}`);
+    const art = path.join(dir, "art.jpg");
+    const audio = path.join(dir, "audio.src");
+    // The cover art (any picture type becomes a JPEG; none or unreadable: a plain navy card).
+    let haveArt = false;
+    if (job.episodeVideo!.artUrl) {
+      await run("curl", ["-s", "-f", "-L", "--retry", "3", "--max-time", "120", "-o", path.join(dir, "art.src"), job.episodeVideo!.artUrl]).catch(() => {});
+      haveArt = await ffmpeg(["-i", path.join(dir, "art.src"), "-frames:v", "1", art]).then(() => true).catch(() => false);
+    }
+    if (!haveArt) await ffmpeg(["-f", "lavfi", "-i", "color=c=0x053877:s=1080x1080", "-frames:v", "1", art]);
+    await run("curl", ["-s", "-f", "-L", "--retry", "3", "--max-time", "1800", "-o", audio, job.downloadUrl]);
+    const out = path.join(dir, `episode-${id}.mp4`);
+    const graph = [
+      "[0:v]split[a][b]",
+      "[a]scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,boxblur=30:4,eq=brightness=-0.32,drawbox=x=0:y=520:w=1280:h=200:color=black@0.5:t=fill[bg]",
+      "[b]scale=440:440:force_original_aspect_ratio=increase,crop=440:440[fg]",
+      "[bg][fg]overlay=(W-w)/2:50[v1]",
+      "[1:a]aformat=channel_layouts=mono,showwaves=s=1100x160:mode=cline:scale=sqrt:draw=full:colors=white:rate=25[w]",
+      "[v1][w]overlay=(W-w)/2:540:format=auto,format=yuv420p[v]",
+    ].join(";");
+    await ffmpeg(["-loop", "1", "-framerate", "25", "-i", art, "-i", audio, "-filter_complex", graph, "-map", "[v]", "-map", "1:a", "-c:v", "libx264", "-preset", "veryfast", "-crf", "26", "-r", "25", "-c:a", "aac", "-b:a", "128k", "-shortest", "-movflags", "+faststart", out]);
+    const sizeBytes = (await fs.stat(out)).size;
+    const durationSec = Math.round(Number((await run("ffprobe", ["-v", "error", "-show_entries", "format=duration", "-of", "csv=p=0", out]).catch(() => "0")).trim()) || job.durationSec);
+    const videoKey = await uploadBig(out, "video/mp4");
+    await api("POST", `/api/agent/episode-video/${id}/done`, { videoKey, sizeBytes, durationSec });
+    console.log(`${tag}: done (${Math.round(sizeBytes / 1048576)}MB)`);
+  } catch (err) {
+    console.warn(`${tag} failed: ${(err as Error).message}`);
+    await api("POST", `/api/agent/episode-video/${id}/failed`, { error: (err as Error).message }).catch(() => {});
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
+}
+
 /** Ask my show: an episode's words, for the AI to answer listeners from. Never throws. */
 async function handleTranscript(job: Job): Promise<void> {
   const id = job.transcriptJob!.id;
@@ -2338,6 +2382,7 @@ async function handle(job: Job): Promise<void> {
   if (job.episodeBookends) return handleEpisodeBookends(job);
   if (job.episodeStitch) return handleEpisodeStitch(job);
   if (job.episodeStill) return handleEpisodeStill(job);
+  if (job.episodeVideo) return handleEpisodeVideo(job);
   if (job.livingSqueeze) return handleLivingSqueeze(job);
   if (job.musicMix) return handleMusic(job);
   if (job.importFrom) return handleImport(job);
@@ -2671,11 +2716,11 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
 async function tick(quick = false): Promise<boolean> {
   const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", quick
     ? { can: ["edit", "music"], quickOnly: true }
-    : { can: ["edit", "episode-edit", "segment-cut", "episode-audio", "episode-bookends", "episode-stitch", "episode-segments", "radio-cut", "episode-copy", "episode-still", "living-squeeze", "transcript", "import", "music", "suggest"] });
+    : { can: ["edit", "episode-edit", "segment-cut", "episode-audio", "episode-bookends", "episode-stitch", "episode-segments", "radio-cut", "episode-copy", "episode-still", "episode-video", "living-squeeze", "transcript", "import", "music", "suggest"] });
   if (!job) return false;
   // An edit is one clip, not the recording: a shutdown mid-edit leaves it to
   // the 15-minute reclaim rather than requeuing the whole episode.
-  const clipJob = !(job.clipEdit || job.episodeEdit || job.segmentCut || job.episodeAudio || job.radioCut || job.episodeBookends || job.episodeStitch || job.episodeStill || job.transcriptJob || job.importFrom || job.musicMix || job.suggestEdits);
+  const clipJob = !(job.clipEdit || job.episodeEdit || job.segmentCut || job.episodeAudio || job.radioCut || job.episodeBookends || job.episodeStitch || job.episodeStill || job.episodeVideo || job.transcriptJob || job.importFrom || job.musicMix || job.suggestEdits);
   if (clipJob) holding.add(job.recordingId);
   if (job.episodeEdit) editing.add(job.recordingId);
   // "Still on it", every minute: a long quiet stretch (waiting on Creatomate)

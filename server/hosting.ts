@@ -17,7 +17,7 @@ import { XMLParser } from "fast-xml-parser";
 import Anthropic from "@anthropic-ai/sdk";
 import { waitUntil } from "@vercel/functions";
 import { isListenNotesConfigured, submitToListenNotes, spendListenNotes } from "./listenNotes.js";
-import { bioPages, hostPosts, hostedShows, hostedEpisodes, hostedDownloads, type HostedShowRow, type HostedEpisodeRow, type CleanResult, type PodcastStatsData } from "../shared/schema.js";
+import { recordings, bioPages, hostPosts, hostedShows, hostedEpisodes, hostedDownloads, type HostedShowRow, type HostedEpisodeRow, type CleanResult, type PodcastStatsData } from "../shared/schema.js";
 
 /**
  * Podcast hosting, all MilitaryVoices: a podcaster's show and its episodes,
@@ -247,6 +247,7 @@ async function ownShow(email: string, id: number) {
   return s ?? null;
 }
 async function episodesOf(showId: number) {
+  await schemaIsReady(); // a new column is added on the first request after a deploy; wait for it
   return db.select().from(hostedEpisodes).where(eq(hostedEpisodes.showId, showId)).orderBy(desc(hostedEpisodes.publishedAt), desc(hostedEpisodes.id));
 }
 const live = (e: HostedEpisodeRow) => e.status === "published" && !!e.publishedAt && Date.parse(e.publishedAt) <= Date.now() && !!(e.audioKey || e.audioUrl);
@@ -536,6 +537,33 @@ export async function claimEpisodeStill(): Promise<{ id: number; title: string; 
   return { id: r.id, title: r.title, durationSec: r.duration_sec || rec.durationSec, url };
 }
 
+/**
+ * An audio-only episode they asked to turn into a video (cover art and a moving sound wave), so Pōstify can clip it and Social can post it.
+ * The worker takes the next one; a stuck one is taken back after 40 minutes.
+ */
+export async function claimEpisodeVideo(): Promise<{ id: number; title: string; durationSec: number; audioUrl: string; artUrl: string } | null> {
+  await schemaIsReady();
+  const stale = new Date(Date.now() - 40 * 60_000).toISOString();
+  const rows = await db.execute(sql`
+    UPDATE hosted_episodes SET video_job = 'running', video_job_at = ${now()}
+    WHERE id = (
+      SELECT id FROM hosted_episodes
+      WHERE video_job = 'queued' OR (video_job = 'running' AND video_job_at < ${stale})
+      ORDER BY id LIMIT 1 FOR UPDATE SKIP LOCKED
+    )
+    RETURNING id, show_id, title, duration_sec, audio_key, audio_url, artwork_url`);
+  const r = (rows as unknown as { id: number; show_id: number; title: string; duration_sec: number; audio_key: string; audio_url: string; artwork_url: string }[])[0];
+  if (!r) return null;
+  const [sh] = await db.select().from(hostedShows).where(eq(hostedShows.id, r.show_id)).limit(1);
+  const audioUrl = r.audio_key ? await signedRecordingUrl(r.audio_key, 6 * 3600) : r.audio_url;
+  const artUrl = r.artwork_url || sh?.artworkUrl || "";
+  if (!audioUrl) {
+    await db.update(hostedEpisodes).set({ videoJob: "failed", videoError: "No audio to make a video from." }).where(eq(hostedEpisodes.id, r.id));
+    return null;
+  }
+  return { id: r.id, title: r.title, durationSec: r.duration_sec, audioUrl, artUrl };
+}
+
 /** The video behind an episode, if it has one: the MP4 they uploaded, or its Library recording. */
 async function videoKeyOf(e: HostedEpisodeRow, owner: string): Promise<string> {
   if (e.mime.startsWith("video/") && e.audioKey) return e.audioKey;
@@ -647,6 +675,30 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
   });
   app.post("/api/agent/episode-still/:id/failed", requireAgent, async (req, res) => {
     await db.update(hostedEpisodes).set({ stillJob: "failed" }).where(eq(hostedEpisodes.id, Number(req.params.id)));
+    res.json({ ok: true });
+  });
+
+  app.post("/api/agent/episode-video/:id/done", requireAgent, async (req, res) => {
+    const id = Number(req.params.id);
+    const key = String(req.body?.videoKey ?? "");
+    if (!/^clean\/[\w.-]+$/.test(key)) return res.status(400).json({ message: "No video." });
+    const [e] = await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.id, id)).limit(1);
+    const [sh] = e ? await db.select().from(hostedShows).where(eq(hostedShows.id, e.showId)).limit(1) : [];
+    if (!e || !sh) return res.status(404).json({ message: "No such episode." });
+    const email = sh.email.trim().toLowerCase();
+    const at = e.publishedAt || e.createdAt || new Date().toISOString();
+    const [had] = await db.select({ id: recordings.id }).from(recordings).where(and(eq(recordings.email, email), eq(recordings.egressId, `PODCAST_${id}`))).limit(1);
+    if (!had) {
+      await db.insert(recordings).values({
+        eventId: 0, studioId: 0, email, title: e.title || "Episode", egressId: `PODCAST_${id}`, status: "Ready", url: key,
+        durationSec: num(req.body?.durationSec) ?? e.durationSec ?? 0, sizeBytes: String(num(req.body?.sizeBytes) ?? 0), startedAt: at, endedAt: at,
+      });
+    }
+    await db.update(hostedEpisodes).set({ videoJob: "", videoError: "" }).where(eq(hostedEpisodes.id, id));
+    res.json({ ok: true });
+  });
+  app.post("/api/agent/episode-video/:id/failed", requireAgent, async (req, res) => {
+    await db.update(hostedEpisodes).set({ videoJob: "failed", videoError: String(req.body?.error ?? "").slice(0, 300) }).where(eq(hostedEpisodes.id, Number(req.params.id)));
     res.json({ ok: true });
   });
 
@@ -1024,6 +1076,64 @@ Return JSON only: {"titles":["","",""],"description":""}`,
   const spotRuns = new Map<string, number[]>();
   const failedJobsReset = (showId: number) => db.update(hostedEpisodes).set({ bookendJob: "" }).where(and(eq(hostedEpisodes.showId, showId), eq(hostedEpisodes.bookendJob, "failed")));
   const ymd = (v: unknown) => (typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v) ? v : "");
+
+  /**
+   * Every episode of their podcast shows, for the pickers in Pōstify, Social and the Library: the picture, the length, and whether
+   * there is a video behind it (a Library recording or an uploaded MP4) or only audio.
+   */
+  app.get("/api/host/podcast-episodes", requireHostSession, async (req, res) => {
+    const email = emailOf(req);
+    res.setHeader("Cache-Control", "no-store");
+    const out: Record<string, unknown>[] = [];
+    for (const sh of await showsOf(email)) {
+      for (const e of await episodesOf(sh.id)) {
+        if (!(e.audioKey || e.audioUrl) && !e.recordingId) continue;
+        const rec = e.recordingId ? await storage.getRecording(e.recordingId) : undefined;
+        const ownRec = rec && rec.status === "Ready" && !!rec.url && rec.email.trim().toLowerCase() === email ? rec : undefined;
+        const videoFile = e.mime.startsWith("video/") && !!e.audioKey;
+        const [made] = await db.select({ id: recordings.id }).from(recordings).where(and(eq(recordings.email, email), eq(recordings.egressId, `PODCAST_${e.id}`))).limit(1);
+        out.push({
+          id: e.id, showId: sh.id, show: sh.title, title: e.title, publishedAt: e.publishedAt, status: e.status, durationSec: e.durationSec,
+          art: e.artworkUrl || sh.artworkUrl, kind: ownRec || videoFile || made ? "video" : "audio", recordingId: ownRec?.id ?? made?.id ?? null,
+          making: e.videoJob === "queued" || e.videoJob === "running", videoFailed: e.videoJob === "failed",
+        });
+      }
+    }
+    out.sort((a, b) => String(b.publishedAt || "").localeCompare(String(a.publishedAt || "")));
+    res.json(out);
+  });
+
+  /** Turn an audio-only episode into a video (the worker does it): cover art, a soft backdrop and a moving sound wave. */
+  app.post("/api/host/podcast-episodes/:id/make-video", requireHostSession, async (req, res) => {
+    const email = emailOf(req);
+    const [e] = await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.id, Number(req.params.id))).limit(1);
+    const sh = e ? await ownShow(email, e.showId) : undefined;
+    if (!e || !sh) return res.status(404).json({ message: "No such episode." });
+    if (!(e.audioKey || e.audioUrl)) return res.status(400).json({ message: "That episode has no audio yet." });
+    if (e.mime.startsWith("video/")) return res.status(400).json({ message: "That episode already has a video." });
+    if (e.videoJob === "queued" || e.videoJob === "running") return res.json({ ok: true });
+    await db.update(hostedEpisodes).set({ videoJob: "queued", videoJobAt: now(), videoError: "" }).where(eq(hostedEpisodes.id, e.id));
+    res.json({ ok: true });
+  });
+
+  /** A podcast episode as a Library recording, so Pōstify and Social can work from it. A video episode becomes one at once; audio only can't. */
+  app.post("/api/host/podcast-episodes/:id/library", requireHostSession, async (req, res) => {
+    const email = emailOf(req);
+    const [e] = await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.id, Number(req.params.id))).limit(1);
+    const sh = e ? await ownShow(email, e.showId) : undefined;
+    if (!e || !sh) return res.status(404).json({ message: "No such episode." });
+    const linked = e.recordingId ? await storage.getRecording(e.recordingId) : undefined;
+    if (linked && linked.status === "Ready" && linked.url && linked.email.trim().toLowerCase() === email) return res.json({ recording: linked });
+    const [had] = await db.select().from(recordings).where(and(eq(recordings.email, email), eq(recordings.egressId, `PODCAST_${e.id}`))).limit(1);
+    if (had) return res.json({ recording: had });
+    if (!(e.mime.startsWith("video/") && e.audioKey)) return res.status(409).json({ audioOnly: true, message: "That one is audio only. Make a video from it first." });
+    const at = e.publishedAt || e.createdAt || new Date().toISOString();
+    const [row] = await db.insert(recordings).values({
+      eventId: 0, studioId: 0, email, title: e.title || "Episode", egressId: `PODCAST_${e.id}`, status: "Ready", url: e.audioKey,
+      durationSec: e.durationSec || 0, sizeBytes: String(e.sizeBytes || 0), startedAt: at, endedAt: at,
+    }).returning();
+    res.status(201).json({ recording: row });
+  });
 
   app.get("/api/host/hosting/shows/:id/spots", requireHostSession, async (req, res) => {
     const s = await ownShow(emailOf(req), Number(req.params.id));

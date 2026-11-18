@@ -171,7 +171,7 @@ import { registerReview } from "./review.js";
 import { registerSponsorFinder } from "./sponsorFinder.js";
 import { registerPodcastStats } from "./podcastStats.js";
 import { registerRadioLibrary, claimRadioShowCut } from "./radioLibrary.js";
-import { registerHosting, startEpisodeFromRecording, claimEpisodeAudio, claimEpisodeBookends, claimEpisodeStill, podcastYouTubeAt } from "./hosting.js";
+import { registerHosting, startEpisodeFromRecording, claimEpisodeAudio, claimEpisodeBookends, claimEpisodeStill, claimEpisodeVideo, podcastYouTubeAt } from "./hosting.js";
 import { decideAdvance } from "../shared/showClock.js";
 import type { StageThanks } from "../shared/stageMeta.js";
 import { registerBioPage, registerBioAgent, claimLivingSqueeze, subscribersFor, publishedBioUrl } from "./bioPage.js";
@@ -7185,6 +7185,11 @@ export function registerRoutes(app: Express): void {
     if (!rec && Array.isArray(req.body?.can) && req.body.can.includes("episode-still")) {
       const st = await claimEpisodeStill().catch((err) => { console.error("Episode still claim failed:", err); return null; });
       if (st) return res.json({ job: { recordingId: st.id, title: st.title, durationSec: st.durationSec, downloadUrl: st.url, show: "", host: "", transcript: [], episodeStill: { episodeId: st.id } } });
+    }
+    // Nothing else: an audio-only episode to make into a video (cover art and a sound wave).
+    if (!rec && Array.isArray(req.body?.can) && req.body.can.includes("episode-video")) {
+      const vd = await claimEpisodeVideo().catch((err) => { console.error("Episode video claim failed:", err); return null; });
+      if (vd) return res.json({ job: { recordingId: vd.id, title: vd.title, durationSec: vd.durationSec, downloadUrl: vd.audioUrl, show: "", host: "", transcript: [], episodeVideo: { episodeId: vd.id, artUrl: vd.artUrl } } });
     }
     // Nothing else: a living photo to make smaller for phones.
     if (!rec && Array.isArray(req.body?.can) && req.body.can.includes("living-squeeze")) {

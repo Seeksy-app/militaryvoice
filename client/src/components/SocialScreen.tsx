@@ -8,6 +8,7 @@ import { useToast } from "@/hooks/use-toast";
 import { PostDialog, type PostTarget } from "@/components/PostDialog";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { UploadRecording } from "@/components/UploadRecording";
+import { PodcastEpisodeGrid } from "@/components/PodcastEpisodes";
 import { uploadToStorage } from "@/lib/upload";
 import { PlatformIcon, platformLabel, platformBackground } from "@/components/SocialIcons";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -519,8 +520,9 @@ function LibraryPicker({ initial = "clips", initialFile = null, clips, episodes,
             ))}
           </div>
         ) : <p className="text-sm text-muted-foreground">No clips yet. Pōstify an episode to make some.</p>
-      ) : episodes.length ? (
-        <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
+      ) : (
+        <>
+        {episodes.length > 0 && <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">
           {episodes.map((r) => (
             <button key={r.id} type="button" onClick={() => onEpisode(r)} className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-border text-left hover:border-[#053877]/50" data-testid={`social-pick-episode-${r.id}`}>
               <span className="relative block aspect-video bg-black"><video src={`/api/host/recordings/${r.id}/video#t=8`} preload="metadata" muted playsInline className="h-full w-full object-cover" /></span>
@@ -528,8 +530,11 @@ function LibraryPicker({ initial = "clips", initialFile = null, clips, episodes,
               <span className="line-clamp-2 p-2 text-xs font-semibold leading-snug">{r.title || "Session"}</span>
             </button>
           ))}
-        </div>
-      ) : <p className="text-sm text-muted-foreground">Nothing in your Library yet.</p>}
+        </div>}
+        <h3 className="mb-2 mt-5 text-sm font-bold">From your podcast</h3>
+        <PodcastEpisodeGrid testid="social-pick-podcast" onPick={(rec) => onEpisode(rec)} />
+        </>
+      )}
     </div>
   );
 }

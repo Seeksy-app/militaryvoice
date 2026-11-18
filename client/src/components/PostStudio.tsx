@@ -16,6 +16,7 @@ import { durationOf, uploadToStorage } from "@/lib/upload";
 import { TrimStrip, Icon, type Cut } from "@/components/TrimStrip";
 import { NotifyPrompt } from "@/components/Notifications";
 import { UploadRecording } from "@/components/UploadRecording";
+import { PodcastEpisodeGrid } from "@/components/PodcastEpisodes";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { useToast } from "@/hooks/use-toast";
 import { API_BASE, apiRequest } from "@/lib/queryClient";
@@ -2197,6 +2198,9 @@ export function PostStudio() {
             );
           })}
         </ul>
+        {/* Their podcast's own episodes: the ones with video open here; audio-only ones can be made into a video first. */}
+        <h3 className="mb-3 mt-8 text-base font-bold text-foreground">From your podcast</h3>
+        <PodcastEpisodeGrid testid="post-podcast-episodes" min={220} onPick={async (r) => { await qc.refetchQueries({ queryKey: ["/api/host/recordings"] }); setSelected(r.id); }} />
       </section>
     );
   }

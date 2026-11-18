@@ -2852,6 +2852,10 @@ export const hostedEpisodes = pgTable("hosted_episodes", {
   audioJob: text("audio_job").notNull().default(""),
   audioJobAt: text("audio_job_at").notNull().default(""),
   audioError: text("audio_error").notNull().default(""),
+  /** Making a video from audio-only episodes (cover art and a moving sound wave) so Pōstify and Social can use it (the worker): "" | queued | running | failed. */
+  videoJob: text("video_job").notNull().default(""),
+  videoJobAt: text("video_job_at").notNull().default(""),
+  videoError: text("video_error").notNull().default(""),
   /** A still from the episode's video as its picture (the worker), when it has none: "" | running | done | failed. */
   stillJob: text("still_job").notNull().default(""),
   stillJobAt: text("still_job_at").notNull().default(""),
