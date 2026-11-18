@@ -103,7 +103,7 @@ function getConnection(): { sql: ReturnType<typeof postgres>; db: ReturnType<typ
     } catch {
       /* leave the string untouched if it isn't a parseable URL */
     }
-    _sql = postgres(url, { prepare: false, max: 4, idle_timeout: 20, connect_timeout: 10 });
+    _sql = postgres(url, { prepare: false, max: Number(process.env.DB_POOL_MAX) || 4, idle_timeout: 20, connect_timeout: 10 });
     _db = drizzle(_sql);
   }
   return { sql: _sql, db: _db };
