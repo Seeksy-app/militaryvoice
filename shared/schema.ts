@@ -2775,6 +2775,8 @@ export const hostedShows = pgTable("hosted_shows", {
   /** Publishing an episode: "ask" (a tick box each time) or "always" (ticked for them). */
   youtubeMode: text("youtube_mode").notNull().default("ask"),
   youtubePrivacy: text("youtube_privacy").notNull().default("public"),
+  /** Written once, added to the end of every episode's notes (feed and page): {title}, {number}, {season}, {guest} fill in per episode. */
+  episodeFooter: text("episode_footer").notNull().default(""),
   /** Leaving us: the new host's feed. The feed then says so (itunes:new-feed-url) and forwards there (301). */
   newFeedUrl: text("new_feed_url").notNull().default(""),
   createdAt: text("created_at").notNull(),
@@ -2790,6 +2792,10 @@ export const hostedEpisodes = pgTable("hosted_episodes", {
   description: text("description").notNull().default(""),
   /** text | html */
   notesFormat: text("notes_format").notNull().default("text"),
+  /** Who was on it (fills {guest} in the show's footer). */
+  guest: text("guest").notNull().default(""),
+  /** True when this one episode leaves the show's footer off. */
+  footerOff: boolean("footer_off").notNull().default(false),
   /** Our copy of the audio (R2), or… */
   audioKey: text("audio_key").notNull().default(""),
   /** …the file at the old host, for an episode that came with an imported show. */

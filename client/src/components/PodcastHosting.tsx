@@ -14,6 +14,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { durationOf, uploadToStorage } from "@/lib/upload";
 import { GuestFinder, ShowFinder } from "@/components/DiscoverPodcasts";
 import type { HostedEpisodeRow, HostedShowRow, RecordingRow } from "@shared/schema";
+import { fillFooter, FOOTER_TOKENS } from "@shared/footer";
 import { AlertCircle, BarChart3, Check, ChevronLeft, Copy, ExternalLink, Film, ImagePlus, Loader2, Mic2, Pencil, Plus, Podcast, Radio, Send, Trash2, Upload } from "lucide-react";
 import { IconTile } from "@/components/ui/icon-tile";
 
@@ -752,6 +753,23 @@ function ShowForm({ show, categories, onSaved, onDeleted, focus = "" }: { show: 
         <div className="grid gap-3 sm:grid-cols-2">
           <label className={`${label} sm:col-span-2`}>Show name<Input autoFocus={focus === "title"} value={v.title} onChange={(e) => set("title", e.target.value)} className="mt-1" /></label>
           <label className={`${label} sm:col-span-2`}>Description<Textarea autoFocus={focus === "description"} value={v.description} onChange={(e) => set("description", e.target.value)} rows={4} className="mt-1" placeholder="What the show is about, who it's for, and who hosts it." /></label>
+          <div className="sm:col-span-2" data-testid="hosting-footer">
+            <label className={label}>Episode footer
+              <Textarea value={v.episodeFooter ?? ""} onChange={(e) => set("episodeFooter", e.target.value)} rows={5} className="mt-1" placeholder={"Bounce Back in Business & Life, Episode #{number}\n{title}\nGuest: {guest}\n\n#Leadership #Veterans"} data-testid="hosting-footer-text" />
+            </label>
+            <p className="mt-1 text-xs text-muted-foreground">Written once. It goes at the end of every episode's notes in Apple, Spotify and your page, new and old. Tap a word to add it; each fills in from the episode. A line with nothing to fill in (no guest, say) is left out.</p>
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {FOOTER_TOKENS.map((t) => (
+                <button key={t} type="button" onClick={() => set("episodeFooter", `${(v.episodeFooter ?? "").replace(/\s+$/, "")}${(v.episodeFooter ?? "").trim() ? " " : ""}{${t}}`)} className="rounded-full border border-border px-2.5 py-0.5 text-xs font-semibold text-foreground hover:bg-muted" data-testid={`hosting-footer-token-${t}`}>{`{${t}}`}</button>
+              ))}
+            </div>
+            {(v.episodeFooter ?? "").trim() && (
+              <div className="mt-3 rounded-xl border border-border bg-muted/30 p-3" data-testid="hosting-footer-preview">
+                <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">How it looks on an episode</p>
+                <p className="whitespace-pre-line text-sm text-foreground">{fillFooter(v.episodeFooter ?? "", { title: "Your episode's title", number: 12, season: null, guest: "Their guest" })}</p>
+              </div>
+            )}
+          </div>
           <label className={label}>Host or author<Input value={v.author} onChange={(e) => set("author", e.target.value)} className="mt-1" /></label>
           <label className={label}>Owner email<Input autoFocus={focus === "ownerEmail"} type="email" value={v.ownerEmail} onChange={(e) => set("ownerEmail", e.target.value)} className="mt-1" /></label>
           <label className={label}>Category
@@ -926,6 +944,13 @@ function EpisodeDialog({ ep, show, youtubeReady, onClose, onSaved }: { ep: Ep | 
           <label className={label}>Episode<Input type="number" min={0} value={v.episodeNumber ?? ""} onChange={(e) => set("episodeNumber", e.target.value === "" ? null : Number(e.target.value))} className="mt-1" /></label>
           <label className={label}>Season<Input type="number" min={0} value={v.season ?? ""} onChange={(e) => set("season", e.target.value === "" ? null : Number(e.target.value))} className="mt-1" /></label>
           <label className={`${label} sm:col-span-3`}>Show notes<Textarea value={typeof f.description === "string" ? f.description : notesPlain} onChange={(e) => setF((x) => ({ ...x, description: e.target.value, notesFormat: "text" }))} rows={6} className="mt-1" placeholder="What it's about, who's on it, and any links you mentioned." /></label>
+          <label className={`${label} sm:col-span-3`}>Guest (fills {"{guest}"} in your footer)<Input value={(v.guest as string) ?? ""} onChange={(e) => set("guest", e.target.value)} className="mt-1" placeholder="Who was on it" data-testid="hosting-ep-guest" /></label>
+          {(show.episodeFooter ?? "").trim() && (
+            <div className="rounded-xl border border-border px-3 py-2.5 text-sm sm:col-span-3" data-testid="hosting-ep-footer">
+              <label className="flex items-center gap-2"><input type="checkbox" checked={!(v.footerOff as boolean)} onChange={(e) => set("footerOff", !e.target.checked)} /> Add your show's footer to this episode</label>
+              {!(v.footerOff as boolean) && <p className="mt-2 whitespace-pre-line text-xs text-muted-foreground">{fillFooter(show.episodeFooter, { title: v.title, number: v.episodeNumber, season: v.season, guest: (v.guest as string) ?? "" })}</p>}
+            </div>
+          )}
           <div className="flex flex-wrap items-center gap-4 text-sm sm:col-span-3">
             <label className="flex items-center gap-2">Type
               <select value={v.episodeType} onChange={(e) => set("episodeType", e.target.value)} className="h-8 rounded-md border border-input bg-background px-2 text-sm">

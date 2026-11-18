@@ -5,6 +5,7 @@ import multer from "multer";
 import sharp from "sharp";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
+import { fillFooter } from "../shared/footer.js";
 import { requireHostSession, getSessionEmail } from "./session.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
 import { uploadPhoto } from "./photoStorage.js";
@@ -276,10 +277,17 @@ function readiness(s: HostedShowRow, eps: HostedEpisodeRow[]): string[] {
 /** The owner email the feed may carry: the one they confirmed, or else the one they sign in with. */
 export const feedOwnerEmail = (s: HostedShowRow) => (s.ownerEmail && s.ownerEmailVerified === s.ownerEmail.trim().toLowerCase() ? s.ownerEmail.trim() : s.email);
 
+/** The show's footer for one episode, as the feed's HTML ("" when the show has none or the episode leaves it off). */
+function footerText(s: HostedShowRow, e: HostedEpisodeRow): string {
+  if (e.footerOff || !s.episodeFooter?.trim()) return "";
+  return fillFooter(s.episodeFooter, { title: e.title, number: e.episodeNumber, season: e.season, guest: e.guest });
+}
+const footerHtml = (s: HostedShowRow, e: HostedEpisodeRow): string => { const t = footerText(s, e); return t ? notesHtml(t) : ""; };
+
 export function feedXml(s: HostedShowRow, eps: HostedEpisodeRow[]): string {
   const self = feedUrl(s.slug);
   const owner = feedOwnerEmail(s);
-  const notes = (e: HostedEpisodeRow) => (e.notesFormat === "html" ? e.description : notesHtml(e.description));
+  const notes = (e: HostedEpisodeRow) => (e.notesFormat === "html" ? e.description : notesHtml(e.description)) + footerHtml(s, e);
   const link = s.website || `${ORIGIN}/podcast/${s.slug}`;
   const cat = s.subcategory
     ? `<itunes:category text="${esc(s.category)}"><itunes:category text="${esc(s.subcategory)}"/></itunes:category>`
@@ -585,7 +593,7 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
       chat: page?.published && page.askEnabled ? page.handle : null,
       chatWelcome: page?.welcome.trim() || "Hi! Thanks for listening. What's on your mind?",
       show: { title: s.title, description: s.description, author: s.author || s.ownerName, artworkUrl: s.artworkUrl, category: s.category, website: s.website, appleUrl: s.appleUrl, spotifyUrl: s.spotifyUrl, feedUrl: feedUrl(s.slug) },
-      episodes: eps.map((e) => ({ id: e.id, title: e.title, notes: e.notesFormat === "html" ? notesText(e.description) : e.description, publishedAt: e.publishedAt, durationSec: e.durationSec, episodeNumber: e.episodeNumber, season: e.season, artworkUrl: e.artworkUrl, audio: `${ORIGIN}/e/${e.id}.${extOf(e.mime)}` })),
+      episodes: eps.map((e) => ({ id: e.id, title: e.title, notes: [e.notesFormat === "html" ? notesText(e.description) : e.description, footerText(s, e)].filter(Boolean).join("\n\n"), publishedAt: e.publishedAt, durationSec: e.durationSec, episodeNumber: e.episodeNumber, season: e.season, artworkUrl: e.artworkUrl, audio: `${ORIGIN}/e/${e.id}.${extOf(e.mime)}` })),
     });
   });
 
@@ -773,7 +781,7 @@ Return JSON only: {"titles":["","",""],"description":""}`,
       ...(newFeedUrl !== undefined ? { newFeedUrl } : {}),
       ...(typeof b.appleUrl === "string" && (b.appleUrl === "" || /^https:\/\/podcasts\.apple\.com\//.test(b.appleUrl)) ? { appleUrl: b.appleUrl.trim() } : {}),
       ...(typeof b.spotifyUrl === "string" && (b.spotifyUrl === "" || /^https:\/\/open\.spotify\.com\//.test(b.spotifyUrl)) ? { spotifyUrl: b.spotifyUrl.trim() } : {}),
-      ...str("title", 200), ...str("description", 4000), ...str("author", 200), ...str("ownerName", 200), ...str("website", 300), ...str("copyright", 300),
+      ...str("title", 200), ...str("description", 4000), ...str("episodeFooter", 4000), ...str("author", 200), ...str("ownerName", 200), ...str("website", 300), ...str("copyright", 300),
       ...(category ? { category, subcategory: subcategory ?? "" } : subcategory !== undefined ? { subcategory } : {}),
       ...(typeof b.explicit === "boolean" ? { explicit: b.explicit } : {}),
       ...(typeof b.aiVoice === "boolean" ? { aiVoice: b.aiVoice } : {}),
@@ -892,6 +900,8 @@ Return JSON only: {"titles":["","",""],"description":""}`,
       ...(typeof b.title === "string" ? { title: b.title.slice(0, 300) } : {}),
       ...(typeof b.description === "string" ? { description: b.description.slice(0, 20000) } : {}),
       ...(b.notesFormat === "text" || b.notesFormat === "html" ? { notesFormat: b.notesFormat } : {}),
+      ...(typeof b.guest === "string" ? { guest: b.guest.trim().slice(0, 200) } : {}),
+      ...(typeof b.footerOff === "boolean" ? { footerOff: b.footerOff } : {}),
       ...("episodeNumber" in b ? { episodeNumber: num(b.episodeNumber) } : {}),
       ...("season" in b ? { season: num(b.season) } : {}),
       ...(["full", "trailer", "bonus"].includes(b.episodeType) ? { episodeType: b.episodeType } : {}),
