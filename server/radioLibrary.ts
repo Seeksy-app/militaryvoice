@@ -13,6 +13,7 @@ import { bookingTimes } from "./booth.js";
 import { dxEventIds } from "./digitalExperience.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
 import { sendImportReadyEmail } from "./email.js";
+import { DEFAULT_CLIP_OPTIONS } from "../shared/schema.js";
 
 const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "").slice(0, 48);
 const stateKey = (id: number) => `dx:lib:${id}`;
@@ -96,6 +97,8 @@ export function registerRadioLibrary(app: Express, requireAgent: RequestHandler)
     for (const p of people) {
       const row = await storage.createUploadedRecording({ email: p.email, title, storageKey: p.key, durationSec: Number(req.body?.durationSec) || 0, sizeBytes: Number(req.body?.sizeBytes) || 0, free: false, queue: false });
       rec ??= row;
+      // A Radio show has two people in two tiles: Pōstify stacks them, one over the other, by default.
+      await storage.setClipOptions(row.id, JSON.stringify({ ...DEFAULT_CLIP_OPTIONS, layout: "radio" }));
       // The same note a Zoom recording gets: it's in your Library.
       void sendImportReadyEmail({ to: p.email, recordingId: row.id, title: row.title, startedAt: new Date(Date.now() - (Number(req.body?.durationSec) || 0) * 1000).toISOString(), durationSec: row.durationSec, provider: "radio" }).catch((err) => console.error("Radio library email failed:", (err as Error).message));
     }

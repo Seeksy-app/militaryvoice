@@ -1506,6 +1506,27 @@ async function handleClean(job: Job): Promise<void> {
  * two-shot — and one cropdetect call is cheaper than getting it wrong.
  */
 /**
+ * The two tiles of a MilitaryVoices Radio show, from the station's own picture (a fixed layout: two framed tiles side by side
+ * on navy, a LIVE badge top left and an "up next" card low right). Their places are fractions of the frame, trimmed so neither
+ * badge nor card is in them. Null when a tile is empty (one person on air), so the usual framing takes over.
+ */
+async function radioTiles(source: string, atSec: number) {
+  const dims = (await run("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", source])).trim().split(",").map(Number);
+  const [fw, fh] = dims;
+  if (!fw || !fh) return null;
+  const box = (x0: number, x1: number) => ({ x: even(fw * x0), y: even(fh * 0.2583), w: even(fw * (x1 - x0)), h: even(fh * (0.7222 - 0.2583)) });
+  const left = box(0.0125, 0.495), right = box(0.5047, 0.986);
+  // A tile with a picture in it is brighter than the navy it sits on (about 10).
+  const lit = async (b: { x: number; y: number; w: number; h: number }) => {
+    const out = await run("ffmpeg", ["-hide_banner", "-ss", String(atSec + 1), "-t", "2", "-i", source, "-vf", `crop=${b.w}:${b.h}:${b.x}:${b.y},signalstats,metadata=print:key=lavfi.signalstats.YAVG`, "-f", "null", "-"]).catch(() => "");
+    const v = [...out.matchAll(/YAVG=([\d.]+)/g)].map((m) => Number(m[1]));
+    return v.length ? v.reduce((a, b) => a + b, 0) / v.length > 22 : false;
+  };
+  if (!(await lit(left)) || !(await lit(right))) return null;
+  return { whole: { x: 0, y: 0, w: fw, h: fh }, left, right, stack: true };
+}
+
+/**
  * How closely to follow the speaker. "shots": per camera cut and every ~8s
  * (Creatomate can reframe mid-clip). "one": a single look from the middle
  * (our own renderer frames one speaker). "none": only a wide shape was asked
@@ -1514,7 +1535,19 @@ async function handleClean(job: Job): Promise<void> {
 type FocusMode = "shots" | "one" | "none";
 
 async function framingFor(job: Job, source: string, m: Moment, within: Line[], dir: string, mode: FocusMode = "shots") {
-  const measured = await frameGeometry(source, m.startSec);
+  const layout = job.options?.layout ?? "auto";
+  // A MilitaryVoices Radio show, two people: one over the other, each in their own tile.
+  if (layout === "radio") {
+    const t = await radioTiles(source, m.startSec).catch(() => null);
+    if (t) { console.log(`[${job.recordingId}]   Radio show: the two tiles stacked`); return { ...t, focus: null as Box | null, focusShots: null as { from: number; to: number; focus: Box | null }[] | null }; }
+  }
+  let measured = await frameGeometry(source, m.startSec);
+  // Chosen by the person: two panels stacked even when the picture isn't wider than 2 to 1 (a Zoom gallery of two), or never.
+  if (layout === "stacked" && measured.whole && !measured.stack) {
+    const w = measured.whole, mid = Math.floor(w.w / 2);
+    measured = { whole: w, left: { x: w.x, y: w.y, w: mid, h: w.h }, right: { x: w.x + mid, y: w.y, w: w.w - mid, h: w.h }, stack: true };
+  }
+  if (layout === "single" && measured.stack) measured = { whole: measured.whole, left: null, right: null, stack: false } as typeof measured;
   let focus: Box | null = null;
   let focusShots: { from: number; to: number; focus: Box | null }[] | null = null;
   if (mode === "one" && !measured.stack && process.env.ANTHROPIC_API_KEY) {

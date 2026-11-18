@@ -2335,6 +2335,14 @@ export function PostStudio() {
                     ))}
                   </div>
                 )}
+                {showOptions && (
+                  <div className="flex flex-wrap items-center gap-1 rounded-full bg-white/10 p-1 text-xs font-semibold" role="group" aria-label="Two people on screen" data-testid="post-layout">
+                    {([["auto", "Layout: automatic"], ["stacked", "Two people: one over the other"], ["single", "Follow the speaker"]] as const).map(([v, label]) => {
+                      const cur = opts.layout === "radio" ? "stacked" : opts.layout ?? "auto";
+                      return <button key={v} type="button" onClick={() => setOpts({ ...opts, layout: v === "stacked" && opts.layout === "radio" ? "radio" : v })} aria-pressed={cur === v} className={`rounded-full px-3 py-1 ${cur === v ? "bg-[#F0A71F] text-[#1a1200]" : "text-white/75 hover:text-white"}`} data-testid={`post-layout-${v}`}>{label}</button>;
+                    })}
+                  </div>
+                )}
               </div>
             )}
           </div>
