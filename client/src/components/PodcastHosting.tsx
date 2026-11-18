@@ -109,7 +109,7 @@ export function PodcastHosting() {
       <section className="mt-2" data-testid="podcast-hosting">
         {/* Their show first (the one from sign-up): one press to move it here. Then the way in: have one, or starting one. */}
         {feedUrl && !inSetup && <YourShowElsewhere name={profile?.podcastName ?? ""} rss={feedUrl} onMoved={refresh} />}
-        <PodcastSetup initialFeed={feedUrl} onImported={refresh} onCreating={() => setInSetup(true)} onFinish={finishSetup} onBack={() => (shows.length ? setInSetup(false) : window.location.assign("/host/dashboard"))} />
+        <PodcastSetup initialFeed={feedUrl} onImported={() => { refresh(); toast({ title: "Alex: your episodes are here", description: "Next, point Apple and Spotify at your new feed so they read it instead of your old host. It is under Directories." }); }} onCreating={() => setInSetup(true)} onFinish={finishSetup} onBack={() => (shows.length ? setInSetup(false) : window.location.assign("/host/dashboard"))} />
       </section>
     );
   }
@@ -174,23 +174,6 @@ export function PodcastHosting() {
 
   return (
     <section className="mt-2 space-y-4" data-testid="podcast-hosting">
-      {s.importedFrom && (
-        // Alex, after a move (7 Oct): what's done, what's next, and what happens to the next episode.
-        <div className="flex items-start gap-3 rounded-2xl border border-[#053877]/25 bg-[#053877]/[0.04] p-4" data-testid="alex-after-move">
-          <img src="/alex.jpg" alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" />
-          <div className="min-w-0 flex-1 text-sm">
-            <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Alex · your podcast producer</p>
-            {s.redirectOk ? (
-              <p className="mt-1"><b>You're all moved.</b> Publish new episodes here (Episodes, then Add an episode). They go out to Apple, Spotify and every app on their own.</p>
-            ) : (
-              <>
-                <p className="mt-1"><b>Done: your {h.episodes.length} episodes are here.</b> Next, point the apps at your new feed, so Apple and Spotify read it instead of your old host's.</p>
-                <p className="mt-1 text-muted-foreground">Until then, the apps still read your old feed. A new episode you publish here won't reach your Apple or Spotify listeners yet, so turn on the forward first (just below).</p>
-              </>
-            )}
-          </div>
-        </div>
-      )}
       {shows.length > 1 && <button type="button" onClick={() => setOpenId(null)} className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground" data-testid="hosting-all-shows"><ChevronLeft className="h-4 w-4" /> All shows</button>}
       {/* The show: its art, its name, its feed. */}
       <div className="flex flex-wrap items-start gap-5">
