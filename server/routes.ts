@@ -2294,7 +2294,10 @@ export function registerRoutes(app: Express): void {
   /** May this visitor run the studio console? Admins, and studio hosts signed in as themselves. */
   app.get("/api/host/studio-access", async (req, res) => {
     noStore(res);
-    const admin = getAdminEmail(req);
+    // The admin sign-in is its own cookie and can outlive a switch of account: when someone is signed in as a member, that account decides which studio opens (an old admin cookie from another address doesn't).
+    const signedAs = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    const adminCookie = getAdminEmail(req);
+    const admin = adminCookie && (!signedAs || signedAs === adminCookie.trim().toLowerCase()) ? adminCookie : null;
     const adminOf = await eventAdminEvents(admin);
     const isAdmin = Boolean(admin && ((await storage.isAdminEmail(admin)) || adminOf.length));
     let host = await studioHostEmail(req);
