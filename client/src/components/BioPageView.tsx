@@ -243,7 +243,7 @@ export function PageTop({ t, avatar, hero, cutoutUrl, living = "", name, handle,
             </div>
           ) : t.layout === "landscape" ? (
             <div className="relative">
-              <div className="h-40 w-full" style={{ background: hero ? `center ${Y}%/cover url(${hero})` : `linear-gradient(135deg, ${theirs}, #000741)` }} />
+              <div className="h-40 w-full" style={{ background: hero ? `center ${Y}%/cover url(${hero})` : `linear-gradient(${withAlpha(theirs, 0.28)}, ${withAlpha(theirs, 0.28)}), center/cover url(/samples/cover-default.jpg), #000741` }} />
               {avatar && <img src={avatar} alt="" className="absolute -bottom-12 left-1/2 h-24 w-24 -translate-x-1/2 rounded-full object-cover" style={{ boxShadow: `0 0 0 4px ${paper}`, objectPosition: `center ${Y}%` }} />}
             </div>
           ) : t.layout === "shape" && avatar ? (
