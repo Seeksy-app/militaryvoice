@@ -17,7 +17,7 @@ import { XMLParser } from "fast-xml-parser";
 import Anthropic from "@anthropic-ai/sdk";
 import { waitUntil } from "@vercel/functions";
 import { isListenNotesConfigured, submitToListenNotes, spendListenNotes } from "./listenNotes.js";
-import { recordings, bioPages, hostPosts, hostedShows, hostedEpisodes, hostedDownloads, type HostedShowRow, type HostedEpisodeRow, type CleanResult, type PodcastStatsData } from "../shared/schema.js";
+import { recordings, hostedFeedHits, bioPages, hostPosts, hostedShows, hostedEpisodes, hostedDownloads, type HostedShowRow, type HostedEpisodeRow, type CleanResult, type PodcastStatsData } from "../shared/schema.js";
 
 /**
  * Podcast hosting, all MilitaryVoices: a podcaster's show and its episodes,
@@ -136,7 +136,7 @@ async function uniqueSlug(base: string, notId?: number): Promise<string> {
 /** Which app asked for the file, from its user agent. */
 function appOf(ua: string): string {
   const u = ua.toLowerCase();
-  if (/applecoremedia|apple ?podcasts|podcasts\/\d|itunes/.test(u)) return "Apple Podcasts";
+  if (/applecoremedia|apple ?podcasts|podcasts\/\d|itunes|itms/.test(u)) return "Apple Podcasts";
   if (/spotify/.test(u)) return "Spotify";
   if (/overcast/.test(u)) return "Overcast";
   if (/pocket ?casts/.test(u)) return "Pocket Casts";
@@ -654,6 +654,22 @@ export async function listOnListenNotes(showId: number, force = false): Promise<
   }
 }
 
+/**
+ * For an episode that went out in the last three days: each app that has been reading this feed lately, and whether it has
+ * read far enough to have this episode yet. Older episodes, and apps that never read the feed, say nothing.
+ */
+function deliveryOf(e: HostedEpisodeRow, hits: { app: string; lastAt: string; seenUntil: string }[], listed: string[] = []): { apps: { app: string; got: boolean; checked: string }[] } | null {
+  if (!live(e)) return null;
+  const age = Date.now() - Date.parse(e.publishedAt);
+  if (!(age >= 0 && age < 72 * 3600_000)) return null;
+  const recent: { app: string; lastAt: string; seenUntil: string }[] = hits.filter((h) => Date.now() - Date.parse(h.lastAt) < 30 * 86400_000);
+  // Apps the show is listed in count even before they have ever read this feed (Spotify, right after a move: it hasn't been yet).
+  for (const app of listed) if (!recent.some((h) => h.app === app)) recent.push({ app, lastAt: "", seenUntil: "" });
+  if (!recent.length) return null;
+  const order = (a: string) => (a === "Apple Podcasts" ? 0 : a === "Spotify" ? 1 : 2);
+  return { apps: recent.sort((a, b) => order(a.app) - order(b.app) || a.app.localeCompare(b.app)).map((h) => ({ app: h.app, got: !!h.seenUntil && h.seenUntil >= e.publishedAt, checked: h.lastAt })) };
+}
+
 export function registerHosting(app: Express, requireAgent: import("express").RequestHandler) {
   app.post("/api/agent/episode-still/:id/done", requireAgent, async (req, res) => {
     const id = Number(req.params.id);
@@ -760,8 +776,20 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
     // Moved to another host: the apps follow a permanent redirect (and the tag, for the ones that read the feed first).
     if (s.newFeedUrl && req.query.preview !== "1") return res.redirect(301, s.newFeedUrl);
     const eps = await episodesOf(s.id);
+    // Note which app is reading the feed and how far it got (the waiting chips on a new episode). Never holds the response up.
+    if (req.method === "GET" && !req.query.preview) {
+      const who = appOf(String(req.get("user-agent") ?? ""));
+      if (who !== "Web browser" && who !== "Other") {
+        const newest = eps.filter(live).reduce((m, e) => (e.publishedAt > m ? e.publishedAt : m), "");
+        const t = now();
+        void db.insert(hostedFeedHits).values({ showId: s.id, app: who, firstAt: t, lastAt: t, seenUntil: newest, hits: 1 })
+          .onConflictDoUpdate({ target: [hostedFeedHits.showId, hostedFeedHits.app], set: { lastAt: t, seenUntil: sql`GREATEST(${hostedFeedHits.seenUntil}, ${newest})`, hits: sql`${hostedFeedHits.hits} + 1` } })
+          .catch((err) => console.warn("Feed visit not noted:", (err as Error).message));
+      }
+    }
     res.setHeader("Content-Type", "application/rss+xml; charset=utf-8");
-    res.setHeader("Cache-Control", "public, max-age=300, s-maxage=300");
+    // Every visit has to reach us to be seen, so the edge doesn't keep a copy (the apps ask with ETag, so a repeat is a tiny 304).
+    res.setHeader("Cache-Control", "no-cache");
     res.send(feedXml(s, eps, await db.select().from(hostedSpots).where(eq(hostedSpots.showId, s.id))));
   });
 
@@ -798,12 +826,17 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
       const eps = await episodesOf(s.id);
       const spotRows = await db.select().from(hostedSpots).where(eq(hostedSpots.showId, s.id));
       const st = await showStats(s.id, 30);
+      const dirs = (() => { try { return JSON.parse(s.directories || "{}") as Record<string, { state?: string }>; } catch { return {} as Record<string, { state?: string }>; } })();
+      const listedApps = [dirs.apple?.state, ].some((x) => x === "live" || x === "submitted") ? ["Apple Podcasts"] : [];
+      if (dirs.spotify?.state === "live" || dirs.spotify?.state === "submitted") listedApps.push("Spotify");
+      // The chips are a nicety: if the table isn't there yet (the first minute after a deploy), the list still loads.
+      const hitRows = await db.select().from(hostedFeedHits).where(eq(hostedFeedHits.showId, s.id)).catch(() => [] as { app: string; lastAt: string; seenUntil: string }[]);
       out.push({
         show: s,
         feedUrl: feedUrl(s.slug),
         missing: readiness(s, eps),
         ownerConfirmed: feedOwnerEmail(s) === s.ownerEmail.trim(),
-        episodes: await Promise.all(eps.map(async (e) => ({ ...e, downloads: st.episodes.get(e.id) ?? 0, live: live(e), hasVideo: hasVideo(e), ytLibrary: await libraryYouTubeAt(e.recordingId), bookend: { wanted: planOf(s, e, spotRows).any, state: !planOf(s, e, spotRows).any ? "" : served(s, e, spotRows) ? "ready" : e.bookendJob === "failed" ? "failed" : "working" } }))),
+        episodes: await Promise.all(eps.map(async (e) => ({ ...e, delivery: deliveryOf(e, hitRows, listedApps), downloads: st.episodes.get(e.id) ?? 0, live: live(e), hasVideo: hasVideo(e), ytLibrary: await libraryYouTubeAt(e.recordingId), bookend: { wanted: planOf(s, e, spotRows).any, state: !planOf(s, e, spotRows).any ? "" : served(s, e, spotRows) ? "ready" : e.bookendJob === "failed" ? "failed" : "working" } }))),
         stats: { total: st.total, last30: st.series.reduce((a, d) => a + d.count, 0), series: st.series, apps: st.apps },
       });
     }

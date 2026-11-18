@@ -25,13 +25,31 @@ import { IconTile } from "@/components/ui/icon-tile";
  * Dashboard, Your analytics and the profile sponsors see.
  */
 
-type Ep = HostedEpisodeRow & { downloads: number; live: boolean; hasVideo?: boolean; ytLibrary?: string };
+type Delivery = { apps: { app: string; got: boolean; checked: string }[] };
+type Ep = HostedEpisodeRow & { downloads: number; live: boolean; hasVideo?: boolean; ytLibrary?: string; delivery?: Delivery | null };
 type Hosted = { show: HostedShowRow; feedUrl: string; missing: string[]; ownerConfirmed: boolean; episodes: Ep[]; stats: { total: number; last30: number; series: { date: string; count: number }[]; apps: Record<string, number> } };
 type Resp = { shows: Hosted[]; categories: Record<string, string[]>; youtubeReady?: boolean };
 
 const KEY = ["/api/host/hosting"];
 const compact = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e4 ? `${Math.round(n / 1e3)}K` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(n));
 const hms = (sec: number) => { const s = Math.round(sec); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60; return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`; };
+const short = (app: string) => app.replace(/ Podcasts$/, "");
+const ago = (iso: string) => { const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000)); return m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`; };
+const waiting = (d?: Delivery | null) => !!d && d.apps.some((a) => !a.got);
+/** A new episode's trip to the apps: amber while an app hasn't picked it up yet, green once it has. */
+function DeliveryChips({ ep }: { ep: Ep }) {
+  const d = ep.delivery;
+  if (!d || !d.apps.length) return null;
+  return (
+    <span className="mt-1 flex flex-wrap gap-1" data-testid={`delivery-${ep.id}`}>
+      {d.apps.map((a) => (
+        <span key={a.app} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${a.got ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]"}`} title={a.got ? `${a.app} has it` : a.checked ? `${a.app} last looked ${ago(a.checked)}` : `${a.app} hasn't looked at this feed yet`}>
+          {a.got ? <Check className="h-3 w-3" /> : <Loader2 className="h-3 w-3 animate-spin" />}{a.got ? `${short(a.app)} has it` : `Waiting for ${short(a.app)}`}
+        </span>
+      ))}
+    </span>
+  );
+}
 /** Show notes as the plain words a person would type: tags out, paragraphs kept, a link written as "text (address)". */
 function htmlToText(html: string): string {
   if (!/<[a-z!/]/i.test(html)) return html;
@@ -75,7 +93,7 @@ export function PodcastHosting() {
   const { data: intake } = useQuery<{ known: { rss: string } }>({ queryKey: ["/api/host/podcast-intake"], queryFn: async () => (await apiRequest("GET", "/api/host/podcast-intake")).json() });
   const feedUrl = intake?.known.rss || profile?.rssUrl || "";
   // While an episode's audio is being made, check back every few seconds.
-  const q = useQuery<Resp>({ queryKey: KEY, queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json(), refetchInterval: (qq) => ((qq.state.data as Resp | undefined)?.shows.some((x) => x.episodes.some((e) => e.audioJob === "queued" || e.audioJob === "running")) ? 5000 : false) });
+  const q = useQuery<Resp>({ queryKey: KEY, queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json(), refetchInterval: (qq) => { const sh = (qq.state.data as Resp | undefined)?.shows; return sh?.some((x) => x.episodes.some((e) => e.audioJob === "queued" || e.audioJob === "running")) ? 5000 : sh?.some((x) => x.episodes.some((e) => waiting(e.delivery))) ? 30_000 : false; } });
   const refresh = () => { void qc.invalidateQueries({ queryKey: KEY }); void qc.invalidateQueries({ queryKey: ["/api/host/podcast-stats"] }); };
   const create = useMutation({
     mutationFn: async () => (await apiRequest("POST", "/api/host/hosting/shows", {})).json(),
@@ -253,6 +271,7 @@ export function PodcastHosting() {
                     <button type="button" onClick={() => setEditEp(e)} className="min-w-0 flex-1 text-left">
                       <span className="line-clamp-2 text-sm font-medium sm:line-clamp-none sm:block sm:truncate">{e.episodeNumber != null ? `${e.episodeNumber}. ` : ""}{e.title}</span>
                       <span className="block text-xs text-muted-foreground"><span className="font-semibold sm:hidden">{STAGE[stageOf(e)].label} · </span>{e.publishedAt ? dateOf(e.publishedAt) : "Not published"}{e.durationSec ? ` · ${hms(e.durationSec)}` : ""}{e.youtube ? " · on YouTube" : ""}</span>
+                      <DeliveryChips ep={e} />
                     </button>
                     <span className="hidden w-24 shrink-0 text-right text-xs tabular-nums text-muted-foreground sm:block"><b className="text-foreground">{compact(e.downloads)}</b> downloads</span>
                     <Button size="sm" variant="outline" className="h-8 shrink-0 rounded-full" onClick={() => setEditEp(e)}>{stageOf(e) === "final" ? "Publish" : stageOf(e) === "post" ? "Open" : "Edit"}</Button>
@@ -990,6 +1009,18 @@ function EpisodePage({ ep, show, youtubeReady, onBack, onSaved, onAddSpot }: { e
             <div className={`rounded-t-2xl px-4 py-3 text-sm font-semibold ${stage === "live" ? "bg-emerald-600 text-white" : stage === "scheduled" ? "bg-[#053877] text-white" : stage === "final" ? "bg-[#F0A71F] text-[#3a2600]" : stage === "failed" ? "bg-destructive text-white" : "bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]"}`} data-testid="episode-stage">{stage === "live" ? "Live" : STAGE[stage].label}</div>
             <div className="space-y-3 p-4 text-sm">
               <p className="text-muted-foreground">{statusLine}</p>
+              {ep.delivery && ep.delivery.apps.length > 0 && (
+                <div className="space-y-1.5 rounded-xl bg-muted/50 px-3 py-2.5" data-testid="episode-delivery">
+                  <p className="text-xs font-semibold text-foreground">{waiting(ep.delivery) ? "On its way to the apps" : "In every app that reads your feed"}</p>
+                  {ep.delivery.apps.map((a) => (
+                    <p key={a.app} className="flex items-center gap-1.5 text-xs">
+                      {a.got ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Loader2 className="h-3.5 w-3.5 animate-spin text-[#b36b00]" />}
+                      <span className="font-medium">{a.app}</span>
+                      <span className="text-muted-foreground">{a.got ? "has it" : a.checked ? `waiting · last looked ${ago(a.checked)}` : "waiting · hasn't looked yet"}</span>
+                    </p>
+                  ))}
+                </div>
+              )}
               {ep.status === "draft" && stage === "post" && (
                 <>
                   <p className="rounded-xl bg-[#053877]/[0.06] px-3 py-2.5 text-xs text-foreground/80">Your original recording is in your Library. We're editing this one: intro and outro, clean-up, the notes. When it's done it becomes a <b>Final draft</b> and you can publish it.</p>

@@ -2880,6 +2880,22 @@ export const hostedDownloads = pgTable("hosted_downloads", {
 }, (t) => [uniqueIndex("hosted_downloads_once").on(t.episodeId, t.listenerHash, t.day), index("hosted_downloads_show_day").on(t.showId, t.day)]);
 export type HostedDownloadRow = typeof hostedDownloads.$inferSelect;
 
+/**
+ * Which apps are reading a show's feed, and how far they have read: one row per show and app (Apple Podcasts, Spotify…).
+ * "seenUntil" is the newest episode date in the feed that app last fetched, so an episode is "picked up" by an app
+ * once seenUntil reaches its publish time.
+ */
+export const hostedFeedHits = pgTable("hosted_feed_hits", {
+  id: serial("id").primaryKey(),
+  showId: integer("show_id").notNull(),
+  app: text("app").notNull(),
+  firstAt: text("first_at").notNull(),
+  lastAt: text("last_at").notNull(),
+  seenUntil: text("seen_until").notNull().default(""),
+  hits: integer("hits").notNull().default(1),
+}, (t) => [uniqueIndex("hosted_feed_hits_show_app").on(t.showId, t.app)]);
+export type HostedFeedHitRow = typeof hostedFeedHits.$inferSelect;
+
 /** A sponsor's message that plays before ("pre") or after ("post") a show's episodes. The episode's own audio is never changed. */
 export const hostedSpots = pgTable("hosted_spots", {
   id: serial("id").primaryKey(),

@@ -1477,7 +1477,8 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
         </div>
       )}
 
-      {simple && kind !== "room" && (() => {
+      {/* The big Put me on stage / Next / Message strip is the Marathon desk's. A creator's own studio has no desk: Go on stage is in the control bar below. */}
+      {simple && kind !== "room" && !personal && (() => {
         const list = scenes ?? [];
         const at = list.findIndex((x) => x.id === studio?.currentSceneId);
         const next = at >= 0 ? list[at + 1] : list[0];
