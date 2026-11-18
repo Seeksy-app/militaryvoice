@@ -39,12 +39,7 @@ export function Opportunities() {
         <div className="rounded-2xl border border-dashed border-border p-10 text-center">
           <Inbox className="mx-auto h-6 w-6 text-muted-foreground" />
           <p className="mt-2 font-medium">Nothing yet</p>
-          <p className="mt-1 text-sm text-muted-foreground">Turn on Let brands find me in your Profile, and add a media kit to your SmartLink, so brands can find you.</p>
-          {/* The way there, not just the words (8 Oct): the switch, with the pointer on it. */}
-          <div className="mt-4 flex flex-wrap justify-center gap-2">
-            <Button className="rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" onClick={() => { navigate("/host/dashboard/profile"); if (STEP_GUIDE.brands) showGuide([STEP_GUIDE.brands]); }} data-testid="opps-turn-on">Let brands find me</Button>
-            <Button variant="outline" className="rounded-full" onClick={() => navigate("/host/dashboard/page")} data-testid="opps-media-kit">Open my SmartLink</Button>
-          </div>
+          <p className="mt-1 text-sm text-muted-foreground">When a brand asks to work with you, it shows up here.</p>
         </div>
       )}
       {list.map((o) => <OppCard key={o.id} o={o} />)}
