@@ -51,6 +51,7 @@ import postgres from "postgres";
 import { and, eq, ne, or, asc, desc, isNull, inArray, lte, lt, sql as sqlExpr } from "drizzle-orm";
 import { ensureSchema as syncSchemaFromDefinitions, schemaFingerprint } from "./schemaSync.js";
 import { seal, unseal } from "./secretBox.js";
+import { poolOptions } from "./poolOptions.js";
 import { REVIEW_EMAIL } from "../shared/review.js";
 
 /** Zoom tokens are sealed in the database and opened on the way out. */
@@ -93,6 +94,8 @@ function getConnection(): { sql: ReturnType<typeof postgres>; db: ReturnType<typ
     //  - `prepare: false` is required in transaction mode (pgbouncer).
     //  - A small per-instance pool (4) lets a page's parallel requests run
     //    side by side; idle connections close so instances don't pin the pooler.
+    //  - No pipelining (max_pipeline: 0): the pooler can't keep pipelined replies
+    //    in order, and under a burst requests hung forever. See poolOptions.ts.
     let url = CONNECTION_STRING;
     try {
       const u = new URL(url);
@@ -103,7 +106,7 @@ function getConnection(): { sql: ReturnType<typeof postgres>; db: ReturnType<typ
     } catch {
       /* leave the string untouched if it isn't a parseable URL */
     }
-    _sql = postgres(url, { prepare: false, max: Number(process.env.DB_POOL_MAX) || 4, idle_timeout: 20, connect_timeout: 10 });
+    _sql = postgres(url, { ...poolOptions() });
     _db = drizzle(_sql);
   }
   return { sql: _sql, db: _db };
