@@ -109,7 +109,7 @@ export function PodcastHosting() {
       <section className="mt-2" data-testid="podcast-hosting">
         {/* Their show first (the one from sign-up): one press to move it here. Then the way in: have one, or starting one. */}
         {feedUrl && !inSetup && <YourShowElsewhere name={profile?.podcastName ?? ""} rss={feedUrl} onMoved={refresh} />}
-        <PodcastSetup initialFeed={feedUrl} onImported={refresh} onCreating={() => setInSetup(true)} onFinish={finishSetup} />
+        <PodcastSetup initialFeed={feedUrl} onImported={refresh} onCreating={() => setInSetup(true)} onFinish={finishSetup} onBack={() => (shows.length ? setInSetup(false) : window.location.assign("/host/dashboard"))} />
       </section>
     );
   }
