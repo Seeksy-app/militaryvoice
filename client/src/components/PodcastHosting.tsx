@@ -70,7 +70,7 @@ export function PodcastHosting() {
   });
   // Which show is open (none: the grid of shows), and which of its tabs.
   const [openId, setOpenId] = useState<number | null>(null);
-  const [tab, setTab] = useState<PodTab>(() => { try { const t = localStorage.getItem("mv_pod_tab"); return t === "directories" || t === "details" || t === "guests" || t === "invite" || t === "pitch" ? t : "episodes"; } catch { return "episodes"; } });
+  const [tab, setTab] = useState<PodTab>(() => { try { const t = localStorage.getItem("mv_pod_tab"); return t === "defaults" || t === "directories" || t === "details" || t === "guests" || t === "invite" || t === "pitch" ? t : "episodes"; } catch { return "episodes"; } });
   const go = (t: PodTab) => { setTab(t); try { localStorage.setItem("mv_pod_tab", t); } catch { /* fine */ } };
   // The field Show details opens on (from the checklist): the description, the name, the owner email.
   const [focus, setFocus] = useState<"" | "title" | "description" | "ownerEmail">("");
@@ -210,6 +210,7 @@ export function PodcastHosting() {
       {/* On a phone the last tabs run off the edge: closer together, and a fade that says there's more (8 Oct). */}
       <div className="flex gap-4 overflow-x-auto whitespace-nowrap border-b border-border pr-6 [mask-image:linear-gradient(to_right,black_82%,transparent)] [scrollbar-width:none] sm:gap-6 sm:pr-0 sm:[mask-image:none]" role="tablist">
         {tabBtn("episodes", "Episodes")}
+        {tabBtn("defaults", "Defaults")}
         {tabBtn("directories", ready ? "Directories" : "Directories · to do")}
         {tabBtn("details", "Show details")}
         {tabBtn("invite", "Invite a guest")}
@@ -264,6 +265,8 @@ export function PodcastHosting() {
         </>
       )}
 
+      {tab === "defaults" && <DefaultsPanel key={s.id} h={h} onSaved={refresh} />}
+
       {tab === "directories" && (
         <>
           {!ready ? (
@@ -301,7 +304,7 @@ export function PodcastHosting() {
   );
 }
 
-type PodTab = "episodes" | "directories" | "details" | "guests" | "pitch" | "invite";
+type PodTab = "episodes" | "defaults" | "directories" | "details" | "guests" | "pitch" | "invite";
 type DirState = { state: "" | "submitted" | "live" | "rejected"; url: string; at?: string };
 const parseDirs = (raw: string | null | undefined): Record<string, DirState> => { try { const v = raw ? JSON.parse(raw) : {}; return v && typeof v === "object" ? v : {}; } catch { return {}; } };
 
@@ -757,23 +760,6 @@ function ShowForm({ show, categories, onSaved, onDeleted, focus = "" }: { show: 
         <div className="grid gap-3 sm:grid-cols-2">
           <label className={`${label} sm:col-span-2`}>Show name<Input autoFocus={focus === "title"} value={v.title} onChange={(e) => set("title", e.target.value)} className="mt-1" /></label>
           <label className={`${label} sm:col-span-2`}>Description<Textarea autoFocus={focus === "description"} value={v.description} onChange={(e) => set("description", e.target.value)} rows={4} className="mt-1" placeholder="What the show is about, who it's for, and who hosts it." /></label>
-          <div className="sm:col-span-2" data-testid="hosting-footer">
-            <label className={label}>Episode footer
-              <Textarea value={v.episodeFooter ?? ""} onChange={(e) => set("episodeFooter", e.target.value)} rows={5} className="mt-1" placeholder={"Bounce Back in Business & Life, Episode #{number}\n{title}\nGuest: {guest}\n\n#Leadership #Veterans"} data-testid="hosting-footer-text" />
-            </label>
-            <p className="mt-1 text-xs text-muted-foreground">Written once. It goes at the end of every episode's notes in Apple, Spotify and your page, new and old. Tap a word to add it; each fills in from the episode. A line with nothing to fill in (no guest, say) is left out.</p>
-            <div className="mt-2 flex flex-wrap gap-1.5">
-              {FOOTER_TOKENS.map((t) => (
-                <button key={t} type="button" onClick={() => set("episodeFooter", `${(v.episodeFooter ?? "").replace(/\s+$/, "")}${(v.episodeFooter ?? "").trim() ? " " : ""}{${t}}`)} className="rounded-full border border-border px-2.5 py-0.5 text-xs font-semibold text-foreground hover:bg-muted" data-testid={`hosting-footer-token-${t}`}>{`{${t}}`}</button>
-              ))}
-            </div>
-            {(v.episodeFooter ?? "").trim() && (
-              <div className="mt-3 rounded-xl border border-border bg-muted/30 p-3" data-testid="hosting-footer-preview">
-                <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">How it looks on an episode</p>
-                <p className="whitespace-pre-line text-sm text-foreground">{fillFooter(v.episodeFooter ?? "", { title: "Your episode's title", number: 12, season: null, guest: "Their guest" })}</p>
-              </div>
-            )}
-          </div>
           <label className={label}>Host or author<Input value={v.author} onChange={(e) => set("author", e.target.value)} className="mt-1" /></label>
           <label className={label}>Owner email<Input autoFocus={focus === "ownerEmail"} type="email" value={v.ownerEmail} onChange={(e) => set("ownerEmail", e.target.value)} className="mt-1" /></label>
           <label className={label}>Category
@@ -838,6 +824,9 @@ function EpisodePage({ ep, show, youtubeReady, onBack, onSaved }: { ep: Ep; show
   const notesPlain = ep.notesFormat === "html" ? htmlToText(ep.description) : ep.description;
   const hasAudio = !!(ep.audioKey || ep.audioUrl);
   const dirty = Object.keys(f).length > 0;
+  // The show's intro and outro: on for episodes made after they were set, unless this one says otherwise.
+  const bookendsOn = (v.bookends ?? "") === "on" || ((v.bookends ?? "") !== "off" && !!show.bookendsSince && ep.createdAt >= show.bookendsSince);
+  const bookendState = (ep as Ep & { bookend?: { state?: string } }).bookend?.state ?? "";
   const label = "block text-xs font-semibold text-muted-foreground";
   const save = async (status?: "published" | "draft") => {
     try {
@@ -937,6 +926,12 @@ function EpisodePage({ ep, show, youtubeReady, onBack, onSaved }: { ep: Ep; show
             )}
             <Textarea value={typeof f.description === "string" ? f.description : notesPlain} onChange={(e) => setF((x) => ({ ...x, description: e.target.value, notesFormat: "text" }))} rows={12} placeholder="What it's about, who's on it, and any links you mention." data-testid="hosting-ep-notes" />
             <label className={`${label} mt-3`}>Guest (fills {"{guest}"} in your footer)<Input value={(v.guest as string) ?? ""} onChange={(e) => set("guest", e.target.value)} className="mt-1" placeholder="Who was on it" data-testid="hosting-ep-guest" /></label>
+            {(show.introKey || show.outroKey) && hasAudio && (
+              <div className="mt-3 rounded-xl border border-border px-3 py-2.5 text-sm" data-testid="hosting-ep-bookends">
+                <label className="flex items-center gap-2"><input type="checkbox" checked={bookendsOn} onChange={(e) => set("bookends", e.target.checked ? "on" : "off")} /> Add your intro{show.outroKey ? " and outro" : ""} to this episode</label>
+                <p className="mt-1 text-xs text-muted-foreground">{!bookendsOn ? "Plays as you uploaded it." : bookendState === "ready" ? "Added. The apps play it with your intro and outro." : bookendState === "failed" ? "Couldn't add them. Save again to retry." : "Being added now: a few minutes. Until then the apps play it as it is."}</p>
+              </div>
+            )}
             {(show.episodeFooter ?? "").trim() && (
               <div className="mt-3 rounded-xl border border-border px-3 py-2.5 text-sm" data-testid="hosting-ep-footer">
                 <label className="flex items-center gap-2"><input type="checkbox" checked={!(v.footerOff as boolean)} onChange={(e) => set("footerOff", !e.target.checked)} /> Add your show's footer to this episode</label>
@@ -996,6 +991,100 @@ function EpisodePage({ ep, show, youtubeReady, onBack, onSaved }: { ep: Ep; show
           </div>
         </aside>
       </div>
+    </div>
+  );
+}
+
+/** What every episode of a show starts with: its intro and outro, and the footer under its notes. Per show, so two shows keep their own. */
+function DefaultsPanel({ h, onSaved }: { h: Hosted; onSaved: () => void }) {
+  const { toast } = useToast();
+  const show = h.show;
+  const [foot, setFoot] = useState<string | null>(null);
+  const footer = foot ?? show.episodeFooter ?? "";
+  const saveFooter = async () => {
+    try { await apiRequest("PATCH", `/api/host/hosting/shows/${show.id}`, { episodeFooter: footer }); onSaved(); setFoot(null); toast({ title: "Footer saved", description: "It's under every episode's notes now." }); }
+    catch (e) { toast({ title: "Couldn't save", description: (e as Error).message, variant: "destructive" }); }
+  };
+  const working = h.episodes.filter((e) => (e as Ep & { bookend?: { state?: string } }).bookend?.state === "working").length;
+  return (
+    <div className="space-y-4" data-testid="hosting-defaults">
+      <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
+        <h2 className="text-sm font-semibold">Intro and outro</h2>
+        <p className="mt-0.5 text-sm text-muted-foreground">Added to every new episode for you, so you never edit them in. Episodes you've already put out are left as they are.</p>
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          <BookendCard show={show} kind="intro" onSaved={onSaved} />
+          <BookendCard show={show} kind="outro" onSaved={onSaved} />
+        </div>
+        {working > 0 && <p className="mt-3 flex items-center gap-2 text-xs text-muted-foreground"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Putting them on {working} episode{working === 1 ? "" : "s"} now. The original audio is kept.</p>}
+      </div>
+      <div className="rounded-2xl border border-border bg-card p-5 shadow-sm" data-testid="hosting-footer">
+        <h2 className="text-sm font-semibold">Episode footer</h2>
+        <p className="mt-0.5 text-sm text-muted-foreground">Written once. It goes at the end of every episode's notes in Apple, Spotify and your page, new and old. Tap a word to add it; each fills in from the episode. A line with nothing to fill in (no guest, say) is left out.</p>
+        <Textarea value={footer} onChange={(e) => setFoot(e.target.value)} rows={6} className="mt-3" placeholder={"Bounce Back in Business & Life, Episode #{number}\n{title}\nGuest: {guest}\n\n#Leadership #Veterans"} data-testid="hosting-footer-text" />
+        <div className="mt-2 flex flex-wrap gap-1.5">
+          {FOOTER_TOKENS.map((t) => (
+            <button key={t} type="button" onClick={() => setFoot(`${footer.replace(/\s+$/, "")}${footer.trim() ? " " : ""}{${t}}`)} className="rounded-full border border-border px-2.5 py-0.5 text-xs font-semibold text-foreground hover:bg-muted" data-testid={`hosting-footer-token-${t}`}>{`{${t}}`}</button>
+          ))}
+        </div>
+        {footer.trim() && (
+          <div className="mt-3 rounded-xl border border-border bg-muted/30 p-3" data-testid="hosting-footer-preview">
+            <p className="mb-1 text-[11px] font-semibold uppercase tracking-[0.08em] text-muted-foreground">How it looks on an episode</p>
+            <p className="whitespace-pre-line text-sm text-foreground">{fillFooter(footer, { title: "Your episode's title", number: 12, season: null, guest: "Their guest" })}</p>
+          </div>
+        )}
+        <Button onClick={() => void saveFooter()} disabled={foot === null} className="mt-3 bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-footer-save">Save footer</Button>
+      </div>
+    </div>
+  );
+}
+
+/** One of the show's two bookends: its file, a player, and replace or remove. */
+function BookendCard({ show, kind, onSaved }: { show: HostedShowRow; kind: "intro" | "outro"; onSaved: () => void }) {
+  const { toast } = useToast();
+  const key = kind === "intro" ? show.introKey : show.outroKey;
+  const name = kind === "intro" ? show.introName : show.outroName;
+  const sec = kind === "intro" ? show.introSec : show.outroSec;
+  const [pct, setPct] = useState<number | null>(null);
+  const input = useRef<HTMLInputElement>(null);
+  const put = async (file: File) => {
+    if (!/^audio\//.test(file.type)) return toast({ title: "That isn't an audio file", description: "Choose an MP3, M4A or WAV.", variant: "destructive" });
+    try {
+      setPct(0);
+      const dur = await durationOf(file).catch(() => 0);
+      const k = await uploadToStorage(file, setPct);
+      await apiRequest("PUT", `/api/host/hosting/shows/${show.id}/bookends`, { kind, key: k, name: file.name.replace(/\.[a-z0-9]+$/i, ""), durationSec: Math.round(dur) });
+      onSaved();
+      toast({ title: `Your ${kind} is set`, description: "New episodes get it automatically." });
+    } catch (e) {
+      toast({ title: "Couldn't use that", description: (e as Error).message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, ""), variant: "destructive" });
+    } finally {
+      setPct(null);
+      if (input.current) input.current.value = "";
+    }
+  };
+  const clear = async () => {
+    if (!window.confirm(`Take your ${kind} off? New episodes won't get it.`)) return;
+    await apiRequest("PUT", `/api/host/hosting/shows/${show.id}/bookends`, { kind, clear: true });
+    onSaved();
+  };
+  return (
+    <div className="rounded-xl border border-border p-4" data-testid={`bookend-${kind}`}>
+      <p className="text-sm font-semibold capitalize">{kind}</p>
+      <input ref={input} type="file" accept="audio/*,.mp3,.m4a,.wav" className="hidden" onChange={(e) => e.target.files?.[0] && void put(e.target.files[0])} />
+      {key ? (
+        <>
+          <p className="mt-1 truncate text-xs text-muted-foreground">{name || "Your file"}{sec ? ` · ${hms(sec)}` : ""}</p>
+          <audio controls preload="none" src={`/api/host/hosting/shows/${show.id}/bookend/${kind}`} className="mt-2 w-full" />
+          <div className="mt-3 flex gap-2">
+            <Button size="sm" variant="outline" className="h-8 rounded-full" disabled={pct !== null} onClick={() => input.current?.click()}>{pct === null ? "Replace" : `Uploading ${Math.round(pct)}%`}</Button>
+            <Button size="sm" variant="ghost" className="h-8 rounded-full text-muted-foreground" onClick={() => void clear()}>Remove</Button>
+          </div>
+        </>
+      ) : (
+        <button type="button" onClick={() => input.current?.click()} disabled={pct !== null} onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); const x = e.dataTransfer.files?.[0]; if (x) void put(x); }} className="mt-2 flex h-28 w-full flex-col items-center justify-center gap-1 rounded-xl border-2 border-dashed border-border text-sm hover:border-[#053877]/50 hover:bg-muted/40 disabled:opacity-60" data-testid={`bookend-${kind}-add`}>
+          {pct === null ? <><Upload className="h-5 w-5 text-[#053877]" /><span className="font-semibold">Add your {kind}</span><span className="text-xs text-muted-foreground">Drag a file here or choose one (up to 5 minutes)</span></> : <span className="inline-flex items-center gap-2"><Loader2 className="h-4 w-4 animate-spin" /> Uploading… {Math.round(pct)}%</span>}
+        </button>
+      )}
     </div>
   );
 }

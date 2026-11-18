@@ -170,7 +170,7 @@ import { registerMusic } from "./music.js";
 import { registerReview } from "./review.js";
 import { registerSponsorFinder } from "./sponsorFinder.js";
 import { registerPodcastStats } from "./podcastStats.js";
-import { registerHosting, claimEpisodeAudio, claimEpisodeStill, podcastYouTubeAt } from "./hosting.js";
+import { registerHosting, claimEpisodeAudio, claimEpisodeBookends, claimEpisodeStill, podcastYouTubeAt } from "./hosting.js";
 import { decideAdvance } from "../shared/showClock.js";
 import type { StageThanks } from "../shared/stageMeta.js";
 import { registerBioPage, registerBioAgent, claimLivingSqueeze, subscribersFor, publishedBioUrl } from "./bioPage.js";
@@ -7106,6 +7106,11 @@ export function registerRoutes(app: Express): void {
     if (Array.isArray(req.body?.can) && req.body.can.includes("episode-audio")) {
       const ea = await claimEpisodeAudio().catch((err) => { console.error("Episode audio claim failed:", err); return null; });
       if (ea) return res.json({ job: { recordingId: ea.id, title: ea.title, durationSec: ea.durationSec, downloadUrl: ea.recordingUrl, show: "", host: "", transcript: [], episodeAudio: { episodeId: ea.id } } });
+    }
+    // A podcast episode that wants its show's intro and outro put on: quick; the original audio is never touched.
+    if (Array.isArray(req.body?.can) && req.body.can.includes("episode-bookends")) {
+      const eb = await claimEpisodeBookends().catch((err) => { console.error("Episode bookends claim failed:", err); return null; });
+      if (eb) return res.json({ job: { recordingId: eb.id, title: eb.title, durationSec: eb.durationSec, downloadUrl: eb.audioUrl, show: "", host: "", transcript: [], episodeBookends: { episodeId: eb.id, introUrl: eb.introUrl, outroUrl: eb.outroUrl, sig: eb.sig } } });
     }
     // A recording to bring in (Zoom), if this worker can: quick, and someone's Library is waiting on it.
     if (Array.isArray(req.body?.can) && req.body.can.includes("import")) {

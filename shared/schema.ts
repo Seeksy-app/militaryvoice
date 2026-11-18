@@ -2777,6 +2777,15 @@ export const hostedShows = pgTable("hosted_shows", {
   youtubePrivacy: text("youtube_privacy").notNull().default("public"),
   /** Written once, added to the end of every episode's notes (feed and page): {title}, {number}, {season}, {guest} fill in per episode. */
   episodeFooter: text("episode_footer").notNull().default(""),
+  /** The show's own intro and outro (audio), added to episodes made after they were set. Keys are in our storage (show-assets/…). */
+  introKey: text("intro_key").notNull().default(""),
+  introName: text("intro_name").notNull().default(""),
+  introSec: integer("intro_sec").notNull().default(0),
+  outroKey: text("outro_key").notNull().default(""),
+  outroName: text("outro_name").notNull().default(""),
+  outroSec: integer("outro_sec").notNull().default(0),
+  /** When the first one was set: episodes made from then on get them (older ones already have theirs). */
+  bookendsSince: text("bookends_since").notNull().default(""),
   /** Leaving us: the new host's feed. The feed then says so (itunes:new-feed-url) and forwards there (301). */
   newFeedUrl: text("new_feed_url").notNull().default(""),
   createdAt: text("created_at").notNull(),
@@ -2792,6 +2801,16 @@ export const hostedEpisodes = pgTable("hosted_episodes", {
   description: text("description").notNull().default(""),
   /** text | html */
   notesFormat: text("notes_format").notNull().default("text"),
+  /** "" (the show's rule), "on" or "off": this one episode gets the show's intro and outro, or doesn't. */
+  bookends: text("bookends").notNull().default(""),
+  /** The episode with the intro and outro on (made by the worker); the original audio stays as it is. */
+  servedKey: text("served_key").notNull().default(""),
+  servedSize: bigint("served_size", { mode: "number" }).notNull().default(0),
+  servedSec: integer("served_sec").notNull().default(0),
+  /** What it was made from (intro, outro and audio): when any change, it is made again. */
+  servedSig: text("served_sig").notNull().default(""),
+  bookendJob: text("bookend_job").notNull().default(""),
+  bookendJobAt: text("bookend_job_at").notNull().default(""),
   /** Who was on it (fills {guest} in the show's footer). */
   guest: text("guest").notNull().default(""),
   /** True when this one episode leaves the show's footer off. */

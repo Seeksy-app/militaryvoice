@@ -75,6 +75,12 @@ const notesText = (html: string) => html
   .replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&apos;/g, "'")
   .replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 /** A show's description as plain words: one that came in with tags (from an old host) loses them; plain text is left alone. */
+/** The show's intro and outro on an episode. What an episode is made from: when any part changes, the worker makes it again. */
+const sigOf = (s: HostedShowRow, e: HostedEpisodeRow) => crypto.createHash("sha1").update([s.introKey, s.outroKey, e.audioKey].join("|")).digest("hex").slice(0, 16);
+export const wantsBookends = (s: HostedShowRow, e: HostedEpisodeRow) =>
+  !!(s.introKey || s.outroKey) && !!e.audioKey && e.bookends !== "off" && (e.bookends === "on" || (!!s.bookendsSince && e.createdAt >= s.bookendsSince));
+/** The finished episode (intro and outro on) when it is ready and still current; null: serve the original. */
+const served = (s: HostedShowRow, e: HostedEpisodeRow) => (wantsBookends(s, e) && e.servedKey && e.servedSig === sigOf(s, e) ? { key: e.servedKey, size: e.servedSize, sec: e.servedSec } : null);
 const plainDesc = (d: string) => (/<[a-z!/][^>]*>|&(nbsp|amp|#\d+);/i.test(d) ? notesText(d) : d);
 const extOf = (mime: string) => (/mp4|m4a|aac/.test(mime) ? (mime.startsWith("video") ? "mp4" : "m4a") : "mp3");
 
@@ -296,16 +302,17 @@ export function feedXml(s: HostedShowRow, eps: HostedEpisodeRow[]): string {
     ? `<itunes:category text="${esc(s.category)}"><itunes:category text="${esc(s.subcategory)}"/></itunes:category>`
     : `<itunes:category text="${esc(s.category)}"/>`;
   const items = eps.filter(live).map((e) => {
-    const url = `${ORIGIN}/e/${e.id}.${extOf(e.mime)}`;
+    const sv = served(s, e);
+    const url = `${ORIGIN}/e/${e.id}.${extOf(sv ? "audio/mpeg" : e.mime)}`;
     return `
     <item>
       <title>${esc(e.title)}</title>
       <description>${cdata(notes(e))}</description>
       <content:encoded>${cdata(notes(e))}</content:encoded>
-      <enclosure url="${esc(url)}" length="${e.sizeBytes || 0}" type="${esc(e.mime)}"/>
+      <enclosure url="${esc(url)}" length="${(sv ? sv.size : e.sizeBytes) || 0}" type="${esc(sv ? "audio/mpeg" : e.mime)}"/>
       <guid isPermaLink="false">${esc(e.guid || `mv-${e.id}`)}</guid>
       <pubDate>${rfc822(e.publishedAt)}</pubDate>
-      ${e.durationSec ? `<itunes:duration>${e.durationSec}</itunes:duration>` : ""}
+      ${(sv ? sv.sec : e.durationSec) ? `<itunes:duration>${sv ? sv.sec : e.durationSec}</itunes:duration>` : ""}
       ${e.episodeNumber != null ? `<itunes:episode>${e.episodeNumber}</itunes:episode>` : ""}
       ${e.season != null ? `<itunes:season>${e.season}</itunes:season>` : ""}
       <itunes:episodeType>${esc(e.episodeType)}</itunes:episodeType>
@@ -391,6 +398,27 @@ export async function hostedAsStats(email: string): Promise<{ source: "militaryv
 const art = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
 const emailOf = (req: Request) => (getSessionEmail(req) ?? "").trim().toLowerCase();
 const num = (v: unknown) => (v === "" || v === null || v === undefined || !Number.isFinite(Number(v)) ? null : Math.max(0, Math.round(Number(v))));
+
+/** An episode that wants the show's intro and outro and doesn't have them yet: the worker puts them on (original untouched). */
+export async function claimEpisodeBookends(): Promise<{ id: number; title: string; durationSec: number; audioUrl: string; introUrl: string; outroUrl: string; sig: string } | null> {
+  await schemaIsReady();
+  const stale = new Date(Date.now() - 30 * 60_000).toISOString();
+  const shows = (await db.select().from(hostedShows)).filter((x) => x.introKey || x.outroKey);
+  for (const sh of shows) {
+    for (const e of await episodesOf(sh.id)) {
+      if (!wantsBookends(sh, e) || served(sh, e)) continue;
+      if (e.bookendJob === "failed" || (e.bookendJob === "running" && e.bookendJobAt > stale)) continue;
+      const got = await db.update(hostedEpisodes).set({ bookendJob: "running", bookendJobAt: now() })
+        .where(and(eq(hostedEpisodes.id, e.id), eq(hostedEpisodes.bookendJob, e.bookendJob))).returning({ id: hostedEpisodes.id });
+      if (!got.length) continue;
+      return {
+        id: e.id, title: e.title, durationSec: e.durationSec, audioUrl: await signedRecordingUrl(e.audioKey, 6 * 3600),
+        introUrl: sh.introKey ? await signedRecordingUrl(sh.introKey, 6 * 3600) : "", outroUrl: sh.outroKey ? await signedRecordingUrl(sh.outroKey, 6 * 3600) : "", sig: sigOf(sh, e),
+      };
+    }
+  }
+  return null;
+}
 
 /** The worker's next episode to turn from video into audio (a stuck one is taken back after 30 minutes). */
 export async function claimEpisodeAudio(mode: "convert" | "copy" = "convert"): Promise<{ id: number; title: string; durationSec: number; recordingUrl: string; copy?: boolean; mime?: string } | null> {
@@ -572,6 +600,16 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
     await db.update(hostedEpisodes).set({ audioKey: key, ...(copied ? {} : { mime: "audio/mpeg" }), ...(num(req.body?.sizeBytes) ? { sizeBytes: num(req.body?.sizeBytes)! } : {}), ...(num(req.body?.durationSec) ? { durationSec: num(req.body?.durationSec)! } : {}), audioJob: "", audioError: "" }).where(eq(hostedEpisodes.id, Number(req.params.id)));
     res.json({ ok: true });
   });
+  app.post("/api/agent/episode-bookends/:id/done", requireAgent, async (req, res) => {
+    const key = String(req.body?.servedKey ?? "");
+    if (!/^clean\/[\w.-]+$/.test(key)) return res.status(400).json({ message: "No audio." });
+    await db.update(hostedEpisodes).set({ servedKey: key, servedSize: num(req.body?.sizeBytes) ?? 0, servedSec: num(req.body?.durationSec) ?? 0, servedSig: String(req.body?.sig ?? "").slice(0, 40), bookendJob: "" }).where(eq(hostedEpisodes.id, Number(req.params.id)));
+    res.json({ ok: true });
+  });
+  app.post("/api/agent/episode-bookends/:id/failed", requireAgent, async (req, res) => {
+    await db.update(hostedEpisodes).set({ bookendJob: req.body?.requeue === true ? "" : "failed" }).where(eq(hostedEpisodes.id, Number(req.params.id)));
+    res.json({ ok: true });
+  });
   app.post("/api/agent/episode-audio/:id/failed", requireAgent, async (req, res) => {
     const requeue = req.body?.requeue === true;
     const [e] = await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.id, Number(req.params.id))).limit(1);
@@ -634,7 +672,10 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
       await db.insert(hostedDownloads).values({ showId: e.showId, episodeId: e.id, day, listenerHash, app: appOf(ua), createdAt: now() }).onConflictDoNothing().catch((err) => console.warn("Download not counted:", (err as Error).message));
     }
     res.setHeader("Cache-Control", "no-store");
-    res.redirect(302, e.audioKey ? await signedRecordingUrl(e.audioKey, 6 * 3600) : e.audioUrl);
+    // With the show's intro and outro on, when that version is ready; otherwise the original.
+    const [sh] = e.audioKey ? await db.select().from(hostedShows).where(eq(hostedShows.id, e.showId)).limit(1) : [];
+    const sv = sh ? served(sh, e) : null;
+    res.redirect(302, sv ? await signedRecordingUrl(sv.key, 6 * 3600) : e.audioKey ? await signedRecordingUrl(e.audioKey, 6 * 3600) : e.audioUrl);
   });
 
   // ---- The podcaster's side ----
@@ -652,7 +693,7 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
         feedUrl: feedUrl(s.slug),
         missing: readiness(s, eps),
         ownerConfirmed: feedOwnerEmail(s) === s.ownerEmail.trim(),
-        episodes: await Promise.all(eps.map(async (e) => ({ ...e, downloads: st.episodes.get(e.id) ?? 0, live: live(e), hasVideo: hasVideo(e), ytLibrary: await libraryYouTubeAt(e.recordingId) }))),
+        episodes: await Promise.all(eps.map(async (e) => ({ ...e, downloads: st.episodes.get(e.id) ?? 0, live: live(e), hasVideo: hasVideo(e), ytLibrary: await libraryYouTubeAt(e.recordingId), bookend: { wanted: wantsBookends(s, e), state: !wantsBookends(s, e) ? "" : served(s, e) ? "ready" : e.bookendJob === "failed" ? "failed" : "working" } }))),
         stats: { total: st.total, last30: st.series.reduce((a, d) => a + d.count, 0), series: st.series, apps: st.apps },
       });
     }
@@ -872,7 +913,7 @@ Return JSON only: {"titles":["","",""],"description":""}`,
         audioUrl: it.url, mime: it.mime, sizeBytes: Math.min(2_000_000_000, it.length), durationSec: it.duration,
         episodeNumber: it.episode ?? (s.showType === "serial" ? null : eps0.filter((x) => x.episodeType === "full").length + 1), season: it.season,
         episodeType: it.episodeType, explicit: it.explicit, artworkUrl: it.image,
-        guid: it.guid, status: "draft", publishedAt: it.published || "", createdAt: now(), audioJob: "copy",
+        guid: it.guid, status: "draft", publishedAt: it.published || "", createdAt: now(), audioJob: "copy", bookends: "off",
       }).returning();
       return res.status(201).json(e);
     }
@@ -887,6 +928,40 @@ Return JSON only: {"titles":["","",""],"description":""}`,
       audioJob: audioKey || !recordingId ? "" : "queued", audioJobAt: audioKey || !recordingId ? "" : now(),
     }).returning();
     res.status(201).json(e);
+  });
+
+  /** The show's intro or outro: set it from a file already in our storage, or clear it. New episodes get them; older ones are left as they are. */
+  app.put("/api/host/hosting/shows/:id/bookends", requireHostSession, async (req, res) => {
+    const s = await ownShow(emailOf(req), Number(req.params.id));
+    if (!s) return res.status(404).json({ message: "No such show." });
+    const b = req.body ?? {};
+    const kind = b.kind === "outro" ? "outro" : b.kind === "intro" ? "intro" : "";
+    if (!kind) return res.status(400).json({ message: "Intro or outro?" });
+    let patch: Partial<HostedShowRow>;
+    if (b.clear === true) {
+      patch = kind === "intro" ? { introKey: "", introName: "", introSec: 0 } : { outroKey: "", outroName: "", outroSec: 0 };
+    } else {
+      const key = typeof b.key === "string" && /^show-assets\/[\w.-]+$/.test(b.key) ? b.key : "";
+      if (!key) return res.status(400).json({ message: "Add the audio file." });
+      const sec = Math.max(0, Math.round(Number(b.durationSec) || 0));
+      if (sec > 300) return res.status(400).json({ message: "Keep it under 5 minutes." });
+      const name = String(b.name ?? "").slice(0, 120);
+      patch = kind === "intro" ? { introKey: key, introName: name, introSec: sec } : { outroKey: key, outroName: name, outroSec: sec };
+    }
+    const since = !(s.introKey || s.outroKey) ? { bookendsSince: now() } : {};
+    const [out] = await db.update(hostedShows).set({ ...patch, ...since, updatedAt: now() }).where(eq(hostedShows.id, s.id)).returning();
+    // A change makes the episodes that failed before try again.
+    await db.update(hostedEpisodes).set({ bookendJob: "" }).where(and(eq(hostedEpisodes.showId, s.id), eq(hostedEpisodes.bookendJob, "failed")));
+    res.json(out);
+  });
+
+  /** Play the show's intro or outro (their own page's player). */
+  app.get("/api/host/hosting/shows/:id/bookend/:kind", requireHostSession, async (req, res) => {
+    const s = await ownShow(emailOf(req), Number(req.params.id));
+    const key = s ? (req.params.kind === "outro" ? s.outroKey : s.introKey) : "";
+    if (!s || !key) return res.status(404).json({ message: "Not set." });
+    res.setHeader("Cache-Control", "no-store");
+    res.redirect(302, await signedRecordingUrl(key, 3600));
   });
 
   /** The episodes in a feed (the show's old host by default), newest first, to import one or to pull its words. */
@@ -971,6 +1046,7 @@ Return JSON only: {"titles":["","",""],"description":""}`,
         sizeBytes: num(b.sizeBytes) ?? 0, durationSec: num(b.durationSec) ?? 0,
       } : {}),
       ...(typeof b.footerOff === "boolean" ? { footerOff: b.footerOff } : {}),
+      ...(b.bookends === "on" || b.bookends === "off" || b.bookends === "" ? { bookends: b.bookends, ...(e.bookendJob === "failed" ? { bookendJob: "" } : {}) } : {}),
       ...("episodeNumber" in b ? { episodeNumber: num(b.episodeNumber) } : {}),
       ...("season" in b ? { season: num(b.season) } : {}),
       ...(["full", "trailer", "bonus"].includes(b.episodeType) ? { episodeType: b.episodeType } : {}),
