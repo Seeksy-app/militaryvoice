@@ -40,10 +40,10 @@ async function buzzsprout(creds: { token: string; podcastId?: string }): Promise
   const shows = await bz<{ id: number; title: string; artwork_url?: string }[]>(creds.token, "podcasts.json");
   const show = creds.podcastId ? shows.find((s) => String(s.id) === String(creds.podcastId)) : shows[0];
   if (!show) throw new StatsError(shows.length ? "That podcast ID isn't on this Buzzsprout account." : "No podcasts on this Buzzsprout account.");
-  const eps = await bz<{ id: number; title: string; published_at: string; total_plays?: number; private?: boolean }[]>(creds.token, `${show.id}/episodes.json`);
+  const eps = await bz<{ id: number; title: string; published_at: string; total_downloads?: number; total_plays?: number; private?: boolean }[]>(creds.token, `${show.id}/episodes.json`);
   const episodes = eps
     .filter((e) => !e.private)
-    .map((e) => ({ title: e.title, published: (e.published_at || "").slice(0, 10), count: Math.max(0, Number(e.total_plays) || 0) }))
+    .map((e) => ({ title: e.title, published: (e.published_at || "").slice(0, 10), count: Math.max(0, Number(e.total_downloads ?? e.total_plays) || 0) }))
     .sort((a, b) => b.published.localeCompare(a.published));
   // The last 30 days, a day per call (the API has no range), five at a time
   // to stay well under 60 a minute.
