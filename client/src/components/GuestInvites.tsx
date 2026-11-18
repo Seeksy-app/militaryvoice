@@ -17,6 +17,12 @@ export function GuestInvites() {
   const qc = useQueryClient();
   const list = useQuery<Invite[]>({ queryKey: ["/api/host/guest-invites"], queryFn: async () => (await apiRequest("GET", "/api/host/guest-invites")).json() });
   const [f, setF] = useState({ guestName: "", guestEmail: "", when: "", zoomLink: "", note: "" });
+  // Where it happens: on Zoom (paste a link), or in the host's own MilitaryVoices Radio booth (we make the guest's link).
+  const [where, setWhere] = useState<"zoom" | "booth">("zoom");
+  const [bookingId, setBookingId] = useState<number | null>(null);
+  const bookings = useQuery<{ id: number; show: string; startAtUtc: string; label: string }[]>({ queryKey: ["/api/host/guest-invites/bookings"], queryFn: async () => (await apiRequest("GET", "/api/host/guest-invites/bookings")).json() });
+  const coming = bookings.data ?? [];
+  const pickedBooking = where === "booth" ? bookingId ?? coming[0]?.id ?? null : null;
   const [open, setOpen] = useState<number | null>(null);
   const [questions, setQuestions] = useState<string[]>([]);
   const sender = useQuery<{ slug: string; address: string; replyTo: string }>({ queryKey: ["/api/host/guest-invites/sender"], queryFn: async () => (await apiRequest("GET", "/api/host/guest-invites/sender")).json() });
@@ -31,9 +37,9 @@ export function GuestInvites() {
     mutationFn: async () => {
       const whenIso = f.when ? new Date(f.when).toISOString() : "";
       const whenText = f.when ? new Date(f.when).toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }) : "";
-      return (await apiRequest("POST", "/api/host/guest-invites", { guestName: f.guestName, guestEmail: f.guestEmail, whenText, whenIso, zoomLink: f.zoomLink, note: f.note, questions: questions.map((q) => q.trim()).filter(Boolean) })).json();
+      return (await apiRequest("POST", "/api/host/guest-invites", { guestName: f.guestName, guestEmail: f.guestEmail, whenText, whenIso, zoomLink: f.zoomLink, note: f.note, ...(where === "booth" ? { where: "booth", bookingId: pickedBooking } : {}), questions: questions.map((q) => q.trim()).filter(Boolean) })).json();
     },
-    onSuccess: () => { setF({ guestName: "", guestEmail: "", when: "", zoomLink: "", note: "" }); setQuestions([]); void qc.invalidateQueries({ queryKey: ["/api/host/guest-invites"] }); toast({ title: "Invitation sent", description: "They'll get an email from you through MilitaryVoices.ai, and you'll hear when they answer." }); },
+    onSuccess: () => { setF({ guestName: "", guestEmail: "", when: "", zoomLink: "", note: "" }); setQuestions([]); setWhere("zoom"); void qc.invalidateQueries({ queryKey: ["/api/host/guest-invites"] }); toast({ title: "Invitation sent", description: "They'll get an email from you through MilitaryVoices.ai, and you'll hear when they answer." }); },
     onError: (e) => toast({ title: "Couldn't send that", description: say(e), variant: "destructive" }),
   });
   const del = useMutation({ mutationFn: async (id: number) => apiRequest("DELETE", `/api/host/guest-invites/${id}`), onSuccess: () => void qc.invalidateQueries({ queryKey: ["/api/host/guest-invites"] }) });
@@ -47,8 +53,30 @@ export function GuestInvites() {
         <form className="mt-5 grid gap-5 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); send.mutate(); }}>
           <div className="space-y-1.5"><Label htmlFor="gi-f-name">Guest's name</Label><Input id="gi-f-name" value={f.guestName} onChange={set("guestName")} maxLength={80} required /></div>
           <div className="space-y-1.5"><Label htmlFor="gi-f-email">Guest's email</Label><Input id="gi-f-email" type="email" value={f.guestEmail} onChange={set("guestEmail")} required /></div>
+          {coming.length > 0 && (
+            <div className="space-y-1.5 sm:col-span-2" data-testid="invite-where">
+              <Label>Where will you talk?</Label>
+              <div className="flex flex-wrap gap-2">
+                {([["zoom", "On Zoom"], ["booth", "In my MilitaryVoices Radio booth"]] as const).map(([v, label]) => (
+                  <button key={v} type="button" onClick={() => setWhere(v)} aria-pressed={where === v} className={`rounded-full border px-4 py-1.5 text-sm font-semibold ${where === v ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:bg-muted"}`} data-testid={`invite-where-${v}`}>{label}</button>
+                ))}
+              </div>
+            </div>
+          )}
+          {where === "booth" && coming.length > 0 ? (
+            <div className="space-y-1.5 sm:col-span-2" data-testid="invite-booth">
+              <Label htmlFor="gi-f-booking">Which show?</Label>
+              <select id="gi-f-booking" value={pickedBooking ?? ""} onChange={(e) => setBookingId(Number(e.target.value))} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+                {coming.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
+              </select>
+              <p className="text-xs text-muted-foreground">Your guest gets a private link into your booth, with the time filled in. They open it on the day, allow their camera and microphone, and they're in. No account needed.</p>
+            </div>
+          ) : (
+            <>
           <div className="space-y-1.5"><Label htmlFor="gi-f-when">When is the interview?</Label><Input id="gi-f-when" type="datetime-local" value={f.when} onChange={set("when")} /></div>
           <div className="space-y-1.5"><Label htmlFor="gi-f-zoom">Zoom link</Label><Input id="gi-f-zoom" value={f.zoomLink} onChange={set("zoomLink")} placeholder="Paste the link from Zoom" /><p className="text-xs text-muted-foreground">Make the meeting in Zoom and paste its link here.</p></div>
+            </>
+          )}
           <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="gi-f-note">A note to your guest (optional)</Label><Textarea id="gi-f-note" value={f.note} onChange={set("note")} rows={3} maxLength={1200} placeholder="What the interview is about, how long it runs, what to have ready." /></div>
           <div className="space-y-3 rounded-xl border border-border/70 p-4 sm:col-span-2" data-testid="guest-invite-questions">
             <Label>Your own questions for the guest (optional)</Label>

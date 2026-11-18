@@ -11,6 +11,8 @@ import { db, storage } from "./storage.js";
 import { getSessionEmail } from "./session.js";
 import { putRecordingObject, signedRecordingUrl } from "./recordingStorage.js";
 import { sendInterviewInvite, sendInterviewAnswered } from "./email.js";
+import { boothGuestKey, bookingTimes } from "./booth.js";
+import { dxEventIds } from "./digitalExperience.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 
@@ -28,6 +30,23 @@ async function senderSlug(email: string): Promise<string> {
   const profile = await storage.getProfileByEmail(email);
   const fromName = (profile?.podcastName ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 30);
   return slugOk(fromName) ? fromName : "hello";
+}
+
+const etLabel = (ms: number) => new Date(ms).toLocaleString("en-US", { timeZone: "America/New_York", weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+/** This host's coming live shows on MilitaryVoices Radio (as the booker or the co-host): where a guest can be invited into the booth. */
+async function boothBookings(owner: string) {
+  const out: { id: number; show: string; startMs: number; endMs: number }[] = [];
+  for (const eventId of await dxEventIds()) {
+    const ev = await storage.getEventById(eventId);
+    if (!ev) continue;
+    for (const s of await storage.listSignups(eventId)) {
+      if (s.status === "cancelled" || s.showFormat === "prerecorded" || s.id === 60) continue;
+      if (s.email.trim().toLowerCase() !== owner && (s.coHostEmail ?? "").trim().toLowerCase() !== owner) continue;
+      const t = bookingTimes(ev, s);
+      if (t.end > Date.now()) out.push({ id: s.id, show: s.podcastName, startMs: t.start, endMs: t.end });
+    }
+  }
+  return out.sort((a, b) => a.startMs - b.startMs);
 }
 const str = (v: unknown, n: number) => String(v ?? "").trim().slice(0, n);
 const rows = (r: unknown) => ((r as { rows?: Record<string, unknown>[] }).rows ?? (r as Record<string, unknown>[]));
@@ -71,6 +90,12 @@ export function registerGuestInvites(app: Express, requireHostSession: RequestHa
     res.json(rows(await db.execute(sql`select * from guest_invites where owner_email=${mine(req)} order by id desc limit 100`)).map(view));
   });
 
+  /** The host's coming Radio shows, for the "in my booth" choice. */
+  app.get("/api/host/guest-invites/bookings", requireHostSession, async (req, res) => {
+    const list = await boothBookings(mine(req));
+    res.json(list.map((b) => ({ id: b.id, show: b.show, startAtUtc: new Date(b.startMs).toISOString(), label: `${b.show} · ${etLabel(b.startMs)}` })));
+  });
+
   /** Who the invitation email says it is from: <name>@militaryvoices.ai, replies to the host. */
   app.get("/api/host/guest-invites/sender", requireHostSession, async (req, res) => {
     const email = mine(req);
@@ -91,11 +116,23 @@ export function registerGuestInvites(app: Express, requireHostSession: RequestHa
     await ensure();
     const owner = mine(req);
     const guestName = str(req.body?.guestName, 80), guestEmail = str(req.body?.guestEmail, 200).toLowerCase();
-    const whenText = str(req.body?.whenText, 120), whenIso = str(req.body?.whenIso, 40), note = str(req.body?.note, 1200);
-    const zoomLink = str(req.body?.zoomLink, 500);
+    const note = str(req.body?.note, 1200);
+    let zoomLink = str(req.body?.zoomLink, 500);
+    // "In my Radio booth": the guest's private link into that booking (made here, with our own key), and its time.
+    let boothShow = "";
+    if (req.body?.where === "booth") {
+      const mineList = await boothBookings(owner);
+      const b = mineList.find((x) => x.id === Number(req.body?.bookingId));
+      if (!b) return res.status(400).json({ message: "Pick one of your coming Radio shows." });
+      zoomLink = `${ORIGIN}/booth/${b.id}?g=${boothGuestKey(b.id)}`;
+      boothShow = b.show;
+      req.body.whenText = etLabel(b.startMs);
+      req.body.whenIso = new Date(b.startMs).toISOString();
+    }
     const questions = (Array.isArray(req.body?.questions) ? req.body.questions : []).map((q: unknown) => str(q, 300)).filter(Boolean).slice(0, 10);
     if (!guestName) return res.status(400).json({ message: "Add the guest's name." });
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(guestEmail)) return res.status(400).json({ message: "Add the guest's email address." });
+    const whenText = str(req.body?.whenText, 120), whenIso = str(req.body?.whenIso, 40);
     if (zoomLink && !/^https?:\/\/\S+$/i.test(zoomLink)) return res.status(400).json({ message: "The Zoom link should start with https://" });
     const count = Number(rows(await db.execute(sql`select count(*)::int n from guest_invites where owner_email=${owner} and created_at > ${new Date(Date.now() - 24 * 3600_000).toISOString()}`))[0]?.n ?? 0);
     if (count >= 20) return res.status(429).json({ message: "That's a lot of invitations today. Try again tomorrow." });
@@ -103,7 +140,7 @@ export function registerGuestInvites(app: Express, requireHostSession: RequestHa
     const token = crypto.randomBytes(18).toString("base64url");
     const now = new Date().toISOString();
     const [r] = rows(await db.execute(sql`insert into guest_invites (token, owner_email, guest_email, guest_name, when_text, when_iso, zoom_link, note, questions, created_at, invited_at) values (${token}, ${owner}, ${guestEmail}, ${guestName}, ${whenText}, ${whenIso}, ${zoomLink}, ${note}, ${JSON.stringify(questions)}, ${now}, ${now}) returning *`));
-    const ok = await sendInterviewInvite({ fromLocal: await senderSlug(owner), to: guestEmail, guestName, hostName: profile?.hostName ?? "", hostEmail: owner, show: profile?.podcastName ?? "", whenText, zoomLink, note, link: `${ORIGIN}/guest-invite/${token}` });
+    const ok = await sendInterviewInvite({ fromLocal: await senderSlug(owner), to: guestEmail, guestName, hostName: profile?.hostName ?? "", hostEmail: owner, show: boothShow || (profile?.podcastName ?? ""), whenText, zoomLink, note, link: `${ORIGIN}/guest-invite/${token}` });
     if (!ok) return res.status(502).json({ message: "The email didn't go. Try again in a moment.", invite: view(r) });
     res.status(201).json(view(r));
   });

@@ -9704,7 +9704,10 @@ export function registerRoutes(app: Express): void {
         eventName: event.name,
         onAirStartLabel: formatDateTimeInZone(onAir.start, tz),
         onAirEndLabel: formatTimeInZone(onAir.end, tz),
-        timezoneLabel: zoneAbbrev(onAir.start, tz),
+        // MilitaryVoices Radio runs on Eastern time: said plainly beside theirs, so nobody books the wrong half hour.
+        timezoneLabel: event.slug.startsWith("digital-experience") && tz !== "America/New_York"
+          ? `${zoneAbbrev(onAir.start, tz)}, which is ${formatTimeInZone(onAir.start, "America/New_York")} ${zoneAbbrev(onAir.start, "America/New_York")}`
+          : zoneAbbrev(onAir.start, tz),
         agendaUrl: `${origin}${schedulePath(event)}`,
         calendar: calendarLinksFor(signup, event, origin),
         // MilitaryVoices Radio's own look, not the Marathon's.

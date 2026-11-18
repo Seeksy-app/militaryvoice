@@ -1426,7 +1426,9 @@ export async function sendInterviewInvite(input: { fromLocal?: string; to: strin
   const who = input.hostName || input.show || "Your host";
   const details = [
     input.whenText ? `<p style="margin:0 0 6px;"><b>When:</b> ${escapeHtml(input.whenText)}</p>` : "",
-    input.zoomLink ? `<p style="margin:0 0 6px;"><b>Zoom:</b> <a href="${escapeHtml(input.zoomLink)}">${escapeHtml(input.zoomLink)}</a></p>` : "",
+    input.zoomLink ? (/\/booth\//.test(input.zoomLink)
+      ? `<p style="margin:0 0 6px;"><b>Your link to join:</b> <a href="${escapeHtml(input.zoomLink)}">${escapeHtml(input.zoomLink)}</a></p><p style="margin:0 0 6px;color:#374151;">Open it on the day, allow your camera and microphone, and you're in the booth with ${escapeHtml(who)}. No account needed. It's live on MilitaryVoices Radio.</p>`
+      : `<p style="margin:0 0 6px;"><b>Zoom:</b> <a href="${escapeHtml(input.zoomLink)}">${escapeHtml(input.zoomLink)}</a></p>`) : "",
     input.note ? `<p style="margin:10px 0 0;white-space:pre-line;">${escapeHtml(input.note)}</p>` : "",
   ].join("");
   return sendRawEmail({
