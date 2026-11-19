@@ -68,6 +68,24 @@ async function zoomApi<T>(c: ZoomConnectionRow, path: string): Promise<T> {
   return j;
 }
 
+/**
+ * Did this person's Zoom keep a cloud recording of a call around this time?
+ * "found" (with whether it's already in their Library), "none", or "unknown"
+ * when Zoom isn't connected or won't answer. Used by the recording reminders.
+ */
+export async function zoomRecordedNear(email: string, whenMs: number): Promise<"found" | "none" | "unknown"> {
+  try {
+    const c = await storage.getZoom(email);
+    if (!c) return "unknown";
+    const d = (x: number) => new Date(x).toISOString().slice(0, 10);
+    const j = await zoomApi<{ meetings?: ZoomMeeting[] }>(c, `/users/me/recordings?page_size=50&from=${d(whenMs - 86_400_000)}&to=${d(whenMs + 2 * 86_400_000)}`);
+    const near = (j.meetings ?? []).some((m) => Math.abs(Date.parse(m.start_time) - whenMs) < 3 * 3_600_000 && !!bestZoomFile(m));
+    return near ? "found" : "none";
+  } catch {
+    return "unknown";
+  }
+}
+
 interface ZoomFile { id: string; file_type: string; file_size?: number; download_url: string; recording_type?: string; status?: string; recording_start?: string; recording_end?: string }
 interface ZoomMeeting { uuid: string; id: number | string; topic: string; start_time: string; duration: number; host_id?: string; recording_files?: ZoomFile[] }
 

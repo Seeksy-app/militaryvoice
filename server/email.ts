@@ -1461,3 +1461,60 @@ export async function sendInterviewAnswered(input: { to: string; guestName: stri
     text: `${input.guestName} answered your interview questions for ${input.show}.\n\n${input.summary}\n\nSee them: ${input.link}`,
   }).then((id) => Boolean(id));
 }
+
+/**
+ * Cloud recording reminders (19 Nov 2026). Podcasters forget to turn on Zoom's
+ * cloud recording. "before": a little ahead of an interview they invited a
+ * guest to. "none": the interview time has passed and no recording came in.
+ * "in-zoom": it recorded in Zoom, but isn't in the Library (auto-import is off).
+ */
+export async function sendRecordingReminderEmail(v: { to: string; kind: "before" | "none" | "in-zoom"; guestName: string; whenLabel: string }): Promise<boolean> {
+  const guest = v.guestName.trim();
+  const withGuest = guest ? ` with ${guest}` : "";
+  const zoomSettings = "https://zoom.us/profile/setting?tab=recording";
+  const libraryUrl = `${SITE}/host/dashboard/library`;
+  const integrationsUrl = `${SITE}/host/dashboard/integrations`;
+  const copy = {
+    before: {
+      subject: "Turn on cloud recording before your interview",
+      heading: "Is Zoom set to record to the cloud?",
+      body: `<p style="margin:0 0 14px;">Your interview${escapeHtml(withGuest)} is coming up (${escapeHtml(v.whenLabel)}).</p>
+        <p style="margin:0 0 14px;">Before you start, check that <b>Cloud recording</b> is turned on in Zoom. When it is, the recording comes into your Library by itself afterwards. If it's off, there is nothing for us to pick up.</p>
+        <p style="margin:0;">In the Zoom meeting, press <b>Record</b>, then <b>Record to the Cloud</b>. Or turn it on for every meeting in your Zoom settings.</p>`,
+      cta: { href: zoomSettings, label: "Open my Zoom recording settings" },
+      text: `Your interview${withGuest} is coming up (${v.whenLabel}).\n\nBefore you start, check that Cloud recording is turned on in Zoom. In the meeting, press Record, then Record to the Cloud. Or turn it on for every meeting: ${zoomSettings}\n`,
+    },
+    none: {
+      subject: "We didn't get a recording of your interview",
+      heading: "No recording came in",
+      body: `<p style="margin:0 0 14px;">Your interview${escapeHtml(withGuest)} was scheduled for ${escapeHtml(v.whenLabel)}, and no recording has come into your Library.</p>
+        <p style="margin:0 0 14px;">If you recorded to your own computer, you can upload the file to your Library. If Cloud recording was off, turn it on in your Zoom settings so the next one comes in by itself.</p>`,
+      cta: { href: libraryUrl, label: "Open my Library" },
+      text: `Your interview${withGuest} was scheduled for ${v.whenLabel}, and no recording has come into your Library.\n\nIf you recorded to your own computer, upload the file to your Library: ${libraryUrl}\nIf Cloud recording was off, turn it on in Zoom: ${zoomSettings}\n`,
+    },
+    "in-zoom": {
+      subject: "Your interview recorded in Zoom. Bring it into your Library",
+      heading: "It's in Zoom, not in your Library yet",
+      body: `<p style="margin:0 0 14px;">Zoom recorded your interview${escapeHtml(withGuest)} (${escapeHtml(v.whenLabel)}). It isn't in your Library yet because automatic import is off.</p>
+        <p style="margin:0;">Open Integrations, press <b>Import past</b>, tick the recording, and press <b>Import</b>.</p>`,
+      cta: { href: integrationsUrl, label: "Open Integrations" },
+      text: `Zoom recorded your interview${withGuest} (${v.whenLabel}). It isn't in your Library yet because automatic import is off.\n\nOpen Integrations, press Import past, tick the recording, and press Import: ${integrationsUrl}\n`,
+    },
+  }[v.kind];
+  return sendEmail({
+    kind: "recording-reminder",
+    to: v.to,
+    subject: copy.subject,
+    html: emailShell({
+      banner: EMAIL_BANNERS.studio,
+      bannerAlt: "MilitaryVoices.ai",
+      eyebrow: "Recording",
+      heading: copy.heading,
+      body: copy.body,
+      cta: copy.cta,
+      secondary: `<p style="margin:18px 0 0;color:#374151;font-size:16px;">The MilitaryVoices.ai team</p>`,
+      footerNote: `You're getting this because you invited a guest to an interview through MilitaryVoices.ai.`,
+    }),
+    text: `${copy.text}\nThe MilitaryVoices.ai team\n`,
+  });
+}
