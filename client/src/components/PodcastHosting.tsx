@@ -106,8 +106,9 @@ export function PodcastHosting() {
   });
   // Which show is open (none: the grid of shows), and which of its tabs.
   const [openId, setOpenId] = useState<number | null>(null);
-  const [tab, setTab] = useState<PodTab>(() => { try { const t = localStorage.getItem("mv_pod_tab"); return t === "defaults" || t === "sponsors" || t === "directories" || t === "details" || t === "guests" || t === "invite" || t === "pitch" ? t : "episodes"; } catch { return "episodes"; } });
-  const go = (t: PodTab) => { setTab(t); try { localStorage.setItem("mv_pod_tab", t); } catch { /* fine */ } };
+  // Podcast always opens on Episodes (not wherever they last wandered).
+  const [tab, setTab] = useState<PodTab>("episodes");
+  const go = (t: PodTab) => setTab(t);
   // The field Show details opens on (from the checklist): the description, the name, the owner email.
   const [focus, setFocus] = useState<"" | "title" | "description" | "ownerEmail">("");
   const [adding, setAdding] = useState(false);
@@ -1061,7 +1062,7 @@ function EpisodePage({ ep, show, youtubeReady, production, onDirectories, onBack
                 return (
                   <div className="space-y-2 rounded-xl bg-muted/50 px-3 py-2.5" data-testid="episode-delivery">
                     <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground"><Check className="h-3.5 w-3.5 text-emerald-600" /> It's in your feed</p>
-                    <p className="text-xs text-muted-foreground">{waiting(d) ? "Apple, Spotify and the other apps pick it up on their own, usually within an hour. There's nothing you need to do." : "Every app that reads your feed has it."}</p>
+                    <p className="text-xs text-muted-foreground">{waiting(d) ? "Apple, Spotify and the other apps pick it up on their own, usually within an hour. There's nothing you need to do, and you can leave this page: it keeps going without you." : "Every app that reads your feed has it."}</p>
                     {big.map((a) => (
                       <div key={a.app} className="text-xs">
                         <p className="flex items-center justify-between gap-2"><span className="font-medium">{a.app}</span>
