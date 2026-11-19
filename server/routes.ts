@@ -184,6 +184,7 @@ import { registerGuests, guestByToken, markGuestJoined, publicGuestsFor } from "
 import { registerGuestInvites, takeAnsweredInvite } from "./guestInvites.js";
 import { registerCaptures, onCaptureWebhook } from "./captures.js";
 import { registerStreamIn, onStreamInWebhook } from "./streamIn.js";
+import { registerIngest } from "./ingestEngine.js";
 import { registerRadioStreamIn, onRadioFeedWebhook } from "./radioStreamIn.js";
 import { registerMail } from "./mail.js";
 import { registerAutomations } from "./automations.js";
@@ -6951,6 +6952,7 @@ export function registerRoutes(app: Express): void {
   registerGuestInvites(app, requireHostSession);
   registerCaptures(app, requireAdmin, (req) => getAdminEmail(req) ?? "");
   registerStreamIn(app);
+  registerIngest(app, requireAdmin);
   registerRadioStreamIn(app);
   registerMail(app, requireAdmin);
   registerContactProfile(app, requireAdmin);

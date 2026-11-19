@@ -38,7 +38,7 @@ export async function beat(key: string): Promise<void> {
   await db.insert(discoveryCache).values({ key: `health:beat:${key}`, payload, createdAt: now() })
     .onConflictDoUpdate({ target: discoveryCache.key, set: { payload, createdAt: now() } }).catch(() => {});
 }
-async function lastBeat(key: string): Promise<number> {
+export async function lastBeat(key: string): Promise<number> {
   const [row] = await db.select().from(discoveryCache).where(eq(discoveryCache.key, `health:beat:${key}`));
   return row ? Date.parse(row.createdAt) : 0;
 }
@@ -165,6 +165,17 @@ const DEFS: Def[] = [
       const t = await lastBeat("cron");
       if (!t) return { state: "down", detail: "No run seen yet" };
       return Date.now() - t < 5 * 60_000 ? { state: "ok", detail: `Last ran ${ago(Date.now() - t)}` } : { state: "down", detail: `Last ran ${ago(Date.now() - t)}` };
+    },
+  },
+  {
+    key: "ingest", db: true, name: "Ingest box (own RTMP server)", group: "The platform", powers: "Stream in on our own server: StreamYard and OBS feeds recorded to the Library",
+    run: async () => {
+      // Off until the box is switched on (INGEST_TOKEN set and the engine chosen); then its 30-second heartbeat is the proof it is up.
+      const on = !!(process.env.INGEST_TOKEN ?? "").trim() && (await storage.getSetting("streamin:engine")) === "own";
+      const t = await lastBeat("ingest");
+      if (!on) return { state: "off", detail: t ? `Not the engine in use (last heard ${ago(Date.now() - t)})` : "Not in use yet" };
+      if (!t) return { state: "down", detail: "The box hasn't checked in yet" };
+      return Date.now() - t < 3 * 60_000 ? { state: "ok", detail: `Answering (${ago(Date.now() - t)})` } : { state: "down", detail: `Silent since ${ago(Date.now() - t)}. New stream keys fall back to LiveKit.` };
     },
   },
   // Mail and messages

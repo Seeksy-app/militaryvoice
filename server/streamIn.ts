@@ -2,9 +2,11 @@ import type { Express, RequestHandler, Response } from "express";
 import { and, desc, eq, gte } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { requireHostSession, getSessionEmail } from "./session.js";
+import crypto from "node:crypto";
 import { createRtmpIngress, deleteIngress, listIngressForRoom, isLiveKitConfigured, isRecordingConfigured, runningEgressIds, startRoomRecording, stopEgressById } from "./livekit.js";
 import { sendImportReadyEmail } from "./email.js";
 import { cleanupRadioFeeds } from "./radioStreamIn.js";
+import { lastBeat } from "./health.js";
 import { ensureRecordingsBucket } from "./recordingStorage.js";
 import { seal, unseal } from "./secretBox.js";
 import { slackNote } from "./slack.js";
@@ -58,19 +60,46 @@ async function keyFor(email: string): Promise<StreamKeyRow | undefined> {
   return row;
 }
 
-/** Make (or remake) the LiveKit ingress behind a key row. */
+export const keyHash = (key: string) => crypto.createHash("sha256").update(key).digest("hex");
+
+/** Where the own engine's stream address points (the box's name), set once the box exists. */
+export async function ownUrl(): Promise<string> {
+  return ((await storage.getSetting("streamin:own-url")) || process.env.INGEST_PUBLIC_URL || "rtmp://stream.militaryvoices.ai/live").replace(/\/+$/, "");
+}
+
+/** Whether our own ingest box has said it is alive in the last three minutes. */
+export async function ownBoxAlive(): Promise<boolean> {
+  return Date.now() - (await lastBeat("ingest")) < 3 * 60_000;
+}
+
+/** Which engine a new key (or a new key for an old one) goes to: our own box when it is switched on and answering, else LiveKit. */
+async function pickEngine(): Promise<"own" | "livekit"> {
+  return (await storage.getSetting("streamin:engine")) === "own" && (await ownBoxAlive()) ? "own" : "livekit";
+}
+
+/** Make (or remake) the stream address and key behind a row, on the engine picked. */
 async function issue(row: StreamKeyRow, name: string): Promise<StreamKeyRow> {
+  if ((await pickEngine()) === "own") {
+    // Our own box: the key is just a random word it checks with us on every connect.
+    const key = `mvk${crypto.randomBytes(24).toString("base64url")}`;
+    const [out] = await db
+      .update(streamKeys)
+      .set({ engine: "own", room: "", ingressId: "", url: await ownUrl(), streamKey: seal(key), keyHash: keyHash(key), status: "idle", pausedWhy: "", problem: "", rotatedAt: now() })
+      .where(eq(streamKeys.id, row.id))
+      .returning();
+    return out;
+  }
   const room = `stream-${row.id}`;
   const cred = await createRtmpIngress({ room, identity: `feed-${row.id}`, name: name || "Live stream" });
   const [out] = await db
     .update(streamKeys)
-    .set({ room, ingressId: cred.ingressId, url: cred.url, streamKey: seal(cred.streamKey), status: "idle", pausedWhy: "", problem: "", rotatedAt: now() })
+    .set({ engine: "livekit", keyHash: "", room, ingressId: cred.ingressId, url: cred.url, streamKey: seal(cred.streamKey), status: "idle", pausedWhy: "", problem: "", rotatedAt: now() })
     .where(eq(streamKeys.id, row.id))
     .returning();
   return out;
 }
 
-async function showName(email: string): Promise<string> {
+export async function showName(email: string): Promise<string> {
   const p = await storage.getProfileByEmail(email).catch(() => undefined);
   return (p?.podcastName || p?.hostName || "").trim();
 }
@@ -82,7 +111,7 @@ function plain(err: unknown): string {
   return "We couldn't start recording this stream. It still reached our servers but wasn't saved. Try going live again in a minute.";
 }
 
-async function closeSession(c: StreamKeyRow): Promise<void> {
+export async function closeSession(c: StreamKeyRow): Promise<void> {
   const open = await db.select().from(streamSessions).where(and(eq(streamSessions.keyId, c.id), eq(streamSessions.endedAt, ""))).orderBy(desc(streamSessions.id));
   for (const s of open) {
     const seconds = Math.max(0, Math.round((Date.now() - Date.parse(s.startedAt)) / 1000));
@@ -176,6 +205,11 @@ export async function onStreamInWebhook(event: { event?: string; ingressInfo?: {
 async function maybeResume(c: StreamKeyRow): Promise<StreamKeyRow> {
   if (c.status !== "paused") return c;
   if ((await usedSeconds(c.ownerEmail)) >= (await capSeconds(c.ownerEmail))) return c;
+  // Our own box keeps the same key; LiveKit's was deleted when the hours ran out, so it gets a fresh one.
+  if (c.engine === "own") {
+    const [out] = await db.update(streamKeys).set({ status: "idle", pausedWhy: "" }).where(eq(streamKeys.id, c.id)).returning();
+    return out;
+  }
   return issue(c, await showName(c.ownerEmail));
 }
 
@@ -201,7 +235,7 @@ async function view(c: StreamKeyRow | undefined) {
           url: c.url,
           streamKey: unseal(c.streamKey),
           status: c.status as "idle" | "live" | "paused",
-          arriving: live, // the encoder is connected, whether or not it is recording yet
+          arriving: live || (c.engine === "own" && c.status === "live"), // the encoder is connected, whether or not it is recording yet
           liveSince: c.liveSince,
           pausedWhy: c.pausedWhy,
           problem: c.problem || (linkError ? "Your stream is reaching us but something is wrong with it. Check your software is sending video and sound, then stop and start it again." : ""),
@@ -232,6 +266,16 @@ export async function runStreamInPass(): Promise<{ stopped: number; rolled: numb
     if (retiring && retiring !== c.egressId) {
       await stopEgressById(retiring).catch(() => {});
       await storage.setSetting(`streamin:retire:${c.id}`, "");
+    }
+    // Keys on our own box are run by the box's agent (reconnects, hours, finishing); there is no LiveKit recorder to look after.
+    if (c.engine === "own") {
+      // If the box has been silent for half an hour a session it held open can't be closed by it: close the books so the hours don't keep running.
+      if (c.egressId === "own" && Date.now() - (await lastBeat("ingest")) > 30 * 60_000) {
+        await closeSession(c);
+        await db.update(streamKeys).set({ egressId: "", liveSince: "", lostAt: "", status: c.status === "paused" ? "paused" : "idle" }).where(eq(streamKeys.id, c.id));
+        out.stopped++;
+      }
+      continue;
     }
     if (!c.egressId) continue;
     if (c.egressId === "pending") {
@@ -358,7 +402,8 @@ export function registerStreamIn(app: Express): void {
     const row = await keyFor(email);
     if (!row) return res.status(404).json({ message: "You don't have a stream key yet." });
     try {
-      const stopped = row.egressId ? await stopRecording(row) : row;
+      // A stream running on LiveKit stops with its old key; one on our own box is kicked by the box when it sees its key retired.
+      const stopped = row.egressId && row.engine !== "own" ? await stopRecording(row) : row;
       if (stopped.ingressId) await deleteIngress(stopped.ingressId).catch(() => {});
       res.json({ configured: true, ...(await view(await issue(stopped, await showName(email)))) });
     } catch (err) {
@@ -372,7 +417,7 @@ export function registerStreamIn(app: Express): void {
     await schemaIsReady();
     const row = await keyFor(normEmail(getSessionEmail(req) ?? ""));
     if (row) {
-      if (row.egressId) await stopRecording(row);
+      if (row.egressId && row.engine !== "own") await stopRecording(row);
       if (row.ingressId) await deleteIngress(row.ingressId).catch(() => {});
       await db.delete(streamKeys).where(eq(streamKeys.id, row.id));
     }

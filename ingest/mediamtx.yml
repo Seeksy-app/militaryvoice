@@ -1,0 +1,53 @@
+# MediaMTX for the MilitaryVoices ingest box. Installed to /etc/mvingest/mediamtx.yml
+# by ingest/setup.sh. Option names follow current MediaMTX (v1.x); if a future
+# release renames one, `mediamtx /etc/mvingest/mediamtx.yml` says which on start.
+#
+# What it does: takes RTMP (and RTMPS) from StreamYard, Restream, OBS, asks the
+# local agent (127.0.0.1:8088) whether the stream key may publish, records the
+# stream untouched (no re-encoding) in crash-safe fragmented MP4 segments, and
+# tells the agent when a stream starts, stops and a segment is closed.
+
+logLevel: info
+logDestinations: [stdout]
+
+# Management API, this machine only (the agent kicks streams through it).
+api: yes
+apiAddress: 127.0.0.1:9997
+metrics: no
+pprof: no
+playback: no
+
+# Only RTMP/RTMPS come in. Nothing is served out.
+rtsp: no
+hls: no
+webrtc: no
+srt: no
+rtmp: yes
+rtmpAddress: :1935
+rtmpEncryption: optional
+rtmpsAddress: :443
+rtmpServerKey: /etc/mvingest/tls/privkey.pem
+rtmpServerCert: /etc/mvingest/tls/fullchain.pem
+
+# Every publish is checked with the site, through the agent. Reading (watching)
+# is never allowed; the management API on localhost is the one exception.
+authMethod: http
+authHTTPAddress: http://127.0.0.1:8088/auth
+authHTTPExclude:
+  - action: api
+
+pathDefaults:
+  record: yes
+  recordPath: /var/lib/mvingest/rec/%path/%Y-%m-%d_%H-%M-%S-%f
+  recordFormat: fmp4
+  # Parts are one second, so a crash loses about a second. A new file every hour keeps each one a sensible size.
+  recordPartDuration: 1s
+  recordSegmentDuration: 1h
+  recordDeleteAfter: 0s
+  runOnReady: curl -s -m 10 -X POST --data-urlencode "path=$MTX_PATH" http://127.0.0.1:8088/event/ready
+  runOnNotReady: curl -s -m 10 -X POST --data-urlencode "path=$MTX_PATH" http://127.0.0.1:8088/event/notready
+  runOnRecordSegmentComplete: curl -s -m 10 -X POST --data-urlencode "path=$MTX_PATH" --data-urlencode "file=$MTX_SEGMENT_PATH" http://127.0.0.1:8088/event/segment
+
+paths:
+  # rtmp://stream.militaryvoices.ai/live/<stream key>: the path is "live/<key>".
+  all_others:

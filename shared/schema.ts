@@ -750,8 +750,12 @@ export const streamKeys = pgTable(
     problem: text("problem").notNull().default(""),
     createdAt: text("created_at").notNull(),
     rotatedAt: text("rotated_at").notNull().default(""),
+    /** Which engine takes the stream: livekit (an ingress) or own (our MediaMTX box). */
+    engine: text("engine").notNull().default("livekit"),
+    /** sha256 of the key, so the ingest box's key checks find a row without opening every sealed key. Own engine only. */
+    keyHash: text("key_hash").notNull().default(""),
   },
-  (t) => ({ onePerPerson: uniqueIndex("stream_keys_owner_unique").on(t.ownerEmail) }),
+  (t) => ({ onePerPerson: uniqueIndex("stream_keys_owner_unique").on(t.ownerEmail), byHash: index("stream_keys_hash_idx").on(t.keyHash) }),
 );
 export type StreamKeyRow = typeof streamKeys.$inferSelect;
 
