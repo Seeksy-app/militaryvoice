@@ -1,0 +1,100 @@
+<!doctype html>
+<!--
+  Founding Members 2026: the Mon 23 Nov teaser graphic (draft for Andrew's approval; nothing posts without his go).
+  Render: teaser.html?size=portrait (1080×1350, Instagram/Facebook) or ?size=wide (1600×900, LinkedIn/Facebook/X).
+  Logo and badge are the site's own (client/public). No names, no numbers, no date beyond Black Friday.
+-->
+<html>
+<head>
+<meta charset="utf-8" />
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #000741; }
+  .frame {
+    position: relative; overflow: hidden; color: #fff; font-family: "General Sans", Inter, system-ui, sans-serif;
+    background: radial-gradient(110% 80% at 85% 10%, #0b2a7a 0%, #000741 55%, #00052e 100%);
+  }
+  .grid { position: absolute; inset: 0; opacity: .35;
+    background-image: linear-gradient(rgba(255,255,255,.05) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.05) 1px, transparent 1px);
+    background-size: 54px 54px; }
+  .glow { position: absolute; border-radius: 50%; background: #F0A71F; filter: blur(160px); opacity: .22; }
+  .stripes { position: absolute; left: 0; right: 0; bottom: 0; opacity: .06;
+    background: repeating-linear-gradient(135deg, #fff 0 18px, transparent 18px 46px); }
+  .logo { position: absolute; }
+  .seal { position: absolute; border-radius: 50%; border: 4px solid #F0A71F; display: flex; align-items: center; justify-content: center; }
+  .seal::before { content: ""; position: absolute; inset: 12px; border-radius: 50%; border: 2px solid rgba(240,167,31,.55); }
+  .seal svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+  .seal .star { color: #F0A71F; }
+  .eyebrow { display: inline-block; color: #F0A71F; font-weight: 600; letter-spacing: .18em; text-transform: uppercase; border: 2px solid rgba(240,167,31,.5); background: rgba(240,167,31,.1); border-radius: 999px; }
+  h1 { font-weight: 600; letter-spacing: -.02em; line-height: 1.02; text-wrap: balance; }
+  h1 em { font-style: normal; color: #F0A71F; }
+  .sub { color: rgba(255,255,255,.8); line-height: 1.35; text-wrap: pretty; }
+  .foot { position: absolute; display: flex; align-items: center; justify-content: space-between; }
+  .url { font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
+  .badge { background: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .badge img { width: 86%; }
+
+  /* Portrait 1080×1350 */
+  .portrait { width: 1080px; height: 1350px; }
+  .portrait .glow { width: 760px; height: 760px; right: -260px; top: -260px; }
+  .portrait .stripes { height: 300px; }
+  .portrait .logo { left: 80px; top: 76px; width: 230px; }
+  .portrait .seal { right: 80px; top: 70px; width: 250px; height: 250px; }
+  .portrait .copy { position: absolute; left: 80px; right: 80px; bottom: 280px; }
+  .portrait .eyebrow { font-size: 26px; padding: 12px 26px; }
+  .portrait h1 { font-size: 116px; margin-top: 36px; }
+  .portrait .sub { font-size: 36px; margin-top: 36px; max-width: 900px; }
+  .portrait .foot { left: 80px; right: 80px; bottom: 80px; }
+  .portrait .url { font-size: 34px; }
+  .portrait .badge { width: 150px; height: 150px; }
+
+  /* Wide 1600×900 */
+  .wide { width: 1600px; height: 900px; }
+  .wide .glow { width: 700px; height: 700px; right: -180px; top: -240px; }
+  .wide .stripes { height: 200px; }
+  .wide .logo { left: 96px; top: 70px; width: 190px; }
+  .wide .seal { right: 120px; top: 230px; width: 340px; height: 340px; }
+  .wide .copy { position: absolute; left: 96px; width: 1010px; bottom: 200px; }
+  .wide .eyebrow { font-size: 22px; padding: 10px 22px; }
+  .wide h1 { font-size: 92px; margin-top: 26px; }
+  .wide .sub { font-size: 30px; margin-top: 26px; max-width: 920px; }
+  .wide .foot { left: 96px; right: 96px; bottom: 64px; }
+  .wide .url { font-size: 28px; }
+  .wide .badge { width: 120px; height: 120px; }
+</style>
+</head>
+<body>
+<div id="f" class="frame portrait">
+  <div class="grid"></div>
+  <div class="glow"></div>
+  <div class="stripes"></div>
+  <img class="logo" src="../../client/public/logo-lockup-dark.png" alt="MilitaryVoices.ai" />
+
+  <div class="seal">
+    <svg viewBox="0 0 200 200" aria-hidden="true">
+      <defs><path id="ring" d="M100,100 m-72,0 a72,72 0 1,1 144,0 a72,72 0 1,1 -144,0" /></defs>
+      <text font-family="General Sans, Inter, sans-serif" font-weight="600" font-size="17" fill="#F0A71F">
+        <textPath href="#ring" startOffset="0" textLength="446" lengthAdjust="spacing">FOUNDING MEMBER · 2026 · VETERAN-OWNED ·</textPath>
+      </text>
+      <polygon class="star" fill="#F0A71F" points="100,62 109,89 138,89 115,106 124,133 100,117 76,133 85,106 62,89 91,89" />
+    </svg>
+  </div>
+
+  <div class="copy">
+    <span class="eyebrow">For military &amp; veteran podcasters</span>
+    <h1>Founding Members <em>opens this Black Friday.</em></h1>
+    <p class="sub">Join MilitaryVoices.ai in 2026 and you're part of the founding group. Veteran-owned, built for the people who tell military and veteran stories.</p>
+  </div>
+
+  <div class="foot">
+    <span class="url">militaryvoices.ai</span>
+    <span class="badge"><img src="../../client/public/veteran-owned.png" alt="Veteran-Owned Business" /></span>
+  </div>
+</div>
+<script>
+  const size = new URLSearchParams(location.search).get("size");
+  if (size === "wide") document.getElementById("f").className = "frame wide";
+</script>
+</body>
+</html>
