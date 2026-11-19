@@ -67,6 +67,7 @@ import Sponsor from "@/pages/Sponsor";
 import ForBrands from "@/pages/ForBrands";
 import Tour from "@/pages/Tour";
 import Pricing from "@/pages/Pricing";
+import BlackFriday from "@/pages/BlackFriday";
 
 /**
  * Client-side navigation keeps the old scroll position by default. Every
@@ -188,6 +189,7 @@ function AppRouter() {
       <Route path="/for-brands">{() => <ForBrands />}</Route>
       <Route path="/tour">{() => <Tour />}</Route>
       <Route path="/pricing">{() => <Pricing />}</Route>
+      <Route path="/black-friday">{() => <BlackFriday />}</Route>
       <Route path="/vfw">{() => <SponsorVFW />}</Route>
       {/* Each screen has its own address, so a tab can be linked, bookmarked
           and reached with the back button. /host/dashboard stays the home
