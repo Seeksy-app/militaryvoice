@@ -1,3 +1,4 @@
+import { shrinkImage } from "@/lib/shrinkImage";
 import { GuestInvites } from "@/components/GuestInvites";
 import type { IconType } from "react-icons";
 import { SiApplepodcasts, SiCastbox, SiDeezer, SiIheartradio, SiPlayerfm, SiPocketcasts, SiPodcastindex, SiSpotify, SiYoutubemusic } from "react-icons/si";
@@ -726,7 +727,7 @@ function EpisodeArt({ ep, fallback, onDone }: { ep: Ep; fallback: string; onDone
     setBusy(true);
     try {
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", await shrinkImage(file));
       const r = await fetch(`/api/host/hosting/episodes/${ep.id}/artwork`, { method: "POST", body: fd, credentials: "include" });
       if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { message?: string }).message || "Couldn't use that image.");
       onDone();
@@ -757,7 +758,7 @@ function ArtworkButton({ show, onDone }: { show: HostedShowRow; onDone: () => vo
     setBusy(true);
     try {
       const fd = new FormData();
-      fd.append("file", file);
+      fd.append("file", await shrinkImage(file));
       const r = await fetch(`/api/host/hosting/shows/${show.id}/artwork`, { method: "POST", body: fd, credentials: "include" });
       if (!r.ok) throw new Error(((await r.json().catch(() => ({}))) as { message?: string }).message || "Couldn't use that image.");
       onDone();
