@@ -8455,6 +8455,8 @@ export function registerRoutes(app: Express): void {
     const plan = sub ? planOf(sub.plan) : undefined;
     // Extras are monthly-only (Stripe bills the meter with a monthly plan); yearly tops up with packs.
     if (!sub || !plan || !sub.customerId || sub.interval === "year") return "no";
+    // A free trial (Founding Members) uses its own credits only: nothing is billed before the first payment.
+    if (sub.status === "trialing") return "no";
     const extra = credits - Math.max(0, allowance.tokens);
     const extraCents = extra * plan.overageCents;
     if (allowance.extraCents + extraCents > sub.overageCapCents) return "limit";

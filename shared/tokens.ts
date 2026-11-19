@@ -26,6 +26,14 @@ export const QUARTERLY_ONLY: readonly string[] = ["pro"];
 export type PlanKey = keyof typeof PLANS;
 export const planOf = (key: string) => (key in PLANS ? PLANS[key as PlanKey] : undefined);
 
+/**
+ * Founding Members 2026 (Black Friday; Andrew, 19 Nov 2026: "Yes, card and Dec 31"). Scale paid monthly with the first
+ * 30 days free (Stripe's own trial, card taken at checkout), one trial per email, open until the end of
+ * December 31, 2026, Eastern. The plan's credits come on day 1; extras aren't billed during the trial.
+ */
+export const FOUNDING = { plan: "creator", trialDays: 30, endsAt: "2027-01-01T05:00:00.000Z", endsLabel: "December 31, 2026", cohort: "founding-2026" } as const;
+export const foundingOpen = (now = Date.now()) => now < Date.parse(FOUNDING.endsAt);
+
 /** The limit on extra credits each month, unless they choose another. */
 export const DEFAULT_OVERAGE_CAP_CENTS = 2000;
 export const OVERAGE_CAP_CHOICES = [0, 1000, 2000, 5000, 10000] as const;

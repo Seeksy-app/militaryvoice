@@ -217,7 +217,22 @@ export async function ensureExtraItem(subscriptionId: string, planKey: PlanKey, 
   await stripe("POST", "/subscription_items", flat({ subscription: subscriptionId, price }));
 }
 
-export async function createPlanCheckout(v: { email: string; plan: PlanKey; interval?: PlanInterval; origin: string; customerId?: string; addons?: AddonKey[] }): Promise<string> {
+/**
+ * Has this person ever had a MilitaryVoices plan in Stripe (any status, any customer with their email)? The account is
+ * shared with other businesses, so only our own plans count (metadata kind "postify_plan").
+ */
+export async function hadPlanSubscription(email: string, customerId?: string): Promise<boolean> {
+  const ids = new Set<string>(customerId ? [customerId] : []);
+  const found = await stripe("GET", `/customers?limit=10&email=${encodeURIComponent(email)}`);
+  for (const c of found.data ?? []) ids.add(String(c.id));
+  for (const id of Array.from(ids)) {
+    const subs = await stripe("GET", `/subscriptions?limit=100&status=all&customer=${encodeURIComponent(id)}`);
+    if ((subs.data ?? []).some((s: any) => s?.metadata?.kind === "postify_plan")) return true;
+  }
+  return false;
+}
+
+export async function createPlanCheckout(v: { email: string; plan: PlanKey; interval?: PlanInterval; origin: string; customerId?: string; addons?: AddonKey[]; trialDays?: number; cohort?: string; cancelPath?: string }): Promise<string> {
   const plan = planOf(v.plan);
   if (!plan) throw new Error("Which plan?");
   // Pro is paid every three months and no other way.
@@ -229,9 +244,12 @@ export async function createPlanCheckout(v: { email: string; plan: PlanKey; inte
   const addons = (v.addons ?? []).filter((a) => a in ADDONS && (interval === "month" ? !("quarterly" in ADDONS[a]) : interval === "quarter" ? "quarterly" in ADDONS[a] : false));
   const addonItems = await Promise.all(addons.map(async (a) => ({ price: await addonPrice(a), quantity: 1 })));
   const asPackage = interval === "quarter" && plan.key === "pro" && addons.includes("production" as AddonKey);
-  const meta = { kind: "postify_plan", email: v.email, plan: plan.key, interval, ...(addons.length ? { addons: addons.join(",") } : {}) };
+  const meta = { kind: "postify_plan", email: v.email, plan: plan.key, interval, ...(addons.length ? { addons: addons.join(",") } : {}), ...(v.cohort ? { cohort: v.cohort } : {}) };
+  // A free trial (Founding Members): Stripe's own trial, and the card is always taken at checkout.
+  const trial = v.trialDays && v.trialDays > 0 ? { trial_period_days: v.trialDays } : {};
   const s = await stripe("POST", "/checkout/sessions", flat({
     mode: "subscription",
+    ...(v.trialDays ? { payment_method_collection: "always" } : {}),
     ...(v.customerId ? { customer: v.customerId } : { customer_email: v.email }),
     client_reference_id: v.email,
     line_items: interval === "year"
@@ -240,9 +258,9 @@ export async function createPlanCheckout(v: { email: string; plan: PlanKey; inte
         ? (asPackage ? [{ price: await packagePrice(), quantity: 1 }] : [{ price: ids[`postify_${plan.key}_quarterly`], quantity: 1 }, ...addonItems])
         : [{ price: ids[`postify_${plan.key}_monthly`], quantity: 1 }, ...addonItems],
     metadata: meta,
-    subscription_data: { metadata: meta },
+    subscription_data: { metadata: meta, ...trial },
     success_url: `${v.origin}/host/dashboard/postify?subscribed={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${v.origin}/pricing`,
+    cancel_url: `${v.origin}${v.cancelPath ?? "/pricing"}`,
   }));
   return String(s.url);
 }
