@@ -91,7 +91,21 @@ async function closeSession(c: StreamKeyRow): Promise<void> {
 }
 
 async function startRecording(c: StreamKeyRow, continued?: string): Promise<StreamKeyRow> {
-  if (c.egressId && !continued) return c;
+  if (!continued) {
+    // Claim the key before any slow call: LiveKit retries a webhook that is slow to answer, and a second ingress_started must find it taken.
+    const [claimed] = await db.update(streamKeys).set({ egressId: "pending", liveSince: now() }).where(and(eq(streamKeys.id, c.id), eq(streamKeys.egressId, ""))).returning();
+    if (!claimed) return c;
+    try {
+      return await startClaimed(c, continued);
+    } catch (err) {
+      await db.update(streamKeys).set({ egressId: "", liveSince: "" }).where(and(eq(streamKeys.id, c.id), eq(streamKeys.egressId, "pending")));
+      throw err;
+    }
+  }
+  return startClaimed(c, continued);
+}
+
+async function startClaimed(c: StreamKeyRow, continued?: string): Promise<StreamKeyRow> {
   await ensureRecordingsBucket();
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const filepath = `streams/${c.id}-${stamp}.mp4`;
@@ -210,6 +224,11 @@ export async function runStreamInPass(): Promise<{ stopped: number; rolled: numb
       await storage.setSetting(`streamin:retire:${c.id}`, "");
     }
     if (!c.egressId) continue;
+    if (c.egressId === "pending") {
+      // A start in flight; one that never finished (the function died) is let go after two minutes.
+      if (!c.liveSince || Date.now() - Date.parse(c.liveSince) > 2 * 60_000) await db.update(streamKeys).set({ egressId: "", liveSince: "" }).where(and(eq(streamKeys.id, c.id), eq(streamKeys.egressId, "pending")));
+      continue;
+    }
     if (!running.has(c.egressId)) {
       // The recorder is gone (a failure, or a hand stop): close the books; the reconcile pass settles the file.
       await closeSession(c);
