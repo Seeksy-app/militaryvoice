@@ -37,17 +37,20 @@ const hms = (sec: number) => { const s = Math.round(sec); const h = Math.floor(s
 const short = (app: string) => app.replace(/ Podcasts$/, "");
 const ago = (iso: string) => { const m = Math.max(0, Math.round((Date.now() - Date.parse(iso)) / 60000)); return m < 1 ? "just now" : m < 60 ? `${m} min ago` : `${Math.round(m / 60)} h ago`; };
 const waiting = (d?: Delivery | null) => !!d && d.apps.some((a) => !a.got);
-/** A new episode's trip to the apps: amber while an app hasn't picked it up yet, green once it has. */
+/** An app that hasn't looked in six hours (or ever) is slower than usual: the only case where the person might need to do something. */
+const slowApp = (a: { got: boolean; checked: string }) => !a.got && (!a.checked || Date.now() - Date.parse(a.checked) > 6 * 3600_000);
+const BIG_APPS = /Apple|Spotify/;
+/** A new episode's trip to the apps, in plain words: it is in the feed, the apps pick it up by themselves, and only a slow one is flagged. */
 function DeliveryChips({ ep }: { ep: Ep }) {
   const d = ep.delivery;
   if (!d || !d.apps.length) return null;
+  const slow = d.apps.filter((a) => BIG_APPS.test(a.app) && slowApp(a));
   return (
     <span className="mt-1 flex flex-wrap gap-1" data-testid={`delivery-${ep.id}`}>
-      {d.apps.map((a) => (
-        <span key={a.app} className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${a.got ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]"}`} title={a.got ? `${a.app} has it` : a.checked ? `${a.app} last looked ${ago(a.checked)}` : `${a.app} hasn't looked at this feed yet`}>
-          {a.got ? <Check className="h-3 w-3" /> : <Loader2 className="h-3 w-3 animate-spin" />}{a.got ? `${short(a.app)} has it` : `Waiting for ${short(a.app)}`}
-        </span>
-      ))}
+      <span className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[11px] font-semibold ${waiting(d) ? "bg-muted text-muted-foreground" : "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400"}`}>
+        <Check className="h-3 w-3" />{waiting(d) ? "In your feed · the apps pick it up within the hour" : "In every app"}
+      </span>
+      {slow.map((a) => <span key={a.app} className="inline-flex items-center gap-1 rounded-full bg-[#F0A71F]/20 px-2 py-0.5 text-[11px] font-semibold text-[#8a5a00] dark:text-[#F0A71F]">{short(a.app)} is slow to pick it up</span>)}
     </span>
   );
 }
@@ -250,7 +253,7 @@ export function PodcastHosting() {
       )}
 
       {tab === "episodes" && editEp && (
-        <EpisodePage ep={h.episodes.find((x) => x.id === editEp.id) ?? editEp} show={s} youtubeReady={!!q.data?.youtubeReady} production={!!h.production} onBack={() => setEditEp(null)} onSaved={refresh} onAddSpot={(id) => { setSpotFor(id); setEditEp(null); go("sponsors"); }} />
+        <EpisodePage ep={h.episodes.find((x) => x.id === editEp.id) ?? editEp} show={s} youtubeReady={!!q.data?.youtubeReady} production={!!h.production} onDirectories={() => { setEditEp(null); go("directories"); }} onBack={() => setEditEp(null)} onSaved={refresh} onAddSpot={(id) => { setSpotFor(id); setEditEp(null); go("sponsors"); }} />
       )}
       {tab === "episodes" && !editEp && adding && (
         <NewEpisodePage show={s} onBack={() => setAdding(false)} onCreated={(e) => { refresh(); setAdding(false); setEditEp({ ...e, downloads: 0, live: false }); }} />
@@ -856,7 +859,7 @@ function ShowForm({ show, categories, onSaved, onDeleted, focus = "" }: { show: 
 const localNow = () => { const d = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000); return d.toISOString().slice(0, 16); };
 
 /** One episode, a whole page (borrowed from the best of what hosts offer, then made plainer): the player, the words, when it goes out, where it is. */
-function EpisodePage({ ep, show, youtubeReady, production, onBack, onSaved, onAddSpot }: { ep: Ep; show: HostedShowRow; youtubeReady: boolean; production: boolean; onBack: () => void; onSaved: () => void; onAddSpot: (episodeId: number) => void }) {
+function EpisodePage({ ep, show, youtubeReady, production, onDirectories, onBack, onSaved, onAddSpot }: { ep: Ep; show: HostedShowRow; youtubeReady: boolean; production: boolean; onDirectories?: () => void; onBack: () => void; onSaved: () => void; onAddSpot: (episodeId: number) => void }) {
   const { toast } = useToast();
   const [f, setF] = useState<Record<string, unknown>>({});
   const [at, setAt] = useState("");
@@ -1051,18 +1054,28 @@ function EpisodePage({ ep, show, youtubeReady, production, onBack, onSaved, onAd
             <div className={`rounded-t-2xl px-4 py-3 text-sm font-semibold ${stage === "live" ? "bg-emerald-600 text-white" : stage === "scheduled" ? "bg-[#053877] text-white" : stage === "final" ? "bg-[#F0A71F] text-[#3a2600]" : stage === "failed" ? "bg-destructive text-white" : "bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]"}`} data-testid="episode-stage">{stage === "live" ? "Live" : STAGE[stage].label}</div>
             <div className="space-y-3 p-4 text-sm">
               <p className="text-muted-foreground">{statusLine}</p>
-              {ep.delivery && ep.delivery.apps.length > 0 && (
-                <div className="space-y-1.5 rounded-xl bg-muted/50 px-3 py-2.5" data-testid="episode-delivery">
-                  <p className="text-xs font-semibold text-foreground">{waiting(ep.delivery) ? "On its way to the apps" : "In every app that reads your feed"}</p>
-                  {ep.delivery.apps.map((a) => (
-                    <p key={a.app} className="flex items-center gap-1.5 text-xs">
-                      {a.got ? <Check className="h-3.5 w-3.5 text-emerald-600" /> : <Loader2 className="h-3.5 w-3.5 animate-spin text-[#b36b00]" />}
-                      <span className="font-medium">{a.app}</span>
-                      <span className="text-muted-foreground">{a.got ? "has it" : a.checked ? `waiting · last looked ${ago(a.checked)}` : "waiting · hasn't looked yet"}</span>
-                    </p>
-                  ))}
-                </div>
-              )}
+              {ep.delivery && ep.delivery.apps.length > 0 && (() => {
+                const d = ep.delivery!;
+                const big = d.apps.filter((a) => BIG_APPS.test(a.app));
+                const rest = d.apps.filter((a) => !BIG_APPS.test(a.app));
+                return (
+                  <div className="space-y-2 rounded-xl bg-muted/50 px-3 py-2.5" data-testid="episode-delivery">
+                    <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground"><Check className="h-3.5 w-3.5 text-emerald-600" /> It's in your feed</p>
+                    <p className="text-xs text-muted-foreground">{waiting(d) ? "Apple, Spotify and the other apps pick it up on their own, usually within an hour. There's nothing you need to do." : "Every app that reads your feed has it."}</p>
+                    {big.map((a) => (
+                      <div key={a.app} className="text-xs">
+                        <p className="flex items-center justify-between gap-2"><span className="font-medium">{a.app}</span>
+                          {a.got ? <span className="inline-flex items-center gap-1 font-semibold text-emerald-700 dark:text-emerald-400"><Check className="h-3 w-3" /> Has it</span> : slowApp(a) ? <span className="font-semibold text-[#8a5a00] dark:text-[#F0A71F]">Slower than usual</span> : <span className="text-muted-foreground">Will pick it up soon</span>}
+                        </p>
+                        {!a.got && slowApp(a) && (
+                          <p className="mt-0.5 text-muted-foreground">{a.checked ? `${short(a.app)} hasn't looked at your feed for a while.` : `${short(a.app)} hasn't looked at your feed yet.`} {onDirectories && <button type="button" onClick={onDirectories} className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">See what to do</button>}</p>
+                        )}
+                      </div>
+                    ))}
+                    {rest.length > 0 && <p className="text-[11px] text-muted-foreground">{rest.filter((a) => a.got).length} of {rest.length} other apps already have it.</p>}
+                  </div>
+                );
+              })()}
               {ep.status === "draft" && stage === "post" && (
                 <>
                   <p className="rounded-xl bg-[#053877]/[0.06] px-3 py-2.5 text-xs text-foreground/80">Your original recording is in your Library. We're editing this one: intro and outro, clean-up, the notes. When it's done it becomes a <b>Final draft</b> and you can publish it.</p>
