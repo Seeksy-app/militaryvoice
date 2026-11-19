@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "MilitaryVoices Zoom Reminder",
+  "version": "1.0.0",
+  "description": "A reminder to turn on Zoom cloud recording when you start a meeting, so your recording comes into your MilitaryVoices.ai Library.",
+  "icons": { "16": "icons/16.png", "48": "icons/48.png", "128": "icons/128.png" },
+  "permissions": ["storage"],
+  "content_scripts": [
+    {
+      "matches": ["https://*.zoom.us/j/*", "https://*.zoom.us/s/*", "https://*.zoom.us/start/*", "https://*.zoom.us/wc/*", "https://*.zoom.com/j/*", "https://*.zoom.com/wc/*"],
+      "js": ["reminder.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}
