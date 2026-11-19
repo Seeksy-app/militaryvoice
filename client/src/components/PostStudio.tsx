@@ -13,7 +13,7 @@ import { Label } from "@/components/ui/label";
 import { startPlanCheckout, openBillingPortal, startTokenCheckout } from "@/lib/tokens";
 import { PostDialog } from "@/components/PostDialog";
 import { durationOf, uploadToStorage } from "@/lib/upload";
-import { TrimStrip, Icon, type Cut } from "@/components/TrimStrip";
+import { TrimStrip, Icon, secs, type Cut } from "@/components/TrimStrip";
 import { NotifyPrompt } from "@/components/Notifications";
 import { UploadRecording } from "@/components/UploadRecording";
 import { PodcastEpisodeGrid } from "@/components/PodcastEpisodes";
@@ -82,7 +82,7 @@ function CleanCard({ rec, clean, saved, onSaved }: { rec: Rec; clean: CleanResul
         <IconTile icon={ready ? Check : clean.status === "running" ? Loader2 : Wand2} spin={!ready && clean.status === "running"} />
         <div className="min-w-0">
           <p className="text-sm font-semibold text-foreground">
-            {ready ? `Your clean episode is ready${clean.removedSec ? ` — ${mmss(clean.removedSec)} shorter` : ""}` : clean.status === "failed" ? "Clean episode" : "Cleaning your episode…"}
+            {ready ? `Your clean episode is ready${clean.removedSec ? ` — ${mmss(clean.removedSec)} shorter` : ""}` : clean.status === "failed" ? "Clean episode" : clean.status === "done" ? "Your episode is already clean" : "Cleaning your episode…"}
           </p>
           <p className="text-xs text-muted-foreground">
             {clean.status === "failed"
@@ -847,8 +847,11 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
       void qc.invalidateQueries({ queryKey: ["/api/host/features"] });
       toast({ title: "Making your clip", description: "It appears with your other clips in a minute or two. You can close this page; it keeps going." });
     },
-    onError: (e: Error) => toast({ title: "Couldn't make that clip", description: e.message, variant: "destructive" }),
+    // Out of credits: the way to get them, here (like More clips), not a toast that says go somewhere else.
+    onError: (e: Error & { status?: number }) => (e.status === 402 ? setPlanOpen(true) : toast({ title: "Couldn't make that clip", description: e.message, variant: "destructive" })),
   });
+  const [planOpen, setPlanOpen] = useState(false);
+  const credits = useQuery<{ beta?: Beta; plan?: Plan | null }>({ queryKey: ["/api/host/features"], queryFn: async () => (await apiRequest("GET", "/api/host/features")).json(), staleTime: 60_000 });
   // Edit the episode
   const remember = (k: string) => { try { const v = localStorage.getItem(k); return v ? (JSON.parse(v) as Bookend) : null; } catch { return null; } };
   // Work in progress, saved as they go (on the recording): they can close and come back to cut more.
@@ -1049,6 +1052,13 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
   // button that finishes. "Save to Library", not "Publish": it makes a copy there, and nothing
   // reaches the podcast until they add it.
   const nothingToSave = (!trim.start && !trim.end && !cuts.length && !intro && !outro && !music.length) || (trim.end > 0 && trim.end < trim.start + 5);
+  // These exact edits are already in the Library: say so, and don't offer to make the same copy twice.
+  // Change anything and Save to Library comes back.
+  const cutSig = (cs: Cut[]) => JSON.stringify(mergeCuts(cs).map(([a, b]) => [a.toFixed(1), b.toFixed(1)]));
+  const savedId = ed?.status === "done" && ed.resultId && ed.source === source
+    && Math.abs((ed.trimStart ?? 0) - trim.start) < 0.05 && Math.abs((ed.trimEnd ?? 0) - trim.end) < 0.05
+    && cutSig(ed.cuts ?? []) === cutSig(cuts) && (ed.introKey ?? "") === (intro?.key ?? "") && (ed.outroKey ?? "") === (outro?.key ?? "")
+    && (ed.music?.length ?? 0) === music.length ? ed.resultId : null;
   // What they've done, in words, in the order it plays; each can be undone on its own.
   const words = (n: number) => { const t = Math.round(n); return t < 60 ? `${t} sec` : `${Math.floor(t / 60)} min${t % 60 ? ` ${t % 60} sec` : ""}`; };
   const log: { key: string; text: string; at?: number; undo: () => void }[] = [
@@ -1103,7 +1113,11 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
         {(tab === "edit" || onMusic) && tip(tab === "edit" ? "Music under part of the episode: the opening, the close, a piece you picked, or all of it" : "Music for your clips", (
           <button type="button" onClick={() => (tab === "edit" ? setMusicDlg(true) : onMusic?.())} aria-label={tab === "edit" ? "Music for the episode" : "Music for your clips"} className="inline-flex h-10 items-center gap-1.5 rounded-lg border border-border bg-background px-3 text-sm font-semibold hover:bg-muted" data-testid="edit-music"><Music2 className="h-4 w-4" /> Music</button>
         ))}
-        {tab === "edit" && tip(nothingToSave ? "Make a change first: trim, split, or add an intro or outro" : "Saves the edited episode to your Library as a new copy. Your original stays, and nothing goes to your podcast until you add it there.", (
+        {tab === "edit" && savedId && !busy && !makeEdit.isPending ? tip("This edit is saved as a new copy in your Library. Change anything here to save another.", (
+          <Button asChild variant="outline" className="h-10 shrink-0 gap-2 rounded-lg border-emerald-400/60 px-5 text-emerald-700 dark:text-emerald-400" data-testid="edit-saved">
+            <a href="/host/dashboard/library"><Check className="h-4 w-4" /> In your Library</a>
+          </Button>
+        )) : tab === "edit" && tip(nothingToSave ?"Make a change first: trim, split, or add an intro or outro" : "Saves the edited episode to your Library as a new copy. Your original stays, and nothing goes to your podcast until you add it there.", (
           <span className="inline-flex">
             <Button type="button" onClick={() => { if (shortKeep && !window.confirm(`This keeps only ${hms(keepLen)} of ${hms(pos.d)}. Save it anyway?`)) return; makeEdit.mutate(); }} disabled={busy || makeEdit.isPending || nothingToSave} className="h-10 shrink-0 gap-2 rounded-lg bg-[#053877] px-5 text-white hover:bg-[#0a4a99] disabled:pointer-events-none" data-testid="edit-make">
               {busy || makeEdit.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</> : <><Library className="h-4 w-4" /> Save to Library</>}
@@ -1286,12 +1300,15 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
               <>
                 {/* After a split, say the next step: pick the piece to take out. */}
                 {!trimming && bounds.length > 2 && !sel && <span className="text-xs font-medium text-muted-foreground" data-testid="tool-next">Now click the piece to take out</span>}
+                {/* Clicking the strip to move the playhead also picks that piece, so a picked piece
+                    must never hide behind "Done": the gold button says exactly what it takes out,
+                    in the strip's own words, and Keep it is the way out. */}
+                {sel && <button type="button" onClick={() => setSel(null)} className="text-xs font-medium text-muted-foreground underline underline-offset-2 hover:text-foreground" data-testid="tool-keep">Keep it</button>}
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    {/* A picked piece is picked to be taken out, so Done takes it out. */}
-                    <button type="button" onClick={() => { if (sel) del(); setTrimming(false); setSplits([]); setSel(null); }} className="ml-1 inline-flex h-8 items-center rounded-lg bg-[#F0A71F] px-4 text-sm font-bold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="tool-done">{sel ? `Take out ${hms(sel[1] - sel[0])} · Done` : "Done"}</button>
+                    <button type="button" onClick={() => { if (sel) del(); setTrimming(false); setSplits([]); setSel(null); }} className="ml-1 inline-flex h-8 items-center rounded-lg bg-[#F0A71F] px-4 text-sm font-bold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="tool-done">{sel ? `Take out ${secs(sel[1] - sel[0])}` : "Done"}</button>
                   </TooltipTrigger>
-                  <TooltipContent side="top" className="max-w-[15rem] text-xs">{sel ? "Takes the picked piece out, and finishes this edit." : "Finish this edit and keep going. Make edited episode when they're all done."}</TooltipContent>
+                  <TooltipContent side="top" className="max-w-[15rem] text-xs">{sel ? "Takes the picked piece out of the episode." : "Finish this edit and keep going. Save to Library when they're all done."}</TooltipContent>
                 </Tooltip>
               </>
             ) : undefined}
@@ -1300,6 +1317,7 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
         )}
         {footer}
         {musicDialog}
+        <PlanDialog open={planOpen} onOpenChange={setPlanOpen} beta={credits.data?.beta} plan={credits.data?.plan} />
       </div>
       {tab === "edit" && (ed?.status === "failed" || sug?.status === "failed" || (sug?.status === "done" && sug.source === source && !(sug.items ?? []).length)) && (
         <p className="mt-2 text-xs text-muted-foreground">

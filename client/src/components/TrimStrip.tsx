@@ -611,7 +611,8 @@ export function TrimStrip({ videoRef, duration, time, start, end, onChange, minL
 }
 
 /** "11s", or "1:05" past a minute: a cut's length, never mistaken for a time in the episode. */
-function secs(n: number) {
+/** A length as people say it: "45s", or "1:05" past a minute. Shared so a piece reads the same on the strip and the toolbar. */
+export function secs(n: number) {
   const t = Math.max(0, Math.round(n));
   return t < 60 ? `${t}s` : `${Math.floor(t / 60)}:${String(t % 60).padStart(2, "0")}`;
 }
