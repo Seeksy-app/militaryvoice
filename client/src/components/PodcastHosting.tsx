@@ -14,7 +14,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { useClipLayoutDefault, type DefaultLayout } from "@/lib/clipLayoutDefault";
 import { durationOf, uploadToStorage } from "@/lib/upload";
-import { GuestFinder, ShowFinder } from "@/components/DiscoverPodcasts";
+import { GuestFinder, ShowFinder, INVITE_KEY } from "@/components/DiscoverPodcasts";
 import type { HostedEpisodeRow, HostedShowRow, HostedSpotRow, RecordingRow } from "@shared/schema";
 import { fillFooter, FOOTER_TOKENS } from "@shared/footer";
 import { AlertCircle, BarChart3, Cable, Check, ChevronLeft, Copy, ExternalLink, Film, ImagePlus, Loader2, Mic2, Pencil, Plus, Podcast, Radio, Send, Sparkles, Trash2, Upload } from "lucide-react";
@@ -110,6 +110,17 @@ export function PodcastHosting() {
   // Podcast always opens on Episodes (not wherever they last wandered).
   const [tab, setTab] = useState<PodTab>("episodes");
   const go = (t: PodTab) => setTab(t);
+  // Invite to my show (a Book a guest profile, here or on Discover) leaves the person in the session:
+  // open Invite a guest with their name, and their email if it was found. n refills the same person.
+  const [prefill, setPrefill] = useState<{ name: string; email: string; n: number } | undefined>(undefined);
+  const takeInvite = () => {
+    let p: { name?: string; email?: string } | null = null;
+    try { p = JSON.parse(sessionStorage.getItem(INVITE_KEY) || "null"); sessionStorage.removeItem(INVITE_KEY); } catch { p = null; }
+    if (!p?.name) return;
+    setPrefill((x) => ({ name: p!.name!, email: p!.email ?? "", n: (x?.n ?? 0) + 1 }));
+    setTab("invite");
+  };
+  useEffect(() => { takeInvite(); }, []);
   // The field Show details opens on (from the checklist): the description, the name, the owner email.
   const [focus, setFocus] = useState<"" | "title" | "description" | "ownerEmail">("");
   const [adding, setAdding] = useState(false);
@@ -339,8 +350,8 @@ export function PodcastHosting() {
         </>
       )}
 
-      {tab === "invite" && <GuestInvites />}
-      {tab === "guests" && <GuestFinder showTitle={s.title} />}
+      {tab === "invite" && <GuestInvites prefill={prefill} />}
+      {tab === "guests" && <GuestFinder showTitle={s.title} onInvite={takeInvite} />}
       {tab === "pitch" && <ShowFinder topics={[s.category, s.subcategory].filter(Boolean) as string[]} />}
 
       {tab === "details" && <ShowForm key={s.id} show={s} focus={focus} categories={q.data?.categories ?? {}} onSaved={() => { refresh(); setFocus(""); }} onDeleted={() => { setOpenId(null); refresh(); }} />}

@@ -207,13 +207,15 @@ function LinkChip({ href, children }: { href: string; children: React.ReactNode 
 }
 
 /** A show or a person, opened: what we know, who's on it, how to reach them. */
-export function PodcastDrawer({ open, from, onGo, onClose, isMember, onJoin, saved, onSave, reveals, onRevealed, pitch = false }: {
+export function PodcastDrawer({ open, from, onGo, onClose, isMember, onJoin, saved, onSave, reveals, onRevealed, pitch = false, onInvite }: {
   open: PodOpen | null; from: PodOpen[]; onGo: (o: PodOpen) => void; onClose: () => void;
   isMember: boolean; onJoin: () => void; saved: Set<string>; onSave: (card: ReturnType<typeof podCard>) => void;
   /** Contact look-ups left this month (Find their email uses one). */
   reveals?: { used: number; allowance: number } | null; onRevealed?: () => void;
   /** Be a guest: a show opens with a pitch to write and send to its host. */
   pitch?: boolean;
+  /** Invite to my show, inside the Podcast hub: switch to its Invite a guest tab (else the button goes there). */
+  onInvite?: () => void;
 }) {
   const { toast } = useToast();
   const scroller = useRef<HTMLDivElement>(null);
@@ -328,7 +330,7 @@ export function PodcastDrawer({ open, from, onGo, onClose, isMember, onJoin, sav
               {show && pitch && isMember && full && <PitchBox key={id} show={show as PodShowFull} />}
 
               {/* Book them: invite to your show, find their email, keep them in Guests. */}
-              {person && isMember && full && <GuestActions key={id} person={person as PodPersonFull} saved={saved.has(saveKey)} onSave={() => onSave(podCard({ kind: "person", ...person } as PodItem))} reveals={reveals ?? null} onRevealed={onRevealed} />}
+              {person && isMember && full && <GuestActions key={id} person={person as PodPersonFull} saved={saved.has(saveKey)} onSave={() => onSave(podCard({ kind: "person", ...person } as PodItem))} reveals={reveals ?? null} onRevealed={onRevealed} onInvite={onInvite} />}
 
               {/* About */}
               {(show?.about || person?.bio) && (
@@ -440,7 +442,10 @@ export function PodcastDrawer({ open, from, onGo, onClose, isMember, onJoin, sav
  * contact look-ups), invite them onto your live slot (they get their own link into the green room),
  * or keep them in your Guests list for later.
  */
-function GuestActions({ person, saved, onSave, reveals, onRevealed }: { person: PodPersonFull; saved: boolean; onSave: () => void; reveals: { used: number; allowance: number } | null; onRevealed?: () => void }) {
+/** Where Invite to my show leaves the person for the Podcast hub's Invite a guest form ({ name, email }). */
+export const INVITE_KEY = "mv_invite_guest";
+
+function GuestActions({ person, saved, onSave, reveals, onRevealed, onInvite }: { person: PodPersonFull; saved: boolean; onSave: () => void; reveals: { used: number; allowance: number } | null; onRevealed?: () => void; onInvite?: () => void }) {
   const { toast } = useToast();
   const x = (person.socials ?? []).find((s) => s.platform === "twitter")?.url ?? "";
   const handle = (x.match(/(?:twitter|x)\.com\/(?!intent|share|home)@?([A-Za-z0-9_]{1,15})/i) ?? [])[1] ?? "";
@@ -459,31 +464,12 @@ function GuestActions({ person, saved, onSave, reveals, onRevealed }: { person: 
       if (!j.email) toast({ title: "No public email for them", description: j.website ? "Their website is below: most have a contact page." : "Try their X account or one of their shows." });
     } catch (e) { toast({ title: "Couldn't look them up", description: (e as Error).message, variant: "destructive" }); } finally { setFinding(false); }
   };
-  // Their live slots here, to invite them onto.
-  const [inviting, setInviting] = useState(false);
-  const dash = useQuery<{ mySignups: { id: number; podcastName: string; slotIndex: number | null; status: string }[] }>({ queryKey: ["/api/host/dashboard"], queryFn: async () => { const r = await fetch("/api/host/dashboard", { credentials: "include" }); if (!r.ok) throw new Error("no"); return r.json(); }, enabled: inviting, retry: false, staleTime: 60_000 });
-  const slots = (dash.data?.mySignups ?? []).filter((s) => s.status !== "cancelled");
-  const [added, setAdded] = useState<{ id: number; signupId: number } | null>(null);
-  const invite = async (signupId: number) => {
-    try {
-      const r = await fetch("/api/host/guests", { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ signupId, name: person.name, title: (person.subtitle ?? "").replace(/^Guest on .*/i, "").slice(0, 120), email: contact?.email ?? "", intro: (person.bio ?? "").slice(0, 1200) }) });
-      const j = await r.json();
-      if (!r.ok) throw new Error(j.message);
-      setAdded({ id: j.guest.id, signupId });
-      setInviting(false);
-      toast({ title: `${person.name} is on your guest list`, description: contact?.email ? "Send their link below, or from your dashboard." : "Add their email on your dashboard to send their link." });
-    } catch (e) { toast({ title: "Couldn't add them", description: (e as Error).message, variant: "destructive" }); }
-  };
-  const [sending, setSending] = useState(false);
-  const sendLink = async () => {
-    if (!added) return;
-    setSending(true);
-    try {
-      const r = await fetch(`/api/host/guests/${added.id}/invite`, { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: "{}" });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j.message || "Not sent");
-      toast({ title: "Invite sent", description: `${person.name} has their link into your green room.` });
-    } catch (e) { toast({ title: "Not sent", description: (e as Error).message, variant: "destructive" }); } finally { setSending(false); }
+  // Invite to my show: the Podcast hub's Invite a guest, their name (and email, once found) filled in.
+  // That form already asks where: Zoom, their Room, or their Radio booth when they have a booking.
+  const inviteThem = () => {
+    try { sessionStorage.setItem(INVITE_KEY, JSON.stringify({ name: person.name, email: contact?.email ?? "" })); } catch { /* private mode: the form opens empty */ }
+    if (onInvite) onInvite();
+    else window.location.href = "/host/dashboard/podcast";
   };
   const left = reveals ? Math.max(0, reveals.allowance - reveals.used) : null;
   // Past the month's reveals, a contact is a credit: how many they have.
@@ -494,7 +480,7 @@ function GuestActions({ person, saved, onSave, reveals, onRevealed }: { person: 
     <section className="space-y-3 rounded-2xl border border-[#053877]/20 bg-[#053877]/[0.03] p-4 dark:border-white/10 dark:bg-white/[0.03]" data-testid="pod-guest-actions">
       <h3 className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Book them</h3>
       <div className="flex flex-wrap gap-2">
-        <Button onClick={() => setInviting((v) => !v)} className="h-9 gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="pod-invite"><Mic2 className="h-4 w-4" /> Invite to my show</Button>
+        <Button onClick={inviteThem} className="h-9 gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="pod-invite"><Mic2 className="h-4 w-4" /> Invite to my show</Button>
         <Button variant="outline" onClick={() => void find()} disabled={!handle || finding || !!contact || outOfAll} title={handle ? undefined : "No X account on file for them"} className="h-9 gap-1.5 rounded-full" data-testid="pod-find-email">{finding ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />} Find their email</Button>
         <Button variant="outline" onClick={onSave} disabled={saved} className="h-9 gap-1.5 rounded-full" data-testid="pod-save-guest">{saved ? <BookmarkCheck className="h-4 w-4 text-[#053877]" /> : <Bookmark className="h-4 w-4" />} {saved ? "In Guests" : "Save to Guests"}</Button>
       </div>
@@ -513,25 +499,6 @@ function GuestActions({ person, saved, onSave, reveals, onRevealed }: { person: 
           {contact.website && <p className="flex items-center gap-2"><Globe className="h-4 w-4 text-[#053877]" /><a href={contact.website} target="_blank" rel="noreferrer" className="truncate hover:underline">{contact.website.replace(/^https?:\/\/(www\.)?/, "")}</a></p>}
         </div>
       )}
-      {inviting && (
-        <div className="rounded-xl bg-background p-3 text-sm" data-testid="pod-invite-pick">
-          {dash.isLoading ? <p className="flex items-center gap-2 text-muted-foreground"><Loader2 className="h-4 w-4 animate-spin" /> Your live slots…</p>
-            : slots.length ? (
-              <>
-                <p className="mb-2 font-medium">Invite {person.name} onto:</p>
-                <div className="flex flex-wrap gap-2">{slots.map((sl) => <Button key={sl.id} variant="outline" size="sm" onClick={() => void invite(sl.id)} className="h-8 rounded-full">{sl.podcastName || "Your live slot"}</Button>)}</div>
-                <p className="mt-2 text-xs text-muted-foreground">They get their own link into your green room: nothing to sign up for.</p>
-              </>
-            ) : <p className="text-muted-foreground">You don't have a live slot yet. <a href="/host/dashboard/events" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Book one</a>, then invite {person.name} onto it. Meanwhile, Save to Guests keeps them for later.</p>}
-        </div>
-      )}
-      {added && (
-        <div className="flex flex-wrap items-center gap-2 rounded-xl bg-emerald-500/[0.07] p-3 text-sm">
-          <Check className="h-4 w-4 text-emerald-600" /> <span className="min-w-0 flex-1">On your guest list.</span>
-          {contact?.email && <Button size="sm" onClick={() => void sendLink()} disabled={sending} className="h-8 gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="pod-send-invite">{sending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Mail className="h-3.5 w-3.5" />} Email them their link</Button>}
-          <a href="/host/dashboard#your-guests" className="text-xs font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Your guests</a>
-        </div>
-      )}
     </section>
   );
 }
@@ -541,7 +508,7 @@ function GuestActions({ person, saved, onSave, reveals, onRevealed }: { person: 
  * podcasts, open one, then invite, find their email or save them. Uses Discovery underneath;
  * a podcaster who hasn't added Discovery gets it (free) with their first search.
  */
-export function GuestFinder({ showTitle = "" }: { showTitle?: string }) {
+export function GuestFinder({ showTitle = "", onInvite }: { showTitle?: string; onInvite?: () => void }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const me = useQuery<{ signedIn?: boolean; member?: unknown; reveals?: { used: number; allowance: number } | null }>({ queryKey: ["/api/discover/me"], queryFn: async () => (await fetch("/api/discover/me", { credentials: "include" })).json() });
@@ -610,7 +577,7 @@ export function GuestFinder({ showTitle = "" }: { showTitle?: string }) {
       {ask && <PodcastResults ask={ask} isMember={!!me.data?.member} onJoin={() => void run(q)} onOpen={(o, f) => { setFrom(f); setOpen(o); }} saved={saved} onSave={(card) => void saveGuest(card)} />}
       </>}
       </>}
-      <PodcastDrawer open={open} from={from} onGo={setOpen} onClose={() => setOpen(null)} isMember={!!me.data?.member} onJoin={() => void run(q)} saved={saved} onSave={(card) => void saveGuest(card)} reveals={me.data?.reveals ?? null} onRevealed={() => void qc.invalidateQueries({ queryKey: ["/api/discover/me"] })} />
+      <PodcastDrawer open={open} from={from} onGo={setOpen} onClose={() => setOpen(null)} isMember={!!me.data?.member} onJoin={() => void run(q)} saved={saved} onSave={(card) => void saveGuest(card)} reveals={me.data?.reveals ?? null} onRevealed={() => void qc.invalidateQueries({ queryKey: ["/api/discover/me"] })} onInvite={onInvite} />
     </div>
   );
 }

@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, Loader2, Send, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -19,7 +19,7 @@ const typoFix = (email: string) => {
 };
 
 /** The guest's name for the card is theirs to type: an invitation from the host asks them, with the photo they want shown. */
-export function GuestInvites() {
+export function GuestInvites({ prefill }: { prefill?: { name: string; email: string; n: number } } = {}) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const list = useQuery<Invite[]>({ queryKey: ["/api/host/guest-invites"], queryFn: async () => (await apiRequest("GET", "/api/host/guest-invites")).json() });
@@ -52,6 +52,13 @@ export function GuestInvites() {
     onError: (e) => toast({ title: "Couldn't use that", description: say(e), variant: "destructive" }),
   });
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF((x) => ({ ...x, [k]: e.target.value }));
+  // From Invite to my show on a Book a guest profile: their name (and email, if found) filled in, the form in view.
+  useEffect(() => {
+    if (!prefill?.name) return;
+    setF((x) => ({ ...x, guestName: prefill.name, guestEmail: prefill.email || x.guestEmail }));
+    requestAnimationFrame(() => document.querySelector("[data-testid='guest-invite-form']")?.scrollIntoView({ behavior: "smooth", block: "start" }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [prefill?.n]);
   const send = useMutation({
     mutationFn: async () => {
       const whenIso = f.when ? new Date(f.when).toISOString() : "";
