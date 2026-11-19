@@ -154,8 +154,10 @@ async function startClaimed(c: StreamKeyRow, continued?: string): Promise<Stream
     .where(continued ? eq(streamKeys.id, c.id) : and(eq(streamKeys.id, c.id), eq(streamKeys.egressId, "pending")))
     .returning();
   if (!out) {
+    // Nothing of this recording is wanted: drop its Library row first (so the egress's end finds nothing to finish, queue or announce), then stop it.
+    await db.delete(recordings).where(eq(recordings.id, rec.id));
     await stopEgressById(egressId).catch(() => {});
-    await db.update(streamSessions).set({ endedAt: now(), seconds: 0 }).where(eq(streamSessions.egressId, egressId));
+    await db.delete(streamSessions).where(eq(streamSessions.egressId, egressId));
     return c;
   }
   return out;
