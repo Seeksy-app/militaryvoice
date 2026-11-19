@@ -55,7 +55,7 @@ export function GuestInvites({ prefill }: { prefill?: { name: string; email: str
   // From Invite to my show on a Book a guest profile: their name (and email, if found) filled in, the form in view.
   useEffect(() => {
     if (!prefill?.name) return;
-    setF((x) => ({ ...x, guestName: prefill.name, guestEmail: prefill.email || x.guestEmail }));
+    setF((x) => ({ ...x, guestName: prefill.name, guestEmail: prefill.email || "" }));
     requestAnimationFrame(() => document.querySelector("[data-testid='guest-invite-form']")?.scrollIntoView({ behavior: "smooth", block: "start" }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill?.n]);
