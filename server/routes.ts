@@ -168,6 +168,7 @@ import { draftYoutubeDescription, chaptersFrom } from "./youtubeDraft.js";
 import { registerZoom, importFetch } from "./zoom.js";
 import { registerRecordingReminders } from "./recordingReminders.js";
 import { registerExtensionApi } from "./extensionApi.js";
+import { registerLayoutSuggest } from "./layoutSuggest.js";
 import { registerMusic } from "./music.js";
 import { registerReview } from "./review.js";
 import { registerSponsorFinder } from "./sponsorFinder.js";
@@ -6983,6 +6984,7 @@ export function registerRoutes(app: Express): void {
   });
   registerBioPage(app);
   registerAskShow(app, requireAgent);
+  registerLayoutSuggest(app, requireAgent);
 
   /** The worker has fetched an import (Zoom): the file is in storage now. */
   /** The worker's note on the way out (signal, memory): the last 30, for working out why it restarts. */
@@ -7212,6 +7214,15 @@ export function registerRoutes(app: Express): void {
     if (!rec && Array.isArray(req.body?.can) && req.body.can.includes("episode-copy")) {
       const cp = await claimEpisodeAudio("copy").catch((err) => { console.error("Episode copy claim failed:", err); return null; });
       if (cp) return res.json({ job: { recordingId: cp.id, title: cp.title, durationSec: cp.durationSec, downloadUrl: cp.recordingUrl, show: "", host: "", transcript: [], episodeAudio: { episodeId: cp.id, copy: true, mime: cp.mime } } });
+    }
+    // Last of all, and only for a worker that can: look at a recording for two people on screen (a suggestion; nothing is rendered).
+    if (!rec && Array.isArray(req.body?.can) && req.body.can.includes("layout")) {
+      const lp = await storage.claimLayoutProbe().catch((err) => { console.error("Layout probe claim failed:", err); return undefined; });
+      if (lp) {
+        const src = /^https?:\/\//i.test(lp.url) ? lp.url : await signedRecordingUrl(lp.url, 3600).catch(() => "");
+        if (src) return res.json({ job: { recordingId: lp.id, title: lp.title, durationSec: lp.durationSec, downloadUrl: src, show: "", host: "", transcript: [], layoutProbe: {} } });
+        await storage.setLayoutSuggestion(lp.id, JSON.stringify({ status: "failed", at: new Date().toISOString() }));
+      }
     }
     if (!rec) {
       res.json({ job: null });

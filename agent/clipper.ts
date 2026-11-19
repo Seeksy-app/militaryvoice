@@ -57,6 +57,7 @@ import { textPath, fitSize, textWidth } from "../server/textPath.js";
 import { cutList, snapToAudio, keepRanges, selectGraph, envelope, type Word } from "./refine.js";
 import { captionTrack, type CaptionStyle, type TimedWord } from "./wordCaptions.js";
 import { glimpseLane } from "./glimpse.js";
+import { analyzeFrame, type FrameAnalysis } from "./layoutDetect.js";
 
 const API_BASE = (process.env.API_BASE || "http://localhost:3000").replace(/\/+$/, "");
 const AGENT_TOKEN = process.env.AGENT_TOKEN || "";
@@ -106,6 +107,8 @@ interface Line {
 }
 
 interface Job {
+  /** Look for two people on screen and write a suggestion (never a render): see handleLayoutProbe. */
+  layoutProbe?: Record<string, never>;
   recordingId: number;
   title: string;
   durationSec: number;
@@ -138,7 +141,7 @@ interface Job {
   /** Clips to make from this episode (Pro: 6). Absent = CLIP_COUNT. */
   clipCount?: number;
   /** What the podcaster picked: which shapes, and the caption style. Absent = all three, animated. */
-  options?: { formats: Shape[]; captions: "animated" | "classic"; layout?: "stacked" | "single" | "radio"; more?: { count: number; avoid: [number, number][] } };
+  options?: { formats: Shape[]; captions: "animated" | "classic"; layout?: "stacked" | "single" | "radio" | "side"; more?: { count: number; avoid: [number, number][] } };
   /** Picked up again after a stop: the moments that run chose, and the clips already made ("start-end"). */
   resume?: { moments: Moment[]; done: string[] };
   /** A track to play under the clips (a signed link to the MP3). */
@@ -693,7 +696,7 @@ export async function render(
       chain.push(`[${k + 1}:v]crop=${even(f.w)}:${even(f.h)}:${f.x}:${f.y},scale=${W}:${videoH},setsar=1,fps=30,format=yuv420p[s${k}]`);
     });
     chain.push(`${shots.map((_, k) => `[s${k}]`).join("")}concat=n=${shots.length}:v=1:a=0[stage]`);
-  } else if (words && !focusOf(geo)) {
+  } else if ((words || (geo as { keepWhole?: boolean } | undefined)?.keepWhole) && !focusOf(geo)) {
     // The whole picture over a blurred copy of itself, as Creatomate did it: a
     // room of people keeps all its people.
     chain.push(
@@ -1537,6 +1540,11 @@ type FocusMode = "shots" | "one" | "none";
 
 async function framingFor(job: Job, source: string, m: Moment, within: Line[], dir: string, mode: FocusMode = "shots") {
   const layout = job.options?.layout ?? "auto";
+  // Chosen by the person: the whole picture, both people in it, over a blurred copy of itself. No stack, no following.
+  if (layout === "side") {
+    const g = await frameGeometry(source, m.startSec);
+    return { whole: g.whole, left: null, right: null, stack: false, keepWhole: true, focus: null, focusShots: null } as unknown as Awaited<ReturnType<typeof frameGeometry>> & { keepWhole: boolean; focus: Box | null; focusShots: { from: number; to: number; focus: Box | null }[] | null };
+  }
   // A MilitaryVoices Radio show, two people: one over the other, each in their own tile.
   if (layout === "radio") {
     const t = await radioTiles(source, m.startSec).catch(() => null);
@@ -1607,6 +1615,78 @@ async function framingFor(job: Job, source: string, m: Moment, within: Line[], d
  */
 function usesCreatomate(): boolean {
   return (process.env.CLIP_RENDERER || "local").toLowerCase() === "creatomate";
+}
+
+/**
+ * "Two people on screen?" (19 Nov 2026). Looks at six frames spread through a recording; when at least four of them show
+ * exactly two equal panels side by side, writes a suggestion on the recording with a still of each layout, from the real
+ * footage. It never renders clips and never changes a layout: the Make clips screen shows it as a question and the person
+ * decides. Unsure means no suggestion.
+ */
+async function handleLayoutProbe(job: Job): Promise<void> {
+  const tag = `[${job.recordingId}] layout`;
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), `layout-${job.recordingId}-`));
+  try {
+    const dur = Math.max(30, job.durationSec || 0);
+    const stamps = [0.12, 0.25, 0.4, 0.55, 0.7, 0.85].map((f) => Math.round(Math.max(5, Math.min(dur - 5, f * dur))));
+    type Seen = { t: number; a: Extract<FrameAnalysis, { ok: true }>; data: Uint8Array; width: number };
+    const seen: Seen[] = [];
+    for (const t of stamps) {
+      const file = path.join(dir, `f${t}.png`);
+      try { await ffmpeg(["-ss", String(t), "-i", job.downloadUrl, "-frames:v", "1", "-vf", "scale=480:-2", file]); } catch { continue; }
+      const { data, info } = await sharp(file).greyscale().raw().toBuffer({ resolveWithObject: true });
+      const a = analyzeFrame(new Uint8Array(data), info.width, info.height);
+      if (a.ok) seen.push({ t, a, data: new Uint8Array(data), width: info.width });
+    }
+    const confidence = seen.length / stamps.length;
+    console.log(`${tag}: ${seen.length} of ${stamps.length} frames show two panels`);
+    if (seen.length < 4) {
+      await api("POST", `/api/agent/layout-suggest/${job.recordingId}/done`, { suggested: "", people: 1, confidence });
+      return;
+    }
+    // Stills from the middle-most frame that passed, larger than the check frame.
+    const pick = seen[Math.floor(seen.length / 2)];
+    const big = path.join(dir, "big.png");
+    await ffmpeg(["-ss", String(pick.t), "-i", job.downloadUrl, "-frames:v", "1", "-vf", "scale=960:-2", big]);
+    const k = 960 / pick.width;
+    const L = Math.round(pick.a.left * k), R = Math.round(pick.a.right * k), T = Math.round(pick.a.top * k), B = Math.round(pick.a.bottom * k), D = Math.round(pick.a.divider * k);
+    const even2 = (n: number) => Math.max(2, Math.floor(n / 2) * 2);
+    const ph = even2(B - T), pw = even2(Math.min(D - L - 8, R - D - 8)), cw = even2(R - L);
+    const out = (name: string) => path.join(dir, `layout-${job.recordingId}-${name}.jpg`);
+    const still = (name: string, graph: string) => ffmpeg(["-i", big, "-filter_complex", graph, "-frames:v", "1", "-q:v", "3", out(name)]);
+    const previews: Record<string, string> = {};
+    // Stacked: each person's own panel, one over the other.
+    await still("stacked", `[0:v]split=2[a][b];[a]crop=${pw}:${ph}:${L}:${T},scale=480:426:force_original_aspect_ratio=increase,crop=480:426[l];[b]crop=${pw}:${ph}:${D + 8}:${T},scale=480:426:force_original_aspect_ratio=increase,crop=480:426[r];[l][r]vstack=2`);
+    // Side by side: the whole picture over a blurred copy of itself.
+    await still("side", `[0:v]crop=${cw}:${ph}:${L}:${T},split=2[a][b];[a]scale=480:852:force_original_aspect_ratio=increase,crop=480:852,scale=60:106,boxblur=2:1,scale=480:852[bg];[b]scale=480:-2[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2`);
+    // Follow the speaker, as an example: the panel with the most movement, cropped to the vertical frame.
+    let leftMove = 0, rightMove = 0;
+    try {
+      const f2 = path.join(dir, "f2.png");
+      await ffmpeg(["-ss", String(pick.t + 1.5), "-i", job.downloadUrl, "-frames:v", "1", "-vf", "scale=480:-2", f2]);
+      const { data: d2, info: i2 } = await sharp(f2).greyscale().raw().toBuffer({ resolveWithObject: true });
+      if (i2.width === pick.width && d2.length === pick.data.length) {
+        for (let y = pick.a.top; y <= pick.a.bottom; y += 2) for (let x = pick.a.left; x <= pick.a.right; x += 2) {
+          const dv = Math.abs(d2[y * i2.width + x] - pick.data[y * i2.width + x]);
+          if (x < pick.a.divider) leftMove += dv; else rightMove += dv;
+        }
+      }
+    } catch { /* the example is the left panel */ }
+    const sx = rightMove > leftMove ? D + 8 : L;
+    await still("single", `[0:v]crop=${pw}:${ph}:${sx}:${T},crop='min(iw,ih*480/852)':ih:(iw-ow)/2:0,scale=480:852`).catch(() => undefined);
+    for (const name of ["stacked", "side", "single"]) {
+      try { await fs.access(out(name)); previews[name] = await uploadFile(out(name), "image/jpeg"); } catch { /* optional */ }
+    }
+    await api("POST", `/api/agent/layout-suggest/${job.recordingId}/done`, {
+      suggested: "stacked", people: 2, confidence, reason: "Two equal panels side by side", previews,
+    });
+    console.log(`${tag}: suggested stacked (${Math.round(confidence * 100)}%)`);
+  } catch (err) {
+    console.warn(`${tag} failed: ${(err as Error).message}`);
+    await api("POST", `/api/agent/layout-suggest/${job.recordingId}/failed`, {}).catch(() => {});
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true }).catch(() => {});
+  }
 }
 
 async function handleEdit(job: Job): Promise<void> {
@@ -2375,6 +2455,7 @@ async function fitTo1080(source: string, job: Job): Promise<void> {
 }
 
 async function handle(job: Job): Promise<void> {
+  if (job.layoutProbe) return handleLayoutProbe(job);
   if (job.segmentCut) return handleSegmentCut(job);
   if (job.transcriptJob) return handleTranscript(job);
   if (job.episodeAudio) return handleEpisodeAudio(job);
@@ -2716,11 +2797,11 @@ for (const sig of ["SIGINT", "SIGTERM", "SIGHUP"] as const) {
 async function tick(quick = false): Promise<boolean> {
   const { job } = await api<{ job: Job | null }>("POST", "/api/agent/clip-jobs/claim", quick
     ? { can: ["edit", "music"], quickOnly: true }
-    : { can: ["edit", "episode-edit", "segment-cut", "episode-audio", "episode-bookends", "episode-stitch", "episode-segments", "radio-cut", "episode-copy", "episode-still", "episode-video", "living-squeeze", "transcript", "import", "music", "suggest"] });
+    : { can: ["edit", "episode-edit", "segment-cut", "episode-audio", "episode-bookends", "episode-stitch", "episode-segments", "radio-cut", "episode-copy", "episode-still", "episode-video", "living-squeeze", "transcript", "import", "music", "suggest", "layout"] });
   if (!job) return false;
   // An edit is one clip, not the recording: a shutdown mid-edit leaves it to
   // the 15-minute reclaim rather than requeuing the whole episode.
-  const clipJob = !(job.clipEdit || job.episodeEdit || job.segmentCut || job.episodeAudio || job.radioCut || job.episodeBookends || job.episodeStitch || job.episodeStill || job.episodeVideo || job.transcriptJob || job.importFrom || job.musicMix || job.suggestEdits);
+  const clipJob = !(job.clipEdit || job.episodeEdit || job.segmentCut || job.episodeAudio || job.radioCut || job.episodeBookends || job.episodeStitch || job.episodeStill || job.episodeVideo || job.transcriptJob || job.importFrom || job.musicMix || job.suggestEdits || job.layoutProbe);
   if (clipJob) holding.add(job.recordingId);
   if (job.episodeEdit) editing.add(job.recordingId);
   // "Still on it", every minute: a long quiet stretch (waiting on Creatomate)

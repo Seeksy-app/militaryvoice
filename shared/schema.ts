@@ -1363,6 +1363,8 @@ export const recordings = pgTable("recordings", {
   musicMix: text("music_mix").notNull().default(""),
   /** Recommended edits from the AI (EditSuggest as JSON): where the show really starts and ends, and what to cut. */
   editSuggest: text("edit_suggest").notNull().default(""),
+  /** The worker's suggestion for two people on screen (JSON, see server/layoutSuggest.ts); "" until it has looked. Never changes a render by itself. */
+  layoutSuggestion: text("layout_suggestion").notNull().default(""),
   /** The episode's transcript from its first run ([startSec, endSec, speaker, text][] as JSON), so later runs skip transcribing. */
   transcriptJson: text("transcript_json").notNull().default(""),
   /** The Library folder it's filed in (library_folders.id); 0 for none. */
@@ -1655,7 +1657,7 @@ export interface ClipOptions {
   /** "Generate more": this many more clips, none overlapping the ones already made. */
   more?: { count: number; avoid: [number, number][] };
   /** Two people side by side: "auto" (stack them when the picture is two panels), "stacked" (always, one over the other), "single" (follow one speaker), or "radio" (a MilitaryVoices Radio show: the two tiles of the station's own picture are stacked, without its on-screen cards). */
-  layout?: "auto" | "stacked" | "single" | "radio";
+  layout?: "auto" | "stacked" | "single" | "radio" | "side";
 }
 export const DEFAULT_CLIP_OPTIONS: ClipOptions = { formats: ["vertical", "square", "wide"], captions: "animated", music: "" };
 export function parseClipOptions(raw: unknown): ClipOptions {
@@ -1666,7 +1668,7 @@ export function parseClipOptions(raw: unknown): ClipOptions {
   const more = v?.more && Number(v.more.count) > 0
     ? { count: Math.min(8, Math.round(Number(v.more.count))), avoid: (Array.isArray(v.more.avoid) ? v.more.avoid : []).filter((a: unknown) => Array.isArray(a) && a.length === 2).map((a: number[]) => [Number(a[0]) || 0, Number(a[1]) || 0] as [number, number]) }
     : undefined;
-  return { formats: formats.length ? formats : [...DEFAULT_CLIP_OPTIONS.formats], captions: v?.captions === "classic" ? "classic" : "animated", music, ...(more ? { more } : {}), ...(["stacked", "single", "radio"].includes(v?.layout) ? { layout: v.layout as "stacked" | "single" | "radio" } : {}) };
+  return { formats: formats.length ? formats : [...DEFAULT_CLIP_OPTIONS.formats], captions: v?.captions === "classic" ? "classic" : "animated", music, ...(more ? { more } : {}), ...(["stacked", "single", "radio", "side"].includes(v?.layout) ? { layout: v.layout as "stacked" | "single" | "radio" | "side" } : {}) };
 }
 
 export const clipResultSchema = z.object({

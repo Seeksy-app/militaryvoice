@@ -250,6 +250,7 @@ async function ensureSchema() {
   await sql`ALTER TABLE recordings ADD COLUMN IF NOT EXISTS clip_progress TEXT NOT NULL DEFAULT ''`;
   await sql`ALTER TABLE recordings ADD COLUMN IF NOT EXISTS clean TEXT NOT NULL DEFAULT ''`;
   await sql`ALTER TABLE recordings ADD COLUMN IF NOT EXISTS postify_beta BOOLEAN NOT NULL DEFAULT false`;
+  await sql`ALTER TABLE recordings ADD COLUMN IF NOT EXISTS layout_suggestion TEXT NOT NULL DEFAULT ''`;
   await sql`ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS no_finance BOOLEAN NOT NULL DEFAULT false`;
 
   await sql`
@@ -865,6 +866,8 @@ export interface IStorage {
   /** A Zoom recording to bring into someone's Library; nothing if that file is already there. */
   queueImport(v: { email: string; title: string; egressId: string; startedAt: string; durationSec: number; sizeBytes: number; source: string }): Promise<RecordingRow | undefined>;
   claimImport(): Promise<RecordingRow | undefined>;
+  claimLayoutProbe(): Promise<RecordingRow | undefined>;
+  setLayoutSuggestion(recordingId: number, json: string): Promise<void>;
   setMusicMix(recordingId: number, json: string): Promise<void>;
   /** The next "Add music" to mix, or one whose worker went quiet for 15 minutes. */
   claimMusicMix(): Promise<RecordingRow | undefined>;
@@ -2198,6 +2201,40 @@ class DatabaseStorage implements IStorage {
       )
       .returning();
     return row;
+  }
+
+  /**
+   * A recording the worker should look at for two people on screen: Ready, a real video, no clips yet, not a Radio show,
+   * and never looked at. Newest first (the one someone is about to clip), one at a time. A "running" one that is
+   * fifteen minutes old is handed on.
+   */
+  async claimLayoutProbe(): Promise<RecordingRow | undefined> {
+    await ready();
+    const stale = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+    const week = new Date(Date.now() - 30 * 24 * 3600 * 1000).toISOString();
+    const running = JSON.stringify({ status: "running", at: new Date().toISOString() });
+    const [row] = await db
+      .update(recordings)
+      .set({ layoutSuggestion: running })
+      .where(
+        sqlExpr`${recordings.id} = (
+          SELECT id FROM recordings
+          WHERE status = 'Ready' AND url <> '' AND duration_sec >= 120 AND started_at > ${week}
+            AND clip_status IN ('none', '') AND clip_options NOT LIKE '%"radio"%' AND email <> ''
+            AND egress_id NOT LIKE 'CLEAN\_%'
+            AND (layout_suggestion = '' OR (layout_suggestion LIKE '%"status":"running"%' AND layout_suggestion LIKE '%"at":"%' AND substring(layout_suggestion from '"at":"([^"]+)"') < ${stale}))
+          ORDER BY id DESC
+          LIMIT 1
+          FOR UPDATE SKIP LOCKED
+        )`,
+      )
+      .returning();
+    return row;
+  }
+
+  async setLayoutSuggestion(recordingId: number, json: string): Promise<void> {
+    await ready();
+    await db.update(recordings).set({ layoutSuggestion: json }).where(eq(recordings.id, recordingId));
   }
 
   async setMusicMix(recordingId: number, json: string): Promise<void> {
