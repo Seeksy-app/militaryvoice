@@ -7,6 +7,7 @@
 // State per booking is the site setting dx:lib:<signupId>: "" (not yet), "want" (do it even though it aired before this began),
 // "running:<time>", "done:<recordingId>", "missed" (no recording covers it) or "failed:<n>". Shows that aired before dx:lib-from
 // (set the first time this runs) are left alone unless marked "want": no surprise emails about last week.
+import { getLayoutDefault } from "./layoutDefault.js";
 import type { Express, RequestHandler } from "express";
 import { storage } from "./storage.js";
 import { bookingTimes } from "./booth.js";
@@ -98,7 +99,9 @@ export function registerRadioLibrary(app: Express, requireAgent: RequestHandler)
       const row = await storage.createUploadedRecording({ email: p.email, title, storageKey: p.key, durationSec: Number(req.body?.durationSec) || 0, sizeBytes: Number(req.body?.sizeBytes) || 0, free: false, queue: false });
       rec ??= row;
       // A Radio show has two people in two tiles: Pōstify stacks them, one over the other, by default.
-      await storage.setClipOptions(row.id, JSON.stringify({ ...DEFAULT_CLIP_OPTIONS, layout: "radio" }));
+      // Unless the podcaster's own default for two people is side by side or follow the speaker; then that.
+      const own = await getLayoutDefault(p.email);
+      await storage.setClipOptions(row.id, JSON.stringify({ ...DEFAULT_CLIP_OPTIONS, layout: own === "side" || own === "single" ? own : "radio" }));
       // The same note a Zoom recording gets: it's in your Library.
       void sendImportReadyEmail({ to: p.email, recordingId: row.id, title: row.title, startedAt: new Date(Date.now() - (Number(req.body?.durationSec) || 0) * 1000).toISOString(), durationSec: row.durationSec, provider: "radio" }).catch((err) => console.error("Radio library email failed:", (err as Error).message));
     }

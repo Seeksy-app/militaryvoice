@@ -169,6 +169,7 @@ import { registerZoom, importFetch } from "./zoom.js";
 import { registerRecordingReminders } from "./recordingReminders.js";
 import { registerExtensionApi } from "./extensionApi.js";
 import { registerLayoutSuggest } from "./layoutSuggest.js";
+import { registerLayoutDefault, getLayoutDefault } from "./layoutDefault.js";
 import { registerMusic } from "./music.js";
 import { registerReview } from "./review.js";
 import { registerSponsorFinder } from "./sponsorFinder.js";
@@ -6985,6 +6986,7 @@ export function registerRoutes(app: Express): void {
   registerBioPage(app);
   registerAskShow(app, requireAgent);
   registerLayoutSuggest(app, requireAgent);
+  registerLayoutDefault(app, requireHostSession);
 
   /** The worker has fetched an import (Zoom): the file is in storage now. */
   /** The worker's note on the way out (signal, memory): the last 30, for working out why it restarts. */
@@ -7055,6 +7057,7 @@ export function registerRoutes(app: Express): void {
             transcript: [],
             // The recording's own choices (the Radio stack, single, ...): without them an edit remade the clip as a plain crop.
             options: parseClipOptions(rec.clipOptions),
+            layoutDefault: await getLayoutDefault(rec.email),
             clipEdit: {
               clipId: edit.id, title: edit.editTitle, subtitle: edit.editSubtitle, startSec: edit.startSec, endSec: edit.endSec,
               // Remake only the shapes this clip has.
@@ -7291,6 +7294,7 @@ export function registerRoutes(app: Express): void {
         transcript: lines,
         cleanOnly,
         options: parseClipOptions(rec.clipOptions),
+        layoutDefault: await getLayoutDefault(rec.email),
         // The track they picked to play under the clips.
         music: await (async () => {
           const key = parseClipOptions(rec.clipOptions).music;

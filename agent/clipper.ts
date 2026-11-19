@@ -107,6 +107,8 @@ interface Line {
 }
 
 interface Job {
+  /** The podcaster's account-wide default for two people (server/layoutDefault.ts); used only when the person chose nothing and two people are on screen. */
+  layoutDefault?: "auto" | "stacked" | "side" | "single";
   /** Look for two people on screen and write a suggestion (never a render): see handleLayoutProbe. */
   layoutProbe?: Record<string, never>;
   recordingId: number;
@@ -1564,8 +1566,29 @@ export async function isRadioPage(source: string, atSec: number): Promise<boolea
   }
 }
 
+/** Two people on screen at this moment: the Radio program page with both tiles lit, or exactly two equal panels side by side. */
+async function twoPeopleAt(source: string, atSec: number): Promise<boolean> {
+  try {
+    if (await isRadioPage(source, atSec)) return !!(await radioTiles(source, atSec).catch(() => null));
+    const f = path.join(os.tmpdir(), `two-${process.pid}-${Date.now()}.png`);
+    try {
+      await ffmpeg(["-ss", String(atSec + 1), "-i", source, "-frames:v", "1", "-vf", "scale=480:-2", f]);
+      const { data, info } = await sharp(f).greyscale().raw().toBuffer({ resolveWithObject: true });
+      return analyzeFrame(new Uint8Array(data), info.width, info.height).ok;
+    } finally { await fs.rm(f, { force: true }).catch(() => {}); }
+  } catch {
+    return false;
+  }
+}
+
 export async function framingFor(job: Job, source: string, m: Moment, within: Line[], dir: string, mode: FocusMode = "shots") {
-  const layout = job.options?.layout ?? "auto";
+  let layout = job.options?.layout ?? "auto";
+  // The podcaster's account-wide default, for a recording with no layout of its own and nothing chosen on screen: used only when two people
+  // are really on screen, so a solo episode is never cut in half by a default meant for two.
+  if (layout === "auto" && job.layoutDefault && job.layoutDefault !== "auto" && (await twoPeopleAt(source, m.startSec))) {
+    layout = job.layoutDefault;
+    console.log(`[${job.recordingId}]   two people on screen: using the podcaster's default (${layout})`);
+  }
   // Chosen by the person: the whole picture, both people in it, over a blurred copy of itself. No stack, no following.
   if (layout === "side") {
     // A Radio show: the two tiles together as one wide picture (not the whole program page with its badges and cards).
