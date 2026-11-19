@@ -773,6 +773,30 @@ export const streamSessions = pgTable(
 );
 export type StreamSessionRow = typeof streamSessions.$inferSelect;
 
+/**
+ * A Radio booking's own stream key ("I'll stream in" in the booth): an RTMP
+ * ingress into that day's Radio room, whose participant carries the booking's
+ * signupId, so the program page puts it on air on the clock like a booth
+ * camera. The Radio broadcast is what records it; nothing is recorded here.
+ */
+export const radioFeeds = pgTable(
+  "radio_feeds",
+  {
+    id: serial("id").primaryKey(),
+    signupId: integer("signup_id").notNull(),
+    room: text("room").notNull().default(""),
+    ingressId: text("ingress_id").notNull().default(""),
+    url: text("url").notNull().default(""),
+    /** Sealed with secretBox. */
+    streamKey: text("stream_key").notNull().default(""),
+    /** Why the last stream was cut, in words for the host. */
+    problem: text("problem").notNull().default(""),
+    createdAt: text("created_at").notNull(),
+  },
+  (t) => ({ onePerBooking: uniqueIndex("radio_feeds_signup_unique").on(t.signupId) }),
+);
+export type RadioFeedRow = typeof radioFeeds.$inferSelect;
+
 /** Listeners who signed up on a podcaster's SmartLink (Stay in touch): theirs, in their Contacts. */
 export const bioSubscribers = pgTable(
   "bio_subscribers",

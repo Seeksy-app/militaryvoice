@@ -4,6 +4,7 @@ import { db, storage, schemaIsReady } from "./storage.js";
 import { requireHostSession, getSessionEmail } from "./session.js";
 import { createRtmpIngress, deleteIngress, listIngressForRoom, isLiveKitConfigured, isRecordingConfigured, runningEgressIds, startRoomRecording, stopEgressById } from "./livekit.js";
 import { sendImportReadyEmail } from "./email.js";
+import { cleanupRadioFeeds } from "./radioStreamIn.js";
 import { ensureRecordingsBucket } from "./recordingStorage.js";
 import { seal, unseal } from "./secretBox.js";
 import { slackNote } from "./slack.js";
@@ -195,6 +196,7 @@ async function view(c: StreamKeyRow | undefined) {
 export async function runStreamInPass(): Promise<{ stopped: number; rolled: number; mailed: number }> {
   await schemaIsReady();
   const out = { stopped: 0, rolled: 0, mailed: 0 };
+  await cleanupRadioFeeds().catch((err) => console.error("Radio feed cleanup failed:", (err as Error).message));
   let running: Set<string>;
   try {
     running = await runningEgressIds();

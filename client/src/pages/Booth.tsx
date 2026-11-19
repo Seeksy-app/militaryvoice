@@ -5,6 +5,7 @@ import { ControlBar, GridLayout, LiveKitRoom, ParticipantTile, PreJoin, RoomAudi
 import { RoomEvent, Track, type RemoteParticipant } from "livekit-client";
 import { Check, Clapperboard, Copy, Loader2, Mic, Radio, Square, Timer, Video, VideoOff } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { RadioStreamIn } from "@/components/RadioStreamIn";
 import { durationOf, uploadToStorage } from "@/lib/upload";
 
 // MilitaryVoices Radio booth: one booking's own simple studio. Check the
@@ -374,6 +375,7 @@ export default function Booth({ id }: { id: string }) {
             <PreJoinBox username={d.role === "host" ? d.host : ""} onJoin={onJoin} onError={onPreJoinError} />
           </div>
         )}
+        {!watchParam && (d.role === "host" || d.role === "admin") && <RadioStreamIn id={id} />}
         {error && <p className="max-w-md text-center text-sm text-red-300">{error}</p>}
       </div>
     );
