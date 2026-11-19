@@ -13,7 +13,7 @@ import { durationOf, uploadToStorage } from "@/lib/upload";
 // and plays the people on this booking (their signupId attribute); the
 // station's intro and outro play on air around them (see Program.tsx).
 
-type Info = { clip?: { on: boolean; durationSec: number; startedAtMs: number } | null; signupId: number; role: "host" | "guest" | "admin"; show: string; host: string; day: string; startAtUtc: string; endAtUtc: string; onAirAtUtc: string; offAirAtUtc: string; opensAtUtc: string; closesAtUtc: string; guestLink: string; ready: boolean; anytime?: boolean; endedAtUtc?: string; next?: { show: string; host: string; startAtUtc: string } | null };
+type Info = { clip?: { ready: boolean; playing: boolean; durationSec: number; startedAtMs: number } | null; signupId: number; role: "host" | "guest" | "admin"; show: string; host: string; day: string; startAtUtc: string; endAtUtc: string; onAirAtUtc: string; offAirAtUtc: string; opensAtUtc: string; closesAtUtc: string; guestLink: string; ready: boolean; anytime?: boolean; endedAtUtc?: string; next?: { show: string; host: string; startAtUtc: string } | null };
 
 const ET = "America/New_York";
 const hm = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { timeZone: ET, hour: "numeric", minute: "2-digit" });
@@ -206,47 +206,65 @@ function BookingStage({ signupId }: { signupId: number }) {
 }
 
 
-/** "Show a clip": the host picks a video, it uploads, and it plays on air (the program page shows it full screen with sound) until it ends or they stop it. */
+/**
+ * "Show a clip": the host uploads a video ahead of time (it waits in the booth), then presses Play when they are ready.
+ * It plays full screen on air with its sound until it ends or they press Stop.
+ */
 function ClipBar({ id, g, clip, onChange }: { id: string; g: string; clip?: Info["clip"]; onChange: () => void }) {
   const [pct, setPct] = useState<number | null>(null);
   const [err, setErr] = useState("");
-  const [tick, setTick] = useState(0);
-  const [started, setStarted] = useState<{ at: number; sec: number } | null>(null);
+  const [, setTick] = useState(0);
+  const [busy, setBusy] = useState(false);
+  const [preview, setPreview] = useState("");
   const inp = useRef<HTMLInputElement>(null);
+  const rehearse = async () => {
+    if (preview) { setPreview(""); return; }
+    setErr("");
+    try { const r = (await (await apiRequest("GET", `/api/booth/${id}/clip/preview${g ? `?g=${encodeURIComponent(g)}` : ""}`)).json()) as { url: string }; setPreview(r.url); } catch (e) { setErr(say(e)); }
+  };
   useEffect(() => { const t = setInterval(() => setTick((x) => x + 1), 1000); return () => clearInterval(t); }, []);
-  const src = started ?? (clip?.on ? { at: clip.startedAtMs, sec: clip.durationSec } : null);
-  const left = src ? Math.max(0, Math.ceil((src.at + src.sec * 1000 - Date.now()) / 1000)) : 0;
-  const playing = !!src && left > 0 && tick >= 0;
-  const go = async (file: File) => {
+  const mmss = (sec: number) => `${Math.floor(sec / 60)}:${String(Math.max(0, Math.round(sec) % 60)).padStart(2, "0")}`;
+  const endAt = clip?.playing ? clip.startedAtMs + clip.durationSec * 1000 : 0;
+  const playing = !!clip && clip.playing && Date.now() < endAt;
+  const post = async (path: string, body: Record<string, unknown> = {}) => { setErr(""); setBusy(true); try { await apiRequest("POST", `/api/booth/${id}/clip${path}`, { g: g || undefined, ...body }); onChange(); } catch (e) { setErr(say(e)); } finally { setBusy(false); } };
+  const upload = async (file: File) => {
     setErr("");
     try {
       const sec = await durationOf(file).catch(() => 0);
       if (!(sec > 0)) throw new Error("We couldn't read that video. Try an MP4.");
       const key = await uploadToStorage(file, setPct);
       setPct(null);
-      const r = (await (await apiRequest("POST", `/api/booth/${id}/clip`, { g: g || undefined, key, durationSec: sec })).json()) as { startedAtMs: number; durationSec: number };
-      setStarted({ at: r.startedAtMs, sec: r.durationSec });
-      onChange();
-    } catch (e) {
-      setPct(null);
-      setErr(say(e));
-    } finally { if (inp.current) inp.current.value = ""; }
+      await post("", { key, durationSec: sec });
+    } catch (e) { setPct(null); setErr(say(e)); } finally { if (inp.current) inp.current.value = ""; }
   };
-  const stop = async () => { try { await apiRequest("POST", `/api/booth/${id}/clip/stop`, { g: g || undefined }); setStarted(null); onChange(); } catch (e) { setErr(say(e)); } };
+  const btn = "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-bold disabled:opacity-60";
   return (
     <div className="flex flex-wrap items-center gap-2" data-testid="booth-clip">
-      <input ref={inp} type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" className="hidden" onChange={(e) => e.target.files?.[0] && void go(e.target.files[0])} />
-      {playing ? (
+      <input ref={inp} type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" className="hidden" onChange={(e) => e.target.files?.[0] && void upload(e.target.files[0])} />
+      {pct !== null ? (
+        <span className={`${btn} border border-white/30 text-white`}><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading your clip… {Math.round(pct)}%</span>
+      ) : playing ? (
         <>
-          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#ed1c24] px-3 py-1 text-xs font-extrabold text-white"><Clapperboard className="h-3.5 w-3.5" /> {src && Date.now() < src.at ? `Clip starts in ${Math.max(1, Math.ceil((src.at - Date.now()) / 1000))}s` : `Clip on air · ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")} left`}</span>
-          <button type="button" onClick={() => void stop()} className="rounded-full border border-white/30 px-3 py-1 text-xs font-bold text-white hover:bg-white/10" data-testid="booth-clip-stop">Stop the clip</button>
+          <span className={`${btn} bg-[#ed1c24] text-white`}><Clapperboard className="h-3.5 w-3.5" /> {Date.now() < clip!.startedAtMs ? "Clip starting…" : `Clip on air · ${mmss((endAt - Date.now()) / 1000)} left`}</span>
+          <button type="button" disabled={busy} onClick={() => void post("/stop")} className={`${btn} border border-white/30 text-white hover:bg-white/10`} data-testid="booth-clip-stop">Stop the clip</button>
+        </>
+      ) : clip?.ready ? (
+        <>
+          <button type="button" disabled={busy} onClick={() => void post("/play")} className={`${btn} bg-gradient-to-b from-[#34d058] to-[#16a34a] text-white hover:brightness-110`} data-testid="booth-clip-play"><Clapperboard className="h-3.5 w-3.5" /> Play your clip ({mmss(clip.durationSec)})</button>
+          <button type="button" disabled={busy} onClick={() => void rehearse()} className={`${btn} border border-white/30 text-white hover:bg-white/10`} data-testid="booth-clip-preview">{preview ? "Close the preview" : "Rehearse it (only you see it)"}</button>
+          <button type="button" disabled={busy} onClick={() => inp.current?.click()} className={`${btn} border border-white/30 text-white hover:bg-white/10`}>Choose another</button>
+          <button type="button" disabled={busy} onClick={() => void post("/remove")} className="text-xs font-semibold text-white/70 underline hover:text-white">Remove</button>
         </>
       ) : (
-        <button type="button" disabled={pct !== null} onClick={() => inp.current?.click()} className="inline-flex items-center gap-1.5 rounded-full border border-white/30 px-3 py-1 text-xs font-bold text-white hover:bg-white/10 disabled:opacity-60" data-testid="booth-clip-add">
-          {pct !== null ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading… {Math.round(pct)}%</> : <><Clapperboard className="h-3.5 w-3.5" /> Show a clip</>}
-        </button>
+        <button type="button" onClick={() => inp.current?.click()} className={`${btn} border border-white/30 text-white hover:bg-white/10`} data-testid="booth-clip-add"><Clapperboard className="h-3.5 w-3.5" /> Add a clip</button>
       )}
       {err && <span className="text-xs text-red-300">{err}</span>}
+      {preview && !playing && (
+        <div className="fixed bottom-24 right-4 z-50 w-72 overflow-hidden rounded-xl border border-white/30 bg-black shadow-2xl" data-testid="booth-clip-preview-player">
+          <video src={preview} controls autoPlay playsInline className="aspect-video w-full" />
+          <p className="px-3 py-1.5 text-[11px] text-white/70">Only you can see and hear this. Use headphones so it doesn't go out through your microphone.</p>
+        </div>
+      )}
     </div>
   );
 }

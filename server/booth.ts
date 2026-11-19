@@ -29,16 +29,27 @@ export function boothGuestKey(signupId: number): string {
 const keyOk = (signupId: number, g: unknown) => typeof g === "string" && g.length === 22 && crypto.timingSafeEqual(Buffer.from(g), Buffer.from(boothGuestKey(signupId)));
 
 
-/** A clip the host is showing on air from the booth: the file (in our storage), how long it runs, and when it started. */
+/** A clip the host is showing on air from the booth: the file (in our storage), how long it runs, and when it was started ("" while it is only uploaded and waiting). */
 type ClipState = { key: string; durationSec: number; startedAt: string };
+async function readClip(signupId: number): Promise<ClipState | null> {
+  try { const c = JSON.parse((await storage.getSetting(`dx:clip:${signupId}`)) ?? "") as ClipState; return c?.key ? c : null; } catch { return null; }
+}
+/** What the program page plays right now: only a clip that has been started and hasn't finished. */
 async function clipFor(signupId: number): Promise<{ url: string; startedAtMs: number; durationSec: number } | null> {
-  let c: ClipState | null = null;
-  try { c = JSON.parse((await storage.getSetting(`dx:clip:${signupId}`)) ?? "") as ClipState; } catch { c = null; }
-  if (!c?.key) return null;
+  const c = await readClip(signupId);
+  if (!c?.startedAt) return null;
   const startedAtMs = Date.parse(c.startedAt);
   if (!(Date.now() < startedAtMs + (c.durationSec + 5) * 1000)) return null;
   const url = await signedRecordingUrl(c.key, 6 * 3600).catch(() => "");
   return url ? { url, startedAtMs, durationSec: c.durationSec } : null;
+}
+/** What the host's booth shows: nothing, a clip waiting to be played, or one on air. */
+async function clipStatus(signupId: number): Promise<{ ready: boolean; playing: boolean; durationSec: number; startedAtMs: number } | null> {
+  const c = await readClip(signupId);
+  if (!c) return null;
+  const startedAtMs = c.startedAt ? Date.parse(c.startedAt) : 0;
+  const playing = !!startedAtMs && Date.now() < startedAtMs + c.durationSec * 1000;
+  return { ready: true, playing, durationSec: c.durationSec, startedAtMs };
 }
 
 const ms = (iso: string) => Date.parse(iso);
@@ -147,7 +158,7 @@ export function registerBooth(app: Express): void {
         const endedMs = endedRaw ? Date.parse(endedRaw) : NaN;
         const early = Number.isFinite(endedMs) && endedMs >= t.onAirStart && endedMs < t.onAirEnd;
         if (early) { t.onAirEnd = endedMs; t.end = Math.min(t.end, endedMs + 45_000); }
-        return { id: s.id, clip: await clipFor(s.id), endedEarly: early, show: s.podcastName, host: s.hostName, photo: s.photoUrl, about: s.notes ?? "", mediaUrl, introUrl: voice.map[String(s.id)]?.introKey ? await signedRecordingUrl(voice.map[String(s.id)].introKey!, 6 * 3600).catch(() => "") : "", outroUrl: voice.map[String(s.id)]?.outroKey ? await signedRecordingUrl(voice.map[String(s.id)].outroKey!, 6 * 3600).catch(() => "") : "", startAtUtc: new Date(t.start).toISOString(), endAtUtc: new Date(t.end).toISOString(), onAirAtUtc: new Date(t.onAirStart).toISOString(), offAirAtUtc: new Date(t.onAirEnd).toISOString() };
+        return { id: s.id, endedEarly: early, show: s.podcastName, host: s.hostName, photo: s.photoUrl, about: s.notes ?? "", mediaUrl, introUrl: voice.map[String(s.id)]?.introKey ? await signedRecordingUrl(voice.map[String(s.id)].introKey!, 6 * 3600).catch(() => "") : "", outroUrl: voice.map[String(s.id)]?.outroKey ? await signedRecordingUrl(voice.map[String(s.id)].outroKey!, 6 * 3600).catch(() => "") : "", startAtUtc: new Date(t.start).toISOString(), endAtUtc: new Date(t.end).toISOString(), onAirAtUtc: new Date(t.onAirStart).toISOString(), offAirAtUtc: new Date(t.onAirEnd).toISOString() };
       })),
     });
   });
@@ -408,7 +419,7 @@ export function registerBooth(app: Express): void {
     const origin = `${req.protocol}://${req.get("host")}`;
     res.json({
       signupId: b.s.id,
-      clip: await clipFor(b.s.id).then((c) => (c ? { on: true, durationSec: c.durationSec, startedAtMs: c.startedAtMs } : null)),
+      clip: await clipStatus(b.s.id),
       role,
       show: b.s.podcastName,
       host: b.s.hostName,
@@ -447,30 +458,66 @@ export function registerBooth(app: Express): void {
   });
 
 
-  /** The host shows a clip on air from the booth: the file is already uploaded (their own session did that); this starts it for the program page. */
+  /** What the program page plays for one booking right now (asked every couple of seconds, so it stays small). */
+  app.get("/api/booth/:id/clip-state", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ clip: await clipFor(Number(req.params.id)) });
+  });
+  /** The host's own copy of their clip, to rehearse with (it is not on air). */
+  app.get("/api/booth/:id/clip/preview", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const b = await bookingFor(Number(req.params.id));
+    if (!b) return res.status(404).json({ message: "That booking isn't on MilitaryVoices Radio." });
+    const role = roleOf(req, b.s, req.query.g);
+    if (role !== "host" && role !== "admin") return res.status(403).json({ message: "Only the host can preview a clip." });
+    const c = await readClip(b.s.id);
+    if (!c) return res.status(404).json({ message: "No clip yet." });
+    res.json({ url: await signedRecordingUrl(c.key, 3600).catch(() => "") });
+  });
+  /** The host's clip is uploaded: it waits in their booth until they press Play. */
   app.post("/api/booth/:id/clip", async (req, res) => {
     const b = await bookingFor(Number(req.params.id));
     if (!b) return res.status(404).json({ message: "That booking isn't on MilitaryVoices Radio." });
     const role = roleOf(req, b.s, req.body?.g);
     if (role !== "host" && role !== "admin") return res.status(403).json({ message: "Only the host can show a clip." });
-    const t = bookingTimes(b.ev, b.s);
-    const now = Date.now();
-    if (now < t.onAirStart || now >= t.onAirEnd) return res.status(409).json({ message: "You can show a clip while you're on air." });
     const key = String(req.body?.key ?? "");
     const durationSec = Math.round(Number(req.body?.durationSec));
     if (!/^show-assets\/[\w.-]+$/.test(key)) return res.status(400).json({ message: "That clip didn't upload. Try again." });
     if (!(durationSec > 0 && durationSec <= 20 * 60)) return res.status(400).json({ message: "A clip can run up to 20 minutes." });
-    // Starts ten seconds from now, so the program page (which looks every ten seconds) catches it from its first frame.
-    const startedAtMs = now + 10_000;
-    await storage.setSetting(`dx:clip:${b.s.id}`, JSON.stringify({ key, durationSec, startedAt: new Date(startedAtMs).toISOString() } satisfies ClipState));
-    res.json({ ok: true, startedAtMs, durationSec });
+    await storage.setSetting(`dx:clip:${b.s.id}`, JSON.stringify({ key, durationSec, startedAt: "" } satisfies ClipState));
+    res.json({ ok: true, durationSec });
   });
-  /** Stop the clip: the booth is back on air. */
+  /** Play it: on air, from the start, in about two seconds. */
+  app.post("/api/booth/:id/clip/play", async (req, res) => {
+    const b = await bookingFor(Number(req.params.id));
+    if (!b) return res.status(404).json({ message: "That booking isn't on MilitaryVoices Radio." });
+    const role = roleOf(req, b.s, req.body?.g);
+    if (role !== "host" && role !== "admin") return res.status(403).json({ message: "Only the host can play a clip." });
+    const t = bookingTimes(b.ev, b.s);
+    const now = Date.now();
+    if (now < t.onAirStart || now >= t.onAirEnd) return res.status(409).json({ message: "You can play a clip while you're on air." });
+    const c = await readClip(b.s.id);
+    if (!c) return res.status(400).json({ message: "Upload a clip first." });
+    const startedAtMs = now + 2000;
+    await storage.setSetting(`dx:clip:${b.s.id}`, JSON.stringify({ ...c, startedAt: new Date(startedAtMs).toISOString() } satisfies ClipState));
+    res.json({ ok: true, startedAtMs, durationSec: c.durationSec });
+  });
+  /** Stop the clip: back to the show. It stays uploaded, so it can be played again. */
   app.post("/api/booth/:id/clip/stop", async (req, res) => {
     const b = await bookingFor(Number(req.params.id));
     if (!b) return res.status(404).json({ message: "That booking isn't on MilitaryVoices Radio." });
     const role = roleOf(req, b.s, req.body?.g);
     if (role !== "host" && role !== "admin") return res.status(403).json({ message: "Only the host can stop a clip." });
+    const c = await readClip(b.s.id);
+    await storage.setSetting(`dx:clip:${b.s.id}`, c ? JSON.stringify({ ...c, startedAt: "" } satisfies ClipState) : "");
+    res.json({ ok: true });
+  });
+  /** Take the uploaded clip away. */
+  app.post("/api/booth/:id/clip/remove", async (req, res) => {
+    const b = await bookingFor(Number(req.params.id));
+    if (!b) return res.status(404).json({ message: "That booking isn't on MilitaryVoices Radio." });
+    const role = roleOf(req, b.s, req.body?.g);
+    if (role !== "host" && role !== "admin") return res.status(403).json({ message: "Only the host can do that." });
     await storage.setSetting(`dx:clip:${b.s.id}`, "");
     res.json({ ok: true });
   });

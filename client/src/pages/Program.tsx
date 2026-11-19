@@ -14,7 +14,7 @@ import { StageGrid, useStageRoom, type StageTile } from "@/components/StageView"
 // once ready to be filmed. ?eventId=N without a token previews the cards;
 // add &at=<ISO time> to see any moment of the day.
 
-type Booking = { clip?: { url: string; startedAtMs: number; durationSec: number } | null; id: number; show: string; host: string; photo: string; about?: string; mediaUrl?: string; startAtUtc: string; endAtUtc: string; onAirAtUtc: string; offAirAtUtc: string };
+type Booking = { id: number; show: string; host: string; photo: string; about?: string; mediaUrl?: string; startAtUtc: string; endAtUtc: string; onAirAtUtc: string; offAirAtUtc: string };
 type Replay_ = { id: number; show: string; host: string; photo: string; mediaUrl: string; durationSec: number };
 type VoiceInfo = { welcomeUrl: string; welcomeSec: number; signoffUrl: string; signoffSec: number; bedUrl?: string };
 type Program = { eventId: number; day: string; startAtUtc: string; endAtUtc: string; fillerUrl: string; voice?: VoiceInfo; dayIndex?: number; replays?: Replay_[]; bookings: Booking[] };
@@ -196,6 +196,14 @@ export default function Program() {
   const current = bookings.find((b) => now >= Date.parse(b.startAtUtc) && now < Date.parse(b.endAtUtc));
   const next = bookings.find((b) => Date.parse(b.startAtUtc) > now && b.id !== current?.id);
   const phase: "intro" | "live" | "outro" | "filler" = !current ? "filler" : now < Date.parse(current.onAirAtUtc) ? "intro" : now < Date.parse(current.offAirAtUtc) ? "live" : "outro";
+  // A clip the host is showing from their booth: looked for every two seconds while they are on air.
+  const clipQ = useQuery<{ clip: { url: string; startedAtMs: number; durationSec: number } | null }>({
+    queryKey: ["/api/booth/clip-state", current?.id],
+    queryFn: async () => (await fetch(`/api/booth/${current!.id}/clip-state`)).json(),
+    enabled: phase === "live" && !!current && !current.mediaUrl,
+    refetchInterval: 2000,
+  });
+  const clip = clipQ.data?.clip ?? null;
 
   // Only the booking on the clock is on air, and only while it's live.
   const onAir = phase === "live" ? current!.id : -1;
@@ -244,7 +252,7 @@ export default function Program() {
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-[#000741] [container-type:size]">
       {phase === "live" && !current!.mediaUrl && tiles.length > 0 && <StageGrid tiles={tiles} meta={{ status: "Live" }} caption={caption} />}
-      {phase === "live" && current!.clip && now >= current!.clip.startedAtMs && now < current!.clip.startedAtMs + current!.clip.durationSec * 1000 && <ClipOverlay key={current!.clip.startedAtMs} clip={current!.clip} now={now} muted={muted} host={current!.host} />}
+      {phase === "live" && clip && now >= clip.startedAtMs && now < clip.startedAtMs + clip.durationSec * 1000 && <ClipOverlay key={clip.startedAtMs} clip={clip} now={now} muted={muted} host={current!.host} />}
       {audioOnlyOk && <AudioOnAir tiles={tiles} show={current!.show} host={current!.host} photo={current!.photo} about={current!.about} />}
       {demoAudio && <AudioOnAir demo tiles={[]} show={current!.show} host={current!.host} photo={current!.photo} about={current!.about || "Veterans, service members and their families, telling their own stories."} />}
       {phase === "live" && current!.mediaUrl && <Replay id={`b${current!.id}`} src={current!.mediaUrl} show={current!.show} host={current!.host} photo={current!.photo} startedAt={Date.parse(current!.onAirAtUtc)} now={now} muted={muted} bedUrl={voice?.bedUrl} />}
