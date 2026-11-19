@@ -235,8 +235,9 @@ async function sendRawEmail(opts: { to: string; subject: string; html: string; t
   let id: string | null = null;
   let error = "";
   try {
-    id = await sendRawEmailNow(opts);
-    if (!id) error = "The email service didn't take it.";
+    // The mail log keeps the service's own reason (a bad address, a blocked domain), not just "it failed".
+    id = await sendRawEmailNow(opts, (why) => { error = why; });
+    if (!id) error = `The email service didn't take it${error ? `: ${error}` : "."}`;
     return id;
   } finally {
     // Every email we send goes in the mail log (the Mail screen's Sent), whatever sent it.
@@ -250,7 +251,7 @@ let mailLogger: ((m: SentMail) => Promise<void>) | null = null;
 /** The server hands its database writer in here (this file keeps no database of its own). */
 export function setMailLogger(fn: (m: SentMail) => Promise<void>) { mailLogger = fn; }
 
-async function sendRawEmailNow(opts: { to: string; subject: string; html: string; text: string; replyTo?: string; from?: string; headers?: Record<string, string>; bcc?: string[]; cc?: string[]; attachments?: MailAttachment[] }): Promise<string | null> {
+async function sendRawEmailNow(opts: { to: string; subject: string; html: string; text: string; replyTo?: string; from?: string; headers?: Record<string, string>; bcc?: string[]; cc?: string[]; attachments?: MailAttachment[] }, fail?: (why: string) => void): Promise<string | null> {
   try {
     const headers: Record<string, string> = { "Content-Type": "application/json" };
     if (RESEND_API_KEY) {
@@ -277,12 +278,16 @@ async function sendRawEmailNow(opts: { to: string; subject: string; html: string
     if (!res.ok) {
       const body = await res.text().catch(() => "");
       console.error(`Resend email failed (${res.status}):`, body);
+      let why = body;
+      try { why = String((JSON.parse(body) as { message?: string }).message ?? body); } catch { /* not JSON */ }
+      fail?.(`${res.status} ${why}`.replace(/\s+/g, " ").trim().slice(0, 300));
       return null;
     }
     const data = await res.json().catch(() => ({})) as { id?: string };
     return data.id ?? null;
   } catch (err) {
     console.error("Failed to send email:", err);
+    fail?.(String((err as Error)?.message ?? err).slice(0, 300));
     return null;
   }
 }
@@ -1421,16 +1426,20 @@ export async function sendOpportunityEmail(input: { to: string; name: string; br
  * A podcaster invites a guest to their interview (17 Nov 2026): from us on the host's behalf, "Frank Zaccari via MilitaryVoices.ai",
  * with the host's own address as the reply-to, so the guest writes back to the host. The link is the guest's private questionnaire.
  */
-export async function sendInterviewInvite(input: { fromLocal?: string; to: string; guestName: string; hostName: string; hostEmail: string; show: string; whenText: string; zoomLink: string; note: string; link: string }): Promise<boolean> {
+export async function sendInterviewInvite(input: { fromLocal?: string; to: string; guestName: string; hostName: string; hostEmail: string; show: string; whenText: string; zoomLink: string; linkLater?: boolean; note: string; link: string }): Promise<boolean> {
   const first = input.guestName.trim().split(/\s+/)[0] || "there";
   const who = input.hostName || input.show || "Your host";
+  // Our own links (a Room or a Radio booth) are "your link to join"; anything else is the host's Zoom.
+  const ours = /\/room\/join\/|\/booth\//.test(input.zoomLink);
+  const later = !input.zoomLink && input.linkLater ? `${who} will send you the Zoom link in a separate email.` : "";
   const details = [
     input.whenText ? `<p style="margin:0 0 6px;"><b>When:</b> ${escapeHtml(input.whenText)}</p>` : "",
     input.zoomLink ? (/\/room\/join\//.test(input.zoomLink)
       ? `<p style="margin:0 0 6px;"><b>Your link to join:</b> <a href="${escapeHtml(input.zoomLink)}">${escapeHtml(input.zoomLink)}</a></p><p style="margin:0 0 6px;color:#374151;">Open it at the time, allow your camera and microphone, and you're in the room with ${escapeHtml(who)}. No account needed.</p>`
       : /\/booth\//.test(input.zoomLink)
       ? `<p style="margin:0 0 6px;"><b>Your link to join:</b> <a href="${escapeHtml(input.zoomLink)}">${escapeHtml(input.zoomLink)}</a></p><p style="margin:0 0 6px;color:#374151;">Open it on the day, allow your camera and microphone, and you're in the booth with ${escapeHtml(who)}. No account needed. It's live on MilitaryVoices Radio.</p>`
-      : `<p style="margin:0 0 6px;"><b>Zoom:</b> <a href="${escapeHtml(input.zoomLink)}">${escapeHtml(input.zoomLink)}</a></p>`) : "",
+      : `<p style="margin:0 0 6px;"><b>Zoom:</b> <a href="${escapeHtml(input.zoomLink)}">${escapeHtml(input.zoomLink)}</a></p>`)
+      : later ? `<p style="margin:0 0 6px;"><b>Zoom:</b> ${escapeHtml(later)}</p>` : "",
     input.note ? `<p style="margin:10px 0 0;white-space:pre-line;">${escapeHtml(input.note)}</p>` : "",
   ].join("");
   return sendRawEmail({
@@ -1443,7 +1452,7 @@ export async function sendInterviewInvite(input: { fromLocal?: string; to: strin
       cta: { href: input.link, label: "Answer a few questions" },
       footerNote: `Sent for ${escapeHtml(who)} through MilitaryVoices.ai. Reply to this email to reach them.`,
     }),
-    text: `Hi ${first},\n\n${who} would like you as a guest on ${input.show || "their podcast"}.${input.whenText ? `\nWhen: ${input.whenText}` : ""}${input.zoomLink ? `\nZoom: ${input.zoomLink}` : ""}${input.note ? `\n\n${input.note}` : ""}\n\nTo get ready, please answer a few quick questions and add the photo you'd like shown with your name (about five minutes):\n${input.link}\n\nReply to this email to reach ${who}.\n\nSent for ${who} through MilitaryVoices.ai`,
+    text: `Hi ${first},\n\n${who} would like you as a guest on ${input.show || "their podcast"}.${input.whenText ? `\nWhen: ${input.whenText}` : ""}${input.zoomLink ? `\n${ours ? "Your link to join" : "Zoom"}: ${input.zoomLink}` : later ? `\nZoom: ${later}` : ""}${input.note ? `\n\n${input.note}` : ""}\n\nTo get ready, please answer a few quick questions and add the photo you'd like shown with your name (about five minutes):\n${input.link}\n\nReply to this email to reach ${who}.\n\nSent for ${who} through MilitaryVoices.ai`,
   }).then((id) => Boolean(id));
 }
 

@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, Loader2, Send, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
@@ -26,6 +27,9 @@ export function GuestInvites() {
   const saved = useQuery<{ id: string; name: string; title: string; org: string; photoUrl: string; url: string }[]>({ queryKey: ["/api/host/captures"], queryFn: async () => (await apiRequest("GET", "/api/host/captures")).json() });
   const unsave = useMutation({ mutationFn: async (id: string) => apiRequest("DELETE", `/api/host/captures/${id}`), onSuccess: () => void qc.invalidateQueries({ queryKey: ["/api/host/captures"] }) });
   const [f, setF] = useState({ guestName: "", guestEmail: "", when: "", zoomLink: "", note: "" });
+  // On Zoom the guest needs the link from somewhere: pasted here, or the host sends it in an email of their own.
+  const [linkLater, setLinkLater] = useState(false);
+  const [needLink, setNeedLink] = useState(false);
   // Where it happens: on Zoom (paste a link), or in the host's own MilitaryVoices Radio booth (we make the guest's link).
   const [where, setWhere] = useState<"zoom" | "studio" | "booth">("zoom");
   const [bookingId, setBookingId] = useState<number | null>(null);
@@ -52,9 +56,9 @@ export function GuestInvites() {
     mutationFn: async () => {
       const whenIso = f.when ? new Date(f.when).toISOString() : "";
       const whenText = f.when ? new Date(f.when).toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }) : "";
-      return (await apiRequest("POST", "/api/host/guest-invites", { guestName: f.guestName, guestEmail: f.guestEmail, whenText, whenIso, zoomLink: f.zoomLink, note: f.note, ...(where === "booth" ? { where: "booth", bookingId: pickedBooking } : where === "studio" ? { where: "studio" } : {}), questions: questions.map((q) => q.trim()).filter(Boolean) })).json();
+      return (await apiRequest("POST", "/api/host/guest-invites", { guestName: f.guestName, guestEmail: f.guestEmail, whenText, whenIso, zoomLink: where === "zoom" && !linkLater ? f.zoomLink.trim() : "", linkLater: where === "zoom" && linkLater, note: f.note, ...(where === "booth" ? { where: "booth", bookingId: pickedBooking } : where === "studio" ? { where: "studio" } : {}), questions: questions.map((q) => q.trim()).filter(Boolean) })).json();
     },
-    onSuccess: () => { setF({ guestName: "", guestEmail: "", when: "", zoomLink: "", note: "" }); setQuestions([]); setWhere("zoom"); void qc.invalidateQueries({ queryKey: ["/api/host/guest-invites"] }); toast({ title: "Invitation sent", description: "They'll get an email from you through MilitaryVoices.ai, and you'll hear when they answer." }); },
+    onSuccess: () => { setF({ guestName: "", guestEmail: "", when: "", zoomLink: "", note: "" }); setQuestions([]); setWhere("zoom"); setLinkLater(false); setNeedLink(false); void qc.invalidateQueries({ queryKey: ["/api/host/guest-invites"] }); toast({ title: "Invitation sent", description: "They'll get an email from you through MilitaryVoices.ai, and you'll hear when they answer." }); },
     onError: (e) => toast({ title: "Couldn't send that", description: say(e), variant: "destructive" }),
   });
   const del = useMutation({ mutationFn: async (id: number) => apiRequest("DELETE", `/api/host/guest-invites/${id}`), onSuccess: () => void qc.invalidateQueries({ queryKey: ["/api/host/guest-invites"] }) });
@@ -129,7 +133,7 @@ export function GuestInvites() {
       <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
         <h3 className="text-lg font-semibold">Invite a guest</h3>
         <p className="mt-1 text-sm text-muted-foreground [text-wrap:pretty]">We email your guest from you. They answer a few questions and add the photo they want shown, and you get it all before the interview. Their name and photo go on your episode's guest card.</p>
-        <form data-testid="guest-invite-form" className="mt-5 grid gap-5 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); const fix = typoFix(f.guestEmail); if (fix && window.confirm(`Is ${f.guestEmail} right? It looks like it should end in .com (${fix}).\n\nOK sends it to ${f.guestEmail}. Cancel lets you fix it.`) === false) return; send.mutate(); }}>
+        <form data-testid="guest-invite-form" className="mt-5 grid gap-5 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); const fix = typoFix(f.guestEmail); if (fix && window.confirm(`Is ${f.guestEmail} right? It looks like it should end in .com (${fix}).\n\nOK sends it to ${f.guestEmail}. Cancel lets you fix it.`) === false) return; if (where === "zoom" && !f.zoomLink.trim() && !linkLater) { setNeedLink(true); document.getElementById("gi-f-zoom")?.focus(); return; } send.mutate(); }}>
           <div className="space-y-1.5"><Label htmlFor="gi-f-name">Guest's name</Label><Input id="gi-f-name" value={f.guestName} onChange={set("guestName")} maxLength={80} required /></div>
           <div className="space-y-1.5"><Label htmlFor="gi-f-email">Guest's email</Label><Input id="gi-f-email" type="email" value={f.guestEmail} onChange={set("guestEmail")} required />{typoFix(f.guestEmail) && <p className="text-xs text-amber-800">Did you mean <button type="button" onClick={() => setF((x) => ({ ...x, guestEmail: typoFix(x.guestEmail) }))} className="font-semibold underline">{typoFix(f.guestEmail)}</button>?</p>}</div>
           <div className="space-y-1.5 sm:col-span-2" data-testid="invite-where">
@@ -150,9 +154,21 @@ export function GuestInvites() {
             </div>
           ) : (
             <>
-          <div className="space-y-1.5"><Label htmlFor="gi-f-when">When is the interview?</Label><Input id="gi-f-when" type="datetime-local" value={f.when} onChange={set("when")} /></div>
+          <div className="space-y-1.5"><Label htmlFor="gi-f-when">When is the interview?</Label><Input id="gi-f-when" type="datetime-local" value={f.when} onChange={set("when")} />{where === "zoom" && !f.when && <p className="text-xs text-amber-800" data-testid="invite-when-nudge">Add the day and time so your guest knows when to join.</p>}</div>
           {where === "studio" && <p className="self-end pb-2 text-xs text-muted-foreground" data-testid="invite-studio-note">Your guest gets the link to your own Room, the quick Zoom-like place on your dashboard. They open it at that time, allow their camera and microphone, and they're in. No account needed.</p>}
-          {where !== "studio" && (<div className="space-y-1.5"><Label htmlFor="gi-f-zoom">Zoom link</Label><Input id="gi-f-zoom" value={f.zoomLink} onChange={set("zoomLink")} placeholder="Paste the link from Zoom" /><p className="text-xs text-muted-foreground">Make the meeting in Zoom and paste its link here.</p></div>)}
+          {where === "zoom" && (
+            <div className="space-y-1.5">
+              <Label htmlFor="gi-f-zoom">Zoom link</Label>
+              <Input id="gi-f-zoom" value={linkLater ? "" : f.zoomLink} onChange={(e) => { set("zoomLink")(e); setNeedLink(false); }} placeholder={linkLater ? "You'll send it yourself" : "Paste the link from Zoom"} disabled={linkLater} aria-invalid={needLink} data-testid="invite-zoom-link" />
+              <label htmlFor="gi-f-later" className="flex items-center gap-2 pt-1 text-sm" data-testid="invite-link-later">
+                <Checkbox id="gi-f-later" checked={linkLater} onCheckedChange={(v) => { setLinkLater(v === true); setNeedLink(false); }} />
+                I'll send the Zoom link in a separate email
+              </label>
+              {needLink
+                ? <p className="text-xs font-medium text-red-700" role="alert" data-testid="invite-need-link">Paste your Zoom link, or tick the box if you'll send it yourself.</p>
+                : <p className="text-xs text-muted-foreground">{linkLater ? "We'll tell your guest the Zoom link is coming from you." : "Make the meeting in Zoom and paste its link here."}</p>}
+            </div>
+          )}
             </>
           )}
           <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="gi-f-note">A note to your guest (optional)</Label><Textarea id="gi-f-note" value={f.note} onChange={set("note")} rows={3} maxLength={1200} placeholder="What the interview is about, how long it runs, what to have ready." /></div>

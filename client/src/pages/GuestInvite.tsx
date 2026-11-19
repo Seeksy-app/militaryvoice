@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
-type Invite = { questions?: string[]; hostName: string; hostPhoto: string; show: string; guestName: string; whenText: string; zoomLink: string; note: string; answered: boolean };
+type Invite = { questions?: string[]; hostName: string; hostPhoto: string; show: string; guestName: string; whenText: string; zoomLink: string; linkLater?: boolean; note: string; answered: boolean };
 
 /**
  * The guest's side of an interview invitation: a few questions before the interview and the photo they want shown with their name.
@@ -57,10 +57,12 @@ export default function GuestInvite({ token }: { token: string }) {
               <p className="text-sm text-muted-foreground">with {d.hostName || "your host"}</p>
             </div>
           </div>
-          {(d.whenText || d.zoomLink || d.note) && (
+          {(d.whenText || d.zoomLink || d.linkLater || d.note) && (
             <div className="mt-4 space-y-1 rounded-xl bg-[#f5f7fb] p-4 text-sm">
               {d.whenText && <p><b>When:</b> {d.whenText}</p>}
-              {d.zoomLink && <p className="break-all"><b>Zoom:</b> <a className="text-[#053877] underline" href={d.zoomLink}>{d.zoomLink}</a></p>}
+              {d.zoomLink
+                ? <p className="break-all"><b>{/\/room\/join\/|\/booth\//.test(d.zoomLink) ? "Your link to join" : "Zoom"}:</b> <a className="text-[#053877] underline" href={d.zoomLink}>{d.zoomLink}</a></p>
+                : d.linkLater && <p><b>Zoom:</b> {d.hostName || "Your host"} will send you the link in a separate email.</p>}
               {d.note && <p className="whitespace-pre-line">{d.note}</p>}
             </div>
           )}

@@ -63,6 +63,8 @@ function ensure(): Promise<void> {
       used_rec INTEGER NOT NULL DEFAULT 0, created_at TEXT NOT NULL, invited_at TEXT NOT NULL DEFAULT '', answered_at TEXT NOT NULL DEFAULT '')`);
     await db.execute(sql`CREATE INDEX IF NOT EXISTS guest_invites_owner_idx ON guest_invites (owner_email)`);
     await db.execute(sql`ALTER TABLE guest_invites ADD COLUMN IF NOT EXISTS questions TEXT NOT NULL DEFAULT '[]'`);
+    // 1 = the host will send the Zoom link in an email of their own (the invite says so instead of a link).
+    await db.execute(sql`ALTER TABLE guest_invites ADD COLUMN IF NOT EXISTS link_later INTEGER NOT NULL DEFAULT 0`);
   })());
 }
 
@@ -82,7 +84,7 @@ export function registerGuestInvites(app: Express, requireHostSession: RequestHa
   const view = (r: Record<string, unknown>) => {
     let answers: Record<string, string> = {}; try { answers = JSON.parse(String(r.answers || "{}")); } catch { answers = {}; }
     let questions: string[] = []; try { questions = JSON.parse(String(r.questions || "[]")); } catch { questions = []; }
-    return { id: r.id, questions, guestName: r.guest_name, guestEmail: r.guest_email, whenText: r.when_text, zoomLink: r.zoom_link, note: r.note, status: r.status, answers, hasPhoto: !!r.photo_key, invitedAt: r.invited_at, answeredAt: r.answered_at, usedRec: r.used_rec, link: `${ORIGIN}/guest-invite/${r.token}` };
+    return { id: r.id, questions, guestName: r.guest_name, guestEmail: r.guest_email, whenText: r.when_text, zoomLink: r.zoom_link, linkLater: Number(r.link_later ?? 0) === 1, note: r.note, status: r.status, answers, hasPhoto: !!r.photo_key, invitedAt: r.invited_at, answeredAt: r.answered_at, usedRec: r.used_rec, link: `${ORIGIN}/guest-invite/${r.token}` };
   };
 
   app.get("/api/host/guest-invites", requireHostSession, async (req, res) => {
@@ -137,13 +139,16 @@ export function registerGuestInvites(app: Express, requireHostSession: RequestHa
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(guestEmail)) return res.status(400).json({ message: "Add the guest's email address." });
     const whenText = str(req.body?.whenText, 120), whenIso = str(req.body?.whenIso, 40);
     if (zoomLink && !/^https?:\/\/\S+$/i.test(zoomLink)) return res.status(400).json({ message: "The Zoom link should start with https://" });
+    // On Zoom, the guest needs the link from somewhere: pasted here, or the host's word that they'll send it themselves.
+    const linkLater = !zoomLink && req.body?.linkLater === true;
+    if (!zoomLink && !linkLater) return res.status(400).json({ message: "Paste your Zoom link, or tick \"I'll send the Zoom link in a separate email\"." });
     const count = Number(rows(await db.execute(sql`select count(*)::int n from guest_invites where owner_email=${owner} and created_at > ${new Date(Date.now() - 24 * 3600_000).toISOString()}`))[0]?.n ?? 0);
     if (count >= 20) return res.status(429).json({ message: "That's a lot of invitations today. Try again tomorrow." });
     const profile = await storage.getProfileByEmail(owner);
     const token = crypto.randomBytes(18).toString("base64url");
     const now = new Date().toISOString();
-    const [r] = rows(await db.execute(sql`insert into guest_invites (token, owner_email, guest_email, guest_name, when_text, when_iso, zoom_link, note, questions, created_at, invited_at) values (${token}, ${owner}, ${guestEmail}, ${guestName}, ${whenText}, ${whenIso}, ${zoomLink}, ${note}, ${JSON.stringify(questions)}, ${now}, ${now}) returning *`));
-    const ok = await sendInterviewInvite({ fromLocal: await senderSlug(owner), to: guestEmail, guestName, hostName: profile?.hostName ?? "", hostEmail: owner, show: boothShow || (profile?.podcastName ?? ""), whenText, zoomLink, note, link: `${ORIGIN}/guest-invite/${token}` });
+    const [r] = rows(await db.execute(sql`insert into guest_invites (token, owner_email, guest_email, guest_name, when_text, when_iso, zoom_link, link_later, note, questions, created_at, invited_at) values (${token}, ${owner}, ${guestEmail}, ${guestName}, ${whenText}, ${whenIso}, ${zoomLink}, ${linkLater ? 1 : 0}, ${note}, ${JSON.stringify(questions)}, ${now}, ${now}) returning *`));
+    const ok = await sendInterviewInvite({ fromLocal: await senderSlug(owner), to: guestEmail, guestName, hostName: profile?.hostName ?? "", hostEmail: owner, show: boothShow || (profile?.podcastName ?? ""), whenText, zoomLink, linkLater, note, link: `${ORIGIN}/guest-invite/${token}` });
     if (!ok) return res.status(502).json({ message: "The email didn't go. Try again in a moment.", invite: view(r) });
     res.status(201).json(view(r));
   });
@@ -162,7 +167,7 @@ export function registerGuestInvites(app: Express, requireHostSession: RequestHa
     const now = new Date().toISOString();
     const [u] = rows(await db.execute(sql`update guest_invites set guest_email=${to}, invited_at=${now} where id=${Number(r.id)} returning *`));
     const profile = await storage.getProfileByEmail(owner);
-    const ok = await sendInterviewInvite({ fromLocal: await senderSlug(owner), to, guestName: String(u.guest_name), hostName: profile?.hostName ?? "", hostEmail: owner, show: profile?.podcastName ?? "", whenText: String(u.when_text), zoomLink: String(u.zoom_link), note: String(u.note), link: `${ORIGIN}/guest-invite/${u.token}` });
+    const ok = await sendInterviewInvite({ fromLocal: await senderSlug(owner), to, guestName: String(u.guest_name), hostName: profile?.hostName ?? "", hostEmail: owner, show: profile?.podcastName ?? "", whenText: String(u.when_text), zoomLink: String(u.zoom_link), linkLater: Number(u.link_later ?? 0) === 1, note: String(u.note), link: `${ORIGIN}/guest-invite/${u.token}` });
     if (!ok) return res.status(502).json({ message: "The email didn't go. Try again in a moment." });
     res.json(view(u));
   });
@@ -189,7 +194,7 @@ export function registerGuestInvites(app: Express, requireHostSession: RequestHa
     if (!r) return res.status(404).json({ message: "That link isn't working. Ask your host to send it again." });
     const profile = await storage.getProfileByEmail(String(r.owner_email));
     let questions: string[] = []; try { questions = JSON.parse(String(r.questions || "[]")); } catch { questions = []; }
-    res.json({ questions, hostName: profile?.hostName ?? "", hostPhoto: profile?.photoUrl ?? "", show: profile?.podcastName ?? "", guestName: r.guest_name, whenText: r.when_text, zoomLink: r.zoom_link, note: r.note, answered: r.status === "answered" });
+    res.json({ questions, hostName: profile?.hostName ?? "", hostPhoto: profile?.photoUrl ?? "", show: profile?.podcastName ?? "", guestName: r.guest_name, whenText: r.when_text, zoomLink: r.zoom_link, linkLater: Number(r.link_later ?? 0) === 1, note: r.note, answered: r.status === "answered" });
   });
 
   app.post("/api/public/guest-invite/:token", photos.single("photo"), async (req, res) => {
