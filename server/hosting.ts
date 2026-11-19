@@ -17,7 +17,7 @@ import { XMLParser } from "fast-xml-parser";
 import Anthropic from "@anthropic-ai/sdk";
 import { waitUntil } from "@vercel/functions";
 import { isListenNotesConfigured, submitToListenNotes, spendListenNotes } from "./listenNotes.js";
-import { recordings, hostedFeedHits, bioPages, hostPosts, hostedShows, hostedEpisodes, hostedDownloads, type HostedShowRow, type HostedEpisodeRow, type CleanResult, type PodcastStatsData } from "../shared/schema.js";
+import { showTranscripts, recordings, hostedFeedHits, bioPages, hostPosts, hostedShows, hostedEpisodes, hostedDownloads, type HostedShowRow, type HostedEpisodeRow, type CleanResult, type PodcastStatsData } from "../shared/schema.js";
 
 /**
  * Podcast hosting, all MilitaryVoices: a podcaster's show and its episodes,
@@ -242,6 +242,11 @@ export async function readFeed(url: string): Promise<ParsedFeed> {
 async function showsOf(email: string) {
   return db.select().from(hostedShows).where(eq(hostedShows.email, email)).orderBy(hostedShows.id);
 }
+/** Whether this person has the Production plan (the team's post-production), set when it is switched on for them. */
+async function hasProduction(email: string): Promise<boolean> {
+  try { return !!(JSON.parse((await storage.getSetting(`package:${email.trim().toLowerCase()}`)) ?? "{}") as { on?: boolean }).on; } catch { return false; }
+}
+
 async function ownShow(email: string, id: number) {
   const [s] = await db.select().from(hostedShows).where(and(eq(hostedShows.id, id), eq(hostedShows.email, email))).limit(1);
   return s ?? null;
@@ -836,6 +841,8 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
         feedUrl: feedUrl(s.slug),
         missing: readiness(s, eps),
         ownerConfirmed: feedOwnerEmail(s) === s.ownerEmail.trim(),
+        // The Production plan (we make their episodes): only then does "Send back to post-production" make sense.
+        production: await hasProduction(s.email),
         episodes: await Promise.all(eps.map(async (e) => ({ ...e, delivery: deliveryOf(e, hitRows, listedApps), downloads: st.episodes.get(e.id) ?? 0, live: live(e), hasVideo: hasVideo(e), ytLibrary: await libraryYouTubeAt(e.recordingId), bookend: { wanted: planOf(s, e, spotRows).any, state: !planOf(s, e, spotRows).any ? "" : served(s, e, spotRows) ? "ready" : e.bookendJob === "failed" ? "failed" : "working" } }))),
         stats: { total: st.total, last30: st.series.reduce((a, d) => a + d.count, 0), series: st.series, apps: st.apps },
       });
@@ -1352,6 +1359,14 @@ Return JSON only: {"titles":["","",""],"description":""}`,
     if (publish && !(e.audioKey || e.audioUrl) && (!e.audioJob || e.audioJob === "failed")) return res.status(400).json({ message: e.audioJob === "failed" ? "Its audio couldn't be made. Delete it and try again, or upload the audio." : "It needs its audio first." });
     // "Final draft" is the team's (or their) word that post-production is done. With auto-post on, that is the moment it goes out.
     const stageIn = b.stage === "post" || b.stage === "final" ? (b.stage as string) : undefined;
+    if (stageIn === "post" && !(await hasProduction(email))) return res.status(403).json({ message: "Post-production is part of the Production plan." });
+    // "Remove this audio" on a draft: it goes back to waiting for an upload (a published one is unpublished first).
+    if (b.removeAudio === true) {
+      if (e.status !== "draft") return res.status(400).json({ message: "Unpublish it first, then you can swap its audio." });
+      const [cleared] = await db.update(hostedEpisodes).set({ audioKey: "", audioUrl: "", mime: "audio/mpeg", sizeBytes: 0, durationSec: 0, audioJob: "", servedSpots: "" }).where(eq(hostedEpisodes.id, e.id)).returning();
+      await db.delete(showTranscripts).where(and(eq(showTranscripts.email, emailOf(req)), eq(showTranscripts.episodeKey, `hosted:${e.id}`))).catch(() => undefined);
+      return res.json(cleared);
+    }
     const readyToGo = !!(e.audioKey || e.audioUrl) && !e.audioJob;
     const autoGo = stageIn === "final" && e.status === "draft" && readyToGo && !publish && !!(await ownShow(email, e.showId))?.autoPublish;
     const at = typeof b.publishedAt === "string" && !Number.isNaN(Date.parse(b.publishedAt)) ? new Date(b.publishedAt).toISOString() : undefined;
@@ -1572,5 +1587,63 @@ Return JSON only: {"titles":["","",""],"description":""}`,
     await toTrash({ email, kind: "episode", label: e.title || "An episode", rows: { hostedEpisodes: [e] } });
     await db.delete(hostedEpisodes).where(eq(hostedEpisodes.id, e.id));
     res.json({ ok: true });
+  });
+
+  // "Write it for me": a title and show notes drafted from what is said on the episode. The worker listens first
+  // (the same transcriber Ask my show uses), so the first answer is "working"; the page asks again until it's ready.
+  app.post("/api/host/hosting/episodes/:id/write", requireHostSession, async (req, res) => {
+    const email = emailOf(req);
+    const [e] = await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.id, Number(req.params.id))).limit(1);
+    const show = e ? await ownShow(email, e.showId) : null;
+    if (!e || !show) return res.status(404).json({ message: "No such episode." });
+    if (!(e.audioKey || e.audioUrl)) return res.status(400).json({ message: "Add the audio first, then we can listen to it." });
+    type Line = [number, number, string, string];
+    let lines: Line[] = [];
+    if (e.recordingId) {
+      const rec = await storage.getRecording(e.recordingId).catch(() => undefined);
+      try { lines = rec?.transcriptJson ? (JSON.parse(rec.transcriptJson) as Line[]) : []; } catch { lines = []; }
+    }
+    if (!lines.length) {
+      const key = `hosted:${e.id}`;
+      const find = async () => (await db.select().from(showTranscripts).where(and(eq(showTranscripts.email, email), eq(showTranscripts.episodeKey, key))).limit(1))[0];
+      let t = await find();
+      if (!t) {
+        await db.insert(showTranscripts).values({ email, episodeKey: key, title: e.title, publishedAt: e.publishedAt, audioUrl: `${ORIGIN}/e/${e.id}.mp3`, status: "queued", createdAt: now() }).onConflictDoNothing();
+        return res.json({ state: "working" });
+      }
+      if (t.status === "failed") {
+        if (req.body?.again !== true) return res.json({ state: "failed", message: t.error || "We couldn't listen to this one." });
+        await db.update(showTranscripts).set({ status: "queued", error: "" }).where(eq(showTranscripts.id, t.id));
+        return res.json({ state: "working" });
+      }
+      if (t.status !== "done" || !t.lines) return res.json({ state: "working" });
+      try { lines = JSON.parse(t.lines) as Line[]; } catch { lines = []; }
+    }
+    const said = lines.map((l) => l[3]).join(" ").replace(/\s+/g, " ").trim();
+    if (said.length < 80) return res.json({ state: "failed", message: "There wasn't enough speech in it to write from." });
+    if (overLimit(`d:${email}`, 30)) return res.status(429).json({ message: "That's plenty for today. Try again tomorrow." });
+    const text = said.length > 48000 ? `${said.slice(0, 24000)} [...] ${said.slice(-24000)}` : said;
+    try {
+      const client = new Anthropic();
+      const r = await client.messages.create({
+        model: "claude-sonnet-5",
+        max_tokens: 900,
+        system: `You write the title and show notes for one podcast episode on MilitaryVoices.ai, a platform for military and veteran creators. Work only from the transcript.
+Title: under 70 characters, plain and specific, says what the episode is about. No clickbait, no episode number, no quotation marks.
+Notes: plain text only (no HTML, no markdown symbols). A short opening paragraph of two or three sentences, then a line "In this episode:" followed by 3 to 5 lines that each start with "- " and name one thing covered. Under 1500 characters in all.
+Invent nothing: no names, ranks, branches, numbers, dates or links that are not in the transcript. If the speakers are not named, do not name them. 8th-grade reading level. No em dashes. No hype words like "journey", "delve" or "unlock".
+Return JSON only: {"title":"","description":""}`,
+        messages: [{ role: "user", content: `Show: ${show.title}\nCurrent title (may just be a file name): ${e.title}\n\nTranscript:\n${text}` }],
+      });
+      const out = r.content.map((c) => ("text" in c ? c.text : "")).join("");
+      const json = JSON.parse(out.slice(out.indexOf("{"), out.lastIndexOf("}") + 1)) as { title?: unknown; description?: unknown };
+      const title = String(json.title ?? "").replace(/^["']|["']$/g, "").trim().slice(0, 120);
+      const description = String(json.description ?? "").replace(/<[^>]*>/g, "").trim().slice(0, 4000);
+      if (!title || !description) throw new Error("empty");
+      res.json({ state: "done", title, description });
+    } catch (err) {
+      console.error("Episode write failed:", (err as Error).message);
+      res.status(502).json({ message: "Couldn't write that just now. Try again, or type your own." });
+    }
   });
 }

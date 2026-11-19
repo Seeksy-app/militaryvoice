@@ -16,7 +16,7 @@ import { durationOf, uploadToStorage } from "@/lib/upload";
 import { GuestFinder, ShowFinder } from "@/components/DiscoverPodcasts";
 import type { HostedEpisodeRow, HostedShowRow, HostedSpotRow, RecordingRow } from "@shared/schema";
 import { fillFooter, FOOTER_TOKENS } from "@shared/footer";
-import { AlertCircle, BarChart3, Check, ChevronLeft, Copy, ExternalLink, Film, ImagePlus, Loader2, Mic2, Pencil, Plus, Podcast, Radio, Send, Trash2, Upload } from "lucide-react";
+import { AlertCircle, BarChart3, Check, ChevronLeft, Copy, ExternalLink, Film, ImagePlus, Loader2, Mic2, Pencil, Plus, Podcast, Radio, Send, Sparkles, Trash2, Upload } from "lucide-react";
 import { IconTile } from "@/components/ui/icon-tile";
 
 /**
@@ -28,7 +28,7 @@ import { IconTile } from "@/components/ui/icon-tile";
 
 type Delivery = { apps: { app: string; got: boolean; checked: string }[] };
 type Ep = HostedEpisodeRow & { downloads: number; live: boolean; hasVideo?: boolean; ytLibrary?: string; delivery?: Delivery | null };
-type Hosted = { show: HostedShowRow; feedUrl: string; missing: string[]; ownerConfirmed: boolean; episodes: Ep[]; stats: { total: number; last30: number; series: { date: string; count: number }[]; apps: Record<string, number> } };
+type Hosted = { show: HostedShowRow; feedUrl: string; missing: string[]; ownerConfirmed: boolean; production?: boolean; episodes: Ep[]; stats: { total: number; last30: number; series: { date: string; count: number }[]; apps: Record<string, number> } };
 type Resp = { shows: Hosted[]; categories: Record<string, string[]>; youtubeReady?: boolean };
 
 const KEY = ["/api/host/hosting"];
@@ -250,7 +250,7 @@ export function PodcastHosting() {
       )}
 
       {tab === "episodes" && editEp && (
-        <EpisodePage ep={h.episodes.find((x) => x.id === editEp.id) ?? editEp} show={s} youtubeReady={!!q.data?.youtubeReady} onBack={() => setEditEp(null)} onSaved={refresh} onAddSpot={(id) => { setSpotFor(id); setEditEp(null); go("sponsors"); }} />
+        <EpisodePage ep={h.episodes.find((x) => x.id === editEp.id) ?? editEp} show={s} youtubeReady={!!q.data?.youtubeReady} production={!!h.production} onBack={() => setEditEp(null)} onSaved={refresh} onAddSpot={(id) => { setSpotFor(id); setEditEp(null); go("sponsors"); }} />
       )}
       {tab === "episodes" && !editEp && adding && (
         <NewEpisodePage show={s} onBack={() => setAdding(false)} onCreated={(e) => { refresh(); setAdding(false); setEditEp({ ...e, downloads: 0, live: false }); }} />
@@ -852,12 +852,17 @@ function ShowForm({ show, categories, onSaved, onDeleted, focus = "" }: { show: 
 }
 
 /** A new episode: the audio first (a file, or a clean episode from the Library), then its words. */
+/** Now, as the value a date-and-time picker wants (their own clock), so it can't pick a time that has passed. */
+const localNow = () => { const d = new Date(Date.now() - new Date().getTimezoneOffset() * 60_000); return d.toISOString().slice(0, 16); };
+
 /** One episode, a whole page (borrowed from the best of what hosts offer, then made plainer): the player, the words, when it goes out, where it is. */
-function EpisodePage({ ep, show, youtubeReady, onBack, onSaved, onAddSpot }: { ep: Ep; show: HostedShowRow; youtubeReady: boolean; onBack: () => void; onSaved: () => void; onAddSpot: (episodeId: number) => void }) {
+function EpisodePage({ ep, show, youtubeReady, production, onBack, onSaved, onAddSpot }: { ep: Ep; show: HostedShowRow; youtubeReady: boolean; production: boolean; onBack: () => void; onSaved: () => void; onAddSpot: (episodeId: number) => void }) {
   const { toast } = useToast();
   const [f, setF] = useState<Record<string, unknown>>({});
-  const [when, setWhen] = useState<"now" | "later">("now");
   const [at, setAt] = useState("");
+  // A date and time means "schedule it"; empty means it goes out the moment they press Publish.
+  const when: "now" | "later" = at ? "later" : "now";
+  const [writing, setWriting] = useState(false);
   const [yt, setYt] = useState<boolean | null>(null);
   const [pull, setPull] = useState<{ open: boolean; url: string; busy: boolean }>({ open: false, url: "", busy: false });
   const [pct, setPct] = useState<number | null>(null);
@@ -895,7 +900,7 @@ function EpisodePage({ ep, show, youtubeReady, onBack, onSaved, onAddSpot }: { e
     }
   };
   const remove = async () => {
-    if (!window.confirm(`Delete "${ep.title}"? It leaves your feed, and the apps drop it on their next check. You can put it back from Recently deleted for 15 days.`)) return;
+    if (!window.confirm(`Delete "${ep.title}"?\n\nIt leaves your feed and your show page right away. Apple Podcasts, Spotify and the other apps drop it the next time they check (usually within hours).${ytState === "sent" || ep.ytLibrary ? "\n\nIt stays on YouTube until you remove it there." : ""}\n\nWe keep a copy for 15 days in Recently deleted, in case you change your mind. After that it's gone for good.`)) return;
     await apiRequest("DELETE", `/api/host/hosting/episodes/${ep.id}`);
     onSaved();
     onBack();
@@ -930,6 +935,34 @@ function EpisodePage({ ep, show, youtubeReady, onBack, onSaved, onAddSpot }: { e
       setPull((p) => ({ ...p, busy: false }));
     }
   };
+  // "Write it for me": the worker listens to the episode, then a title and notes are drafted. First asks start the
+  // listening; the page asks again every few seconds until it's ready, then fills the boxes (nothing is saved until Save).
+  const writeIt = async (again = false) => {
+    if (!again && ((typeof f.description === "string" ? f.description : notesPlain).trim() && !window.confirm("This replaces the notes you have now (until you press Save). Go on?"))) return;
+    setWriting(true);
+    try {
+      for (let i = 0; i < 90; i++) {
+        const r = (await (await apiRequest("POST", `/api/host/hosting/episodes/${ep.id}/write`, { again: again && i === 0 })).json()) as { state: string; title?: string; description?: string; message?: string };
+        if (r.state === "done") {
+          const placeholder = !v.title.trim() || /[_]|\.(mp3|m4a|mp4|wav)$|^new episode$/i.test(v.title.trim());
+          setF((x) => ({ ...x, description: r.description ?? "", notesFormat: "text", ...(placeholder || window.confirm(`Use this title too?\n\n${r.title}`) ? { title: r.title ?? v.title } : {}) }));
+          toast({ title: "Written", description: "Read it over and change anything you like, then press Save." });
+          return;
+        }
+        if (r.state === "failed") { toast({ title: "Couldn't write it", description: r.message, variant: "destructive" }); return; }
+        if (i === 0) toast({ title: "Listening to your episode", description: "This takes a few minutes. You can keep working; it fills in here when it's ready." });
+        await new Promise((res) => setTimeout(res, 8000));
+      }
+      toast({ title: "Still listening", description: "It's taking longer than usual. Press Write it for me again in a few minutes." });
+    } catch (e) {
+      toast({ title: "Couldn't write it", description: (e as Error).message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, ""), variant: "destructive" });
+    } finally { setWriting(false); }
+  };
+  const removeAudio = async () => {
+    if (!window.confirm("Take this audio off the episode? You can then upload a new file. Your title and notes stay.")) return;
+    try { await apiRequest("PATCH", `/api/host/hosting/episodes/${ep.id}`, { removeAudio: true }); onSaved(); toast({ title: "Audio removed", description: "Choose the new file below." }); }
+    catch (e) { toast({ title: "Couldn't remove it", description: (e as Error).message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, ""), variant: "destructive" }); }
+  };
   const copy = async (text: string, what: string) => { try { await navigator.clipboard.writeText(text); toast({ title: `${what} copied` }); } catch { toast({ title: what, description: text }); } };
   const origin = typeof window !== "undefined" ? window.location.origin : "";
   const stage = stageOf(ep);
@@ -963,6 +996,7 @@ function EpisodePage({ ep, show, youtubeReady, onBack, onSaved, onAddSpot }: { e
               <span><b className="tabular-nums">{compact(ep.downloads)}</b> <span className="text-muted-foreground">downloads</span></span>
               {ep.durationSec > 0 && <span><b className="tabular-nums">{hms(ep.durationSec)}</b> <span className="text-muted-foreground">long</span></span>}
               <span className="text-muted-foreground">{statusLine}</span>
+              {hasAudio && ep.status === "draft" && !ep.audioJob && <button type="button" onClick={() => void removeAudio()} className="ml-auto text-xs font-semibold text-muted-foreground underline hover:text-foreground" data-testid="episode-remove-audio">Remove this audio and upload a new one</button>}
             </div>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 shadow-sm" data-testid="episode-details">
@@ -982,16 +1016,17 @@ function EpisodePage({ ep, show, youtubeReady, onBack, onSaved, onAddSpot }: { e
           <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <span className={label}>Description (show notes)</span>
-              <button type="button" onClick={() => (show.importedFrom ? void pullNow() : setPull((p) => ({ ...p, open: !p.open })))} disabled={pull.busy} className="inline-flex items-center gap-1 text-xs font-semibold text-[#053877] hover:underline disabled:opacity-60 dark:text-[#8fb5e8]" data-testid="episode-pull">
-                {pull.busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Radio className="h-3.5 w-3.5" />} Pull from RSS feed
-              </button>
+              <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
+                <button type="button" onClick={() => void writeIt()} disabled={writing || !hasAudio} title={hasAudio ? "We listen to the episode and write the title and notes" : "Add the audio first"} className="inline-flex items-center gap-1 text-xs font-semibold text-[#053877] hover:underline disabled:opacity-60 dark:text-[#8fb5e8]" data-testid="episode-write">
+                  {writing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} {writing ? "Listening…" : "Write it for me"}
+                </button>
+                {show.importedFrom && (
+                  <button type="button" onClick={() => void pullNow()} disabled={pull.busy} className="inline-flex items-center gap-1 text-xs font-semibold text-[#053877] hover:underline disabled:opacity-60 dark:text-[#8fb5e8]" data-testid="episode-pull">
+                    {pull.busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Radio className="h-3.5 w-3.5" />} Pull from your old feed
+                  </button>
+                )}
+              </span>
             </div>
-            {pull.open && !show.importedFrom && (
-              <div className="mb-3 flex gap-2">
-                <Input value={pull.url} onChange={(e) => setPull((p) => ({ ...p, url: e.target.value }))} placeholder="Your show's RSS feed address, or its Apple Podcasts link" className="h-9" data-testid="episode-pull-url" />
-                <Button size="sm" className="h-9 rounded-full" disabled={pull.busy || !pull.url.trim()} onClick={() => void pullNow(pull.url)}>Pull</Button>
-              </div>
-            )}
             <Textarea value={typeof f.description === "string" ? f.description : notesPlain} onChange={(e) => setF((x) => ({ ...x, description: e.target.value, notesFormat: "text" }))} rows={12} placeholder="What it's about, who's on it, and any links you mention." data-testid="hosting-ep-notes" />
             <label className={`${label} mt-3`}>Guest (fills {"{guest}"} in your footer)<Input value={(v.guest as string) ?? ""} onChange={(e) => set("guest", e.target.value)} className="mt-1" placeholder="Who was on it" data-testid="hosting-ep-guest" /></label>
             {false && (show.introKey || show.outroKey) && hasAudio && (
@@ -1038,21 +1073,18 @@ function EpisodePage({ ep, show, youtubeReady, onBack, onSaved, onAddSpot }: { e
               )}
               {ep.status === "draft" && stage !== "post" && (
                 <>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-xs font-semibold text-muted-foreground">Goes out</span>
-                    {(["now", "later"] as const).map((w) => (
-                      <button key={w} type="button" onClick={() => setWhen(w)} className={`rounded-full border px-3 py-1 text-xs font-semibold ${when === w ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:bg-muted"}`}>{w === "now" ? "Now" : "Later"}</button>
-                    ))}
-                    {when === "later" && <Input type="datetime-local" value={at} onChange={(e) => setAt(e.target.value)} className="h-8 w-full" />}
-                  </div>
+                  <label className={label}>Schedule it for later (optional)
+                    <Input type="datetime-local" value={at} min={localNow()} onChange={(e) => setAt(e.target.value)} className="mt-1 h-9" data-testid="hosting-schedule" />
+                    <span className="mt-1 block text-[11px] font-normal">{at ? `Goes out ${new Date(at).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} (${Intl.DateTimeFormat().resolvedOptions().timeZone}). ` : "Leave it empty to publish right away. "}{at && <button type="button" onClick={() => setAt("")} className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Clear</button>}</span>
+                  </label>
                   {ep.ytLibrary && <p className="rounded-xl border border-border px-3 py-2 text-xs text-muted-foreground">Already on YouTube: you posted it from your Library on {dateOf(ep.ytLibrary)}.</p>}
                   {offerYt && (youtubeReady
                     ? <label className="flex items-center gap-2"><input type="checkbox" checked={ytOn} onChange={(e) => setYt(e.target.checked)} /> <span>Also post it to YouTube <span className="text-muted-foreground">({show.youtubePrivacy === "unlisted" ? "unlisted" : "public"})</span></span></label>
                     : <span className="text-xs text-muted-foreground">Want it on YouTube too? <a href="/host/dashboard/social" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Connect YouTube</a> first.</span>)}
-                  <Button onClick={() => void save("published")} disabled={!v.title.trim() || (when === "later" && !at) || (!hasAudio && !ep.audioJob)} className="w-full gap-1.5 bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-publish"><Send className="h-4 w-4" /> {when === "later" ? "Schedule it" : "Publish now"}</Button>
+                  <Button onClick={() => void save("published")} disabled={!v.title.trim() || (!!at && Date.parse(at) < Date.now() - 60_000) || (!hasAudio && !ep.audioJob)} className="w-full gap-1.5 bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-publish"><Send className="h-4 w-4" /> {when === "later" ? "Schedule it" : "Publish now"}</Button>
                   {!hasAudio && !ep.audioJob && <p className="text-xs text-muted-foreground">Add the audio first, then you can publish.</p>}
                   <Button variant="outline" onClick={() => void save()} disabled={!dirty} className="w-full">Save draft</Button>
-                  <button type="button" onClick={() => void setStage("post")} className="w-full text-center text-xs font-semibold text-muted-foreground hover:text-foreground" data-testid="episode-back-to-post">Send back to post-production</button>
+                  {production && <button type="button" onClick={() => void setStage("post")} className="w-full text-center text-xs font-semibold text-muted-foreground hover:text-foreground" data-testid="episode-back-to-post">Send back to post-production</button>}
                 </>
               )}
               {ep.status !== "draft" && (
