@@ -225,7 +225,7 @@ export function PodcastHosting() {
           <div id="hosting-owner"><OwnerEmail h={h} onDone={refresh} /></div>
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <FeedLink url={h.feedUrl} />
-            <button type="button" onClick={() => setInSetup(true)} className="inline-flex h-8 items-center gap-1 rounded-full border border-dashed border-border px-3 text-xs font-semibold text-[#053877] hover:bg-[#053877]/5 dark:text-[#8fb5e8]" data-testid="hosting-add-show"><Plus className="h-3.5 w-3.5" /> Add a show</button>
+            {!editEp && <button type="button" onClick={() => setInSetup(true)} className="inline-flex h-8 items-center gap-1 rounded-full border border-dashed border-border px-3 text-xs font-semibold text-[#053877] hover:bg-[#053877]/5 dark:text-[#8fb5e8]" data-testid="hosting-add-show"><Plus className="h-3.5 w-3.5" /> Add a show</button>}
             {h.episodes.some((e) => e.live) && <Button asChild variant="outline" size="sm" className="h-8 gap-1.5 rounded-full"><a href={`/podcast/${s.slug}`} target="_blank" rel="noreferrer" data-testid="hosting-public-page">Your show page <ExternalLink className="h-3 w-3" /></a></Button>}
           </div>
         </div>
