@@ -24,7 +24,7 @@ import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/s
 import { Slider } from "@/components/ui/slider";
 import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2, Clapperboard, Plus, ArrowLeftToLine, ArrowRightToLine, MoreHorizontal, Blend, Brackets, Library, ArrowLeft, CalendarClock } from "lucide-react";
 import { IconTile } from "@/components/ui/icon-tile";
-import { LayoutNudge, parseLayoutSuggestion, type LayoutChoice } from "@/components/LayoutNudge";
+import { LayoutPicker, parseLayoutSuggestion } from "@/components/LayoutPicker";
 
 // Postify: one recording going from "the segment ended" to clips ready
 // to post, as the clipper actually does it. Every step and number here is what
@@ -2089,6 +2089,15 @@ export function PostStudio() {
   const [showOptions, setShowOptions] = useState(false);
   // The detector's look at this recording (a JSON string on the row, "" until it has looked).
   const layoutHint = useMemo(() => parseLayoutSuggestion((rec as { layoutSuggestion?: string } | undefined)?.layoutSuggestion), [rec]);
+  // The detector's favourite is lit to start with (visible, and one tap changes it), once per recording,
+  // and only when nothing else has been chosen.
+  const preselected = useRef<number | null>(null);
+  useEffect(() => {
+    if (!rec || !layoutHint || preselected.current === rec.id) return;
+    preselected.current = rec.id;
+    if (rec.clipStatus !== "none" || parseClipOptions(rec.clipOptions).layout) return;
+    setOpts((o) => (o.layout && o.layout !== "auto" ? o : { ...o, layout: layoutHint.suggested }));
+  }, [rec?.id, rec?.clipStatus, rec?.clipOptions, layoutHint]);
   const [musicOpen, setMusicOpen] = useState(false);
   const musicList = useQuery<{ key: string; name: string }[]>({ queryKey: ["/api/music"], queryFn: async () => (await apiRequest("GET", "/api/music")).json(), staleTime: 300_000 });
 
@@ -2354,14 +2363,6 @@ export function PostStudio() {
                     ))}
                   </div>
                 )}
-                {showOptions && (
-                  <div className="flex flex-wrap items-center gap-1 rounded-full bg-white/10 p-1 text-xs font-semibold" role="group" aria-label="Two people on screen" data-testid="post-layout">
-                    {([["auto", "Automatic"], ["stacked", "Two people stacked"], ["single", "Follow the speaker"]] as const).map(([v, label]) => {
-                      const cur = opts.layout === "radio" ? "stacked" : opts.layout ?? "auto";
-                      return <button key={v} type="button" onClick={() => setOpts({ ...opts, layout: v === "stacked" && opts.layout === "radio" ? "radio" : v })} aria-pressed={cur === v} className={`rounded-full px-3 py-1 ${cur === v ? "bg-[#F0A71F] text-[#1a1200]" : "text-white/75 hover:text-white"}`} data-testid={`post-layout-${v}`}>{label}</button>;
-                    })}
-                  </div>
-                )}
               </div>
             )}
           </div>
@@ -2512,9 +2513,9 @@ export function PostStudio() {
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,18rem)]">
         {/* The numbers sit under the player, in the space there; the side is just the pipeline. */}
         <div className="flex min-w-0 flex-col gap-3">
-          {/* Before the run, if the recording looks like two people: offer each way to frame them. Radio keeps its own layout. */}
-          {rec.clipStatus === "none" && !parseClipOptions(rec.clipOptions).layout && !intro && layoutHint && (
-            <LayoutNudge key={rec.id} recId={rec.id} suggestion={layoutHint} onPick={(l: LayoutChoice) => setOpts((o) => ({ ...o, layout: l as ClipOptions["layout"] }))} onClear={() => setOpts((o) => ({ ...o, layout: undefined }))} />
+          {/* How two people are framed: always on offer before the run; the detector only lights and marks the one it likes. */}
+          {rec.clipStatus === "none" && !intro && (
+            <LayoutPicker value={opts.layout} own={parseClipOptions(rec.clipOptions).layout} suggestion={layoutHint} onChange={(l) => setOpts((o) => ({ ...o, layout: l }))} />
           )}
           {viewerEl}
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-6" data-testid="post-stats">
