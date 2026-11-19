@@ -22,6 +22,9 @@ export function GuestInvites() {
   const { toast } = useToast();
   const qc = useQueryClient();
   const list = useQuery<Invite[]>({ queryKey: ["/api/host/guest-invites"], queryFn: async () => (await apiRequest("GET", "/api/host/guest-invites")).json() });
+  // People saved from the browser extension ("Add to my show"): one tap starts an invitation with their name filled in.
+  const saved = useQuery<{ id: string; name: string; title: string; org: string; photoUrl: string; url: string }[]>({ queryKey: ["/api/host/captures"], queryFn: async () => (await apiRequest("GET", "/api/host/captures")).json() });
+  const unsave = useMutation({ mutationFn: async (id: string) => apiRequest("DELETE", `/api/host/captures/${id}`), onSuccess: () => void qc.invalidateQueries({ queryKey: ["/api/host/captures"] }) });
   const [f, setF] = useState({ guestName: "", guestEmail: "", when: "", zoomLink: "", note: "" });
   // Where it happens: on Zoom (paste a link), or in the host's own MilitaryVoices Radio booth (we make the guest's link).
   const [where, setWhere] = useState<"zoom" | "studio" | "booth">("zoom");
@@ -59,6 +62,25 @@ export function GuestInvites() {
 
   return (
     <div className="space-y-6" data-testid="guest-invites">
+      {(saved.data?.length ?? 0) > 0 && (
+        <div data-testid="guest-saved">
+          <h3 className="text-lg font-semibold">Saved from your browser</h3>
+          <p className="text-xs text-muted-foreground">People you added with the MilitaryVoices extension. Press Invite to start their invitation.</p>
+          <ul className="mt-3 space-y-2">
+            {(saved.data ?? []).map((c) => (
+              <li key={c.id} className="flex flex-wrap items-center gap-3 rounded-xl border border-border bg-card p-3">
+                {c.photoUrl ? <img src={c.photoUrl} alt="" className="h-10 w-10 rounded-full object-cover" referrerPolicy="no-referrer" /> : <div className="h-10 w-10 rounded-full bg-muted" />}
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold">{c.name}</p>
+                  <p className="truncate text-xs text-muted-foreground">{[c.title, c.org].filter(Boolean).join(" · ") || c.url}</p>
+                </div>
+                <Button type="button" size="sm" onClick={() => { setF((x) => ({ ...x, guestName: c.name, note: x.note || (c.url ? `Found you here: ${c.url}` : "") })); unsave.mutate(c.id); document.querySelector("[data-testid='guest-invite-form']")?.scrollIntoView({ behavior: "smooth", block: "start" }); }}>Invite</Button>
+                <Button type="button" variant="ghost" size="sm" onClick={() => unsave.mutate(c.id)} aria-label={`Remove ${c.name}`}><Trash2 className="h-4 w-4" /></Button>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
       {(list.data?.length ?? 0) > 0 && (
       <div data-testid="guest-invites-list">
         <h3 className="text-lg font-semibold">Your invitations</h3>
@@ -107,7 +129,7 @@ export function GuestInvites() {
       <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
         <h3 className="text-lg font-semibold">Invite a guest</h3>
         <p className="mt-1 text-sm text-muted-foreground [text-wrap:pretty]">We email your guest from you. They answer a few questions and add the photo they want shown, and you get it all before the interview. Their name and photo go on your episode's guest card.</p>
-        <form className="mt-5 grid gap-5 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); const fix = typoFix(f.guestEmail); if (fix && window.confirm(`Is ${f.guestEmail} right? It looks like it should end in .com (${fix}).\n\nOK sends it to ${f.guestEmail}. Cancel lets you fix it.`) === false) return; send.mutate(); }}>
+        <form data-testid="guest-invite-form" className="mt-5 grid gap-5 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); const fix = typoFix(f.guestEmail); if (fix && window.confirm(`Is ${f.guestEmail} right? It looks like it should end in .com (${fix}).\n\nOK sends it to ${f.guestEmail}. Cancel lets you fix it.`) === false) return; send.mutate(); }}>
           <div className="space-y-1.5"><Label htmlFor="gi-f-name">Guest's name</Label><Input id="gi-f-name" value={f.guestName} onChange={set("guestName")} maxLength={80} required /></div>
           <div className="space-y-1.5"><Label htmlFor="gi-f-email">Guest's email</Label><Input id="gi-f-email" type="email" value={f.guestEmail} onChange={set("guestEmail")} required />{typoFix(f.guestEmail) && <p className="text-xs text-amber-800">Did you mean <button type="button" onClick={() => setF((x) => ({ ...x, guestEmail: typoFix(x.guestEmail) }))} className="font-semibold underline">{typoFix(f.guestEmail)}</button>?</p>}</div>
           <div className="space-y-1.5 sm:col-span-2" data-testid="invite-where">

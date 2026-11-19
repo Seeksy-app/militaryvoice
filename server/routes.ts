@@ -167,6 +167,7 @@ import { stageMetaFromStudio } from "../shared/stageMeta.js";
 import { draftYoutubeDescription, chaptersFrom } from "./youtubeDraft.js";
 import { registerZoom, importFetch } from "./zoom.js";
 import { registerRecordingReminders } from "./recordingReminders.js";
+import { registerExtensionApi } from "./extensionApi.js";
 import { registerMusic } from "./music.js";
 import { registerReview } from "./review.js";
 import { registerSponsorFinder } from "./sponsorFinder.js";
@@ -6933,6 +6934,7 @@ export function registerRoutes(app: Express): void {
 
   registerZoom(app);
   registerRecordingReminders(app);
+  registerExtensionApi(app);
   registerMusic(app, requireAdmin);
   registerReview(app);
   registerSponsorFinder(app, requireAdmin);
