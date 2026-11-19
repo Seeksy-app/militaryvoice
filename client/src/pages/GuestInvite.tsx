@@ -75,7 +75,7 @@ export default function GuestInvite({ token }: { token: string }) {
             <p className="mt-1 text-muted-foreground">{d.hostName || "Your host"} has your answers and your photo. See you at the interview.</p>
           </div>
         ) : (
-          <form className="mt-4 space-y-4 rounded-2xl bg-white p-6 shadow-sm ring-1 ring-black/5" onSubmit={(e) => { e.preventDefault(); void submit(); }}>
+          <form className="mt-4 space-y-4 rounded-2xl bg-white p-6 text-gray-900 shadow-sm ring-1 ring-black/5 [&_input:not([type=file]):not([type=checkbox])]:border-gray-300 [&_input:not([type=file]):not([type=checkbox])]:bg-white [&_input]:text-gray-900 [&_input::placeholder]:text-gray-400 [&_textarea]:border-gray-300 [&_textarea]:bg-white [&_textarea]:text-gray-900 [&_textarea::placeholder]:text-gray-400 [&_label]:text-gray-900" style={{ colorScheme: "light" }} onSubmit={(e) => { e.preventDefault(); void submit(); }}>
             <p className="text-sm text-muted-foreground">A few quick questions to get ready. It takes about five minutes.</p>
             <div className="space-y-1.5"><Label htmlFor="gi-name">Your name, as it should read</Label><Input id="gi-name" value={f.name} onChange={set("name")} maxLength={80} required /></div>
             <div className="space-y-1.5"><Label htmlFor="gi-title">What you do</Label><Input id="gi-title" value={f.title} onChange={set("title")} maxLength={120} placeholder="Author and Army veteran" /></div>
