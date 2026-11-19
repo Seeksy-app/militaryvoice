@@ -288,19 +288,33 @@ export function registerZoom(app: Express): void {
     res.json({ ok: true });
   });
 
-  /** Their cloud recordings from the last 30 days (Zoom's own limit per ask), newest first. */
+  /**
+   * Their cloud recordings, newest first. Zoom answers one month at a time,
+   * so a longer look back is several asks, a few at once. `?months=` is 1 to
+   * 12 (default 3); Zoom itself only keeps what their account's retention does.
+   */
   app.get("/api/host/zoom/recordings", requireHostSession, async (req, res) => {
     res.set("Cache-Control", "no-store");
     const c = await storage.getZoom(getSessionEmail(req) ?? "");
     if (!c) return res.status(404).json({ message: "Connect Zoom first." });
     try {
-      const to = new Date();
-      const from = new Date(Date.now() - 30 * 86_400_000);
+      const months = Math.min(12, Math.max(1, Math.round(Number(req.query.months)) || 3));
       const d = (x: Date) => x.toISOString().slice(0, 10);
-      const j = await zoomApi<{ meetings?: ZoomMeeting[] }>(c, `/users/me/recordings?page_size=50&from=${d(from)}&to=${d(to)}`);
+      const windows = Array.from({ length: months }, (_, i) => ({ from: new Date(Date.now() - (i + 1) * 30 * 86_400_000), to: new Date(Date.now() - i * 30 * 86_400_000) }));
+      const meetings = new Map<string, ZoomMeeting>();
+      const ask = async (w: { from: Date; to: Date }) => {
+        let next = "";
+        for (let page = 0; page < 5; page++) {
+          const j = await zoomApi<{ meetings?: ZoomMeeting[]; next_page_token?: string }>(c, `/users/me/recordings?page_size=100&from=${d(w.from)}&to=${d(w.to)}${next ? `&next_page_token=${encodeURIComponent(next)}` : ""}`);
+          for (const m of j.meetings ?? []) meetings.set(m.uuid, m);
+          next = j.next_page_token ?? "";
+          if (!next) break;
+        }
+      };
+      for (let i = 0; i < windows.length; i += 3) await Promise.all(windows.slice(i, i + 3).map(ask));
       const mine = await storage.listRecordingsByEmail(c.email);
       const have = new Set(mine.map((r) => r.egressId));
-      res.json((j.meetings ?? []).map((m) => {
+      res.json(Array.from(meetings.values()).map((m) => {
         const f = bestZoomFile(m);
         return { meetingId: String(m.id), uuid: m.uuid, topic: m.topic, startTime: m.start_time, durationMin: m.duration, sizeBytes: f?.file_size ?? 0, importable: !!f, imported: f ? have.has(`ZOOM_${f.id}`) : false };
       }).sort((a, b) => Date.parse(b.startTime) - Date.parse(a.startTime)));

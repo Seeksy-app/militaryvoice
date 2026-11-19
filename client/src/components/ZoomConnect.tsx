@@ -3,6 +3,7 @@ import { Link } from "wouter";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -203,20 +204,31 @@ export function ImportLink({ bare = false }: { bare?: boolean } = {}) {
 function ZoomPicker({ open, onOpenChange }: { open: boolean; onOpenChange: (v: boolean) => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const recs = useQuery<ZoomRec[]>({ queryKey: ["/api/host/zoom/recordings"], queryFn: async () => (await apiRequest("GET", "/api/host/zoom/recordings")).json(), enabled: open });
-  const [busy, setBusy] = useState<string | null>(null);
+  // Three months to start; "Look further back" asks Zoom for the whole year.
+  const [months, setMonths] = useState(3);
+  const recs = useQuery<ZoomRec[]>({ queryKey: ["/api/host/zoom/recordings", months], queryFn: async () => (await apiRequest("GET", `/api/host/zoom/recordings?months=${months}`)).json(), enabled: open });
+  const [picked, setPicked] = useState<string[]>([]);
+  const [busy, setBusy] = useState(false);
   const [done, setDone] = useState<string[]>([]);
-  const bring = async (r: ZoomRec) => {
-    setBusy(r.uuid);
-    try {
-      await apiRequest("POST", "/api/host/zoom/import", { uuid: r.uuid, meetingId: r.meetingId });
-      setDone((d) => [...d, r.uuid]);
+  const left = (recs.data ?? []).filter((r) => r.importable && !r.imported && !done.includes(r.uuid));
+  const toggle = (uuid: string) => setPicked((p) => (p.includes(uuid) ? p.filter((x) => x !== uuid) : [...p, uuid]));
+  const bring = async () => {
+    setBusy(true);
+    let ok = 0;
+    for (const r of left.filter((x) => picked.includes(x.uuid))) {
+      try {
+        await apiRequest("POST", "/api/host/zoom/import", { uuid: r.uuid, meetingId: r.meetingId });
+        setDone((d) => [...d, r.uuid]);
+        setPicked((p) => p.filter((x) => x !== r.uuid));
+        ok++;
+      } catch (e) {
+        toast({ title: `Couldn't import "${r.topic || "that recording"}"`, description: (e as Error).message, variant: "destructive" });
+      }
+    }
+    setBusy(false);
+    if (ok) {
       void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] });
-      toast({ title: "Bringing it in", description: "It shows in your Library now and is ready in a few minutes." });
-    } catch (e) {
-      toast({ title: "Couldn't import that", description: (e as Error).message, variant: "destructive" });
-    } finally {
-      setBusy(null);
+      toast({ title: ok === 1 ? "Bringing it in" : `Bringing in ${ok} recordings`, description: "They show in your Library now and are ready in a few minutes." });
     }
   };
   return (
@@ -224,20 +236,25 @@ function ZoomPicker({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
       <DialogContent className="max-h-[85vh] overflow-y-auto sm:max-w-xl">
         <DialogHeader>
           <DialogTitle>Import from Zoom</DialogTitle>
-          <DialogDescription>Your cloud recordings from the last 30 days. Each comes into your Library as its own episode.</DialogDescription>
+          <DialogDescription>
+            {months === 3 ? "Your cloud recordings from the last 3 months." : "Your cloud recordings from the last year."} Tick the ones you want in your Library; each comes in as its own episode.
+          </DialogDescription>
         </DialogHeader>
         {recs.isLoading ? (
           <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
         ) : recs.error ? (
           <p className="text-sm text-destructive">{(recs.error as Error).message}</p>
         ) : !recs.data?.length ? (
-          <p className="py-6 text-center text-sm text-muted-foreground">No cloud recordings in the last 30 days.</p>
+          <p className="py-6 text-center text-sm text-muted-foreground">No cloud recordings in this time.</p>
         ) : (
           <ul className="divide-y divide-border">
             {recs.data.map((r) => {
               const inLib = r.imported || done.includes(r.uuid);
               return (
                 <li key={r.uuid} className="flex items-center gap-3 py-3">
+                  {!inLib && r.importable ? (
+                    <Checkbox checked={picked.includes(r.uuid)} onCheckedChange={() => toggle(r.uuid)} disabled={busy} aria-label={`Import ${r.topic || "Zoom meeting"}`} data-testid="zoom-pick" />
+                  ) : <span className="w-4 shrink-0" />}
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-sm font-semibold text-foreground">{r.topic || "Zoom meeting"}</p>
                     <p className="text-xs text-muted-foreground">
@@ -246,18 +263,29 @@ function ZoomPicker({ open, onOpenChange }: { open: boolean; onOpenChange: (v: b
                   </div>
                   {inLib ? (
                     <span className="inline-flex items-center gap-1 text-xs font-semibold text-emerald-600"><Check className="h-3.5 w-3.5" /> In your Library</span>
-                  ) : r.importable ? (
-                    <Button size="sm" variant="outline" className="rounded-full" disabled={busy !== null} onClick={() => void bring(r)}>
-                      {busy === r.uuid ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : "Import"}
-                    </Button>
-                  ) : (
+                  ) : !r.importable ? (
                     <span className="text-xs text-muted-foreground">No video</span>
-                  )}
+                  ) : null}
                 </li>
               );
             })}
           </ul>
         )}
+        <div className="flex flex-wrap items-center justify-between gap-3 pt-2">
+          {months === 3 && !recs.isLoading ? (
+            <Button variant="ghost" size="sm" className="rounded-full text-muted-foreground" onClick={() => { setMonths(12); setPicked([]); }} data-testid="zoom-further-back">Look further back</Button>
+          ) : <span />}
+          <div className="flex items-center gap-2">
+            {left.length > 1 && (
+              <Button variant="ghost" size="sm" className="rounded-full text-muted-foreground" disabled={busy} onClick={() => setPicked(picked.length === left.length ? [] : left.map((r) => r.uuid))}>
+                {picked.length === left.length ? "Clear" : "Tick all"}
+              </Button>
+            )}
+            <Button size="sm" className="rounded-full" disabled={busy || picked.length === 0} onClick={() => void bring()} data-testid="zoom-import-selected">
+              {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : picked.length ? `Import ${picked.length} selected` : "Import selected"}
+            </Button>
+          </div>
+        </div>
       </DialogContent>
     </Dialog>
   );
