@@ -12,6 +12,22 @@ type Invite = { questions?: string[]; hostName: string; hostPhoto: string; show:
  * The guest's side of an interview invitation: a few questions before the interview and the photo they want shown with their name.
  * No account: the link is the key.
  */
+/** Phone photos and PNGs are often bigger than an upload can carry (about 4.5 MB), so send a 1600px JPEG instead. Falls back to the original file if the browser can't read it. */
+async function shrinkPhoto(file: File): Promise<Blob> {
+  try {
+    const bmp = await createImageBitmap(file);
+    const scale = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.round(bmp.width * scale); canvas.height = Math.round(bmp.height * scale);
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return file;
+    ctx.fillStyle = "#fff"; ctx.fillRect(0, 0, canvas.width, canvas.height);
+    ctx.drawImage(bmp, 0, 0, canvas.width, canvas.height);
+    const out = await new Promise<Blob | null>((ok) => canvas.toBlob(ok, "image/jpeg", 0.88));
+    return out && out.size < file.size ? out : file;
+  } catch { return file; }
+}
+
 export default function GuestInvite({ token }: { token: string }) {
   useEffect(() => { document.title = "Your interview · MilitaryVoices.ai"; }, []);
   const q = useQuery<Invite>({ queryKey: ["/api/public/guest-invite", token], retry: false, queryFn: async () => { const r = await fetch(`/api/public/guest-invite/${token}`); if (!r.ok) throw new Error((await r.json().catch(() => ({}))).message || "That link isn't working."); return r.json(); } });
@@ -37,8 +53,12 @@ export default function GuestInvite({ token }: { token: string }) {
       for (const [k, v] of Object.entries(f)) body.append(k, v);
       body.append("consent", consent ? "yes" : "no");
       for (const [k, v] of Object.entries(extra)) body.append(k, v);
-      if (photo) body.append("photo", photo);
-      const r = await fetch(`/api/public/guest-invite/${token}`, { method: "POST", body });
+      if (photo) {
+        const small = await shrinkPhoto(photo);
+        if (small.size > 4_000_000) throw new Error("That photo is too large to send. Try a smaller picture, or a screenshot of it.");
+        body.append("photo", small, small === photo ? photo.name : "photo.jpg");
+      }
+      const r = await fetch(`/api/public/guest-invite/${token}`, { method: "POST", body }).catch(() => { throw new Error("That didn't go through. Check your connection and press Send again."); });
       const j = await r.json().catch(() => ({}));
       if (!r.ok) throw new Error(j.message || "That didn't go through. Try again.");
       setDone(true);
