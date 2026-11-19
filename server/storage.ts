@@ -1989,6 +1989,8 @@ class DatabaseStorage implements IStorage {
         startedAt: now,
         endedAt: now,
         clipStatus: "none",
+        // A Radio show's edited copy still gets the over/under stack when it is clipped.
+        clipOptions: (() => { try { return JSON.parse(source.clipOptions || "{}").layout === "radio" ? JSON.stringify({ formats: ["vertical", "square", "wide"], captions: "animated", music: "", layout: "radio" }) : ""; } catch { return ""; } })(),
         // Filed with the episode it came from.
         folderId: source.folderId,
       })

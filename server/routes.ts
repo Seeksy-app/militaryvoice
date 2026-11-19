@@ -8815,6 +8815,8 @@ export function registerRoutes(app: Express): void {
     if (rec.clipStatus === "queued" || rec.clipStatus === "running") return res.json({ ok: true, already: true });
     if (rec.clipStatus === "done") return res.status(409).json({ message: "Clips are already made for this one." });
     const options = allShapes(parseClipOptions(req.body?.options ?? rec.clipOptions));
+    // A MilitaryVoices Radio show keeps its over/under stack: the screen starts from what this browser last used, not from the show, so "automatic" must not undo it. Only "Follow the speaker" opts out.
+    if (parseClipOptions(rec.clipOptions).layout === "radio" && options.layout !== "single") options.layout = "radio";
     if (!rec.postifyBeta) {
       const allowance = await postifyAllowance(email);
       if (!allowance.unlimited && rec.durationSec > BETA_MAX_SEC()) return res.status(400).json({ message: `The beta takes episodes up to ${allowance.maxMinutes} minutes.` });
