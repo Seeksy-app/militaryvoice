@@ -8,7 +8,8 @@ import crypto from "node:crypto";
 import type { Express } from "express";
 import Anthropic from "@anthropic-ai/sdk";
 import { storage } from "./storage.js";
-import { getSessionEmail, requireHostSession } from "./session.js";
+import type { NextFunction, Request, Response } from "express";
+import { getAdminEmail, getSessionEmail, requireHostSession } from "./session.js";
 
 type Capture = { id: string; name: string; title: string; org: string; photoUrl: string; bio: string; url: string; savedAt: string };
 
@@ -33,16 +34,34 @@ const BRIEF_SYSTEM =
   "talkingPoints (array of 4 to 6 short strings, the interesting things worth asking about), questions (array of 5 open questions for a military and veteran audience), " +
   "pronounce (string: how to say their name if it is unusual, else empty), careful (string: anything the host should handle with care, such as a loss or a sensitive subject, else empty).";
 
+
+/**
+ * The extension acts only on the signed-in person's own account. A podcaster sign-in is what it normally uses; a team member who is
+ * signed in to the admin (and listed as an admin) can use it as themselves too, so they needn't sign in twice. It grants nothing
+ * beyond their own address: no admin power comes from a podcaster sign-in, and none is used here.
+ */
+async function extSession(req: Request, res: Response, next: NextFunction): Promise<void> {
+  let email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+  if (!email) {
+    const admin = (getAdminEmail(req) ?? "").trim().toLowerCase();
+    if (admin && (await storage.isAdminEmail(admin))) email = admin;
+  }
+  if (!email) { res.status(401).json({ message: "Please sign in again." }); return; }
+  (req as any).extEmail = email;
+  next();
+}
+const who = (req: Request) => String((req as any).extEmail ?? "");
+
 export function registerExtensionApi(app: Express): void {
-  app.get("/api/ext/me", requireHostSession, async (req, res) => {
+  app.get("/api/ext/me", extSession, async (req, res) => {
     res.set("Cache-Control", "no-store");
-    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    const email = who(req);
     const profile = await storage.getProfileByEmail(email).catch(() => undefined);
     res.json({ email, show: profile?.podcastName ?? "", name: profile?.hostName ?? "", saved: (await readCaptures(email)).length });
   });
 
-  app.post("/api/ext/capture", requireHostSession, async (req, res) => {
-    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+  app.post("/api/ext/capture", extSession, async (req, res) => {
+    const email = who(req);
     const name = str(req.body?.name, 120);
     if (!name) return res.status(400).json({ message: "I couldn't find a person's name on this page. Open their profile or bio page and try again." });
     const list = await readCaptures(email);
@@ -70,8 +89,8 @@ export function registerExtensionApi(app: Express): void {
     res.json({ ok: true });
   });
 
-  app.post("/api/ext/import", requireHostSession, async (req, res) => {
-    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+  app.post("/api/ext/import", extSession, async (req, res) => {
+    const email = who(req);
     const url = httpsUrl(req.body?.url);
     if (!url) return res.status(400).json({ message: "That isn't a web address I can bring in." });
     const host = new URL(url).hostname.toLowerCase();
@@ -88,8 +107,8 @@ export function registerExtensionApi(app: Express): void {
     res.status(row ? 201 : 200).json(row ? { ok: true, id: row.id, message: "It's coming into your Library. We'll email you when it's in." } : { ok: true, already: true, message: "That one is already in your Library." });
   });
 
-  app.post("/api/ext/prep", requireHostSession, async (req, res) => {
-    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+  app.post("/api/ext/prep", extSession, async (req, res) => {
+    const email = who(req);
     const text = String(req.body?.text ?? "").replace(/\s+/g, " ").trim().slice(0, 14_000);
     if (text.length < 200) return res.status(400).json({ message: "There isn't enough on this page to prepare from. Open the guest's profile or bio and try again." });
     // A day's worth, so one stuck button can't run up the bill.
