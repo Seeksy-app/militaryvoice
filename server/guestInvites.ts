@@ -148,6 +148,25 @@ export function registerGuestInvites(app: Express, requireHostSession: RequestHa
     res.status(201).json(view(r));
   });
 
+  /** Send an invitation again, to the same address or a corrected one (a typo is the usual reason it never arrived). */
+  app.post("/api/host/guest-invites/:id/resend", requireHostSession, async (req, res) => {
+    await ensure();
+    const owner = mine(req);
+    const [r] = rows(await db.execute(sql`select * from guest_invites where id=${Number(req.params.id)} and owner_email=${owner}`));
+    if (!r) return res.status(404).json({ message: "No such invitation." });
+    const to = str(req.body?.guestEmail, 200).toLowerCase() || String(r.guest_email);
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to)) return res.status(400).json({ message: "Add the guest's email address." });
+    const since = new Date(Date.now() - 3600_000).toISOString();
+    const n = Number(rows(await db.execute(sql`select count(*)::int n from guest_invites where owner_email=${owner} and invited_at > ${since}`))[0]?.n ?? 0);
+    if (n >= 20) return res.status(429).json({ message: "That's a lot of invitations just now. Try again in a little while." });
+    const now = new Date().toISOString();
+    const [u] = rows(await db.execute(sql`update guest_invites set guest_email=${to}, invited_at=${now} where id=${Number(r.id)} returning *`));
+    const profile = await storage.getProfileByEmail(owner);
+    const ok = await sendInterviewInvite({ fromLocal: await senderSlug(owner), to, guestName: String(u.guest_name), hostName: profile?.hostName ?? "", hostEmail: owner, show: profile?.podcastName ?? "", whenText: String(u.when_text), zoomLink: String(u.zoom_link), note: String(u.note), link: `${ORIGIN}/guest-invite/${u.token}` });
+    if (!ok) return res.status(502).json({ message: "The email didn't go. Try again in a moment." });
+    res.json(view(u));
+  });
+
   app.delete("/api/host/guest-invites/:id", requireHostSession, async (req, res) => {
     await ensure();
     await db.execute(sql`delete from guest_invites where id=${Number(req.params.id)} and owner_email=${mine(req)}`);
