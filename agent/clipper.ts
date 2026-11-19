@@ -1538,15 +1538,55 @@ async function radioTiles(source: string, atSec: number) {
  */
 type FocusMode = "shots" | "one" | "none";
 
-async function framingFor(job: Job, source: string, m: Moment, within: Line[], dir: string, mode: FocusMode = "shots") {
+/**
+ * Is this frame the MilitaryVoices Radio program page? Its picture sits on navy, with a navy gutter down each side of the tiles
+ * (a Zoom or camera picture has black or a face there). Checked before the Radio tile crop is used on a recording nobody flagged,
+ * so a layout chosen on a Zoom recording is never cut by the Radio tile boxes.
+ */
+export async function isRadioPage(source: string, atSec: number): Promise<boolean> {
+  try {
+    const dims = (await run("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", source])).trim().split(",").map(Number);
+    const [fw, fh] = dims;
+    if (!fw || !fh) return false;
+    const strip = async (x: number) => {
+      const f = path.join(os.tmpdir(), `radio-${process.pid}-${Date.now()}-${Math.round(x)}.png`);
+      try {
+        await ffmpeg(["-ss", String(atSec + 1), "-i", source, "-frames:v", "1", "-vf", `crop=${even(fw * 0.008)}:${even(fh * 0.4)}:${even(x)}:${even(fh * 0.29)},scale=1:1`, f]);
+        const { data } = await sharp(f).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+        return { r: data[0], g: data[1], b: data[2] };
+      } finally { await fs.rm(f, { force: true }).catch(() => {}); }
+    };
+    const navy = (c: { r: number; g: number; b: number }) => c.r < 30 && c.g < 45 && c.b > 40 && c.b < 130;
+    const [a, b] = await Promise.all([strip(fw * 0.001), strip(fw * 0.99)]);
+    return navy(a) && navy(b);
+  } catch {
+    return false;
+  }
+}
+
+export async function framingFor(job: Job, source: string, m: Moment, within: Line[], dir: string, mode: FocusMode = "shots") {
   const layout = job.options?.layout ?? "auto";
   // Chosen by the person: the whole picture, both people in it, over a blurred copy of itself. No stack, no following.
   if (layout === "side") {
+    // A Radio show: the two tiles together as one wide picture (not the whole program page with its badges and cards).
+    if (await isRadioPage(source, m.startSec)) {
+      const t = await radioTiles(source, m.startSec).catch(() => null);
+      if (t) {
+        const whole = { x: t.left.x, y: t.left.y, w: t.right.x + t.right.w - t.left.x, h: t.left.h };
+        console.log(`[${job.recordingId}]   Radio show: the two tiles side by side`);
+        return { whole, left: null, right: null, stack: false, keepWhole: true, focus: null, focusShots: null } as unknown as Awaited<ReturnType<typeof frameGeometry>> & { keepWhole: boolean; focus: Box | null; focusShots: { from: number; to: number; focus: Box | null }[] | null };
+      }
+    }
     const g = await frameGeometry(source, m.startSec);
     return { whole: g.whole, left: null, right: null, stack: false, keepWhole: true, focus: null, focusShots: null } as unknown as Awaited<ReturnType<typeof frameGeometry>> & { keepWhole: boolean; focus: Box | null; focusShots: { from: number; to: number; focus: Box | null }[] | null };
   }
   // A MilitaryVoices Radio show, two people: one over the other, each in their own tile.
   if (layout === "radio") {
+    const t = await radioTiles(source, m.startSec).catch(() => null);
+    if (t) { console.log(`[${job.recordingId}]   Radio show: the two tiles stacked`); return { ...t, focus: null as Box | null, focusShots: null as { from: number; to: number; focus: Box | null }[] | null }; }
+  }
+  // Stacked chosen on a Radio recording that was never flagged: still the two tiles, not a split of the whole program page.
+  if (layout === "stacked" && (await isRadioPage(source, m.startSec))) {
     const t = await radioTiles(source, m.startSec).catch(() => null);
     if (t) { console.log(`[${job.recordingId}]   Radio show: the two tiles stacked`); return { ...t, focus: null as Box | null, focusShots: null as { from: number; to: number; focus: Box | null }[] | null }; }
   }
