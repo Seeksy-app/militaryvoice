@@ -1057,7 +1057,7 @@ Return JSON only: {"titles":["","",""],"description":""}`,
         audioUrl: it.url, mime: it.mime, sizeBytes: Math.min(2_000_000_000, it.length), durationSec: it.duration,
         episodeNumber: it.episode ?? (s.showType === "serial" ? null : eps0.filter((x) => x.episodeType === "full").length + 1), season: it.season,
         episodeType: it.episodeType, explicit: it.explicit, artworkUrl: it.image,
-        guid: it.guid, status: "draft", publishedAt: it.published || "", createdAt: now(), audioJob: "copy", bookends: "off",
+        guid: it.guid, status: "draft", publishedAt: it.published || "", createdAt: now(), audioJob: "copy", bookends: "off", spotsOff: true,
       }).returning();
       return res.status(201).json(e);
     }
@@ -1068,7 +1068,7 @@ Return JSON only: {"titles":["","",""],"description":""}`,
       showId: s.id, title: title || "New episode", description: String(b.description ?? "").slice(0, 20000),
       audioKey, mime, sizeBytes: num(b.sizeBytes) ?? 0, durationSec, recordingId,
       episodeNumber: num(b.episodeNumber) ?? (s.showType === "serial" ? null : eps.filter((x) => x.episodeType === "full").length + 1),
-      season: num(b.season), guid: crypto.randomUUID(), status: "draft", createdAt: now(),
+      season: num(b.season), guid: crypto.randomUUID(), status: "draft", createdAt: now(), spotsOff: true,
       audioJob: audioKey || !recordingId ? "" : "queued", audioJobAt: audioKey || !recordingId ? "" : now(),
     }).returning();
     res.status(201).json(e);

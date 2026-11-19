@@ -945,7 +945,6 @@ function EpisodePage({ ep, show, youtubeReady, onBack, onSaved, onAddSpot }: { e
       <button type="button" onClick={onBack} className="inline-flex items-center gap-1 text-sm font-semibold text-muted-foreground hover:text-foreground" data-testid="episode-back"><ChevronLeft className="h-4 w-4" /> All episodes</button>
       <div className="grid gap-5 lg:grid-cols-[1fr_20rem]">
         <div className="min-w-0 space-y-4">
-          <Input value={v.title} onChange={(e) => set("title", e.target.value)} className="h-auto border-0 bg-transparent px-0 text-2xl font-bold tracking-tight shadow-none focus-visible:ring-0 sm:text-3xl" placeholder="Episode title" data-testid="hosting-ep-title" />
           <div className="rounded-2xl border border-border bg-card p-4 shadow-sm" data-testid="episode-player">
             {hasAudio ? (
               <audio key={ep.id} controls preload="none" src={`/e/${ep.id}.mp3?preview=1`} className="w-full" data-testid="hosting-ep-player" />
@@ -963,6 +962,20 @@ function EpisodePage({ ep, show, youtubeReady, onBack, onSaved, onAddSpot }: { e
               <span><b className="tabular-nums">{compact(ep.downloads)}</b> <span className="text-muted-foreground">downloads</span></span>
               {ep.durationSec > 0 && <span><b className="tabular-nums">{hms(ep.durationSec)}</b> <span className="text-muted-foreground">long</span></span>}
               <span className="text-muted-foreground">{statusLine}</span>
+            </div>
+          </div>
+          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm" data-testid="episode-details">
+            <label className={label}>Title<Input value={v.title} onChange={(e) => set("title", e.target.value)} className="mt-1 h-11 text-base font-semibold" placeholder="Episode title" data-testid="hosting-ep-title" /></label>
+            <div className="mt-4 flex flex-wrap items-end gap-4">
+              <div><span className={label}>Picture</span><div className="mt-1"><EpisodeArt ep={ep} fallback={show.artworkUrl} onDone={onSaved} /></div></div>
+              <label className={label}>Episode<Input type="number" min={0} value={v.episodeNumber ?? ""} onChange={(e) => set("episodeNumber", e.target.value === "" ? null : Number(e.target.value))} className="mt-1 w-24" /></label>
+              <label className={label}>Season<Input type="number" min={0} value={v.season ?? ""} onChange={(e) => set("season", e.target.value === "" ? null : Number(e.target.value))} className="mt-1 w-24" /></label>
+              <label className={label}>Type
+                <select value={v.episodeType} onChange={(e) => set("episodeType", e.target.value)} className="mt-1 block h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground">
+                  <option value="full">Full episode</option><option value="trailer">Trailer</option><option value="bonus">Bonus</option>
+                </select>
+              </label>
+              <label className="flex items-center gap-2 pb-2 text-sm"><input type="checkbox" checked={v.explicit} onChange={(e) => set("explicit", e.target.checked)} /> Explicit</label>
             </div>
           </div>
           <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
@@ -995,19 +1008,6 @@ function EpisodePage({ ep, show, youtubeReady, onBack, onSaved, onAddSpot }: { e
                 {!(v.footerOff as boolean) && <p className="mt-2 whitespace-pre-line text-xs text-muted-foreground">{fillFooter(show.episodeFooter, { title: v.title, number: v.episodeNumber, season: v.season, guest: (v.guest as string) ?? "" })}</p>}
               </div>
             )}
-          </div>
-          <div className="rounded-2xl border border-border bg-card p-4 shadow-sm">
-            <div className="flex flex-wrap items-end gap-4">
-              <div><span className={label}>Picture</span><div className="mt-1"><EpisodeArt ep={ep} fallback={show.artworkUrl} onDone={onSaved} /></div></div>
-              <label className={label}>Episode<Input type="number" min={0} value={v.episodeNumber ?? ""} onChange={(e) => set("episodeNumber", e.target.value === "" ? null : Number(e.target.value))} className="mt-1 w-24" /></label>
-              <label className={label}>Season<Input type="number" min={0} value={v.season ?? ""} onChange={(e) => set("season", e.target.value === "" ? null : Number(e.target.value))} className="mt-1 w-24" /></label>
-              <label className={label}>Type
-                <select value={v.episodeType} onChange={(e) => set("episodeType", e.target.value)} className="mt-1 block h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground">
-                  <option value="full">Full episode</option><option value="trailer">Trailer</option><option value="bonus">Bonus</option>
-                </select>
-              </label>
-              <label className="flex items-center gap-2 pb-2 text-sm"><input type="checkbox" checked={v.explicit} onChange={(e) => set("explicit", e.target.checked)} /> Explicit</label>
-            </div>
           </div>
         </div>
         <aside className="space-y-4 lg:sticky lg:top-4 lg:self-start">
