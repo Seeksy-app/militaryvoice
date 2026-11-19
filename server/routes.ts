@@ -182,6 +182,7 @@ import { registerBioPage, registerBioAgent, claimLivingSqueeze, subscribersFor, 
 import { registerGuests, guestByToken, markGuestJoined, publicGuestsFor } from "./guests.js";
 import { registerGuestInvites, takeAnsweredInvite } from "./guestInvites.js";
 import { registerCaptures, onCaptureWebhook } from "./captures.js";
+import { registerStreamIn, onStreamInWebhook } from "./streamIn.js";
 import { registerMail } from "./mail.js";
 import { registerAutomations } from "./automations.js";
 import { registerTrash, toTrash } from "./trash.js";
@@ -6947,6 +6948,7 @@ export function registerRoutes(app: Express): void {
   registerGuests(app, requireAdmin);
   registerGuestInvites(app, requireHostSession);
   registerCaptures(app, requireAdmin, (req) => getAdminEmail(req) ?? "");
+  registerStreamIn(app);
   registerMail(app, requireAdmin);
   registerContactProfile(app, requireAdmin);
   registerTrash(app, requireHostSession);
@@ -9389,6 +9391,8 @@ export function registerRoutes(app: Express): void {
     // bug of ours would be worse than a missed row.
     // An outside show's stream starting or stopping: record it, or stop. Before the reply, so it runs to the end.
     await onCaptureWebhook(event as never).catch((err) => console.error("Capture webhook failed:", err));
+    // A podcaster's own stream key (StreamYard, OBS…): the same, into their Library.
+    await onStreamInWebhook(event as never).catch((err) => console.error("Stream-in webhook failed:", err));
     res.json({ ok: true });
 
     if (event.event !== "egress_ended" || !event.egressInfo) return;

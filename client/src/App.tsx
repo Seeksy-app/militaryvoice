@@ -20,6 +20,7 @@ import GuestInvite from "@/pages/GuestInvite";
 import Events from "@/pages/Events";
 import Admin from "@/pages/Admin";
 import MyStudio from "@/pages/MyStudio";
+import StreamIn from "@/pages/StreamIn";
 import HostDashboard from "@/pages/HostDashboard";
 import Landing from "@/pages/Landing";
 import Faq from "@/pages/Faq";
@@ -166,6 +167,7 @@ function AppRouter() {
       <Route path="/event/:slug/watch">{(params) => <Watch slug={params.slug} />}</Route>
       <Route path="/directory">{() => <Directory />}</Route>
       <Route path="/podcast/:slug">{(p) => <PodcastPage slug={p.slug} />}</Route>
+      <Route path="/stream-in">{() => <StreamIn />}</Route>
       <Route path="/room">{() => <MyStudio />}</Route>
       <Route path="/room/join/:token">{(p) => <MyStudio invite={p.token} />}</Route>
       <Route path="/my-studio">{() => <MyStudio />}</Route>

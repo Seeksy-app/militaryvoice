@@ -18,7 +18,7 @@ interface Payload {
   ingress: { id: number; url: string; streamKey: string; displayName: string } | null;
 }
 
-function CopyField({ label, value, secret = false }: { label: string; value: string; secret?: boolean }) {
+export function CopyField({ label, value, secret = false }: { label: string; value: string; secret?: boolean }) {
   const { toast } = useToast();
   const [shown, setShown] = useState(!secret);
 

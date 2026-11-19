@@ -721,6 +721,56 @@ export const captures = pgTable("captures", {
 });
 export type CaptureRow = typeof captures.$inferSelect;
 
+/**
+ * Stream in: a podcaster's own stream key (StreamYard, Restream, OBS, any
+ * "custom RTMP" destination). One key per podcaster, reused for every show;
+ * each time they go live it becomes a recording in their Library. The key is
+ * sealed at rest (secretBox); the ingress behind it is LiveKit's.
+ */
+export const streamKeys = pgTable(
+  "stream_keys",
+  {
+    id: serial("id").primaryKey(),
+    ownerEmail: text("owner_email").notNull().default(""),
+    room: text("room").notNull().default(""),
+    ingressId: text("ingress_id").notNull().default(""),
+    url: text("url").notNull().default(""),
+    /** Sealed with secretBox; open it with unseal(). */
+    streamKey: text("stream_key").notNull().default(""),
+    /** idle (waiting for a stream) · live · paused (monthly hours used) */
+    status: text("status").notNull().default("idle"),
+    pausedWhy: text("paused_why").notNull().default(""),
+    /** The recording in progress, if any. */
+    egressId: text("egress_id").notNull().default(""),
+    recordingId: integer("recording_id"),
+    liveSince: text("live_since").notNull().default(""),
+    /** Something went wrong on the last go-live, in words for the podcaster. */
+    problem: text("problem").notNull().default(""),
+    createdAt: text("created_at").notNull(),
+    rotatedAt: text("rotated_at").notNull().default(""),
+  },
+  (t) => ({ onePerPerson: uniqueIndex("stream_keys_owner_unique").on(t.ownerEmail) }),
+);
+export type StreamKeyRow = typeof streamKeys.$inferSelect;
+
+/** One go-live on a stream key: what the monthly hours are counted from. */
+export const streamSessions = pgTable(
+  "stream_sessions",
+  {
+    id: serial("id").primaryKey(),
+    keyId: integer("key_id").notNull(),
+    ownerEmail: text("owner_email").notNull().default(""),
+    recordingId: integer("recording_id"),
+    egressId: text("egress_id").notNull().default(""),
+    startedAt: text("started_at").notNull(),
+    /** Empty while it is still running. */
+    endedAt: text("ended_at").notNull().default(""),
+    seconds: integer("seconds").notNull().default(0),
+  },
+  (t) => ({ byOwner: index("stream_sessions_owner_idx").on(t.ownerEmail, t.startedAt) }),
+);
+export type StreamSessionRow = typeof streamSessions.$inferSelect;
+
 /** Listeners who signed up on a podcaster's SmartLink (Stay in touch): theirs, in their Contacts. */
 export const bioSubscribers = pgTable(
   "bio_subscribers",
