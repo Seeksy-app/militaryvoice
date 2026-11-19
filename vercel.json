@@ -145,6 +145,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/stream-in",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/health",
       "schedule": "*/5 * * * *"
     }

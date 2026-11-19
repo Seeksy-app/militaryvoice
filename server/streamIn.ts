@@ -1,12 +1,13 @@
-import type { Express, Response } from "express";
+import type { Express, RequestHandler, Response } from "express";
 import { and, desc, eq, gte } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { requireHostSession, getSessionEmail } from "./session.js";
-import { createRtmpIngress, deleteIngress, listIngressForRoom, isLiveKitConfigured, isRecordingConfigured, startRoomRecording, stopEgressById } from "./livekit.js";
+import { createRtmpIngress, deleteIngress, listIngressForRoom, isLiveKitConfigured, isRecordingConfigured, runningEgressIds, startRoomRecording, stopEgressById } from "./livekit.js";
+import { sendImportReadyEmail } from "./email.js";
 import { ensureRecordingsBucket } from "./recordingStorage.js";
 import { seal, unseal } from "./secretBox.js";
 import { slackNote } from "./slack.js";
-import { streamKeys, streamSessions, type StreamKeyRow } from "../shared/schema.js";
+import { recordings, streamKeys, streamSessions, type StreamKeyRow } from "../shared/schema.js";
 
 /**
  * Stream in. A podcaster who produces their show in StreamYard, Restream,
@@ -22,6 +23,10 @@ import { streamKeys, streamSessions, type StreamKeyRow } from "../shared/schema.
  */
 
 export const DEFAULT_CAP_HOURS = 10;
+/** An encoder that drops and comes back inside this stays one recording. */
+const GRACE_MS = 3 * 60_000;
+/** LiveKit ends a file at 3 hours; a new one starts at 2, and the old one stops a pass later. */
+const ROLL_MS = 2 * 3600_000;
 const now = () => new Date().toISOString();
 const noStore = (res: Response) => void res.set("Cache-Control", "no-store");
 
@@ -84,28 +89,28 @@ async function closeSession(c: StreamKeyRow): Promise<void> {
   }
 }
 
-async function startRecording(c: StreamKeyRow): Promise<StreamKeyRow> {
-  if (c.egressId) return c;
+async function startRecording(c: StreamKeyRow, continued?: string): Promise<StreamKeyRow> {
+  if (c.egressId && !continued) return c;
   await ensureRecordingsBucket();
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
   const filepath = `streams/${c.id}-${stamp}.mp4`;
   const when = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" }).format(new Date());
   const name = await showName(c.ownerEmail);
-  const title = `${name || "Live stream"} · ${when}`;
+  const title = continued ? `${continued.replace(/ \(continued\)$/, "")} (continued)` : `${name || "Live stream"} · ${when}`;
   const egressId = await startRoomRecording(c.room, filepath);
   // A Library recording like any other; the event and studio are only bookkeeping.
   const event = await storage.getFeaturedEvent();
   const studio = await storage.getOrCreateStudio(event.id);
   const rec = await storage.createRecording({ eventId: event.id, studioId: studio.id, signupId: null, email: c.ownerEmail, title, egressId, filepath });
   await db.insert(streamSessions).values({ keyId: c.id, ownerEmail: c.ownerEmail, recordingId: rec.id, egressId, startedAt: now() });
-  const [out] = await db.update(streamKeys).set({ egressId, recordingId: rec.id, status: "live", liveSince: now(), problem: "" }).where(eq(streamKeys.id, c.id)).returning();
+  const [out] = await db.update(streamKeys).set({ egressId, recordingId: rec.id, status: "live", liveSince: continued ? c.liveSince : now(), lostAt: "", problem: "" }).where(eq(streamKeys.id, c.id)).returning();
   return out;
 }
 
 async function stopRecording(c: StreamKeyRow): Promise<StreamKeyRow> {
   if (c.egressId) await stopEgressById(c.egressId).catch(() => {});
   await closeSession(c);
-  const [out] = await db.update(streamKeys).set({ egressId: "", liveSince: "", status: c.status === "paused" ? "paused" : "idle" }).where(eq(streamKeys.id, c.id)).returning();
+  const [out] = await db.update(streamKeys).set({ egressId: "", liveSince: "", lostAt: "", status: c.status === "paused" ? "paused" : "idle" }).where(eq(streamKeys.id, c.id)).returning();
   return out;
 }
 
@@ -117,10 +122,15 @@ export async function onStreamInWebhook(event: { event?: string; ingressInfo?: {
   const [c] = await db.select().from(streamKeys).where(eq(streamKeys.room, room)).limit(1);
   if (!c) return;
   if (event.event === "ingress_ended") {
-    await stopRecording(c);
+    // Not stopped yet: a dropped connection that comes straight back stays one recording. The minute cron stops it after the grace period.
+    if (c.egressId && !c.lostAt) await db.update(streamKeys).set({ lostAt: now() }).where(eq(streamKeys.id, c.id));
     return;
   }
-  if (c.egressId) return; // a reconnect on a recording that is already running
+  if (c.egressId) {
+    // A reconnect on a recording that is already running.
+    if (c.lostAt) await db.update(streamKeys).set({ lostAt: "" }).where(eq(streamKeys.id, c.id));
+    return;
+  }
   const cap = await capSeconds(c.ownerEmail);
   if ((await usedSeconds(c.ownerEmail)) >= cap) {
     // Out of hours: end the stream itself, or LiveKit keeps transcoding it at our cost.
@@ -176,7 +186,102 @@ async function view(c: StreamKeyRow | undefined) {
   };
 }
 
+/**
+ * The minute pass. Stops a recording whose stream has been gone past the
+ * grace period or whose hours ran out, starts a fresh file before LiveKit's
+ * 3-hour cap, tidies a recorder that died, and tells each podcaster (once)
+ * that a finished stream is in their Library.
+ */
+export async function runStreamInPass(): Promise<{ stopped: number; rolled: number; mailed: number }> {
+  await schemaIsReady();
+  const out = { stopped: 0, rolled: 0, mailed: 0 };
+  let running: Set<string>;
+  try {
+    running = await runningEgressIds();
+  } catch {
+    return out; // LiveKit unreachable is not evidence that anything stopped
+  }
+  for (const c of await db.select().from(streamKeys)) {
+    const retiring = await storage.getSetting(`streamin:retire:${c.id}`);
+    if (retiring && retiring !== c.egressId) {
+      await stopEgressById(retiring).catch(() => {});
+      await storage.setSetting(`streamin:retire:${c.id}`, "");
+    }
+    if (!c.egressId) continue;
+    if (!running.has(c.egressId)) {
+      // The recorder is gone (a failure, or a hand stop): close the books; the reconcile pass settles the file.
+      await closeSession(c);
+      await db.update(streamKeys).set({ egressId: "", liveSince: "", lostAt: "", status: c.status === "paused" ? "paused" : "idle" }).where(eq(streamKeys.id, c.id));
+      out.stopped++;
+      continue;
+    }
+    if (c.lostAt && Date.now() - Date.parse(c.lostAt) >= GRACE_MS) {
+      await stopRecording(c);
+      out.stopped++;
+      continue;
+    }
+    const cap = await capSeconds(c.ownerEmail);
+    if ((await usedSeconds(c.ownerEmail)) >= cap) {
+      await stopRecording(c);
+      if (c.ingressId) await deleteIngress(c.ingressId).catch(() => {});
+      await db.update(streamKeys).set({ status: "paused", ingressId: "", pausedWhy: `You've used this month's ${Math.round(cap / 3600)} streaming hours, so your stream was stopped. They come back on the 1st.` }).where(eq(streamKeys.id, c.id));
+      out.stopped++;
+      continue;
+    }
+    const [open] = await db.select().from(streamSessions).where(and(eq(streamSessions.keyId, c.id), eq(streamSessions.endedAt, ""))).orderBy(desc(streamSessions.id)).limit(1);
+    if (open && !retiring && !c.lostAt && Date.now() - Date.parse(open.startedAt) >= ROLL_MS) {
+      try {
+        const [prev] = c.recordingId ? await db.select().from(recordings).where(eq(recordings.id, c.recordingId)).limit(1) : [];
+        await closeSession(c); // the old file runs on a few minutes, overlapping; those minutes are not counted twice
+        await startRecording({ ...c, egressId: "" }, prev?.title || "Live stream");
+        await storage.setSetting(`streamin:retire:${c.id}`, c.egressId);
+        out.rolled++;
+      } catch (err) {
+        console.error("Stream-in roll failed:", (err as Error).message);
+      }
+    }
+  }
+
+  // Finished streams: tell the podcaster once that they're in the Library.
+  const since = new Date(Date.now() - 3 * 24 * 3600_000).toISOString();
+  for (const s of await db.select().from(streamSessions).where(gte(streamSessions.startedAt, since))) {
+    if (!s.recordingId || (s.endedAt === "" && running.has(s.egressId))) continue;
+    if (await storage.getSetting(`streamin:mailed:${s.recordingId}`)) continue;
+    const [rec] = await db.select().from(recordings).where(eq(recordings.id, s.recordingId)).limit(1);
+    if (!rec || rec.status === "Recording") continue;
+    await storage.setSetting(`streamin:mailed:${s.recordingId}`, now());
+    if (rec.status === "Ready") {
+      // A test of a few seconds isn't worth an email; it is in the Library all the same.
+      if (rec.durationSec >= 60) {
+        await sendImportReadyEmail({ to: rec.email, recordingId: rec.id, title: rec.title, startedAt: rec.startedAt, durationSec: rec.durationSec, provider: "stream" }).then(() => { out.mailed++; }).catch((err) => console.error("Stream-in email failed:", (err as Error).message));
+      }
+    } else {
+      void slackNote(`Stream in: a recording didn't save (${rec.error || "no reason given"}). Podcaster's stream, recording ${rec.id}.`).catch(() => {});
+    }
+  }
+  return out;
+}
+
 export function registerStreamIn(app: Express): void {
+  const cron: RequestHandler = async (req, res) => {
+    if (process.env.CRON_SECRET && (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "") !== process.env.CRON_SECRET) {
+      res.status(401).json({ message: "Not authorised." });
+      return;
+    }
+    if (!isLiveKitConfigured()) {
+      res.json({ skipped: "no media layer" });
+      return;
+    }
+    try {
+      res.json(await runStreamInPass());
+    } catch (err) {
+      console.error("Stream-in pass failed:", (err as Error).message);
+      res.status(500).json({ message: "Stream-in pass failed." });
+    }
+  };
+  app.get("/api/cron/stream-in", cron);
+  app.post("/api/cron/stream-in", cron);
+
   const ready = (res: Response) => {
     if (!isLiveKitConfigured() || !isRecordingConfigured()) {
       res.status(503).json({ message: "Live streaming in isn't switched on yet." });

@@ -744,6 +744,8 @@ export const streamKeys = pgTable(
     egressId: text("egress_id").notNull().default(""),
     recordingId: integer("recording_id"),
     liveSince: text("live_since").notNull().default(""),
+    /** When the encoder dropped, while a recording is still open: a reconnect inside the grace period keeps one recording. */
+    lostAt: text("lost_at").notNull().default(""),
     /** Something went wrong on the last go-live, in words for the podcaster. */
     problem: text("problem").notNull().default(""),
     createdAt: text("created_at").notNull(),
