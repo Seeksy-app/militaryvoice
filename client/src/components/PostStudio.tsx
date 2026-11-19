@@ -1069,8 +1069,10 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
       onAdd={(m) => { setMusic((ms) => [...ms, m]); setSel(null); setMusicDlg(false); toast({ title: "Music added", description: `${m.name}, ${hms(m.from)}–${hms(m.to)}. It's mixed in when you save to your Library.` }); }}
     />
   );
+  // Pinned to the bottom of the window while the timeline above it is taller than the screen, so
+  // Save to Library / Music are always in reach (at 1180×800 they sat on the fold, under the help button).
   const footer = (
-    <div className="mt-3 flex flex-wrap items-end gap-3 border-t border-border pt-3" data-testid="edit-footer">
+    <div className={`mt-3 flex flex-wrap items-end gap-3 border-t border-border pt-3 ${tab === "edit" ? "sticky bottom-0 z-10 -mx-3 -mb-3 rounded-b-2xl bg-card px-3 pb-3 shadow-[0_-8px_10px_-8px_rgba(0,0,0,0.12)]" : ""}`} data-testid="edit-footer">
       {tab === "edit" && (
         <div className="min-w-0 flex-1" data-testid="edit-log">
           <p className="flex flex-wrap items-baseline gap-x-2 text-xs font-semibold text-muted-foreground">
@@ -1092,7 +1094,7 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
           {shortKeep && <p className="mt-1 text-xs font-semibold text-amber-700 dark:text-amber-400">That takes out most of the episode.</p>}
         </div>
       )}
-      <div className="ml-auto flex items-center gap-2">
+      <div className="ml-auto flex items-center gap-2 lg:mr-12">
         {tab === "edit" && tip("Keeps your edits so you can come back and carry on. Nothing is made yet.", (
           <Button type="button" variant="outline" onClick={() => void saveAndClose()} className="h-10 rounded-lg" data-testid="edit-save-close">Save & close</Button>
         ))}
@@ -1112,7 +1114,7 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
   // The toolbar only says where the work is: marking, naming and making all happen on the timeline, in order.
   const clipTools = (
     <>
-      <span className="min-w-0 truncate text-sm text-muted-foreground">Mark the moment on the timeline below.</span>
+      {mark.in === null && <span className="min-w-0 truncate text-sm text-muted-foreground">Mark the moment on the timeline below.</span>}
       {mark.in !== null && <button type="button" onClick={reset} className="ml-auto text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground" data-testid="mark-reset">Start over</button>}
     </>
   );
