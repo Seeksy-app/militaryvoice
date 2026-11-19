@@ -118,7 +118,17 @@ async function startClaimed(c: StreamKeyRow, continued?: string): Promise<Stream
   const studio = await storage.getOrCreateStudio(event.id);
   const rec = await storage.createRecording({ eventId: event.id, studioId: studio.id, signupId: null, email: c.ownerEmail, title, egressId, filepath });
   await db.insert(streamSessions).values({ keyId: c.id, ownerEmail: c.ownerEmail, recordingId: rec.id, egressId, startedAt: now() });
-  const [out] = await db.update(streamKeys).set({ egressId, recordingId: rec.id, status: "live", liveSince: continued ? c.liveSince : now(), lostAt: "", problem: "" }).where(eq(streamKeys.id, c.id)).returning();
+  // A fresh start only lands if the claim is still ours: a stop or a new key in the meantime released it, and then this recording must not run on.
+  const [out] = await db
+    .update(streamKeys)
+    .set({ egressId, recordingId: rec.id, status: "live", liveSince: continued ? c.liveSince : now(), lostAt: "", problem: "" })
+    .where(continued ? eq(streamKeys.id, c.id) : and(eq(streamKeys.id, c.id), eq(streamKeys.egressId, "pending")))
+    .returning();
+  if (!out) {
+    await stopEgressById(egressId).catch(() => {});
+    await db.update(streamSessions).set({ endedAt: now(), seconds: 0 }).where(eq(streamSessions.egressId, egressId));
+    return c;
+  }
   return out;
 }
 
