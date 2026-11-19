@@ -25,6 +25,7 @@ import { Slider } from "@/components/ui/slider";
 import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2, Clapperboard, Plus, ArrowLeftToLine, ArrowRightToLine, MoreHorizontal, Blend, Brackets, Library, ArrowLeft, CalendarClock } from "lucide-react";
 import { IconTile } from "@/components/ui/icon-tile";
 import { LayoutPicker, parseLayoutSuggestion } from "@/components/LayoutPicker";
+import { useClipLayoutDefault } from "@/lib/clipLayoutDefault";
 
 // Postify: one recording going from "the segment ended" to clips ready
 // to post, as the clipper actually does it. Every step and number here is what
@@ -2058,17 +2059,15 @@ export function PostStudio() {
   const [opts, setOpts] = useState<ClipOptions>(() => {
     let saved: ClipOptions = { ...DEFAULT_CLIP_OPTIONS };
     try { saved = parseClipOptions(localStorage.getItem("mv_clip_options") ?? ""); } catch { /* private mode */ }
-    return { ...saved, formats: [] };
+    // The layout is not carried over from the last episode: it comes from the recording, the account default or the detector.
+    return { ...saved, formats: [], layout: undefined };
   });
   useEffect(() => { try { localStorage.setItem("mv_clip_options", JSON.stringify(opts)); } catch { /* private mode */ } }, [opts]);
-  // The layout belongs to the recording, not the browser: a Radio show (two people, one over the
-  // other) is set on the recording itself, so Make clips opens with that lit instead of "automatic".
-  // A layout the person picked for an earlier episode carries over, except "radio", which only
-  // the recording that has it should show.
+  // A layout the recording carries (a Radio show's stack) is what Make clips opens on.
   useEffect(() => {
     if (!rec) return;
     const own = parseClipOptions(rec.clipOptions).layout;
-    setOpts((o) => (own ? (o.layout === own ? o : { ...o, layout: own }) : o.layout === "radio" ? { ...o, layout: undefined } : o));
+    if (own) setOpts((o) => (o.layout === own ? o : { ...o, layout: own }));
   }, [rec?.id, rec?.clipOptions]);
   const start = useMutation({
     mutationFn: async (id: number) => (await apiRequest("POST", `/api/host/recordings/${id}/clip`, { options: { ...opts, formats: ["vertical", "square", "wide"] } })).json(),
@@ -2089,15 +2088,17 @@ export function PostStudio() {
   const [showOptions, setShowOptions] = useState(false);
   // The detector's look at this recording (a JSON string on the row, "" until it has looked).
   const layoutHint = useMemo(() => parseLayoutSuggestion((rec as { layoutSuggestion?: string } | undefined)?.layoutSuggestion), [rec]);
-  // The detector's favourite is lit to start with (visible, and one tap changes it), once per recording,
-  // and only when nothing else has been chosen.
-  const preselected = useRef<number | null>(null);
+  // What Make clips starts on when the recording has no layout of its own and nothing has been picked
+  // on screen: the account default (Podcast > Settings), else the detector's favourite, else automatic.
+  // It is lit and visible, and a tap on the screen always wins.
+  const layoutDefault = useClipLayoutDefault();
+  const layoutTouched = useRef<number | null>(null);
   useEffect(() => {
-    if (!rec || !layoutHint || preselected.current === rec.id) return;
-    preselected.current = rec.id;
-    if (rec.clipStatus !== "none" || parseClipOptions(rec.clipOptions).layout) return;
-    setOpts((o) => (o.layout && o.layout !== "auto" ? o : { ...o, layout: layoutHint.suggested }));
-  }, [rec?.id, rec?.clipStatus, rec?.clipOptions, layoutHint]);
+    if (!rec || rec.clipStatus !== "none" || parseClipOptions(rec.clipOptions).layout) return;
+    if (layoutTouched.current === rec.id || layoutDefault.loading) return;
+    const target = layoutDefault.value || layoutHint?.suggested || undefined;
+    setOpts((o) => (o.layout === target ? o : { ...o, layout: target }));
+  }, [rec?.id, rec?.clipStatus, rec?.clipOptions, layoutHint, layoutDefault.value, layoutDefault.loading]);
   const [musicOpen, setMusicOpen] = useState(false);
   const musicList = useQuery<{ key: string; name: string }[]>({ queryKey: ["/api/music"], queryFn: async () => (await apiRequest("GET", "/api/music")).json(), staleTime: 300_000 });
 
@@ -2515,7 +2516,7 @@ export function PostStudio() {
         <div className="flex min-w-0 flex-col gap-3">
           {/* How two people are framed: always on offer before the run; the detector only lights and marks the one it likes. */}
           {rec.clipStatus === "none" && !intro && (
-            <LayoutPicker value={opts.layout} own={parseClipOptions(rec.clipOptions).layout} suggestion={layoutHint} onChange={(l) => setOpts((o) => ({ ...o, layout: l }))} />
+            <LayoutPicker value={opts.layout} own={parseClipOptions(rec.clipOptions).layout} suggestion={layoutHint} onChange={(l) => { layoutTouched.current = rec.id; setOpts((o) => ({ ...o, layout: l })); }} />
           )}
           {viewerEl}
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-6" data-testid="post-stats">

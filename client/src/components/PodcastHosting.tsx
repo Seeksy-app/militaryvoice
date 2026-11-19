@@ -12,6 +12,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { useClipLayoutDefault, type DefaultLayout } from "@/lib/clipLayoutDefault";
 import { durationOf, uploadToStorage } from "@/lib/upload";
 import { GuestFinder, ShowFinder } from "@/components/DiscoverPodcasts";
 import type { HostedEpisodeRow, HostedShowRow, HostedSpotRow, RecordingRow } from "@shared/schema";
@@ -1130,6 +1131,7 @@ function DefaultsPanel({ h, onSaved }: { h: Hosted; onSaved: () => void }) {
     try { await apiRequest("PATCH", `/api/host/hosting/shows/${show.id}`, { autoPublish: on }); onSaved(); toast({ title: on ? "Auto-post is on" : "Auto-post is off", description: on ? "When post-production is done, an episode goes out by itself." : "You press Publish on each episode." }); }
     catch (e) { toast({ title: "Couldn't change that", description: (e as Error).message, variant: "destructive" }); } finally { setBusy(false); }
   };
+  const layoutDefault = useClipLayoutDefault();
   return (
     <div className="space-y-4" data-testid="hosting-defaults">
       <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
@@ -1144,6 +1146,17 @@ function DefaultsPanel({ h, onSaved }: { h: Hosted; onSaved: () => void }) {
             <span className="mt-1.5 block text-xs font-semibold text-[#8a5a00] dark:text-[#F0A71F]">We recommend publishing by hand for a while, so you see each one before it goes out.</span>
           </span>
         </label>
+        {/* Shows with two people on screen: the layout Make clips starts on. Hidden until the server answers. */}
+        {layoutDefault.value !== null && (
+          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-border p-3" role="group" aria-label="My shows are" data-testid="hosting-layout-default">
+            <span className="text-sm font-semibold">My shows are</span>
+            <div className="flex flex-wrap items-center gap-1 rounded-full bg-muted/60 p-1 text-xs font-semibold">
+              {([["", "Automatic"], ["stacked", "Stacked"], ["side", "Side by side"], ["single", "Follow the speaker"]] as [DefaultLayout, string][]).map(([v, label]) => (
+                <button key={v || "auto"} type="button" onClick={() => layoutDefault.save.mutate(v, { onSuccess: () => toast({ title: "Saved", description: "Make clips starts on this for every show." }), onError: () => toast({ title: "Couldn't save that", variant: "destructive" }) })} aria-pressed={layoutDefault.value === v} className={`rounded-full px-3 py-1 ${layoutDefault.value === v ? "bg-[#F0A71F] text-[#1a1200]" : "text-muted-foreground hover:text-foreground"}`} data-testid={`hosting-layout-${v || "auto"}`}>{label}</button>
+              ))}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
