@@ -7049,6 +7049,8 @@ export function registerRoutes(app: Express): void {
             show: edit.editSubtitle,
             host: "",
             transcript: [],
+            // The recording's own choices (the Radio stack, single, ...): without them an edit remade the clip as a plain crop.
+            options: parseClipOptions(rec.clipOptions),
             clipEdit: {
               clipId: edit.id, title: edit.editTitle, subtitle: edit.editSubtitle, startSec: edit.startSec, endSec: edit.endSec,
               // Remake only the shapes this clip has.

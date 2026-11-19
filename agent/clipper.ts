@@ -138,7 +138,7 @@ interface Job {
   /** Clips to make from this episode (Pro: 6). Absent = CLIP_COUNT. */
   clipCount?: number;
   /** What the podcaster picked: which shapes, and the caption style. Absent = all three, animated. */
-  options?: { formats: Shape[]; captions: "animated" | "classic"; more?: { count: number; avoid: [number, number][] } };
+  options?: { formats: Shape[]; captions: "animated" | "classic"; layout?: "stacked" | "single" | "radio"; more?: { count: number; avoid: [number, number][] } };
   /** Picked up again after a stop: the moments that run chose, and the clips already made ("start-end"). */
   resume?: { moments: Moment[]; done: string[] };
   /** A track to play under the clips (a signed link to the MP3). */
