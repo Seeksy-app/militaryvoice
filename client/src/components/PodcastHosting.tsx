@@ -17,7 +17,7 @@ import { durationOf, uploadToStorage } from "@/lib/upload";
 import { GuestFinder, ShowFinder } from "@/components/DiscoverPodcasts";
 import type { HostedEpisodeRow, HostedShowRow, HostedSpotRow, RecordingRow } from "@shared/schema";
 import { fillFooter, FOOTER_TOKENS } from "@shared/footer";
-import { AlertCircle, BarChart3, Check, ChevronLeft, Copy, ExternalLink, Film, ImagePlus, Loader2, Mic2, Pencil, Plus, Podcast, Radio, Send, Sparkles, Trash2, Upload } from "lucide-react";
+import { AlertCircle, BarChart3, Cable, Check, ChevronLeft, Copy, ExternalLink, Film, ImagePlus, Loader2, Mic2, Pencil, Plus, Podcast, Radio, Send, Sparkles, Trash2, Upload } from "lucide-react";
 import { IconTile } from "@/components/ui/icon-tile";
 
 /**
@@ -268,7 +268,13 @@ export function PodcastHosting() {
                 <h2 className="flex items-center gap-2 text-sm font-semibold"><Mic2 className="h-4 w-4 text-[#053877] dark:text-[#8fb5e8]" /> Episodes</h2>
                 <p className="text-xs text-muted-foreground">{compact(h.stats.last30)} downloads in the last 30 days · {compact(h.stats.total)} in all</p>
               </div>
-              <Button onClick={() => setAdding(true)} className="h-9 gap-1.5 rounded-lg bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-new-episode"><Plus className="h-4 w-4" /> New episode</Button>
+              <div className="flex flex-wrap items-center gap-2">
+                {/* Recording somewhere else: their own stream key, and each live show lands in the Library (/stream-in). */}
+                <Button asChild variant="outline" className="h-9 gap-1.5 rounded-lg" data-testid="hosting-stream-in">
+                  <a href="/stream-in"><Cable className="h-4 w-4" /> Stream in from StreamYard, Restream or OBS</a>
+                </Button>
+                <Button onClick={() => setAdding(true)} className="h-9 gap-1.5 rounded-lg bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-new-episode"><Plus className="h-4 w-4" /> New episode</Button>
+              </div>
             </div>
             {h.episodes.length ? (
               <ul className="divide-y divide-border">
