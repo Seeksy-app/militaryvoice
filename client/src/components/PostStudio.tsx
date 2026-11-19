@@ -24,6 +24,7 @@ import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/s
 import { Slider } from "@/components/ui/slider";
 import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2, Clapperboard, Plus, ArrowLeftToLine, ArrowRightToLine, MoreHorizontal, Blend, Brackets, Library, ArrowLeft, CalendarClock } from "lucide-react";
 import { IconTile } from "@/components/ui/icon-tile";
+import { LayoutNudge, parseLayoutSuggestion, type LayoutChoice } from "@/components/LayoutNudge";
 
 // Postify: one recording going from "the segment ended" to clips ready
 // to post, as the clipper actually does it. Every step and number here is what
@@ -2086,6 +2087,8 @@ export function PostStudio() {
   const cost = episodeCredits(opts, clipsN);
   const affordable = (r: Rec) => Boolean(beta?.unlimited || r.postifyBeta || freeLeft || (beta?.tokens ?? 0) >= cost || plan);
   const [showOptions, setShowOptions] = useState(false);
+  // The detector's look at this recording (a JSON string on the row, "" until it has looked).
+  const layoutHint = useMemo(() => parseLayoutSuggestion((rec as { layoutSuggestion?: string } | undefined)?.layoutSuggestion), [rec]);
   const [musicOpen, setMusicOpen] = useState(false);
   const musicList = useQuery<{ key: string; name: string }[]>({ queryKey: ["/api/music"], queryFn: async () => (await apiRequest("GET", "/api/music")).json(), staleTime: 300_000 });
 
@@ -2509,6 +2512,10 @@ export function PostStudio() {
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,18rem)]">
         {/* The numbers sit under the player, in the space there; the side is just the pipeline. */}
         <div className="flex min-w-0 flex-col gap-3">
+          {/* Before the run, if the recording looks like two people: offer each way to frame them. Radio keeps its own layout. */}
+          {rec.clipStatus === "none" && !parseClipOptions(rec.clipOptions).layout && !intro && layoutHint && (
+            <LayoutNudge key={rec.id} recId={rec.id} suggestion={layoutHint} onPick={(l: LayoutChoice) => setOpts((o) => ({ ...o, layout: l as ClipOptions["layout"] }))} onClear={() => setOpts((o) => ({ ...o, layout: undefined }))} />
+          )}
           {viewerEl}
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-6" data-testid="post-stats">
             {stats.map((st) => (
