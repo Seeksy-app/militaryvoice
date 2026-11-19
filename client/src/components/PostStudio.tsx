@@ -2060,6 +2060,15 @@ export function PostStudio() {
     return { ...saved, formats: [] };
   });
   useEffect(() => { try { localStorage.setItem("mv_clip_options", JSON.stringify(opts)); } catch { /* private mode */ } }, [opts]);
+  // The layout belongs to the recording, not the browser: a Radio show (two people, one over the
+  // other) is set on the recording itself, so Make clips opens with that lit instead of "automatic".
+  // A layout the person picked for an earlier episode carries over, except "radio", which only
+  // the recording that has it should show.
+  useEffect(() => {
+    if (!rec) return;
+    const own = parseClipOptions(rec.clipOptions).layout;
+    setOpts((o) => (own ? (o.layout === own ? o : { ...o, layout: own }) : o.layout === "radio" ? { ...o, layout: undefined } : o));
+  }, [rec?.id, rec?.clipOptions]);
   const start = useMutation({
     mutationFn: async (id: number) => (await apiRequest("POST", `/api/host/recordings/${id}/clip`, { options: { ...opts, formats: ["vertical", "square", "wide"] } })).json(),
     onSuccess: () => {
@@ -2311,7 +2320,8 @@ export function PostStudio() {
             ) : (
               // Not started: one button. Every clip comes in all three shapes; captions are under Options.
               <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-white">
-                <IconTile icon={Wand2} />
+                {/* Options open: the picture goes, so the three layout choices sit inside the card, not on its edge. */}
+                {!showOptions && <IconTile icon={Wand2} />}
                 <p className="text-xl font-bold sm:text-2xl">Ready for Pōstify</p>
                 <p className="max-w-md text-sm text-white/70">{clipsN} clips in vertical, square and wide, with {opts.captions === "classic" ? "Classic" : "animated"} captions, and a clean episode. You can add music at the end.</p>
                 {!affordable(rec) ? (
@@ -2343,7 +2353,7 @@ export function PostStudio() {
                 )}
                 {showOptions && (
                   <div className="flex flex-wrap items-center gap-1 rounded-full bg-white/10 p-1 text-xs font-semibold" role="group" aria-label="Two people on screen" data-testid="post-layout">
-                    {([["auto", "Layout: automatic"], ["stacked", "Two people: one over the other"], ["single", "Follow the speaker"]] as const).map(([v, label]) => {
+                    {([["auto", "Automatic"], ["stacked", "Two people stacked"], ["single", "Follow the speaker"]] as const).map(([v, label]) => {
                       const cur = opts.layout === "radio" ? "stacked" : opts.layout ?? "auto";
                       return <button key={v} type="button" onClick={() => setOpts({ ...opts, layout: v === "stacked" && opts.layout === "radio" ? "radio" : v })} aria-pressed={cur === v} className={`rounded-full px-3 py-1 ${cur === v ? "bg-[#F0A71F] text-[#1a1200]" : "text-white/75 hover:text-white"}`} data-testid={`post-layout-${v}`}>{label}</button>;
                     })}

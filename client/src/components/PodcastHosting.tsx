@@ -1135,6 +1135,7 @@ function DefaultsPanel({ h, onSaved }: { h: Hosted; onSaved: () => void }) {
       <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
         <h2 className="text-sm font-semibold">How episodes go out</h2>
         <p className="mt-0.5 text-sm text-muted-foreground">An episode goes from <b className="text-foreground">In post-production</b> to <b className="text-foreground">Final draft</b> to <b className="text-foreground">Live</b>. Publishing puts it in your feed, so Apple, Spotify and every directory pick it up, and on YouTube if it has video.</p>
+        <p className="mt-2 text-sm text-muted-foreground" data-testid="hosting-bookends-note">Your intro and outro are added in post-production.</p>
         <label className="mt-4 flex items-start gap-3 rounded-xl border border-border p-4" data-testid="hosting-autopublish">
           <input type="checkbox" className="mt-1 h-4 w-4" checked={!!show.autoPublish} disabled={busy} onChange={(e) => void flip(e.target.checked)} />
           <span className="min-w-0 text-sm">
