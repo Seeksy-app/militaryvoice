@@ -28,6 +28,19 @@ export function boothGuestKey(signupId: number): string {
 }
 const keyOk = (signupId: number, g: unknown) => typeof g === "string" && g.length === 22 && crypto.timingSafeEqual(Buffer.from(g), Buffer.from(boothGuestKey(signupId)));
 
+
+/** A clip the host is showing on air from the booth: the file (in our storage), how long it runs, and when it started. */
+type ClipState = { key: string; durationSec: number; startedAt: string };
+async function clipFor(signupId: number): Promise<{ url: string; startedAtMs: number; durationSec: number } | null> {
+  let c: ClipState | null = null;
+  try { c = JSON.parse((await storage.getSetting(`dx:clip:${signupId}`)) ?? "") as ClipState; } catch { c = null; }
+  if (!c?.key) return null;
+  const startedAtMs = Date.parse(c.startedAt);
+  if (!(Date.now() < startedAtMs + (c.durationSec + 5) * 1000)) return null;
+  const url = await signedRecordingUrl(c.key, 6 * 3600).catch(() => "");
+  return url ? { url, startedAtMs, durationSec: c.durationSec } : null;
+}
+
 const ms = (iso: string) => Date.parse(iso);
 /** A booking's block, and when they're live inside it (the station's intro and outro either side). */
 export function bookingTimes(ev: EventRow, s: Pick<SignupRow, "slotIndex" | "slotSpan">) {
@@ -134,7 +147,7 @@ export function registerBooth(app: Express): void {
         const endedMs = endedRaw ? Date.parse(endedRaw) : NaN;
         const early = Number.isFinite(endedMs) && endedMs >= t.onAirStart && endedMs < t.onAirEnd;
         if (early) { t.onAirEnd = endedMs; t.end = Math.min(t.end, endedMs + 45_000); }
-        return { id: s.id, endedEarly: early, show: s.podcastName, host: s.hostName, photo: s.photoUrl, about: s.notes ?? "", mediaUrl, introUrl: voice.map[String(s.id)]?.introKey ? await signedRecordingUrl(voice.map[String(s.id)].introKey!, 6 * 3600).catch(() => "") : "", outroUrl: voice.map[String(s.id)]?.outroKey ? await signedRecordingUrl(voice.map[String(s.id)].outroKey!, 6 * 3600).catch(() => "") : "", startAtUtc: new Date(t.start).toISOString(), endAtUtc: new Date(t.end).toISOString(), onAirAtUtc: new Date(t.onAirStart).toISOString(), offAirAtUtc: new Date(t.onAirEnd).toISOString() };
+        return { id: s.id, clip: await clipFor(s.id), endedEarly: early, show: s.podcastName, host: s.hostName, photo: s.photoUrl, about: s.notes ?? "", mediaUrl, introUrl: voice.map[String(s.id)]?.introKey ? await signedRecordingUrl(voice.map[String(s.id)].introKey!, 6 * 3600).catch(() => "") : "", outroUrl: voice.map[String(s.id)]?.outroKey ? await signedRecordingUrl(voice.map[String(s.id)].outroKey!, 6 * 3600).catch(() => "") : "", startAtUtc: new Date(t.start).toISOString(), endAtUtc: new Date(t.end).toISOString(), onAirAtUtc: new Date(t.onAirStart).toISOString(), offAirAtUtc: new Date(t.onAirEnd).toISOString() };
       })),
     });
   });
@@ -395,6 +408,7 @@ export function registerBooth(app: Express): void {
     const origin = `${req.protocol}://${req.get("host")}`;
     res.json({
       signupId: b.s.id,
+      clip: await clipFor(b.s.id).then((c) => (c ? { on: true, durationSec: c.durationSec, startedAtMs: c.startedAtMs } : null)),
       role,
       show: b.s.podcastName,
       host: b.s.hostName,
@@ -430,6 +444,35 @@ export function registerBooth(app: Express): void {
     if (now < t.onAirStart || now >= t.onAirEnd) return res.status(409).json({ message: "You can end your show while you're on air." });
     await storage.setSetting(`dx:ended:${b.s.id}`, new Date(now).toISOString());
     res.json({ ok: true, endedAtUtc: new Date(now).toISOString() });
+  });
+
+
+  /** The host shows a clip on air from the booth: the file is already uploaded (their own session did that); this starts it for the program page. */
+  app.post("/api/booth/:id/clip", async (req, res) => {
+    const b = await bookingFor(Number(req.params.id));
+    if (!b) return res.status(404).json({ message: "That booking isn't on MilitaryVoices Radio." });
+    const role = roleOf(req, b.s, req.body?.g);
+    if (role !== "host" && role !== "admin") return res.status(403).json({ message: "Only the host can show a clip." });
+    const t = bookingTimes(b.ev, b.s);
+    const now = Date.now();
+    if (now < t.onAirStart || now >= t.onAirEnd) return res.status(409).json({ message: "You can show a clip while you're on air." });
+    const key = String(req.body?.key ?? "");
+    const durationSec = Math.round(Number(req.body?.durationSec));
+    if (!/^show-assets\/[\w.-]+$/.test(key)) return res.status(400).json({ message: "That clip didn't upload. Try again." });
+    if (!(durationSec > 0 && durationSec <= 20 * 60)) return res.status(400).json({ message: "A clip can run up to 20 minutes." });
+    // Starts ten seconds from now, so the program page (which looks every ten seconds) catches it from its first frame.
+    const startedAtMs = now + 10_000;
+    await storage.setSetting(`dx:clip:${b.s.id}`, JSON.stringify({ key, durationSec, startedAt: new Date(startedAtMs).toISOString() } satisfies ClipState));
+    res.json({ ok: true, startedAtMs, durationSec });
+  });
+  /** Stop the clip: the booth is back on air. */
+  app.post("/api/booth/:id/clip/stop", async (req, res) => {
+    const b = await bookingFor(Number(req.params.id));
+    if (!b) return res.status(404).json({ message: "That booking isn't on MilitaryVoices Radio." });
+    const role = roleOf(req, b.s, req.body?.g);
+    if (role !== "host" && role !== "admin") return res.status(403).json({ message: "Only the host can stop a clip." });
+    await storage.setSetting(`dx:clip:${b.s.id}`, "");
+    res.json({ ok: true });
   });
 
   /** Into the day's room, carrying the booking's id. Open from an hour before until ten minutes after. */

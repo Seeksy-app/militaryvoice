@@ -14,7 +14,7 @@ import { StageGrid, useStageRoom, type StageTile } from "@/components/StageView"
 // once ready to be filmed. ?eventId=N without a token previews the cards;
 // add &at=<ISO time> to see any moment of the day.
 
-type Booking = { id: number; show: string; host: string; photo: string; about?: string; mediaUrl?: string; startAtUtc: string; endAtUtc: string; onAirAtUtc: string; offAirAtUtc: string };
+type Booking = { clip?: { url: string; startedAtMs: number; durationSec: number } | null; id: number; show: string; host: string; photo: string; about?: string; mediaUrl?: string; startAtUtc: string; endAtUtc: string; onAirAtUtc: string; offAirAtUtc: string };
 type Replay_ = { id: number; show: string; host: string; photo: string; mediaUrl: string; durationSec: number };
 type VoiceInfo = { welcomeUrl: string; welcomeSec: number; signoffUrl: string; signoffSec: number; bedUrl?: string };
 type Program = { eventId: number; day: string; startAtUtc: string; endAtUtc: string; fillerUrl: string; voice?: VoiceInfo; dayIndex?: number; replays?: Replay_[]; bookings: Booking[] };
@@ -80,6 +80,19 @@ function Replay({ id, src, show, host, photo, startedAt, now, muted, tag, duck, 
       {/* The Marathon's own picture has a red LIVE badge in this corner. An encore is not live: cover it and say so. */}
       <div className="pointer-events-none absolute left-[1%] top-[2%] flex h-[6.8%] w-[9.8%] items-center justify-center rounded-full bg-[#0b1d4a] font-black uppercase tracking-[0.16em] text-white ring-1 ring-white/30 [font-size:1.1cqw]" data-testid="encore-tag">Encore</div>
     </>
+  );
+}
+
+/** A clip the host is showing from their booth: full screen over the show, with its sound, joined from wherever it has got to. */
+function ClipOverlay({ clip, now, muted, host }: { clip: { url: string; startedAtMs: number; durationSec: number }; now: number; muted: boolean; host: string }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  const [ended, setEnded] = useState(false);
+  if (ended) return null;
+  return (
+    <div className="absolute inset-0 z-20 bg-black">
+      <video ref={ref} src={clip.url} autoPlay playsInline muted={muted} onLoadedMetadata={() => { const v = ref.current; if (v) { const at = Math.max(0, (now - clip.startedAtMs) / 1000); if (at > 1 && at < (v.duration || Infinity)) v.currentTime = at; } }} onEnded={() => setEnded(true)} className="h-full w-full object-contain" />
+      <span className="absolute left-4 top-4 rounded-full bg-black/60 px-3 py-1 text-xs font-bold uppercase tracking-wider text-white">A clip from {host}</span>
+    </div>
   );
 }
 
@@ -231,6 +244,7 @@ export default function Program() {
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-[#000741] [container-type:size]">
       {phase === "live" && !current!.mediaUrl && tiles.length > 0 && <StageGrid tiles={tiles} meta={{ status: "Live" }} caption={caption} />}
+      {phase === "live" && current!.clip && now >= current!.clip.startedAtMs && now < current!.clip.startedAtMs + current!.clip.durationSec * 1000 && <ClipOverlay key={current!.clip.startedAtMs} clip={current!.clip} now={now} muted={muted} host={current!.host} />}
       {audioOnlyOk && <AudioOnAir tiles={tiles} show={current!.show} host={current!.host} photo={current!.photo} about={current!.about} />}
       {demoAudio && <AudioOnAir demo tiles={[]} show={current!.show} host={current!.host} photo={current!.photo} about={current!.about || "Veterans, service members and their families, telling their own stories."} />}
       {phase === "live" && current!.mediaUrl && <Replay id={`b${current!.id}`} src={current!.mediaUrl} show={current!.show} host={current!.host} photo={current!.photo} startedAt={Date.parse(current!.onAirAtUtc)} now={now} muted={muted} bedUrl={voice?.bedUrl} />}

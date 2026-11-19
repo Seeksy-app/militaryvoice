@@ -1,10 +1,11 @@
 import "@livekit/components-styles";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { ControlBar, GridLayout, LiveKitRoom, ParticipantTile, PreJoin, RoomAudioRenderer, useLocalParticipant, useRemoteParticipants, useRoomContext, useTracks, type LocalUserChoices } from "@livekit/components-react";
 import { RoomEvent, Track, type RemoteParticipant } from "livekit-client";
-import { Check, Copy, Mic, Radio, Square, Timer, Video, VideoOff } from "lucide-react";
+import { Check, Clapperboard, Copy, Loader2, Mic, Radio, Square, Timer, Video, VideoOff } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
+import { durationOf, uploadToStorage } from "@/lib/upload";
 
 // MilitaryVoices Radio booth: one booking's own simple studio. Check the
 // camera and mic, wait with a countdown, go on air on the clock, see the time
@@ -12,7 +13,7 @@ import { apiRequest } from "@/lib/queryClient";
 // and plays the people on this booking (their signupId attribute); the
 // station's intro and outro play on air around them (see Program.tsx).
 
-type Info = { signupId: number; role: "host" | "guest" | "admin"; show: string; host: string; day: string; startAtUtc: string; endAtUtc: string; onAirAtUtc: string; offAirAtUtc: string; opensAtUtc: string; closesAtUtc: string; guestLink: string; ready: boolean; anytime?: boolean; endedAtUtc?: string; next?: { show: string; host: string; startAtUtc: string } | null };
+type Info = { clip?: { on: boolean; durationSec: number; startedAtMs: number } | null; signupId: number; role: "host" | "guest" | "admin"; show: string; host: string; day: string; startAtUtc: string; endAtUtc: string; onAirAtUtc: string; offAirAtUtc: string; opensAtUtc: string; closesAtUtc: string; guestLink: string; ready: boolean; anytime?: boolean; endedAtUtc?: string; next?: { show: string; host: string; startAtUtc: string } | null };
 
 const ET = "America/New_York";
 const hm = (iso: string) => new Date(iso).toLocaleTimeString("en-US", { timeZone: ET, hour: "numeric", minute: "2-digit" });
@@ -204,6 +205,52 @@ function BookingStage({ signupId }: { signupId: number }) {
   );
 }
 
+
+/** "Show a clip": the host picks a video, it uploads, and it plays on air (the program page shows it full screen with sound) until it ends or they stop it. */
+function ClipBar({ id, g, clip, onChange }: { id: string; g: string; clip?: Info["clip"]; onChange: () => void }) {
+  const [pct, setPct] = useState<number | null>(null);
+  const [err, setErr] = useState("");
+  const [tick, setTick] = useState(0);
+  const [started, setStarted] = useState<{ at: number; sec: number } | null>(null);
+  const inp = useRef<HTMLInputElement>(null);
+  useEffect(() => { const t = setInterval(() => setTick((x) => x + 1), 1000); return () => clearInterval(t); }, []);
+  const src = started ?? (clip?.on ? { at: clip.startedAtMs, sec: clip.durationSec } : null);
+  const left = src ? Math.max(0, Math.ceil((src.at + src.sec * 1000 - Date.now()) / 1000)) : 0;
+  const playing = !!src && left > 0 && tick >= 0;
+  const go = async (file: File) => {
+    setErr("");
+    try {
+      const sec = await durationOf(file).catch(() => 0);
+      if (!(sec > 0)) throw new Error("We couldn't read that video. Try an MP4.");
+      const key = await uploadToStorage(file, setPct);
+      setPct(null);
+      const r = (await (await apiRequest("POST", `/api/booth/${id}/clip`, { g: g || undefined, key, durationSec: sec })).json()) as { startedAtMs: number; durationSec: number };
+      setStarted({ at: r.startedAtMs, sec: r.durationSec });
+      onChange();
+    } catch (e) {
+      setPct(null);
+      setErr(say(e));
+    } finally { if (inp.current) inp.current.value = ""; }
+  };
+  const stop = async () => { try { await apiRequest("POST", `/api/booth/${id}/clip/stop`, { g: g || undefined }); setStarted(null); onChange(); } catch (e) { setErr(say(e)); } };
+  return (
+    <div className="flex flex-wrap items-center gap-2" data-testid="booth-clip">
+      <input ref={inp} type="file" accept="video/mp4,video/quicktime,video/webm,.mp4,.mov,.webm" className="hidden" onChange={(e) => e.target.files?.[0] && void go(e.target.files[0])} />
+      {playing ? (
+        <>
+          <span className="inline-flex items-center gap-1.5 rounded-full bg-[#ed1c24] px-3 py-1 text-xs font-extrabold text-white"><Clapperboard className="h-3.5 w-3.5" /> {src && Date.now() < src.at ? `Clip starts in ${Math.max(1, Math.ceil((src.at - Date.now()) / 1000))}s` : `Clip on air · ${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")} left`}</span>
+          <button type="button" onClick={() => void stop()} className="rounded-full border border-white/30 px-3 py-1 text-xs font-bold text-white hover:bg-white/10" data-testid="booth-clip-stop">Stop the clip</button>
+        </>
+      ) : (
+        <button type="button" disabled={pct !== null} onClick={() => inp.current?.click()} className="inline-flex items-center gap-1.5 rounded-full border border-white/30 px-3 py-1 text-xs font-bold text-white hover:bg-white/10 disabled:opacity-60" data-testid="booth-clip-add">
+          {pct !== null ? <><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading… {Math.round(pct)}%</> : <><Clapperboard className="h-3.5 w-3.5" /> Show a clip</>}
+        </button>
+      )}
+      {err && <span className="text-xs text-red-300">{err}</span>}
+    </div>
+  );
+}
+
 /** Props that never change, so the page ticking its clock twice a second doesn't hand LiveKit a "new" setting each time. */
 const CONNECT_OPTS = { autoSubscribe: false } as const;
 const ROOM_STYLE = { height: "100dvh", display: "flex", flexDirection: "column", background: "#000741" } as const;
@@ -328,7 +375,7 @@ export default function Booth({ id }: { id: string }) {
     >
       <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-2 text-white">
         <p className="text-sm font-semibold">{d.show} <span className="font-normal text-white/60">· {watching ? "Watching only: this is what the host sees. You can't be seen or heard." : "you see and hear only your own booth"}</span></p>
-        {d.role === "host" && <GuestLink link={d.guestLink} />}
+        <div className="flex flex-wrap items-center gap-3">{!watching && (d.role === "host" || d.role === "admin") && <ClipBar id={id} g={g} clip={d.clip} onChange={() => void info.refetch()} />}{d.role === "host" && <GuestLink link={d.guestLink} />}</div>
       </div>
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row-reverse">
         <Rail info={eff} shift={d.anytime ? previewShift : 0} onEnd={!watching && (d.role === "host" || d.role === "admin") ? endShow : undefined} error={error} />
