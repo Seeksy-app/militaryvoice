@@ -21,7 +21,7 @@ Nothing posts, schedules or emails until Andrew approves this exact text. Posts 
 2. (blank line)
 3. MilitaryVoices.ai is veteran-owned and built for the people who tell military and veteran stories. The podcasters who join in 2026 become our Founding Members.
 4. (blank line)
-5. Friday, the door opens. militaryvoices.ai
+5. Friday, the door opens. militaryvoices.ai/go/bf?src=li-riccoh  (was militaryvoices.ai; link changed with Andrew's yes, 20 Nov)
 6. (blank line)
 7. #MilitaryVoices #VeteranPodcasters #Podcasting
 
@@ -39,6 +39,7 @@ Nothing posts, schedules or emails until Andrew approves this exact text. Posts 
 - MilitaryVoices' own profile has only Andrew's personal LinkedIn connected (no MV Facebook, Instagram or LinkedIn page), so nothing goes there.
 - Andrew (via PM, 20 Nov): approve the images himself first. hp-181 pulled from Upload-Post (Upload-Post profile mv-3, LinkedIn "Riccoh Player"), row kept as cancelled. Both sizes in Admin → Growth → Go-to-market → Materials. Re-schedule Mon 9am ET only after his OK on the images.
 - Andrew, 20 Nov: "Looks great" on the images → re-scheduled as hp-182 (Riccoh's LinkedIn, Upload-Post profile mv-3, Mon 23 Nov 9am ET, 1600x900 coin teaser).
+- Andrew, 20 Nov (via PM): yes to changing only the link to the counted /go/bf link. hp-182 cancelled, re-scheduled as hp-184 (Upload-Post job 0536e382…, same time, image and text; link now militaryvoices.ai/go/bf?src=li-riccoh). The six photo-teaser drafts use the same link.
 
 ## Photo teasers (20 Nov 2026, drafts for Andrew's pick)
 Andrew asked for versions with a podcaster or a recording in the background, two posts a day through the week. Source: teaser-photo.html?v=<scene>&size=portrait|wide; rendered in photo-teasers/ (1080x1350 and 1600x900 JPEGs); review sheets photo-teasers-portrait-sheet.jpg and photo-teasers-wide-sheet.jpg.
@@ -61,7 +62,7 @@ Wording avoids "our": the posts go out from Riccoh's profile, and Riccoh is a cr
    >
    > MilitaryVoices.ai is veteran-owned and built for military and veteran podcasters. Everyone who joins in 2026 becomes a Founding Member.
    >
-   > The door opens this Friday. militaryvoices.ai
+   > The door opens this Friday. militaryvoices.ai/go/bf?src=li-riccoh
    >
    > #MilitaryVoices #VeteranPodcasters #Podcasting
 2. **Tue 24, 9 am ET: interview** (wide 99c1749cf425, portrait c03e30b8e085)
@@ -69,7 +70,7 @@ Wording avoids "our": the posts go out from Riccoh's profile, and Riccoh is a cr
    >
    > Founding Members opens this Black Friday at MilitaryVoices.ai, a veteran-owned home for military and veteran podcasters and the stories they tell.
    >
-   > militaryvoices.ai
+   > militaryvoices.ai/go/bf?src=li-riccoh
    >
    > #MilitaryVoices #VeteranPodcasters #Podcasting
 3. **Tue 24, 2 pm ET: mic with dog tags** (wide e7644832591a, portrait 236cfd5c195a)
@@ -77,7 +78,7 @@ Wording avoids "our": the posts go out from Riccoh's profile, and Riccoh is a cr
    >
    > MilitaryVoices.ai is veteran-owned. Join in 2026 and you're one of its Founding Members. It opens this Friday.
    >
-   > militaryvoices.ai
+   > militaryvoices.ai/go/bf?src=li-riccoh
    >
    > #MilitaryVoices #VeteranPodcasters #Podcasting
 4. **Wed 25, 9 am ET: live stage** (wide 92fcbfd6944f, portrait ce0216657b03)
@@ -85,7 +86,7 @@ Wording avoids "our": the posts go out from Riccoh's profile, and Riccoh is a cr
    >
    > Founding Members opens this Friday. Military and veteran podcasters who join MilitaryVoices.ai in 2026 are the founding group.
    >
-   > militaryvoices.ai
+   > militaryvoices.ai/go/bf?src=li-riccoh
    >
    > #MilitaryVoices #VeteranPodcasters #Podcasting
 5. **Wed 25, 2 pm ET: studio voice** (wide d8b9fa841cf4, portrait 343342d4b6dc)
@@ -93,7 +94,7 @@ Wording avoids "our": the posts go out from Riccoh's profile, and Riccoh is a cr
    >
    > Join MilitaryVoices.ai in 2026 and you're a Founding Member. The door opens Friday.
    >
-   > militaryvoices.ai
+   > militaryvoices.ai/go/bf?src=li-riccoh
    >
    > #MilitaryVoices #VeteranPodcasters #Podcasting
 6. **Thu 26 (Thanksgiving), 10 am ET: camera rolling** (wide 860f03d47ac8, portrait 737ac376788a)
@@ -101,7 +102,7 @@ Wording avoids "our": the posts go out from Riccoh's profile, and Riccoh is a cr
    >
    > Tomorrow, Founding Members opens at MilitaryVoices.ai. Join in 2026 and you're part of the founding group.
    >
-   > militaryvoices.ai
+   > militaryvoices.ai/go/bf?src=li-riccoh
    >
    > #MilitaryVoices #VeteranPodcasters #Podcasting
 
