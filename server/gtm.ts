@@ -12,7 +12,7 @@ import { and, desc, eq, inArray } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { RICCOH_EMAIL } from "./email.js";
 import { signedAssetUpload } from "./photoStorage.js";
-import { createConnectUrl, ensureUploadPostProfile, fetchConnectedAccounts, isUploadPostConfigured, parseSocialAccounts, publishPhoto, publishVideo } from "./uploadPost.js";
+import { cancelScheduledPost, createConnectUrl, ensureUploadPostProfile, fetchConnectedAccounts, isUploadPostConfigured, listScheduledPosts, parseSocialAccounts, publishPhoto, publishVideo } from "./uploadPost.js";
 import { hostPosts, type SocialAccount } from "../shared/schema.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
@@ -60,8 +60,8 @@ export function registerGtm(app: Express, requireAdmin: RequestHandler): void {
       configured: isUploadPostConfigured(),
       assets: await assets(),
       accounts: {
-        riccoh: { name: riccoh.name, ready: Boolean(riccoh.username), accounts: riccoh.accounts },
-        mv: { name: mv.name, ready: Boolean(mv.username) && mv.accounts.length > 0, accounts: mv.accounts },
+        riccoh: { name: riccoh.name, username: riccoh.username, ready: Boolean(riccoh.username), accounts: riccoh.accounts },
+        mv: { name: mv.name, username: mv.username, ready: Boolean(mv.username) && mv.accounts.length > 0, accounts: mv.accounts },
       },
       posts: posts.map((p) => ({ id: p.id, account: p.email === RICCOH_EMAIL ? "riccoh" : "mv", title: p.title, description: p.description, platforms: p.platforms, status: p.status, scheduledAt: p.scheduledAt, createdAt: p.createdAt, results: p.results, error: p.error, mediaKey: p.mediaKey })),
     });
@@ -146,6 +146,37 @@ export function registerGtm(app: Express, requireAdmin: RequestHandler): void {
       await storage.updateHostPost(row.id, { status: "failed", error: ((err as Error).message || "Failed").slice(0, 300) });
       res.status(502).json({ message: (err as Error).message || "Couldn't post that right now." });
     }
+  });
+
+  /** What Upload-Post itself holds as scheduled for both accounts: the profile each job goes out on. */
+  app.get("/api/admin/gtm/scheduled", requireAdmin, async (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const [riccoh, mv] = await Promise.all([accountOf("riccoh"), accountOf("mv")]);
+    const out: Record<string, unknown> = {};
+    for (const [k, u] of [["riccoh", riccoh.username], ["mv", mv.username]] as const) {
+      out[k] = u ? await listScheduledPosts(u).catch((e) => ({ error: (e as Error).message })) : [];
+    }
+    res.json(out);
+  });
+
+  /** Take a scheduled post back before it goes out (it stays in the list as "cancelled", to post again later). */
+  app.delete("/api/admin/gtm/posts/:id", requireAdmin, async (req, res) => {
+    const row = await storage.getHostPost(Number(req.params.id));
+    if (!row || row.kind !== "gtm") return res.status(404).json({ message: "No such post." });
+    if (row.status !== "scheduled") return res.status(409).json({ message: row.status === "sent" ? "It has already gone out." : "It isn't scheduled." });
+    let job = row.jobId;
+    if (!job) {
+      // No job id kept: find it in the profile's schedule by its time, only when exactly one matches.
+      const who = await accountOf(row.email === RICCOH_EMAIL ? "riccoh" : "mv");
+      const at = Date.parse(row.scheduledAt);
+      const hits = (await listScheduledPosts(who.username).catch(() => [])).filter((j) => Math.abs(Date.parse(j.scheduled_date) - at) < 60_000);
+      if (hits.length !== 1) return res.status(409).json({ message: "Couldn't tell which job that is in Upload-Post. Cancel it there." });
+      job = hits[0].job_id;
+    }
+    try { await cancelScheduledPost(job); }
+    catch (err) { return res.status(502).json({ message: `Couldn't take it back: ${(err as Error).message}` }); }
+    await storage.updateHostPost(row.id, { status: "cancelled", jobId: "" });
+    res.json({ ok: true });
   });
 
   /** MilitaryVoices' own accounts: start Upload-Post's connect page, and read back what's connected. */
