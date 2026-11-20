@@ -1113,8 +1113,8 @@ function EpisodePage({ ep, show, youtubeReady, production, onDirectories, onBack
                   {offerYt && (youtubeReady
                     ? <label className="flex items-center gap-2"><input type="checkbox" checked={ytOn} onChange={(e) => setYt(e.target.checked)} /> <span>Also post it to YouTube <span className="text-muted-foreground">({show.youtubePrivacy === "unlisted" ? "unlisted" : "public"})</span></span></label>
                     : <span className="text-xs text-muted-foreground">Want it on YouTube too? <a href="/host/dashboard/social" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Connect YouTube</a> first.</span>)}
-                  <Button onClick={() => void save("published")} disabled={!v.title.trim() || (!!at && Date.parse(at) < Date.now() - 60_000) || (!hasAudio && !ep.audioJob)} className="w-full gap-1.5 bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-publish"><Send className="h-4 w-4" /> {when === "later" ? "Schedule it" : "Publish now"}</Button>
-                  {!hasAudio && !ep.audioJob && <p className="text-xs text-muted-foreground">Add the audio first, then you can publish.</p>}
+                  <Button onClick={() => void save("published")} disabled={!v.title.trim() || (!!at && Date.parse(at) < Date.now() - 60_000) || (!hasAudio && !ep.audioJob && !ep.recordingId)} className="w-full gap-1.5 bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-publish"><Send className="h-4 w-4" /> {when === "later" ? "Schedule it" : "Publish now"}</Button>
+                  {!hasAudio && !ep.audioJob && !ep.recordingId && <p className="text-xs text-muted-foreground">Add the audio first, then you can publish.</p>}
                   <Button variant="outline" onClick={() => void save()} disabled={!dirty} className="w-full">Save draft</Button>
                   {production && <button type="button" onClick={() => void setStage("post")} className="w-full text-center text-xs font-semibold text-muted-foreground hover:text-foreground" data-testid="episode-back-to-post">Send back to post-production</button>}
                 </>

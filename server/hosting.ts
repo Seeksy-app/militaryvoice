@@ -668,7 +668,8 @@ export async function listOnListenNotes(showId: number, force = false): Promise<
   if (cur?.state === "live" && cur.url) return;
   if (!force && cur?.state === "rejected") return;
   if (!force && cur?.at && Date.now() - Date.parse(cur.at) < 23 * 3600_000) return;
-  const [ep] = await db.select({ id: hostedEpisodes.id }).from(hostedEpisodes).where(and(eq(hostedEpisodes.showId, show.id), eq(hostedEpisodes.status, "published"))).limit(1);
+  // Only once an episode is really in the feed (published with its audio): an empty feed gets rejected.
+  const [ep] = await db.select({ id: hostedEpisodes.id }).from(hostedEpisodes).where(and(eq(hostedEpisodes.showId, show.id), eq(hostedEpisodes.status, "published"), sql`(${hostedEpisodes.audioKey} <> '' or ${hostedEpisodes.audioUrl} <> '')`)).limit(1);
   if (!ep) return;
   if (!(await spendListenNotes())) return;
   try {
@@ -1373,7 +1374,9 @@ Return JSON only: {"titles":["","",""],"description":""}`,
     const publish = b.status === "published";
     // Audio still being made (from a video, or copied in): it can be published now, and it joins
     // the feed by itself the moment its audio lands (the feed only lists episodes with audio).
-    if (publish && !(e.audioKey || e.audioUrl) && (!e.audioJob || e.audioJob === "failed")) return res.status(400).json({ message: e.audioJob === "failed" ? "Its audio couldn't be made. Delete it and try again, or upload the audio." : "It needs its audio first." });
+    // Made from a Library recording and its MP3 not started yet: Publish starts it now.
+    const makeAudio = publish && !(e.audioKey || e.audioUrl) && !e.audioJob && !!e.recordingId;
+    if (publish && !makeAudio && !(e.audioKey || e.audioUrl) && (!e.audioJob || e.audioJob === "failed")) return res.status(400).json({ message: e.audioJob === "failed" ? "Its audio couldn't be made. Delete it and try again, or upload the audio." : "It needs its audio first." });
     // "Final draft" is the team's (or their) word that post-production is done. With auto-post on, that is the moment it goes out.
     const stageIn = b.stage === "post" || b.stage === "final" ? (b.stage as string) : undefined;
     if (stageIn === "post" && !(await hasProduction(email))) return res.status(403).json({ message: "Post-production is part of the Production plan." });
@@ -1408,6 +1411,7 @@ Return JSON only: {"titles":["","",""],"description":""}`,
       ...(stageIn ? { stage: stageIn } : {}),
       ...(autoGo ? { status: "published", publishedAt: now(), youtubeWanted: false } : {}),
       ...(publish ? { status: "published", publishedAt: at ?? (e.publishedAt || now()) } : b.status === "draft" ? { status: "draft" } : {}),
+      ...(makeAudio ? { audioJob: "queued", audioJobAt: now(), audioError: "" } : {}),
       ...(!publish && at ? { publishedAt: at } : {}),
       ...(typeof b.youtube === "boolean" ? { youtubeWanted: b.youtube && hasVideo(e) } : {}),
     }).where(eq(hostedEpisodes.id, e.id)).returning();
