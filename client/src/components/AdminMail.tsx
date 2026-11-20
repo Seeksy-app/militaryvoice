@@ -17,9 +17,9 @@ import { ContactProfile } from "@/components/AdminContact";
  */
 
 type Events = { delivered: boolean; opened: boolean; clicked: boolean; bounced: boolean; complained: boolean } | null;
-type Item = { key: string; dir: "in" | "out" | "campaign"; email: string; name: string; subject: string; snippet: string; at: string; kind: string; status: string; ok: boolean; events: Events; inboundId?: number; broadcastId?: number; count?: number; opened?: number; clicked?: number; unread?: boolean; archived?: boolean };
+type Item = { key: string; dir: "in" | "out" | "campaign"; email: string; name: string; subject: string; snippet: string; at: string; kind: string; status: string; ok: boolean; events: Events; inboundId?: number; broadcastId?: number; count?: number; opened?: number; clicked?: number; unread?: boolean; archived?: boolean; replyFrom?: string };
 type Msg = { key: string; dir: "in" | "out"; at: string; subject: string; body: string; from: string; kind: string; ok?: boolean; error?: string; events?: Events;
-  inbound?: { id: number; status: string; draftFrom: string; draftSubject: string; draftText: string; summary: string } };
+  inbound?: { id: number; status: string; draftFrom: string; draftSubject: string; draftText: string; summary: string; replyFrom?: string } };
 type Thread = { email: string; name: string; contact: { status: string; lifecycleStage: string; source: string } | null; messages: Msg[] };
 type Folder = "needs" | "inbox" | "sent" | "campaigns" | "failed" | "all" | "archive";
 
@@ -171,7 +171,7 @@ export function AdminMail() {
                   <div className="mt-0.5 flex items-center gap-2">
                     <p className="min-w-0 flex-1 truncate text-xs text-muted-foreground">{it.dir === "out" ? kindOf(it.kind) : it.dir === "campaign" ? `${it.opened ?? 0} opened · ${it.clicked ?? 0} clicked` : it.snippet}</p>
                     {waiting ? <span className="shrink-0 rounded-full bg-[#F0A71F]/20 px-2 py-0.5 text-[10px] font-bold text-[#8a5a00] dark:text-[#F0A71F]">Needs a reply</span>
-                      : it.dir === "in" && it.status === "sent" ? <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-400">Answered</span>
+                      : it.dir === "in" && it.status === "sent" ? <span className="shrink-0 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-bold text-emerald-700 dark:text-emerald-400">{it.replyFrom === "alex" ? "Alex replied" : "Answered"}</span>
                       : it.dir === "out" ? <Fate ok={it.ok} events={it.events} /> : null}
                   </div>
                 </button>
@@ -261,7 +261,7 @@ export function ThreadView({ email, focus, onChanged, onProfile }: { email: stri
               <div className="mb-1.5 flex flex-wrap items-center gap-2 text-xs">
                 <span className="font-semibold">{m.dir === "in" ? m.from : kindOf(m.kind)}</span>
                 <span className="text-muted-foreground">{full(m.at)}</span>
-                <span className="ml-auto">{m.dir === "out" ? <Fate ok={m.ok} events={m.events} error={m.error} /> : m.inbound?.status === "sent" ? <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">Answered</span> : m.inbound && (m.inbound.status === "new" || m.inbound.status === "drafted") ? <span className="rounded-full bg-[#F0A71F]/20 px-2 py-0.5 text-[11px] font-semibold text-[#8a5a00] dark:text-[#F0A71F]">Needs a reply</span> : null}</span>
+                <span className="ml-auto">{m.dir === "out" ? <Fate ok={m.ok} events={m.events} error={m.error} /> : m.inbound?.status === "sent" ? <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">{m.inbound.replyFrom === "alex" ? "Alex replied" : "Answered"}</span> : m.inbound && (m.inbound.status === "new" || m.inbound.status === "drafted") ? <span className="rounded-full bg-[#F0A71F]/20 px-2 py-0.5 text-[11px] font-semibold text-[#8a5a00] dark:text-[#F0A71F]">Needs a reply</span> : null}</span>
               </div>
               <p className="text-sm font-semibold">{m.subject || "(no subject)"}</p>
               {/* Long ones (a campaign) fold to a few lines, so the conversation reads at a glance. */}

@@ -9250,10 +9250,11 @@ export function registerRoutes(app: Express): void {
         const id = await sendOneOffEmail({ kind: "ack", to: row.fromEmail, subject, html, text, headers });
         if (!id) return;
         const now = new Date().toISOString();
-        // Answered in full: off Needs a reply (it shows as Answered). Otherwise the person's draft waits there.
+        // Alex replied: read and replied, off Needs a reply, shown as "Alex replied" (Andrew, 20 Nov). When he
+        // said a person will follow up, Slack still hears it (tellSlack below).
         const settled = draft && draft.ack && !draft.needsPerson;
         alex = followUp ? "followup" : settled ? "answered" : "person";
-        await storage.updateInbound(row.id, { ackAt: now, ackResendId: id, ackText: text, ...(settled ? { status: "sent", repliedAt: now, replyResendId: id, replyFrom: "alex", replyText: text } : {}) });
+        await storage.updateInbound(row.id, { ackAt: now, ackResendId: id, ackText: text, status: "sent", readAt: now, repliedAt: now, replyResendId: id, replyFrom: "alex", replyText: text });
         const featured = await storage.getFeaturedEvent();
         await storage.recordOneOffSend({ eventId: featured?.id ?? null, subject, bodyText: text, sender: "team", banner: "podcasters", email: row.fromEmail, resendId: id });
         console.log(`Auto-acknowledged ${row.fromEmail}: ${subject}`);

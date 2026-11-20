@@ -52,10 +52,12 @@ type Item = {
   kind: string; status: string; ok: boolean; events: Events | null; inboundId?: number; broadcastId?: number; count?: number; opened?: number; clicked?: number;
   /** Came in and not opened yet; put away in Archive. */
   unread?: boolean; archived?: boolean;
+  /** Who answered it: "alex" shows as "Alex replied". */
+  replyFrom?: string;
 };
 const inItem = (r: typeof inboundEmails.$inferSelect): Item => ({
   key: `in-${r.id}`, dir: "in", email: r.fromEmail.toLowerCase(), name: r.fromName || r.fromEmail, subject: r.subject, snippet: snippet(r.summary || said(r.bodyText)), at: r.receivedAt,
-  kind: r.category || "other", status: r.status, ok: true, events: null, inboundId: r.id, unread: !r.readAt, archived: r.archived,
+  kind: r.category || "other", status: r.status, ok: true, events: null, inboundId: r.id, unread: !r.readAt, archived: r.archived, replyFrom: r.replyFrom,
 });
 const outItem = (r: MailLogRow, ev: Map<string, Events>): Item => ({
   key: `out-${r.id}`, dir: "out", email: r.toEmail, name: r.toEmail, subject: r.subject, snippet: snippet(r.bodyText), at: r.sentAt,
@@ -164,7 +166,7 @@ export function registerMail(app: Express, requireAdmin: RequestHandler) {
     const ev = await eventsFor(outs.map((r) => r.resendId));
     const messages = [
       ...ins.map((r) => ({ key: `in-${r.id}`, dir: "in" as const, at: r.receivedAt, subject: r.subject, body: said(r.bodyText) || r.bodyText, from: r.fromName || r.fromEmail, kind: r.category || "other",
-        inbound: { id: r.id, status: r.status, draftFrom: r.draftFrom, draftSubject: r.draftSubject, draftText: r.draftText, summary: r.summary } })),
+        inbound: { id: r.id, status: r.status, draftFrom: r.draftFrom, draftSubject: r.draftSubject, draftText: r.draftText, summary: r.summary, replyFrom: r.replyFrom } })),
       ...outs.map((r) => ({ key: `out-${r.id}`, dir: "out" as const, at: r.sentAt, subject: r.subject, body: r.bodyText, from: r.fromAddr, kind: r.kind, ok: r.ok, error: r.error, events: ev.get(r.resendId) ?? null })),
     ].sort((a, b) => a.at.localeCompare(b.at));
     const name = ins.find((r) => r.fromName)?.fromName || [contact?.firstName, contact?.lastName].filter(Boolean).join(" ") || email;
