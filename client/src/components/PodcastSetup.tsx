@@ -52,7 +52,7 @@ function Progress({ stage, q }: { stage: Stage; q: number }) {
   );
 }
 
-function BeginCard({ icon: Icon, title, text, action, selected, onClick, testid, withIcon }: { icon: typeof Mic; title: string; text: string; action?: string; selected?: boolean; onClick: () => void; testid: string; withIcon?: boolean }) {
+function BeginCard({ icon: Icon, img, title, text, action, selected, onClick, testid, withIcon }: { icon: typeof Mic; img?: string; title: string; text: string; action?: string; selected?: boolean; onClick: () => void; testid: string; withIcon?: boolean }) {
   return (
     <button
       type="button"
@@ -62,7 +62,7 @@ function BeginCard({ icon: Icon, title, text, action, selected, onClick, testid,
       aria-pressed={selected}
       data-testid={testid}
     >
-      {(action || withIcon) && <span className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl border-2 border-foreground/80"><Icon className="h-6 w-6" /></span>}
+      {(action || withIcon) && <span className="mb-4 flex h-12 w-12 items-center justify-center rounded-xl border-2 border-foreground/80">{img ? <img src={img} alt="" className="h-6 w-6" /> : <Icon className="h-6 w-6" />}</span>}
       <span className="text-2xl font-bold tracking-tight [text-wrap:balance]">{title}</span>
       <span className="mt-1.5 text-[15px] text-muted-foreground [text-wrap:balance]">{text}</span>
       {action && <span className="mt-auto pt-5 font-bold" style={{ color: selected ? ORANGE : NAVY }}>{action} <ArrowRight className="inline h-4 w-4" /></span>}
@@ -310,7 +310,7 @@ export function PodcastSetup({ initialFeed, onImported, onCreating, onFinish, on
         <div className="mt-8 grid gap-4 sm:grid-cols-3">
           <BeginCard icon={Video} withIcon title="Record in Rooms" text="Quick, like Zoom. Guests join on a link." onClick={() => onFinish("rooms", madeId)} testid="setup-record-rooms" />
           <BeginCard icon={Upload} withIcon title="Upload an episode" text="Audio or video you already have." onClick={() => onFinish("upload", madeId)} testid="setup-record-upload" />
-          <BeginCard icon={Mic} withIcon title="Use Zoom" text="Your Zoom cloud recordings land in your Library." onClick={() => onFinish("zoom", madeId)} testid="setup-record-zoom" />
+          <BeginCard icon={Mic} img="/brands/zoom.svg" withIcon title="Use Zoom" text="Your Zoom cloud recordings land in your Library." onClick={() => onFinish("zoom", madeId)} testid="setup-record-zoom" />
         </div>
         <p className="mt-8"><button type="button" onClick={() => onFinish("show", madeId)} className="text-base font-semibold underline underline-offset-4" style={{ color: NAVY }} data-testid="setup-go-show">Go to my show</button></p>
       </section>
