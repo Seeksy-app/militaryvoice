@@ -1,0 +1,180 @@
+<!doctype html>
+<!--
+  Founding Member badge: three new versions beside the current seal (20 Nov 2026, for Andrew's pick).
+  Render the review sheet: badges.html (1600×1700). One badge alone, transparent: badges.html?only=coin|patch|tag|seal (800×800).
+  No names, no numbers beyond 2026.
+-->
+<html>
+<head>
+<meta charset="utf-8" />
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #000741; color: #fff; font-family: "General Sans", Inter, system-ui, sans-serif; }
+  .sheet { width: 1600px; height: 1700px; display: grid; grid-template-columns: 1fr 1fr; grid-template-rows: 1fr 1fr;
+    background: radial-gradient(90% 70% at 80% 0%, #0b2a7a 0%, #000741 60%, #00052e 100%); }
+  .cell { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; border: 1px solid rgba(255,255,255,.06); }
+  .cell svg { width: 620px; height: 620px; filter: drop-shadow(0 30px 50px rgba(0,0,0,.45)); }
+  .label { font-size: 30px; font-weight: 600; letter-spacing: .04em; }
+  .label b { color: #F0A71F; margin-right: 12px; }
+  .label span { display: block; text-align: center; font-size: 22px; font-weight: 400; color: rgba(255,255,255,.65); margin-top: 6px; letter-spacing: 0; }
+  body.one { background: transparent; }
+  body.one .sheet { width: 800px; height: 800px; display: flex; background: none; }
+  body.one .cell { border: 0; width: 800px; height: 800px; }
+  body.one .cell svg { width: 720px; height: 720px; }
+  body.one .label { display: none; }
+</style>
+</head>
+<body>
+<div class="sheet">
+
+  <!-- Current: the seal on the teaser -->
+  <div class="cell" data-k="seal">
+    <svg viewBox="0 0 400 400">
+      <defs><path id="sRing" d="M200,200 m-144,0 a144,144 0 1,1 288,0 a144,144 0 1,1 -288,0" /></defs>
+      <circle cx="200" cy="200" r="186" fill="#000741" stroke="#F0A71F" stroke-width="8" />
+      <circle cx="200" cy="200" r="162" fill="none" stroke="rgba(240,167,31,.55)" stroke-width="4" />
+      <text font-family="General Sans, sans-serif" font-weight="600" font-size="34" fill="#F0A71F">
+        <textPath href="#sRing" textLength="892" lengthAdjust="spacing">FOUNDING MEMBER · 2026 · VETERAN-OWNED ·</textPath>
+      </text>
+      <polygon fill="#F0A71F" points="200,124 218,178 276,178 230,212 248,266 200,234 152,266 170,212 124,178 182,178" />
+    </svg>
+    <div class="label"><b>Now</b>The seal on the teaser<span>Gold ring on navy, the words around the edge</span></div>
+  </div>
+
+  <!-- A: challenge coin -->
+  <div class="cell" data-k="coin">
+    <svg viewBox="0 0 400 400">
+      <defs>
+        <linearGradient id="gold" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#FFE7A3" /><stop offset=".35" stop-color="#F0A71F" /><stop offset=".6" stop-color="#FFD978" /><stop offset="1" stop-color="#9A6410" />
+        </linearGradient>
+        <linearGradient id="goldDeep" x1="1" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#C98A1A" /><stop offset=".5" stop-color="#FFE08A" /><stop offset="1" stop-color="#7A4E0B" />
+        </linearGradient>
+        <radialGradient id="enamel" cx=".4" cy=".3" r=".9">
+          <stop offset="0" stop-color="#14328c" /><stop offset=".6" stop-color="#000741" /><stop offset="1" stop-color="#00031f" />
+        </radialGradient>
+        <path id="cTop" d="M 51,200 A 149,149 0 0,1 349,200" />
+        <path id="cBot" d="M 51,200 A 149,149 0 0,0 349,200" />
+      </defs>
+      <circle cx="200" cy="200" r="194" fill="url(#gold)" />
+      <circle cx="200" cy="200" r="188" fill="none" stroke="#7A4E0B" stroke-width="9" stroke-dasharray="1.6 2.6" opacity=".75" />
+      <circle cx="200" cy="200" r="178" fill="url(#goldDeep)" />
+      <circle cx="200" cy="200" r="172" fill="url(#enamel)" />
+      <circle cx="200" cy="200" r="127" fill="url(#gold)" />
+      <circle cx="200" cy="200" r="120" fill="url(#enamel)" />
+      <text font-family="General Sans, sans-serif" font-weight="700" font-size="28" letter-spacing="5" fill="url(#gold)" dominant-baseline="middle">
+        <textPath href="#cTop" startOffset="50%" text-anchor="middle">FOUNDING MEMBER</textPath>
+      </text>
+      <text font-family="General Sans, sans-serif" font-weight="600" font-size="22" letter-spacing="6" fill="url(#gold)" dominant-baseline="middle">
+        <textPath href="#cBot" startOffset="50%" text-anchor="middle">VETERAN-OWNED</textPath>
+      </text>
+      <polygon fill="url(#gold)" transform="translate(51 200) scale(.22)" points="0,-50 12,-16 48,-16 19,6 30,40 0,19 -30,40 -19,6 -48,-16 -12,-16" />
+      <polygon fill="url(#gold)" transform="translate(349 200) scale(.22)" points="0,-50 12,-16 48,-16 19,6 30,40 0,19 -30,40 -19,6 -48,-16 -12,-16" />
+      <g id="laurel" fill="url(#gold)"></g>
+      <polygon fill="url(#gold)" stroke="#7A4E0B" stroke-width="1.5" transform="translate(200 178) scale(1.05)" points="0,-50 12,-16 48,-16 19,6 30,40 0,19 -30,40 -19,6 -48,-16 -12,-16" />
+      <text x="200" y="262" text-anchor="middle" font-family="General Sans, sans-serif" font-weight="700" font-size="44" letter-spacing="3" fill="url(#gold)">2026</text>
+    </svg>
+    <div class="label"><b>A</b>Challenge coin<span>Gold coin with a ridged edge, navy enamel, laurels</span></div>
+  </div>
+
+  <!-- B: unit patch -->
+  <div class="cell" data-k="patch">
+    <svg viewBox="0 0 400 400">
+      <defs>
+        <pattern id="twill" width="6" height="6" patternUnits="userSpaceOnUse" patternTransform="rotate(45)">
+          <rect width="6" height="6" fill="#000741" /><rect width="2" height="6" fill="#06135a" />
+        </pattern>
+        <linearGradient id="thread" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stop-color="#FFD978" /><stop offset=".5" stop-color="#F0A71F" /><stop offset="1" stop-color="#C98A1A" />
+        </linearGradient>
+        <path id="shield" d="M200,14 L352,58 L352,190 C352,292 284,354 200,388 C116,354 48,292 48,190 L48,58 Z" />
+      </defs>
+      <use href="#shield" fill="url(#twill)" stroke="url(#thread)" stroke-width="16" stroke-linejoin="round" />
+      <use href="#shield" fill="none" stroke="#FFF3D1" stroke-width="2" stroke-dasharray="7 5" opacity=".7" transform="translate(200 201) scale(.9) translate(-200 -201)" />
+      <text x="200" y="92" text-anchor="middle" font-family="General Sans, sans-serif" font-weight="700" font-size="16" letter-spacing="3" fill="url(#thread)">MILITARYVOICES.AI</text>
+      <g fill="url(#thread)">
+        <path d="M122,138 L200,112 L278,138 L278,155 L200,129 L122,155 Z" />
+        <path d="M122,167 L200,141 L278,167 L278,184 L200,158 L122,184 Z" />
+        <path d="M122,196 L200,170 L278,196 L278,213 L200,187 L122,213 Z" />
+      </g>
+      <!-- banner -->
+      <path d="M36,240 L72,240 L72,278 L36,278 L50,259 Z" fill="#9A6410" />
+      <path d="M364,240 L328,240 L328,278 L364,278 L350,259 Z" fill="#9A6410" />
+      <path d="M60,230 L340,230 L340,272 L60,272 Z" fill="url(#thread)" />
+      <path d="M60,272 L72,278 L72,272 Z M340,272 L328,278 L328,272 Z" fill="#5c3b08" />
+      <text x="200" y="259" text-anchor="middle" font-family="General Sans, sans-serif" font-weight="700" font-size="23" textLength="236" lengthAdjust="spacingAndGlyphs" fill="#000741">FOUNDING MEMBER</text>
+      <text x="200" y="312" text-anchor="middle" font-family="General Sans, sans-serif" font-weight="700" font-size="24" letter-spacing="5" fill="url(#thread)">★ 2026 ★</text>
+      <text x="200" y="333" text-anchor="middle" font-family="General Sans, sans-serif" font-weight="600" font-size="9.5" letter-spacing="2" fill="rgba(255,243,209,.8)">VETERAN-OWNED</text>
+    </svg>
+    <div class="label"><b>B</b>Unit patch<span>Stitched shield, three chevrons, a Founding Member banner</span></div>
+  </div>
+
+  <!-- C: dog tag -->
+  <div class="cell" data-k="tag">
+    <svg viewBox="0 0 400 400">
+      <defs>
+        <linearGradient id="steel" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#F4F6F9" /><stop offset=".3" stop-color="#B7BEC7" /><stop offset=".55" stop-color="#E6EAEF" /><stop offset=".8" stop-color="#9AA3AD" /><stop offset="1" stop-color="#D5DAE0" />
+        </linearGradient>
+        <linearGradient id="rim" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stop-color="#7E8792" /><stop offset="1" stop-color="#E9EDF2" />
+        </linearGradient>
+        <filter id="stamp" x="-5%" y="-5%" width="110%" height="110%">
+          <feOffset dx="1.2" dy="1.6" in="SourceAlpha" result="o" />
+          <feFlood flood-color="#ffffff" flood-opacity=".9" /><feComposite in2="o" operator="in" result="hi" />
+          <feMerge><feMergeNode in="hi" /><feMergeNode in="SourceGraphic" /></feMerge>
+        </filter>
+      </defs>
+      <!-- chain -->
+      <g fill="none" stroke="#C9CFD6" stroke-width="3">
+        <g id="chain"></g>
+      </g>
+      <g transform="rotate(-8 200 215)">
+        <rect x="34" y="112" width="332" height="206" rx="62" fill="url(#rim)" />
+        <rect x="42" y="120" width="316" height="190" rx="55" fill="url(#steel)" />
+        <rect x="54" y="132" width="292" height="166" rx="46" fill="none" stroke="#8E97A2" stroke-width="2" opacity=".6" />
+        <circle cx="80" cy="215" r="11" fill="#000741" stroke="#7E8792" stroke-width="3" />
+        <g filter="url(#stamp)" font-family="'Courier New', Courier, monospace" font-weight="700" fill="#4A535E" letter-spacing="2">
+          <text x="106" y="174" font-size="22">FOUNDING MEMBER</text>
+          <text x="106" y="208" font-size="18">MILITARYVOICES.AI</text>
+          <text x="106" y="240" font-size="18">JOINED 2026</text>
+          <text x="106" y="272" font-size="18">VETERAN-OWNED</text>
+          <polygon transform="translate(300 234) scale(.34)" points="0,-50 12,-16 48,-16 19,6 30,40 0,19 -30,40 -19,6 -48,-16 -12,-16" fill="#F0A71F" />
+        </g>
+      </g>
+    </svg>
+    <div class="label"><b>C</b>Dog tag<span>Steel tag on a ball chain, the words stamped in</span></div>
+  </div>
+</div>
+<script>
+  // Laurel leaves around the coin's centre.
+  const g = document.getElementById("laurel");
+  for (const side of [-1, 1]) {
+    for (let i = 0; i < 7; i++) {
+      const th = (34 + i * 13) * Math.PI / 180; // measured from the bottom, up each side
+      const x = 200 + side * 100 * Math.sin(th), y = 200 + 100 * Math.cos(th);
+      const e = document.createElementNS("http://www.w3.org/2000/svg", "ellipse");
+      e.setAttribute("cx", x); e.setAttribute("cy", y); e.setAttribute("rx", 5); e.setAttribute("ry", 12);
+      const deg = (Math.atan2(y - 200, x - 200) * 180 / Math.PI) - side * 28;
+      e.setAttribute("transform", `rotate(${deg} ${x} ${y})`);
+      g.appendChild(e);
+    }
+  }
+  // Ball chain from the tag's hole up and off the top.
+  const ch = document.getElementById("chain");
+  for (let i = 0; i < 20; i++) {
+    const t = i / 19, x = 86 - 60 * t + 30 * Math.sin(t * Math.PI), y = 206 - 200 * t;
+    const c = document.createElementNS("http://www.w3.org/2000/svg", "circle");
+    c.setAttribute("cx", x); c.setAttribute("cy", y); c.setAttribute("r", 4.2); c.setAttribute("fill", "#C9CFD6"); c.setAttribute("stroke", "#8E97A2"); c.setAttribute("stroke-width", "1");
+    ch.appendChild(c);
+  }
+  const only = new URLSearchParams(location.search).get("only");
+  if (only) {
+    document.body.classList.add("one"); document.documentElement.style.background = "transparent";
+    document.querySelectorAll(".cell").forEach((c) => { if (c.dataset.k !== only) c.remove(); });
+  }
+</script>
+</body>
+</html>
