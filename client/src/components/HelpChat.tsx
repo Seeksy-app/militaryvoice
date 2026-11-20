@@ -63,7 +63,7 @@ const HIDDEN_ON = ["/promo", "/studio/composite", "/room/composite", "/dx/", "/a
 
 const OPENER: Msg = {
   role: "assistant",
-  content: "Hi, I'm Alex. Ask me anything about MilitaryVoices.ai. If I can't help, I'll get you to a person.",
+  content: "Hi, I'm Alex. Ask me anything about MilitaryVoices.ai. If I can't answer it, someone will get back to you as soon as possible.",
 };
 
 export function HelpChat() {
@@ -126,7 +126,7 @@ export function HelpChat() {
         setMode("human");
       }
     },
-    onError: (e: Error) => setMsgs((m) => [...m, { role: "assistant", content: e.message || "Something went wrong. Want a person instead?" }]),
+    onError: (e: Error) => setMsgs((m) => [...m, { role: "assistant", content: e.message || "Something went wrong. Want someone to get back to you instead?" }]),
   });
 
   const handoff = useMutation({
@@ -191,7 +191,7 @@ export function HelpChat() {
               <img src="/alex.jpg" alt="Alex" className="h-10 w-10 rounded-full object-cover ring-2 ring-white/30" />
               <div>
                 <p className="text-sm font-semibold">Alex · SI help desk</p>
-                <p className="text-[11px] text-white/80">{cfg?.agent === false ? "A person will reply by email" : "Answers now · a person if you need one"}</p>
+                <p className="text-[11px] text-white/80">{cfg?.agent === false ? "We'll get back to you by email" : "Answers now · or we'll get back to you"}</p>
               </div>
             </div>
             <button type="button" onClick={() => setOpen(false)} className="rounded-full p-1 hover:bg-white/10" aria-label="Close help" data-testid="button-help-close">
@@ -257,7 +257,7 @@ export function HelpChat() {
                   </Button>
                 </form>
                 <button type="button" onClick={wantHuman} className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-primary hover:underline" data-testid="button-help-human">
-                  <User className="h-3.5 w-3.5" /> Talk to a human
+                  <User className="h-3.5 w-3.5" /> Have someone get back to me
                 </button>
               </div>
             </>
@@ -272,8 +272,8 @@ export function HelpChat() {
               }}
             >
               <div>
-                <p className="text-sm font-semibold text-foreground">Leave it with a person</p>
-                <p className="text-xs text-muted-foreground">We'll email you back — usually the same day.</p>
+                <p className="text-sm font-semibold text-foreground">Leave your question with us</p>
+                <p className="text-xs text-muted-foreground">Someone will get back to you as soon as possible.</p>
               </div>
               <Input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" data-testid="input-help-name" />
               <Input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" required data-testid="input-help-email" />
@@ -282,7 +282,7 @@ export function HelpChat() {
               {handoff.isError && <p className="text-xs text-destructive">{(handoff.error as Error).message}</p>}
               <div className="mt-auto flex items-center gap-2">
                 <Button type="submit" className="gap-1.5 rounded-full" disabled={handoff.isPending || !email.includes("@") || !question.trim() || (Boolean(siteKey) && !human)} data-testid="button-help-submit">
-                  {handoff.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Send to a person
+                  {handoff.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Send className="h-4 w-4" />} Send
                 </Button>
                 <Button type="button" variant="ghost" size="sm" onClick={() => setMode("chat")}>
                   Back
@@ -296,7 +296,7 @@ export function HelpChat() {
               <span className="flex h-12 w-12 items-center justify-center rounded-full bg-emerald-500/15 text-emerald-700">
                 <Check className="h-6 w-6" />
               </span>
-              <p className="text-sm font-semibold text-foreground">Sent. A person has it.</p>
+              <p className="text-sm font-semibold text-foreground">Sent. Someone will get back to you as soon as possible.</p>
               <p className="text-xs text-muted-foreground">We'll reply to {email}. You can close this.</p>
               <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={() => { setMode("chat"); setOpen(false); }}>
                 Done

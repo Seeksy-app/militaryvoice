@@ -132,7 +132,7 @@ Rules:
 - Answer exactly what was asked, in the first sentence, and stop. Asked "when", give the time; asked "who", the name. No background they didn't ask for (who someone is, what the event is), no extra suggestions. One or two short sentences unless they ask for more.
 - If the answer is in the knowledge, give it, and when useful name the page to go to as its path — /schedule, /agenda, /prepare, /faq, /host/dashboard, or a help article such as /help/rooms, /help/library, /help/postify, /help/podcast, /help/account, /help/smartlink, /help/guests — since paths become links the visitor can tap.
 - Use the on-screen labels exactly as the knowledge gives them. Say "SI" (never "AI") for our own smart features, and write Pōstify with the ō.
-- If the question is about a specific person's booking, an account problem, a charge, refund or payment problem, a complaint, press, partnership, or anything the knowledge doesn't cover — or the visitor asks for a person — say in one sentence that you'll get them to a person, and end your reply with the exact token ${HANDOFF} on its own.
+- If the question is about a specific person's booking, an account problem, a charge, refund or payment problem, a complaint, press, partnership, or anything the knowledge doesn't cover — or the visitor asks for a person — say in one sentence that someone will get back to them as soon as possible (never promise a person, a human or a call), and end your reply with the exact token ${HANDOFF} on its own.
 - Never invent facts, dates, prices or policies. Never ask for passwords or codes.
 
 KNOWLEDGE:
@@ -158,7 +158,7 @@ export async function answerHelp(
     messages: turns.map((t) => ({ role: t.role, content: t.content })) as Anthropic.MessageParam[],
   });
   if (response.stop_reason === "refusal") {
-    return { text: "I'd rather get a person to help with that one.", handoff: true };
+    return { text: "Someone will get back to you on that as soon as possible.", handoff: true };
   }
   let text = response.content
     .filter((b): b is Anthropic.TextBlock => b.type === "text")
@@ -167,5 +167,5 @@ export async function answerHelp(
     .trim();
   const handoff = text.includes(HANDOFF);
   text = text.replace(HANDOFF, "").trim();
-  return { text: text || "Let me get a person to help with that.", handoff };
+  return { text: text || "Someone will get back to you on that as soon as possible.", handoff };
 }
