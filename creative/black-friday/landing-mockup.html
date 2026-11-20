@@ -1,0 +1,241 @@
+<!doctype html>
+<!--
+  /black-friday redesign MOCKUP (20 Nov 2026, Social session) after Andrew's ChatGPT banner: gold "BLACK FRIDAY SPECIAL",
+  red "30 DAYS FREE" tag, the challenge coin he picked, four features, offer bar. Static picture of the page: the join box
+  here is a drawing; the build keeps the real JoinBox (email → code → Stripe checkout). Nothing ships before Andrew's go.
+  Render: Chrome headless at 390 wide (phone) and 1440 wide (desktop).
+-->
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Founding Members 2026 mockup</title>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:ital,wght@0,700;0,800;0,900;1,800;1,900&display=swap" rel="stylesheet" />
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet" />
+<style>
+  :root { --navy: #000741; --navy2: #0a1460; --gold: #F0A71F; --gold-hi: #FFE08A; --red: #C8202E; --red-dk: #7E0C16; }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: var(--navy); color: #fff; font-family: "General Sans", Inter, system-ui, sans-serif; -webkit-font-smoothing: antialiased; }
+  h1, h2, h3, p { text-wrap: balance; }
+  .wrap { max-width: 1240px; margin: 0 auto; padding: 0 20px; }
+
+  /* top bar */
+  .top { position: relative; z-index: 5; border-bottom: 1px solid rgba(255,255,255,.08); }
+  .top .wrap { display: flex; align-items: center; justify-content: space-between; height: 60px; }
+  .top img { height: 30px; }
+  .top a { color: rgba(255,255,255,.85); font-weight: 500; font-size: 15px; text-decoration: none; }
+
+  /* hero */
+  .hero { position: relative; overflow: hidden; padding: 22px 0 28px;
+    background:
+      radial-gradient(60% 55% at 78% 40%, rgba(240,167,31,.32), rgba(240,167,31,0) 70%),
+      radial-gradient(80% 60% at 10% 0%, rgba(40,60,190,.55), rgba(0,7,65,0) 70%),
+      linear-gradient(180deg, #030b52 0%, var(--navy) 100%); }
+  .hero::before { /* flag stripes, faint */
+    content: ""; position: absolute; inset: -20% -10%; transform: rotate(-12deg);
+    background: repeating-linear-gradient(180deg, rgba(200,32,46,.16) 0 26px, rgba(255,255,255,.04) 26px 52px);
+    -webkit-mask: linear-gradient(90deg, #000 0%, rgba(0,0,0,.6) 30%, transparent 60%); mask: linear-gradient(90deg, #000 0%, rgba(0,0,0,.6) 30%, transparent 60%); }
+  .sparks { position: absolute; inset: 0; pointer-events: none;
+    background-image: radial-gradient(2px 2px at 12% 18%, #ffe9a8, transparent), radial-gradient(1.5px 1.5px at 30% 70%, #ffe9a8, transparent), radial-gradient(2px 2px at 64% 12%, #fff, transparent), radial-gradient(1.5px 1.5px at 88% 78%, #ffe9a8, transparent), radial-gradient(2.5px 2.5px at 72% 58%, #fff3c4, transparent), radial-gradient(1.5px 1.5px at 48% 30%, #fff, transparent), radial-gradient(2px 2px at 94% 24%, #ffe9a8, transparent); opacity: .9; }
+  .grid { position: relative; display: grid; grid-template-columns: minmax(0,1fr); gap: 0; }
+
+  .pill { display: inline-flex; align-items: center; gap: 10px; padding: 6px 14px; border: 2px solid var(--gold); border-radius: 6px; transform: skewX(-10deg);
+    color: var(--gold-hi); font: 800 italic 17px/1 "Barlow Condensed", sans-serif; letter-spacing: .22em; text-transform: uppercase; background: rgba(0,7,65,.6); box-shadow: 0 0 24px rgba(240,167,31,.35); }
+  .pill span { transform: skewX(10deg); display: inline-block; }
+
+  .bf { margin-top: 10px; font: 900 italic 92px/.84 "Barlow Condensed", sans-serif; text-transform: uppercase; letter-spacing: -.01em;
+    background: linear-gradient(180deg, #fffbe6 0%, #ffe08a 28%, #f5b836 48%, #b9761a 62%, #ffd66b 80%, #fff1bf 100%); -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 3px 0 #6b3d05) drop-shadow(0 10px 22px rgba(0,0,0,.55)); }
+  .bf .l2 { display: block; }
+  .special { display: inline-block; margin-top: 8px; padding: 6px 26px 7px; color: #fff; font: 900 italic 30px/1 "Barlow Condensed", sans-serif; letter-spacing: .28em; text-transform: uppercase;
+    background: linear-gradient(180deg, #e2333f, var(--red-dk)); clip-path: polygon(4% 0, 100% 0, 96% 100%, 0 100%); box-shadow: 0 8px 20px rgba(0,0,0,.4); }
+
+  .art { position: absolute; right: -10px; top: 64px; width: 140px; height: 180px; }
+  .coin { position: absolute; right: 0; top: 0; width: 140px; transform: rotate(-8deg); filter: drop-shadow(0 18px 30px rgba(0,0,0,.6)) drop-shadow(0 0 40px rgba(240,167,31,.45)); animation: shine 5s ease-in-out infinite; }
+  @keyframes shine { 0%, 100% { filter: drop-shadow(0 18px 30px rgba(0,0,0,.6)) drop-shadow(0 0 30px rgba(240,167,31,.35)); } 50% { filter: drop-shadow(0 18px 30px rgba(0,0,0,.6)) drop-shadow(0 0 60px rgba(255,215,120,.75)); } }
+  @media (prefers-reduced-motion: reduce) { .coin, .tick-row { animation: none !important; } }
+
+  /* red price tag */
+  .tag { position: absolute; left: -8px; bottom: -10px; width: 92px; padding: 22px 6px 10px; transform: rotate(14deg); text-align: center;
+    background: linear-gradient(160deg, #ec3a46 0%, var(--red) 45%, var(--red-dk) 100%); color: #fff; border-radius: 8px 8px 10px 10px;
+    clip-path: polygon(50% 0, 100% 16%, 100% 100%, 0 100%, 0 16%); box-shadow: inset 0 0 0 2px rgba(255,220,140,.6); filter: drop-shadow(0 10px 16px rgba(0,0,0,.5)); }
+  .tag::before { content: ""; position: absolute; left: 50%; top: 9px; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; background: var(--navy); box-shadow: 0 0 0 2px var(--gold); }
+  .tag b { display: block; font: 900 46px/.8 "Barlow Condensed", sans-serif; }
+  .tag i { display: block; font: 800 italic 17px/1 "Barlow Condensed", sans-serif; letter-spacing: .04em; text-transform: uppercase; margin-top: 4px; }
+
+  /* offer bar */
+  .offer { margin-top: 20px; display: flex; align-items: stretch; border: 2px solid var(--gold); border-radius: 12px; overflow: hidden; background: rgba(0,5,45,.75); box-shadow: 0 0 0 1px rgba(255,224,138,.25), 0 0 32px rgba(240,167,31,.25); }
+  .offer .lead { display: none; }
+  .offer .big { flex: 1; padding: 10px 14px; }
+  .offer .big b { display: block; font: 900 italic 34px/.95 "Barlow Condensed", sans-serif; text-transform: uppercase; }
+  .offer .big small { display: block; margin-top: 3px; font-size: 13px; letter-spacing: .06em; text-transform: uppercase; color: rgba(255,255,255,.85); font-weight: 600; }
+  .offer .big small em { font-style: normal; color: var(--gold-hi); font-weight: 700; font-size: 15px; }
+  .offer .ends { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-left: 1px solid rgba(240,167,31,.5); font-size: 12px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; line-height: 1.25; }
+  .offer .ends svg { flex: none; }
+
+  /* join box (drawing of the real JoinBox) */
+  .join { margin-top: 14px; padding: 14px; border-radius: 14px; background: #fff; color: #0b1020; box-shadow: 0 20px 50px rgba(0,0,0,.45); }
+  .join label { display: block; font-size: 14px; font-weight: 600; color: #333a55; }
+  .join .row { display: flex; flex-direction: column; gap: 10px; margin-top: 8px; }
+  .join .input { height: 52px; border: 1.5px solid #c9cfe4; border-radius: 10px; padding: 0 14px; display: flex; align-items: center; color: #8a90a8; font-size: 17px; }
+  .join .btn { height: 56px; border-radius: 10px; display: flex; align-items: center; justify-content: center; gap: 10px; font: 900 italic 24px/1 "Barlow Condensed", sans-serif; letter-spacing: .03em; text-transform: uppercase; white-space: nowrap; color: #1a1000;
+    background: linear-gradient(180deg, #ffe28f 0%, #f6b93a 50%, #e39a12 100%); box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 6px 18px rgba(240,167,31,.55); }
+  .join p { margin-top: 9px; font-size: 13px; color: #555c78; line-height: 1.35; text-wrap: pretty; }
+
+  /* feature row */
+  .feats { position: relative; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
+  .feat { display: flex; align-items: center; gap: 10px; padding: 10px; border-radius: 10px; background: rgba(255,255,255,.05); border: 1px solid rgba(240,167,31,.35); font-weight: 600; font-size: 14px; line-height: 1.2; }
+  .ico { flex: none; width: 36px; height: 36px; border-radius: 9px; display: grid; place-items: center; border: 2px solid var(--gold); color: var(--gold-hi); box-shadow: 0 0 14px rgba(240,167,31,.35); }
+
+  /* ticker */
+  .tick { background: linear-gradient(180deg, #ffd56b, var(--gold)); color: var(--navy); overflow: hidden; border-block: 3px solid #fff2c4; }
+  .tick-row { display: flex; width: max-content; animation: run 28s linear infinite; }
+  .tick span { padding: 10px 0; font: 900 italic 22px/1 "Barlow Condensed", sans-serif; letter-spacing: .08em; text-transform: uppercase; white-space: nowrap; }
+  @keyframes run { to { transform: translateX(-50%); } }
+
+  /* lower sections */
+  section.blk { padding: 48px 0; }
+  .eyebrow { color: var(--gold); font: 800 italic 18px/1 "Barlow Condensed", sans-serif; letter-spacing: .2em; text-transform: uppercase; }
+  h2 { margin-top: 10px; font: 900 italic 46px/.95 "Barlow Condensed", sans-serif; text-transform: uppercase; }
+  .cards { display: grid; grid-template-columns: 1fr; gap: 14px; margin-top: 22px; }
+  .card { padding: 20px; border-radius: 14px; background: linear-gradient(180deg, rgba(255,255,255,.07), rgba(255,255,255,.02)); border: 1px solid rgba(255,255,255,.12); }
+  .card h3 { font-size: 20px; font-weight: 600; }
+  .card p { margin-top: 6px; color: rgba(255,255,255,.78); font-size: 15px; line-height: 1.45; text-wrap: pretty; }
+  .card .ico { margin-bottom: 12px; }
+  .free { background: var(--navy2); }
+  .terms { display: grid; grid-template-columns: 1fr; gap: 10px; margin-top: 20px; }
+  .terms li { list-style: none; display: flex; gap: 12px; align-items: flex-start; padding: 14px 16px; border-radius: 12px; background: rgba(255,255,255,.05); font-size: 16px; line-height: 1.4; }
+  .terms li::before { content: "★"; color: var(--gold); }
+  .final { text-align: center; padding: 56px 0 64px; background: radial-gradient(60% 70% at 50% 30%, rgba(240,167,31,.3), transparent 70%), var(--navy); }
+  .final img { width: 170px; transform: rotate(-8deg); filter: drop-shadow(0 0 40px rgba(240,167,31,.5)); }
+  .final .join { max-width: 520px; margin: 22px auto 0; text-align: left; }
+  .vo { display: flex; align-items: center; justify-content: center; gap: 12px; margin-top: 26px; color: rgba(255,255,255,.75); font-size: 14px; }
+  .vo span { width: 56px; height: 56px; border-radius: 50%; background: #fff; display: grid; place-items: center; overflow: hidden; }
+  .vo img { width: 86%; transform: none; filter: none; }
+
+  /* desktop */
+  @media (min-width: 900px) {
+    .wrap { padding: 0 40px; }
+    .top .wrap { height: 72px; } .top img { height: 36px; }
+    .hero { padding: 26px 0 40px; }
+    .grid { grid-template-columns: minmax(0,1.25fr) minmax(0,.75fr); align-items: center; gap: 30px; }
+    .pill { font-size: 22px; }
+    .bf { font-size: 136px; margin-top: 12px; }
+    .special { font-size: 38px; padding: 6px 36px 7px; margin-top: 10px; }
+    .art { position: relative; right: auto; top: auto; width: 100%; height: 440px; }
+    .coin { width: 400px; right: 0; top: 10px; }
+    .tag { width: 150px; left: 0; bottom: 30px; padding: 34px 10px 16px; }
+    .tag::before { top: 13px; width: 14px; height: 14px; margin-left: -7px; }
+    .tag b { font-size: 84px; } .tag i { font-size: 28px; }
+    .offer .lead { display: flex; align-items: center; padding: 0 22px; background: linear-gradient(180deg, #ffe28f, #e8a21a); color: var(--navy); font: 900 italic 28px/.95 "Barlow Condensed", sans-serif; text-transform: uppercase; clip-path: polygon(0 0, 100% 0, 90% 100%, 0 100%); padding-right: 30px; width: 170px; }
+    .offer .big { padding: 10px 22px; } .offer .big b { font-size: 46px; white-space: nowrap; } .offer .big small { font-size: 15px; white-space: nowrap; } .offer .big small em { font-size: 18px; }
+    .offer .ends { font-size: 15px; padding: 12px 22px; gap: 12px; }
+    .join { padding: 18px; } .join .row { flex-direction: row; } .join .input { flex: 1; height: 58px; } .join .btn { height: 58px; padding: 0 26px; font-size: 26px; }
+    .feats { grid-template-columns: repeat(4, 1fr); gap: 14px; margin-top: 26px; }
+    .feat { font-size: 16px; padding: 12px 14px; }
+    .tick span { font-size: 26px; padding: 12px 0; }
+    section.blk { padding: 72px 0; }
+    h2 { font-size: 72px; }
+    .cards { grid-template-columns: repeat(3, 1fr); gap: 20px; }
+    .terms { grid-template-columns: 1fr 1fr; }
+    .final h2 { font-size: 88px; }
+  }
+</style>
+</head>
+<body>
+<header class="top"><div class="wrap"><img src="../../client/public/logo-lockup-dark.png" alt="MilitaryVoices.ai" /><a href="#">Sign in</a></div></header>
+
+<section class="hero">
+  <div class="sparks"></div>
+  <div class="wrap">
+    <div class="grid">
+      <div class="left">
+        <div class="pill"><span>★ Founding Members 2026 ★</span></div>
+        <h1 class="bf">Black<span class="l2">Friday</span></h1>
+        <div class="special">Special</div>
+
+        <div class="offer">
+          <div class="lead">Black Friday offer</div>
+          <div class="big"><b>30 days free</b><small>then just <em>$19.95</em> / month · Scale plan</small></div>
+          <div class="ends"><svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="#FFE08A" stroke-width="2"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M3 10h18M8 3v4M16 3v4"/></svg><span>Ends<br/><span style="white-space:nowrap">Dec 31, 2026</span></span></div>
+        </div>
+
+        <div class="join">
+          <label>Your email</label>
+          <div class="row"><div class="input">you@yourshow.com</div><div class="btn">Start my 30 days free <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#1a1000" stroke-width="3"><path d="M5 12h14M13 6l6 6-6 6"/></svg></div></div>
+          <p>We'll email you a 6-digit code, then you're on to checkout. Card at checkout; cancel before day 30 and you pay nothing.</p>
+        </div>
+      </div>
+      <div class="art">
+        <img class="coin" src="badge-coin.png" alt="Founding Member 2026 challenge coin" />
+        <div class="tag"><b>30</b><i>Days free</i></div>
+      </div>
+    </div>
+
+    <div class="feats">
+      <div class="feat"><span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="2" width="6" height="12" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v4"/></svg></span>Grow your podcast</div>
+      <div class="feat"><span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="m16 10 6-3v10l-6-3"/></svg></span>Your own Studio</div>
+      <div class="feat"><span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10 14a5 5 0 0 0 7 0l3-3a5 5 0 0 0-7-7l-1 1M14 10a5 5 0 0 0-7 0l-3 3a5 5 0 0 0 7 7l1-1"/></svg></span>SmartLink page</div>
+      <div class="feat"><span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M13 2 4 14h7l-1 8 9-12h-7z"/></svg></span>SmartChat for listeners</div>
+    </div>
+  </div>
+</section>
+
+<div class="tick"><div class="tick-row" id="tk"></div></div>
+
+<section class="blk">
+  <div class="wrap">
+    <div class="eyebrow">What Scale does for your show</div>
+    <h2>Your episodes, everywhere</h2>
+    <div class="cards">
+      <div class="card"><span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><path d="M20 4 8.1 15.9M14.5 14.5 20 20M8.1 8.1 12 12"/></svg></span><h3>30 Pōstify credits a month</h3><p>About 3 episodes a month of clips with animated captions (or 6 with Classic captions), 4 clips an episode. Yours on day 1.</p></div>
+      <div class="card"><span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="6" width="14" height="12" rx="2"/><path d="m16 10 6-3v10l-6-3"/></svg></span><h3>Your own Studio</h3><p>Record and go live with your guests in a studio that's yours.</p></div>
+      <div class="card"><span class="ico"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="8" r="4"/><path d="M2 21a7 7 0 0 1 14 0M19 8v6M16 11h6"/></svg></span><h3>Invite a guest</h3><p>Your guest answers a few questions and sends their photo before the interview.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="blk free">
+  <div class="wrap">
+    <div class="eyebrow">Free on every plan</div>
+    <h2>Yours to keep</h2>
+    <div class="cards">
+      <div class="card"><h3>Podcast hosting</h3><p>Your feed, listed in Apple Podcasts, Spotify and 10+ apps.</p></div>
+      <div class="card"><h3>Your SmartLink page</h3><p>One link for your show, your socials and your latest episodes.</p></div>
+      <div class="card"><h3>SmartChat for listeners</h3><p>Listeners ask your show a question and get an answer from your episodes.</p></div>
+    </div>
+  </div>
+</section>
+
+<section class="blk">
+  <div class="wrap">
+    <div class="eyebrow">The plain terms</div>
+    <h2>No fine print</h2>
+    <ul class="terms">
+      <li>Scale free for your first 30 days, then $19.95 a month.</li>
+      <li>Card at checkout. Cancel in Manage billing before day 30 and nothing is charged.</li>
+      <li>One free trial per email.</li>
+      <li>Open until December 31, 2026. Join in 2026 and you're a Founding Member.</li>
+    </ul>
+  </div>
+</section>
+
+<section class="final">
+  <div class="wrap">
+    <img src="badge-coin.png" alt="" />
+    <h2>Become a Founding Member</h2>
+    <div class="join">
+      <label>Your email</label>
+      <div class="row"><div class="input">you@yourshow.com</div><div class="btn">Start my 30 days free</div></div>
+      <p>Card at checkout; cancel before day 30 and you pay nothing.</p>
+    </div>
+    <div class="vo"><span><img src="../../client/public/veteran-owned.png" alt="Veteran-Owned Business" /></span>A veteran-owned business</div>
+  </div>
+</section>
+
+<script>
+  const t = "Founding Members 2026 ★ Scale 30 days free ★ Veteran-owned ★ Ends Dec 31, 2026 ★ ";
+  document.getElementById("tk").innerHTML = Array(8).fill(`<span>${t}</span>`).join("");
+</script>
+</body>
+</html>
