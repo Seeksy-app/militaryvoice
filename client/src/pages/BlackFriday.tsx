@@ -46,7 +46,7 @@ const SCALE = [
 const FREE = [
   { i: Mic, t: "Free podcast hosting", d: "Your show and its feed, listed in Apple Podcasts, Spotify and 10+ apps." },
   { i: Link2, t: "Your SmartLink", d: "One link to add to your social media profiles, with your show, your links and your latest episodes." },
-  { i: Users, t: "Podcast Guest Invite", d: "Send your guest a link. They answer a few questions and add the photo they want shown, and you get it all before the interview." },
+  { i: Users, t: "Invite a guest", d: "Send your guest a link. They answer a few questions and add the photo they want shown, and you get it all before the interview." },
   { i: Gift, t: "Your first Pōstify episode free", d: "See what Pōstify does with one of your own episodes." },
 ];
 const TICKER = ["Founding Members 2026", "Scale 30 days free", `Then just ${price} a month`, "Veteran-owned", `Offer ends ${endsShort}`];

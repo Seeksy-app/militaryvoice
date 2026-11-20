@@ -24,6 +24,8 @@ const GROWTH: Feature[] = [
   { t: "Podcast hosting + directory", tip: "We host your show and its feed, and it's listed in the MilitaryVoices directory." },
   { t: "Publish to 10+ podcast apps", tip: "One feed, listed once in each: Apple Podcasts, Spotify, Amazon Music and Audible, iHeartRadio, YouTube Music, Pocket Casts, TuneIn, Deezer, Player FM, Castbox and Podcast Index, which feeds dozens more. We copy your feed and walk you through each one." },
   { t: "SmartChat for your listeners", tip: "Listeners ask your show a question and get an answer from your own episodes, any time of day." },
+  // Free since 20 Nov 2026 (Andrew): guestInvites.ts has no plan gate. Same name as the app's Podcast tab.
+  { t: "Invite a guest", tip: "Send your guest an invitation from your Podcast page. They answer a few questions and add the photo they want shown, and you get it all before the interview." },
   { t: "Zoom recordings, straight in", tip: "Connect Zoom once. Every cloud recording comes in on its own, ready for clips and a clean episode." },
   { t: "Events with an SI co-host", tip: "Take a slot in live events like the Podcast Marathon. Alex, our SI co-host, introduces you and keeps the hand-offs moving." },
 ];
@@ -35,7 +37,6 @@ const PLAN_FEATURES: Record<string, Feature[]> = {
     { t: "A clean episode, every time", tip: "Ums, false starts and dead air taken out, as MP3 and MP4. Your original is never changed." },
     { t: "Music and title edits included", tip: "Add a track from our library to every clip, and change a title or subtitle, at no extra cost." },
     { t: "Animated captions", tip: "Word-by-word captions, framed on whoever is talking. Or Classic captions for fewer credits." },
-    { t: "Invite a guest", tip: "Send your guest an invitation from your Podcast page. They answer a few questions and add the photo they want shown, and you get it all before the interview." },
     { t: "Your own Studio", tip: "A full studio for your show: scenes, layouts, lower thirds and a producer console, empty and yours. Room, for a quick jump in and out, is on every plan." },
     { t: "Extra credits 60¢ each, up to a limit you set", tip: "Run out, and Pōstify keeps going. Extras go on your next bill, never past the limit you set." },
   ],
