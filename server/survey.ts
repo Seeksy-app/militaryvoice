@@ -12,6 +12,7 @@ import { db, storage, schemaIsReady } from "./storage.js";
 import { emailShell, EMAIL_BANNERS, sendOneOffEmail, bccFor } from "./email.js";
 import { clips, outboxMail, postifySubscriptions, recordings, scheduledGrants, scheduledTexts, smsOptOuts, surveyInvites } from "../shared/schema.js";
 import { peopleFor, sendSms, toE164 } from "./sms.js";
+import { sendFoundingReminders } from "./foundingReminder.js";
 import { SURVEY_QUESTIONS } from "../shared/survey.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
@@ -467,7 +468,9 @@ export function registerSurvey(app: Express, requireAdmin: RequestHandler): void
     const ended = await db.update(postifySubscriptions).set({ status: "canceled", updatedAt: now() })
       .where(and(like(postifySubscriptions.subscriptionId, "comp:%"), eq(postifySubscriptions.status, "active"), lte(postifySubscriptions.periodEnd, t)))
       .returning({ id: postifySubscriptions.id });
-    res.json({ sent, texted, given, ended: ended.length });
+    // Founding Members: 7 days before the free month ends (held until Andrew approves the text).
+    const reminded = await sendFoundingReminders().catch((e: Error) => { console.warn("founding reminders:", e.message); return 0; });
+    res.json({ sent, texted, given, ended: ended.length, reminded });
   };
   /**
    * Text everyone from the event who gave us a mobile number and hasn't answered
