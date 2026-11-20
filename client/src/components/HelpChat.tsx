@@ -71,7 +71,7 @@ export function HelpChat() {
   const inApp = location.startsWith("/host/dashboard");
   // On the editing screens (Pōstify, the SmartLink builder) just Alex's face, on a computer too: the
   // full "Ask Alex" pill sat on the timeline and the phone preview (8 Oct).
-  const compact = /^\/host\/dashboard\/(postify|page)\b/.test(location);
+  const compact = /^\/host\/dashboard\/(postify|page)\b/.test(location) || location.startsWith("/black-friday");
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([OPENER]);
   const [draft, setDraft] = useState("");
@@ -170,11 +170,11 @@ export function HelpChat() {
         <button
           type="button"
           onClick={() => setOpen(true)}
-          className={`fixed right-4 z-50 inline-flex items-center gap-2 rounded-full bg-[#053877] text-sm font-semibold text-white shadow-lg transition-transform hover:scale-[1.03] lg:right-5 ${compact ? "lg:p-1.5" : "lg:px-4 lg:py-3"} ${inApp ? "bottom-[calc(4.75rem+env(safe-area-inset-bottom))] p-1.5 lg:bottom-5" : "bottom-5 px-4 py-3"}`}
+          className={`fixed right-4 z-50 inline-flex items-center gap-2 rounded-full bg-[#053877] text-sm font-semibold text-white shadow-lg transition-transform hover:scale-[1.03] lg:right-5 ${compact ? "lg:p-1.5" : "lg:px-4 lg:py-3"} ${inApp ? "bottom-[calc(4.75rem+env(safe-area-inset-bottom))] p-1.5 lg:bottom-5" : compact ? "bottom-5 p-1.5" : "bottom-5 px-4 py-3"}`}
           aria-label="Open help"
           data-testid="button-help-open"
         >
-          <img src="/alex.jpg" alt="" className={`h-8 w-8 rounded-full object-cover ring-2 ring-white/30 ${inApp ? (compact ? "" : "lg:-ml-1.5") : "-ml-1.5"}`} />
+          <img src="/alex.jpg" alt="" className={`h-8 w-8 rounded-full object-cover ring-2 ring-white/30 ${inApp ? (compact ? "" : "lg:-ml-1.5") : compact ? "" : "-ml-1.5"}`} />
           {/* On the phone's dashboard: just Alex's face, above the tab bar. */}
           <span className={compact ? "sr-only" : inApp ? "hidden lg:inline" : ""}>Ask Alex</span>
         </button>

@@ -315,7 +315,7 @@ function JoinBox({ src }: { src: string }) {
   }, [signedIn, standing]);
 
   const shell = "relative rounded-3xl bg-white p-5 text-left text-[#0b1530] ring-[3px] ring-[#F0A71F] shadow-[0_0_0_6px_rgba(240,167,31,0.25),0_0_60px_rgba(240,167,31,0.5),0_24px_60px_rgba(0,0,0,0.45)] sm:p-6";
-  const gold = `h-14 w-full gap-2 disabled:opacity-80 rounded-full px-3 text-[15px] font-extrabold uppercase italic tracking-tight text-[#2a1800] shadow-[0_0_26px_rgba(240,167,31,0.55),inset_0_2px_0_rgba(255,255,255,0.6)] hover:brightness-110 sm:text-base ${GOLD_FILL}`;
+  const gold = `h-14 w-full gap-2 disabled:opacity-100 rounded-full px-3 text-[15px] font-extrabold uppercase italic tracking-tight text-[#2a1800] shadow-[0_0_26px_rgba(240,167,31,0.55),inset_0_2px_0_rgba(255,255,255,0.6)] enabled:hover:brightness-110 sm:text-base ${GOLD_FILL}`;
   const fine = "mt-3 flex items-start gap-1.5 text-xs leading-relaxed text-[#4a5568]";
   const err = error ? <p className="mt-3 text-sm font-medium text-red-600" role="alert">{error}</p> : null;
 
@@ -357,9 +357,9 @@ function JoinBox({ src }: { src: string }) {
       <p className="text-lg font-bold">Join the Founding Members</p>
       {step === "email" ? (
         <form onSubmit={(e) => { e.preventDefault(); if (email.includes("@") && (!siteKey || human)) void sendCode(); }}>
-          <p className="mt-1 text-sm text-[#4a5568]">Your email, and we'll send a 6-digit code. New or returning, the same way.</p>
+          <p className="mt-1 text-sm text-[#4a5568]">30 days free, then {price} a month.</p>
           <Input type="email" required autoComplete="email" placeholder="you@yourshow.com" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-4 h-12 rounded-xl border-[#cbd5e1] bg-white text-base text-[#0b1530]" data-testid="bf-email" />
-          {siteKey && <div className="mt-3"><Turnstile siteKey={siteKey} onToken={setHuman} resetSignal={humanReset} /></div>}
+          {siteKey && <div className="mt-3"><Turnstile siteKey={siteKey} onToken={setHuman} resetSignal={humanReset} appearance="interaction-only" theme="light" /></div>}
           <Button type="submit" disabled={busy || !email.includes("@") || (Boolean(siteKey) && !human)} className={`mt-4 ${gold}`} data-testid="bf-send-code">
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Become a Founding Member <ArrowRight className="h-5 w-5" /></>}
           </Button>

@@ -43,11 +43,16 @@ export function Turnstile({
   siteKey,
   onToken,
   resetSignal = 0,
+  appearance = "always",
+  theme = "auto",
 }: {
   siteKey: string;
   onToken: (token: string | null) => void;
   /** Bump after every submit: a token is single-use. */
   resetSignal?: number;
+  /** "interaction-only" takes no room unless Cloudflare needs a click (the Black Friday page's phone fold). */
+  appearance?: "always" | "execute" | "interaction-only";
+  theme?: "auto" | "light" | "dark";
 }) {
   const host = useRef<HTMLDivElement>(null);
   const widget = useRef<string | null>(null);
@@ -68,7 +73,8 @@ export function Turnstile({
       if (cancelled || !host.current || !window.turnstile) return;
       widget.current = window.turnstile.render(host.current, {
         sitekey: siteKey,
-        theme: "auto",
+        theme,
+        appearance,
         size: "flexible",
         callback: (token: string) => latest.current(token),
         "expired-callback": () => latest.current(null),
@@ -80,7 +86,7 @@ export function Turnstile({
       if (widget.current && window.turnstile) window.turnstile.remove(widget.current);
       widget.current = null;
     };
-  }, [siteKey]);
+  }, [siteKey, appearance, theme]);
 
   useEffect(() => {
     if (resetSignal > 0 && widget.current && window.turnstile) {
@@ -91,7 +97,7 @@ export function Turnstile({
 
   return (
     <div>
-      <div ref={host} className="min-h-[65px]" data-testid="turnstile" />
+      <div ref={host} className={appearance === "interaction-only" ? "" : "min-h-[65px]"} data-testid="turnstile" />
       {slow && (
         <p className="mt-1 text-xs text-muted-foreground" data-testid="turnstile-slow">
           The security check hasn't loaded. If you use an ad or privacy blocker, pause it for this page, or try another browser.
