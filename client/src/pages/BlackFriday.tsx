@@ -219,7 +219,7 @@ export default function BlackFriday() {
                 </li>
               ))}
             </ul>
-            <Link href="/host/dashboard" className="mt-7 flex h-12 w-full items-center justify-center gap-2 rounded-full border-2 border-white/70 text-[15px] font-extrabold uppercase italic tracking-tight text-white transition hover:bg-white hover:text-[#000741]" data-testid="bf-free-cta">
+            <Link href="/host/dashboard" onClick={() => track("free", src)} className="mt-7 flex h-12 w-full items-center justify-center gap-2 rounded-full border-2 border-white/70 text-[15px] font-extrabold uppercase italic tracking-tight text-white transition hover:bg-white hover:text-[#000741]" data-testid="bf-free-cta">
               Join free <ArrowRight className="h-4 w-4" />
             </Link>
             <p className="mt-3 text-center text-xs text-white/60">Just your email and a 6-digit code.</p>

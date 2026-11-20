@@ -2,7 +2,7 @@
 // December 31, 2026 (Eastern) a first Scale plan comes with 30 days free (Stripe's own trial, card at checkout).
 //
 // Counted links: every post, email and card links to /go/bf?src=<channel> (counted, then on to /black-friday).
-// The page reports its own steps (join, code, signedin, checkout) to POST /api/promo/bf, so each channel has a funnel.
+// The page reports its own steps (join, code, signedin, checkout; free for the Join free button) to POST /api/promo/bf, so each channel has a funnel.
 // Clicks are kept in sponsor_clicks with sponsor id 0 (our own promotion, not a sponsor) and source
 // "bf:<step>:<src>", so no new table is needed. Sponsor reports read real sponsor ids only, so 0 never shows there.
 //
@@ -16,7 +16,8 @@ import { siteSettings, sponsorClicks } from "../shared/schema.js";
 import { FOUNDING, foundingOpen, planOf, type PlanKey } from "../shared/tokens.js";
 
 const PROMO_ID = 0;
-const STEPS = new Set(["page", "start", "join", "code", "signedin", "checkout"]);
+// "free": the Join free button (Free plan, to the dashboard), counted apart from the Founding Member steps.
+const STEPS = new Set(["page", "start", "join", "code", "signedin", "checkout", "free"]);
 const clean = (v: unknown) => String(v ?? "").toLowerCase().replace(/[^a-z0-9-]+/g, "").slice(0, 20) || "link";
 const LIVE = ["active", "trialing", "past_due"];
 
