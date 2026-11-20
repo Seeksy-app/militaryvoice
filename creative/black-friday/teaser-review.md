@@ -131,10 +131,11 @@ Andrew: "We can post Frank's creatives", then "Yes, schedule it" on the exact te
 ## Loud Black Friday creatives: plan for Andrew's go (20 Nov 2026; nothing scheduled)
 Andrew picked all six (design session, creative/black-friday/loud/). Go-to-market library ids: 01 e8721d367b0a, 02 705a7c9e0099, 03 a79be2d5d1b1, 04 76ea2771baf9, 05 23a2764946ba, 06 3b966ff213cb.
 Riccoh's LinkedIn, one Founding post a day max. The text is the design session's draft, with two changes: link → militaryvoices.ai/go/bf?src=li-riccoh, and our three hashtags added.
-1. Fri 27 Nov 8:00 am ET: 05 hero wide (launch)
-2. Sat 28 Nov 10:00 am: 01 hero portrait
-3. Mon 30 Nov (Cyber Monday) 8:00 am: 06 what you get wide
-4. Wed 2 Dec 9:00 am: 02 what you get portrait
+(Order per PM, 20 Nov.)
+1. Fri 27 Nov 8:00 am ET: 01 hero portrait (launch)
+2. Sat 28 Nov 10:00 am: 05 hero wide
+3. Mon 30 Nov (Cyber Monday) 8:00 am: 02 what you get portrait
+4. Wed 2 Dec 9:00 am: 06 what you get wide
 5. Tue 8 Dec 9:00 am: 03 the coin
 6. Tue 15 Dec 9:00 am: 04 ends Dec 31
-Optional last call (repeat 04 / 05): Mon 28 Dec and Wed 30 Dec, 9:00 am.
+Optional last calls: Mon 28 Dec 9:00 am (04) and Wed 30 Dec 9:00 am (01).
