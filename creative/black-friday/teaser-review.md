@@ -139,3 +139,6 @@ Riccoh's LinkedIn, one Founding post a day max. The text is the design session's
 5. Tue 8 Dec 9:00 am: 03 the coin
 6. Tue 15 Dec 9:00 am: 04 ends Dec 31
 Optional last calls: Mon 28 Dec 9:00 am (04) and Wed 30 Dec 9:00 am (01).
+
+### Scheduled (20 Nov 2026, Andrew: "All 8", on the full texts)
+hp-194 Fri 27 8am (01) · hp-195 Sat 28 10am (05) · hp-196 Mon 30 8am (02) · hp-197 Wed 2 Dec 9am (06) · hp-198 Tue 8 Dec 9am (03) · hp-199 Tue 15 Dec 9am (04) · hp-200 Mon 28 Dec 9am (04) · hp-201 Wed 30 Dec 9am (01). All are on Riccoh's LinkedIn with the design session's text plus /go/bf?src=li-riccoh and our hashtags. #5 kept "this Black Friday" as written. Confirmed in Upload-Post. Alt text doesn't go through Go-to-market (no field for it); it's kept in loud/post-text-and-alt.md.
