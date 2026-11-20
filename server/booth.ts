@@ -87,7 +87,21 @@ async function readVoice(): Promise<VoiceMap> {
   try { const j = JSON.parse((await storage.getSetting("dx:voice")) ?? "{}"); return { welcome: j.welcome, signoff: j.signoff, map: j.map ?? {} }; } catch { return { map: {} }; }
 }
 
+/** An admin can open one booking's booth early, so the host and guests can get in before the hour. */
+async function openEarly(signupId: number): Promise<boolean> {
+  return (await storage.getSetting(`dx:openEarly:${signupId}`)) === "1";
+}
+
 export function registerBooth(app: Express): void {
+  /** Open (or close again) one booth before its hour. Admin only. */
+  app.post("/api/admin/booth/:id/open-early", async (req, res) => {
+    if (!getAdminEmail(req)) return res.status(403).json({ message: "Admins only." });
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ message: "Which booking?" });
+    await storage.setSetting(`dx:openEarly:${id}`, req.body?.open === false ? "" : "1");
+    res.json({ ok: true, open: req.body?.open !== false });
+  });
+
   /** What the program page needs to play the welcome and the sign-off. */
   async function voiceFor() {
     const v = await readVoice();
@@ -439,7 +453,7 @@ export function registerBooth(app: Express): void {
       })(),
       guestLink: role === "guest" ? "" : `${origin}/booth/${b.s.id}?g=${boothGuestKey(b.s.id)}`,
       // An admin can open any booth at any time (to see it, or to help); so can a developer's machine.
-      anytime: !!getAdminEmail(req) || (process.env.NODE_ENV === "development" && !process.env.VERCEL),
+      anytime: !!getAdminEmail(req) || (process.env.NODE_ENV === "development" && !process.env.VERCEL) || (await openEarly(b.s.id) && Date.now() < t.end + CLOSES_MIN * 60_000),
       ready: isLiveKitConfigured(),
     });
   });
@@ -533,7 +547,7 @@ export function registerBooth(app: Express): void {
     const now = Date.now();
     // On a developer's machine the booth opens any time, to try it.
     const anytime = !!getAdminEmail(req) || (process.env.NODE_ENV === "development" && !process.env.VERCEL);
-    if (!anytime && now < t.start - OPENS_MIN * 60_000) return res.status(409).json({ message: `Your booth opens an hour before your time.` });
+    if (!anytime && now < t.start - OPENS_MIN * 60_000 && !(await openEarly(b.s.id))) return res.status(409).json({ message: `Your booth opens an hour before your time.` });
     if (!anytime && now > t.end + CLOSES_MIN * 60_000) return res.status(409).json({ message: "Your time has finished. Thank you for being on!" });
     const studio = await storage.getOrCreateStudio(b.ev.id);
     const name = String(req.body?.name ?? "").trim().slice(0, 60) || (role === "guest" ? "Guest" : b.s.hostName);
