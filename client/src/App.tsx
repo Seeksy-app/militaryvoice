@@ -14,6 +14,7 @@ import DigitalExperience from "@/pages/DigitalExperience";
 import RadioPage from "@/pages/Radio";
 import RadioEmbed from "@/pages/RadioEmbed";
 import RadioROS from "@/pages/RadioROS";
+import HelpDesk from "@/pages/HelpDesk";
 import Booth from "@/pages/Booth";
 import Program from "@/pages/Program";
 import GuestInvite from "@/pages/GuestInvite";
@@ -179,6 +180,7 @@ function AppRouter() {
       <Route path="/greenroom">{() => <Studio />}</Route>
       <Route path="/event/:slug/studio">{(params) => <Studio slug={params.slug} />}</Route>
       <Route path="/admin/radio-ros">{() => <RadioROS />}</Route>
+      <Route path="/admin/help-desk">{() => <HelpDesk />}</Route>
       <Route path="/admin">{() => <Admin />}</Route>
       <Route path="/admin/e/:id">{(p) => <Admin eventId={p.id} />}</Route>
       <Route path="/admin/e/:id/:tab">{(p) => <Admin eventId={p.id} tab={p.tab} />}</Route>

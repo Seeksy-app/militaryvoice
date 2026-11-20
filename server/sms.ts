@@ -193,12 +193,22 @@ export async function peopleFor(eventId: number) {
   return out.sort((a, b) => a.slotIndex - b.slotIndex || (a.role === "host" ? -1 : 1));
 }
 
+/** Other parts of the app can claim an incoming text (the help desk takes its phone's replies as answers). */
+type ReplyHook = (phone: string, text: string) => Promise<boolean>;
+const replyHooks: ReplyHook[] = [];
+export function onTextReply(fn: ReplyHook): void { replyHooks.push(fn); }
+async function claimedByHook(phone: string, text: string): Promise<boolean> {
+  for (const fn of replyHooks) { try { if (await fn(phone, text)) return true; } catch (e) { console.error("[sms] reply hook", e); } }
+  return false;
+}
+
 /** A text back from someone: kept against whoever we last texted at that number; STOP/START honoured; anything else to Slack. */
 async function logReply(phone: string, text: string, providerId: string) {
   const [last] = await db.select().from(smsMessages).where(and(eq(smsMessages.phone, phone), eq(smsMessages.direction, "out"))).orderBy(desc(smsMessages.id)).limit(1);
   await db.insert(smsMessages).values({ eventId: last?.eventId ?? null, direction: "in", phone, name: last?.name ?? "", email: last?.email ?? "", body: text, status: "received", providerId, createdAt: now() });
   if (STOP_WORDS.test(text)) await db.insert(smsOptOuts).values({ phone, createdAt: now() }).onConflictDoNothing();
   else if (START_WORDS.test(text)) await db.delete(smsOptOuts).where(eq(smsOptOuts.phone, phone));
+  else if (await claimedByHook(phone, text)) return;
   else await slackNote(`:iphone: Text from ${last?.name || phone}: "${text.slice(0, 300)}"`, { label: "Open Texts", url: `${ORIGIN}/admin/texts` }).catch(() => {});
 }
 

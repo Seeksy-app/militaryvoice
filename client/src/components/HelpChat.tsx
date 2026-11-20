@@ -9,8 +9,9 @@ import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 import { X, Send, User, Check, Loader2 } from "lucide-react";
 
 // The help bubble. Ask a question, get an answer from what we know about the
-// site; at any point "Talk to a human" hands the whole thing to a person by
-// email. Hidden on the studio and admin surfaces, where it would only be in
+// site. When Alex isn't sure she checks with the team live (20 Nov): the chat
+// waits up to 5 minutes for their answer, then offers the email form. "Email
+// the team" hands the whole thing over by email at any point. Hidden on the studio and admin surfaces, where it would only be in
 // the way.
 
 type Msg = { role: "user" | "assistant"; content: string };
@@ -63,7 +64,7 @@ const HIDDEN_ON = ["/promo", "/studio/composite", "/room/composite", "/dx/", "/a
 
 const OPENER: Msg = {
   role: "assistant",
-  content: "Hi, I'm Alex. Ask me anything about MilitaryVoices.ai. If I can't answer it, someone will get back to you as soon as possible.",
+  content: "Hi, I'm Alex. Ask me anything about MilitaryVoices.ai. If I'm not sure, I'll check with the team.",
 };
 
 export function HelpChat() {
@@ -81,6 +82,8 @@ export function HelpChat() {
   const [email, setEmail] = useState("");
   const [question, setQuestion] = useState("");
   const [human, setHuman] = useState<string | null>(null);
+  // Alex is checking with the team: the question's token, and when to stop waiting.
+  const [waiting, setWaiting] = useState<{ token: string; until: number } | null>(null);
   const [humanReset, setHumanReset] = useState(0);
   const siteKey = useTurnstileSiteKey();
   const scroller = useRef<HTMLDivElement>(null);
@@ -116,10 +119,11 @@ export function HelpChat() {
 
   const ask = useMutation({
     mutationFn: async (history: Msg[]) =>
-      (await apiRequest("POST", "/api/help/chat", { messages: history, page: location })).json() as Promise<{ text: string; handoff: boolean }>,
+      (await apiRequest("POST", "/api/help/chat", { messages: history, page: location, canWait: true })).json() as Promise<{ text: string; handoff: boolean; waiting?: string; waitSec?: number }>,
     onSuccess: (r) => {
       setMsgs((m) => [...m, { role: "assistant", content: r.text }]);
-      if (r.handoff) {
+      if (r.waiting) setWaiting({ token: r.waiting, until: Date.now() + ((r.waitSec ?? 300) + 30) * 1000 });
+      else if (r.handoff) {
         // Carry their last question into the form so they don't retype it.
         const last = [...msgs].reverse().find((x) => x.role === "user");
         setQuestion(last?.content ?? "");
@@ -128,6 +132,42 @@ export function HelpChat() {
     },
     onError: (e: Error) => setMsgs((m) => [...m, { role: "assistant", content: e.message || "Something went wrong. Want someone to get back to you instead?" }]),
   });
+
+  // While Alex checks with the team: ask every 3 seconds. The first answer shows here; no answer in
+  // 5 minutes and the email form comes up with their question in it.
+  useEffect(() => {
+    if (!waiting) return;
+    let stop = false;
+    const giveUp = (mail?: string) => {
+      setWaiting(null);
+      setMsgs((m) => [...m, { role: "assistant", content: "Someone will get back to you as soon as possible. Leave your email and we'll write back." }]);
+      const last = [...msgs].reverse().find((x) => x.role === "user");
+      setQuestion(last?.content ?? "");
+      if (mail) setEmail((e) => e || mail);
+      setMode("human");
+    };
+    const tick = async () => {
+      if (stop) return;
+      if (Date.now() > waiting.until) return giveUp();
+      try {
+        const r = await fetch(`/api/help/question/${encodeURIComponent(waiting.token)}`, { cache: "no-store" });
+        if (stop) return;
+        if (r.ok) {
+          const q = (await r.json()) as { status: string; answer: string; email?: string };
+          if (q.status === "answered" && q.answer) {
+            setWaiting(null);
+            setMsgs((m) => [...m, { role: "assistant", content: `Here's what the team says: ${q.answer}` }]);
+            return;
+          }
+          if (q.status === "timed_out") return giveUp(q.email);
+        }
+      } catch {
+        /* try again on the next tick */
+      }
+    };
+    const t = setInterval(tick, 3000);
+    return () => { stop = true; clearInterval(t); };
+  }, [waiting]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const handoff = useMutation({
     mutationFn: async () =>
@@ -149,7 +189,7 @@ export function HelpChat() {
 
   function send(said?: string) {
     const text = (said ?? draft).trim();
-    if (!text || ask.isPending) return;
+    if (!text || ask.isPending || waiting) return;
     const next = [...msgs, { role: "user" as const, content: text }];
     setMsgs(next);
     setDraft("");
@@ -191,7 +231,7 @@ export function HelpChat() {
               <img src="/alex.jpg" alt="Alex" className="h-10 w-10 rounded-full object-cover ring-2 ring-white/30" />
               <div>
                 <p className="text-sm font-semibold">Alex · SI help desk</p>
-                <p className="text-[11px] text-white/80">{cfg?.agent === false ? "We'll get back to you by email" : "Answers now · or we'll get back to you"}</p>
+                <p className="text-[11px] text-white/80">{cfg?.agent === false ? "We'll get back to you by email" : "Answers now · checks with the team when unsure"}</p>
               </div>
             </div>
             <button type="button" onClick={() => setOpen(false)} className="rounded-full p-1 hover:bg-white/10" aria-label="Close help" data-testid="button-help-close">
@@ -229,6 +269,13 @@ export function HelpChat() {
                     </div>
                   </div>
                 )}
+                {waiting && (
+                  <div className="flex justify-start pl-8" data-testid="help-waiting">
+                    <div className="rounded-2xl bg-muted px-3.5 py-2.5 text-sm text-muted-foreground">
+                      <Loader2 className="inline h-3.5 w-3.5 animate-spin" /> Checking with the team…
+                    </div>
+                  </div>
+                )}
               </div>
               <div className="border-t border-border p-3">
                 <form
@@ -252,7 +299,7 @@ export function HelpChat() {
                     className="min-h-[40px] resize-none text-sm"
                     data-testid="input-help-question"
                   />
-                  <Button type="submit" size="icon" className="h-10 w-10 shrink-0 rounded-full" disabled={!draft.trim() || ask.isPending} aria-label="Send" data-testid="button-help-send">
+                  <Button type="submit" size="icon" className="h-10 w-10 shrink-0 rounded-full" disabled={!draft.trim() || ask.isPending || !!waiting} aria-label="Send" data-testid="button-help-send">
                     <Send className="h-4 w-4" />
                   </Button>
                 </form>

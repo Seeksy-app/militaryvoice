@@ -7,7 +7,8 @@ import sharp from "sharp";
 import { storage, db } from "./storage.js";
 import { sql } from "drizzle-orm";
 import { requireHuman, turnstileSiteKey } from "./turnstile.js";
-import { answerHelp, isHelpAgentConfigured, type HelpTurn } from "./help.js";
+import { answerHelp, isHelpAgentConfigured, CHECKING, GET_BACK, type HelpTurn } from "./help.js";
+import { registerHelpDesk, openQuestion, askerEmail, WAIT_MS } from "./helpDesk.js";
 import { KINDS, effectiveSchedule, cardInput, caption as campaignCaption, isKind, type CampaignContext } from "./campaign.js";
 import { uploadPhoto, uploadShowAsset, signedAssetUpload, listShowAssets } from "./photoStorage.js";
 import {
@@ -6985,6 +6986,7 @@ export function registerRoutes(app: Express): void {
   registerNotices(app, requireAdmin, requireHostSession);
   registerSurvey(app, requireAdmin);
   registerSms(app, requireAdmin);
+  registerHelpDesk(app, requireAdmin);
   registerSceneLog(app, requireAdmin);
   registerPeople(app, requireAdmin);
   registerOrganizer(app, requireHostSession, requireAdmin);
@@ -10457,7 +10459,7 @@ export function registerRoutes(app: Express): void {
       return;
     }
     if (helpRateLimited(req)) {
-      res.status(429).json({ message: "That's a lot of questions at once — give it a few minutes, or ask for a person." });
+      res.status(429).json({ message: "That's a lot of questions at once. Give it a few minutes, or leave your email and we'll write back." });
       return;
     }
     const raw = Array.isArray(req.body?.messages) ? req.body.messages : [];
@@ -10477,10 +10479,21 @@ export function registerRoutes(app: Express): void {
       // Watch-page questions go to Michael's Watch tab, for the record (saved
       // before answering: a serverless function stops once it has replied).
       if (req.body?.page === "/watch") await logWatchChat(turns[turns.length - 1].content, String((out as { text?: string }).text ?? "")).catch((e) => console.error("watch log:", e));
-      res.json(out);
+      // Not sure: Alex checks with the team live (the chat waits on the answer), unless it's money,
+      // legal, press or a complaint, which only ever get "someone will get back to you".
+      if (out.handoff && !out.sensitive) {
+        if (req.body?.canWait === true) {
+          const q = await openQuestion({ turns, page: String(req.body?.page ?? ""), email: askerEmail(req) });
+          res.json({ text: CHECKING, handoff: false, waiting: q.token, waitSec: WAIT_MS / 1000 });
+          return;
+        }
+        res.json({ text: GET_BACK, handoff: true });
+        return;
+      }
+      res.json({ text: out.text, handoff: out.handoff });
     } catch (err) {
       console.error("help chat failed:", (err as Error).message);
-      res.json({ text: "I couldn't reach my notes just now. Want me to get a person for you?", handoff: true });
+      res.json({ text: "I couldn't reach my notes just now. Leave your email and someone will get back to you as soon as possible.", handoff: true });
     }
   });
 

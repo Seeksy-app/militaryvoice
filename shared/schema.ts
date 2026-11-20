@@ -1949,6 +1949,25 @@ export const campaignPosts = pgTable("campaign_posts", {
 }));
 export type CampaignPostRow = typeof campaignPosts.$inferSelect;
 
+/** Alex's "hold on, let me check" (20 Nov 2026): a question she couldn't answer, waiting on the team (server/helpDesk.ts). */
+export const helpQuestions = pgTable("help_questions", {
+  id: serial("id").primaryKey(),
+  /** The chat polls by this, never by id. */
+  token: text("token").notNull().unique(),
+  question: text("question").notNull(),
+  /** The last few chat turns, JSON [{ role, content }]. */
+  turns: text("turns").notNull().default("[]"),
+  page: text("page").notNull().default(""),
+  email: text("email").notNull().default(""),
+  /** open | answered | timed_out */
+  status: text("status").notNull().default("open"),
+  answer: text("answer").notNull().default(""),
+  answeredBy: text("answered_by").notNull().default(""),
+  answeredAt: text("answered_at").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("help_questions_status_idx").on(t.status)]);
+export type HelpQuestionRow = typeof helpQuestions.$inferSelect;
+
 // A visitor who asked the help chat to talk to a person.
 export const helpRequests = pgTable("help_requests", {
   id: serial("id").primaryKey(),

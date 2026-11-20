@@ -7,6 +7,9 @@ import { HELP_ARTICLES } from "./helpArticles.js";
 // party chat product — this is one route and one system prompt.
 
 const HANDOFF = "[[HUMAN]]";
+const PRIVATE = "[[PRIVATE]]";
+export const CHECKING = "Hold on, let me check with the team.";
+export const GET_BACK = "Someone will get back to you as soon as possible.";
 
 export function isHelpAgentConfigured(): boolean {
   return Boolean(process.env.ANTHROPIC_API_KEY);
@@ -42,7 +45,7 @@ THE MARATHON: FOR PODCASTERS (integrations like YouTube and Zoom below work acco
 - Your own YouTube: a podcaster can send their slot (or the whole show) to their own YouTube channel from Dashboard → Integrations → Connect YouTube. Google shows an "unverified app" warning during connection — that is expected (verification in review); press Advanced, then Go to Military Voice, then Continue. Full walkthrough with pictures at /help/youtube.
 - Zoom recordings: a podcaster can connect Zoom from Dashboard → Integrations → Connect Zoom (our Zoom app is called MilitaryVoices); new cloud recordings then come into their Library on their own (a switch on the Zoom card turns that off), and "Import past recordings" brings in any from the last 30 days (MP4 video, cloud recordings only). Disconnect on the Zoom card, or removing the app in Zoom's App Marketplace, deletes the connection; imported videos stay in the Library until deleted there. Adding, using and removing it, step by step, at /help/zoom.
 - Going live: you join from the studio page in your browser about 10 minutes before your slot (a link is emailed before the event). No special software. Podcasters who already run OBS/StreamYard can ask for a stream key instead.
-- Guests (someone you're interviewing or bringing on): dashboard → Events → the event → "Your guests" → "Add a guest". Add their name and title (as you'd like them read and shown on air), and their email; a few lines to introduce them and a photo are optional and can come later. Press "Email it to them" (or "Copy their link"): each guest gets their own link into the green room, no account needed, and they come on stage with you. Up to 12 guests a slot. If they'd rather we set it up, the podcaster can reply with the guest's name, title, a short intro and a photo, and a person on the team adds them.
+- Guests (someone you're interviewing or bringing on): dashboard → Events → the event → "Your guests" → "Add a guest". Add their name and title (as you'd like them read and shown on air), and their email; a few lines to introduce them and a photo are optional and can come later. Press "Email it to them" (or "Copy their link"): each guest gets their own link into the green room, no account needed, and they come on stage with you. Up to 12 guests a slot. If they'd rather we set it up, the podcaster can reply with the guest's name, title, a short intro and a photo, and someone on the team adds them.
 - Materials: upload an intro, outro, mid-roll, images or slides from the dashboard so the production team can plan transitions. Say in Event settings if you'd like an interviewer paired with you.
 - RSS feed: optional but recommended — it lets listeners play your episodes from your card and follow you after. Found in your hosting platform's settings (Buzzsprout, Spotify for Creators, Libsyn, Transistor, Podbean...).
 - Connected social accounts show on your card with avatar and follower count. Podcasters can also tick ready-made posts in "Your posting plan" and we post them from their own accounts on schedule; nothing is ever posted without them ticking it.
@@ -132,7 +135,9 @@ Rules:
 - Answer exactly what was asked, in the first sentence, and stop. Asked "when", give the time; asked "who", the name. No background they didn't ask for (who someone is, what the event is), no extra suggestions. One or two short sentences unless they ask for more.
 - If the answer is in the knowledge, give it, and when useful name the page to go to as its path — /schedule, /agenda, /prepare, /faq, /host/dashboard, or a help article such as /help/rooms, /help/library, /help/postify, /help/podcast, /help/account, /help/smartlink, /help/guests — since paths become links the visitor can tap.
 - Use the on-screen labels exactly as the knowledge gives them. Say "SI" (never "AI") for our own smart features, and write Pōstify with the ō.
-- If the question is about a specific person's booking, an account problem, a charge, refund or payment problem, a complaint, press, partnership, or anything the knowledge doesn't cover — or the visitor asks for a person — say in one sentence that someone will get back to them as soon as possible (never promise a person, a human or a call), and end your reply with the exact token ${HANDOFF} on its own.
+- If the question is about a charge, refund, payment or any money matter, a legal matter, a complaint, or press: reply with exactly "Someone will get back to you as soon as possible." and end your reply with the exact token ${PRIVATE} on its own.
+- If it's about a specific person's booking or account, a partnership, or anything the knowledge doesn't cover, or the visitor asks for the team: reply with exactly "Hold on, let me check with the team." and end your reply with the exact token ${HANDOFF} on its own.
+- Never offer a person, a human or a call.
 - Never invent facts, dates, prices or policies. Never ask for passwords or codes.
 
 KNOWLEDGE:
@@ -147,7 +152,7 @@ export interface HelpTurn {
 export async function answerHelp(
   turns: HelpTurn[],
   ctx: { event?: EventRow; taken: number; total: number; agenda?: string },
-): Promise<{ text: string; handoff: boolean }> {
+): Promise<{ text: string; handoff: boolean; sensitive?: boolean }> {
   const client = new Anthropic();
   const response = await client.messages.create({
     model: "claude-opus-5",
@@ -158,14 +163,16 @@ export async function answerHelp(
     messages: turns.map((t) => ({ role: t.role, content: t.content })) as Anthropic.MessageParam[],
   });
   if (response.stop_reason === "refusal") {
-    return { text: "Someone will get back to you on that as soon as possible.", handoff: true };
+    return { text: GET_BACK, handoff: true, sensitive: true };
   }
   let text = response.content
     .filter((b): b is Anthropic.TextBlock => b.type === "text")
     .map((b) => b.text)
     .join("\n")
     .trim();
-  const handoff = text.includes(HANDOFF);
-  text = text.replace(HANDOFF, "").trim();
-  return { text: text || "Someone will get back to you on that as soon as possible.", handoff };
+  const sensitive = text.includes(PRIVATE);
+  const handoff = sensitive || text.includes(HANDOFF);
+  text = text.replace(PRIVATE, "").replace(HANDOFF, "").trim();
+  if (sensitive) return { text: GET_BACK, handoff: true, sensitive: true };
+  return { text: text || CHECKING, handoff };
 }
