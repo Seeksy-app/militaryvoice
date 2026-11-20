@@ -107,3 +107,13 @@ Wording avoids "our": the posts go out from Riccoh's profile, and Riccoh is a cr
    > #MilitaryVoices #VeteranPodcasters #Podcasting
 
 Alt text pattern: "<headline>. Founding Members opens Black Friday. MilitaryVoices.ai, a veteran-owned business."
+
+### Scheduled (20 Nov 2026, Andrew: "1. yes")
+All six went to Riccoh's LinkedIn (Upload-Post profile mv-3), 1600x900, text exactly as above:
+- hp-187 Mon 23, 2 pm ET (home)
+- hp-188 Tue 24, 9 am (duo)
+- hp-189 Tue 24, 2 pm (mic)
+- hp-190 Wed 25, 9 am (stage)
+- hp-191 Wed 25, 2 pm (woman)
+- hp-192 Thu 26, 10 am (camera)
+Confirmed in Upload-Post's own schedule. To take one back: DELETE /api/admin/gtm/posts/<id>.
