@@ -22,6 +22,7 @@ rtsp: no
 hls: no
 webrtc: no
 srt: no
+moq: no
 rtmp: yes
 rtmpAddress: :1935
 rtmpEncryption: optional
@@ -38,14 +39,14 @@ authHTTPExclude:
 
 pathDefaults:
   record: yes
-  recordPath: /var/lib/mvingest/rec/%path/%Y-%m-%d_%H-%M-%S-%f
+  recordPath: /var/lib/mvingest/rec/%path/%Y-%m-%d_%H-%M-%S-%f_%z
   recordFormat: fmp4
   # Parts are one second, so a crash loses about a second. A new file every hour keeps each one a sensible size.
   recordPartDuration: 1s
   recordSegmentDuration: 1h
   recordDeleteAfter: 0s
-  runOnReady: curl -s -m 10 -X POST --data-urlencode "path=$MTX_PATH" http://127.0.0.1:8088/event/ready
-  runOnNotReady: curl -s -m 10 -X POST --data-urlencode "path=$MTX_PATH" http://127.0.0.1:8088/event/notready
+  runOnAvailable: curl -s -m 10 -X POST --data-urlencode "path=$MTX_PATH" http://127.0.0.1:8088/event/ready
+  runOnUnavailable: curl -s -m 10 -X POST --data-urlencode "path=$MTX_PATH" http://127.0.0.1:8088/event/notready
   runOnRecordSegmentComplete: curl -s -m 10 -X POST --data-urlencode "path=$MTX_PATH" --data-urlencode "file=$MTX_SEGMENT_PATH" http://127.0.0.1:8088/event/segment
 
 paths:

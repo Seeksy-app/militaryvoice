@@ -37,10 +37,11 @@ ARCH="$(dpkg --print-architecture)"; case "$ARCH" in amd64) A=amd64;; arm64) A=a
 VER="${MEDIAMTX_VERSION:-$(curl -fsSL https://api.github.com/repos/bluenviron/mediamtx/releases/latest | jq -r .tag_name)}"
 TMP="$(mktemp -d)"; trap 'rm -rf "$TMP"' EXIT
 BASE="https://github.com/bluenviron/mediamtx/releases/download/$VER"
-curl -fsSL -o "$TMP/mtx.tar.gz" "$BASE/mediamtx_${VER}_linux_${A}.tar.gz"
+TARBALL="mediamtx_${VER}_linux_${A}.tar.gz"
+curl -fsSL -o "$TMP/$TARBALL" "$BASE/$TARBALL"
 curl -fsSL -o "$TMP/checksums.sha256" "$BASE/checksums.sha256"
-( cd "$TMP" && grep "mediamtx_${VER}_linux_${A}.tar.gz" checksums.sha256 | sha256sum -c - )
-tar -xzf "$TMP/mtx.tar.gz" -C "$TMP" mediamtx
+( cd "$TMP" && grep " \*\?$TARBALL\$" checksums.sha256 | sha256sum -c - )
+tar -xzf "$TMP/$TARBALL" -C "$TMP" mediamtx
 install -m 755 "$TMP/mediamtx" "$APP/mediamtx"
 echo "MediaMTX $VER installed"
 
