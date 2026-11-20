@@ -24,7 +24,7 @@ import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/s
 import { Slider } from "@/components/ui/slider";
 import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2, Clapperboard, Plus, ArrowLeftToLine, ArrowRightToLine, MoreHorizontal, Blend, Brackets, Library, ArrowLeft, CalendarClock } from "lucide-react";
 import { IconTile } from "@/components/ui/icon-tile";
-import { LayoutPicker, parseLayoutSuggestion } from "@/components/LayoutPicker";
+import { LayoutPicker, parseLayoutSuggestion, seesOnePerson, suggestedLayout } from "@/components/LayoutPicker";
 import { useClipLayoutDefault } from "@/lib/clipLayoutDefault";
 
 // Postify: one recording going from "the segment ended" to clips ready
@@ -811,6 +811,15 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
   const [title, setTitle] = useState("");
   // Vertical to start with: it's the one almost everyone posts.
   const [formats, setFormats] = useState<ClipFormat[]>(["vertical"]);
+  // Two people on screen, for this clip: the recording's own layout (a Radio show's stack) first, then
+  // the account's default, then what the detector saw; Automatic otherwise. A pick here stays for the next clip.
+  const ownLayout = parseClipOptions(rec.clipOptions).layout;
+  const accountLayout = useClipLayoutDefault();
+  const seenLayout = suggestedLayout((rec as { layoutSuggestion?: string }).layoutSuggestion);
+  const startLayout = (ownLayout === "radio" ? "stacked" : ownLayout && ownLayout !== "auto" ? ownLayout : "") || accountLayout.value || seenLayout || "";
+  const [clipLayout, setClipLayout] = useState<"" | "stacked" | "side" | "single" | null>(null);
+  const layoutNow = clipLayout ?? startLayout;
+  const showLayout = !!ownLayout || !seesOnePerson((rec as { layoutSuggestion?: string }).layoutSuggestion);
   const titleRef = useRef<HTMLInputElement>(null);
   const len = mark.in !== null && mark.out !== null ? mark.out - mark.in : 0;
   const reset = () => { setMark({ in: null, out: null }); setTitle(""); setFormats(["vertical"]); };
@@ -840,7 +849,7 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
   };
   const pct = (t: number) => (pos.d ? `${Math.min(100, Math.max(0, (t / pos.d) * 100))}%` : "0%");
   const makeClip = useMutation({
-    mutationFn: async () => (await apiRequest("POST", `/api/host/recordings/${rec.id}/clips`, { startSec: mark.in, endSec: mark.out, title, source: source === "clean" ? "clean" : "", formats })).json(),
+    mutationFn: async () => (await apiRequest("POST", `/api/host/recordings/${rec.id}/clips`, { startSec: mark.in, endSec: mark.out, title, source: source === "clean" ? "clean" : "", formats, layout: layoutNow === "stacked" && ownLayout === "radio" ? "radio" : layoutNow || "auto" })).json(),
     onSuccess: () => {
       reset();
       void qc.invalidateQueries({ queryKey: ["/api/host/clips"] });
@@ -1161,6 +1170,13 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
           );
         })}
       </div>
+      {/* Two people on screen: how this clip frames them. Same four choices as Make clips. */}
+      {showLayout && <select value={layoutNow} onChange={(e) => setClipLayout(e.target.value as "" | "stacked" | "side" | "single")} aria-label="Two people on screen" title="Two people on screen: how this clip shows them" className="h-9 rounded-lg border border-border bg-background px-2 text-xs font-semibold text-foreground" data-testid="mark-layout">
+        <option value="">Two people: Automatic</option>
+        <option value="stacked">Two people: Stacked</option>
+        <option value="side">Two people: Side by side</option>
+        <option value="single">Two people: Follow the speaker</option>
+      </select>}
       {tip(
         `1 credit per shape. ${source === "clean" ? "From the clean episode" : "From the original"}, with animated captions.`,
         <span className="shrink-0">

@@ -54,6 +54,21 @@ export function seesTwoPeople(raw: unknown): boolean {
   return !!v && v.status === "done" && Number(v.people) >= 2;
 }
 
+/** What the detector would pick for two people, pictures or not (null: one person, or not looked at). */
+// True once the detector has looked and found one person: there is nothing to frame, so no choice.
+export function seesOnePerson(raw: unknown): boolean {
+  let v: any = raw;
+  if (typeof raw === "string") { try { v = raw ? JSON.parse(raw) : null; } catch { v = null; } }
+  return !!v && v.status === "done" && Number(v.people) < 2;
+}
+
+export function suggestedLayout(raw: unknown): Choice | null {
+  if (!seesTwoPeople(raw)) return null;
+  let v: any = raw;
+  if (typeof raw === "string") { try { v = JSON.parse(raw); } catch { return null; } }
+  return isChoice(v?.suggested) ? v.suggested : "stacked";
+}
+
 export function LayoutPicker({ value, own, suggestion, onChange }: {
   /** The layout on the options now (undefined = automatic). */
   value: ClipOptions["layout"];
