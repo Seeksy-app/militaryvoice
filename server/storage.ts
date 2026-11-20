@@ -1,5 +1,5 @@
 import { randomBytes } from "node:crypto";
-import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, sponsorSearches, type SponsorSearchRow, showSponsors, type ShowSponsorRow, sponsorClicks, postifyTokens, postifySubscriptions, addonSubscriptions, zoomConnections, type ZoomConnectionRow, importLinks, type AddonSubscriptionRow, type PostifySubscriptionRow, hostPosts, type HostPostRow, pushSubscriptions, type PushSubscriptionRow, libraryFolders, type LibraryFolderRow, musicTracks, type MusicTrackRow, podcastStats, type PodcastStatsRow, socialPosts, type SocialPostRow, cohostLines, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
+import { cohostSlots, events, signups, reminders, loginTokens, podcasterProfiles, sponsors, sponsorPackages, adminUsers, sponsorInquiries, siteSettings, showAssets, runOfShow, platformInterest, studios, studioParticipants, recordings, destinations, ingresses, scenes, youtubeAccounts, eventShows, nudges, followUps, lowerThirds, campaignPosts, helpRequests, contacts, broadcasts, segments, eventTeam, broadcastSends, broadcastEvents, contactImports, presentations, presentationSlides, transcriptLines, clips, socialMetrics, inboundEmails, type InboundEmailRow, sponsorLeads, type SponsorLeadRow, sponsorSearches, type SponsorSearchRow, showSponsors, type ShowSponsorRow, sponsorClicks, postifyTokens, postifySubscriptions, addonSubscriptions, zoomConnections, type ZoomConnectionRow, importLinks, type AddonSubscriptionRow, type PostifySubscriptionRow, hostPosts, type HostPostRow, pushSubscriptions, type PushSubscriptionRow, libraryFolders, type LibraryFolderRow, hostedEpisodes, musicTracks, type MusicTrackRow, podcastStats, type PodcastStatsRow, socialPosts, type SocialPostRow, cohostLines, type EventTeamMember, type SegmentRow, type ContactImport, type PresentationRow, type PresentationSlideRow } from "../shared/schema.js";
 import type {
   CampaignPostRow,
   HelpRequestRow,
@@ -928,8 +928,8 @@ export interface IStorage {
   claimClipEdit(): Promise<ClipRow | undefined>;
   listSocialMetrics(): Promise<SocialMetricRow[]>;
   upsertSocialMetric(v: Omit<SocialMetricRow, "id">): Promise<SocialMetricRow>;
-  replaceClips(recordingId: number, rows: Omit<ClipRow, "id" | "createdAt" | "recordingId" | "editTitle" | "editSubtitle" | "editStatus" | "editError" | "editAt" | "source" | "editShapes" | "captionStyle" | "editLayout">[]): Promise<ClipRow[]>;
-  appendClips(recordingId: number, rows: Omit<ClipRow, "id" | "createdAt" | "recordingId" | "editTitle" | "editSubtitle" | "editStatus" | "editError" | "editAt" | "source" | "editShapes" | "captionStyle" | "editLayout">[]): Promise<ClipRow[]>;
+  replaceClips(recordingId: number, rows: Omit<ClipRow, "id" | "createdAt" | "recordingId" | "editTitle" | "editSubtitle" | "editStatus" | "editError" | "editAt" | "source" | "editShapes" | "captionStyle" | "editLayout" | "folderId">[]): Promise<ClipRow[]>;
+  appendClips(recordingId: number, rows: Omit<ClipRow, "id" | "createdAt" | "recordingId" | "editTitle" | "editSubtitle" | "editStatus" | "editError" | "editAt" | "source" | "editShapes" | "captionStyle" | "editLayout" | "folderId">[]): Promise<ClipRow[]>;
   addClip(v: Partial<ClipRow> & { recordingId: number; email: string; title: string; startSec: number; endSec: number }): Promise<ClipRow>;
   listDestinations(eventId: number): Promise<DestinationRow[]>;
   getDestination(id: number): Promise<DestinationRow | undefined>;
@@ -2503,7 +2503,12 @@ class DatabaseStorage implements IStorage {
   async deleteFolder(email: string, id: number): Promise<void> {
     await ready();
     const e = email.toLowerCase().trim();
+    const [mine] = await db.select({ id: libraryFolders.id }).from(libraryFolders).where(and(eq(libraryFolders.id, id), eq(libraryFolders.email, e))).limit(1);
+    if (!mine) return;
     await db.update(recordings).set({ folderId: 0 }).where(and(eq(recordings.email, e), eq(recordings.folderId, id)));
+    // Folder ids are unique, so only this person's episodes and clips can be in it.
+    await db.update(hostedEpisodes).set({ folderId: 0 }).where(eq(hostedEpisodes.folderId, id));
+    await db.update(clips).set({ folderId: 0 }).where(and(eq(clips.email, e), eq(clips.folderId, id)));
     await db.delete(libraryFolders).where(and(eq(libraryFolders.id, id), eq(libraryFolders.email, e)));
   }
 
@@ -2822,7 +2827,7 @@ class DatabaseStorage implements IStorage {
   /** "Generate more": the new clips join the ones already there. */
   async appendClips(
     recordingId: number,
-    rows: Omit<ClipRow, "id" | "createdAt" | "recordingId" | "editTitle" | "editSubtitle" | "editStatus" | "editError" | "editAt" | "source" | "editShapes" | "captionStyle" | "editLayout">[],
+    rows: Omit<ClipRow, "id" | "createdAt" | "recordingId" | "editTitle" | "editSubtitle" | "editStatus" | "editError" | "editAt" | "source" | "editShapes" | "captionStyle" | "editLayout" | "folderId">[],
   ): Promise<ClipRow[]> {
     await ready();
     if (rows.length === 0) return [];
@@ -2832,7 +2837,7 @@ class DatabaseStorage implements IStorage {
 
   async replaceClips(
     recordingId: number,
-    rows: Omit<ClipRow, "id" | "createdAt" | "recordingId" | "editTitle" | "editSubtitle" | "editStatus" | "editError" | "editAt" | "source" | "editShapes" | "captionStyle" | "editLayout">[],
+    rows: Omit<ClipRow, "id" | "createdAt" | "recordingId" | "editTitle" | "editSubtitle" | "editStatus" | "editError" | "editAt" | "source" | "editShapes" | "captionStyle" | "editLayout" | "folderId">[],
   ): Promise<ClipRow[]> {
     await ready();
     await db.delete(clips).where(eq(clips.recordingId, recordingId));

@@ -1624,6 +1624,8 @@ export const clips = pgTable(
     captionStyle: text("caption_style").notNull().default(""),
     /** The layout chosen for this clip on the timeline's Make clip ("stacked" | "side" | "single" | "radio"); "" = the recording's own. Edit-text remakes keep it. */
     editLayout: text("edit_layout").notNull().default(""),
+    /** The Library folder it's filed in (library_folders.id); 0 for none. */
+    folderId: integer("folder_id").notNull().default(0),
     createdAt: text("created_at").notNull(),
   },
   (t) => ({
@@ -2896,6 +2898,8 @@ export const hostedEpisodes = pgTable("hosted_episodes", {
   /** The ids of the sponsor spots baked into the finished file (so a download can be counted for them). */
   servedSpots: text("served_spots").notNull().default(""),
   /** "" (the show's rule), "on" or "off": this one episode gets the show's intro and outro, or doesn't. */
+  /** The Library folder it's filed in (library_folders.id); 0 for none. */
+  folderId: integer("folder_id").notNull().default(0),
   bookends: text("bookends").notNull().default(""),
   /** The episode with the intro and outro on (made by the worker); the original audio stays as it is. */
   servedKey: text("served_key").notNull().default(""),

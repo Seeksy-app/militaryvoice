@@ -428,6 +428,27 @@ export async function hostedAsStats(email: string): Promise<{ source: "militaryv
 // ---- Routes -----------------------------------------------------------------------
 
 const art = multer({ storage: multer.memoryStorage(), limits: { fileSize: 20 * 1024 * 1024 } });
+/** The podcaster's episodes as the Library, Pōstify and Social grids show them (newest first), with the folder each is filed in. */
+export async function listHostEpisodes(email: string): Promise<Array<Record<string, unknown> & { folderId: number }>> {
+  const out: Array<Record<string, unknown> & { folderId: number }> = [];
+  for (const sh of await showsOf(email)) {
+    for (const e of await episodesOf(sh.id)) {
+      if (!(e.audioKey || e.audioUrl) && !e.recordingId) continue;
+      const rec = e.recordingId ? await storage.getRecording(e.recordingId) : undefined;
+      const ownRec = rec && rec.status === "Ready" && !!rec.url && rec.email.trim().toLowerCase() === email ? rec : undefined;
+      const videoFile = e.mime.startsWith("video/") && !!e.audioKey;
+      const [made] = await db.select({ id: recordings.id }).from(recordings).where(and(eq(recordings.email, email), eq(recordings.egressId, `PODCAST_${e.id}`))).limit(1);
+      out.push({
+        id: e.id, showId: sh.id, show: sh.title, title: e.title, publishedAt: e.publishedAt, status: e.status, durationSec: e.durationSec,
+        art: e.artworkUrl || sh.artworkUrl, kind: ownRec || videoFile || made ? "video" : "audio", recordingId: ownRec?.id ?? made?.id ?? null,
+        making: e.videoJob === "queued" || e.videoJob === "running", videoFailed: e.videoJob === "failed", folderId: e.folderId,
+      });
+    }
+  }
+  out.sort((a, b) => String(b.publishedAt || "").localeCompare(String(a.publishedAt || "")));
+  return out;
+}
+
 const emailOf = (req: Request) => (getSessionEmail(req) ?? "").trim().toLowerCase();
 const num = (v: unknown) => (v === "" || v === null || v === undefined || !Number.isFinite(Number(v)) ? null : Math.max(0, Math.round(Number(v))));
 
@@ -1122,25 +1143,21 @@ Return JSON only: {"titles":["","",""],"description":""}`,
    * there is a video behind it (a Library recording or an uploaded MP4) or only audio.
    */
   app.get("/api/host/podcast-episodes", requireHostSession, async (req, res) => {
-    const email = emailOf(req);
     res.setHeader("Cache-Control", "no-store");
-    const out: Record<string, unknown>[] = [];
-    for (const sh of await showsOf(email)) {
-      for (const e of await episodesOf(sh.id)) {
-        if (!(e.audioKey || e.audioUrl) && !e.recordingId) continue;
-        const rec = e.recordingId ? await storage.getRecording(e.recordingId) : undefined;
-        const ownRec = rec && rec.status === "Ready" && !!rec.url && rec.email.trim().toLowerCase() === email ? rec : undefined;
-        const videoFile = e.mime.startsWith("video/") && !!e.audioKey;
-        const [made] = await db.select({ id: recordings.id }).from(recordings).where(and(eq(recordings.email, email), eq(recordings.egressId, `PODCAST_${e.id}`))).limit(1);
-        out.push({
-          id: e.id, showId: sh.id, show: sh.title, title: e.title, publishedAt: e.publishedAt, status: e.status, durationSec: e.durationSec,
-          art: e.artworkUrl || sh.artworkUrl, kind: ownRec || videoFile || made ? "video" : "audio", recordingId: ownRec?.id ?? made?.id ?? null,
-          making: e.videoJob === "queued" || e.videoJob === "running", videoFailed: e.videoJob === "failed",
-        });
-      }
-    }
-    out.sort((a, b) => String(b.publishedAt || "").localeCompare(String(a.publishedAt || "")));
-    res.json(out);
+    const folder = req.query.folder !== undefined ? Number(req.query.folder) || 0 : undefined;
+    const all = await listHostEpisodes(emailOf(req));
+    res.json(folder === undefined ? all : all.filter((e) => e.folderId === folder));
+  });
+
+  /** File a podcast episode in a Library folder, or take it out (folderId 0 or null). */
+  app.post("/api/host/podcast-episodes/:id/folder", requireHostSession, async (req, res) => {
+    const email = emailOf(req);
+    const [e] = await db.select({ id: hostedEpisodes.id, showId: hostedEpisodes.showId }).from(hostedEpisodes).where(eq(hostedEpisodes.id, Number(req.params.id))).limit(1);
+    if (!e || !(await ownShow(email, e.showId))) return res.status(404).json({ message: "No such episode." });
+    const folderId = Number(req.body?.folderId) || 0;
+    if (folderId && !(await storage.listFolders(email)).some((f) => f.id === folderId)) return res.status(404).json({ message: "No such folder." });
+    await db.update(hostedEpisodes).set({ folderId }).where(eq(hostedEpisodes.id, e.id));
+    res.json({ ok: true, folderId });
   });
 
   /** Turn an audio-only episode into a video (the worker does it): cover art, a soft backdrop and a moving sound wave. */

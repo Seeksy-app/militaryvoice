@@ -176,7 +176,7 @@ import { registerReview } from "./review.js";
 import { registerSponsorFinder } from "./sponsorFinder.js";
 import { registerPodcastStats } from "./podcastStats.js";
 import { registerRadioLibrary, claimRadioShowCut } from "./radioLibrary.js";
-import { registerHosting, startEpisodeFromRecording, claimEpisodeAudio, claimEpisodeBookends, claimEpisodeStill, claimEpisodeVideo, podcastYouTubeAt } from "./hosting.js";
+import { registerHosting, startEpisodeFromRecording, listHostEpisodes, claimEpisodeAudio, claimEpisodeBookends, claimEpisodeStill, claimEpisodeVideo, podcastYouTubeAt } from "./hosting.js";
 import { decideAdvance } from "../shared/showClock.js";
 import type { StageThanks } from "../shared/stageMeta.js";
 import { registerBioPage, registerBioAgent, claimLivingSqueeze, subscribersFor, publishedBioUrl } from "./bioPage.js";
@@ -3441,6 +3441,16 @@ export function registerRoutes(app: Express): void {
     const row = await storage.renameFolder(getSessionEmail(req) ?? "", Number(req.params.id), name);
     if (!row) return res.status(404).json({ message: "No such folder." });
     res.json(row);
+  });
+  /** One folder opened: its recordings, podcast episodes and clips, each in the shape its own list uses. */
+  app.get("/api/host/folders/:id", requireHostSession, async (req, res) => {
+    noStore(res);
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    const id = Number(req.params.id);
+    const folder = (await storage.listFolders(email)).find((f) => f.id === id);
+    if (!folder) return res.status(404).json({ message: "No such folder." });
+    const [recs, episodes, clipRows] = await Promise.all([storage.listRecordingsByEmail(email), listHostEpisodes(email), hostClips(email)]);
+    res.json({ folder, recordings: recs.filter((r) => r.folderId === id), episodes: episodes.filter((e) => e.folderId === id), clips: clipRows.filter((c) => c.folderId === id) });
   });
   app.delete("/api/host/folders/:id", requireHostSession, async (req, res) => {
     await storage.deleteFolder(getSessionEmail(req) ?? "", Number(req.params.id));
@@ -7639,9 +7649,7 @@ export function registerRoutes(app: Express): void {
   });
 
   /** A podcaster's own clips, newest first. */
-  app.get("/api/host/clips", requireHostSession, async (req, res) => {
-    noStore(res);
-    const email = (req as any).hostEmail as string;
+  async function hostClips(email: string) {
     const rows = await storage.listClipsByEmail(email);
     // Clips made before the subtitle was stored: say what their band shows.
     const shows = new Map<number, string>();
@@ -7650,7 +7658,24 @@ export function registerRoutes(app: Express): void {
       const rec = await storage.getRecording(c.recordingId);
       shows.set(c.recordingId, rec ? await showNameFor(rec) : "");
     }
-    res.json(rows.map((c) => (c.subtitle ? c : { ...c, subtitle: shows.get(c.recordingId) ?? "" })));
+    return rows.map((c) => (c.subtitle ? c : { ...c, subtitle: shows.get(c.recordingId) ?? "" }));
+  }
+  app.get("/api/host/clips", requireHostSession, async (req, res) => {
+    noStore(res);
+    const all = await hostClips((req as any).hostEmail as string);
+    const folder = req.query.folder !== undefined ? Number(req.query.folder) || 0 : undefined;
+    res.json(folder === undefined ? all : all.filter((c) => c.folderId === folder));
+  });
+
+  /** File a clip in a Library folder, or take it out (folderId 0 or null). */
+  app.post("/api/host/clips/:id/folder", requireHostSession, async (req, res) => {
+    const email = ((req as any).hostEmail as string).trim().toLowerCase();
+    const clip = await storage.getClip(Number(req.params.id));
+    if (!clip || clip.email.trim().toLowerCase() !== email) return res.status(404).json({ message: "No such clip." });
+    const folderId = Number(req.body?.folderId) || 0;
+    if (folderId && !(await storage.listFolders(email)).some((f) => f.id === folderId)) return res.status(404).json({ message: "No such folder." });
+    await storage.updateClip(clip.id, { folderId });
+    res.json({ ok: true, folderId });
   });
 
   /** "Edit text": a new title and subtitle for one clip. The clipper remakes its three shapes. */
