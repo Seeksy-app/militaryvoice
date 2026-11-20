@@ -8,7 +8,7 @@ import { storage, db } from "./storage.js";
 import { sql } from "drizzle-orm";
 import { requireHuman, turnstileSiteKey } from "./turnstile.js";
 import { answerHelp, isHelpAgentConfigured, CHECKING, GET_BACK, type HelpTurn } from "./help.js";
-import { registerHelpDesk, openQuestion, askerEmail, WAIT_MS } from "./helpDesk.js";
+import { registerHelpDesk, openQuestion, askerEmail, learnedForAlex, WAIT_MS } from "./helpDesk.js";
 import { KINDS, effectiveSchedule, cardInput, caption as campaignCaption, isKind, type CampaignContext } from "./campaign.js";
 import { uploadPhoto, uploadShowAsset, signedAssetUpload, listShowAssets } from "./photoStorage.js";
 import {
@@ -10475,7 +10475,7 @@ export function registerRoutes(app: Express): void {
       const event = await storage.getFeaturedEvent();
       const taken = (await storage.listSignups(event.id)).filter((x) => x.status !== "cancelled").length;
       const total = Math.floor((event.durationHours * 60) / event.slotMinutes);
-      const out = await answerHelp(turns, { event, taken, total, agenda: await runningOrderText(event) });
+      const out = await answerHelp(turns, { event, taken, total, agenda: await runningOrderText(event), learned: await learnedForAlex().catch(() => "") });
       // Watch-page questions go to Michael's Watch tab, for the record (saved
       // before answering: a serverless function stops once it has replied).
       if (req.body?.page === "/watch") await logWatchChat(turns[turns.length - 1].content, String((out as { text?: string }).text ?? "")).catch((e) => console.error("watch log:", e));

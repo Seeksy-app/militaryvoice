@@ -8,7 +8,7 @@ import type { Express, Request, RequestHandler } from "express";
 import crypto from "node:crypto";
 import { and, desc, eq } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
-import { getAdminEmail, getSessionEmail } from "./session.js";
+import { getSessionEmail } from "./session.js";
 import { slackNote } from "./slack.js";
 import { onTextReply, sendSms, toE164 } from "./sms.js";
 import { helpQuestions, type HelpQuestionRow } from "../shared/schema.js";
@@ -23,6 +23,27 @@ const short = (s: string, n: number) => { const t = s.replace(/\s+/g, " ").trim(
 /** The phone that gets "Alex needs help" texts (set on the help desk page; never in code). */
 export async function deskPhone(): Promise<string> {
   return toE164((await storage.getSetting(PHONE_SETTING)) ?? "");
+}
+
+// What the team taught Alex (PM for Andrew, 20 Nov: "Alex learns it"): every answered question is kept
+// here and read on every chat, so next time she answers it herself. Edit or delete on /admin/help-desk.
+const LEARNED_SETTING = "help-learned";
+const LEARNED_MAX = 150;
+export type Learned = { id: string; q: string; a: string; at: string; by: string };
+export async function listLearned(): Promise<Learned[]> {
+  try { const v = JSON.parse((await storage.getSetting(LEARNED_SETTING)) ?? "[]"); return Array.isArray(v) ? v : []; } catch { return []; }
+}
+const saveLearned = (items: Learned[]) => storage.setSetting(LEARNED_SETTING, JSON.stringify(items.slice(-LEARNED_MAX)));
+async function learn(q: string, a: string, by: string): Promise<void> {
+  const items = await listLearned();
+  items.push({ id: crypto.randomBytes(6).toString("hex"), q: q.slice(0, 600), a: a.slice(0, 2000), at: now(), by });
+  await saveLearned(items);
+}
+/** For Alex's system prompt: the team's answers, newest last. Empty when there are none. */
+export async function learnedForAlex(): Promise<string> {
+  const items = await listLearned();
+  if (!items.length) return "";
+  return `TEAM ANSWERS (the team answered these for visitors before; they are true, use them when the same question comes up, in your own words):\n${items.map((x) => `Q: ${x.q}\nA: ${x.a}`).join("\n\n")}`;
 }
 
 /** Past its 5 minutes with no answer: timed out. Returns the row as it now stands. */
@@ -63,6 +84,7 @@ async function answer(id: number, text: string, by: string): Promise<HelpQuestio
   const cur = await settle(q);
   const [out] = await db.update(helpQuestions).set({ answer: text.slice(0, 4000), answeredBy: by, answeredAt: now(), ...(cur.status === "open" ? { status: "answered" } : {}) })
     .where(and(eq(helpQuestions.id, id), eq(helpQuestions.answer, ""))).returning();
+  if (out && out.question) await learn(out.question, out.answer, by).catch((e) => console.error("[help-desk] learn", e));
   return out ?? null;
 }
 
@@ -99,10 +121,32 @@ export function registerHelpDesk(app: Express, requireAdmin: RequestHandler): vo
   app.post("/api/admin/help/questions/:id/answer", requireAdmin, async (req, res) => {
     const text = String(req.body?.answer ?? "").trim();
     if (!text) return res.status(400).json({ message: "Write the answer first." });
-    const by = String(req.body?.by ?? "").trim().slice(0, 60) || getAdminEmail(req as Request) || "admin";
+    // Andrew is the one who answers (20 Nov): the admin page, his text reply, or the PM relaying his exact words.
+    const by = String(req.body?.by ?? "").trim().slice(0, 60) || "andrew";
     const out = await answer(Number(req.params.id), text, by);
     if (!out) return res.status(409).json({ message: "Someone answered it already." });
     res.json({ question: adminView(out), shown: out.status === "answered" });
+  });
+
+  /** What Alex has learned from the team's answers. */
+  app.get("/api/admin/help/learned", requireAdmin, async (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ items: (await listLearned()).reverse() });
+  });
+  app.put("/api/admin/help/learned/:id", requireAdmin, async (req, res) => {
+    const q = String(req.body?.q ?? "").trim(), a = String(req.body?.a ?? "").trim();
+    if (!q || !a) return res.status(400).json({ message: "Both the question and the answer are needed." });
+    const items = await listLearned();
+    const it = items.find((x) => x.id === req.params.id);
+    if (!it) return res.status(404).json({ message: "Not found." });
+    it.q = q.slice(0, 600); it.a = a.slice(0, 2000);
+    await saveLearned(items);
+    res.json({ item: it });
+  });
+  app.delete("/api/admin/help/learned/:id", requireAdmin, async (req, res) => {
+    const items = await listLearned();
+    await saveLearned(items.filter((x) => x.id !== req.params.id));
+    res.json({ ok: true });
   });
 
   /** Where the "Alex needs help" texts go. */
@@ -123,7 +167,7 @@ export function registerHelpDesk(app: Express, requireAdmin: RequestHandler): vo
     if (!text.trim() || phone !== (await deskPhone())) return false;
     const [q] = await db.select().from(helpQuestions).where(eq(helpQuestions.status, "open")).orderBy(desc(helpQuestions.id)).limit(1);
     if (!q) return false;
-    const out = await answer(q.id, text.trim(), "text");
+    const out = await answer(q.id, text.trim(), "andrew");
     if (!out) return false;
     await slackNote(`:white_check_mark: Answered by text${out.status === "answered" ? "" : " (too late to show in the chat)"}: "${short(out.question, 80)}"`).catch(() => {});
     return true;

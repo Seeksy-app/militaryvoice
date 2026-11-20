@@ -151,7 +151,7 @@ export interface HelpTurn {
 
 export async function answerHelp(
   turns: HelpTurn[],
-  ctx: { event?: EventRow; taken: number; total: number; agenda?: string },
+  ctx: { event?: EventRow; taken: number; total: number; agenda?: string; learned?: string },
 ): Promise<{ text: string; handoff: boolean; sensitive?: boolean }> {
   const client = new Anthropic();
   const response = await client.messages.create({
@@ -159,7 +159,11 @@ export async function answerHelp(
     // Help answers are deliberately short; a low cap keeps them that way.
     max_tokens: 600,
     output_config: { effort: "low" },
-    system: [{ type: "text", text: systemPrompt(ctx.event, ctx.taken, ctx.total, ctx.agenda), cache_control: { type: "ephemeral" } }],
+    // The team's answers come after the cached part, so learning one doesn't throw the cache away.
+    system: [
+      { type: "text", text: systemPrompt(ctx.event, ctx.taken, ctx.total, ctx.agenda), cache_control: { type: "ephemeral" } },
+      ...(ctx.learned ? [{ type: "text" as const, text: ctx.learned }] : []),
+    ],
     messages: turns.map((t) => ({ role: t.role, content: t.content })) as Anthropic.MessageParam[],
   });
   if (response.stop_reason === "refusal") {

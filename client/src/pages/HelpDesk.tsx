@@ -6,7 +6,7 @@ import { adminGet, adminSend } from "@/lib/adminApi";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
-import { Loader2, Send } from "lucide-react";
+import { Loader2, Pencil, Send, Trash2 } from "lucide-react";
 
 // Alex's help desk (20 Nov): questions she wasn't sure of, waiting on the team. The visitor's chat shows
 // the first answer within 5 minutes; after that they get the email form. Data: server/helpDesk.ts.
@@ -16,6 +16,7 @@ type Q = {
   status: "open" | "answered" | "timed_out"; answer: string; answeredBy: string; answeredAt: string; createdAt: string; late: boolean;
 };
 type List = { questions: Q[]; waitSec: number; phoneSet: boolean };
+type Learned = { id: string; q: string; a: string; at: string; by: string };
 
 const ET = "America/New_York";
 const when = (iso: string) => new Date(iso).toLocaleString("en-US", { timeZone: ET, month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
@@ -36,6 +37,7 @@ function OpenCard({ q, waitSec, now }: { q: Q; waitSec: number; now: number }) {
       await adminSend("POST", `/api/admin/help/questions/${q.id}/answer`, { answer: text.trim() });
       setText("");
       await qc.invalidateQueries({ queryKey: ["/api/admin/help/questions"] });
+      await qc.invalidateQueries({ queryKey: ["/api/admin/help/learned"] });
     } catch (e) {
       setErr((e as Error).message.replace(/^\d+:\s*/, ""));
     } finally { setBusy(false); }
@@ -62,6 +64,48 @@ function OpenCard({ q, waitSec, now }: { q: Q; waitSec: number; now: number }) {
         </Button>
       </form>
       {err && <p className="mt-2 text-xs text-red-600">{err}</p>}
+    </li>
+  );
+}
+
+function LearnedRow({ it }: { it: Learned }) {
+  const qc = useQueryClient();
+  const [edit, setEdit] = useState(false);
+  const [q, setQ] = useState(it.q);
+  const [a, setA] = useState(it.a);
+  const [err, setErr] = useState("");
+  const refresh = () => qc.invalidateQueries({ queryKey: ["/api/admin/help/learned"] });
+  const save = async () => {
+    setErr("");
+    try { await adminSend("PUT", `/api/admin/help/learned/${it.id}`, { q, a }); setEdit(false); await refresh(); }
+    catch (e) { setErr((e as Error).message.replace(/^\d+:\s*/, "")); }
+  };
+  const remove = async () => {
+    if (!window.confirm("Delete this answer? Alex won't know it any more.")) return;
+    try { await adminSend("DELETE", `/api/admin/help/learned/${it.id}`); await refresh(); }
+    catch (e) { setErr((e as Error).message.replace(/^\d+:\s*/, "")); }
+  };
+  if (edit) return (
+    <li className="space-y-2 p-4">
+      <Input value={q} onChange={(e) => setQ(e.target.value)} className="text-sm font-semibold" />
+      <Textarea value={a} onChange={(e) => setA(e.target.value)} rows={3} className="text-sm" />
+      <div className="flex gap-2">
+        <Button size="sm" className="rounded-full bg-[#053877]" onClick={save} disabled={!q.trim() || !a.trim()}>Save</Button>
+        <Button size="sm" variant="ghost" onClick={() => { setEdit(false); setQ(it.q); setA(it.a); }}>Cancel</Button>
+      </div>
+      {err && <p className="text-xs text-red-600">{err}</p>}
+    </li>
+  );
+  return (
+    <li className="flex items-start gap-3 p-4" data-testid={`helpdesk-learned-${it.id}`}>
+      <div className="min-w-0 flex-1">
+        <p className="text-sm font-semibold text-slate-900">{it.q}</p>
+        <p className="mt-1 text-sm text-slate-700">{it.a}</p>
+        <p className="mt-1 text-xs text-slate-500">{when(it.at)}</p>
+        {err && <p className="text-xs text-red-600">{err}</p>}
+      </div>
+      <button type="button" onClick={() => setEdit(true)} className="rounded-full p-1.5 text-slate-500 hover:bg-slate-100 hover:text-slate-900" aria-label="Edit"><Pencil className="h-4 w-4" /></button>
+      <button type="button" onClick={remove} className="rounded-full p-1.5 text-slate-500 hover:bg-red-50 hover:text-red-600" aria-label="Delete"><Trash2 className="h-4 w-4" /></button>
     </li>
   );
 }
@@ -101,6 +145,7 @@ function PhoneBox({ set }: { set: boolean }) {
 export default function HelpDesk() {
   const { isAuthenticated, isLoading } = useAdminAuth();
   const { data, error } = useQuery<List>({ queryKey: ["/api/admin/help/questions"], queryFn: () => adminGet<List>("/api/admin/help/questions"), enabled: isAuthenticated, refetchInterval: 5_000 });
+  const { data: learned } = useQuery<{ items: Learned[] }>({ queryKey: ["/api/admin/help/learned"], queryFn: () => adminGet("/api/admin/help/learned"), enabled: isAuthenticated });
   const [now, setNow] = useState(Date.now());
   useEffect(() => { const t = setInterval(() => setNow(Date.now()), 1000); return () => clearInterval(t); }, []);
   useEffect(() => { document.title = "Help desk · MilitaryVoices"; }, []);
@@ -120,7 +165,7 @@ export default function HelpDesk() {
           <h1 className="text-2xl font-bold text-slate-900">Alex's help desk</h1>
           <Link href="/admin" className="text-sm font-medium text-[#053877] underline underline-offset-2">Back to admin</Link>
         </div>
-        <p className="mt-1 text-sm text-slate-600 [text-wrap:pretty]">Questions Alex wasn't sure of. The first answer shows in the visitor's chat. After 5 minutes they get the email form instead, and it lands in Mail → Needs a reply.</p>
+        <p className="mt-1 text-sm text-slate-600 [text-wrap:pretty]">Questions Alex wasn't sure of. Your answer shows in the visitor's chat, and Alex learns it for next time. After 5 minutes they get the email form instead, and it lands in Mail → Needs a reply.</p>
         <div className="mt-3"><PhoneBox set={!!data?.phoneSet} /></div>
         {error && <p className="mt-4 text-sm text-red-600">{(error as Error).message}</p>}
 
@@ -130,6 +175,13 @@ export default function HelpDesk() {
         ) : (
           <ul className="mt-2 space-y-3">{open.map((q) => <OpenCard key={q.id} q={q} waitSec={waitSec} now={now} />)}</ul>
         )}
+
+        <h2 className="mt-10 text-sm font-bold uppercase tracking-wide text-slate-500">What Alex has learned ({learned?.items.length ?? 0})</h2>
+        <p className="mt-1 text-xs text-slate-500">She reads these on every chat. Edit or delete any that are wrong.</p>
+        <ul className="mt-2 divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-white">
+          {!learned?.items.length && <li className="p-4 text-sm text-slate-500">Nothing yet. Each answer you give lands here.</li>}
+          {learned?.items.map((it) => <LearnedRow key={it.id} it={it} />)}
+        </ul>
 
         <h2 className="mt-10 text-sm font-bold uppercase tracking-wide text-slate-500">Recent</h2>
         <ul className="mt-2 divide-y divide-slate-200 rounded-2xl border border-slate-200 bg-white">
