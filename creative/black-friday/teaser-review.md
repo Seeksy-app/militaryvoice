@@ -35,5 +35,6 @@ Nothing posts, schedules or emails until Andrew approves this exact text. Posts 
 
 ## Status (20 Nov 2026)
 - Andrew: "Approved as written", then "schedule on Riccoh's LI".
-- Scheduled: Riccoh's LinkedIn only, Mon 23 Nov 2026 9:00 am ET (14:00 UTC), image teaser-1600x900.png (Go-to-market library asset 2bc94d4cc5d7), host_posts id 181 (external id hp-181).
+- Was scheduled: Riccoh's LinkedIn only, Mon 23 Nov 2026 9:00 am ET (14:00 UTC), image teaser-1600x900.png (Go-to-market library asset 2bc94d4cc5d7), host_posts id 181 (external id hp-181).
 - MilitaryVoices' own profile has only Andrew's personal LinkedIn connected (no MV Facebook, Instagram or LinkedIn page), so nothing goes there.
+- Andrew (via PM, 20 Nov): approve the images himself first. hp-181 pulled from Upload-Post (Upload-Post profile mv-3, LinkedIn "Riccoh Player"), row kept as cancelled. Both sizes in Admin → Growth → Go-to-market → Materials. Re-schedule Mon 9am ET only after his OK on the images.
