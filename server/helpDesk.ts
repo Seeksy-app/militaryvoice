@@ -68,7 +68,7 @@ export async function openQuestion(o: { turns: { role: string; content: string }
   const line = `Alex needs help: "${short(q.question, 140)}"`;
   // All at once, and the chat doesn't wait on any of them.
   await Promise.allSettled([
-    slackNote(`:sos: ${line}${q.email ? ` (${q.email})` : ""}${q.page ? ` on ${q.page}` : ""}`, { label: "Answer it", url: deskLink(q.id) }),
+    slackNote(`:sos: ${line}${q.email ? ` (${q.email})` : ""}${q.page ? ` on ${q.page}` : ""}`, { label: "Answer it", url: deskLink(q.id) }, "helpdesk"),
     (async () => {
       const phone = await deskPhone();
       if (phone) await sendSms({ phone, body: `${line} Answer: ${deskLink(q.id)} (or reply to this text)`, name: "Help desk", sentBy: "help-desk" });
@@ -169,7 +169,7 @@ export function registerHelpDesk(app: Express, requireAdmin: RequestHandler): vo
     if (!q) return false;
     const out = await answer(q.id, text.trim(), "andrew");
     if (!out) return false;
-    await slackNote(`:white_check_mark: Answered by text${out.status === "answered" ? "" : " (too late to show in the chat)"}: "${short(out.question, 80)}"`).catch(() => {});
+    await slackNote(`:white_check_mark: Answered by text${out.status === "answered" ? "" : " (too late to show in the chat)"}: "${short(out.question, 80)}"`, undefined, "helpdesk").catch(() => {});
     return true;
   });
 }

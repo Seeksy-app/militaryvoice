@@ -49,11 +49,14 @@ export async function slackInbound(o: {
   }
 }
 
-/** A short heads-up to the team channel, with an optional button. Never throws. */
-export async function slackNote(text: string, button?: { label: string; url: string }): Promise<void> {
-  if (!isSlackInboxConfigured()) return;
+/** A short heads-up to the team channel, with an optional button. Never throws.
+ *  channel "helpdesk" posts to #alex-help-desk (SLACK_HELPDESK_WEBHOOK_URL), else the inbox channel. */
+export async function slackNote(text: string, button?: { label: string; url: string }, channel?: "helpdesk"): Promise<void> {
+  const desk = process.env.SLACK_HELPDESK_WEBHOOK_URL ?? "";
+  const url = channel === "helpdesk" && /^https:\/\/hooks\.slack\.com\//.test(desk) ? desk : process.env.SLACK_INBOX_WEBHOOK_URL ?? "";
+  if (!/^https:\/\/hooks\.slack\.com\//.test(url)) return;
   try {
-    await fetch(process.env.SLACK_INBOX_WEBHOOK_URL ?? "", {
+    await fetch(url, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
