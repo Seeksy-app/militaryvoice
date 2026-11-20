@@ -1,0 +1,92 @@
+<!doctype html>
+<!--
+  Founding Members 2026: photo teasers for the days before Black Friday (20 Nov 2026, drafts for Andrew; nothing posts without his go).
+  Render: teaser-photo.html?v=home|duo|stage|mic|woman|camera&size=portrait|wide (1080×1350 or 1600×900).
+  Photos in photos/ are AI-generated scenes (fal, flux-pro 1.1 ultra): invented people, nobody real, no insignia.
+-->
+<html>
+<head>
+<meta charset="utf-8" />
+<link href="https://api.fontshare.com/v2/css?f[]=general-sans@400,500,600,700&display=swap" rel="stylesheet" />
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #000741; }
+  .frame { position: relative; overflow: hidden; color: #fff; font-family: "General Sans", Inter, system-ui, sans-serif; background: #000741; }
+  .photo { position: absolute; inset: 0; background-size: cover; background-position: center; }
+  .shade { position: absolute; inset: 0; }
+  .logo { position: absolute; z-index: 2; }
+  .coin { position: absolute; z-index: 2; transform: rotate(-8deg); filter: drop-shadow(0 24px 40px rgba(0,0,0,.6)); }
+  .copy { position: absolute; z-index: 2; }
+  .kicker { display: inline-flex; align-items: center; gap: 14px; color: #F0A71F; font-weight: 600; letter-spacing: .18em; text-transform: uppercase; }
+  .kicker::before { content: ""; display: block; height: 3px; background: #F0A71F; }
+  h1 { font-weight: 600; letter-spacing: -.02em; line-height: 1.02; text-wrap: balance; text-shadow: 0 4px 30px rgba(0,0,0,.45); }
+  h1 em { font-style: normal; color: #F0A71F; }
+  .sub { color: rgba(255,255,255,.88); line-height: 1.35; text-wrap: pretty; }
+  .foot { position: absolute; z-index: 2; display: flex; align-items: center; justify-content: space-between; }
+  .url { font-weight: 600; letter-spacing: .14em; text-transform: uppercase; }
+  .badge { background: #fff; border-radius: 50%; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .badge img { width: 86%; }
+
+  .portrait { width: 1080px; height: 1350px; }
+  .portrait .shade { background: linear-gradient(180deg, rgba(0,7,65,.55) 0%, rgba(0,7,65,0) 22%, rgba(0,7,65,0) 38%, rgba(0,7,65,.88) 64%, #000741 100%); }
+  .portrait .logo { left: 72px; top: 64px; width: 200px; }
+  .portrait .coin { right: 44px; top: 36px; width: 280px; }
+  .portrait .copy { left: 72px; right: 72px; bottom: 210px; }
+  .portrait .kicker { font-size: 24px; }
+  .portrait .kicker::before { width: 56px; }
+  .portrait h1 { font-size: 98px; margin-top: 24px; }
+  .portrait .sub { font-size: 34px; margin-top: 26px; max-width: 900px; }
+  .portrait .foot { left: 72px; right: 72px; bottom: 64px; }
+  .portrait .url { font-size: 32px; }
+  .portrait .badge { width: 120px; height: 120px; }
+
+  .wide { width: 1600px; height: 900px; }
+  .wide .shade { background: linear-gradient(90deg, rgba(0,7,65,.96) 0%, rgba(0,7,65,.82) 36%, rgba(0,7,65,.2) 64%, rgba(0,7,65,0) 100%), linear-gradient(0deg, rgba(0,7,65,.7) 0%, rgba(0,7,65,0) 30%); }
+  .wide .logo { left: 88px; top: 64px; width: 170px; }
+  .wide .coin { right: 56px; top: 48px; width: 250px; }
+  .wide .copy { left: 88px; width: 860px; bottom: 170px; }
+  .wide .kicker { font-size: 21px; }
+  .wide .kicker::before { width: 48px; }
+  .wide h1 { font-size: 80px; margin-top: 20px; }
+  .wide .sub { font-size: 28px; margin-top: 22px; max-width: 780px; }
+  .wide .foot { left: 88px; right: 88px; bottom: 56px; }
+  .wide .url { font-size: 26px; }
+  .wide .badge { width: 104px; height: 104px; }
+</style>
+</head>
+<body>
+<div id="f" class="frame portrait">
+  <div class="photo" id="photo"></div>
+  <div class="shade"></div>
+  <img class="logo" src="../../client/public/logo-lockup-dark.png" alt="MilitaryVoices.ai" />
+  <img class="coin" src="badge-coin.png" alt="Founding Member 2026 challenge coin" />
+  <div class="copy">
+    <div class="kicker" id="kicker">Founding Members · opens Black Friday</div>
+    <h1 id="h"></h1>
+    <p class="sub" id="s"></p>
+  </div>
+  <div class="foot">
+    <span class="url">militaryvoices.ai</span>
+    <span class="badge"><img src="../../client/public/veteran-owned.png" alt="Veteran-Owned Business" /></span>
+  </div>
+</div>
+<script>
+  // One headline per scene. Facts only: who it's for, joining in 2026, opens Black Friday, veteran-owned.
+  const V = {
+    home:   { h: "Hit record. <em>Become a Founding Member.</em>", s: "For the military and veteran podcasters who join MilitaryVoices.ai in 2026." },
+    duo:    { h: "Every guest has a story. <em>Tell it with us.</em>", s: "Founding Members opens this Black Friday, for military and veteran podcasters." },
+    stage:  { h: "Your show deserves <em>a bigger stage.</em>", s: "Founding Members opens this Black Friday. Join in 2026 and you're part of the founding group." },
+    mic:    { h: "Built for the people who tell <em>military and veteran stories.</em>", s: "Veteran-owned. Founding Members opens this Black Friday." },
+    woman:  { h: "Your voice. Your show. <em>Your founding year.</em>", s: "Join MilitaryVoices.ai in 2026 and you're a Founding Member." },
+    camera: { h: "Join in 2026. <em>Be a Founding Member.</em>", s: "For military and veteran podcasters. The door opens this Black Friday." },
+  };
+  const q = new URLSearchParams(location.search);
+  const v = V[q.get("v")] ? q.get("v") : "home";
+  const wide = q.get("size") === "wide";
+  if (wide) document.getElementById("f").className = "frame wide";
+  document.getElementById("photo").style.backgroundImage = `url(photos/${v}${wide ? "-wide" : ""}.jpg)`;
+  document.getElementById("h").innerHTML = V[v].h;
+  document.getElementById("s").textContent = V[v].s;
+</script>
+</body>
+</html>

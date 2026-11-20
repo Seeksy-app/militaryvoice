@@ -38,3 +38,15 @@ Nothing posts, schedules or emails until Andrew approves this exact text. Posts 
 - Was scheduled: Riccoh's LinkedIn only, Mon 23 Nov 2026 9:00 am ET (14:00 UTC), image teaser-1600x900.png (Go-to-market library asset 2bc94d4cc5d7), host_posts id 181 (external id hp-181).
 - MilitaryVoices' own profile has only Andrew's personal LinkedIn connected (no MV Facebook, Instagram or LinkedIn page), so nothing goes there.
 - Andrew (via PM, 20 Nov): approve the images himself first. hp-181 pulled from Upload-Post (Upload-Post profile mv-3, LinkedIn "Riccoh Player"), row kept as cancelled. Both sizes in Admin → Growth → Go-to-market → Materials. Re-schedule Mon 9am ET only after his OK on the images.
+- Andrew, 20 Nov: "Looks great" on the images → re-scheduled as hp-182 (Riccoh's LinkedIn, Upload-Post profile mv-3, Mon 23 Nov 9am ET, 1600x900 coin teaser).
+
+## Photo teasers (20 Nov 2026, drafts for Andrew's pick)
+Andrew asked for versions with a podcaster or a recording in the background, two posts a day through the week. Source: teaser-photo.html?v=<scene>&size=portrait|wide; rendered in photo-teasers/ (1080x1350 and 1600x900 JPEGs); review sheets photo-teasers-portrait-sheet.jpg and photo-teasers-wide-sheet.jpg.
+Photos are AI-generated scenes (fal flux-pro 1.1 ultra): invented people, no real members, no insignia.
+1. home: "Hit record. Become a Founding Member."
+2. duo: "Every guest has a story. Tell it with us."
+3. stage: "Your show deserves a bigger stage."
+4. mic: "Built for the people who tell military and veteran stories."
+5. woman: "Your voice. Your show. Your founding year."
+6. camera: "Join in 2026. Be a Founding Member."
+Each carries "Founding Members · opens Black Friday" and one line of facts. Post text for each still needs Andrew's line-by-line go.
