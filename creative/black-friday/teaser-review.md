@@ -8,7 +8,7 @@ Nothing posts, schedules or emails until Andrew approves this exact text. Posts 
 - The source is teaser.html, so any word can change and both sizes can be redrawn in a minute.
 - What's on it:
   - the white MilitaryVoices.ai logo
-  - a "Founding Member · 2026 · Veteran-Owned" seal
+  - the Founding Member challenge coin (Andrew picked A, the coin, 20 Nov; badge-coin.png)
   - the line "For military & veteran podcasters"
   - the headline "Founding Members opens this Black Friday."
   - one line of body text

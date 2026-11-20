@@ -2,7 +2,7 @@
 <!--
   Founding Members 2026: the Mon 23 Nov teaser graphic (draft for Andrew's approval; nothing posts without his go).
   Render: teaser.html?size=portrait (1080×1350, Instagram/Facebook) or ?size=wide (1600×900, LinkedIn/Facebook/X).
-  Logo and badge are the site's own (client/public). No names, no numbers, no date beyond Black Friday.
+  Logo and Veteran-Owned badge are the site's own (client/public); the coin is badge-coin.png (Andrew's pick, 20 Nov). No names, no numbers, no date beyond Black Friday.
 -->
 <html>
 <head>
@@ -22,10 +22,7 @@
   .stripes { position: absolute; left: 0; right: 0; bottom: 0; opacity: .06;
     background: repeating-linear-gradient(135deg, #fff 0 18px, transparent 18px 46px); }
   .logo { position: absolute; }
-  .seal { position: absolute; border-radius: 50%; border: 4px solid #F0A71F; display: flex; align-items: center; justify-content: center; }
-  .seal::before { content: ""; position: absolute; inset: 12px; border-radius: 50%; border: 2px solid rgba(240,167,31,.55); }
-  .seal svg { position: absolute; inset: 0; width: 100%; height: 100%; }
-  .seal .star { color: #F0A71F; }
+  .seal { position: absolute; transform: rotate(-8deg); filter: drop-shadow(0 24px 40px rgba(0,0,0,.5)); }
   .eyebrow { display: inline-block; color: #F0A71F; font-weight: 600; letter-spacing: .18em; text-transform: uppercase; border: 2px solid rgba(240,167,31,.5); background: rgba(240,167,31,.1); border-radius: 999px; }
   h1 { font-weight: 600; letter-spacing: -.02em; line-height: 1.02; text-wrap: balance; }
   h1 em { font-style: normal; color: #F0A71F; }
@@ -40,7 +37,7 @@
   .portrait .glow { width: 760px; height: 760px; right: -260px; top: -260px; }
   .portrait .stripes { height: 300px; }
   .portrait .logo { left: 80px; top: 76px; width: 230px; }
-  .portrait .seal { right: 80px; top: 70px; width: 250px; height: 250px; }
+  .portrait .seal { right: 40px; top: 30px; width: 380px; height: 380px; }
   .portrait .copy { position: absolute; left: 80px; right: 80px; bottom: 280px; }
   .portrait .eyebrow { font-size: 26px; padding: 12px 26px; }
   .portrait h1 { font-size: 116px; margin-top: 36px; }
@@ -54,10 +51,10 @@
   .wide .glow { width: 700px; height: 700px; right: -180px; top: -240px; }
   .wide .stripes { height: 200px; }
   .wide .logo { left: 96px; top: 70px; width: 190px; }
-  .wide .seal { right: 120px; top: 230px; width: 340px; height: 340px; }
+  .wide .seal { right: 40px; top: 190px; width: 470px; height: 470px; }
   .wide .copy { position: absolute; left: 96px; width: 1010px; bottom: 200px; }
   .wide .eyebrow { font-size: 22px; padding: 10px 22px; }
-  .wide h1 { font-size: 92px; margin-top: 26px; }
+  .wide h1 { font-size: 84px; margin-top: 26px; }
   .wide .sub { font-size: 30px; margin-top: 26px; max-width: 920px; }
   .wide .foot { left: 96px; right: 96px; bottom: 64px; }
   .wide .url { font-size: 28px; }
@@ -71,15 +68,7 @@
   <div class="stripes"></div>
   <img class="logo" src="../../client/public/logo-lockup-dark.png" alt="MilitaryVoices.ai" />
 
-  <div class="seal">
-    <svg viewBox="0 0 200 200" aria-hidden="true">
-      <defs><path id="ring" d="M100,100 m-72,0 a72,72 0 1,1 144,0 a72,72 0 1,1 -144,0" /></defs>
-      <text font-family="General Sans, Inter, sans-serif" font-weight="600" font-size="17" fill="#F0A71F">
-        <textPath href="#ring" startOffset="0" textLength="446" lengthAdjust="spacing">FOUNDING MEMBER · 2026 · VETERAN-OWNED ·</textPath>
-      </text>
-      <polygon class="star" fill="#F0A71F" points="100,62 109,89 138,89 115,106 124,133 100,117 76,133 85,106 62,89 91,89" />
-    </svg>
-  </div>
+  <img class="seal" src="badge-coin.png" alt="Founding Member 2026 challenge coin" />
 
   <div class="copy">
     <span class="eyebrow">For military &amp; veteran podcasters</span>
