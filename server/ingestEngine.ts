@@ -149,6 +149,8 @@ export function registerIngest(app: Express, requireAdmin: RequestHandler): void
       keys: keys.length,
       ownKeys: keys.filter((k) => k.engine === "own").length,
       liveNow: keys.filter((k) => k.status === "live").length,
+      // Who holds a key, masked to the first letter and the domain (admin only), so an unexpected key can be placed.
+      owners: keys.map((k) => ({ who: String(k.ownerEmail ?? "").replace(/^(.).*@/, "$1***@"), engine: k.engine, status: k.status, since: k.createdAt })),
     });
   });
 
