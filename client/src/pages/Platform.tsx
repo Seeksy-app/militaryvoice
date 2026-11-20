@@ -2,6 +2,7 @@ import { Link } from "wouter";
 import { motion } from "framer-motion";
 import { NavBar } from "@/components/NavBar";
 import { HeroBackdrop, HeroCard } from "@/components/platform/LiveEventMock";
+import { FoundingHero, foundingHeroOn } from "@/components/platform/FoundingHero";
 import { PillarArt } from "@/components/platform/PillarArt";
 import { StudioConsoleMock } from "@/components/platform/StudioConsoleMock";
 import { RealTimePostMock } from "@/components/platform/RealTimePostMock";
@@ -221,6 +222,8 @@ export default function Platform({ pitch = false }: { pitch?: boolean } = {}) {
 
       {pitch ? (
         <PitchHero />
+      ) : foundingHeroOn() ? (
+        <FoundingHero />
       ) : (
         <>
       {/* ------------------------------------------------------------- hero */}
