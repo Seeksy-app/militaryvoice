@@ -37,6 +37,7 @@ import {
   Menu,
   CircleHelp,
   Check,
+  Cable,
 } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -683,6 +684,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   // browser), and on its own while editing in Pōstify, for room, until they
   // open it again or stop editing.
   const [editingNow, setEditingNow] = useState(false);
+  /** The Go live door's choice: our room, or their own StreamYard/Restream/OBS (20 Nov 2026 mockup). */
+  const [liveOpen, setLiveOpen] = useState(false);
   const [editNav, setEditNav] = useState<boolean | null>(null);
   const [navPref, setNavPref] = useState(() => { try { return localStorage.getItem("mv_nav_collapsed") === "1"; } catch { return false; } });
   useEffect(() => {
@@ -1668,21 +1671,51 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                         ? { key: "myevents", icon: CalendarDays, title: "My events", hint: "Create and run yours", go: () => goTo("myevents") }
                         : { key: "episode", icon: Mic2, title: hosted ? "New episode" : "Your podcast", hint: hosted ? "Publish to every app" : "Host it free", go: () => goTo("podcast") },
                       { key: "clips", icon: Wand2, title: "Make clips", hint: "Pōstify a video", go: () => goTo("postify") },
-                      { key: "live", icon: Video, title: "Go live", hint: "Open a Room", go: () => { window.location.href = "/room"; } },
+                      { key: "live", icon: Video, title: "Go live", hint: "Studio, StreamYard or OBS", go: () => setLiveOpen((v) => !v) },
                       step
                         ? { key: `todo-${step.key}`, icon: Sparkles, title: step.label, tag: step.tag, hint: `Next step: ${step.cta.toLowerCase()}`, go: () => goToStep(step), next: true }
                         : { key: "page", icon: Globe, title: "Your SmartLink", hint: "Edit your page", go: () => goTo("page") },
                     ];
                     return (
+                      <>
                       <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="todo-strip">
-                        {doors.map((d) => (
-                          <button key={d.key} type="button" onClick={d.go} className={`rounded-2xl bg-card p-4 text-left shadow-sm transition-colors hover:bg-muted/40 ${d.next ? "border-2 border-[#053877]" : "border border-border"}`} data-testid={d.next ? d.key : `door-${d.key}`}>
-                            <d.icon className="h-5 w-5 text-[#053877] dark:text-[#8ab4f8]" />
-                            <span className="mt-2 flex items-center gap-2 text-sm font-semibold text-foreground">{d.title}{d.tag && <span className="rounded-full bg-[#F0A71F]/20 px-1.5 py-px text-[10px] font-semibold leading-4 text-[#8a5a00] dark:text-[#F0A71F]">{d.tag}</span>}</span>
-                            <span className="mt-0.5 block text-xs text-muted-foreground">{d.hint}</span>
-                          </button>
-                        ))}
+                        {doors.map((d) => {
+                          const on = d.key === "live" && liveOpen;
+                          return (
+                            <button key={d.key} type="button" onClick={d.go} aria-expanded={d.key === "live" ? liveOpen : undefined} className={`rounded-2xl bg-card p-4 text-left shadow-sm transition-colors hover:bg-muted/40 ${d.next || on ? "border-2 border-[#053877] dark:border-[#8ab4f8]" : "border border-border"} ${on ? "shadow-[0_6px_18px_rgba(5,56,119,0.14)]" : ""}`} data-testid={d.next ? d.key : `door-${d.key}`}>
+                              <d.icon className="h-5 w-5 text-[#053877] dark:text-[#8ab4f8]" />
+                              <span className="mt-2 flex items-center gap-2 text-sm font-semibold text-foreground">{d.title}{d.tag && <span className="rounded-full bg-[#F0A71F]/20 px-1.5 py-px text-[10px] font-semibold leading-4 text-[#8a5a00] dark:text-[#F0A71F]">{d.tag}</span>}</span>
+                              <span className="mt-0.5 block text-xs text-muted-foreground">{d.hint}</span>
+                            </button>
+                          );
+                        })}
                       </div>
+                      {/* Go live: our room, or their own software with our stream key. Both land in the Library. */}
+                      {liveOpen && (
+                        <div className="mt-3 rounded-[20px] border border-border bg-card px-5 py-5 shadow-[0_18px_44px_rgba(16,24,40,0.16)] sm:px-8 sm:pb-6 sm:pt-6" data-testid="go-live-panel">
+                          <h3 className="text-xl font-bold tracking-tight text-foreground">Where are you going live?</h3>
+                          <p className="mt-1 text-sm text-muted-foreground">Either way, the show lands in your Library, ready for clips.</p>
+                          <div className="mt-4 grid gap-4 md:grid-cols-2">
+                            <div className="flex flex-col gap-2.5 rounded-2xl border border-border p-[18px]">
+                              <div className="flex items-center gap-3">
+                                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#e8eef7] dark:bg-[#8ab4f8]/15"><Video className="h-[22px] w-[22px] text-[#053877] dark:text-[#8ab4f8]" /></span>
+                                <h4 className="text-[17px] font-bold text-foreground">In our studio</h4>
+                              </div>
+                              <p className="text-sm leading-relaxed text-muted-foreground">Check your camera and mic, invite guests, and go. Nothing else to set up.</p>
+                              <a href="/room" className="mt-1.5 self-start rounded-[10px] bg-[#053877] px-[18px] py-[11px] text-sm font-semibold text-white hover:bg-[#022a5c]" data-testid="go-live-room">Open my room</a>
+                            </div>
+                            <div className="flex flex-col gap-2.5 rounded-2xl border border-border p-[18px]">
+                              <div className="flex items-center gap-3">
+                                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#fdf1d8] dark:bg-[#F0A71F]/15"><Cable className="h-[22px] w-[22px] text-[#7a4e00] dark:text-[#F0A71F]" /></span>
+                                <h4 className="text-[17px] font-bold text-foreground">From StreamYard, Restream or OBS</h4>
+                              </div>
+                              <p className="text-sm leading-relaxed text-muted-foreground">Keep producing the way you do. Paste our address and your key into your software, then go live there.</p>
+                              <a href="/stream-in" className="mt-1.5 self-start rounded-[10px] border-2 border-[#053877] bg-background px-[18px] py-[9px] text-sm font-semibold text-[#053877] hover:bg-[#053877]/5 dark:border-[#8ab4f8] dark:text-[#8ab4f8]" data-testid="go-live-stream-in">Get my stream key</a>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                      </>
                     );
                   })()}
                   {/* Coming up: Radio times, then an event they're booked on, as rows. Nothing coming, nothing here. */}
