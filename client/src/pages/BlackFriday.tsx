@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 import { apiRequest } from "@/lib/queryClient";
-import { PLANS, FOUNDING, CLIPS_PER_EPISODE } from "@shared/tokens";
+import { PLANS, FOUNDING, CLIPS_PER_EPISODE, foundingOpen } from "@shared/tokens";
 import { Link } from "wouter";
 import { ArrowRight, CalendarDays, Captions, Gift, Loader2, Lock, Mic, Scissors, Sparkles, Link2, Users, Video, Coins } from "lucide-react";
 
@@ -76,15 +76,20 @@ export default function BlackFriday() {
   const src = useRef(srcOf()).current;
   const box = useRef<HTMLDivElement>(null);
 
-  // Not shared yet: keep it out of search until it's approved.
+  // Open to search while the offer runs (Andrew, 20 Nov 2026: "let Google index the Black Friday page until Dec 31").
+  // REMINDER: the offer ends Dec 31, 2026. From then on this page keeps itself out of search (the noindex below),
+  // and it should be retired or redirected; also drop it from the sitemap in server/routes.ts (that's automatic too).
   useEffect(() => {
-    const m = document.createElement("meta");
-    m.name = "robots";
-    m.content = "noindex, nofollow";
-    document.head.appendChild(m);
     const before = document.title;
     document.title = "Founding Members 2026 · MilitaryVoices.ai";
-    return () => { m.remove(); document.title = before; };
+    let m: HTMLMetaElement | null = null;
+    if (!foundingOpen()) {
+      m = document.createElement("meta");
+      m.name = "robots";
+      m.content = "noindex, nofollow";
+      document.head.appendChild(m);
+    }
+    return () => { m?.remove(); document.title = before; };
   }, []);
 
   const toBox = () => {

@@ -194,7 +194,7 @@ import { registerCreatorCampaigns } from "./creatorCampaigns.js";
 import { registerContactProfile } from "./contactProfile.js";
 import { registerAskShow, claimTranscript } from "./askShow.js";
 import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, createProductionSubscription, readSessionMeta, readSubscription, reportExtraCredits, billingPortal, createAddonCheckout, readAddonSession, addonStateFrom, bundledAddonStatesFrom, readPlanSessionAddons, ensureExtraItem, type PlanState } from "./stripe.js";
-import { episodeCredits, SHORT_VIDEO_SEC, planOf, PLANS, ADDONS, DEFAULT_OVERAGE_CAP_CENTS, OVERAGE_CAP_CHOICES, type PlanKey, type AddonKey } from "../shared/tokens.js";
+import { foundingOpen, episodeCredits, SHORT_VIDEO_SEC, planOf, PLANS, ADDONS, DEFAULT_OVERAGE_CAP_CENTS, OVERAGE_CAP_CHOICES, type PlanKey, type AddonKey } from "../shared/tokens.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, getSession, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
 import {
   publishPhoto,
@@ -2051,7 +2051,8 @@ export function registerRoutes(app: Express): void {
 
   app.get("/sitemap.xml", async (req, res) => {
     const origin = `${req.protocol}://${req.get("host")}`;
-    const staticPaths = ["", "/schedule", "/agenda", "/faq", "/prepare", "/platform", "/events", "/policy", "/terms"];
+    // /black-friday (Founding Members 2026) is listed only while the offer is open: it drops out on its own after Dec 31, 2026.
+    const staticPaths = ["", "/schedule", "/agenda", "/faq", "/prepare", "/platform", "/events", "/policy", "/terms", ...(foundingOpen() ? ["/black-friday"] : [])];
     let events: { slug: string }[] = [];
     try {
       events = (await storage.listEvents()).filter((e) => e.slug && e.visible);
