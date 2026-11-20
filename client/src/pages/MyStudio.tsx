@@ -2,16 +2,20 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   LiveKitRoom, RoomAudioRenderer, VideoTrack, isTrackReference, useChat, useConnectionState, useIsSpeaking,
-  useLocalParticipant, useMediaDeviceSelect, useParticipants, useRoomContext, useSpeakingParticipants, useTracks,
+  useLocalParticipant, useMediaDeviceSelect, useParticipants, useRoomContext, useRoomInfo, useSpeakingParticipants, useTracks,
   type TrackReferenceOrPlaceholder,
 } from "@livekit/components-react";
 import { ConnectionState, Track, type Participant } from "livekit-client";
 import {
   ArrowLeft, Check, Circle, Copy, ExternalLink, Loader2, LogOut, MessageSquare, Mic, MicOff, MonitorUp, NotebookPen,
-  Plus, Settings, Square, UserPlus, Users, Video, VideoOff, X, Youtube,
+  Palette, Plus, Settings, Square, UserPlus, Users, Video, VideoOff, X, Youtube,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
+import { BACKGROUNDS, assetUrl, lookFromMetadata, normalize, sceneOnStage, useLookActions, type Look, type Scene } from "@/components/room/look";
+import { LayoutPicker, ScenesPanel } from "@/components/room/ScenesPanel";
+import { LookPanel } from "@/components/room/LookPanel";
+import { MarkClip } from "@/components/room/MarkClip";
 
 /** The room is light in both themes, so always the light logo file. */
 const Logo = ({ className }: { className: string }) => <img src="/logo-lockup.png?v=4" alt="MilitaryVoices.ai" className={`w-auto ${className}`} />;
@@ -23,21 +27,19 @@ const Logo = ({ className }: { className: string }) => <img src="/logo-lockup.pn
  * People, Notes, Recording and Chat. Go live opens a sheet: your Library is
  * always on, plus YouTube and any streaming key.
  *
- * Layouts change how the room looks to the people in it. The recording and the
- * live picture are still the server's own layout until phase 2 (egress template).
+ * Phase 2 (20 Nov, mockup v8): scenes on the left, "Your look" on the right, and the stage
+ * follows the scene on air. It switches on by itself when the server sends `look` (Podcasting's
+ * API); until then the room stays phase 1, a plain grid like the recording, with no layout picker
+ * (Andrew: "go, hide layouts").
  */
-type Studio = { you?: string; id: number; name: string; inviteLink: string; recording: { since: string } | null; live: { since: string; watchUrl: string } | null; youtube: boolean; youtubeOn: boolean; streams: { id: string; name: string; on: boolean }[]; ready: boolean; canRecord: boolean };
+type Studio = { you?: string; id: number; name: string; inviteLink: string; recording: { since: string } | null; live: { since: string; watchUrl: string } | null; youtube: boolean; youtubeOn: boolean; streams: { id: string; name: string; on: boolean }[]; ready: boolean; canRecord: boolean; look?: Look | null };
 type Conn = { url: string; token: string; name: string };
 type Setup = { name: string; title: string; mic: boolean; cam: boolean; micId?: string; camId?: string };
-type Layout = "solo" | "side" | "grid" | "speaker" | "screen" | "pip";
-type Tab = "people" | "notes" | "recording" | "chat";
+type Tab = "look" | "people" | "notes" | "recording" | "chat";
 
 const NAVY = "#053877";
-/**
- * The layout picker stays hidden until phase 2, when layouts reach the recording and the live
- * picture (Andrew, 20 Nov: "go, hide layouts"). Until then the stage is a grid, like the recording.
- */
-const SHOW_LAYOUTS = false;
+/** Mark a clip stays hidden until Podcasting's POST /api/host/my-studio/mark is on main. */
+const MARK_CLIP = false;
 /** The approved mockup (v8) is set in Inter; the rest of the site isn't, so the room loads it itself. */
 const INTER = "'Inter', 'General Sans', system-ui, sans-serif";
 function useInter() {
@@ -263,14 +265,38 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
   const state = useConnectionState();
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } = useLocalParticipant();
   const now = useNow();
-  const [layout, setLayout] = useState<Layout>(SHOW_LAYOUTS ? "side" : "grid");
-  const [focus, setFocus] = useState<string | null>(null);
-  const [tab, setTab] = useState<Tab>("people");
+  const [picked, setTab] = useState<Tab | null>(null);
   const [sheet, setSheet] = useState(false);
   const [settings, setSettings] = useState(false);
   const [busy, setBusy] = useState<"" | "rec" | "live">("");
   const hosting = useQuery<{ shows: { show: { artworkUrl?: string } }[] }>({ queryKey: ["/api/host/hosting"], enabled: owner, queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json(), staleTime: 60_000, retry: false });
   const logo = hosting.data?.shows?.find((s) => s.show.artworkUrl)?.show.artworkUrl;
+
+  // The look: the owner's own copy (it changes the moment they click); guests follow the room's metadata.
+  const meta = useRoomInfo().metadata;
+  const look = owner ? normalize(studio?.look) : lookFromMetadata(meta);
+  const editing = owner && !!look;
+  const scene = sceneOnStage(look);
+  const actions = useLookActions();
+  const people = useParticipants();
+  const tab: Tab = picked ?? (editing ? "look" : "people");
+
+  // A banner with a time limit comes down by itself.
+  const showing = look?.banners.find((b) => b.id === look.showing);
+  useEffect(() => {
+    if (!editing || !showing?.seconds) return;
+    const t = window.setTimeout(() => void actions.showBanner(null), showing.seconds * 1000);
+    return () => window.clearTimeout(t);
+  }, [editing, showing?.id, showing?.seconds]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  /** On the strip: put someone on or off the stage in the scene on air. */
+  const toggleOnStage = (identity: string) => {
+    if (!scene) return;
+    const all = people.map((p) => p.identity);
+    const now = scene.stage.length ? scene.stage : all;
+    const next = now.includes(identity) ? now.filter((x) => x !== identity) : [...now, identity];
+    actions.change((l) => ({ ...l, scenes: l.scenes.map((s) => (s.id === scene.id ? { ...s, stage: all.every((x) => next.includes(x)) ? [] : next } : s)) }));
+  };
 
   // Their title from the set-up screen rides on their participant, so it shows under their name for everyone.
   useEffect(() => {
@@ -300,7 +326,12 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
     void navigator.clipboard.writeText(studio.inviteLink).then(() => toast({ title: "Invite link copied", description: "Send it to your guest. They pick a name and they're in." }));
   };
   const share = async () => {
-    try { await localParticipant.setScreenShareEnabled(!isScreenShareEnabled); if (SHOW_LAYOUTS && !isScreenShareEnabled) setLayout("screen"); }
+    try {
+      await localParticipant.setScreenShareEnabled(!isScreenShareEnabled);
+      // Starting a share puts the screen-share scene on air, if there is one.
+      const s = !isScreenShareEnabled && editing ? look?.scenes.find((x) => x.layout === "screen") : undefined;
+      if (s && s.id !== look?.onStage) void actions.toStage(s.id);
+    }
     catch (e) { if ((e as Error).name !== "NotAllowedError") toast({ title: "Couldn't share your screen", description: say(e), variant: "destructive" }); }
   };
   const leave = async () => {
@@ -341,6 +372,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
         )}
         {owner && studio && (
           <div className="ml-auto flex items-center gap-2.5">
+            {MARK_CLIP && <MarkClip recording={!!rec} />}
             {live?.watchUrl && <a href={live.watchUrl} target="_blank" rel="noreferrer" className="hidden items-center gap-1 text-[13px] font-semibold text-[#053877] underline-offset-2 hover:underline lg:flex">Watch <ExternalLink className="h-3.5 w-3.5" /></a>}
             <button type="button" onClick={copyInvite} className="hidden h-[42px] items-center gap-2 rounded-xl border border-[#d0d5dd] bg-white px-4 text-sm font-semibold hover:bg-[#f9fafb] sm:flex" data-testid="my-studio-invite"><UserPlus className="h-[18px] w-[18px]" /> Invite guests</button>
             {live ? (
@@ -355,11 +387,16 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
       </header>
 
       <div className="flex min-h-0 flex-1">
+        {editing && look && <ScenesPanel look={look} people={people.map((p) => ({ identity: p.identity, name: (p.name || p.identity) + (p.isLocal ? " (you)" : "") }))} actions={actions} />}
         {/* Stage column */}
         <div className="flex min-w-0 flex-1 flex-col items-center px-4 pt-5 lg:px-6">
-          <Stage layout={layout} focus={focus} logo={logo} />
-          {SHOW_LAYOUTS && <LayoutRow layout={layout} setLayout={setLayout} />}
-          <PeopleStrip focus={focus} setFocus={SHOW_LAYOUTS ? setFocus : null} owner={owner} onShare={() => void share()} onInvite={copyInvite} />
+          <Stage look={look} scene={scene} fallbackLogo={look ? undefined : logo} />
+          {editing && scene && (
+            <div className="mt-3 shrink-0" title={`Layout for ${scene.name}`}>
+              <LayoutPicker value={scene.layout} onPick={(layout) => actions.change((l) => ({ ...l, scenes: l.scenes.map((s) => (s.id === scene.id ? { ...s, layout } : s)) }))} />
+            </div>
+          )}
+          <PeopleStrip scene={look ? scene : undefined} onToggle={editing ? toggleOnStage : undefined} owner={owner} onShare={() => void share()} onInvite={copyInvite} />
           <div className="mb-3 mt-auto flex items-center gap-1 rounded-[18px] border border-[#e4e7ec] bg-white px-2 py-2 shadow-[0_8px_24px_rgba(16,24,40,0.1)] sm:gap-1.5 sm:px-3" data-testid="my-studio-controls">
             <BarButton label={isMicrophoneEnabled ? "Mic" : "Muted"} off={!isMicrophoneEnabled} onClick={() => void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)}>{isMicrophoneEnabled ? <Mic className="h-[22px] w-[22px]" /> : <MicOff className="h-[22px] w-[22px]" />}</BarButton>
             <BarButton label={isCameraEnabled ? "Camera" : "Camera off"} off={!isCameraEnabled} onClick={() => void localParticipant.setCameraEnabled(!isCameraEnabled)}>{isCameraEnabled ? <Video className="h-[22px] w-[22px]" /> : <VideoOff className="h-[22px] w-[22px]" />}</BarButton>
@@ -373,14 +410,16 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
         </div>
 
         {/* Right panel */}
-        <aside className="hidden w-[360px] shrink-0 border-l border-[#e4e7ec] bg-white lg:flex">
+        <aside className={`hidden shrink-0 border-l border-[#e4e7ec] bg-white lg:flex ${editing ? "w-[360px] 2xl:w-[392px]" : "w-[360px]"}`}>
           <div className="flex min-w-0 flex-1 flex-col">
+            {tab === "look" && editing && look && <LookPanel look={look} actions={actions} />}
             {tab === "people" && <PeoplePanel owner={owner} studio={studio} onCopy={copyInvite} />}
             {tab === "notes" && <NotesPanel roomKey={owner ? String(studio?.id ?? "mine") : roomName} />}
             {tab === "recording" && owner && <RecordingPanel studio={studio} now={now} busy={busy} onRecord={(on) => void record(on)} onGoLive={() => setSheet(true)} onEndLive={() => void endLive()} />}
             {tab === "chat" && <ChatPanel />}
           </div>
           <nav className="flex w-[72px] shrink-0 flex-col items-center gap-1 border-l border-[#eef0f4] pt-3" aria-label="Panels">
+            {editing && <RailButton on={tab === "look"} onClick={() => setTab("look")} icon={<Palette className="h-[22px] w-[22px]" />} label="Look" />}
             <RailButton on={tab === "people"} onClick={() => setTab("people")} icon={<Users className="h-[22px] w-[22px]" />} label="People" />
             <RailButton on={tab === "notes"} onClick={() => setTab("notes")} icon={<NotebookPen className="h-[22px] w-[22px]" />} label="Notes" />
             {owner && <RailButton on={tab === "recording"} onClick={() => setTab("recording")} icon={<Circle className={`h-[22px] w-[22px] ${rec ? "fill-[#d92d20] text-[#d92d20]" : ""}`} />} label="Recording" />}
@@ -419,11 +458,22 @@ function useStageTracks() {
   return { cams, screens };
 }
 
-function Stage({ layout, focus, logo }: { layout: Layout; focus: string | null; logo?: string }) {
-  const { cams, screens } = useStageTracks();
+/** Is this person on the stage in this scene? An empty list means everyone. */
+const onStageIn = (s: Scene | undefined, identity: string) => !s || s.stage.length === 0 || s.stage.includes(identity);
+
+/**
+ * The stage as the room sees it: the scene on air (its layout and who's in it), the
+ * background, the logo in its corner and any banner. Engineering's RoomStage replaces this
+ * once it lands, so the host sees exactly what's recorded.
+ */
+function Stage({ look, scene, fallbackLogo }: { look: Look | null; scene?: Scene; fallbackLogo?: string }) {
+  const all = useStageTracks();
+  const cams = all.cams.filter((t) => onStageIn(scene, t.participant.identity));
+  const screens = all.screens;
+  const layout = scene?.layout ?? "grid";
   const speaking = useSpeakingParticipants();
   const byId = (id: string | null | undefined) => cams.find((t) => t.participant.identity === id);
-  const main = byId(focus) ?? byId(speaking[0]?.identity) ?? cams[0];
+  const main = byId(speaking[0]?.identity) ?? cams[0];
   const others = cams.filter((t) => t !== main);
   const screen = screens[0];
 
@@ -446,10 +496,18 @@ function Stage({ layout, focus, logo }: { layout: Layout; focus: string | null; 
     body = <div className="relative h-full">{big && <Tile t={big} big />}{small && <div className="absolute bottom-3 right-3 aspect-video w-[26%] shadow-[0_6px_18px_rgba(0,0,0,0.35)]"><Tile t={small} small /></div>}</div>;
   }
 
+  const bgUrl = look?.background.assetId ? assetUrl(look, look.background.assetId) : undefined;
+  const background = bgUrl ? `center / cover no-repeat url("${bgUrl}")` : BACKGROUNDS[look?.background.color ?? "blue"];
+  const logo = look ? (look.logo ? assetUrl(look, look.logo.assetId) : undefined) : fallbackLogo;
+  const corner = look?.logo?.corner ?? "tr";
+  const banner = look?.banners.find((b) => b.id === look.showing);
+  if (!cams.length && !screens.length) body = <div className="flex h-full items-center justify-center text-center text-[15px] font-semibold text-white/80">No one is on the stage in this scene</div>;
+
   return (
-    <div className="relative shrink-0 overflow-hidden rounded-2xl shadow-[0_12px_32px_rgba(16,24,40,0.22)]" style={{ width: "min(768px, 100%, calc((100dvh - 336px) * 16 / 9))", aspectRatio: "16 / 9", background: "linear-gradient(135deg, #0b1f4a 0%, #0a3a8f 55%, #3b6fd6 100%)" }} data-testid="my-studio-stage">
-      <div className="absolute inset-x-[4.5%] bottom-[8%] top-[12.5%]">{body}</div>
-      {logo && <img src={logo} alt="Your show's logo" className="absolute right-4 top-2 h-[11%] max-h-[50px] w-auto rounded-md object-contain" />}
+    <div className="relative shrink-0 overflow-hidden rounded-2xl shadow-[0_12px_32px_rgba(16,24,40,0.22)]" style={{ width: "min(768px, 100%, calc((100dvh - 336px) * 16 / 9))", aspectRatio: "16 / 9", background }} data-testid="my-studio-stage">
+      <div className={`absolute inset-x-[4.5%] top-[12.5%] transition-[bottom] duration-300 ${banner ? "bottom-[17%]" : "bottom-[8%]"}`}>{body}</div>
+      {logo && <img src={logo} alt="Your show's logo" className={`absolute top-2 h-[11%] max-h-[50px] w-auto rounded-md object-contain ${corner === "tl" ? "left-4" : "right-4"}`} />}
+      {banner && <div className="absolute bottom-[3%] left-[4.5%] max-w-[80%] truncate rounded-lg bg-[#053877] px-4 py-2 text-[15px] font-bold text-white shadow-[0_6px_18px_rgba(0,0,0,0.3)]" data-testid="stage-banner">{banner.text}</div>}
     </div>
   );
 }
@@ -485,43 +543,22 @@ function Tile({ t, big, small }: { t: TrackReferenceOrPlaceholder; big?: boolean
   );
 }
 
-const LAYOUTS: { id: Layout; label: string; icon: ReactNode }[] = [
-  { id: "solo", label: "Solo", icon: <rect x="5" y="1" width="12" height="14" rx="2" /> },
-  { id: "side", label: "Side by side", icon: <><rect x="1" y="2" width="9" height="12" rx="2" /><rect x="12" y="2" width="9" height="12" rx="2" /></> },
-  { id: "grid", label: "Grid", icon: <><rect x="1" y="1" width="9" height="6" rx="1.5" /><rect x="12" y="1" width="9" height="6" rx="1.5" /><rect x="1" y="9" width="9" height="6" rx="1.5" /><rect x="12" y="9" width="9" height="6" rx="1.5" /></> },
-  { id: "speaker", label: "Speaker and strip", icon: <><rect x="1" y="1" width="20" height="10" rx="1.5" /><rect x="1" y="12.5" width="6" height="3" rx="1" /><rect x="8" y="12.5" width="6" height="3" rx="1" /></> },
-  { id: "screen", label: "Screen share", icon: <><rect x="1" y="1" width="15" height="14" rx="1.5" /><rect x="17" y="1" width="4" height="6" rx="1" /></> },
-  { id: "pip", label: "Picture in picture", icon: <><rect x="1" y="1" width="20" height="14" rx="1.5" /><rect x="13" y="8" width="7" height="6" rx="1" opacity="0.55" /></> },
-];
-
-function LayoutRow({ layout, setLayout }: { layout: Layout; setLayout: (l: Layout) => void }) {
-  return (
-    <div className="mt-3 flex shrink-0 items-center gap-2" role="radiogroup" aria-label="Layouts">
-      {LAYOUTS.map((l) => {
-        const on = l.id === layout;
-        return (
-          <button key={l.id} type="button" role="radio" aria-checked={on} aria-label={l.label} title={l.label} onClick={() => setLayout(l.id)} className={`flex h-10 w-[54px] items-center justify-center rounded-[10px] ${on ? "border-2 border-[#053877] bg-[#eef3fb]" : "border border-[#e4e7ec] bg-white hover:border-[#98a2b3]"}`} data-testid={`layout-${l.id}`}>
-            <svg width="22" height="16" viewBox="0 0 22 16" fill={on ? NAVY : "#98a2b3"} aria-hidden>{l.icon}</svg>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function PeopleStrip({ focus, setFocus, owner, onShare, onInvite }: { focus: string | null; setFocus: ((id: string | null) => void) | null; owner: boolean; onShare: () => void; onInvite: () => void }) {
+/** Everyone in the room. With scenes on, each shows ON STAGE, and the owner clicks to put them on or off. */
+function PeopleStrip({ scene, onToggle, owner, onShare, onInvite }: { scene?: Scene; onToggle?: (identity: string) => void; owner: boolean; onShare: () => void; onInvite: () => void }) {
   const { cams } = useStageTracks();
   const [menu, setMenu] = useState(false);
   return (
     <div className="mt-3 flex w-full max-w-[768px] shrink-0 gap-3 overflow-x-auto pb-1" data-testid="my-studio-strip">
       {cams.map((t) => {
         const name = t.participant.name || t.participant.identity;
-        const on = focus === t.participant.identity;
+        const on = !!scene && onStageIn(scene, t.participant.identity);
         return (
-          <button key={key(t)} type="button" onClick={setFocus ? () => setFocus(on ? null : t.participant.identity) : undefined} disabled={!setFocus} title={!setFocus ? undefined : on ? `Stop keeping ${name} in the big spot` : `Keep ${name} in the big spot`} className={`relative h-24 w-40 shrink-0 overflow-hidden rounded-xl bg-white ${on ? "border-2 border-[#053877]" : `border border-[#e4e7ec] ${setFocus ? "hover:border-[#98a2b3]" : "cursor-default"}`}`}>
+          <button key={key(t)} type="button" onClick={onToggle ? () => onToggle(t.participant.identity) : undefined} disabled={!onToggle} title={onToggle ? (on ? `Take ${name} off the stage` : `Put ${name} on the stage`) : undefined} className={`relative h-24 w-40 shrink-0 overflow-hidden rounded-xl bg-white ${scene && !on ? "opacity-60" : ""} border border-[#e4e7ec] ${onToggle ? "hover:border-[#98a2b3]" : "cursor-default"}`} data-testid="strip-person">
             <div className="absolute inset-x-0 top-0 bottom-6"><MiniFace t={t} /></div>
             <div className="absolute inset-x-2.5 bottom-1 truncate text-left text-xs font-semibold">{name}{t.participant.isLocal ? " (you)" : ""}</div>
-            {on && <div className="absolute right-2 top-2 rounded-full bg-[#eef3fb] px-2 py-0.5 text-[10px] font-bold text-[#053877]">BIG SPOT</div>}
+            {scene && (on
+              ? <div className="absolute right-2 top-2 rounded-full bg-[#d1fadf] px-2 py-0.5 text-[10px] font-bold text-[#067647]">ON STAGE</div>
+              : <div className="absolute right-2 top-2 rounded-full bg-[#f2f4f7] px-2 py-0.5 text-[10px] font-bold text-[#475467]">OFF STAGE</div>)}
           </button>
         );
       })}
