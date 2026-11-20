@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { ZoomConnect, ImportLink } from "@/components/ZoomConnect";
 import { ConnectYoutube } from "@/components/ConnectYoutube";
-import { PodcastStatsRows } from "@/components/PodcastStats";
+import { PodcastStatsRows, useHostedHere } from "@/components/PodcastStats";
 import { PlatformIcon, platformLabel, platformBackground, formatFollowers, ALL_PLATFORMS } from "@/components/SocialIcons";
 import type { ProfileRow, SocialAccount } from "@shared/schema";
 import { Check, ChevronDown, ExternalLink, Headphones, Link2, Radio, RefreshCw, Share2, Upload, Video, Webhook } from "lucide-react";
@@ -37,6 +37,7 @@ export function IntegrationsScreen({
 }) {
   const [linkOpen, setLinkOpen] = useState(() => typeof window !== "undefined" && window.location.hash === "#import-link");
   const accounts = social?.accounts ?? [];
+  const { ready: hostedReady, hosted: hostedHere } = useHostedHere();
   return (
     <section className="mt-6" data-testid="integrations-screen">
       <h2 className="mb-1 flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
@@ -148,7 +149,9 @@ export function IntegrationsScreen({
         />
       </Group>
 
-      <Group
+      {/* Only for shows hosted somewhere else (20 Nov 2026). Once a show is hosted with us its numbers are
+          counted here already; numbers brought in before the move stay in Podcast analytics. */}
+      {hostedReady && !hostedHere && <Group
         id="section-podcast-stats"
         icon={<Headphones className="h-4 w-4" />}
         title="Podcast stats"
@@ -160,7 +163,7 @@ export function IntegrationsScreen({
         }
       >
         <PodcastStatsRows Row={Row} onOpenStats={onOpenPodcastStats} />
-      </Group>
+      </Group>}
 
     </section>
   );

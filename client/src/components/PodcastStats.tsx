@@ -32,6 +32,50 @@ export function usePodcastStats() {
   return useQuery<StatsResponse>({ queryKey: KEY, queryFn: async () => (await apiRequest("GET", "/api/host/podcast-stats")).json(), staleTime: 5 * 60_000 });
 }
 
+type HostingShowLite = { show: { id: number; title: string; artworkUrl?: string; directories?: string; appleUrl?: string; spotifyUrl?: string; importedFrom?: string; redirectOk?: boolean }; episodes?: { live?: boolean }[] };
+function useHosting() {
+  return useQuery<{ shows: HostingShowLite[] }>({ queryKey: ["/api/host/hosting"], queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json(), staleTime: 60_000 });
+}
+
+/**
+ * Is their show hosted with us (20 Nov 2026)? A show here with a live episode,
+ * and, when it moved from another host, the old feed already forwarding to ours.
+ * Mid-move they still count as hosted elsewhere, so Integrations keeps Buzzsprout.
+ */
+export function useHostedHere(): { ready: boolean; hosted: boolean } {
+  const q = useHosting();
+  const hosted = (q.data?.shows ?? []).some((x) => (x.episodes ?? []).some((e) => e.live) && (!x.show.importedFrom || !!x.show.redirectOk));
+  return { ready: !q.isLoading, hosted };
+}
+
+/** The Spotify for Creators CSV upload: one button, used in Integrations and, for hosted shows, in Podcast analytics. */
+function SpotifyUpload({ has, stale, onOpenStats }: { has: boolean; stale?: boolean; onOpenStats?: () => void }) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const file = useRef<HTMLInputElement>(null);
+  const see = onOpenStats ? <ToastAction altText="See your numbers in Podcast analytics" onClick={onOpenStats} data-testid="toast-see-numbers">See your numbers</ToastAction> : undefined;
+  const upload = useMutation({
+    mutationFn: async (files: FileList) => {
+      const list = await Promise.all(Array.from(files).map(async (f) => ({ name: f.name, text: await f.text() })));
+      return (await apiRequest("POST", "/api/host/podcast-stats/spotify", { files: list })).json();
+    },
+    onSuccess: (r: SourceView & { read: string[]; skipped: string[] }) => {
+      toast({ title: "Spotify numbers added", description: `Read ${r.read.length} file${r.read.length === 1 ? "" : "s"}${r.skipped.length ? `; couldn't use ${r.skipped.join(", ")}` : ""}.`, action: see });
+      void qc.invalidateQueries({ queryKey: KEY });
+    },
+    onError: (e: Error) => toast({ title: "Couldn't read those files", description: e.message.replace(/^\d+:\s*/, ""), variant: "destructive" }),
+    onSettled: () => { if (file.current) file.current.value = ""; },
+  });
+  return (
+    <>
+      <input ref={file} type="file" accept=".csv,text/csv" multiple className="hidden" onChange={(e) => e.target.files?.length && upload.mutate(e.target.files)} data-testid="input-spotify-csv" />
+      <Button variant={stale ? "default" : "outline"} size="sm" className="h-8 gap-1 rounded-full px-3.5 text-xs" disabled={upload.isPending} onClick={() => file.current?.click()} data-testid="button-spotify-upload">
+        {upload.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />} {has ? "Update" : "Upload CSVs"}
+      </Button>
+    </>
+  );
+}
+
 function Badge({ source }: { source: Source }) {
   const mark = MARK[source];
   if (mark) {
@@ -58,7 +102,6 @@ export function PodcastStatsRows({ Row, onOpenStats }: { Row: (p: { icon: ReactN
   const q = usePodcastStats();
   const [open, setOpen] = useState<Source | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
-  const file = useRef<HTMLInputElement>(null);
   const done = () => { setForm({}); setOpen(null); void qc.invalidateQueries({ queryKey: KEY }); };
   // The same way to the numbers as the link under the section's intro.
   const see = onOpenStats ? <ToastAction altText="See your numbers in Podcast analytics" onClick={onOpenStats} data-testid="toast-see-numbers">See your numbers</ToastAction> : undefined;
@@ -66,18 +109,6 @@ export function PodcastStatsRows({ Row, onOpenStats }: { Row: (p: { icon: ReactN
     mutationFn: async (source: "buzzsprout") => (await apiRequest("POST", `/api/host/podcast-stats/${source}`, form)).json(),
     onSuccess: (r: SourceView) => { toast({ title: `${NAME[r.source]} connected`, description: r.showName ? `${r.showName}: your numbers are in Podcast analytics.` : "Your numbers are in Podcast analytics.", action: see }); done(); },
     onError: (e: Error) => toast({ title: "Couldn't connect", description: e.message.replace(/^\d+:\s*/, ""), variant: "destructive" }),
-  });
-  const upload = useMutation({
-    mutationFn: async (files: FileList) => {
-      const list = await Promise.all(Array.from(files).map(async (f) => ({ name: f.name, text: await f.text() })));
-      return (await apiRequest("POST", "/api/host/podcast-stats/spotify", { files: list })).json();
-    },
-    onSuccess: (r: SourceView & { read: string[]; skipped: string[] }) => {
-      toast({ title: "Spotify numbers added", description: `Read ${r.read.length} file${r.read.length === 1 ? "" : "s"}${r.skipped.length ? `; couldn't use ${r.skipped.join(", ")}` : ""}.`, action: see });
-      done();
-    },
-    onError: (e: Error) => toast({ title: "Couldn't read those files", description: e.message.replace(/^\d+:\s*/, ""), variant: "destructive" }),
-    onSettled: () => { if (file.current) file.current.value = ""; },
   });
   const remove = async (source: Source) => {
     if (!window.confirm(`Disconnect ${NAME[source]}? Its numbers leave Podcast analytics.`)) return;
@@ -130,10 +161,7 @@ export function PodcastStatsRows({ Row, onOpenStats }: { Row: (p: { icon: ReactN
         line={spotify ? <>{status(spotify)}{spotifyStale && <span className="font-semibold text-amber-700 dark:text-amber-400"> · time for this month's</span>}</> : "Upload what Spotify for Creators exports. About once a month."}
         right={
           <span className="flex items-center gap-1">
-            <input ref={file} type="file" accept=".csv,text/csv" multiple className="hidden" onChange={(e) => e.target.files?.length && upload.mutate(e.target.files)} data-testid="input-spotify-csv" />
-            <Button variant={spotifyStale ? "default" : "outline"} size="sm" className="h-8 gap-1 rounded-full px-3.5 text-xs" disabled={upload.isPending} onClick={() => file.current?.click()} data-testid="button-spotify-upload">
-              {upload.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Upload className="h-3.5 w-3.5" />} {spotify ? "Update" : "Upload CSVs"}
-            </Button>
+            <SpotifyUpload has={!!spotify} stale={!!spotifyStale} onOpenStats={onOpenStats} />
             {spotify && <button type="button" onClick={() => void remove("spotify")} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="Remove Spotify numbers"><X className="h-3.5 w-3.5" /></button>}
           </span>
         }
@@ -207,6 +235,7 @@ export function PodcastChips({ onOpen, hostName }: { onOpen: () => void; /** The
  */
 export function PodcastListens({ onConnect, bare = false }: { onConnect: () => void; /** Inside Your analytics' Podcast section: no title of its own. */ bare?: boolean }) {
   const q = usePodcastStats();
+  const { hosted: hostedHere } = useHostedHere();
   const qc = useQueryClient();
   const [refreshing, setRefreshing] = useState<string | null>(null);
   const [tab, setTab] = useState<string>("all");
@@ -362,7 +391,7 @@ export function PodcastListens({ onConnect, bare = false }: { onConnect: () => v
                 <p className="text-xs text-muted-foreground">
                   {isAll ? `All your sources together: ${sources.map((x) => NAME[x.source]).join(", ")}` : s.source === "militaryvoices" ? "Hosted on MilitaryVoices" : s.source === "spotify" ? "From Spotify for Creators" : `From ${NAME[s.source]}`}
                   {" · "}{s.source === "spotify" ? `Uploaded ${when(s.fetchedAt)}` : `Updated ${when(s.fetchedAt)}`}
-                  {stale && <span className="font-semibold text-amber-700 dark:text-amber-400"> · a month old: upload this month's in Integrations</span>}
+                  {stale && <span className="font-semibold text-amber-700 dark:text-amber-400"> · a month old: upload this month's {hostedHere ? "below" : "in Integrations"}</span>}
                   {s.status === "failed" && <span className="text-destructive"> · {s.error}</span>}
                 </p>
               </div>
@@ -407,6 +436,21 @@ export function PodcastListens({ onConnect, bare = false }: { onConnect: () => v
           </div>
         );
       })}
+      {/* Hosted with us: Integrations no longer shows Podcast stats, so Spotify's audience upload lives here. */}
+      {hostedHere && (() => {
+        const sp = sources.find((x) => x.source === "spotify");
+        const spStale = !!sp && Date.now() - Date.parse(sp.fetchedAt) > MONTH;
+        return (
+          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-dashed border-border px-4 py-3" data-testid="add-spotify-details">
+            <img src="/brands/spotify.svg" alt="" className="h-5 w-5 shrink-0 object-contain" />
+            <p className="min-w-0 flex-1 text-sm">
+              <span className="font-semibold text-foreground">{sp ? "Spotify details" : "Add Spotify details (optional)"}</span>{" "}
+              <span className="text-muted-foreground">{sp ? `Uploaded ${when(sp.fetchedAt)}.` : "Adds listener age, gender and location from Spotify. Export them at creators.spotify.com → Analytics."}</span>
+            </p>
+            <SpotifyUpload has={!!sp} stale={spStale} />
+          </div>
+        );
+      })()}
     </section>
   );
 }
@@ -424,11 +468,7 @@ const LISTING: Record<string, { name: string; domain: string }> = {
 };
 type Listing = { key: string; show: string; artwork: string; url: string };
 export function useListings(): Listing[] {
-  const q = useQuery<{ shows: { show: { id: number; title: string; artworkUrl?: string; directories?: string; appleUrl?: string; spotifyUrl?: string } }[] }>({
-    queryKey: ["/api/host/hosting"],
-    queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json(),
-    staleTime: 60_000,
-  });
+  const q = useHosting();
   const out: Listing[] = [];
   for (const { show } of q.data?.shows ?? []) {
     let dirs: Record<string, { state?: string; url?: string }> = {};
