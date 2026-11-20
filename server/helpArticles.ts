@@ -70,18 +70,18 @@ Your show name is under it. You see and hear only your own booth, never the next
 Microphone and Camera at the bottom turn them on or off.
 Leave (the red button at the bottom) takes you out of the booth. You don't press it to go on air.
 4 What the top bar says
-You don't have to do anything. The station runs on the clock, and the bar tells you where you are. In a 30-minute slot, the station's intro plays for the first 3 minutes, you're live for the next 24, and a short thank-you plays for the last 3. A 60-minute slot works the same way, with 54 minutes live. The pictures below are a 9:30 to 10:00 PM slot.
-Before your time. It counts down to when you're live, and tells you when the station's intro starts and when you go live.
-Your time starts. A 3-minute countdown runs while the station plays a short intro on its own. The bar is gold. Get ready, you're next.
-You're live. The bar turns red and says ON AIR, with your time left and when you're live until. Just talk.
-Five minutes left. Time to head toward your close.
-Two minutes left. Start wrapping up.
-The last 30 seconds. The bar turns white. Say your goodbye now. The station's outro is about to play.
-You're off air. The station plays a short thank-you. Stay as long as you like, or leave.
-All done. You can close the tab. Thank you!
+You don't have to do anything. The station runs on the clock, and the bar tells you where you are. In a 30-minute slot, the station's intro plays for the first 3 minutes, you're live for the next 24, and a short thank-you plays for the last 3. A 60-minute slot works the same way, with 54 minutes live.
+Intro playing You're on air Thank-you playing
+Before your time. The bar counts down to when you're live, and tells you when the station's intro starts and when you go live.
+Your time starts (gold). A 3-minute countdown runs while the station plays a short intro on its own. Get ready, you're next.
+You're live (red). The bar says ON AIR, with your time left and when you're live until. Just talk.
+Five minutes left, then two. At two minutes it says to start wrapping up.
+The last 30 seconds (white). Say your goodbye now. The station's outro is about to play.
+You're off air (blue). The station plays a short thank-you. Stay as long as you like, or leave.
+That's a wrap. You can close the tab. Thank you!
 The station takes you off on the clock, so plan to finish before your time is up.
 5 Bring a guest
-A guest joins with a link, with no account. In your booth, press Copy guest link, next to your show name. You'll find the same button before your booth opens.
+A guest, or a co-host from your show, joins with a link, with no account. In your booth, press Copy guest link, next to your show name. You'll find the same button before your booth opens.
 a Send the link to your guest by text or email.
 b They open it, check their sound, and press Enter my booth.
 Ask them to be there 10 minutes early too.
@@ -501,7 +501,7 @@ Jerry: gruff, gritty commander.
 They're under Man's voice, with the others.
 4 Email your fans
 Everyone who signs up with the Stay in touch block on your SmartLink is on your list, and you can write to them.
-a In the menu, under Audience, press Email your fans. It shows how many fans have signed up.
+a In the menu, under Audience, press Email. It shows how many fans have signed up.
 b Press New email. Start from a personal note, an announcement or a newsletter, or press Or have SI write it and say what it's about.
 c Add blocks (text, heading, picture, button, callout, divider) and watch the email on the right, on a phone or a computer. Press Send me a test to see it in your own inbox.
 d Press Review & send, then Send now or Schedule.
@@ -525,7 +525,7 @@ Find their email (below).
 Save to Guests keeps them for later.
 2 Find their email
 Find their email looks a person up by their X account. Each one uses a contact email from your month:
-10 a month free, or 100 with Discovery Pro.
+10 a month with Scale or Pro, or 50 with Discovery Pro.
 Used them all? Each one after that is 1 credit. Once you've paid for one, it's free to see again.
 No X account on file for them? The button is greyed out.
 See credits and Discovery Pro.
@@ -568,10 +568,10 @@ Music and text edits are included.
 A contact email in Discovery, past your monthly ones: 1 credit. Once paid for, it's free to see again.
 To top up, press Buy 50 credits · $35 in Plan & billing. On a monthly plan, if you run out, extra credits go on your next bill, up to a limit you set in Pōstify.
 4 Discovery Pro
-Discovery comes with Scale and Pro (and is free for brands and event planners), with 10 contact emails and 200 profile look-ups a month. Discovery Pro raises that to 100 contact emails and 1,000 look-ups a month, for $29 a month. You don't need a Pōstify plan for it.
+Discovery comes with Scale and Pro (and is free for brands and event planners), with a taste each month: 10 searches, 5 full creator profiles and 10 contact emails. Discovery Pro raises that to 100 searches, 25 full profiles and 50 contact emails a month, and includes Verified creators, for $50 a month. You don't need a Pōstify plan for it. Verified creators on its own (everyone MilitaryVoices knows, with real numbers) is $10 a month.
 a In Plan & billing, press Add Discovery Pro.
 b Once it's on, the same card shows how many contact emails you have left this month, and Manage.
-Past your monthly contact emails, each one is 1 credit. See Book a guest, or be one.
+Past your monthly contact emails or full profiles, each one is 1 credit, and once you've paid for one it's free to open again. See Book a guest, or be one.
 5 Manage billing
 On a plan, Plan & billing shows your plan, your credits a month and when it renews. Press Manage billing to open Stripe's secure billing page: change your card, see your invoices, or cancel.
 If a payment didn't go through, your plan says so. Update your card in Manage billing.
@@ -586,7 +586,14 @@ a Open the account menu and press Recently deleted. Each item shows how many day
 b Press Put it back. It's back where it was.
 Want it gone now? Press Delete now. That can't be undone.
 Deleting a podcast episode takes it out of your feed, and the apps drop it on their next check. It doesn't take it off YouTube: if you posted it there, remove it in YouTube Studio.
-7 Help and contact
+7 Co-hosts and your team
+Your co-hosts don't need an account. They join your show on a link, the same way a guest does.
+Radio booth: in your booth, press Copy guest link, next to your show name, and send it to them. The same button is there before your booth opens.
+Rooms: on the Rooms screen, under Invite a guest, press Copy link and send it. They open it, type their name, and come in.
+Zoom: they join your Zoom meeting as usual. The recording comes into your Library from your own Zoom account.
+Can my team share one account?
+Not with their own logins yet. An account belongs to one email address, and each sign-in sends a 6-digit code to that address. If your team uses a shared show email, everyone who reads it can sign in. Separate team logins are on our list; if you need one now, write to us.
+8 Help and contact
 Email us: hello@militaryvoices.ai. A person reads every message and writes back.
 Search the help, or ask Alex: militaryvoices.ai/help.
 Your plan, credits and Discovery Pro are in one place.
