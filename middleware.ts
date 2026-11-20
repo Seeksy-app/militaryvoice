@@ -10,7 +10,7 @@
 //    that page's title, description and image in the share tags.
 import { rewrite, next } from "@vercel/functions";
 
-export const config = { matcher: ["/", "/podcast-one-pitch"] };
+export const config = { matcher: ["/", "/podcast-one-pitch", "/black-friday"] };
 
 const ORIGIN = "https://www.militaryvoices.ai";
 const SHARE: Record<string, { title: string; description: string; image: string; alt: string }> = {
@@ -19,6 +19,13 @@ const SHARE: Record<string, { title: string; description: string; image: string;
     description: "Thirty-two military and veteran shows, back to back, in one broadcast day, hosted by Emmy winner Riccoh Player (USMC, Retired).",
     image: `${ORIGIN}/og-podcast-one-pitch.jpg?v=3`,
     alt: "26.2 miles of military podcasts: 32 shows, 234,000+ combined following, hosted by Riccoh Player",
+  },
+  // Founding Members 2026: the Black Friday offer. Reached from the counted /go/bf links, which redirect here.
+  "/black-friday": {
+    title: "Black Friday Special: 30 days free for Founding Members — MilitaryVoices.ai",
+    description: "Join MilitaryVoices.ai as a Founding Member: Scale free for your first 30 days, then $19.95 a month. Card at checkout; cancel before day 30 and pay nothing. Offer ends Dec 31, 2026.",
+    image: `${ORIGIN}/og-black-friday.jpg?v=1`,
+    alt: "Black Friday Special: 30 days free, then just $19.95 a month. Founding Member 2026, Veteran-Owned. Offer ends Dec 31, 2026.",
   },
 };
 
