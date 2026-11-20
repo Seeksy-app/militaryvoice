@@ -1,7 +1,7 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { StageGrid, useStageRoom, type RoomMeta } from "@/components/StageView";
 import { apiRequest } from "@/lib/queryClient";
-import { roomStageMeta, studioIdFromRoom, type RoomLive, type RoomLook } from "@shared/roomLook";
+import { roomStageMeta, shownOnStage, studioIdFromRoom, type RoomLive, type RoomLook } from "@shared/roomLook";
 
 /** The room name inside a LiveKit token ("my-12"), without verifying anything: the page only needs to know which look to read. */
 function roomOfToken(token: string | null): string {
@@ -44,13 +44,25 @@ export function RoomPicture({
   onState?: (s: { connected: boolean; failed: boolean }) => void;
 }) {
   const id = studioId ?? studioIdFromRoom(roomOfToken(token));
-  const { tiles, meta: raw, connected, failed, caption } = useStageRoom(url, token, muted, undefined, forRecording, (a) => a.stage !== "off");
+  const [look, setLook] = useState<RoomLook | null>(null);
+  const lookRef = useRef<RoomLook | null>(null);
+  const liveRef = useRef<RoomLive>({});
+  // Who is shown depends on the scene on air, so the stage is read again when that changes.
+  const [pickKey, setPickKey] = useState("");
+  const { tiles, meta: raw, connected, failed, caption } = useStageRoom(
+    url, token, muted, undefined, forRecording,
+    (a) => shownOnStage(a, lookRef.current, liveRef.current),
+    pickKey,
+  );
   const live = raw as unknown as RoomLive;
+  liveRef.current = live;
+  lookRef.current = look;
+  const sceneKey = `${live.activeScene ?? ""}:${look?.rev ?? 0}`;
+  useEffect(() => { setPickKey(sceneKey); }, [sceneKey]);
 
   useEffect(() => { onState?.({ connected, failed }); }, [connected, failed, onState]);
 
   // The look, again whenever Podcasting saves (lookRev changes on the room).
-  const [look, setLook] = useState<RoomLook | null>(null);
   useEffect(() => {
     if (!id || !lookKey) return;
     let alive = true;

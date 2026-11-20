@@ -11,7 +11,8 @@ import { getSessionEmail } from "./session.js";
 import { isLiveKitConfigured, isRecordingConfigured, publicLiveKitUrl, startBroadcast, startSegmentRecording, stopEgressById, studioToken, runningEgressIds } from "./livekit.js";
 import { ensureRecordingsBucket } from "./recordingStorage.js";
 import { createBroadcast } from "./youtube.js";
-import { registerRoomStage, roomTemplateUrl } from "./roomStage.js";
+import { onLookSaved, roomLookKey } from "./roomKit.js";
+import { bumpLookRev, registerRoomStage, roomTemplateUrl, useRoomKit } from "./roomStage.js";
 import { personalStudios, type PersonalStudioRow } from "../shared/schema.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
@@ -62,7 +63,10 @@ export async function roomInviteLink(email: string): Promise<string> {
 
 export function registerMyStudio(app: Express, requireHostSession: RequestHandler, deps: { youtubeToken: (email: string) => Promise<string | null> }) {
   registerRoomStage(app, requireHostSession);
-  const view =(s: PersonalStudioRow, youtube: boolean) => ({
+  // Podcasting's saved look is read through its key, and a save refreshes any room that is live.
+  useRoomKit({ roomLookKey });
+  onLookSaved((studioId, look) => bumpLookRev(studioId, look.rev));
+  const view = (s: PersonalStudioRow, youtube: boolean) => ({
     id: s.id,
     name: s.name,
     inviteLink: `${ORIGIN}/room/join/${s.inviteToken}`,
@@ -114,7 +118,8 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     const s = await mine(email);
     const profile = await storage.getProfileByEmail(email).catch(() => undefined);
     const name = String(req.body?.name ?? "").trim().slice(0, 60) || profile?.hostName || email.split("@")[0];
-    const token = await studioToken({ room: room(s), identity: `owner-${s.id}-${crypto.randomBytes(3).toString("hex")}`, name, canPublish: true, admin: true, attributes: { role: "host", stage: "on" } });
+    const identity = `owner-${s.id}-${crypto.randomBytes(3).toString("hex")}`;
+    const token = await studioToken({ room: room(s), identity, name, canPublish: true, admin: true, attributes: { role: "host", stage: "on", who: identity } });
     res.json({ url: publicLiveKitUrl(), token, name: s.name });
   });
 
@@ -133,7 +138,8 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     if (!s) return res.status(404).json({ message: "This invite link has expired. Ask the host for a new one." });
     const name = String(req.body?.name ?? "").trim().slice(0, 60);
     if (!name) return res.status(400).json({ message: "Your name, please." });
-    const token = await studioToken({ room: room(s), identity: `guest-${crypto.randomBytes(5).toString("hex")}`, name, canPublish: true, attributes: { role: "guest", stage: GUEST_STAGE } });
+    const identity = `guest-${crypto.randomBytes(5).toString("hex")}`;
+    const token = await studioToken({ room: room(s), identity, name, canPublish: true, attributes: { role: "guest", stage: GUEST_STAGE, who: identity } });
     res.json({ url: publicLiveKitUrl(), token, name: s.name });
   });
 

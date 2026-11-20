@@ -34,6 +34,8 @@ export interface RoomScene {
   n?: number;
   name: string;
   layout: RoomLayoutKey;
+  /** Guest identities shown in this scene; [] means everyone. The host is always shown. */
+  stage?: string[];
   /** Overrides for this scene only. */
   look?: RoomLookStyle;
 }
@@ -103,6 +105,19 @@ export function roomStageMeta(look: RoomLook | null, live: RoomLive, name: strin
   const show = live.showing;
   const banner = show && show.until > now ? (l.banners ?? []).find((b) => b.id === show.bannerId)?.text ?? "" : "";
   return { meta, banner };
+}
+
+/**
+ * Who is shown: not sent backstage (only an explicit stage = "off" hides someone, so a person who
+ * joined before this existed, with no setting, is never left out of a recording), and, when the
+ * scene on air names guests, only those. The host is always shown.
+ */
+export function shownOnStage(attrs: Record<string, string>, look: RoomLook | null, live: RoomLive): boolean {
+  if (attrs.stage === "off") return false;
+  if (attrs.role === "host") return true;
+  const scene = look?.scenes.find((x) => x.id === live.activeScene) ?? look?.scenes[0];
+  const list = scene?.stage ?? [];
+  return list.length === 0 || list.includes(attrs.who ?? "");
 }
 
 /** The room name LiveKit puts in a token ("my-12") back to the studio id. */
