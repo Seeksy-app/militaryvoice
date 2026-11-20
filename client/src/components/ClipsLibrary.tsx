@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Check, Clapperboard } from "lucide-react";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ClipCard, ClipPreview } from "@/components/PostStudio";
+import { MoveToFolder, dragToFolder, useLibraryFolders } from "@/components/LibraryFolders";
 import type { ClipRow, HostPostRow, RecordingRow } from "@shared/schema";
 
 /**
@@ -9,14 +10,17 @@ import type { ClipRow, HostPostRow, RecordingRow } from "@shared/schema";
  * (ready, scheduled, posted). The same card as Pōstify's, so Post, Trim and
  * Edit the title work here too; one episode's clips with the filter.
  */
-export function ClipsLibrary({ clips, posts, recordings, episode, onEpisode }: {
+export function ClipsLibrary({ clips, posts, recordings, episode, onEpisode, bare = false }: {
   clips: ClipRow[];
   posts: HostPostRow[];
   recordings: RecordingRow[];
   episode: number | null;
   onEpisode: (id: number | null) => void;
+  /** Inside an open folder: just the cards, no episode filter or empty note. */
+  bare?: boolean;
 }) {
   const [playing, setPlaying] = useState<ClipRow | null>(null);
+  const lib = useLibraryFolders();
   // Each clip's standing, from its posts: out, or waiting in the queue.
   const standing = new Map<number, "Scheduled" | "Posted">();
   for (const p of posts) {
@@ -30,7 +34,7 @@ export function ClipsLibrary({ clips, posts, recordings, episode, onEpisode }: {
 
   return (
     <div data-testid="clips-library">
-      <div className="mb-4 flex flex-wrap items-center gap-3">
+      {!bare && <div className="mb-4 flex flex-wrap items-center gap-3">
         <Select value={episode == null ? "all" : String(episode)} onValueChange={(v) => onEpisode(v === "all" ? null : Number(v))}>
           <SelectTrigger className="h-9 w-72 max-w-full" data-testid="clips-filter"><SelectValue /></SelectTrigger>
           <SelectContent>
@@ -39,8 +43,8 @@ export function ClipsLibrary({ clips, posts, recordings, episode, onEpisode }: {
           </SelectContent>
         </Select>
         <span className="text-sm text-muted-foreground">{shown.length} clip{shown.length === 1 ? "" : "s"}</span>
-      </div>
-      {shown.length === 0 ? (
+      </div>}
+      {shown.length === 0 ? (bare ? null :
         <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border p-12 text-center text-sm text-muted-foreground">
           <Clapperboard className="h-6 w-6" />
           No clips yet. Open an episode in <a href="/host/dashboard/postify" className="font-semibold text-[#053877] hover:underline dark:text-white">Pōstify</a> and it makes them for you.
@@ -50,8 +54,8 @@ export function ClipsLibrary({ clips, posts, recordings, episode, onEpisode }: {
           {shown.map((c) => {
             const st = standing.get(c.id);
             return (
-              <div key={c.id} className="relative flex min-w-0 flex-col">
-                <ClipCard c={c} onPreview={() => setPlaying(c)} />
+              <div key={c.id} {...dragToFolder(lib, { kind: "clip", id: c.id })} className="relative flex min-w-0 flex-col">
+                <ClipCard c={c} onPreview={() => setPlaying(c)} menuExtra={lib && <MoveToFolder item={{ kind: "clip", id: c.id }} current={c.folderId ?? 0} />} />
                 {st && (
                   <span className={`pointer-events-none absolute right-2 top-2 z-10 inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-[10px] font-bold text-white ${st === "Scheduled" ? "bg-[#053877]" : "bg-emerald-500"}`}>
                     <Check className="h-3 w-3" /> {st}

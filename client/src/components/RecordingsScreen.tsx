@@ -3,7 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { UploadRecording } from "@/components/UploadRecording";
 import { MyRecordings } from "@/components/MyRecordings";
 import { ClipsLibrary } from "@/components/ClipsLibrary";
-import { usePodcastEpisodes } from "@/components/PodcastEpisodes";
+import { PodcastEpisodeGrid, usePodcastEpisodes } from "@/components/PodcastEpisodes";
+import { FolderBar, LibraryFoldersProvider, useLibraryFolders } from "@/components/LibraryFolders";
 import { apiRequest } from "@/lib/queryClient";
 import type { PublicEvent, RecordingRow, ClipRow, HostPostRow, CleanResult } from "@shared/schema";
 import { Clock3, Film, Library, Scissors, Send, Timer } from "lucide-react";
@@ -18,12 +19,19 @@ interface EventEntry {
 }
 
 export function RecordingsScreen({ socialAccounts }: { socialAccounts?: string | null }) {
+  // One set of folders for the whole Library: its bar sits above the tabs.
+  return <LibraryFoldersProvider><Library_ socialAccounts={socialAccounts} /></LibraryFoldersProvider>;
+}
+
+function Library_({ socialAccounts }: { socialAccounts?: string | null }) {
   const [eventId, setEventId] = useState<number | null>(null);
-  // Episodes or Clips; a link can open the clips (?tab=clips&ep=48).
+  // Episodes, Podcast episodes or Clips; a link can open the clips (?tab=clips&ep=48).
   const q = new URLSearchParams(typeof window !== "undefined" ? window.location.search : "");
-  const [tab, setTab] = useState<"episodes" | "clips">(q.get("tab") === "clips" ? "clips" : "episodes");
+  const [tab, setTab] = useState<"episodes" | "podcast" | "clips">(q.get("tab") === "clips" ? "clips" : "episodes");
   const [clipEp, setClipEp] = useState<number | null>(Number(q.get("ep")) || null);
-  const showClips = (ep: number | null) => { setClipEp(ep); setTab("clips"); window.scrollTo({ top: 0, behavior: "smooth" }); };
+  const lib = useLibraryFolders();
+  const open = lib?.open ?? null;
+  const showClips = (ep: number | null) => { lib?.setOpen(null); setClipEp(ep); setTab("clips"); window.scrollTo({ top: 0, behavior: "smooth" }); };
 
   const { data: entries } = useQuery<EventEntry[]>({
     queryKey: ["/api/host/events"],
@@ -46,15 +54,22 @@ export function RecordingsScreen({ socialAccounts }: { socialAccounts?: string |
   // downloads live with each show's own host, which we aren't connected to.
   // Their podcast's episodes count too (a video one is already a recording once opened).
   const { data: podEps } = usePodcastEpisodes();
-  const podOnly = (podEps ?? []).filter((e) => e.status === "published" && !e.recordingId).length;
+  const published = (podEps ?? []).filter((e) => e.status === "published");
+  const podOnly = published.filter((e) => !e.recordingId).length;
   const originals = (recordings ?? []).filter((r) => r.status === "Ready" && !r.egressId.startsWith("CLEAN_"));
+  // What each folder holds: episodes (their clean and edited copies go with them), podcast episodes and clips.
+  const mains = (recordings ?? []).filter((r) => !r.egressId.startsWith("CLEAN_"));
+  const folderCounts = new Map<number, number>();
+  for (const x of [...mains, ...published, ...(clips ?? [])]) if (x.folderId) folderCounts.set(x.folderId, (folderCounts.get(x.folderId) ?? 0) + 1);
+  // Podcast episodes get a tab of their own once there are recordings too (with none, they are the Episodes tab).
+  const podTab = published.length > 0 && (recordings?.length ?? 0) > 0;
   const hours = originals.reduce((n, r) => n + r.durationSec, 0) / 3600;
   const saved = (recordings ?? []).reduce((n, r) => {
     try { return n + (r.clean ? ((JSON.parse(r.clean) as CleanResult).removedSec ?? 0) : 0); } catch { return n; }
   }, 0);
   // The counts that lead somewhere are buttons: episodes, clips, and the posts on the Social calendar.
   const stats: { icon: typeof Film; n: string; label: string; go?: () => void }[] = [
-    { icon: Film, n: String(originals.length + podOnly), label: originals.length + podOnly === 1 ? "Episode" : "Episodes", go: () => setTab("episodes") },
+    { icon: Film, n: String(originals.length + podOnly), label: originals.length + podOnly === 1 ? "Episode" : "Episodes", go: () => { lib?.setOpen(null); setTab("episodes"); } },
     { icon: Clock3, n: hours >= 1 ? hours.toFixed(1) : `${Math.round(hours * 60)}m`, label: hours >= 1 ? "Hours recorded" : "Recorded" },
     { icon: Scissors, n: String(clips?.length ?? 0), label: "Clips made", go: () => showClips(null) },
     { icon: Send, n: String(posts?.filter((p) => p.status !== "failed").length ?? 0), label: "Posts sent", go: () => { window.location.href = "/host/dashboard/social"; } },
@@ -104,10 +119,16 @@ export function RecordingsScreen({ socialAccounts }: { socialAccounts?: string |
         </div>
       </div>
 
-      {/* Two views of one Library: the episodes (with their folders), and every clip made from them. */}
+      {/* The folders, for everything below: drag any card onto one, or open one to see all it holds. */}
+      <FolderBar counts={folderCounts} />
+
+      {open != null ? (
+        <FolderContents folder={open} socialAccounts={socialAccounts} clipCounts={clipCounts} onShowClips={showClips} recordings={recordings ?? []} clips={clips ?? []} posts={posts ?? []} counts={{ recs: mains.filter((r) => r.folderId === open).length, pods: published.filter((e) => e.folderId === open).length }} />
+      ) : (<>
+      {/* Views of one Library: the episodes, the podcast's episodes, and every clip made from them. */}
       <div className="mb-4 inline-flex rounded-full border border-border bg-card p-1" role="tablist">
-        {([["episodes", "Episodes", originals.length + podOnly], ["clips", "Clips", clips?.length ?? 0]] as const).map(([k, label, n]) => (
-          <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => (k === "clips" ? showClips(clipEp) : setTab("episodes"))} className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${tab === k ? "bg-[#053877] text-white" : "text-muted-foreground hover:text-foreground"}`} data-testid={`library-tab-${k}`}>
+        {([["episodes", "Episodes", podTab ? originals.length : originals.length + podOnly], ...(podTab ? [["podcast", "Podcast episodes", published.length] as const] : []), ["clips", "Clips", clips?.length ?? 0]] as const).map(([k, label, n]) => (
+          <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => (k === "clips" ? showClips(clipEp) : setTab(k))} className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${tab === k ? "bg-[#053877] text-white" : "text-muted-foreground hover:text-foreground"}`} data-testid={`library-tab-${k}`}>
             {label} <span className={tab === k ? "text-white/70" : ""}>{n}</span>
           </button>
         ))}
@@ -115,6 +136,8 @@ export function RecordingsScreen({ socialAccounts }: { socialAccounts?: string |
 
       {tab === "clips" ? (
         <ClipsLibrary clips={clips ?? []} posts={posts ?? []} recordings={recordings ?? []} episode={clipEp} onEpisode={setClipEp} />
+      ) : tab === "podcast" && podTab ? (
+        <PodcastEpisodeGrid testid="library-podcast" min={240} fileable onPick={(rec) => { window.location.href = `/host/dashboard/postify?rec=${rec.id}`; }} />
       ) : (<>
       {options.length > 1 && (
         <div className="mb-4 flex flex-wrap gap-2">
@@ -144,6 +167,7 @@ export function RecordingsScreen({ socialAccounts }: { socialAccounts?: string |
 
       <MyRecordings socialAccounts={socialAccounts} eventId={eventId} showEmpty clipCounts={clipCounts} onShowClips={showClips} />
       </>)}
+      </>)}
 
       {/* Clips and clean episodes live in Pōstify; this page is the recordings. */}
       <p className="mt-6 text-sm text-muted-foreground">
@@ -151,5 +175,49 @@ export function RecordingsScreen({ socialAccounts }: { socialAccounts?: string |
         <a href="/host/dashboard/postify" className="font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">Pōstify →</a>
       </p>
     </section>
+  );
+}
+
+/** An open folder: everything filed in it, episodes first, then podcast episodes, then clips. */
+function FolderContents({ folder, socialAccounts, clipCounts, onShowClips, recordings, clips, posts, counts }: {
+  folder: number;
+  socialAccounts?: string | null;
+  clipCounts: Map<number, number>;
+  onShowClips: (ep: number | null) => void;
+  recordings: RecordingRow[];
+  clips: ClipRow[];
+  posts: HostPostRow[];
+  counts: { recs: number; pods: number };
+}) {
+  const filedClips = clips.filter((c) => c.folderId === folder);
+  if (!counts.recs && !counts.pods && !filedClips.length) {
+    return (
+      <p className="rounded-2xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground" data-testid="folder-empty">
+        Nothing in this folder yet. Drag an episode or a clip onto it, or use its ⋯ menu → Move to folder.
+      </p>
+    );
+  }
+  const Head = ({ children }: { children: string }) => <h3 className="mb-3 text-sm font-semibold text-foreground">{children}</h3>;
+  return (
+    <div className="space-y-8" data-testid="folder-contents">
+      {counts.recs > 0 && (
+        <div>
+          <Head>{`Episodes (${counts.recs})`}</Head>
+          <MyRecordings socialAccounts={socialAccounts} folder={folder} clipCounts={clipCounts} onShowClips={onShowClips} />
+        </div>
+      )}
+      {counts.pods > 0 && (
+        <div>
+          <Head>{`Podcast episodes (${counts.pods})`}</Head>
+          <PodcastEpisodeGrid testid="folder-podcast" min={240} fileable only={(e) => e.folderId === folder} onPick={(rec) => { window.location.href = `/host/dashboard/postify?rec=${rec.id}`; }} />
+        </div>
+      )}
+      {filedClips.length > 0 && (
+        <div>
+          <Head>{`Clips (${filedClips.length})`}</Head>
+          <ClipsLibrary clips={filedClips} posts={posts} recordings={recordings} episode={null} onEpisode={() => {}} bare />
+        </div>
+      )}
+    </div>
   );
 }

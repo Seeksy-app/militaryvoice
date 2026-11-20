@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useLocation } from "wouter";
 import { AnimatePresence, motion } from "framer-motion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -1759,7 +1759,7 @@ export function ClipPreview({ c, onClose }: { c: ClipRow | null; onClose: () => 
   );
 }
 
-export function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }) {
+export function ClipCard({ c, onPreview, menuExtra }: { c: ClipRow; onPreview: () => void; /** More ⋯ items (the Library's Move to folder). */ menuExtra?: ReactNode }) {
   const { toast } = useToast();
   const [editing, setEditing] = useState(false);
   const [trimmingClip, setTrimmingClip] = useState(false);
@@ -1845,6 +1845,7 @@ export function ClipCard({ c, onPreview }: { c: ClipRow; onPreview: () => void }
               )}
               {!updating && <DropdownMenuItem className="gap-2" onSelect={() => setTrimmingClip(true)} data-testid="clip-trim"><Brackets className="h-3.5 w-3.5" /> Trim this clip</DropdownMenuItem>}
               {!updating && <DropdownMenuItem className="gap-2" onSelect={() => setEditing(true)}><Pencil className="h-3.5 w-3.5" /> Edit text and captions</DropdownMenuItem>}
+              {menuExtra}
               <DropdownMenuItem className="gap-2 text-destructive focus:text-destructive" onSelect={() => setDeleting(true)}><Trash2 className="h-3.5 w-3.5" /> Delete this clip</DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>

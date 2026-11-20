@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Headphones, Loader2, Mic, Video, Wand2 } from "lucide-react";
+import { Headphones, Loader2, Mic, MoreHorizontal, Video, Wand2 } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { MoveToFolder, dragToFolder, useLibraryFolders } from "@/components/LibraryFolders";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { RecordingRow } from "@shared/schema";
@@ -9,6 +11,8 @@ import type { RecordingRow } from "@shared/schema";
 export type PodEpisode = {
   id: number; showId: number; show: string; title: string; publishedAt: string; status: string; durationSec: number;
   art: string; kind: "video" | "audio"; recordingId: number | null; making: boolean; videoFailed: boolean;
+  /** The Library folder it's filed in; 0 for none. */
+  folderId: number;
 };
 
 const clock = (s: number) => { const m = Math.floor(s / 60); const r = Math.round(s % 60); return `${m}:${String(r).padStart(2, "0")}`; };
@@ -33,17 +37,23 @@ export async function recordingOfEpisode(id: number): Promise<RecordingRow> {
  * Their podcast episodes as cards. A video episode opens straight into the job (`onPick` gets its Library recording);
  * an audio-only one offers "Make a video", which puts the cover art and a moving sound wave behind the audio.
  */
-export function PodcastEpisodeGrid({ onPick, used, testid = "podcast-episodes", min = 200 }: {
+export function PodcastEpisodeGrid({ onPick, used, testid = "podcast-episodes", min = 200, fileable = false, only }: {
   onPick: (rec: RecordingRow, ep: PodEpisode) => void;
   used?: (ep: PodEpisode) => string | undefined;
   testid?: string;
   min?: number;
+  /** In the Library: drag onto a folder, and Move to folder in a ⋯ menu. */
+  fileable?: boolean;
+  /** Just these (an open folder's). */
+  only?: (ep: PodEpisode) => boolean;
 }) {
   const q = usePodcastEpisodes();
   const qc = useQueryClient();
   const { toast } = useToast();
   const [busy, setBusy] = useState<number | null>(null);
-  const eps = (q.data ?? []).filter((e) => e.status === "published");
+  const lib = useLibraryFolders();
+  const filing = fileable && !!lib;
+  const eps = (q.data ?? []).filter((e) => e.status === "published" && (!only || only(e)));
 
   async function pick(e: PodEpisode) {
     setBusy(e.id);
@@ -75,7 +85,7 @@ export function PodcastEpisodeGrid({ onPick, used, testid = "podcast-episodes", 
         const tag = used?.(e);
         const working = e.making || busy === e.id;
         return (
-          <li key={e.id} className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card text-left" data-testid={`${testid}-${e.id}`}>
+          <li key={e.id} {...(filing ? dragToFolder(lib, { kind: "episode", id: e.id }) : {})} className="flex min-w-0 flex-col overflow-hidden rounded-xl border border-border bg-card text-left" data-testid={`${testid}-${e.id}`}>
             <button type="button" disabled={working || e.kind === "audio"} onClick={() => void pick(e)} className="relative block aspect-video bg-[#050d26] disabled:cursor-default" aria-label={`Open ${e.title}`}>
               {e.art ? <img src={e.art} alt="" className="h-full w-full object-cover" loading="lazy" /> : <span className="flex h-full w-full items-center justify-center text-white/60"><Mic className="h-8 w-8" /></span>}
               <span className={`absolute left-2 top-2 inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-bold ${e.kind === "video" ? "bg-[#053877] text-white" : "bg-white/90 text-[#000741]"}`}>
@@ -94,6 +104,16 @@ export function PodcastEpisodeGrid({ onPick, used, testid = "podcast-episodes", 
                 <button type="button" disabled={working} onClick={() => void makeVideo(e)} className="inline-flex shrink-0 items-center gap-1 rounded-full border border-border px-2.5 py-1 text-[11px] font-semibold hover:border-[#053877]/50 disabled:opacity-60" data-testid={`${testid}-make-${e.id}`}>
                   <Wand2 className="h-3 w-3" /> {e.making ? "Making…" : e.videoFailed ? "Try again" : "Make a video"}
                 </button>
+              )}
+              {filing && (
+                <DropdownMenu>
+                  <DropdownMenuTrigger asChild>
+                    <button type="button" className="shrink-0 rounded-full p-1 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label="More" data-testid={`${testid}-more-${e.id}`}><MoreHorizontal className="h-4 w-4" /></button>
+                  </DropdownMenuTrigger>
+                  <DropdownMenuContent align="end" className="w-52">
+                    <MoveToFolder item={{ kind: "episode", id: e.id }} current={e.folderId ?? 0} />
+                  </DropdownMenuContent>
+                </DropdownMenu>
               )}
             </div>
           </li>

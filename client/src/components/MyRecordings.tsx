@@ -4,12 +4,13 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PostDialog } from "@/components/PostDialog";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
-import { DEFAULT_CLIP_OPTIONS, parseClipOptions, type LibraryFolderRow, type RecordingRow } from "@shared/schema";
-import { CalendarClock, Check, Download, Folder, FolderInput, FolderOpen, FolderPlus, Library, Loader2, Mic2, MoreHorizontal, Pencil, Play, Share2, Trash2, Wand2, X, Send } from "lucide-react";
+import { DEFAULT_CLIP_OPTIONS, parseClipOptions, type RecordingRow } from "@shared/schema";
+import { CalendarClock, Download, Library, Loader2, Mic2, MoreHorizontal, Pencil, Play, Share2, Trash2, Wand2, X, Send } from "lucide-react";
 import { PodcastEpisodeGrid, usePodcastEpisodes } from "@/components/PodcastEpisodes";
+import { MoveToFolder, dragToFolder, useLibraryFolders } from "@/components/LibraryFolders";
 import { seesTwoPeople } from "@/components/LayoutPicker";
 
 // A podcaster's own sessions. The studio writes them; nothing here is uploaded
@@ -88,7 +89,10 @@ export function MyRecordings({
   showEmpty = false,
   clipCounts,
   onShowClips,
+  folder = null,
 }: {
+  /** Only what's filed in this Library folder; null for every episode. */
+  folder?: number | null;
   socialAccounts?: string | null;
   /** Clips per recording, for the "4 clips →" link on each card. */
   clipCounts?: Map<number, number>;
@@ -103,10 +107,11 @@ export function MyRecordings({
   // Their podcast shows, so a recording becomes an episode in one step (then its words, on the Podcast screen).
   const showsQ = useQuery<{ shows: { show: { id: number; title: string } }[] }>({ queryKey: ["/api/host/hosting"], queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json(), staleTime: 60_000 });
   const podShows = showsQ.data?.shows ?? [];
-  // Their podcast's episodes live in the Library too: one chip, the same cards as in Pōstify and Social.
+  // Folders are the Library's, one set for episodes, podcast episodes and clips (LibraryFolders.tsx).
+  const lib = useLibraryFolders();
+  // A podcast and no recordings (an audio show, say): its episodes are this tab.
   const podQ = usePodcastEpisodes();
-  const podCount = (podQ.data ?? []).filter((e) => e.status === "published").length;
-  const [showPod, setShowPod] = useState(false);
+  const hasPodcast = (podQ.data ?? []).some((e) => e.status === "published");
   const [makingEp, setMakingEp] = useState(false);
   const { toast: epToast } = useToast();
   async function toEpisode(recId: number, showId: number) {
@@ -123,9 +128,6 @@ export function MyRecordings({
   const [deleting, setDeleting] = useState<RecordingRow | null>(null);
   /** Which version each episode's card shows, by the episode's id. */
   const [picked, setPicked] = useState<Record<number, number>>({});
-  /** The open folder: null for everything. */
-  const [openFolder, setOpenFolder] = useState<number | null>(null);
-  const [naming, setNaming] = useState<{ id: number | null; name: string; file?: number } | null>(null);
   const [renaming, setRenaming] = useState<{ id: number; title: string } | null>(null);
   async function saveTitle() {
     if (!renaming) return;
@@ -139,16 +141,9 @@ export function MyRecordings({
       toast({ title: "Couldn't rename that", description: (e as Error).message, variant: "destructive" });
     }
   }
-  const [removingFolder, setRemovingFolder] = useState<LibraryFolderRow | null>(null);
-  const [dragOver, setDragOver] = useState<number | null>(null);
   const { toast } = useToast();
   const qc = useQueryClient();
   const [starting, setStarting] = useState<number | null>(null);
-  const folderQ = useQuery<LibraryFolderRow[]>({
-    queryKey: ["/api/host/folders"],
-    queryFn: async () => (await apiRequest("GET", "/api/host/folders")).json(),
-  });
-  const folders = folderQ.data ?? [];
   const { data: all, isLoading } = useQuery<RecordingRow[]>({
     queryKey: ["/api/host/recordings"],
     queryFn: async () => (await apiRequest("GET", "/api/host/recordings")).json(),
@@ -158,47 +153,16 @@ export function MyRecordings({
   });
   const data = eventId == null ? all : (all ?? []).filter((r) => r.eventId === eventId);
   const eps = episodes(data ?? []);
-  // A folder that was deleted elsewhere just stops being open.
-  const current = openFolder != null && folders.some((f) => f.id === openFolder) ? openFolder : null;
-  const shown = showPod ? [] : current == null ? eps : eps.filter((e) => e.main.folderId === current);
-  const inFolder = (id: number) => eps.filter((e) => e.main.folderId === id).length;
-
-  async function fileIn(recId: number, folderId: number) {
-    try {
-      await apiRequest("POST", `/api/host/recordings/${recId}/folder`, { folderId });
-      await qc.invalidateQueries({ queryKey: ["/api/host/recordings"] });
-      const f = folders.find((x) => x.id === folderId);
-      toast({ title: f ? `Moved to ${f.name}` : "Taken out of its folder" });
-    } catch (err) {
-      toast({ title: "Couldn't move that", description: (err as Error).message, variant: "destructive" });
-    }
-  }
-
-  async function saveFolder() {
-    if (!naming) return;
-    const name = naming.name.trim();
-    if (!name) return setNaming(null);
-    try {
-      const res = naming.id == null
-        ? await apiRequest("POST", "/api/host/folders", { name })
-        : await apiRequest("PATCH", `/api/host/folders/${naming.id}`, { name });
-      const row = (await res.json()) as LibraryFolderRow;
-      await qc.invalidateQueries({ queryKey: ["/api/host/folders"] });
-      if (naming.file != null) await fileIn(naming.file, row.id);
-      if (naming.id == null) setOpenFolder(row.id);
-      setNaming(null);
-    } catch (err) {
-      toast({ title: "Couldn't save that folder", description: (err as Error).message, variant: "destructive" });
-    }
-  }
+  const shown = folder == null ? eps : eps.filter((e) => e.main.folderId === folder);
 
   if (isLoading) return null;
+  if (folder != null && shown.length === 0) return null;
   if (!data || data.length === 0) {
     // Only a podcast, no recordings (an audio show, say): its episodes are the Library.
-    if (podCount > 0) return (
+    if (hasPodcast) return (
       <section className="mt-2" data-testid="library-podcast-only">
         <h3 className="mb-3 text-base font-bold text-foreground">Podcast episodes</h3>
-        <PodcastEpisodeGrid testid="library-podcast" min={240} onPick={(rec) => { window.location.href = `/host/dashboard/postify?rec=${rec.id}`; }} />
+        <PodcastEpisodeGrid testid="library-podcast" min={240} fileable onPick={(rec) => { window.location.href = `/host/dashboard/postify?rec=${rec.id}`; }} />
       </section>
     );
     if (!showEmpty) return null;
@@ -258,56 +222,6 @@ export function MyRecordings({
 
   return (
     <section className="mt-2">
-      {/* Folders: the podcaster's own. Click to open one; drag an episode onto one to file it. */}
-      <div className="mb-4 flex flex-wrap items-center gap-2" data-testid="library-folders">
-        <FolderChip active={current == null && !showPod} onClick={() => { setShowPod(false); setOpenFolder(null); }} icon={<Library className="h-3.5 w-3.5" />} label="All episodes" n={eps.length} />
-        {podCount > 0 && <FolderChip active={showPod} onClick={() => setShowPod(true)} icon={<Mic2 className="h-3.5 w-3.5" />} label="Podcast episodes" n={podCount} testId="folder-podcast" />}
-        {folders.map((f) =>
-          naming?.id === f.id ? (
-            <NameInput key={f.id} value={naming.name} onChange={(name) => setNaming({ ...naming, name })} onSave={saveFolder} onCancel={() => setNaming(null)} />
-          ) : (
-            <FolderChip
-              key={f.id}
-              active={current === f.id && !showPod}
-              over={dragOver === f.id}
-              onClick={() => { setShowPod(false); setOpenFolder(f.id); }}
-              icon={current === f.id ? <FolderOpen className="h-3.5 w-3.5" /> : <Folder className="h-3.5 w-3.5" />}
-              label={f.name}
-              n={inFolder(f.id)}
-              onDragOver={(e) => { e.preventDefault(); setDragOver(f.id); }}
-              onDragLeave={() => setDragOver(null)}
-              onDrop={(e) => { e.preventDefault(); setDragOver(null); const id = Number(e.dataTransfer.getData("text/x-recording")); if (id) void fileIn(id, f.id); }}
-              testId={`folder-${f.id}`}
-            />
-          ),
-        )}
-        {naming?.id === null ? (
-          <NameInput value={naming.name} onChange={(name) => setNaming({ ...naming, name })} onSave={saveFolder} onCancel={() => setNaming(null)} />
-        ) : (
-          <button type="button" onClick={() => setNaming({ id: null, name: "" })} className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:border-foreground/40 hover:text-foreground" data-testid="button-new-folder">
-            <FolderPlus className="h-3.5 w-3.5" /> New folder
-          </button>
-        )}
-        {current != null && naming?.id !== current && (
-          <span className="ml-auto flex items-center gap-1">
-            <Button size="sm" variant="ghost" className="h-7 gap-1 rounded-full px-2.5 text-xs" onClick={() => setNaming({ id: current, name: folders.find((f) => f.id === current)?.name ?? "" })} data-testid="button-rename-folder">
-              <Pencil className="h-3 w-3" /> Rename
-            </Button>
-            <Button size="sm" variant="ghost" className="h-7 gap-1 rounded-full px-2.5 text-xs text-muted-foreground hover:text-destructive" onClick={() => setRemovingFolder(folders.find((f) => f.id === current) ?? null)} data-testid="button-delete-folder">
-              <Trash2 className="h-3 w-3" /> Delete folder
-            </Button>
-          </span>
-        )}
-      </div>
-
-      {showPod && <PodcastEpisodeGrid testid="library-podcast" min={240} onPick={(rec) => { window.location.href = `/host/dashboard/postify?rec=${rec.id}`; }} />}
-
-      {!showPod && shown.length === 0 && (
-        <p className="rounded-2xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground">
-          Nothing in this folder yet. Drag an episode onto it, or use an episode's ⋯ menu → Move to folder.
-        </p>
-      )}
-
       {/* Thumbnails, each with one menu: the things you do with an episode. */}
       <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {shown.map(({ main, versions, earlier }) => {
@@ -319,8 +233,7 @@ export function MyRecordings({
           return (
           <li
             key={main.id}
-            draggable={folders.length > 0}
-            onDragStart={(e) => { e.dataTransfer.setData("text/x-recording", String(main.id)); e.dataTransfer.effectAllowed = "move"; }}
+            {...dragToFolder(lib, { kind: "recording", id: main.id })}
             className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm"
             data-testid={`recording-${r.id}`}
           >
@@ -436,28 +349,7 @@ export function MyRecordings({
                     <DropdownMenuItem onSelect={() => { setScheduling(true); setPublishing(r); }} className="gap-2" data-testid={`button-schedule-recording-${r.id}`}>
                       <CalendarClock className="h-4 w-4" /> Schedule…
                     </DropdownMenuItem>
-                    <DropdownMenuSub>
-                      <DropdownMenuSubTrigger className="gap-2" data-testid={`button-move-recording-${main.id}`}>
-                        <FolderInput className="h-4 w-4" /> Move to folder
-                      </DropdownMenuSubTrigger>
-                      <DropdownMenuSubContent className="w-48">
-                        {folders.map((f) => (
-                          <DropdownMenuItem key={f.id} onSelect={() => void fileIn(main.id, f.id)} className="gap-2">
-                            <Folder className="h-4 w-4" /> <span className="truncate">{f.name}</span>
-                            {main.folderId === f.id && <Check className="ml-auto h-3.5 w-3.5" />}
-                          </DropdownMenuItem>
-                        ))}
-                        {main.folderId > 0 && (
-                          <DropdownMenuItem onSelect={() => void fileIn(main.id, 0)} className="gap-2">
-                            <X className="h-4 w-4" /> Out of the folder
-                          </DropdownMenuItem>
-                        )}
-                        {(folders.length > 0 || main.folderId > 0) && <DropdownMenuSeparator />}
-                        <DropdownMenuItem onSelect={() => setNaming({ id: null, name: "", file: main.id })} className="gap-2">
-                          <FolderPlus className="h-4 w-4" /> New folder…
-                        </DropdownMenuItem>
-                      </DropdownMenuSubContent>
-                    </DropdownMenuSub>
+                    <MoveToFolder item={{ kind: "recording", id: main.id }} current={main.folderId} />
                     </>)}
                     {/* Uploads, imports and Pōstify's copies (a failed import too); a studio session is the event's too. */}
                     {deletable(r) && (
@@ -508,14 +400,6 @@ export function MyRecordings({
         })}
       </ul>
 
-      <ConfirmDelete
-        open={!!removingFolder}
-        onOpenChange={(v) => !v && setRemovingFolder(null)}
-        title={`Delete the "${removingFolder?.name ?? ""}" folder?`}
-        description="Only the folder goes. Its episodes stay in your Library, under All episodes."
-        url={`/api/host/folders/${removingFolder?.id}`}
-        onDeleted={() => { setOpenFolder(null); void qc.invalidateQueries({ queryKey: ["/api/host/folders"] }); }}
-      />
       <PostDialog target={publishing ? { kind: "recording", id: publishing.id, title: publishing.title, clipsFrom: sourceOf(publishing) ?? publishing.id } : null} onClose={() => setPublishing(null)} schedule={scheduling} />
       <ConfirmDelete
         open={!!deleting}
@@ -526,54 +410,5 @@ export function MyRecordings({
         restorable
       />
     </section>
-  );
-}
-
-function FolderChip({ active, over, onClick, icon, label, n, onDragOver, onDragLeave, onDrop, testId }: {
-  active: boolean;
-  over?: boolean;
-  onClick: () => void;
-  icon: React.ReactNode;
-  label: string;
-  n: number;
-  onDragOver?: (e: React.DragEvent) => void;
-  onDragLeave?: () => void;
-  onDrop?: (e: React.DragEvent) => void;
-  testId?: string;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      onDragOver={onDragOver}
-      onDragLeave={onDragLeave}
-      onDrop={onDrop}
-      aria-pressed={active}
-      className={`inline-flex max-w-[16rem] items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-        over ? "border-[#F0A71F] bg-[#F0A71F]/15 text-foreground" : active ? "border-[#000741] bg-[#000741] text-white dark:border-white dark:bg-white dark:text-[#000741]" : "border-border bg-card text-muted-foreground hover:text-foreground"
-      }`}
-      data-testid={testId}
-    >
-      {icon} <span className="truncate">{label}</span> <span className={`tabular-nums ${active ? "opacity-70" : ""}`}>{n}</span>
-    </button>
-  );
-}
-
-function NameInput({ value, onChange, onSave, onCancel }: { value: string; onChange: (v: string) => void; onSave: () => void; onCancel: () => void }) {
-  return (
-    <form onSubmit={(e) => { e.preventDefault(); onSave(); }} className="inline-flex items-center gap-1">
-      <Input
-        autoFocus
-        value={value}
-        maxLength={60}
-        onChange={(e) => onChange(e.target.value)}
-        onKeyDown={(e) => e.key === "Escape" && onCancel()}
-        placeholder="Folder name"
-        className="h-8 w-44 rounded-full text-xs"
-        data-testid="input-folder-name"
-      />
-      <Button type="submit" size="sm" className="h-8 rounded-full px-3 text-xs" data-testid="button-save-folder">Save</Button>
-      <Button type="button" size="icon" variant="ghost" className="h-8 w-8 rounded-full" onClick={onCancel} aria-label="Cancel"><X className="h-3.5 w-3.5" /></Button>
-    </form>
   );
 }
