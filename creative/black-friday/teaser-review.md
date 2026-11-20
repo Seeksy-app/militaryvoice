@@ -50,3 +50,59 @@ Photos are AI-generated scenes (fal flux-pro 1.1 ultra): invented people, no rea
 5. woman: "Your voice. Your show. Your founding year."
 6. camera: "Join in 2026. Be a Founding Member."
 Each carries "Founding Members · opens Black Friday" and one line of facts. Post text for each still needs Andrew's line-by-line go.
+
+### Andrew, 20 Nov: "Use all six". Drafts for his line-by-line go (nothing scheduled)
+All 12 images are in Admin → Growth → Go-to-market → Materials ("Founding Members photo teaser: …", both sizes; library ids below).
+Where: Riccoh's LinkedIn (Upload-Post profile mv-3), 1600x900, same as Monday's coin teaser. Two a day: 9 am and 2 pm ET.
+Wording avoids "our": the posts go out from Riccoh's profile, and Riccoh is a creator, not the owner.
+
+1. **Mon 23, 2 pm ET: home studio** (wide fcf830342156, portrait 6754c4e07b44)
+   > Hit record.
+   >
+   > MilitaryVoices.ai is veteran-owned and built for military and veteran podcasters. Everyone who joins in 2026 becomes a Founding Member.
+   >
+   > The door opens this Friday. militaryvoices.ai
+   >
+   > #MilitaryVoices #VeteranPodcasters #Podcasting
+2. **Tue 24, 9 am ET: interview** (wide 99c1749cf425, portrait c03e30b8e085)
+   > Every guest has a story worth hearing.
+   >
+   > Founding Members opens this Black Friday at MilitaryVoices.ai, a veteran-owned home for military and veteran podcasters and the stories they tell.
+   >
+   > militaryvoices.ai
+   >
+   > #MilitaryVoices #VeteranPodcasters #Podcasting
+3. **Tue 24, 2 pm ET: mic with dog tags** (wide e7644832591a, portrait 236cfd5c195a)
+   > Built for the people who tell military and veteran stories.
+   >
+   > MilitaryVoices.ai is veteran-owned. Join in 2026 and you're one of its Founding Members. It opens this Friday.
+   >
+   > militaryvoices.ai
+   >
+   > #MilitaryVoices #VeteranPodcasters #Podcasting
+4. **Wed 25, 9 am ET: live stage** (wide 92fcbfd6944f, portrait ce0216657b03)
+   > Your show deserves a bigger stage.
+   >
+   > Founding Members opens this Friday. Military and veteran podcasters who join MilitaryVoices.ai in 2026 are the founding group.
+   >
+   > militaryvoices.ai
+   >
+   > #MilitaryVoices #VeteranPodcasters #Podcasting
+5. **Wed 25, 2 pm ET: studio voice** (wide d8b9fa841cf4, portrait 343342d4b6dc)
+   > Your voice. Your show. Your founding year.
+   >
+   > Join MilitaryVoices.ai in 2026 and you're a Founding Member. The door opens Friday.
+   >
+   > militaryvoices.ai
+   >
+   > #MilitaryVoices #VeteranPodcasters #Podcasting
+6. **Thu 26 (Thanksgiving), 10 am ET: camera rolling** (wide 860f03d47ac8, portrait 737ac376788a)
+   > Happy Thanksgiving to everyone telling military and veteran stories, and to everyone who listens.
+   >
+   > Tomorrow, Founding Members opens at MilitaryVoices.ai. Join in 2026 and you're part of the founding group.
+   >
+   > militaryvoices.ai
+   >
+   > #MilitaryVoices #VeteranPodcasters #Podcasting
+
+Alt text pattern: "<headline>. Founding Members opens Black Friday. MilitaryVoices.ai, a veteran-owned business."
