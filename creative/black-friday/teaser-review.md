@@ -32,3 +32,8 @@ Nothing posts, schedules or emails until Andrew approves this exact text. Posts 
 - Link: the homepage (as written), or militaryvoices.ai/go/bf?src=li|fb|ig once the test checkout passes and the Draft ribbon is off (then every click is counted).
 - When: Mon 23 Nov, 9 am ET? (The Social queue's first slot.)
 - Who posts: MilitaryVoices only (recommended), or also Riccoh's accounts in his own voice (a separate text for his approval).
+
+## Status (20 Nov 2026)
+- Andrew: "Approved as written", then "schedule on Riccoh's LI".
+- Scheduled: Riccoh's LinkedIn only, Mon 23 Nov 2026 9:00 am ET (14:00 UTC), image teaser-1600x900.png (Go-to-market library asset 2bc94d4cc5d7), host_posts id 181 (external id hp-181).
+- MilitaryVoices' own profile has only Andrew's personal LinkedIn connected (no MV Facebook, Instagram or LinkedIn page), so nothing goes there.
