@@ -12269,7 +12269,8 @@ The ${eventName} team`;
     const paragraphs = text.split(/\n{2,}/).map((p) => `<p>${esc(p).replace(/\n/g, "<br>")}</p>`).join("");
     const body = from === "alex" ? paragraphs.replace(/<p>Alex<\/p>\s*$/, "") + alexSignatureHtml() : paragraphs;
     const html = emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "MilitaryVoices.ai", heading: subject.replace(/^re:\s*/i, ""), body });
-    const named = from === "michael" ? { from: "Michael <michael@militaryvoices.ai>", replyTo: "michael@militaryvoices.ai" } : {};
+    // Signed by Michael, but replies come to hello@ like everything else.
+    const named = from === "michael" ? { from: "Michael <michael@militaryvoices.ai>" } : {};
     // Threads under their latest message to us, when there is one. A copy
     // (`standalone`) stands on its own and leaves their messages waiting.
     const latest = req.body?.standalone ? undefined : (await storage.listInboundByEmail(to))[0];

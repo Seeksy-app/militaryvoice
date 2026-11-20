@@ -241,7 +241,7 @@ async function sendRawEmail(opts: { to: string; subject: string; html: string; t
     return id;
   } finally {
     // Every email we send goes in the mail log (the Mail screen's Sent), whatever sent it.
-    if (mailLogger) await mailLogger({ to: opts.to, from: opts.from ?? FROM_ADDRESS, subject: opts.subject, text: opts.text, kind: opts.kind ?? "other", resendId: id ?? "", ok: !!id, error, replyTo: opts.replyTo ?? "" }).catch((err) => console.warn("Mail log failed:", (err as Error).message));
+    if (mailLogger) await mailLogger({ to: opts.to, from: opts.from ?? FROM_ADDRESS, subject: opts.subject, text: opts.text, kind: opts.kind ?? "other", resendId: id ?? "", ok: !!id, error, replyTo: opts.replyTo || REPLY_ADDRESS }).catch((err) => console.warn("Mail log failed:", (err as Error).message));
   }
 }
 
@@ -268,7 +268,8 @@ async function sendRawEmailNow(opts: { to: string; subject: string; html: string
         subject: opts.subject,
         html: opts.html,
         text: opts.text,
-        ...(opts.replyTo ? { reply_to: opts.replyTo } : {}),
+        // Replies always come to hello@ (Andrew, 20 Nov), unless a podcaster's own mail to their guests or fans names them.
+        reply_to: opts.replyTo || REPLY_ADDRESS,
         ...(opts.bcc?.length ? { bcc: opts.bcc } : {}),
         ...(opts.cc?.length ? { cc: opts.cc } : {}),
         ...(opts.headers && Object.keys(opts.headers).length ? { headers: opts.headers } : {}),
