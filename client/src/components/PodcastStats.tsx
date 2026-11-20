@@ -39,8 +39,8 @@ function Badge({ source }: { source: Source }) {
 }
 
 /**
- * Integrations → Podcast stats: connect Buzzsprout or Podbean with the
- * podcaster's own keys, or upload what Spotify for Creators exports.
+ * Integrations → Podcast stats: connect Buzzsprout with the podcaster's
+ * own key, or upload what Spotify for Creators exports.
  */
 export function PodcastStatsRows({ Row }: { Row: (p: { icon: ReactNode; name: string; line: ReactNode; right: ReactNode; children?: ReactNode; testId?: string }) => JSX.Element }) {
   const { toast } = useToast();
@@ -51,7 +51,7 @@ export function PodcastStatsRows({ Row }: { Row: (p: { icon: ReactNode; name: st
   const file = useRef<HTMLInputElement>(null);
   const done = () => { setForm({}); setOpen(null); void qc.invalidateQueries({ queryKey: KEY }); };
   const connect = useMutation({
-    mutationFn: async (source: "buzzsprout" | "podbean" | "transistor") => (await apiRequest("POST", `/api/host/podcast-stats/${source}`, form)).json(),
+    mutationFn: async (source: "buzzsprout") => (await apiRequest("POST", `/api/host/podcast-stats/${source}`, form)).json(),
     onSuccess: (r: SourceView) => { toast({ title: `${NAME[r.source]} connected`, description: r.showName || "Your numbers are in Podcast analytics." }); done(); },
     onError: (e: Error) => toast({ title: "Couldn't connect", description: e.message.replace(/^\d+:\s*/, ""), variant: "destructive" }),
   });
@@ -83,7 +83,7 @@ export function PodcastStatsRows({ Row }: { Row: (p: { icon: ReactNode; name: st
     !r ? "Not connected"
     : r.status === "failed" ? <span className="text-destructive">{r.error}</span>
     : <><span className="font-medium text-foreground">{r.showName || "Connected"}</span>{r.data ? ` · ${compact(r.data.total)} ${r.data.unit}` : ""}{r.fetchedAt ? ` · updated ${when(r.fetchedAt)}` : ""}</>;
-  const right = (s: "buzzsprout" | "podbean" | "transistor") => {
+  const right = (s: "buzzsprout") => {
     const r = row(s);
     return r ? (
       <span className="flex items-center gap-1">
@@ -110,26 +110,7 @@ export function PodcastStatsRows({ Row }: { Row: (p: { icon: ReactNode; name: st
           </form>
         )}
       </Row>
-      <Row testId="row-transistor" icon={<Badge source="transistor" />} name="Transistor" line={status(row("transistor"))} right={right("transistor")}>
-        {open === "transistor" && (
-          <form onSubmit={(e) => { e.preventDefault(); connect.mutate("transistor"); }} className="mt-4 grid gap-3 rounded-xl bg-muted/40 p-4 sm:grid-cols-[1fr_14rem_auto] sm:items-end">
-            {field("key", "API key", true)}
-            {field("show", "Show (optional)")}
-            <Button type="submit" disabled={connect.isPending || !form.key} className="h-9 gap-1.5 rounded-full">{connect.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />} Connect</Button>
-            <p className="text-xs text-muted-foreground sm:col-span-3">In Transistor, open <span className="font-semibold text-foreground">Account → API</span> (top right, your name) and copy your API key. With more than one show, paste the show's RSS feed address (like feeds.transistor.fm/your-show) under Show. We read your download numbers only, and keep the key encrypted.</p>
-          </form>
-        )}
-      </Row>
-      <Row testId="row-podbean" icon={<Badge source="podbean" />} name="Podbean" line={status(row("podbean"))} right={right("podbean")}>
-        {open === "podbean" && (
-          <form onSubmit={(e) => { e.preventDefault(); connect.mutate("podbean"); }} className="mt-4 grid gap-3 rounded-xl bg-muted/40 p-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end">
-            {field("clientId", "Client ID")}
-            {field("secret", "Client secret", true)}
-            <Button type="submit" disabled={connect.isPending || !form.clientId || !form.secret} className="h-9 gap-1.5 rounded-full">{connect.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Link2 className="h-4 w-4" />} Connect</Button>
-            <p className="text-xs text-muted-foreground sm:col-span-3">In your Podbean dashboard, go to <span className="font-semibold text-foreground">Settings → Advanced Options → AI &amp; Integrations</span>, turn the API on, then <span className="font-semibold text-foreground">Check API Credentials</span>. Podbean offers this on its Business plan. We read your download numbers only, and keep the secret encrypted.</p>
-          </form>
-        )}
-      </Row>
+      {/* Transistor and Podbean rows came out on 20 Nov 2026: never used. Their endpoints in server/podcastStats.ts stay, to bring back. */}
       <Row
         testId="row-spotify"
         icon={<Badge source="spotify" />}
@@ -234,7 +215,7 @@ export function PodcastListens({ onConnect, bare = false }: { onConnect: () => v
         <Headphones className="h-7 w-7 shrink-0 text-[#053877] dark:text-[#8ab4f8]" />
         <div className="min-w-0 flex-1">
           <p className="font-semibold text-foreground">See your podcast's downloads here</p>
-          <p className="text-sm text-muted-foreground">Connect Buzzsprout, Transistor or Podbean, or upload your Spotify numbers, and see where your show fits among MilitaryVoices podcasts.</p>
+          <p className="text-sm text-muted-foreground">Connect Buzzsprout or upload your Spotify numbers, and see where your show fits among MilitaryVoices podcasts.</p>
         </div>
         <Button variant="outline" className="gap-1.5 rounded-full" onClick={onConnect} data-testid="button-podcast-stats-connect"><Link2 className="h-4 w-4" /> Connect</Button>
       </div>
