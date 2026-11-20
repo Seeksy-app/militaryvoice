@@ -2,7 +2,6 @@ import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { ZoomConnect, ImportLink } from "@/components/ZoomConnect";
 import { ConnectYoutube } from "@/components/ConnectYoutube";
-import { AudienceConsent } from "@/components/AudienceConsent";
 import { PodcastStatsRows } from "@/components/PodcastStats";
 import { PlatformIcon, platformLabel, platformBackground, formatFollowers, ALL_PLATFORMS } from "@/components/SocialIcons";
 import type { ProfileRow, SocialAccount } from "@shared/schema";
@@ -104,7 +103,6 @@ export function IntegrationsScreen({
           })}
         </Group>
       )}
-      {social?.configured && accounts.length > 0 && profile && <div className="-mt-3 mb-8"><AudienceConsent profile={profile} /></div>}
 
       {/* Right under social media: going live on YouTube is the same kind of thing, their own channel. */}
       <Group
