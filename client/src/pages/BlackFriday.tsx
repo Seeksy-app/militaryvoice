@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 import { apiRequest } from "@/lib/queryClient";
 import { PLANS, FOUNDING } from "@shared/tokens";
-import { ArrowRight, CalendarDays, Check, Loader2, Lock, Mic, Scissors, Link2, Users, Video, MessageCircle, Zap } from "lucide-react";
+import { ArrowRight, CalendarDays, Check, Loader2, Lock, Mic, Scissors, Link2, Users, Video } from "lucide-react";
 
 // Black Friday 2026: Founding Members. Podcasters who join MilitaryVoices.ai in 2026 are its founding group; until the
 // end of December 31, 2026 a first Scale plan comes with 30 days free (Stripe's own trial, card at checkout).
@@ -30,10 +30,10 @@ const GOLD_TEXT = "bg-gradient-to-b from-[#fff4c2] via-[#f7c548] to-[#c98a10] bg
 const GOLD_FILL = "bg-gradient-to-b from-[#ffe9a0] via-[#f6b93b] to-[#d28a0c]";
 
 const CHIPS = [
-  { i: Mic, t: "Grow Your Podcast" },
-  { i: Video, t: "Your Own Studio" },
-  { i: Link2, t: "SmartLink Page" },
-  { i: Zap, t: "SmartChat for Listeners" },
+  { img: "ico-hosting", t: "Free Hosting" },
+  { img: "ico-studio", t: "Recording Studio" },
+  { img: "ico-link", t: "Custom Bio Link" },
+  { img: "ico-member", t: "Founding Member" },
 ];
 const SCALE = [
   { i: Scissors, t: `${scale.credits} Pōstify credits a month`, d: "About 3 episodes a month of captioned clips and a clean episode. Yours on day 1." },
@@ -43,7 +43,6 @@ const SCALE = [
 const FREE = [
   { i: Mic, t: "Podcast hosting", d: "Your feed, listed in Apple Podcasts, Spotify and 10+ apps." },
   { i: Link2, t: "Your SmartLink page", d: "One link for your show, your socials and your latest episodes." },
-  { i: MessageCircle, t: "SmartChat for listeners", d: "Listeners ask your show a question and get an answer from your episodes." },
 ];
 const TICKER = ["Founding Members 2026", "Scale 30 days free", `Then just ${price} a month`, "Veteran-owned", `Offer ends ${endsShort}`];
 
@@ -162,11 +161,11 @@ export default function BlackFriday() {
             </div>
 
             {/* What's in it. Plain icons, not buttons. */}
-            <ul className="grid grid-cols-2 gap-x-3 gap-y-4 sm:grid-cols-4 lg:col-start-1 lg:row-start-3" aria-label="What Founding Members get">
-              {CHIPS.map(({ i: I, t }) => (
-                <li key={t} className="flex items-center gap-2.5 sm:flex-col sm:gap-1.5 sm:text-center lg:flex-row lg:text-left">
-                  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[#0a1668] text-[#F0A71F] shadow-[0_0_14px_rgba(240,167,31,0.35),inset_0_0_0_1.5px_rgba(240,167,31,0.85)]"><I className="h-5 w-5" aria-hidden="true" /></span>
-                  <span className="text-[13px] font-bold leading-tight text-white" style={HEADLINE_FONT}>{t}</span>
+            <ul className="grid grid-cols-4 gap-x-2 lg:col-start-1 lg:row-start-3" aria-label="What Founding Members get">
+              {CHIPS.map(({ img, t }) => (
+                <li key={t} className="flex flex-col items-center gap-1.5 text-center">
+                  <img src={`/bf/${img}.webp`} alt="" aria-hidden="true" width={176} height={171} className="h-11 w-11 shrink-0 drop-shadow-[0_0_10px_rgba(240,167,31,0.55)] sm:h-14 sm:w-14" />
+                  <span className="text-balance text-[13px] font-bold leading-tight text-white sm:whitespace-nowrap sm:text-sm" style={HEADLINE_FONT}>{t}</span>
                 </li>
               ))}
             </ul>
