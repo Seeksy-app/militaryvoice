@@ -6,8 +6,8 @@ import { useToast } from "@/hooks/use-toast";
 /**
  * "Mark a clip" (Andrew, 20 Nov: keep it): while recording, one press drops a marker at
  * this moment; Pōstify has the clip waiting after the show. Podcasting owns the API:
- * POST /api/host/my-studio/mark {} → { id, atSec, label }, 409 when not recording,
- * DELETE /api/host/my-studio/mark/:id to undo.
+ * POST /api/host/room/mark {} → { id, atSec, label }, 409 when not recording,
+ * DELETE /api/host/room/mark/:id to undo.
  */
 export function MarkClip({ recording }: { recording: boolean }) {
   const { toast } = useToast();
@@ -15,14 +15,14 @@ export function MarkClip({ recording }: { recording: boolean }) {
   const mark = async () => {
     setBusy(true);
     try {
-      const r = await fetch("/api/host/my-studio/mark", { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: "{}" });
+      const r = await fetch("/api/host/room/mark", { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: "{}" });
       const j = (await r.json().catch(() => ({}))) as { id?: string; label?: string; message?: string };
       if (!r.ok || !j.id) throw new Error(j.message || (r.status === 409 ? "Start recording first, then mark a clip." : "Couldn't mark that. Try again."));
       const id = j.id;
       toast({
         title: `Clip marked at ${j.label}.`,
         description: "We'll have it waiting after the show.",
-        action: <ToastAction altText="Undo the clip marker" onClick={() => { void fetch(`/api/host/my-studio/mark/${encodeURIComponent(id)}`, { method: "DELETE", credentials: "include" }).then((x) => toast(x.ok ? { title: "Clip marker removed" } : { title: "Couldn't undo that", variant: "destructive" })); }}>Undo</ToastAction>,
+        action: <ToastAction altText="Undo the clip marker" onClick={() => { void fetch(`/api/host/room/mark/${encodeURIComponent(id)}`, { method: "DELETE", credentials: "include" }).then((x) => toast(x.ok ? { title: "Clip marker removed" } : { title: "Couldn't undo that", variant: "destructive" })); }}>Undo</ToastAction>,
       });
     } catch (e) {
       toast({ title: (e as Error).message, variant: "destructive" });

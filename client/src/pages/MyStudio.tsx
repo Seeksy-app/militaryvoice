@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { BACKGROUNDS, assetUrl, lookFromMetadata, normalize, sceneOnStage, useLookActions, type Look, type Scene } from "@/components/room/look";
+import { BACKGROUNDS, bgCss, sceneLive, useRoomKit, type RoomKit, type Scene } from "@/components/room/look";
 import { LayoutPicker, ScenesPanel } from "@/components/room/ScenesPanel";
 import { LookPanel } from "@/components/room/LookPanel";
 import { MarkClip } from "@/components/room/MarkClip";
@@ -32,14 +32,14 @@ const Logo = ({ className }: { className: string }) => <img src="/logo-lockup.pn
  * API); until then the room stays phase 1, a plain grid like the recording, with no layout picker
  * (Andrew: "go, hide layouts").
  */
-type Studio = { you?: string; id: number; name: string; inviteLink: string; recording: { since: string } | null; live: { since: string; watchUrl: string } | null; youtube: boolean; youtubeOn: boolean; streams: { id: string; name: string; on: boolean }[]; ready: boolean; canRecord: boolean; look?: Look | null };
+type Studio = { you?: string; id: number; name: string; inviteLink: string; recording: { since: string } | null; live: { since: string; watchUrl: string } | null; youtube: boolean; youtubeOn: boolean; streams: { id: string; name: string; on: boolean }[]; ready: boolean; canRecord: boolean };
 type Conn = { url: string; token: string; name: string };
 type Setup = { name: string; title: string; mic: boolean; cam: boolean; micId?: string; camId?: string };
 type Tab = "look" | "people" | "notes" | "recording" | "chat";
 
 const NAVY = "#053877";
 /** Mark a clip stays hidden until Podcasting's POST /api/host/my-studio/mark is on main. */
-const MARK_CLIP = false;
+const MARK_CLIP = true;
 /** The approved mockup (v8) is set in Inter; the rest of the site isn't, so the room loads it itself. */
 const INTER = "'Inter', 'General Sans', system-ui, sans-serif";
 function useInter() {
@@ -272,31 +272,22 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
   const hosting = useQuery<{ shows: { show: { artworkUrl?: string } }[] }>({ queryKey: ["/api/host/hosting"], enabled: owner, queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json(), staleTime: 60_000, retry: false });
   const logo = hosting.data?.shows?.find((s) => s.show.artworkUrl)?.show.artworkUrl;
 
-  // The look: the owner's own copy (it changes the moment they click); guests follow the room's metadata.
+  // Phase 2: the owner's saved look (Podcasting) and what's on air (Engineering, in the room's metadata).
+  // With no look from the server, or for guests, the room works as in phase 1.
   const meta = useRoomInfo().metadata;
-  const look = owner ? normalize(studio?.look) : lookFromMetadata(meta);
+  const kit = useRoomKit(owner, meta);
+  const look = kit.look;
   const editing = owner && !!look;
-  const scene = sceneOnStage(look);
-  const actions = useLookActions();
-  const people = useParticipants();
+  const scene = sceneLive(look, kit.live);
   const tab: Tab = picked ?? (editing ? "look" : "people");
 
-  // A banner with a time limit comes down by itself.
-  const showing = look?.banners.find((b) => b.id === look.showing);
+  // Once connected, put the scene on air again so the room carries it (Engineering: call /scene after joining).
+  const joined = useRef(false);
   useEffect(() => {
-    if (!editing || !showing?.seconds) return;
-    const t = window.setTimeout(() => void actions.showBanner(null), showing.seconds * 1000);
-    return () => window.clearTimeout(t);
-  }, [editing, showing?.id, showing?.seconds]); // eslint-disable-line react-hooks/exhaustive-deps
-
-  /** On the strip: put someone on or off the stage in the scene on air. */
-  const toggleOnStage = (identity: string) => {
-    if (!scene) return;
-    const all = people.map((p) => p.identity);
-    const now = scene.stage.length ? scene.stage : all;
-    const next = now.includes(identity) ? now.filter((x) => x !== identity) : [...now, identity];
-    actions.change((l) => ({ ...l, scenes: l.scenes.map((s) => (s.id === scene.id ? { ...s, stage: all.every((x) => next.includes(x)) ? [] : next } : s)) }));
-  };
+    if (!editing || joined.current || state !== ConnectionState.Connected || !scene) return;
+    joined.current = true;
+    kit.toScene(scene.id, true);
+  }, [editing, state, scene?.id]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Their title from the set-up screen rides on their participant, so it shows under their name for everyone.
   useEffect(() => {
@@ -330,7 +321,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
       await localParticipant.setScreenShareEnabled(!isScreenShareEnabled);
       // Starting a share puts the screen-share scene on air, if there is one.
       const s = !isScreenShareEnabled && editing ? look?.scenes.find((x) => x.layout === "screen") : undefined;
-      if (s && s.id !== look?.onStage) void actions.toStage(s.id);
+      if (s) kit.toScene(s.id);
     }
     catch (e) { if ((e as Error).name !== "NotAllowedError") toast({ title: "Couldn't share your screen", description: say(e), variant: "destructive" }); }
   };
@@ -387,16 +378,17 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
       </header>
 
       <div className="flex min-h-0 flex-1">
-        {editing && look && <ScenesPanel look={look} people={people.map((p) => ({ identity: p.identity, name: (p.name || p.identity) + (p.isLocal ? " (you)" : "") }))} actions={actions} />}
+        {editing && <ScenesPanel kit={kit} />}
         {/* Stage column */}
         <div className="flex min-w-0 flex-1 flex-col items-center px-4 pt-5 lg:px-6">
-          <Stage look={look} scene={scene} fallbackLogo={look ? undefined : logo} />
+          <Stage kit={kit} scene={scene} fallbackLogo={look ? undefined : logo} />
           {editing && scene && (
             <div className="mt-3 shrink-0" title={`Layout for ${scene.name}`}>
-              <LayoutPicker value={scene.layout} onPick={(layout) => actions.change((l) => ({ ...l, scenes: l.scenes.map((s) => (s.id === scene.id ? { ...s, layout } : s)) }))} />
+              <LayoutPicker value={scene.layout} onPick={(layout) => kit.change((l) => ({ ...l, scenes: l.scenes.map((s) => (s.id === scene.id ? { ...s, layout } : s)) }))} />
             </div>
           )}
-          <PeopleStrip scene={look ? scene : undefined} onToggle={editing ? toggleOnStage : undefined} owner={owner} onShare={() => void share()} onInvite={copyInvite} />
+          <Backstage kit={kit} />
+          <PeopleStrip kit={kit} owner={owner} onShare={() => void share()} onInvite={copyInvite} />
           <div className="mb-3 mt-auto flex items-center gap-1 rounded-[18px] border border-[#e4e7ec] bg-white px-2 py-2 shadow-[0_8px_24px_rgba(16,24,40,0.1)] sm:gap-1.5 sm:px-3" data-testid="my-studio-controls">
             <BarButton label={isMicrophoneEnabled ? "Mic" : "Muted"} off={!isMicrophoneEnabled} onClick={() => void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)}>{isMicrophoneEnabled ? <Mic className="h-[22px] w-[22px]" /> : <MicOff className="h-[22px] w-[22px]" />}</BarButton>
             <BarButton label={isCameraEnabled ? "Camera" : "Camera off"} off={!isCameraEnabled} onClick={() => void localParticipant.setCameraEnabled(!isCameraEnabled)}>{isCameraEnabled ? <Video className="h-[22px] w-[22px]" /> : <VideoOff className="h-[22px] w-[22px]" />}</BarButton>
@@ -412,7 +404,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
         {/* Right panel */}
         <aside className={`hidden shrink-0 border-l border-[#e4e7ec] bg-white lg:flex ${editing ? "w-[360px] 2xl:w-[392px]" : "w-[360px]"}`}>
           <div className="flex min-w-0 flex-1 flex-col">
-            {tab === "look" && editing && look && <LookPanel look={look} actions={actions} />}
+            {tab === "look" && editing && <LookPanel kit={kit} />}
             {tab === "people" && <PeoplePanel owner={owner} studio={studio} onCopy={copyInvite} />}
             {tab === "notes" && <NotesPanel roomKey={owner ? String(studio?.id ?? "mine") : roomName} />}
             {tab === "recording" && owner && <RecordingPanel studio={studio} now={now} busy={busy} onRecord={(on) => void record(on)} onGoLive={() => setSheet(true)} onEndLive={() => void endLive()} />}
@@ -458,17 +450,15 @@ function useStageTracks() {
   return { cams, screens };
 }
 
-/** Is this person on the stage in this scene? An empty list means everyone. */
-const onStageIn = (s: Scene | undefined, identity: string) => !s || s.stage.length === 0 || s.stage.includes(identity);
-
 /**
- * The stage as the room sees it: the scene on air (its layout and who's in it), the
- * background, the logo in its corner and any banner. Engineering's RoomStage replaces this
- * once it lands, so the host sees exactly what's recorded.
+ * The stage as the room sees it: the scene on air (its layout), who's on stage (guests sent
+ * backstage aren't), the background, the logo in its corner, any banner and a playing intro or
+ * outro. Engineering's RoomStage replaces this once it's on main, so the host sees exactly what's recorded.
  */
-function Stage({ look, scene, fallbackLogo }: { look: Look | null; scene?: Scene; fallbackLogo?: string }) {
+function Stage({ kit, scene, fallbackLogo }: { kit: RoomKit; scene?: Scene; fallbackLogo?: string }) {
+  const look = kit.look;
   const all = useStageTracks();
-  const cams = all.cams.filter((t) => onStageIn(scene, t.participant.identity));
+  const cams = all.cams.filter((t) => kit.isOnStage(t.participant.identity, t.participant.attributes?.stage));
   const screens = all.screens;
   const layout = scene?.layout ?? "grid";
   const speaking = useSpeakingParticipants();
@@ -496,11 +486,12 @@ function Stage({ look, scene, fallbackLogo }: { look: Look | null; scene?: Scene
     body = <div className="relative h-full">{big && <Tile t={big} big />}{small && <div className="absolute bottom-3 right-3 aspect-video w-[26%] shadow-[0_6px_18px_rgba(0,0,0,0.35)]"><Tile t={small} small /></div>}</div>;
   }
 
-  const bgUrl = look?.background.assetId ? assetUrl(look, look.background.assetId) : undefined;
-  const background = bgUrl ? `center / cover no-repeat url("${bgUrl}")` : BACKGROUNDS[look?.background.color ?? "blue"];
-  const logo = look ? (look.logo ? assetUrl(look, look.logo.assetId) : undefined) : fallbackLogo;
-  const corner = look?.logo?.corner ?? "tr";
-  const banner = look?.banners.find((b) => b.id === look.showing);
+  const background = look ? bgCss(scene?.look?.background ?? look.background) : BACKGROUNDS.blue;
+  const logoOn = look ? (scene?.look && "logo" in scene.look ? scene.look.logo : look.logo) : null;
+  const logo = look ? logoOn?.asset.url : fallbackLogo;
+  const corner = logoOn?.corner ?? "tr";
+  const banner = look?.banners.find((b) => b.id === kit.live.showing?.bannerId);
+  const clip = kit.live.playing && look?.[kit.live.playing.slot];
   if (!cams.length && !screens.length) body = <div className="flex h-full items-center justify-center text-center text-[15px] font-semibold text-white/80">No one is on the stage in this scene</div>;
 
   return (
@@ -508,6 +499,7 @@ function Stage({ look, scene, fallbackLogo }: { look: Look | null; scene?: Scene
       <div className={`absolute inset-x-[4.5%] top-[12.5%] transition-[bottom] duration-300 ${banner ? "bottom-[17%]" : "bottom-[8%]"}`}>{body}</div>
       {logo && <img src={logo} alt="Your show's logo" className={`absolute top-2 h-[11%] max-h-[50px] w-auto rounded-md object-contain ${corner === "tl" ? "left-4" : "right-4"}`} />}
       {banner && <div className="absolute bottom-[3%] left-[4.5%] max-w-[80%] truncate rounded-lg bg-[#053877] px-4 py-2 text-[15px] font-bold text-white shadow-[0_6px_18px_rgba(0,0,0,0.3)]" data-testid="stage-banner">{banner.text}</div>}
+      {clip && <video key={clip.id} src={clip.url} autoPlay muted playsInline onEnded={() => kit.play(null)} onError={() => kit.play(null)} className="absolute inset-0 h-full w-full bg-black object-contain" data-testid="stage-clip" />}
     </div>
   );
 }
@@ -543,23 +535,31 @@ function Tile({ t, big, small }: { t: TrackReferenceOrPlaceholder; big?: boolean
   );
 }
 
-/** Everyone in the room. With scenes on, each shows ON STAGE, and the owner clicks to put them on or off. */
-function PeopleStrip({ scene, onToggle, owner, onShare, onInvite }: { scene?: Scene; onToggle?: (identity: string) => void; owner: boolean; onShare: () => void; onInvite: () => void }) {
+/** Everyone in the room. The owner brings guests on stage or sends them backstage (phase 2). */
+function PeopleStrip({ kit, owner, onShare, onInvite }: { kit: RoomKit; owner: boolean; onShare: () => void; onInvite: () => void }) {
   const { cams } = useStageTracks();
   const [menu, setMenu] = useState(false);
+  const scenes = !!kit.look;
   return (
     <div className="mt-3 flex w-full max-w-[768px] shrink-0 gap-3 overflow-x-auto pb-1" data-testid="my-studio-strip">
       {cams.map((t) => {
-        const name = t.participant.name || t.participant.identity;
-        const on = !!scene && onStageIn(scene, t.participant.identity);
+        const p = t.participant;
+        const name = p.name || p.identity;
+        const on = kit.isOnStage(p.identity, p.attributes?.stage);
+        const guest = p.identity.startsWith("guest-");
         return (
-          <button key={key(t)} type="button" onClick={onToggle ? () => onToggle(t.participant.identity) : undefined} disabled={!onToggle} title={onToggle ? (on ? `Take ${name} off the stage` : `Put ${name} on the stage`) : undefined} className={`relative h-24 w-40 shrink-0 overflow-hidden rounded-xl bg-white ${scene && !on ? "opacity-60" : ""} border border-[#e4e7ec] ${onToggle ? "hover:border-[#98a2b3]" : "cursor-default"}`} data-testid="strip-person">
+          <div key={key(t)} className={`relative h-24 w-40 shrink-0 overflow-hidden rounded-xl border border-[#e4e7ec] bg-white ${on ? "" : "opacity-70"}`} data-testid="strip-person">
             <div className="absolute inset-x-0 top-0 bottom-6"><MiniFace t={t} /></div>
-            <div className="absolute inset-x-2.5 bottom-1 truncate text-left text-xs font-semibold">{name}{t.participant.isLocal ? " (you)" : ""}</div>
-            {scene && (on
-              ? <div className="absolute right-2 top-2 rounded-full bg-[#d1fadf] px-2 py-0.5 text-[10px] font-bold text-[#067647]">ON STAGE</div>
-              : <div className="absolute right-2 top-2 rounded-full bg-[#f2f4f7] px-2 py-0.5 text-[10px] font-bold text-[#475467]">OFF STAGE</div>)}
-          </button>
+            <div className="absolute inset-x-2.5 bottom-1 truncate text-left text-xs font-semibold">{name}{p.isLocal ? " (you)" : ""}</div>
+            {(scenes || !on) && (on
+              ? <div className="absolute left-2 top-2 rounded-full bg-[#d1fadf] px-2 py-0.5 text-[10px] font-bold text-[#067647]">ON STAGE</div>
+              : <div className="absolute left-2 top-2 rounded-full bg-[#f2f4f7] px-2 py-0.5 text-[10px] font-bold text-[#475467]">BACKSTAGE</div>)}
+            {owner && scenes && guest && (
+              <button type="button" onClick={() => void kit.backstage(p.identity, !on)} className={`absolute right-1.5 top-1.5 rounded-lg px-2 py-1 text-[11px] font-bold shadow-sm ${on ? "bg-white text-[#344054] ring-1 ring-[#d0d5dd] hover:bg-[#f9fafb]" : "bg-[#053877] text-white hover:bg-[#0a4a99]"}`} data-testid="strip-stage-toggle">
+                {on ? "Send backstage" : "Bring on stage"}
+              </button>
+            )}
+          </div>
         );
       })}
       <div className="relative shrink-0">
@@ -575,6 +575,13 @@ function PeopleStrip({ scene, onToggle, owner, onShare, onInvite }: { scene?: Sc
       </div>
     </div>
   );
+}
+
+/** A guest who's backstage is told so: they're in the room, not in the recording or the show. */
+function Backstage({ kit }: { kit: RoomKit }) {
+  const { localParticipant } = useLocalParticipant();
+  if (kit.isOnStage(localParticipant.identity, localParticipant.attributes?.stage)) return null;
+  return <p className="mt-3 w-full max-w-[768px] shrink-0 rounded-xl bg-[#fff8e6] px-4 py-2.5 text-sm font-semibold text-[#7a4e00]" data-testid="you-backstage">You're backstage. You're not in the recording or the live show until the host brings you on.</p>;
 }
 
 function MiniFace({ t }: { t: TrackReferenceOrPlaceholder }) {
@@ -595,7 +602,7 @@ function PeoplePanel({ owner, studio, onCopy }: { owner: boolean; studio?: Studi
   const people = useParticipants();
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PanelHead title="People" line={`${people.length} in the room. Everyone here is on the stage.`} />
+      <PanelHead title="People" line={(() => { const back = people.filter((p) => p.attributes?.stage === "off").length; return back ? `${people.length} in the room, ${back} backstage.` : `${people.length} in the room. Everyone here is on the stage.`; })()} />
       <ul className="mt-4 min-h-0 flex-1 space-y-1 overflow-y-auto px-3">
         {people.map((p) => (
           <li key={p.identity} className="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-[#f9fafb]">
