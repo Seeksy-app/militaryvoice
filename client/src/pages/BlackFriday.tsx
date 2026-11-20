@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 import { apiRequest } from "@/lib/queryClient";
-import { PLANS, FOUNDING } from "@shared/tokens";
-import { ArrowRight, CalendarDays, Check, Loader2, Lock, Mic, Scissors, Link2, Users, Video } from "lucide-react";
+import { PLANS, FOUNDING, CLIPS_PER_EPISODE } from "@shared/tokens";
+import { Link } from "wouter";
+import { ArrowRight, CalendarDays, Captions, Gift, Loader2, Lock, Mic, Scissors, Sparkles, Link2, Users, Video, Coins } from "lucide-react";
 
 // Black Friday 2026: Founding Members. Podcasters who join MilitaryVoices.ai in 2026 are its founding group; until the
 // end of December 31, 2026 a first Scale plan comes with 30 days free (Stripe's own trial, card at checkout).
@@ -36,13 +37,17 @@ const CHIPS = [
   { img: "ico-member", t: "Founding Member" },
 ];
 const SCALE = [
-  { i: Scissors, t: `${scale.credits} Pōstify credits a month`, d: "About 3 episodes a month of captioned clips and a clean episode. Yours on day 1." },
-  { i: Video, t: "Your own Studio", d: "Record and go live with your guests in a studio that's yours." },
-  { i: Users, t: "Invite a guest", d: "Your guest answers a few questions and sends their photo before the interview." },
+  { i: Scissors, t: "Pōstify: clips, reels and text overlays", d: `Pōstify finds the best moments in every episode and cuts ${CLIPS_PER_EPISODE} captioned clips, in vertical, square and wide, ready to post. Add music and your own titles at no extra cost.` },
+  { i: Captions, t: "Animated captions", d: "Word-by-word captions that follow whoever is talking, so your clips work with the sound off." },
+  { i: Sparkles, t: "A clean episode, every time", d: "Ums, false starts and dead air taken out. Your original is never changed." },
+  { i: Coins, t: `${scale.credits} Pōstify credits a month, yours on day 1`, d: "About 3 episodes a month with animated captions, or 6 with Classic captions." },
+  { i: Video, t: "Your own Studio", d: "Record and go live with your guests in a studio that's yours: scenes, layouts, lower thirds and a producer console." },
 ];
 const FREE = [
-  { i: Mic, t: "Podcast hosting", d: "Your feed, listed in Apple Podcasts, Spotify and 10+ apps." },
-  { i: Link2, t: "Your SmartLink page", d: "One link for your show, your socials and your latest episodes." },
+  { i: Mic, t: "Free podcast hosting", d: "Your show and its feed, listed in Apple Podcasts, Spotify and 10+ apps." },
+  { i: Link2, t: "Your SmartLink", d: "One link to add to your social media profiles, with your show, your links and your latest episodes." },
+  { i: Users, t: "Podcast Guest Invite", d: "Send your guest a link. They answer a few questions and add the photo they want shown, and you get it all before the interview." },
+  { i: Gift, t: "Your first Pōstify episode free", d: "See what Pōstify does with one of your own episodes." },
 ];
 const TICKER = ["Founding Members 2026", "Scale 30 days free", `Then just ${price} a month`, "Veteran-owned", `Offer ends ${endsShort}`];
 
@@ -184,46 +189,42 @@ export default function BlackFriday() {
 
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-12 sm:px-6">
         <div className="grid gap-5 md:grid-cols-2">
-          <section className="rounded-3xl border-2 border-[#F0A71F]/70 bg-[#050d56] p-6 text-white shadow-[0_0_30px_rgba(240,167,31,0.18)]" data-testid="bf-scale">
-            <p className="text-sm font-semibold text-[#F0A71F]">{scale.name}</p>
+          <section className="flex flex-col rounded-3xl border-2 border-[#F0A71F]/70 bg-[#050d56] p-6 text-white shadow-[0_0_30px_rgba(240,167,31,0.18)]" data-testid="bf-scale">
+            <p className="text-sm font-semibold text-[#F0A71F]">{scale.name} · Founding Members</p>
             <p className="mt-2 text-3xl font-bold tracking-tight" style={HEADLINE_FONT}>
               30 days free<span className="block whitespace-nowrap text-base font-medium text-white/70 sm:inline">{" "}then {price} a month</span>
             </p>
-            <ul className="mt-5 space-y-4">
+            <ul className="mt-5 flex-1 space-y-4">
               {SCALE.map(({ i: I, t, d }) => (
                 <li key={t} className="flex items-start gap-3">
                   <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[#F0A71F]/15 text-[#F0A71F]"><I className="h-4 w-4" /></span>
-                  <span><span className="block font-semibold">{t}</span><span className="block text-sm text-white/65">{d}</span></span>
+                  <span><span className="block font-semibold">{t}</span><span className="block text-sm text-white/70">{d}</span></span>
                 </li>
               ))}
             </ul>
+            <Button onClick={toBox} className={`mt-7 h-12 w-full gap-2 rounded-full text-[15px] font-extrabold uppercase italic tracking-tight text-[#2a1800] shadow-[0_0_26px_rgba(240,167,31,0.5),inset_0_2px_0_rgba(255,255,255,0.6)] hover:brightness-110 ${GOLD_FILL}`} data-testid="bf-scale-cta">
+              Start 30 days free <ArrowRight className="h-4 w-4" />
+            </Button>
+            <p className="mt-3 text-center text-xs text-white/60">Card needed. Cancel before day 30 and you pay nothing.</p>
           </section>
 
-          <section className="rounded-3xl border border-white/15 bg-[#050d56]/60 p-6 text-white" data-testid="bf-free">
-            <p className="text-sm font-semibold text-white/60">On every plan, free</p>
-            <p className="mt-2 text-3xl font-bold tracking-tight" style={HEADLINE_FONT}>Free to keep</p>
-            <ul className="mt-5 space-y-4">
+          <section className="flex flex-col rounded-3xl border border-white/20 bg-[#050d56]/60 p-6 text-white" data-testid="bf-free">
+            <p className="text-sm font-semibold text-white/60">Free, always</p>
+            <p className="mt-2 text-3xl font-bold tracking-tight" style={HEADLINE_FONT}>Join free</p>
+            <ul className="mt-5 flex-1 space-y-4">
               {FREE.map(({ i: I, t, d }) => (
                 <li key={t} className="flex items-start gap-3">
                   <span className="mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-emerald-400/15 text-emerald-300"><I className="h-4 w-4" /></span>
-                  <span><span className="block font-semibold">{t}</span><span className="block text-sm text-white/65">{d}</span></span>
+                  <span><span className="block font-semibold">{t}</span><span className="block text-sm text-white/70">{d}</span></span>
                 </li>
               ))}
             </ul>
+            <Link href="/host/dashboard" className="mt-7 flex h-12 w-full items-center justify-center gap-2 rounded-full border-2 border-white/70 text-[15px] font-extrabold uppercase italic tracking-tight text-white transition hover:bg-white hover:text-[#000741]" data-testid="bf-free-cta">
+              Join free <ArrowRight className="h-4 w-4" />
+            </Link>
+            <p className="mt-3 text-center text-xs text-white/60">Just your email and a 6-digit code.</p>
           </section>
         </div>
-
-        <section className="relative mt-10 overflow-hidden rounded-3xl border border-[#F0A71F]/60 bg-[#020a38] px-6 py-10 text-center text-white shadow-[0_0_40px_rgba(240,167,31,0.2)]">
-          <h2 className="text-balance text-2xl font-semibold tracking-tight sm:text-3xl" style={HEADLINE_FONT}>Founding Members join by {FOUNDING.endsLabel}.</h2>
-          <ul className="mx-auto mt-5 flex max-w-md flex-col gap-2 text-left text-sm text-white/80">
-            {["Sign in with your email and a 6-digit code.", "Add your card on Stripe's secure page. Nothing is charged for 30 days.", "Cancel before day 30 under Manage billing and you pay nothing."].map((t) => (
-              <li key={t} className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#F0A71F]" /> {t}</li>
-            ))}
-          </ul>
-          <Button size="lg" onClick={toBox} className={`mt-7 h-14 max-w-full gap-2 rounded-full px-5 text-[15px] font-extrabold sm:px-8 sm:text-base uppercase italic tracking-tight text-[#2a1800] shadow-[0_0_30px_rgba(240,167,31,0.6),inset_0_2px_0_rgba(255,255,255,0.6)] hover:brightness-110 ${GOLD_FILL}`} data-testid="bf-join-bottom">
-            Become a Founding Member <ArrowRight className="h-5 w-5" />
-          </Button>
-        </section>
       </main>
       <SiteFooter />
     </div>
