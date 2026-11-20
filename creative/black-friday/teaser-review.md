@@ -117,3 +117,13 @@ All six went to Riccoh's LinkedIn (Upload-Post profile mv-3), 1600x900, text exa
 - hp-191 Wed 25, 2 pm (woman)
 - hp-192 Thu 26, 10 am (camera)
 Confirmed in Upload-Post's own schedule. To take one back: DELETE /api/admin/gtm/posts/<id>.
+
+## Frank Zaccari, Founding Member post (20 Nov 2026)
+Andrew: "We can post Frank's creatives", then "Yes, schedule it" on the exact text. Scheduled as hp-193 on Riccoh's LinkedIn (mv-3), Fri 27 Nov 2:00 pm ET (19:00 UTC), with the 1200x627 image (frank/frank-founding-1200x627.jpg, library 02701738baf1).
+> Welcome to the founding group, Frank Zaccari.
+>
+> Frank is an Air Force veteran and the host of Bounce Back in Business & Life, and a MilitaryVoices.ai Founding Member.
+>
+> Podcasters who join MilitaryVoices.ai in 2026 become Founding Members. militaryvoices.ai/go/bf?src=li-riccoh
+>
+> #MilitaryVoices #VeteranPodcasters #Podcasting
