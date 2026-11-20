@@ -137,12 +137,13 @@ async function uniqueSlug(base: string, notId?: number): Promise<string> {
 /** Spotify's own copy of an episode: kept as a row, never counted as a download. */
 export const SPOTIFY_COPIES = "Spotify (copies)";
 const listens = () => sql`${hostedDownloads.app} <> ${SPOTIFY_COPIES}`;
+/** The app on a download row. Spotify fetches a file once and plays its own copy to listeners, so its fetch is a copy, not a listener (Andrew, 20 Nov). */
+const downloadApp = (ua: string) => { const a = appOf(ua); return a === "Spotify" ? SPOTIFY_COPIES : a; };
 
 function appOf(ua: string): string {
   const u = ua.toLowerCase();
   if (/applecoremedia|apple ?podcasts|podcasts\/\d|itunes|itms/.test(u)) return "Apple Podcasts";
-  // Spotify fetches a file once and plays its own copy to listeners: never a listener here (Andrew, 20 Nov).
-  if (/spotify/.test(u)) return SPOTIFY_COPIES;
+  if (/spotify/.test(u)) return "Spotify";
   if (/overcast/.test(u)) return "Overcast";
   if (/pocket ?casts/.test(u)) return "Pocket Casts";
   if (/castbox/.test(u)) return "Castbox";
@@ -842,7 +843,7 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
       const day = today();
       const listenerHash = crypto.createHash("sha256").update(`${ip}|${ua}|${day}|${process.env.SESSION_SECRET ?? "mv"}`).digest("hex").slice(0, 40);
       // Once per listener per episode per day: the unique index does the de-duplicating. The sponsor spots in the file they got are noted with it.
-      await db.insert(hostedDownloads).values({ showId: e.showId, episodeId: e.id, day, listenerHash, app: appOf(ua), spots: sv ? e.servedSpots : "", createdAt: now() }).onConflictDoNothing().catch((err) => console.warn("Download not counted:", (err as Error).message));
+      await db.insert(hostedDownloads).values({ showId: e.showId, episodeId: e.id, day, listenerHash, app: downloadApp(ua), spots: sv ? e.servedSpots : "", createdAt: now() }).onConflictDoNothing().catch((err) => console.warn("Download not counted:", (err as Error).message));
     }
     res.setHeader("Cache-Control", "no-store");
     res.redirect(302, sv ? await signedRecordingUrl(sv.key, 6 * 3600) : e.audioKey ? await signedRecordingUrl(e.audioKey, 6 * 3600) : e.audioUrl);
@@ -873,6 +874,8 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
         production: await hasProduction(s.email),
         episodes: await Promise.all(eps.map(async (e) => ({ ...e, delivery: deliveryOf(e, hitRows, listedApps), downloads: st.episodes.get(e.id) ?? 0, live: live(e), hasVideo: hasVideo(e), ytLibrary: await libraryYouTubeAt(e.recordingId), bookend: { wanted: planOf(s, e, spotRows).any, state: !planOf(s, e, spotRows).any ? "" : served(s, e, spotRows) ? "ready" : e.bookendJob === "failed" ? "failed" : "working" } }))),
         stats: { total: st.total, last30: st.series.reduce((a, d) => a + d.count, 0), series: st.series, apps: st.apps },
+        // Apps that read this feed in the last 14 days: after a move, the proof each one followed.
+        reading: Array.from(new Set(hitRows.filter((r) => Date.now() - Date.parse(r.lastAt) < 14 * 86400000).map((r) => r.app))),
       });
     }
     // YouTube connected through Upload-Post (the Social screen)?

@@ -29,7 +29,7 @@ import { IconTile } from "@/components/ui/icon-tile";
 
 type Delivery = { apps: { app: string; got: boolean; checked: string }[] };
 type Ep = HostedEpisodeRow & { downloads: number; live: boolean; hasVideo?: boolean; ytLibrary?: string; delivery?: Delivery | null };
-type Hosted = { show: HostedShowRow; feedUrl: string; missing: string[]; ownerConfirmed: boolean; production?: boolean; episodes: Ep[]; stats: { total: number; last30: number; series: { date: string; count: number }[]; apps: Record<string, number> } };
+type Hosted = { show: HostedShowRow; feedUrl: string; missing: string[]; ownerConfirmed: boolean; production?: boolean; episodes: Ep[]; stats: { total: number; last30: number; series: { date: string; count: number }[]; apps: Record<string, number> }; reading?: string[] };
 type Resp = { shows: Hosted[]; categories: Record<string, string[]>; youtubeReady?: boolean };
 
 const KEY = ["/api/host/hosting"];
@@ -449,8 +449,11 @@ function Directories({ h, ready, onSaved, youtube }: { h: Hosted; ready: boolean
     toast({ title: "Your feed is copied", description: `Paste it into ${d.name}.` });
   };
   const listed = DIRS.filter((d) => dirs[d.key]?.state === "live").length;
+  // The name each app reads the feed under (server appOf): seen in the last 14 days = it follows the new feed.
+  const READS_AS: Record<string, string> = { apple: "Apple Podcasts", spotify: "Spotify", amazon: "Amazon Music", iheart: "iHeartRadio", pocketcasts: "Pocket Casts", castbox: "Castbox", youtube: "Google / YouTube" };
   const renderRow = (d: (typeof DIRS)[number]) => {
           const st = dirs[d.key];
+          const follows = moved && st?.state !== "live" && !!READS_AS[d.key] && !!h.reading?.includes(READS_AS[d.key]);
           const isOpen = open === d.key;
           return (
             <li key={d.key} className="py-3" data-testid={`hosting-dir-${d.key}`}>
@@ -461,7 +464,7 @@ function Directories({ h, ready, onSaved, youtube }: { h: Hosted; ready: boolean
                   <span className="block text-sm font-semibold">{d.name}{d.auto && <span className="ml-2 align-middle text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Powered by Listen Notes</span>}</span>
                   <span className="block truncate text-xs text-muted-foreground">{d.reach}</span>
                 </button>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${st?.state === "live" ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : st?.state === "submitted" ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : "bg-muted text-muted-foreground"}`}>{st?.state === "live" ? (moved && !s.redirectOk ? "Live, by your old feed" : "Live") : st?.state === "submitted" ? "Submitted" : d.auto && s.aiVoice ? "Not listed" : d.auto ? "Automatic" : moved ? (s.redirectOk ? "Moves with your forward" : "Waits for your old feed to forward") : "Not listed"}</span>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${st?.state === "live" || follows ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : st?.state === "submitted" ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : "bg-muted text-muted-foreground"}`}>{follows ? "On your new feed" : st?.state === "live" ? (moved && !s.redirectOk ? "Live, by your old feed" : "Live") : st?.state === "submitted" ? "Submitted" : d.auto && s.aiVoice ? "Not listed" : d.auto ? "Automatic" : moved ? (s.redirectOk ? "Moves with your forward" : "Waits for your old feed to forward") : "Not listed"}</span>
                 {d.auto && s.aiVoice && !(st?.state === "live" && st.url) ? (
                   <span className="shrink-0 text-xs text-muted-foreground" data-testid={`hosting-dir-ai-${d.key}`}>Doesn't take AI-voiced shows</span>
                 ) : d.auto && !(st?.state === "live" && st.url) ? (
