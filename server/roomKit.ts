@@ -37,6 +37,8 @@ export type Look = {
   background: Background;
   logo: { asset: Asset; corner: "tl" | "tr" } | null;
   logos: Asset[];
+  /** Uploaded background pictures to pick from (the one in use is background). */
+  backgrounds: Asset[];
   banners: { id: string; text: string; seconds: number }[];
   intro: Asset | null;
   outro: Asset | null;
@@ -48,6 +50,7 @@ const freshLook = (): Look => ({
   background: { kind: "color", value: "blue" },
   logo: null,
   logos: [],
+  backgrounds: [],
   banners: [],
   intro: null,
   outro: null,
@@ -131,6 +134,7 @@ function clean(raw: any, assets: Map<string, Asset>): Look | string {
     background: bg(raw.background) ?? { kind: "color", value: "blue" },
     logo: logo(raw.logo) ?? null,
     logos: (Array.isArray(raw.logos) ? raw.logos : []).map((v: any) => asset(v, "logo")).filter(Boolean).slice(0, 6) as Asset[],
+    backgrounds: (Array.isArray(raw.backgrounds) ? raw.backgrounds : []).map((v: any) => asset(v, "background")).filter(Boolean).slice(0, 6) as Asset[],
     banners,
     intro, outro, scenes,
   };
@@ -196,7 +200,7 @@ export function registerRoomKit(app: Express, requireHostSession: RequestHandler
     res.setHeader("Cache-Control", "no-store");
     const id = Number(req.params.studioId);
     if (!Number.isInteger(id) || !keyOk(id, req.query.k)) return res.status(404).json({ message: "Not found." });
-    const { logos: _shelf, ...look } = await getLook(id);
+    const { logos: _logos, backgrounds: _backgrounds, ...look } = await getLook(id);
     res.json({ look });
   });
 
