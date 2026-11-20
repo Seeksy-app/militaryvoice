@@ -16,7 +16,7 @@ function roomOfToken(token: string | null): string {
 
 /**
  * The Room's picture: the same thing the recorder films, drawn from the same two sources.
- * People come from the LiveKit room (only those with stage = "on" are shown or heard);
+ * People come from the LiveKit room (only those not sent backstage (stage = "off") are shown or heard);
  * the look (scenes, background, logo, banners, intro, outro) comes from Podcasting's look
  * endpoint; which scene is on, which banner is showing and which clip is playing come from the
  * room's metadata, which is ours. Nothing here decides any of it.
@@ -44,7 +44,7 @@ export function RoomPicture({
   onState?: (s: { connected: boolean; failed: boolean }) => void;
 }) {
   const id = studioId ?? studioIdFromRoom(roomOfToken(token));
-  const { tiles, meta: raw, connected, failed, caption } = useStageRoom(url, token, muted, undefined, forRecording, (a) => a.stage === "on");
+  const { tiles, meta: raw, connected, failed, caption } = useStageRoom(url, token, muted, undefined, forRecording, (a) => a.stage !== "off");
   const live = raw as unknown as RoomLive;
 
   useEffect(() => { onState?.({ connected, failed }); }, [connected, failed, onState]);

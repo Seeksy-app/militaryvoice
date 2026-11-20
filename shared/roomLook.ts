@@ -12,19 +12,21 @@ export type RoomLayoutKey = "solo" | "side" | "grid" | "speaker" | "screen" | "p
 
 /** An uploaded file; url is a stable link that needs no login (Podcasting's /api/room-assets/:id). */
 export interface RoomAsset {
-  id?: string | number;
-  url: string;
+  id?: string;
   kind?: string;
+  name?: string;
+  mime?: string;
+  url: string;
   sec?: number;
 }
 
-/** A background: a named colour (blue, dark, light), a #rrggbb, or a picture. */
-export type RoomBackground = string | RoomAsset | { asset?: RoomAsset | null; color?: string } | null;
+/** A background: a named colour (blue, dark, light) or a picture (Podcasting's shape). */
+export type RoomBackground = { kind: "color"; value: string } | { kind: "image"; asset: RoomAsset };
 
 export interface RoomLookStyle {
   background?: RoomBackground;
   /** corner: tl | tr | bl | br */
-  logo?: { asset?: RoomAsset | null; corner?: string } | null;
+  logo?: { asset: RoomAsset; corner: string } | null;
 }
 
 export interface RoomScene {
@@ -70,14 +72,10 @@ export const DEFAULT_LOGO = "/logo-lockup-dark.png";
 
 const abs = (u: string | undefined, origin: string) => (u && u.startsWith("/") && origin ? `${origin}${u}` : u || "");
 
-function backgroundOf(b: RoomBackground | undefined, origin: string): string {
+function backgroundOf(b: RoomBackground | undefined | null, origin: string): string {
   if (!b) return "";
-  if (typeof b === "string") return COLORS[b] ?? (b.startsWith("#") ? b : abs(b, origin));
-  const o = b as { url?: string; asset?: RoomAsset | null; color?: string };
-  if (o.asset?.url) return abs(o.asset.url, origin);
-  if (o.url) return abs(o.url, origin);
-  if (o.color) return COLORS[o.color] ?? o.color;
-  return "";
+  if (b.kind === "image") return abs(b.asset?.url, origin);
+  return COLORS[b.value] ?? (b.value?.startsWith("#") ? b.value : "");
 }
 
 /** What StageGrid draws, plus the banner text (StageGrid only shows its lower third over clips). */
@@ -99,7 +97,7 @@ export function roomStageMeta(look: RoomLook | null, live: RoomLive, name: strin
   if (playing && clip?.url) {
     meta.stageMediaPlaying = true;
     meta.stageMediaUrl = abs(clip.url, origin);
-    meta.stageMediaKind = clip.kind === "image" ? "image" : "video";
+    meta.stageMediaKind = (clip.mime ?? "").startsWith("image") ? "image" : "video";
     meta.stageMediaLabel = playing.slot === "intro" ? "Intro" : "Outro";
   }
   const show = live.showing;
