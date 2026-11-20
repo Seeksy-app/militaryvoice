@@ -33,6 +33,23 @@ type Layout = "solo" | "side" | "grid" | "speaker" | "screen" | "pip";
 type Tab = "people" | "notes" | "recording" | "chat";
 
 const NAVY = "#053877";
+/**
+ * The layout picker stays hidden until phase 2, when layouts reach the recording and the live
+ * picture (Andrew, 20 Nov: "go, hide layouts"). Until then the stage is a grid, like the recording.
+ */
+const SHOW_LAYOUTS = false;
+/** The approved mockup (v8) is set in Inter; the rest of the site isn't, so the room loads it itself. */
+const INTER = "'Inter', 'General Sans', system-ui, sans-serif";
+function useInter() {
+  useEffect(() => {
+    if (document.getElementById("font-inter")) return;
+    const l = document.createElement("link");
+    l.id = "font-inter";
+    l.rel = "stylesheet";
+    l.href = "https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap";
+    document.head.appendChild(l);
+  }, []);
+}
 const say = (e: unknown) => ((e as Error).message ?? "").replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, "") || "Try again in a moment.";
 const clock = (since: string, now: number) => { const s = Math.max(0, Math.floor((now - Date.parse(since)) / 1000)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return `${h ? `${h}:${String(m).padStart(2, "0")}` : m}:${String(s % 60).padStart(2, "0")}`; };
 const initials = (n: string) => n.trim().split(/\s+/).map((w) => w[0] ?? "").slice(0, 2).join("").toUpperCase() || "?";
@@ -41,6 +58,7 @@ const useNow = () => { const [now, setNow] = useState(Date.now()); useEffect(() 
 
 export default function MyStudio({ invite }: { invite?: string }) {
   const owner = !invite;
+  useInter();
   const [conn, setConn] = useState<Conn | null>(null);
   const [setup, setSetup] = useState<Setup | null>(null);
   const [left, setLeft] = useState(false);
@@ -169,7 +187,7 @@ function SetupScreen({ owner, roomName, blocked, defaultName, onEnter }: { owner
   const select = "h-9 min-w-0 flex-1 truncate rounded-lg border border-[#d0d5dd] bg-white px-2 text-[13px] text-[#344054]";
 
   return (
-    <div className="min-h-screen bg-[#f3f4f7] text-[#101828]" data-testid="my-studio-setup">
+    <div className="min-h-screen bg-[#f3f4f7] text-[#101828]" data-testid="my-studio-setup" style={{ fontFamily: INTER }}>
       <header className="flex h-16 items-center gap-4 border-b border-[#e4e7ec] bg-white px-5">
         <Logo className="h-10" />
         {owner && <a href="/host/dashboard/rooms" className="ml-auto flex items-center gap-1.5 text-sm font-semibold text-[#475467] hover:text-[#101828]"><ArrowLeft className="h-4 w-4" /> Back to your dashboard</a>}
@@ -245,7 +263,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
   const state = useConnectionState();
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } = useLocalParticipant();
   const now = useNow();
-  const [layout, setLayout] = useState<Layout>("side");
+  const [layout, setLayout] = useState<Layout>(SHOW_LAYOUTS ? "side" : "grid");
   const [focus, setFocus] = useState<string | null>(null);
   const [tab, setTab] = useState<Tab>("people");
   const [sheet, setSheet] = useState(false);
@@ -282,7 +300,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
     void navigator.clipboard.writeText(studio.inviteLink).then(() => toast({ title: "Invite link copied", description: "Send it to your guest. They pick a name and they're in." }));
   };
   const share = async () => {
-    try { await localParticipant.setScreenShareEnabled(!isScreenShareEnabled); if (!isScreenShareEnabled) setLayout("screen"); }
+    try { await localParticipant.setScreenShareEnabled(!isScreenShareEnabled); if (SHOW_LAYOUTS && !isScreenShareEnabled) setLayout("screen"); }
     catch (e) { if ((e as Error).name !== "NotAllowedError") toast({ title: "Couldn't share your screen", description: say(e), variant: "destructive" }); }
   };
   const leave = async () => {
@@ -296,7 +314,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
   };
 
   return (
-    <div className="flex h-[100dvh] flex-col bg-[#f3f4f7] text-[#101828]" data-testid="my-studio">
+    <div className="flex h-[100dvh] flex-col bg-[#f3f4f7] text-[#101828]" data-testid="my-studio" style={{ fontFamily: INTER }}>
       {/* Top bar */}
       <header className="flex h-16 shrink-0 items-center gap-3 border-b border-[#e4e7ec] bg-white px-4 lg:gap-3.5 lg:px-5" data-testid="my-studio-bar">
         <Logo className="hidden h-[38px] sm:block" />
@@ -309,7 +327,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
           <div className="ml-2 hidden items-center gap-2 md:flex">
             {rec ? (
               <button type="button" onClick={() => setTab("recording")} className="flex items-center gap-2 rounded-full bg-[#fef3f2] px-3.5 py-[7px] text-[13px] font-semibold tabular-nums text-[#b42318]" data-testid="badge-recording">
-                <span className="h-2 w-2 animate-pulse rounded-full bg-[#d92d20]" /> Recording to your Library · {clock(rec.since, now)}
+                <span className="h-2 w-2 animate-pulse rounded-full bg-[#d92d20]" /> Recording · {clock(rec.since, now)}
               </button>
             ) : studio.canRecord ? (
               <button type="button" onClick={() => void record(true)} disabled={busy !== ""} className="flex items-center gap-2 rounded-full border border-[#fda29b] bg-white px-3.5 py-[6px] text-[13px] font-semibold text-[#b42318] hover:bg-[#fef3f2] disabled:opacity-60" data-testid="my-studio-record">
@@ -340,13 +358,14 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
         {/* Stage column */}
         <div className="flex min-w-0 flex-1 flex-col items-center px-4 pt-5 lg:px-6">
           <Stage layout={layout} focus={focus} logo={logo} />
-          <LayoutRow layout={layout} setLayout={setLayout} />
-          <PeopleStrip focus={focus} setFocus={setFocus} owner={owner} onShare={() => void share()} onInvite={copyInvite} />
+          {SHOW_LAYOUTS && <LayoutRow layout={layout} setLayout={setLayout} />}
+          <PeopleStrip focus={focus} setFocus={SHOW_LAYOUTS ? setFocus : null} owner={owner} onShare={() => void share()} onInvite={copyInvite} />
           <div className="mb-3 mt-auto flex items-center gap-1 rounded-[18px] border border-[#e4e7ec] bg-white px-2 py-2 shadow-[0_8px_24px_rgba(16,24,40,0.1)] sm:gap-1.5 sm:px-3" data-testid="my-studio-controls">
             <BarButton label={isMicrophoneEnabled ? "Mic" : "Muted"} off={!isMicrophoneEnabled} onClick={() => void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)}>{isMicrophoneEnabled ? <Mic className="h-[22px] w-[22px]" /> : <MicOff className="h-[22px] w-[22px]" />}</BarButton>
             <BarButton label={isCameraEnabled ? "Camera" : "Camera off"} off={!isCameraEnabled} onClick={() => void localParticipant.setCameraEnabled(!isCameraEnabled)}>{isCameraEnabled ? <Video className="h-[22px] w-[22px]" /> : <VideoOff className="h-[22px] w-[22px]" />}</BarButton>
             <BarButton label={isScreenShareEnabled ? "Stop share" : "Share"} active={isScreenShareEnabled} onClick={() => void share()}><MonitorUp className="h-[22px] w-[22px]" /></BarButton>
             {owner && <BarButton label="Invite" onClick={copyInvite}><UserPlus className="h-[22px] w-[22px]" /></BarButton>}
+            <BarButton label="Notes" active={tab === "notes"} onClick={() => setTab("notes")}><NotebookPen className="h-[22px] w-[22px]" /></BarButton>
             <BarButton label="Settings" onClick={() => setSettings(true)}><Settings className="h-[22px] w-[22px]" /></BarButton>
             <div className="mx-1 h-9 w-px bg-[#e4e7ec]" />
             <button type="button" onClick={() => void leave()} className="flex h-[58px] w-[60px] flex-col items-center justify-center gap-1 rounded-xl bg-[#fef3f2] text-xs font-bold text-[#b42318] hover:bg-[#fee4e2] sm:w-[76px]" data-testid="my-studio-leave"><LogOut className="h-[22px] w-[22px]" />Leave</button>
@@ -435,6 +454,18 @@ function Stage({ layout, focus, logo }: { layout: Layout; focus: string | null; 
   );
 }
 
+/** The speaker's level, as four green bars in the tile's corner (mockup v8). */
+function Meter({ p }: { p: Participant }) {
+  const [lvl, setLvl] = useState(0);
+  useEffect(() => { const t = window.setInterval(() => setLvl(p.audioLevel ?? 0), 100); return () => window.clearInterval(t); }, [p]);
+  const v = Math.min(1, lvl * 3);
+  return (
+    <div className="absolute bottom-3 right-3 flex h-[18px] items-end gap-[3px]" aria-hidden>
+      {[0.45, 0.8, 0.6, 1].map((k, i) => <span key={i} className="w-1 rounded-sm bg-[#12b76a] transition-[height] duration-100" style={{ height: `${Math.max(4, Math.round(18 * Math.min(1, v * k + 0.2)))}px` }} />)}
+    </div>
+  );
+}
+
 const key = (t: TrackReferenceOrPlaceholder) => `${t.participant.identity}:${t.source}`;
 const roleOf = (p: Participant) => p.attributes?.title || (p.attributes?.role === "host" ? "Host" : "Guest");
 
@@ -449,6 +480,7 @@ function Tile({ t, big, small }: { t: TrackReferenceOrPlaceholder; big?: boolean
         : <div className={`flex items-center justify-center rounded-full bg-[#3a4f80] font-bold text-white ${small ? "h-10 w-10 text-sm" : big ? "h-28 w-28 text-4xl" : "h-24 w-24 text-3xl"}`}>{initials(name)}</div>}
       {!small && <div className="absolute bottom-3 left-3 max-w-[85%] truncate rounded-full bg-[rgba(5,18,48,0.78)] px-3 py-1.5 text-[13px] font-semibold text-white">{screen ? `${name}'s screen` : name}{!screen && <span className="font-medium text-[#9bb6e8]"> · {roleOf(t.participant)}</span>}</div>}
       {small && <div className="absolute bottom-1 left-1.5 max-w-[90%] truncate rounded-full bg-[rgba(5,18,48,0.78)] px-2 py-0.5 text-[11px] font-semibold text-white">{name}</div>}
+      {speaking && !screen && !small && <Meter p={t.participant} />}
     </div>
   );
 }
@@ -477,7 +509,7 @@ function LayoutRow({ layout, setLayout }: { layout: Layout; setLayout: (l: Layou
   );
 }
 
-function PeopleStrip({ focus, setFocus, owner, onShare, onInvite }: { focus: string | null; setFocus: (id: string | null) => void; owner: boolean; onShare: () => void; onInvite: () => void }) {
+function PeopleStrip({ focus, setFocus, owner, onShare, onInvite }: { focus: string | null; setFocus: ((id: string | null) => void) | null; owner: boolean; onShare: () => void; onInvite: () => void }) {
   const { cams } = useStageTracks();
   const [menu, setMenu] = useState(false);
   return (
@@ -486,7 +518,7 @@ function PeopleStrip({ focus, setFocus, owner, onShare, onInvite }: { focus: str
         const name = t.participant.name || t.participant.identity;
         const on = focus === t.participant.identity;
         return (
-          <button key={key(t)} type="button" onClick={() => setFocus(on ? null : t.participant.identity)} title={on ? `Stop keeping ${name} in the big spot` : `Keep ${name} in the big spot`} className={`relative h-24 w-40 shrink-0 overflow-hidden rounded-xl bg-white ${on ? "border-2 border-[#053877]" : "border border-[#e4e7ec] hover:border-[#98a2b3]"}`}>
+          <button key={key(t)} type="button" onClick={setFocus ? () => setFocus(on ? null : t.participant.identity) : undefined} disabled={!setFocus} title={!setFocus ? undefined : on ? `Stop keeping ${name} in the big spot` : `Keep ${name} in the big spot`} className={`relative h-24 w-40 shrink-0 overflow-hidden rounded-xl bg-white ${on ? "border-2 border-[#053877]" : `border border-[#e4e7ec] ${setFocus ? "hover:border-[#98a2b3]" : "cursor-default"}`}`}>
             <div className="absolute inset-x-0 top-0 bottom-6"><MiniFace t={t} /></div>
             <div className="absolute inset-x-2.5 bottom-1 truncate text-left text-xs font-semibold">{name}{t.participant.isLocal ? " (you)" : ""}</div>
             {on && <div className="absolute right-2 top-2 rounded-full bg-[#eef3fb] px-2 py-0.5 text-[10px] font-bold text-[#053877]">BIG SPOT</div>}
