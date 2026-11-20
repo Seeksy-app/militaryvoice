@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from "react";
-import { RESERVED_HANDLES } from "@shared/bio";
 import { Link, useLocation } from "wouter";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -56,13 +55,15 @@ function linkify(text: string) {
   return out;
 }
 
-// Not on the studio or the watch page, where it would sit on the picture.
-// /admin has its own Ask Alex button (AdminChatDock), in the same corner.
-const HIDDEN_ON = ["/promo", "/studio", "/watch", "/podcast/", "/magazine", "/booth", "/dx/", "/radio", "/admin"];
+// Andrew, 20 Nov 2026: Ask Alex on the whole site for now (booths, Radio, show pages and podcasters' own pages
+// included), until there's a permanent placement. Still never on a page the recorder films (it would be on air
+// or in the recording: /dx/program, /studio/composite, /room/composite, the /promo renders), and not on /admin,
+// which has its own Ask Alex button (AdminChatDock) in the same corner.
+const HIDDEN_ON = ["/promo", "/studio/composite", "/room/composite", "/dx/", "/admin"];
 
 const OPENER: Msg = {
   role: "assistant",
-  content: "Hi, I'm Alex. Ask me anything about MilitaryVoices.ai: Rooms, your Library, Pōstify, your podcast, SmartLink, or the Podcast Marathon. If I can't help, I'll get you to a person.",
+  content: "Hi, I'm Alex. Ask me anything about MilitaryVoices.ai. If I can't help, I'll get you to a person.",
 };
 
 export function HelpChat() {
@@ -145,9 +146,6 @@ export function HelpChat() {
   });
 
   if (HIDDEN_ON.some((p) => location.startsWith(p))) return null;
-  // A podcaster's own page (militaryvoices.ai/<handle>) is theirs: no MilitaryVoices help bubble on it.
-  const seg = location.split(/[?#]/)[0].split("/").filter(Boolean);
-  if ((seg.length === 1 || (seg.length === 2 && seg[1] === "brands") || (seg.length === 3 && seg[1] === "family") || ((seg.length === 2 || seg.length === 3) && seg[1] === "show")) && !RESERVED_HANDLES.has(seg[0].toLowerCase())) return null;
 
   function send(said?: string) {
     const text = (said ?? draft).trim();
