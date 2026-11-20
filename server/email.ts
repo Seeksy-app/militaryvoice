@@ -369,7 +369,7 @@ export async function sendConfirmationEmail(input: ConfirmationEmailInput): Prom
 export interface LoginCodeEmailInput {
   to: string;
   code: string;
-  /** Where they're signing in from: "dx" is MilitaryVoices Radio sign-up, which gets its own look. */
+  /** Where they're signing in from: "dx" is MilitaryVoices Radio sign-up, "bf" is the Black Friday page; each gets its own look. */
   context?: string;
 }
 
@@ -384,9 +384,9 @@ export async function sendLoginCodeEmail(input: LoginCodeEmailInput): Promise<bo
     to: input.to,
     subject: `Your sign-in code: ${input.code}`,
     html: emailShell({
-      banner: input.context === "dx" ? `${SITE}/dx/email.jpg` : EMAIL_BANNERS.signin,
-      bannerAlt: input.context === "dx" ? "MilitaryVoices Radio" : "MilitaryVoices.ai",
-      eyebrow: input.context === "dx" ? "MilitaryVoices Radio · sign-in" : "Sign-in",
+      banner: input.context === "dx" ? `${SITE}/dx/email.jpg` : input.context === "bf" ? `${SITE}/bf/email.jpg` : EMAIL_BANNERS.signin,
+      bannerAlt: input.context === "dx" ? "MilitaryVoices Radio" : input.context === "bf" ? "Black Friday Special: Founding Members 2026, 30 days free" : "MilitaryVoices.ai",
+      eyebrow: input.context === "dx" ? "MilitaryVoices Radio · sign-in" : input.context === "bf" ? "Founding Members 2026 · sign-in" : "Sign-in",
       heading: "Your sign-in code",
       body: `<p style="margin:0 0 16px;">Enter this code on the sign-in page. It expires in 15 minutes.</p>${codeBlock}<p style="margin:0;color:#9ca3af;font-size:13px;">If you didn't request this, you can ignore this email.</p>`,
       footerNote: "One-time code — expires in 15 minutes.",

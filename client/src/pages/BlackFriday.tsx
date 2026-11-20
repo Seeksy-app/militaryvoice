@@ -275,7 +275,7 @@ function JoinBox({ src }: { src: string }) {
     setBusy(true);
     setError("");
     try {
-      await apiRequest("POST", "/api/host/request-code", { email, turnstileToken: human });
+      await apiRequest("POST", "/api/host/request-code", { email, turnstileToken: human, context: "bf" });
       track("code", src);
       setStep("code");
     } catch (e) {

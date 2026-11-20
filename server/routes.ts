@@ -10512,7 +10512,7 @@ export function registerRoutes(app: Express): void {
       // Local dev without Resend: surface the code in the terminal so sign-in still works.
       console.log(`[dev] login code for ${email}: ${code}`);
     }
-    await sendLoginCodeEmail({ to: email, code, context: req.body?.context === "dx" ? "dx" : undefined });
+    await sendLoginCodeEmail({ to: email, code, context: req.body?.context === "dx" ? "dx" : req.body?.context === "bf" ? "bf" : undefined });
     res.json({ ok: true, message: "We sent a 6-digit code to that email." });
   });
 
