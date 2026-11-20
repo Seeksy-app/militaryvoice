@@ -27,6 +27,15 @@ export function boothGuestKey(signupId: number): string {
   return crypto.createHmac("sha256", secret()).update(`booth:${signupId}`).digest("base64url").slice(0, 22);
 }
 const keyOk = (signupId: number, g: unknown) => typeof g === "string" && g.length === 22 && crypto.timingSafeEqual(Buffer.from(g), Buffer.from(boothGuestKey(signupId)));
+/**
+ * A one-off host link for a host stuck at the sign-in code: an admin makes it (GET /api/admin/booth/:id/host-link),
+ * it goes in the same ?g= place, and it only works on the day it was made (Eastern), so it can't be reused later.
+ */
+const etDay = () => new Date().toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+function boothHostKey(signupId: number, day = etDay()): string {
+  return crypto.createHmac("sha256", secret()).update(`booth-host:${signupId}:${day}`).digest("base64url").slice(0, 22);
+}
+const hostKeyOk = (signupId: number, g: unknown) => typeof g === "string" && g.length === 22 && crypto.timingSafeEqual(Buffer.from(g), Buffer.from(boothHostKey(signupId)));
 
 
 /** A clip the host is showing on air from the booth: the file (in our storage), how long it runs, and when it was started ("" while it is only uploaded and waiting). */
@@ -101,6 +110,13 @@ export function registerBooth(app: Express): void {
     await storage.setSetting(`dx:openEarly:${id}`, req.body?.open === false ? "" : "1");
     res.json({ ok: true, open: req.body?.open !== false });
   });
+  /** Make a one-off host link (works today only, no sign-in code needed) for an admin to send to a stuck host. */
+  app.get("/api/admin/booth/:id/host-link", (req, res) => {
+    if (!getAdminEmail(req)) return res.status(403).json({ message: "Admins only." });
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ message: "Which booking?" });
+    res.json({ link: `https://www.militaryvoices.ai/booth/${id}?g=${boothHostKey(id)}`, validOn: etDay() });
+  });
 
   /** What the program page needs to play the welcome and the sign-off. */
   async function voiceFor() {
@@ -119,6 +135,7 @@ export function registerBooth(app: Express): void {
   const roleOf = (req: Parameters<Parameters<Express["get"]>[1]>[0], s: SignupRow, g: unknown): "host" | "guest" | "admin" | null => {
     const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
     if (email && (email === s.email.trim().toLowerCase() || (s.coHostEmail && email === s.coHostEmail.trim().toLowerCase()))) return "host";
+    if (hostKeyOk(s.id, g)) return "host";
     if (keyOk(s.id, g)) return "guest";
     if (getAdminEmail(req)) return "admin";
     return null;
