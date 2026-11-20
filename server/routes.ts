@@ -190,6 +190,7 @@ import { registerMail } from "./mail.js";
 import { registerAutomations } from "./automations.js";
 import { registerTrash, toTrash } from "./trash.js";
 import { registerMyStudio } from "./myStudio.js";
+import { registerRoomKit, marksFor } from "./roomKit.js";
 import { registerCreatorCampaigns } from "./creatorCampaigns.js";
 import { registerContactProfile } from "./contactProfile.js";
 import { registerAskShow, claimTranscript } from "./askShow.js";
@@ -6969,6 +6970,7 @@ export function registerRoutes(app: Express): void {
   registerContactProfile(app, requireAdmin);
   registerTrash(app, requireHostSession);
   registerMyStudio(app, requireHostSession, { youtubeToken });
+  registerRoomKit(app, requireHostSession);
   registerCreatorCampaigns(app, requireHostSession);
   registerMagazine(app, requireAdmin, requireAgent);
   registerBioPrefill(app, requireAdmin);
@@ -7313,7 +7315,8 @@ export function registerRoutes(app: Express): void {
         host: (rec.signupId ? (await storage.getSignupById(rec.signupId))?.hostName : "") ?? "",
         transcript: lines,
         cleanOnly,
-        options: parseClipOptions(rec.clipOptions),
+        // Room "Mark a clip": the moments the host marked live, for the moment picker.
+        options: { ...parseClipOptions(rec.clipOptions), ...(await marksFor(rec.id).then((m) => (m.length ? { marks: m } : {})).catch(() => ({}))) },
         layoutDefault: await getLayoutDefault(rec.email),
         // The track they picked to play under the clips.
         music: await (async () => {

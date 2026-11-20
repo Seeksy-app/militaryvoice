@@ -1742,6 +1742,8 @@ export interface ClipOptions {
   more?: { count: number; avoid: [number, number][] };
   /** Two people side by side: "auto" (stack them when the picture is two panels), "stacked" (always, one over the other), "single" (follow one speaker), or "radio" (a MilitaryVoices Radio show: the two tiles of the station's own picture are stacked, without its on-screen cards). */
   layout?: "auto" | "stacked" | "single" | "radio" | "side";
+  /** Room "Mark a clip": seconds from the recording's start the host marked live. Added at claim time, never stored here. */
+  marks?: number[];
 }
 export const DEFAULT_CLIP_OPTIONS: ClipOptions = { formats: ["vertical", "square", "wide"], captions: "animated", music: "" };
 export function parseClipOptions(raw: unknown): ClipOptions {
@@ -2252,6 +2254,36 @@ export const personalStudios = pgTable("personal_studios", {
   createdAt: text("created_at").notNull(),
 });
 export type PersonalStudioRow = typeof personalStudios.$inferSelect;
+
+/** Room phase 2 (server/roomKit.ts): a room's look and scenes, one JSON document saved whole with a rev. */
+export const roomLooks = pgTable("room_looks", {
+  studioId: integer("studio_id").primaryKey(),
+  look: text("look").notNull().default("{}"),
+  rev: integer("rev").notNull().default(0),
+  updatedAt: text("updated_at").notNull(),
+});
+/** A room's files (logo, background, intro, outro) in R2; the random id is the link's permission. */
+export const roomAssets = pgTable("room_assets", {
+  id: text("id").primaryKey(),
+  studioId: integer("studio_id").notNull(),
+  kind: text("kind").notNull(),
+  name: text("name").notNull().default(""),
+  storageKey: text("storage_key").notNull(),
+  mime: text("mime").notNull().default(""),
+  sizeBytes: integer("size_bytes").notNull().default(0),
+  sec: integer("sec").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("room_assets_studio_idx").on(t.studioId)]);
+export type RoomAssetRow = typeof roomAssets.$inferSelect;
+/** "Mark a clip" while recording: seconds from the recording's start. Pōstify's moment picker builds clips around them. */
+export const roomMarks = pgTable("room_marks", {
+  id: serial("id").primaryKey(),
+  studioId: integer("studio_id").notNull(),
+  recordingId: integer("recording_id").notNull(),
+  email: text("email").notNull(),
+  atSec: integer("at_sec").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("room_marks_recording_idx").on(t.recordingId)]);
 
 // Saved segment — a named filter that can be used as a broadcast target
 export const segments = pgTable("segments", {

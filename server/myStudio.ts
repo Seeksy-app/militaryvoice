@@ -8,10 +8,11 @@ import crypto from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { getSessionEmail } from "./session.js";
-import { isLiveKitConfigured, isRecordingConfigured, publicLiveKitUrl, startBroadcast, startSegmentRecording, stopEgressById, studioToken, runningEgressIds } from "./livekit.js";
+import { isLiveKitConfigured, isRecordingConfigured, publicLiveKitUrl, rooms, startBroadcast, startSegmentRecording, stopEgressById, studioToken, runningEgressIds } from "./livekit.js";
 import { ensureRecordingsBucket } from "./recordingStorage.js";
 import { createBroadcast } from "./youtube.js";
 import { personalStudios, type PersonalStudioRow } from "../shared/schema.js";
+import { getLook, pushLookToRoom, roomLookKey } from "./roomKit.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 const now = () => new Date().toISOString();
@@ -75,7 +76,8 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     const s = await settle(await mine(email));
     const profile = await storage.getProfileByEmail(email).catch(() => undefined);
     // Their own name, for the camera check's name box.
-    res.json({ ...view(s, !!(await storage.getYoutubeAccount(email).catch(() => undefined))), you: profile?.hostName?.trim() || "" });
+    // Room phase 2: the saved look and scenes (server/roomKit.ts), and the key the recording page reads it with.
+    res.json({ ...view(s, !!(await storage.getYoutubeAccount(email).catch(() => undefined))), you: profile?.hostName?.trim() || "", look: await getLook(s.id), lookKey: roomLookKey(s.id) });
   });
 
   app.patch("/api/host/my-studio", requireHostSession, async (req, res) => {
@@ -109,7 +111,9 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     const profile = await storage.getProfileByEmail(email).catch(() => undefined);
     const name = String(req.body?.name ?? "").trim().slice(0, 60) || profile?.hostName || email.split("@")[0];
     const token = await studioToken({ room: room(s), identity: `owner-${s.id}-${crypto.randomBytes(3).toString("hex")}`, name, canPublish: true, admin: true, attributes: { role: "host" } });
-    res.json({ url: publicLiveKitUrl(), token, name: s.name });
+    // The room exists before anyone joins, carrying its look, so the first frame already has it.
+    await rooms().createRoom({ name: room(s) }).then(() => pushLookToRoom(s.id)).catch(() => {});
+    res.json({ url: publicLiveKitUrl(), token, name: s.name, studioId: s.id, lookKey: roomLookKey(s.id) });
   });
 
   /** A guest on the invite link: no account, just a name. */
@@ -128,7 +132,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     const name = String(req.body?.name ?? "").trim().slice(0, 60);
     if (!name) return res.status(400).json({ message: "Your name, please." });
     const token = await studioToken({ room: room(s), identity: `guest-${crypto.randomBytes(5).toString("hex")}`, name, canPublish: true, attributes: { role: "guest" } });
-    res.json({ url: publicLiveKitUrl(), token, name: s.name });
+    res.json({ url: publicLiveKitUrl(), token, name: s.name, studioId: s.id, lookKey: roomLookKey(s.id) });
   });
 
   /** Record: the whole room, to an MP4 in their Library. */
