@@ -8,7 +8,8 @@
 //
 // Founding Members: setting "founding:<email>" = { at, via, sub?, test? }. Set only when a real trial starts: Stripe tells
 // us a Founding subscription (metadata cohort FOUNDING.cohort) was created trialing or active (Andrew, 20 Nov: signing in
-// on the page, or a customer already on a plan, doesn't make a Founding Member). "test": true marks a team test trial.
+// on the page, or a customer already on a plan, doesn't make a Founding Member). "test": true marks a team test trial;
+// via "andrew" = added by Andrew's decision (e.g. a paying customer he names a Founding Member), with a note.
 import type { Express, RequestHandler } from "express";
 import { and, eq, like, sql } from "drizzle-orm";
 import { db, storage } from "./storage.js";
@@ -116,7 +117,7 @@ export function registerPromo(app: Express, requireAdmin: RequestHandler): void 
       .where(and(eq(sponsorClicks.sponsorId, PROMO_ID), like(sponsorClicks.source, "bf:%")))
       .groupBy(sponsorClicks.source);
     const marks = await db.select({ key: siteSettings.key, value: siteSettings.value }).from(siteSettings).where(like(siteSettings.key, "founding:%"));
-    const list = marks.map((r) => { let v: { at?: string; via?: string; test?: boolean } = {}; try { v = JSON.parse(String(r.value)); } catch { /* keep empty */ } return { email: r.key.slice("founding:".length), at: v.at ?? "", via: v.via ?? "", test: Boolean(v.test) }; }).sort((a, b) => a.at.localeCompare(b.at));
-    res.json({ members: list.length, tests: list.filter((x) => x.test).length, list, clicks: rows.map((r) => { const [, step, src] = r.source.split(":"); return { step, src, n: r.n }; }) });
+    const list = marks.map((r) => { let v: { at?: string; via?: string; test?: boolean; note?: string } = {}; try { v = JSON.parse(String(r.value)); } catch { /* keep empty */ } return { email: r.key.slice("founding:".length), at: v.at ?? "", via: v.via ?? "", test: Boolean(v.test), note: v.note ?? "" }; }).sort((a, b) => a.at.localeCompare(b.at));
+    res.json({ members: list.length, tests: list.filter((x) => x.test).length, added: list.filter((x) => x.via === "andrew").length, list, clicks: rows.map((r) => { const [, step, src] = r.source.split(":"); return { step, src, n: r.n }; }) });
   });
 }
