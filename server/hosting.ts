@@ -134,10 +134,15 @@ async function uniqueSlug(base: string, notId?: number): Promise<string> {
 }
 
 /** Which app asked for the file, from its user agent. */
+/** Spotify's own copy of an episode: kept as a row, never counted as a download. */
+export const SPOTIFY_COPIES = "Spotify (copies)";
+const listens = () => sql`${hostedDownloads.app} <> ${SPOTIFY_COPIES}`;
+
 function appOf(ua: string): string {
   const u = ua.toLowerCase();
   if (/applecoremedia|apple ?podcasts|podcasts\/\d|itunes|itms/.test(u)) return "Apple Podcasts";
-  if (/spotify/.test(u)) return "Spotify";
+  // Spotify fetches a file once and plays its own copy to listeners: never a listener here (Andrew, 20 Nov).
+  if (/spotify/.test(u)) return SPOTIFY_COPIES;
   if (/overcast/.test(u)) return "Overcast";
   if (/pocket ?casts/.test(u)) return "Pocket Casts";
   if (/castbox/.test(u)) return "Castbox";
@@ -382,13 +387,14 @@ export function feedXml(s: HostedShowRow, eps: HostedEpisodeRow[], spots: Hosted
 
 export async function showStats(showId: number, days = 30) {
   const since = new Date(Date.now() - (days - 1) * 86400000).toISOString().slice(0, 10);
-  const [tot] = await db.select({ n: sql<number>`count(*)::int` }).from(hostedDownloads).where(eq(hostedDownloads.showId, showId));
+  // Downloads are listeners: Spotify's own copies are left out (its listeners play from Spotify's servers).
+  const [tot] = await db.select({ n: sql<number>`count(*)::int` }).from(hostedDownloads).where(and(eq(hostedDownloads.showId, showId), listens()));
   const byDay = await db.select({ day: hostedDownloads.day, n: sql<number>`count(*)::int` }).from(hostedDownloads)
-    .where(and(eq(hostedDownloads.showId, showId), gte(hostedDownloads.day, since))).groupBy(hostedDownloads.day);
+    .where(and(eq(hostedDownloads.showId, showId), gte(hostedDownloads.day, since), listens())).groupBy(hostedDownloads.day);
   const byEp = await db.select({ id: hostedDownloads.episodeId, n: sql<number>`count(*)::int` }).from(hostedDownloads)
-    .where(eq(hostedDownloads.showId, showId)).groupBy(hostedDownloads.episodeId);
+    .where(and(eq(hostedDownloads.showId, showId), listens())).groupBy(hostedDownloads.episodeId);
   const byApp = await db.select({ app: hostedDownloads.app, n: sql<number>`count(*)::int` }).from(hostedDownloads)
-    .where(and(eq(hostedDownloads.showId, showId), gte(hostedDownloads.day, since))).groupBy(hostedDownloads.app);
+    .where(and(eq(hostedDownloads.showId, showId), gte(hostedDownloads.day, since), listens())).groupBy(hostedDownloads.app);
   const map = new Map(byDay.map((r) => [r.day, r.n]));
   const series = Array.from({ length: days }, (_, i) => {
     const d = new Date(Date.now() - (days - 1 - i) * 86400000).toISOString().slice(0, 10);
@@ -1202,8 +1208,8 @@ Return JSON only: {"titles":["","",""],"description":""}`,
     const out = [];
     for (const sp of rows) {
       const like = `%,${sp.id},%`;
-      const [t] = (await db.execute(sql`select count(*)::int n from hosted_downloads where show_id = ${s.id} and (',' || spots || ',') like ${like}`)) as unknown as { n: number }[];
-      const [m] = (await db.execute(sql`select count(*)::int n from hosted_downloads where show_id = ${s.id} and day >= ${since} and (',' || spots || ',') like ${like}`)) as unknown as { n: number }[];
+      const [t] = (await db.execute(sql`select count(*)::int n from hosted_downloads where show_id = ${s.id} and app <> ${SPOTIFY_COPIES} and (',' || spots || ',') like ${like}`)) as unknown as { n: number }[];
+      const [m] = (await db.execute(sql`select count(*)::int n from hosted_downloads where show_id = ${s.id} and app <> ${SPOTIFY_COPIES} and day >= ${since} and (',' || spots || ',') like ${like}`)) as unknown as { n: number }[];
       const day = new Date().toISOString().slice(0, 10);
       const state = !sp.active ? "paused" : sp.endsOn && sp.endsOn < day ? "ended" : sp.startsOn && sp.startsOn > day ? "scheduled" : "live";
       out.push({ ...sp, state, delivered: t?.n ?? 0, delivered30: m?.n ?? 0 });

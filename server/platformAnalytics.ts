@@ -44,7 +44,7 @@ export function registerPlatformAnalytics(app: Express, requireAdmin: RequestHan
     const pagesLive = await safe(() => one(sql`select count(*)::int n from bio_pages where published = true`), 0);
     const bioKinds = await safe(() => rows(sql`select kind, count(*)::int n from bio_events where day >= ${sinceDay} group by kind`), []);
     const shows = await safe(() => one(sql`select count(*)::int n from hosted_shows`), 0);
-    const downloads = await safe(() => one(sql`select count(*)::int n from hosted_downloads where day >= ${sinceDay}`), 0);
+    const downloads = await safe(() => one(sql`select count(*)::int n from hosted_downloads where day >= ${sinceDay} and app <> 'Spotify (copies)'`), 0);
     const discMembers = await safe(() => one(sql`select count(*)::int n from discovery_members`), 0);
     const discNew = await safe(() => one(sql`select count(*)::int n from discovery_members where created_at >= ${since}`), 0);
     const searches = await safe(() => one(sql`select count(*)::int n from discovery_searches where created_at >= ${since}`), 0);
@@ -76,7 +76,7 @@ export function registerPlatformAnalytics(app: Express, requireAdmin: RequestHan
       const acc = await rows(sql`select left(created_at, 10) d, count(*)::int n from podcaster_profiles where created_at >= ${since} group by 1`);
       const clp = await rows(sql`select left(created_at, 10) d, count(*)::int n from clips where created_at >= ${since} group by 1`);
       const vw = await rows(sql`select day d, count(*)::int n from bio_events where day >= ${sinceDay} and kind = 'view' group by 1`);
-      const dl = await rows(sql`select day d, count(*)::int n from hosted_downloads where day >= ${sinceDay} group by 1`);
+      const dl = await rows(sql`select day d, count(*)::int n from hosted_downloads where day >= ${sinceDay} and app <> 'Spotify (copies)' group by 1`);
       const at = (list: Row[], d: string) => Number(list.find((r) => r.d === d)?.n ?? 0);
       return Array.from({ length: days }, (_, i) => {
         const d = new Date(Date.now() - (days - 1 - i) * 86_400_000).toISOString().slice(0, 10);
