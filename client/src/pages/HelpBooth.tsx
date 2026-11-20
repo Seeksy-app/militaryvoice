@@ -90,7 +90,7 @@ export default function HelpBooth() {
         </HelpSection>
 
         <HelpSection n={5} id="guest" title="Bring a guest">
-          <p>A guest joins with a link, with no account. In your booth, press <strong>Copy guest link</strong>, next to your show name. You'll find the same button before your booth opens.</p>
+          <p>A guest, or a co-host from your show, joins with a link, with no account. In your booth, press <strong>Copy guest link</strong>, next to your show name. You'll find the same button before your booth opens.</p>
           <HelpStep k="a">Send the link to your guest by text or email.</HelpStep>
           <HelpStep k="b">They open it, check their sound, and press <strong>Enter my booth</strong>.</HelpStep>
           <p className="mt-3">Ask them to be there 10 minutes early too.</p>

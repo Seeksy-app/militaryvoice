@@ -1,7 +1,7 @@
 import { useEffect } from "react";
 import { Link } from "wouter";
 import { NavBar } from "@/components/NavBar";
-import { HelpArticle, HelpContact, HelpCta, HelpNote, HelpSection, HelpStep } from "@/components/HelpArticle";
+import { HelpArticle, HelpContact, HelpCta, HelpNote, HelpSection, HelpStep, HelpSub } from "@/components/HelpArticle";
 import { SiteFooter } from "@/components/SiteFooter";
 import { CreditCard } from "lucide-react";
 import { ADDONS, CREDIT_PACKS, FREE_DISCOVERY, PLANS, cents } from "@shared/tokens";
@@ -25,7 +25,7 @@ export default function HelpAccount() {
         eyebrow="Help · Your account"
         title="Your plan, credits, and what you deleted"
         lead={<>Two things live in your account menu (press your photo, top right): <strong>Plan &amp; billing</strong> and <strong>Recently deleted</strong>.</>}
-        toc={[["#free", "Growth: what's free"], ["#plans", "Pōstify plans"], ["#credits", "Credits"], ["#discovery", "Discovery Pro"], ["#manage", "Manage billing"], ["#deleted", "Recently deleted"], ["#support", "Help and contact"]]}
+        toc={[["#free", "Growth: what's free"], ["#plans", "Pōstify plans"], ["#credits", "Credits"], ["#discovery", "Discovery Pro"], ["#manage", "Manage billing"], ["#deleted", "Recently deleted"], ["#team", "Co-hosts and your team"], ["#support", "Help and contact"]]}
       >
         <HelpSection n={1} id="free" title="Growth: what's free">
           <p>Growth is the free plan. Your SmartLink, podcast hosting and Ask my show are free, always, and your first Pōstify episode is free too. Discovery comes with Scale and Pro; for brands and event planners it's free.</p>
@@ -80,7 +80,18 @@ export default function HelpAccount() {
           <HelpNote>Deleting a podcast episode takes it out of your feed, and the apps drop it on their next check. It doesn't take it off YouTube: if you posted it there, remove it in YouTube Studio.</HelpNote>
         </HelpSection>
 
-        <HelpContact n={7} />
+        <HelpSection n={7} id="team" title="Co-hosts and your team">
+          <p>Your co-hosts don't need an account. They join your show on a link, the same way a guest does.</p>
+          <ul className="mt-3 list-disc space-y-2 pl-5">
+            <li><strong>Radio booth:</strong> in your booth, press <strong>Copy guest link</strong>, next to your show name, and send it to them. The same button is there before your booth opens.</li>
+            <li><strong>Rooms:</strong> on the Rooms screen, under <strong>Invite a guest</strong>, press <strong>Copy link</strong> and send it. They open it, type their name, and come in.</li>
+            <li><strong>Zoom:</strong> they join your Zoom meeting as usual. The recording comes into your Library from your own Zoom account.</li>
+          </ul>
+          <HelpSub>Can my team share one account?</HelpSub>
+          <p className="mt-2">Not with their own logins yet. An account belongs to one email address, and each sign-in sends a 6-digit code to that address. If your team uses a shared show email, everyone who reads it can sign in. Separate team logins are on our list; if you need one now, write to us.</p>
+        </HelpSection>
+
+        <HelpContact n={8} />
 
         <HelpCta icon={CreditCard} text="Your plan, credits and Discovery Pro are in one place." label="Open Plan & billing" href="/host/dashboard/billing" />
       </HelpArticle>
