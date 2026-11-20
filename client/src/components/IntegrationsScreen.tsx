@@ -125,6 +125,14 @@ export function IntegrationsScreen({
         line="Where your episodes come from. Everything lands in your Library, ready for Pōstify."
       >
         <ZoomConnect row />
+        {/* Their own stream key (20 Nov 2026): Andrew looked for it here. Same /stream-in as the Podcast screen's link. */}
+        <Row
+          testId="row-stream-in"
+          icon={<span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white ring-1 ring-border"><img src="/brands/streamyard.svg" alt="" className="h-7 w-7 object-contain" /></span>}
+          name="StreamYard, Restream or OBS"
+          line="Stream in live, and the recording lands in your Library."
+          right={<Button asChild variant="outline" size="sm" className="h-8 rounded-full px-3.5 text-xs"><a href="/stream-in" data-testid="button-stream-in-key">Get my stream key</a></Button>}
+        />
         <div id="import-link" className="scroll-mt-24">
           <Row
             testId="row-import-link"
