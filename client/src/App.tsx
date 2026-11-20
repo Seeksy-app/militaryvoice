@@ -156,7 +156,7 @@ function AppRouter() {
       <Route path="/about">{() => <EventAbout />}</Route>
       <Route path="/event/:slug/about">{(params) => <EventAbout slug={params.slug} />}</Route>
       <Route path="/studio/composite">{() => <StudioComposite />}</Route>
-      <Route path="/room/composite">{() => <RoomComposite />}</Route>
+      <Route path="/room/composite/:k">{(p) => <RoomComposite k={p.k} />}</Route>
       <Route path="/studio/control">{() => <StudioControl />}</Route>
       <Route path="/watch">{() => <Watch />}</Route>
       <Route path="/keepsake">{() => <Keepsake />}</Route>

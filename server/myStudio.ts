@@ -11,7 +11,7 @@ import { getSessionEmail } from "./session.js";
 import { isLiveKitConfigured, isRecordingConfigured, publicLiveKitUrl, startBroadcast, startSegmentRecording, stopEgressById, studioToken, runningEgressIds } from "./livekit.js";
 import { ensureRecordingsBucket } from "./recordingStorage.js";
 import { createBroadcast } from "./youtube.js";
-import { applyRoomLook, registerRoomStage, roomTemplateUrl } from "./roomStage.js";
+import { registerRoomStage, roomTemplateUrl } from "./roomStage.js";
 import { personalStudios, type PersonalStudioRow } from "../shared/schema.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
@@ -36,10 +36,10 @@ async function mine(email: string): Promise<PersonalStudioRow> {
   return again;
 }
 const room = (s: PersonalStudioRow) => `my-${s.id}`;
-// Guests wait Backstage until the host brings them on, once the room UI has the button for it
-// (ROOM_BACKSTAGE=1). Until then they go straight on stage, as before, so nobody is ever left
-// out of a recording by a control that isn't there yet.
-const GUEST_STATE = process.env.ROOM_BACKSTAGE === "1" ? "Backstage" : "On stage";
+// Guests wait backstage (stage = "off") until the host brings them on, once the room UI has the
+// button for it (ROOM_BACKSTAGE=1). Until then they go straight on stage (stage = "on"), as
+// before, so nobody is ever left out of a recording by a control that isn't there yet.
+const GUEST_STAGE = process.env.ROOM_BACKSTAGE === "1" ? "off" : "on";
 
 /** Recording and live flags checked against LiveKit, so a stopped egress never shows as running. */
 async function settle(s: PersonalStudioRow): Promise<PersonalStudioRow> {
@@ -114,7 +114,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     const s = await mine(email);
     const profile = await storage.getProfileByEmail(email).catch(() => undefined);
     const name = String(req.body?.name ?? "").trim().slice(0, 60) || profile?.hostName || email.split("@")[0];
-    const token = await studioToken({ room: room(s), identity: `owner-${s.id}-${crypto.randomBytes(3).toString("hex")}`, name, canPublish: true, admin: true, attributes: { role: "host", state: "On stage" } });
+    const token = await studioToken({ room: room(s), identity: `owner-${s.id}-${crypto.randomBytes(3).toString("hex")}`, name, canPublish: true, admin: true, attributes: { role: "host", stage: "on" } });
     res.json({ url: publicLiveKitUrl(), token, name: s.name });
   });
 
@@ -133,7 +133,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     if (!s) return res.status(404).json({ message: "This invite link has expired. Ask the host for a new one." });
     const name = String(req.body?.name ?? "").trim().slice(0, 60);
     if (!name) return res.status(400).json({ message: "Your name, please." });
-    const token = await studioToken({ room: room(s), identity: `guest-${crypto.randomBytes(5).toString("hex")}`, name, canPublish: true, attributes: { role: "guest", state: GUEST_STATE } });
+    const token = await studioToken({ room: room(s), identity: `guest-${crypto.randomBytes(5).toString("hex")}`, name, canPublish: true, attributes: { role: "guest", stage: GUEST_STAGE } });
     res.json({ url: publicLiveKitUrl(), token, name: s.name });
   });
 
@@ -148,9 +148,8 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
         await ensureRecordingsBucket();
         const stamp = new Date().toISOString().replace(/[:.]/g, "-");
         const filepath = `personal/${s.id}/${stamp}.mp4`;
-        // The room's own look on the room first, then film our page (stock grid if it can't be reached).
-        await applyRoomLook(s, email);
-        const egressId = await startSegmentRecording(room(s), filepath, await roomTemplateUrl());
+        // Film our own page (the room's look, scene and clips); the stock grid if it can't be reached.
+        const egressId = await startSegmentRecording(room(s), filepath, await roomTemplateUrl(s.id));
         const title = `${s.name} · ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York" })}`;
         // A Library recording like an upload's: no event, no studio row, theirs by email.
         await storage.createRecording({ eventId: 0, studioId: 0, signupId: null, email, title, egressId, filepath });
@@ -185,8 +184,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
           }
         }
         if (!targets.length) return res.status(400).json({ message: "Connect YouTube or add a streaming key first." });
-        await applyRoomLook(s, email);
-        const egressId = await startBroadcast(room(s), targets as never, await roomTemplateUrl());
+        const egressId = await startBroadcast(room(s), targets as never, await roomTemplateUrl(s.id));
         [s] = await db.update(personalStudios).set({ liveEgressId: egressId, liveSince: now(), liveWatchUrl: watchUrl }).where(eq(personalStudios.id, s.id)).returning();
       } else if (!on && s.liveEgressId) {
         await stopEgressById(s.liveEgressId).catch(() => {});
