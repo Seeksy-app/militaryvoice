@@ -2219,7 +2219,7 @@ class DatabaseStorage implements IStorage {
       .where(
         sqlExpr`${recordings.id} = (
           SELECT id FROM recordings
-          WHERE status = 'Ready' AND url <> '' AND duration_sec >= 120 AND started_at > ${week}
+          WHERE status = 'Ready' AND url <> '' AND duration_sec >= 30 AND started_at > ${week}
             AND clip_status IN ('none', '') AND clip_options NOT LIKE '%"radio"%' AND email <> ''
             AND egress_id NOT LIKE 'CLEAN\_%'
             AND (layout_suggestion = '' OR (layout_suggestion LIKE '%"status":"running"%' AND layout_suggestion LIKE '%"at":"%' AND substring(layout_suggestion from '"at":"([^"]+)"') < ${stale}))
