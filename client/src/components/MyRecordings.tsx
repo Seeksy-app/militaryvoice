@@ -10,6 +10,7 @@ import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { DEFAULT_CLIP_OPTIONS, parseClipOptions, type LibraryFolderRow, type RecordingRow } from "@shared/schema";
 import { CalendarClock, Check, Download, Folder, FolderInput, FolderOpen, FolderPlus, Library, Loader2, Mic2, MoreHorizontal, Pencil, Play, Share2, Trash2, Wand2, X, Send } from "lucide-react";
 import { PodcastEpisodeGrid, usePodcastEpisodes } from "@/components/PodcastEpisodes";
+import { seesTwoPeople } from "@/components/LayoutPicker";
 
 // A podcaster's own sessions. The studio writes them; nothing here is uploaded
 // by hand. The bucket is private, so every download is a fresh signed link.
@@ -211,8 +212,15 @@ export function MyRecordings({
   // "Pōstify it" starts the job here, on the click, so it's running on our
   // side before Pōstify opens: closing the tab on the way can't lose it. Not
   // started (no credits, too long): Pōstify opens with the way to go on.
-  async function postifyIt(id: number) {
+  // Two people on screen and no layout of its own (Andrew, 20 Nov): Pōstify opens on its start
+  // screen instead, where they pick Stacked, Side by side, Follow the speaker or Automatic first.
+  async function postifyIt(rec: RecordingRow) {
+    const id = rec.id;
     if (starting != null) return;
+    if (seesTwoPeople((rec as { layoutSuggestion?: string }).layoutSuggestion) && !parseClipOptions(rec.clipOptions).layout) {
+      window.location.href = `/host/dashboard/postify?rec=${id}`;
+      return;
+    }
     setStarting(id);
     let opts = DEFAULT_CLIP_OPTIONS;
     try { opts = parseClipOptions(localStorage.getItem("mv_clip_options") ?? ""); } catch { /* private mode */ }
@@ -376,7 +384,7 @@ export function MyRecordings({
                   onClick={(e) => {
                     if (main.clipStatus !== "none" && main.clipStatus !== "failed") return;
                     e.preventDefault();
-                    void postifyIt(main.id);
+                    void postifyIt(main);
                   }}
                   className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-semibold ${main.clipStatus === "none" || main.clipStatus === "failed" ? "bg-[#F0A71F] text-[#1a1200] hover:bg-[#f5b94a]" : "border border-border text-foreground hover:bg-muted"}`}
                   data-testid={`button-postify-card-${main.id}`}
@@ -402,7 +410,7 @@ export function MyRecordings({
                     {/* Clips and the clean episode are made in Pōstify. */}
                     {/* A clean copy is already Pōstify's output; clips come from the original. */}
                     {!main.egressId.startsWith("CLEAN_") && (
-                      <DropdownMenuItem onSelect={() => { if (main.clipStatus === "none" || main.clipStatus === "failed") void postifyIt(main.id); else window.location.href = `/host/dashboard/postify?rec=${main.id}`; }} className="gap-2" data-testid={`button-postify-recording-${main.id}`}>
+                      <DropdownMenuItem onSelect={() => { if (main.clipStatus === "none" || main.clipStatus === "failed") void postifyIt(main); else window.location.href = `/host/dashboard/postify?rec=${main.id}`; }} className="gap-2" data-testid={`button-postify-recording-${main.id}`}>
                         <Wand2 className="h-4 w-4 text-[#b36b00]" /> {main.clipStatus === "done" ? "Clips in Pōstify" : "Pōstify it"}
                       </DropdownMenuItem>
                     )}

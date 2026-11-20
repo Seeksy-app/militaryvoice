@@ -47,6 +47,13 @@ export function parseLayoutSuggestion(raw: unknown): LayoutSuggestion | null {
   return { suggested: isChoice(v.suggested) ? v.suggested : "stacked", people: Math.round(Number(v.people)), previews };
 }
 
+/** The detector has looked and seen two or more people (pictures or not). The Library asks how they should look before starting. */
+export function seesTwoPeople(raw: unknown): boolean {
+  let v: any = raw;
+  if (typeof raw === "string") { try { v = raw ? JSON.parse(raw) : null; } catch { v = null; } }
+  return !!v && v.status === "done" && Number(v.people) >= 2;
+}
+
 export function LayoutPicker({ value, own, suggestion, onChange }: {
   /** The layout on the options now (undefined = automatic). */
   value: ClipOptions["layout"];
