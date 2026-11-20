@@ -25,7 +25,7 @@ const price = `$${(scale.cents / 100).toFixed(2)}`;
 const endsShort = FOUNDING.endsLabel.replace("December", "Dec");
 
 /** Until one real test checkout has passed: a ribbon, so nobody shares it early. */
-const TRIAL_DRAFT = true;
+const TRIAL_DRAFT = false;
 
 const GOLD_TEXT = "bg-gradient-to-b from-[#fff4c2] via-[#f7c548] to-[#c98a10] bg-clip-text text-transparent";
 const GOLD_FILL = "bg-gradient-to-b from-[#ffe9a0] via-[#f6b93b] to-[#d28a0c]";
