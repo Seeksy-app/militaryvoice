@@ -2385,7 +2385,9 @@ export function registerRoutes(app: Express): void {
       const host = await studioHostEmail(req);
       if (host) {
         const person = await studioPerson(host.email);
-        return res.json({ email: host.email, name: person.name, isOwner: false, studioHost: true, displayName: person.name, title: person.title, photoUrl: person.photoUrl });
+        // teamHost: a studio host on a real event (Radio, the Marathon), not only on their own Personal studio. The nav shows the console only then.
+        const teamHost = (await Promise.all(host.events.map((id) => storage.getEventById(id)))).some((ev) => ev && ev.occasion !== "Personal studio");
+        return res.json({ email: host.email, name: person.name, isOwner: false, studioHost: true, teamHost, displayName: person.name, title: person.title, photoUrl: person.photoUrl });
       }
       res.status(401).json({ message: "Not signed in" });
       return;

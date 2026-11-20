@@ -7,7 +7,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { LogoLockup } from "@/components/Logo";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { GetTheApp } from "@/components/GetTheApp";
-import { LayoutDashboard, Plus, Podcast, Clapperboard, Film, Upload, Globe, ChevronRight, ChevronDown, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones, PanelLeftClose, PanelLeftOpen, Sun, Moon, Monitor, Check, MoreHorizontal, BadgeCheck, CalendarClock, CreditCard, Trash2, Video, Radio, Building2, Send, Inbox } from "lucide-react";
+import { LayoutDashboard, Plus, Podcast, Clapperboard, Film, Upload, Globe, ChevronRight, ChevronDown, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones, PanelLeftClose, PanelLeftOpen, Sun, Moon, Monitor, Check, MoreHorizontal, BadgeCheck, CalendarClock, CreditCard, Trash2, Video, Radio, Building2, Send, Inbox, SlidersHorizontal } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { NotificationsMenuItem } from "@/components/Notifications";
 import { Link } from "wouter";
@@ -105,6 +105,12 @@ export function HostNav({
   const { isAuthenticated: adminSignedIn, admin: adminMe } = useAdminAuth();
   const viewingAsOther = !!adminMe?.email && !!account?.email && adminMe.email.trim().toLowerCase() !== account.email.trim().toLowerCase();
   const isAdmin = adminSignedIn && !viewingAsOther;
+  // The console: platform and event admins, and studio hosts on a real event (Radio, the Marathon). A studio host whose only
+  // studio is their own Personal studio isn't one; the admins turn it on by adding someone as a studio host on an event.
+  const me = adminMe as { studioHost?: boolean; teamHost?: boolean } | null;
+  const consoleOn = isAdmin && !(me?.studioHost && !me.teamHost);
+  /** Doors that are pages of their own rather than dashboard screens. */
+  const pageHref = (it: Item): string | undefined => it.feature === "room" ? "/room" : it.feature === "studio" ? (me?.studioHost ? "/studio/control" : "/admin/studio") : undefined;
   const brand = path === "brand";
   // A brand's menu (7 Oct): finding creators and its team, none of the making-content tools.
   const brandGroups: { title: string; items: Item[] }[] = [
@@ -175,7 +181,10 @@ export function HostNav({
     {
       title: "Record & host",
       items: [
-        { key: "pro", feature: "studio", label: "Studio", hint: "Your own full studio: scenes, layouts, lower thirds and a producer console. On Scale and Pro.", icon: MonitorPlay, tag: "Beta" },
+        // Studio is the Room for every creator (20 Nov 2026, Andrew): the one we're making StreamYard-like, on every plan.
+        { key: "pro", feature: "room", label: "Studio", hint: "Your room: check your camera and mic, invite guests, record or go live. It all lands in your Library.", icon: MonitorPlay, tag: "Beta" },
+        // The producer console (Radio and events) only for the people who run it: admins and studio hosts on a real event.
+        ...(consoleOn ? [{ key: "pro" as const, feature: "studio", label: "Studio console", hint: "The producer console for Radio and events: scenes, run of show and lower thirds", icon: SlidersHorizontal }] : []),
         { key: "podcast", label: "Podcast", hint: "Host your show: your RSS feed for Apple and Spotify, episodes, and downloads sponsors trust", icon: Podcast },
         { key: "podcaststats", label: "Analytics", hint: "Your downloads and listens, from every place your podcast is heard", icon: BarChart3, sub: true },
         ...(path !== "planner" ? [{ key: "myevents" as const, label: "Events", hint: "The events you're in, and your own: create one, build your page and lineup, and run it from our studio", icon: CalendarDays, badge: eventsCount || undefined }] : []),
@@ -249,17 +258,16 @@ export function HostNav({
         </Link>
       );
     }
-    const adminThrough = isAdmin && (!!it.soon || it.feature === "studio");
+    const adminThrough = isAdmin && !!it.soon;
     const active = it.soon && !adminThrough ? false : it.locked ? screen === "pro" && (feature ?? "campaigns") === it.feature : screen === it.key || (it.key === "myevents" && (screen === "events" || screen === "promotion" || (screen === "greenroom" && !compact)));
     const inert = !!it.locked && !proOpen;
     return (
       <a
         key={`${it.key}-${it.feature ?? ""}`}
-        href={adminThrough ? (it.feature === "studio" ? "/admin/studio" : pathFor(it.key)) : it.feature === "studio" && !it.locked ? "/studio/control" : inert || it.soon ? undefined : it.locked ? `${pathFor("pro")}#${it.feature}` : pathFor(it.key)}
+        href={pageHref(it) ?? (adminThrough ? pathFor(it.key) : inert || it.soon ? undefined : it.locked ? `${pathFor("pro")}#${it.feature}` : pathFor(it.key))}
         aria-disabled={inert || undefined}
         onClick={(e) => {
-          if (adminThrough && it.feature === "studio") return;
-          if (it.feature === "studio" && !it.locked) return; // everyone has a studio of their own: the link takes them there
+          if (pageHref(it)) return; // a page of its own (the Room, the console): the link takes them there
           if (it.soon && !adminThrough) { e.preventDefault(); toast({ title: it.soon, description: "Opening on National Military Podcast Day. Until then, you can still upload episodes to your Library and make clips in Pōstify." }); return; }
           if (inert) { e.preventDefault(); return; }
           if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return;
@@ -329,7 +337,7 @@ export function HostNav({
         screen={screen}
         onGo={onGo}
         pathFor={pathFor}
-        more={[...groups.flatMap((g) => g.items).flatMap((it) => (it.key === "myevents" && path !== "planner" ? (eventsCount ? [it, greenRoomItem] : [it]) : [it]))].filter((it) => !it.soon && (it.href || !PHONE_TABS.some((t) => t.key === it.key)))}
+        more={[...groups.flatMap((g) => g.items).map((it) => { const page = pageHref(it); return page ? { ...it, href: page } : it; }).flatMap((it) => (it.key === "myevents" && path !== "planner" ? (eventsCount ? [it, greenRoomItem] : [it]) : [it]))].filter((it) => !it.soon && (it.href || !PHONE_TABS.some((t) => t.key === it.key)))}
         badge={eventsCount}
         proOpen={proOpen}
       />
@@ -341,7 +349,7 @@ export function HostNav({
               const Icon = it.icon;
               const active = screen === it.key || (it.key === "myevents" && (screen === "events" || screen === "promotion" || screen === "greenroom"));
               return (
-                <RailButton key={`r-${it.key}-${it.feature ?? ""}-${it.href ?? ""}`} tip={it.label} active={active} href={it.href} onClick={it.href ? undefined : () => { if (it.soon && !isAdmin) { toast({ title: it.soon }); return; } if (isAdmin && it.feature === "studio") { window.location.href = "/admin/studio"; return; } if (it.feature === "studio" && !it.locked) { window.location.href = "/studio/control"; return; } onGo(it.key, it.feature); }} testid={`nav-rail-${it.key}`}>
+                <RailButton key={`r-${it.key}-${it.feature ?? ""}-${it.href ?? ""}`} tip={it.label} active={active} href={it.href} onClick={it.href ? undefined : () => { if (it.soon && !isAdmin) { toast({ title: it.soon }); return; } const page = pageHref(it); if (page) { window.location.href = page; return; } onGo(it.key, it.feature); }} testid={`nav-rail-${it.key}`}>
                   <Icon className="h-5 w-5" />
                 </RailButton>
               );
