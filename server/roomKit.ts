@@ -1,13 +1,14 @@
 // Room phase 2 (20 Nov 2026), the data side: a creator's room look and its scenes, the files it
 // uses (logo, background, intro, outro), and "Mark a clip" while recording.
 //
-// - The look is one JSON document per room (room_looks), saved whole on every change with a rev.
-//   look.onStage is the scene on air: POST /api/host/my-studio/stage is the one way to switch it.
-// - Every save puts a small copy of the look on the LiveKit room's metadata (key "look"), so the
-//   recording page (/room/composite, no login) and everyone in the room see it at once.
+// - The look is one JSON document per room (room_looks), saved whole on every change with a rev. It holds
+//   the scene DEFINITIONS only: which scene is on air, and a banner showing, are live state, Engineering's,
+//   in the LiveKit room metadata (server/roomStage.ts). onLookSaved() lets them hear about each save.
+// - The recording page (/room/composite) has no login: it reads the look with the room's HMAC key
+//   (GET /api/room/:studioId/look?k=, key from roomLookKey()).
 // - Files go up with the usual R2 browser upload, then are registered here. Their URLs are stable
-//   (/api/my-studio/:id/asset/:assetId → a fresh signed R2 link each time), so a long show never
-//   holds an expired link. Asset ids are random: the URL is the permission.
+//   (/api/room-assets/:id → a fresh signed R2 link each time), so a long show never holds an expired
+//   link. Asset ids are random: the URL is the permission.
 // - Marks are seconds from the recording's start, by the server's clock. A Pōstify clip job on
 //   that recording carries them (options.marks) and the moment picker builds clips around them.
 import type { Express, Request, RequestHandler } from "express";
@@ -15,7 +16,6 @@ import crypto from "node:crypto";
 import { and, asc, eq } from "drizzle-orm";
 import { db, schemaIsReady } from "./storage.js";
 import { getSessionEmail } from "./session.js";
-import { isLiveKitConfigured, rooms } from "./livekit.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
 import { personalStudios, recordings, roomAssets, roomLooks, roomMarks, type PersonalStudioRow, type RoomAssetRow } from "../shared/schema.js";
 
@@ -41,8 +41,6 @@ export type Look = {
   intro: Asset | null;
   outro: Asset | null;
   scenes: Scene[];
-  onStage: string;
-  showing: { bannerId: string; until: string } | null;
 };
 
 const freshLook = (): Look => ({
@@ -57,8 +55,6 @@ const freshLook = (): Look => ({
     { id: "s1", n: 1, name: "Just us", layout: "side", stage: [] },
     { id: "s2", n: 2, name: "Sharing a screen", layout: "screen", stage: [] },
   ],
-  onStage: "s1",
-  showing: null,
 });
 
 /** The key the recording page passes to read a room's look without a login. */
@@ -68,8 +64,8 @@ const keyOk = (studioId: number, k: unknown) => {
   const got = Buffer.from(String(k ?? ""));
   return got.length === want.length && crypto.timingSafeEqual(got, want);
 };
-const assetUrl = (studioId: number, id: string) => `${ORIGIN}/api/my-studio/${studioId}/asset/${id}`;
-const toAsset = (a: RoomAssetRow): Asset => ({ id: a.id, kind: a.kind as AssetKind, name: a.name, mime: a.mime, sec: a.sec, url: assetUrl(a.studioId, a.id) });
+const assetUrl = (id: string) => `${ORIGIN}/api/room-assets/${id}`;
+const toAsset = (a: RoomAssetRow): Asset => ({ id: a.id, kind: a.kind as AssetKind, name: a.name, mime: a.mime, sec: a.sec, url: assetUrl(a.id) });
 
 async function studioOf(email: string): Promise<PersonalStudioRow | undefined> {
   await schemaIsReady();
@@ -128,7 +124,6 @@ function clean(raw: any, assets: Map<string, Asset>): Look | string {
     });
   }
   if (!scenes.length) return "Keep at least one scene.";
-  const onStage = scenes.some((s) => s.id === raw.onStage) ? String(raw.onStage) : scenes[0].id;
   const intro = raw.intro ? asset(raw.intro, "intro") : null;
   const outro = raw.outro ? asset(raw.outro, "outro") : null;
   return {
@@ -137,8 +132,7 @@ function clean(raw: any, assets: Map<string, Asset>): Look | string {
     logo: logo(raw.logo) ?? null,
     logos: (Array.isArray(raw.logos) ? raw.logos : []).map((v: any) => asset(v, "logo")).filter(Boolean).slice(0, 6) as Asset[],
     banners,
-    intro, outro, scenes, onStage,
-    showing: raw.showing && banners.some((b: { id: string }) => b.id === raw.showing.bannerId) && !Number.isNaN(Date.parse(raw.showing.until)) ? { bannerId: raw.showing.bannerId, until: new Date(raw.showing.until).toISOString() } : null,
+    intro, outro, scenes,
   };
 }
 
@@ -147,24 +141,10 @@ async function assetsOf(studioId: number): Promise<Map<string, Asset>> {
   return new Map(rows.map((a) => [a.id, toAsset(a)]));
 }
 
-/** What goes on the LiveKit room: the look without the logo shelf. A few KB at most. */
-const metaLook = (l: Look) => ({ rev: l.rev, background: l.background, logo: l.logo, banners: l.banners, intro: l.intro, outro: l.outro, scenes: l.scenes, onStage: l.onStage, showing: l.showing });
-
-/** Puts the look on the room (merged with whatever else is there). The room may not exist until someone joins. */
-export async function pushLookToRoom(studioId: number, look?: Look): Promise<void> {
-  if (!isLiveKitConfigured()) return;
-  const l = look ?? (await getLook(studioId));
-  const name = `my-${studioId}`;
-  try {
-    const [r] = await rooms().listRooms([name]);
-    if (!r) return;
-    let meta: Record<string, unknown> = {};
-    try { meta = r.metadata ? JSON.parse(r.metadata) : {}; } catch { /* not ours */ }
-    await rooms().updateRoomMetadata(name, JSON.stringify({ ...meta, look: metaLook(l) }));
-  } catch (err) {
-    console.warn("Room look to LiveKit failed:", (err as Error).message);
-  }
-}
+/** Engineering's hook (server/roomStage.ts): told after every save, e.g. to refresh a room that's live. */
+type LookListener = (studioId: number, look: Look) => void | Promise<void>;
+const listeners: LookListener[] = [];
+export function onLookSaved(fn: LookListener): void { listeners.push(fn); }
 
 /** Saves the look if rev matches; null when someone saved first. */
 async function saveLook(studioId: number, rev: number, look: Look): Promise<Look | null> {
@@ -177,7 +157,7 @@ async function saveLook(studioId: number, rev: number, look: Look): Promise<Look
     const [out] = await db.update(roomLooks).set({ look: body, rev: rev + 1, updatedAt: now() }).where(and(eq(roomLooks.studioId, studioId), eq(roomLooks.rev, rev))).returning();
     if (!out) return null;
   }
-  void pushLookToRoom(studioId, next);
+  for (const fn of listeners) Promise.resolve().then(() => fn(studioId, next)).catch((e) => console.warn("onLookSaved:", (e as Error).message));
   return next;
 }
 
@@ -191,7 +171,14 @@ export async function marksFor(recordingId: number): Promise<number[]> {
 
 export function registerRoomKit(app: Express, requireHostSession: RequestHandler): void {
   // ---- the look ----
-  app.put("/api/host/my-studio/look", requireHostSession, async (req, res) => {
+  app.get("/api/host/room/look", requireHostSession, async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const s = await studioOf(me(req));
+    if (!s) return res.status(404).json({ message: "Open your room first." });
+    res.json({ look: await getLook(s.id) });
+  });
+
+  app.put("/api/host/room/look", requireHostSession, async (req, res) => {
     const s = await studioOf(me(req));
     if (!s) return res.status(404).json({ message: "Open your room first." });
     const cur = await getLook(s.id);
@@ -204,45 +191,17 @@ export function registerRoomKit(app: Express, requireHostSession: RequestHandler
     res.json({ look: out });
   });
 
-  /** The one way to change the scene on air. */
-  app.post("/api/host/my-studio/stage", requireHostSession, async (req, res) => {
-    const s = await studioOf(me(req));
-    if (!s) return res.status(404).json({ message: "Open your room first." });
-    for (let i = 0; i < 3; i++) {
-      const cur = await getLook(s.id);
-      const scene = cur.scenes.find((x) => x.id === req.body?.sceneId) ?? cur.scenes.find((x) => x.n === Number(req.body?.n));
-      if (!scene) return res.status(404).json({ message: "No such scene." });
-      if (cur.onStage === scene.id) return res.json({ look: cur });
-      const out = await saveLook(s.id, cur.rev, { ...cur, onStage: scene.id });
-      if (out) return res.json({ look: out });
-    }
-    res.status(409).json({ message: "Try that again.", look: await getLook(s.id) });
-  });
-
-  /** A banner on screen for its seconds, or off (bannerId null). */
-  app.post("/api/host/my-studio/banner", requireHostSession, async (req, res) => {
-    const s = await studioOf(me(req));
-    if (!s) return res.status(404).json({ message: "Open your room first." });
-    for (let i = 0; i < 3; i++) {
-      const cur = await getLook(s.id);
-      const b = req.body?.bannerId ? cur.banners.find((x) => x.id === req.body.bannerId) : null;
-      if (req.body?.bannerId && !b) return res.status(404).json({ message: "No such banner." });
-      const out = await saveLook(s.id, cur.rev, { ...cur, showing: b ? { bannerId: b.id, until: new Date(Date.now() + b.seconds * 1000).toISOString() } : null });
-      if (out) return res.json({ look: out });
-    }
-    res.status(409).json({ message: "Try that again.", look: await getLook(s.id) });
-  });
-
   /** For the recording page and guests: no login, the room's key. */
-  app.get("/api/my-studio/:id/look", async (req, res) => {
+  app.get("/api/room/:studioId/look", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
-    const id = Number(req.params.id);
-    if (!Number.isInteger(id) || !keyOk(id, req.query.t)) return res.status(404).json({ message: "Not found." });
-    res.json({ look: metaLook(await getLook(id)) });
+    const id = Number(req.params.studioId);
+    if (!Number.isInteger(id) || !keyOk(id, req.query.k)) return res.status(404).json({ message: "Not found." });
+    const { logos: _shelf, ...look } = await getLook(id);
+    res.json({ look });
   });
 
   // ---- files ----
-  app.post("/api/host/my-studio/assets", requireHostSession, async (req, res) => {
+  app.post("/api/host/room/assets", requireHostSession, async (req, res) => {
     const s = await studioOf(me(req));
     if (!s) return res.status(404).json({ message: "Open your room first." });
     const key = String(req.body?.storageKey ?? "");
@@ -271,7 +230,7 @@ export function registerRoomKit(app: Express, requireHostSession: RequestHandler
     res.json({ asset: toAsset(a) });
   });
 
-  app.delete("/api/host/my-studio/assets/:assetId", requireHostSession, async (req, res) => {
+  app.delete("/api/host/room/assets/:assetId", requireHostSession, async (req, res) => {
     const s = await studioOf(me(req));
     if (!s) return res.status(404).json({ message: "Open your room first." });
     const [gone] = await db.delete(roomAssets).where(and(eq(roomAssets.studioId, s.id), eq(roomAssets.id, String(req.params.assetId)))).returning();
@@ -287,16 +246,16 @@ export function registerRoomKit(app: Express, requireHostSession: RequestHandler
   });
 
   /** A room's file, for anyone with its link (the recording page has no login). */
-  app.get("/api/my-studio/:id/asset/:assetId", async (req, res) => {
+  app.get("/api/room-assets/:assetId", async (req, res) => {
     await schemaIsReady();
-    const [a] = await db.select().from(roomAssets).where(and(eq(roomAssets.studioId, Number(req.params.id) || 0), eq(roomAssets.id, String(req.params.assetId)))).limit(1);
+    const [a] = await db.select().from(roomAssets).where(eq(roomAssets.id, String(req.params.assetId))).limit(1);
     if (!a) return res.status(404).type("text/plain").send("Not found.");
     res.setHeader("Cache-Control", "private, max-age=300");
     res.redirect(302, await signedRecordingUrl(a.storageKey, 6 * 3600));
   });
 
   // ---- Mark a clip ----
-  app.post("/api/host/my-studio/mark", requireHostSession, async (req, res) => {
+  app.post("/api/host/room/mark", requireHostSession, async (req, res) => {
     const email = me(req);
     const s = await studioOf(email);
     if (!s?.recordingEgressId || !s.recordingSince) return res.status(409).json({ message: "Start recording first, then mark a clip." });
@@ -307,7 +266,7 @@ export function registerRoomKit(app: Express, requireHostSession: RequestHandler
     res.json({ id: m.id, recordingId: rec.id, atSec, label: clock(atSec) });
   });
 
-  app.delete("/api/host/my-studio/mark/:id", requireHostSession, async (req, res) => {
+  app.delete("/api/host/room/mark/:id", requireHostSession, async (req, res) => {
     const [gone] = await db.delete(roomMarks).where(and(eq(roomMarks.id, Number(req.params.id) || 0), eq(roomMarks.email, me(req)))).returning();
     if (!gone) return res.status(404).json({ message: "No such mark." });
     res.json({ ok: true });
