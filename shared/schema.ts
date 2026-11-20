@@ -1622,6 +1622,8 @@ export const clips = pgTable(
     editAt: text("edit_at").notNull().default(""),
     /** The clip's caption look, set in Pōstify's editor (JSON {scale, pos}); empty = the usual size and place. */
     captionStyle: text("caption_style").notNull().default(""),
+    /** The layout chosen for this clip on the timeline's Make clip ("stacked" | "side" | "single" | "radio"); "" = the recording's own. Edit-text remakes keep it. */
+    editLayout: text("edit_layout").notNull().default(""),
     createdAt: text("created_at").notNull(),
   },
   (t) => ({

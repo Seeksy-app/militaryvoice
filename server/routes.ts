@@ -7064,7 +7064,8 @@ export function registerRoutes(app: Express): void {
             host: "",
             transcript: [],
             // The recording's own choices (the Radio stack, single, ...): without them an edit remade the clip as a plain crop.
-            options: parseClipOptions(rec.clipOptions),
+            // ...and this clip's own layout, when one was picked on Make clip.
+            options: { ...parseClipOptions(rec.clipOptions), ...(["stacked", "side", "single", "radio"].includes(edit.editLayout) ? { layout: edit.editLayout as "stacked" | "side" | "single" | "radio" } : {}) },
             layoutDefault: await getLayoutDefault(rec.email),
             clipEdit: {
               clipId: edit.id, title: edit.editTitle, subtitle: edit.editSubtitle, startSec: edit.startSec, endSec: edit.endSec,
@@ -7725,12 +7726,15 @@ export function registerRoutes(app: Express): void {
     if (!title) return res.status(400).json({ message: "Give the clip a title." });
     const source = b.source === "clean" ? "clean" : "";
     const formats = parseClipOptions({ formats: b.formats, captions: "animated" }).formats;
+    // The layout picked on Make clip; "auto" or nothing = the recording's own. A Radio show's stack stays the Radio stack, as on Make clips.
+    let layout = ["stacked", "side", "single"].includes(b.layout) ? String(b.layout) : "";
+    if (layout === "stacked" && parseClipOptions(rec.clipOptions).layout === "radio") layout = "radio";
     const allowance = await postifyAllowance(email);
     const show = await showNameFor(rec);
     const clip = await storage.addClip({
       recordingId: rec.id, eventId: rec.eventId, signupId: rec.signupId ?? null, email: rec.email,
       title, subtitle: show, reason: "Marked by you in the Viewer", startSec, endSec,
-      source, editTitle: title, editSubtitle: show, editShapes: formats.join(","), editStatus: "", editAt: new Date().toISOString(),
+      source, editTitle: title, editSubtitle: show, editShapes: formats.join(","), editLayout: layout, editStatus: "", editAt: new Date().toISOString(),
     });
     let paid;
     try {
