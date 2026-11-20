@@ -1433,6 +1433,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
             onRefreshSocial={() => refreshSocial.mutate()}
             refreshing={refreshSocial.isPending}
             onOpenLibrary={() => goTo("recordings")}
+            onOpenPodcastStats={() => goTo("podcaststats")}
             youtubeLocked={noWayIn}
           />
         ) : screen === "billing" ? (

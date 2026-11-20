@@ -21,6 +21,7 @@ export function IntegrationsScreen({
   onRefreshSocial,
   refreshing,
   onOpenLibrary,
+  onOpenPodcastStats,
   youtubeLocked,
 }: {
   social?: { configured: boolean; accounts: SocialAccount[] };
@@ -30,6 +31,8 @@ export function IntegrationsScreen({
   onRefreshSocial: () => void;
   refreshing: boolean;
   onOpenLibrary: () => void;
+  /** Podcast analytics, where the numbers from this section show up. */
+  onOpenPodcastStats: () => void;
   youtubeLocked: boolean;
 }) {
   const [linkOpen, setLinkOpen] = useState(() => typeof window !== "undefined" && window.location.hash === "#import-link");
@@ -150,21 +153,27 @@ export function IntegrationsScreen({
         icon={<Headphones className="h-4 w-4" />}
         title="Podcast stats"
         line="Your downloads and streams, in Podcast analytics, with where your show fits among MilitaryVoices podcasts. Only you see your numbers."
+        after={
+          <button type="button" onClick={onOpenPodcastStats} className="mt-1 text-sm font-semibold text-primary hover:underline" data-testid="link-see-podcast-stats">
+            See your numbers in Podcast analytics →
+          </button>
+        }
       >
-        <PodcastStatsRows Row={Row} />
+        <PodcastStatsRows Row={Row} onOpenStats={onOpenPodcastStats} />
       </Group>
 
     </section>
   );
 }
 
-function Group({ id, icon, title, line, action, children }: { id?: string; icon: ReactNode; title: string; line: string; action?: ReactNode; children: ReactNode }) {
+function Group({ id, icon, title, line, after, action, children }: { id?: string; icon: ReactNode; title: string; line: string; /** A link under the intro line. */ after?: ReactNode; action?: ReactNode; children: ReactNode }) {
   return (
     <div id={id} className="mb-8 scroll-mt-24" data-testid={id}>
       <div className="mb-2.5 flex flex-wrap items-end justify-between gap-3">
         <div className="min-w-0">
           <h3 className="flex items-center gap-2 text-base font-bold text-foreground">{icon} {title}</h3>
           <p className="mt-0.5 max-w-2xl text-sm text-muted-foreground">{line}</p>
+          {after}
         </div>
         {action}
       </div>

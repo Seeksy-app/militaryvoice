@@ -7,9 +7,8 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { Check, Download, Loader2, Plus, Send, Video, X } from "lucide-react";
+import { Check, Download, Loader2, Plus, Send, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { IconTile } from "@/components/ui/icon-tile";
 
 interface ZoomState { configured: boolean; connected: boolean; zoomEmail: string; autoImport: boolean }
 interface ZoomRec { meetingId: string; uuid: string; topic: string; startTime: string; durationMin: number; sizeBytes: number; importable: boolean; imported: boolean }
@@ -64,9 +63,9 @@ export function ZoomConnect({ row = false }: { row?: boolean } = {}) {
   return (
     <div className={row ? "px-5 py-3.5" : "mt-6 rounded-2xl border border-border bg-card p-5"} data-testid="zoom-connect">
       <div className="flex flex-wrap items-center gap-3.5">
-        {/* Zoom's own blue, like the other brand marks in Integrations; the
-            48px slot lines its name up with the rows around it. */}
-        <IconTile icon={Video} />
+        {/* Zoom's own app icon (client/public/brands), like the other brand marks in
+            Integrations; the 48px slot lines its name up with the rows around it. */}
+        <span className="flex w-12 shrink-0 justify-center"><img src="/brands/zoom.svg" alt="" className="h-10 w-10" /></span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-foreground">Zoom</p>
           <p className="text-sm text-muted-foreground">

@@ -4,6 +4,7 @@ import { Check, ChevronDown, Headphones, Link2, Loader2, RefreshCw, Trophy, Uplo
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
+import { ToastAction } from "@/components/ui/toast";
 import { apiRequest } from "@/lib/queryClient";
 import type { PodcastStatsData } from "@shared/schema";
 
@@ -13,14 +14,15 @@ interface StatsResponse { sources: SourceView[]; benchmark: { unit: string; avg:
 
 const KEY = ["/api/host/podcast-stats"];
 const NAME: Record<Source, string> = { militaryvoices: "MilitaryVoices", buzzsprout: "Buzzsprout", podbean: "Podbean", transistor: "Transistor", spotify: "Spotify" };
-/** Each host's own mark, as a small badge (their site icon). */
-const MARK: Record<Source, string> = {
+/** Each host's real mark, saved in client/public/brands (not hotlinked). Podbean and Transistor have
+ *  no row any more (20 Nov 2026), so they keep a plain letter if old numbers ever show. */
+const MARK: Partial<Record<Source, string>> = {
   militaryvoices: "/icons/icon-192.png",
-  buzzsprout: "https://www.google.com/s2/favicons?domain=buzzsprout.com&sz=64",
-  podbean: "https://www.google.com/s2/favicons?domain=podbean.com&sz=64",
-  transistor: "https://www.google.com/s2/favicons?domain=transistor.fm&sz=64",
-  spotify: "https://www.google.com/s2/favicons?domain=podcasters.spotify.com&sz=64",
+  buzzsprout: "/brands/buzzsprout.svg",
+  spotify: "/brands/spotify.svg",
 };
+/** The same marks on the Podcast analytics tabs, which also show the apps we count for a hosted show. */
+const TAB_MARK: Record<string, string> = { ...MARK, "app:apple": "/brands/apple-podcasts.svg", "app:spotify": "/brands/spotify.svg", yt: "/brands/youtube.svg" } as Record<string, string>;
 const COLOR: Record<Source, string> = { militaryvoices: "#053877", buzzsprout: "#1B1B1B", podbean: "#7ACB2F", transistor: "#2C3E50", spotify: "#1DB954" };
 const compact = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e4 ? `${Math.round(n / 1e3)}K` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(Math.round(n)));
 const when = (iso: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "");
@@ -31,9 +33,17 @@ export function usePodcastStats() {
 }
 
 function Badge({ source }: { source: Source }) {
+  const mark = MARK[source];
+  if (mark) {
+    return (
+      <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white ring-1 ring-border" aria-hidden>
+        <img src={mark} alt="" className="h-6 w-6 object-contain" />
+      </span>
+    );
+  }
   return (
     <span className="flex h-10 w-10 items-center justify-center rounded-xl text-sm font-black text-white" style={{ background: COLOR[source] }} aria-hidden>
-      {source === "spotify" ? <Headphones className="h-5 w-5" /> : NAME[source][0]}
+      {NAME[source][0]}
     </span>
   );
 }
@@ -42,7 +52,7 @@ function Badge({ source }: { source: Source }) {
  * Integrations → Podcast stats: connect Buzzsprout with the podcaster's
  * own key, or upload what Spotify for Creators exports.
  */
-export function PodcastStatsRows({ Row }: { Row: (p: { icon: ReactNode; name: string; line: ReactNode; right: ReactNode; children?: ReactNode; testId?: string }) => JSX.Element }) {
+export function PodcastStatsRows({ Row, onOpenStats }: { Row: (p: { icon: ReactNode; name: string; line: ReactNode; right: ReactNode; children?: ReactNode; testId?: string }) => JSX.Element; /** Opens Podcast analytics: the success message carries it. */ onOpenStats?: () => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const q = usePodcastStats();
@@ -50,9 +60,11 @@ export function PodcastStatsRows({ Row }: { Row: (p: { icon: ReactNode; name: st
   const [form, setForm] = useState<Record<string, string>>({});
   const file = useRef<HTMLInputElement>(null);
   const done = () => { setForm({}); setOpen(null); void qc.invalidateQueries({ queryKey: KEY }); };
+  // The same way to the numbers as the link under the section's intro.
+  const see = onOpenStats ? <ToastAction altText="See your numbers in Podcast analytics" onClick={onOpenStats} data-testid="toast-see-numbers">See your numbers</ToastAction> : undefined;
   const connect = useMutation({
     mutationFn: async (source: "buzzsprout") => (await apiRequest("POST", `/api/host/podcast-stats/${source}`, form)).json(),
-    onSuccess: (r: SourceView) => { toast({ title: `${NAME[r.source]} connected`, description: r.showName || "Your numbers are in Podcast analytics." }); done(); },
+    onSuccess: (r: SourceView) => { toast({ title: `${NAME[r.source]} connected`, description: r.showName ? `${r.showName}: your numbers are in Podcast analytics.` : "Your numbers are in Podcast analytics.", action: see }); done(); },
     onError: (e: Error) => toast({ title: "Couldn't connect", description: e.message.replace(/^\d+:\s*/, ""), variant: "destructive" }),
   });
   const upload = useMutation({
@@ -61,7 +73,7 @@ export function PodcastStatsRows({ Row }: { Row: (p: { icon: ReactNode; name: st
       return (await apiRequest("POST", "/api/host/podcast-stats/spotify", { files: list })).json();
     },
     onSuccess: (r: SourceView & { read: string[]; skipped: string[] }) => {
-      toast({ title: "Spotify numbers added", description: `Read ${r.read.length} file${r.read.length === 1 ? "" : "s"}${r.skipped.length ? `; couldn't use ${r.skipped.join(", ")}` : ""}.` });
+      toast({ title: "Spotify numbers added", description: `Read ${r.read.length} file${r.read.length === 1 ? "" : "s"}${r.skipped.length ? `; couldn't use ${r.skipped.join(", ")}` : ""}.`, action: see });
       done();
     },
     onError: (e: Error) => toast({ title: "Couldn't read those files", description: e.message.replace(/^\d+:\s*/, ""), variant: "destructive" }),
@@ -177,7 +189,7 @@ export function PodcastChips({ onOpen, hostName }: { onOpen: () => void; /** The
             ) : (
               <span className="flex h-8 w-8 items-center justify-center rounded-full text-xs font-black text-white" style={{ background: COLOR[s.source] }} aria-hidden>{(s.showName || NAME[s.source])[0]}</span>
             )}
-            <img src={MARK[s.source]} alt="" className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full bg-white object-contain p-px ring-2 ring-card" />
+            {MARK[s.source] && <img src={MARK[s.source]} alt="" className="absolute -bottom-0.5 -right-0.5 h-4 w-4 rounded-full bg-white object-contain p-px ring-2 ring-card" />}
           </span>
           <span className="min-w-0">
             <span className="hidden max-w-[9.5rem] truncate text-sm font-medium leading-tight text-foreground sm:block">{s.showName || NAME[s.source]}</span>
@@ -285,7 +297,9 @@ export function PodcastListens({ onConnect, bare = false }: { onConnect: () => v
         <div role="tablist" className="flex gap-1 overflow-x-auto rounded-full bg-muted/60 p-1" data-testid="podcast-tabs">
           {tabs.map((t) => (
             <button key={t.key} role="tab" aria-selected={pick === t.key} type="button" onClick={() => setTab(t.key)} data-testid={`podcast-tab-${t.key}`}
-              className={`shrink-0 rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${pick === t.key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>{t.label}</button>
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${pick === t.key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
+              {TAB_MARK[t.key] && <img src={TAB_MARK[t.key]} alt="" className="h-4 w-4 rounded-sm object-contain" />}{t.label}
+            </button>
           ))}
         </div>
       )}
@@ -341,7 +355,7 @@ export function PodcastListens({ onConnect, bare = false }: { onConnect: () => v
             <div className="mb-4 flex flex-wrap items-center gap-3">
               <span className="relative shrink-0">
                 {d.artwork ? <img src={d.artwork} alt="" className="h-12 w-12 rounded-xl object-cover" /> : isAll ? <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#053877] text-white"><Headphones className="h-6 w-6" /></span> : <Badge source={s.source} />}
-                {!isAll && d.artwork && <img src={MARK[s.source]} alt="" className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-white object-contain p-px ring-2 ring-card" />}
+                {!isAll && d.artwork && MARK[s.source] && <img src={MARK[s.source]} alt="" className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-white object-contain p-px ring-2 ring-card" />}
               </span>
               <div className="min-w-0 flex-1">
                 <p className="font-semibold text-foreground">{s.showName || (isAll ? "Your show" : NAME[s.source])}</p>
