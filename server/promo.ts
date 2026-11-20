@@ -6,7 +6,9 @@
 // Clicks are kept in sponsor_clicks with sponsor id 0 (our own promotion, not a sponsor) and source
 // "bf:<step>:<src>", so no new table is needed. Sponsor reports read real sponsor ids only, so 0 never shows there.
 //
-// Founding Members: setting "founding:<email>" = { at, via }, set when they sign in on the page or start the trial.
+// Founding Members: setting "founding:<email>" = { at, via, sub?, test? }. Set only when a real trial starts: Stripe tells
+// us a Founding subscription (metadata cohort FOUNDING.cohort) was created trialing or active (Andrew, 20 Nov: signing in
+// on the page, or a customer already on a plan, doesn't make a Founding Member). "test": true marks a team test trial.
 import type { Express, RequestHandler } from "express";
 import { and, eq, like, sql } from "drizzle-orm";
 import { db, storage } from "./storage.js";
@@ -25,12 +27,21 @@ function count(step: string, src: string, req: { get(h: string): string | undefi
   storage.recordSponsorClick(PROMO_ID, `bf:${step}:${clean(src)}`, String(req.get("referer") ?? ""), String(req.get("user-agent") ?? "")).catch(() => {});
 }
 
-async function markFounding(email: string, via: string): Promise<boolean> {
+async function markFounding(email: string, via: string, sub = ""): Promise<boolean> {
   const key = `founding:${email}`;
   if (await storage.getSetting(key)) return true;
   if (!foundingOpen()) return false;
-  await storage.setSetting(key, JSON.stringify({ at: new Date().toISOString(), via }));
+  await storage.setSetting(key, JSON.stringify({ at: new Date().toISOString(), via, ...(sub ? { sub } : {}) }));
   return true;
+}
+
+/** From the Stripe webhook (customer.subscription.created/updated): a Founding trial really started. */
+export async function noteFoundingTrial(sub: any): Promise<void> {
+  const m = sub?.metadata;
+  if (sub?.object !== "subscription" || m?.kind !== "postify_plan" || m?.cohort !== FOUNDING.cohort) return;
+  if (!["trialing", "active"].includes(String(sub.status))) return;
+  const email = String(m.email || "").trim().toLowerCase();
+  if (email) await markFounding(email, "trial", String(sub.id || ""));
 }
 
 /** Where this person stands with the offer. */
@@ -69,10 +80,9 @@ export function registerPromo(app: Express, requireAdmin: RequestHandler): void 
     res.json({ open: foundingOpen(), endsLabel: FOUNDING.endsLabel, ...(await standing(email)) });
   });
 
-  /** Joined from the page: they're a Founding Member (while the offer is open). */
+  /** Signed in on the page: where they stand. (No mark here: a Founding Member is a real trial start, see noteFoundingTrial.) */
   app.post("/api/host/founding/join", requireHostSession, async (req, res) => {
     const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
-    await markFounding(email, "page");
     res.json({ open: foundingOpen(), endsLabel: FOUNDING.endsLabel, ...(await standing(email)) });
   });
 
@@ -86,7 +96,6 @@ export function registerPromo(app: Express, requireAdmin: RequestHandler): void 
       return res.status(409).json({ message, reason: s.reason });
     }
     try {
-      await markFounding(email, "trial");
       const sub = await storage.getSubscription(email);
       const origin = (process.env.PUBLIC_ORIGIN || `${req.protocol}://${req.get("host")}`).replace(/\/+$/, "");
       const url = await createPlanCheckout({ email, plan: FOUNDING.plan as PlanKey, interval: "month", origin, customerId: sub?.customerId || undefined, trialDays: FOUNDING.trialDays, cohort: FOUNDING.cohort, cancelPath: "/black-friday" });
@@ -106,8 +115,8 @@ export function registerPromo(app: Express, requireAdmin: RequestHandler): void 
       .from(sponsorClicks)
       .where(and(eq(sponsorClicks.sponsorId, PROMO_ID), like(sponsorClicks.source, "bf:%")))
       .groupBy(sponsorClicks.source);
-    const [m] = await db.select({ n: sql<number>`count(*)::int` }).from(siteSettings).where(like(siteSettings.key, "founding:%"));
-    const members = Number(m?.n ?? 0);
-    res.json({ members, clicks: rows.map((r) => { const [, step, src] = r.source.split(":"); return { step, src, n: r.n }; }) });
+    const marks = await db.select({ key: siteSettings.key, value: siteSettings.value }).from(siteSettings).where(like(siteSettings.key, "founding:%"));
+    const list = marks.map((r) => { let v: { at?: string; via?: string; test?: boolean } = {}; try { v = JSON.parse(String(r.value)); } catch { /* keep empty */ } return { email: r.key.slice("founding:".length), at: v.at ?? "", via: v.via ?? "", test: Boolean(v.test) }; }).sort((a, b) => a.at.localeCompare(b.at));
+    res.json({ members: list.length, tests: list.filter((x) => x.test).length, list, clicks: rows.map((r) => { const [, step, src] = r.source.split(":"); return { step, src, n: r.n }; }) });
   });
 }

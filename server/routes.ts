@@ -144,7 +144,7 @@ import { registerPlatformAnalytics } from "./platformAnalytics.js";
 import { registerWorldLabs } from "./worldlabs.js";
 import { registerSite } from "./site.js";
 import { registerGtm } from "./gtm.js";
-import { registerPromo } from "./promo.js";
+import { registerPromo, noteFoundingTrial } from "./promo.js";
 import { registerShareLogin } from "./shareLogin.js";
 import { orgMemberEmails, registerOrgs } from "./orgs.js";
 import { registerProspects } from "./prospects.js";
@@ -8733,6 +8733,7 @@ export function registerRoutes(app: Express): void {
         const state = await readSubscription(String(obj.subscription));
         if (state) await syncPlan(state, String(obj.id));
       }
+      if (event.type === "customer.subscription.created" || event.type === "customer.subscription.updated") await noteFoundingTrial(obj).catch((e: any) => console.error("Founding mark failed:", e?.message));
       if (event.type === "customer.subscription.created") {
         const st = planStateFrom(obj);
         if (st) await ensureExtraItem(st.subscriptionId, st.plan, st.interval).catch((e: any) => console.error("Extra-credits item failed:", e?.message));
