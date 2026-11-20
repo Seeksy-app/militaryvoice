@@ -110,6 +110,24 @@ function PlayButton({ ep, accent, size = "md" }: { ep: SiteEpisode; accent: stri
   );
 }
 
+/** The play button on a navy episode row: quiet until it's the one playing, then gold. */
+function NavyPlay({ ep }: { ep: SiteEpisode }) {
+  const p = usePlayer();
+  const mine = p.track?.audio === ep.audio;
+  const on = mine && p.playing;
+  return (
+    <button
+      type="button"
+      onClick={() => (mine ? p.toggle() : p.play({ slug: ep.slug, title: ep.title, audio: ep.audio, artworkUrl: ep.artworkUrl }))}
+      aria-label={on ? `Pause ${ep.title}` : `Play ${ep.title}`}
+      className={`flex h-11 w-11 shrink-0 items-center justify-center rounded-full ${mine ? "bg-[#F0A71F] text-[#1a1200]" : "bg-white/10 text-white hover:bg-[#F0A71F] hover:text-[#1a1200]"}`}
+      data-testid={`play-${ep.key}`}
+    >
+      {on ? <Pause className="h-4 w-4 fill-current" /> : <Play className="h-4 w-4 translate-x-px fill-current" />}
+    </button>
+  );
+}
+
 // ---- Shared frame: top bar and footer -----------------------------------------------------
 function Frame({ data, accent, children, home }: { data: { handle: string; name: string; artworkUrl: string; title: string; brandsOn: boolean }; accent: string; children: ReactNode; home: boolean }) {
   const base = `/${data.handle}/show`;
@@ -178,6 +196,7 @@ function Home({ d }: { d: SitePublic }) {
   const latest = d.episodes[0];
   const [shown, setShown] = useState(12);
   const [find, setFind] = useState("");
+  const [about, setAbout] = useState(false);
   const list = useMemo(() => {
     const f = find.trim().toLowerCase();
     return f ? d.episodes.filter((e) => `${e.title} ${e.summary}`.toLowerCase().includes(f)) : d.episodes;
@@ -188,80 +207,93 @@ function Home({ d }: { d: SitePublic }) {
     ...(d.youtubeUrl ? [["YouTube", d.youtubeUrl, <PlatformIcon key="y" platform={"youtube" as SocialPlatform} className="h-4 w-4" />] as [string, string, ReactNode]] : []),
     ...(show?.feedUrl ? [["RSS", show.feedUrl, <Rss key="r" className="h-4 w-4" />] as [string, string, ReactNode]] : []),
   ];
+  const p = usePlayer();
+  const latestOn = !!latest && p.track?.audio === latest.audio && p.playing;
   return (
     <Frame data={{ handle: d.handle, name: d.name, artworkUrl: art, title, brandsOn: d.brandsOn }} accent={accent} home>
-      {/* The show */}
-      <section className="relative overflow-hidden">
-        <div className="pointer-events-none absolute inset-0 opacity-[0.07]" style={{ background: `radial-gradient(1200px 400px at 20% 0%, ${accent}, transparent)` }} />
-        <div className="relative mx-auto grid max-w-5xl gap-8 px-4 pb-10 pt-8 sm:pt-12 md:grid-cols-[300px_1fr] md:items-center">
-          {art && <img src={art} alt={title} className="mx-auto aspect-square w-56 rounded-3xl object-cover shadow-xl sm:w-72 md:w-full" />}
-          <div className="min-w-0">
-            {d.branch && <p className="text-xs font-bold uppercase tracking-[0.16em]" style={{ color: accent }}>{d.branch}</p>}
-            <h1 className="mt-2 text-balance text-4xl font-extrabold leading-[1.05] tracking-tight sm:text-5xl" style={{ color: INK }}>{title}</h1>
-            <p className="mt-2 text-sm font-semibold" style={{ color: SUB }}>Hosted by {d.name || show?.author}</p>
-            {show?.description && <p className="mt-4 line-clamp-4 text-pretty text-[15px] leading-relaxed" style={{ color: SUB }}>{show.description}</p>}
-            {listen.length > 0 && (
-              <div className="mt-5 flex flex-wrap gap-2">
+      {/* 20 Nov 2026 (Andrew): the same navy Featured look as /podcast/<slug>. A smaller cover
+          beside the title, a short description and a gold Play latest, then the episodes as navy rows. */}
+      <div className="bg-[#04102b] pb-12 text-white">
+        <div className="mx-auto max-w-5xl px-4 pt-6 sm:pt-8">
+          <section className="grid grid-cols-[auto_minmax(0,1fr)] items-center gap-x-4 gap-y-4 rounded-3xl bg-gradient-to-br from-[#0a2350] to-[#071a3d] p-5 ring-1 ring-white/10 sm:grid-cols-[240px_minmax(0,1fr)] sm:grid-rows-[auto_auto] sm:gap-x-8 sm:gap-y-0 sm:p-7" data-testid="site-hero">
+            {art && <img src={art} alt={title} className="h-24 w-24 shrink-0 rounded-xl object-cover shadow-xl ring-1 ring-white/10 sm:row-span-2 sm:h-[240px] sm:w-[240px] sm:rounded-2xl" />}
+            <div className={`min-w-0 sm:self-end ${art ? "" : "col-span-2"}`}>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#F0A71F]">{d.branch || "Podcast"}</p>
+              <h1 className="mt-1.5 text-balance text-2xl font-bold leading-tight tracking-tight sm:text-4xl">{title}</h1>
+              {(d.name || show?.author) && <p className="mt-1 text-[15px] text-white/75">Hosted by <span className="font-semibold text-white">{d.name || show?.author}</span></p>}
+            </div>
+            <div className="col-span-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:self-start">
+              {show?.description && (
+                <>
+                  <p className={`max-w-2xl text-pretty text-[15px] leading-relaxed text-white/80 sm:mt-3 ${about ? "whitespace-pre-line" : "line-clamp-3"}`}>{about ? show.description : show.description.replace(/\s*\n+\s*/g, " ")}</p>
+                  {show.description.length > 220 && <button type="button" onClick={() => setAbout((v) => !v)} className="mt-1 text-sm font-semibold text-[#F0A71F] hover:underline">{about ? "Less" : "More about the show"}</button>}
+                </>
+              )}
+              <div className="mt-5 flex flex-wrap items-center gap-2.5">
+                {latest && (
+                  <button type="button" onClick={() => (p.track?.audio === latest.audio ? p.toggle() : p.play({ slug: latest.slug, title: latest.title, audio: latest.audio, artworkUrl: latest.artworkUrl }))} className="inline-flex h-11 items-center gap-2 rounded-full bg-[#F0A71F] pl-2 pr-5 text-sm font-bold text-[#1a1200] shadow-lg shadow-black/20 hover:bg-[#f5b840]" data-testid="site-play-latest">
+                    <span className="flex h-7 w-7 items-center justify-center rounded-full bg-[#1a1200]/10">{latestOn ? <Pause className="h-3.5 w-3.5 fill-current" /> : <Play className="h-3.5 w-3.5 translate-x-px fill-current" />}</span>
+                    {latestOn ? "Pause" : "Play latest"}
+                  </button>
+                )}
                 {listen.map(([label, href, icon]) => (
-                  <a key={label} href={href} target="_blank" rel="noopener noreferrer" className="inline-flex items-center gap-1.5 rounded-full border px-3.5 py-2 text-sm font-semibold hover:bg-black/5" style={{ borderColor: LINE, color: INK }}>{icon}{label}</a>
+                  <a key={label} href={href} target="_blank" rel="noopener noreferrer" className="inline-flex h-11 items-center gap-2 rounded-full bg-white/10 px-4 text-sm font-semibold text-white hover:bg-white/15">{icon}{label}</a>
                 ))}
               </div>
-            )}
-          </div>
-        </div>
-        {latest && (
-          <div className="relative mx-auto max-w-5xl px-4">
-            <div className="flex items-center gap-4 rounded-2xl p-4 sm:p-5" style={{ background: SOFT }}>
-              <PlayButton ep={latest} accent={accent} size="lg" />
-              <div className="min-w-0 flex-1">
-                <p className="text-xs font-bold uppercase tracking-[0.14em]" style={{ color: accent }}>Latest episode</p>
-                <Link href={`/${d.handle}/show/${latest.slug}`} className="mt-0.5 line-clamp-2 text-balance text-lg font-bold leading-snug hover:underline" style={{ color: INK }}>{latest.title}</Link>
-                <p className="mt-0.5 text-xs" style={{ color: SUB }}>{[dateOf(latest.publishedAt), mins(latest.durationSec)].filter(Boolean).join(" · ")}</p>
-              </div>
             </div>
-          </div>
-        )}
-      </section>
+          </section>
+
+          {/* Episodes */}
+          <section className="mt-10">
+            <div className="flex flex-wrap items-end justify-between gap-3">
+              <div id="episodes" className="scroll-mt-28">
+                <div className="mb-1 h-1 w-10 rounded-full bg-[#F0A71F]" />
+                <h2 className="text-balance text-2xl font-extrabold tracking-tight sm:text-3xl">Episodes</h2>
+              </div>
+              {d.episodes.length > 8 && (
+                <label className="flex w-full items-center gap-2 rounded-full bg-white/[0.07] px-3 py-2 text-sm ring-1 ring-white/15 sm:w-64">
+                  <Search className="h-4 w-4 shrink-0 text-white/60" />
+                  <input value={find} onChange={(e) => setFind(e.target.value)} placeholder={`Search ${d.episodes.length} episodes`} className="min-w-0 flex-1 bg-transparent text-white outline-none placeholder:text-white/50" aria-label="Search episodes" />
+                  {find && <button type="button" onClick={() => setFind("")} aria-label="Clear"><X className="h-4 w-4 text-white/60" /></button>}
+                </label>
+              )}
+            </div>
+            {d.episodes.length === 0 ? (
+              <p className="mt-4 text-sm text-white/70">Episodes will show here as soon as they're out.</p>
+            ) : (
+              <ul className="mt-5 space-y-2.5">
+                {list.slice(0, shown).map((e) => {
+                  const on = p.track?.audio === e.audio;
+                  return (
+                    <li key={e.key} className={`rounded-2xl p-4 ring-1 transition-colors ${on ? "bg-white/[0.09] ring-[#F0A71F]/50" : "bg-white/[0.05] ring-white/10 hover:bg-white/[0.07]"}`}>
+                      <div className="flex items-start gap-3.5">
+                        {(e.artworkUrl || art) && <img src={e.artworkUrl || art} alt="" loading="lazy" className="hidden h-16 w-16 shrink-0 rounded-xl object-cover sm:block" />}
+                        <div className="min-w-0 flex-1">
+                          <Link href={`/${d.handle}/show/${e.slug}`} className="text-balance font-semibold leading-snug text-white hover:underline">{e.title}</Link>
+                          <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-white/60">
+                            {[e.episodeNumber ? `Ep ${e.episodeNumber}` : "", dateOf(e.publishedAt), mins(e.durationSec)].filter(Boolean).join(" · ")}
+                            {e.hasTranscript && <span className="inline-flex items-center gap-1"><FileText className="h-3 w-3" /> Transcript</span>}
+                          </p>
+                          {e.summary && <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed text-white/75">{e.summary}</p>}
+                        </div>
+                        <NavyPlay ep={e} />
+                      </div>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+            {list.length > shown && (
+              <button type="button" onClick={() => setShown((n) => n + 20)} className="mt-4 inline-flex items-center gap-1.5 rounded-full border border-white/25 px-4 py-2 text-sm font-semibold text-white hover:bg-white/10">
+                More episodes <ChevronDown className="h-4 w-4" />
+              </button>
+            )}
+            {find && list.length === 0 && <p className="mt-4 text-sm text-white/70">No episodes match "{find}".</p>}
+          </section>
+        </div>
+      </div>
 
       <main className="mx-auto max-w-5xl space-y-16 px-4 pt-12">
-        {/* Episodes */}
-        <section>
-          <div className="flex flex-wrap items-end justify-between gap-3">
-            <SectionTitle id="episodes" accent={accent}>Episodes</SectionTitle>
-            {d.episodes.length > 8 && (
-              <label className="flex w-full items-center gap-2 rounded-full border px-3 py-2 text-sm sm:w-64" style={{ borderColor: LINE }}>
-                <Search className="h-4 w-4 shrink-0" style={{ color: SUB }} />
-                <input value={find} onChange={(e) => setFind(e.target.value)} placeholder={`Search ${d.episodes.length} episodes`} className="min-w-0 flex-1 bg-transparent outline-none" aria-label="Search episodes" />
-                {find && <button type="button" onClick={() => setFind("")} aria-label="Clear"><X className="h-4 w-4" style={{ color: SUB }} /></button>}
-              </label>
-            )}
-          </div>
-          {d.episodes.length === 0 ? (
-            <p className="mt-4 text-sm" style={{ color: SUB }}>Episodes will show here as soon as they're out.</p>
-          ) : (
-            <ul className="mt-5 divide-y" style={{ borderColor: LINE }}>
-              {list.slice(0, shown).map((e) => (
-                <li key={e.key} className="flex items-start gap-4 py-4" style={{ borderColor: LINE }}>
-                  <PlayButton ep={e} accent={accent} />
-                  <div className="min-w-0 flex-1">
-                    <Link href={`/${d.handle}/show/${e.slug}`} className="text-balance text-[16px] font-bold leading-snug hover:underline" style={{ color: INK }}>{e.title}</Link>
-                    <p className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs" style={{ color: SUB }}>
-                      {[e.episodeNumber ? `Ep ${e.episodeNumber}` : "", dateOf(e.publishedAt), mins(e.durationSec)].filter(Boolean).join(" · ")}
-                      {e.hasTranscript && <span className="inline-flex items-center gap-1"><FileText className="h-3 w-3" /> Transcript</span>}
-                    </p>
-                    {e.summary && <p className="mt-1.5 line-clamp-2 text-sm leading-relaxed" style={{ color: SUB }}>{e.summary}</p>}
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-          {list.length > shown && (
-            <button type="button" onClick={() => setShown((n) => n + 20)} className="mt-2 inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-semibold hover:bg-black/5" style={{ borderColor: LINE }}>
-              More episodes <ChevronDown className="h-4 w-4" />
-            </button>
-          )}
-          {find && list.length === 0 && <p className="mt-4 text-sm" style={{ color: SUB }}>No episodes match "{find}".</p>}
-        </section>
 
         {/* Clips */}
         {d.clips.length > 0 && (
