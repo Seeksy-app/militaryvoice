@@ -32,7 +32,7 @@ export function usePodcastStats() {
   return useQuery<StatsResponse>({ queryKey: KEY, queryFn: async () => (await apiRequest("GET", "/api/host/podcast-stats")).json(), staleTime: 5 * 60_000 });
 }
 
-type HostingShowLite = { show: { id: number; title: string; artworkUrl?: string; directories?: string; appleUrl?: string; spotifyUrl?: string; importedFrom?: string; redirectOk?: boolean }; episodes?: { live?: boolean }[] };
+type HostingShowLite = { show: { id: number; title: string; artworkUrl?: string; directories?: string; appleUrl?: string; spotifyUrl?: string; importedFrom?: string; redirectOk?: boolean }; episodes?: { live?: boolean }[]; /** Apps that read the feed in the last 14 days. */ reading?: string[] };
 function useHosting() {
   return useQuery<{ shows: HostingShowLite[] }>({ queryKey: ["/api/host/hosting"], queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json(), staleTime: 60_000 });
 }
@@ -75,6 +75,25 @@ function SpotifyUpload({ has, stale, onOpenStats }: { has: boolean; stale?: bool
     </>
   );
 }
+
+/** A card's header: the show's artwork with the source's mark on its corner, like Buzzsprout's (Andrew, 21 Nov: "add icons to all"). */
+function CardHead({ art, mark, title, sub, right }: { art?: string; mark: ReactNode; title: ReactNode; sub: ReactNode; right?: ReactNode }) {
+  return (
+    <div className="mb-4 flex flex-wrap items-center gap-3">
+      <span className="relative shrink-0">
+        {art ? <img src={art} alt="" className="h-12 w-12 rounded-xl object-cover" /> : <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#053877] text-white"><Headphones className="h-6 w-6" /></span>}
+        <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center overflow-hidden rounded-full bg-white ring-2 ring-card">{mark}</span>
+      </span>
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold text-foreground">{title}</p>
+        <p className="text-xs text-muted-foreground">{sub}</p>
+      </div>
+      {right}
+    </div>
+  );
+}
+const markImg = (src: string) => <img src={src} alt="" className="h-full w-full object-contain p-px" />;
+const ALL_MARK = <span className="flex h-full w-full items-center justify-center bg-[#053877] text-white"><Headphones className="h-3 w-3" /></span>;
 
 function Badge({ source }: { source: Source }) {
   const mark = MARK[source];
@@ -236,6 +255,7 @@ export function PodcastChips({ onOpen, hostName }: { onOpen: () => void; /** The
 export function PodcastListens({ onConnect, bare = false }: { onConnect: () => void; /** Inside Your analytics' Podcast section: no title of its own. */ bare?: boolean }) {
   const q = usePodcastStats();
   const { hosted: hostedHere } = useHostedHere();
+  const hostingQ = useHosting();
   const qc = useQueryClient();
   const [refreshing, setRefreshing] = useState<string | null>(null);
   const [tab, setTab] = useState<string>("all");
@@ -303,6 +323,9 @@ export function PodcastListens({ onConnect, bare = false }: { onConnect: () => v
   const pick = tabs.some((t) => t.key === tab) ? tab : tabs[0].key;
   const shown = pick === "all" && merged ? [merged] : sources.filter((x) => x.source === pick);
   const appView = pick.startsWith("app:") ? (pick === "app:apple" ? { name: "Apple Podcasts", n: appSum(/apple/i) } : { name: "Spotify", n: appSum(/spotify/i) }) : null;
+  // The show's artwork for every card's header, and which apps read the feed (to say the zeros honestly).
+  const art = sources.find((x) => x.data?.artwork)?.data!.artwork || (hostingQ.data?.shows ?? []).find((x) => x.show.artworkUrl)?.show.artworkUrl || "";
+  const reads = new Set((hostingQ.data?.shows ?? []).flatMap((x) => x.reading ?? []));
   return (
     <section className={`${bare ? "" : "mb-6 "}space-y-4`} data-testid="podcast-listens">
       {!sources.some((x) => x.source === "buzzsprout") && (
@@ -346,21 +369,25 @@ export function PodcastListens({ onConnect, bare = false }: { onConnect: () => v
       ))}
       {appView && (
         <div className="rounded-2xl border border-border bg-card p-5" data-testid={`listens-${pick}`}>
-          <p className="font-semibold text-foreground">{appView.name}</p>
-          <p className="text-xs text-muted-foreground">Counted from your MilitaryVoices feed, by the app that asked for each episode.</p>
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-xl bg-muted/50 px-3 py-2.5"><p className="text-xl font-bold tabular-nums text-foreground">{compact(appView.n)}</p><p className="text-xs text-muted-foreground">downloads through {appView.name}</p></div>
-            <div className="rounded-xl bg-muted/50 px-3 py-2.5"><p className="text-xl font-bold tabular-nums text-foreground">{appTotal ? `${Math.round((appView.n / appTotal) * 100)}%` : "–"}</p><p className="text-xs text-muted-foreground">of all your downloads</p></div>
-          </div>
-          {appView.n === 0 && <p className="mt-4 text-sm text-muted-foreground">Nothing yet. Once your show's address in {appView.name} points at your MilitaryVoices feed, each listen shows here. Earlier history is in your Buzzsprout tab.</p>}
-          {appTotal > 0 && <div className="mt-5"><p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Where they listen</p><Bars items={top(apps, 6)} /></div>}
+          <CardHead art={art} mark={markImg(TAB_MARK[pick])} title={appView.name} sub={pick === "app:spotify" ? "Your MilitaryVoices feed, as Spotify reads it." : "Counted from your MilitaryVoices feed, by the app that asked for each episode."} />
+          {/* Spotify copies each episode once and plays its own copy, so no host ever sees Spotify's plays: no 0 to show. */}
+          {pick !== "app:spotify" && (
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="rounded-xl bg-muted/50 px-3 py-2.5"><p className="text-xl font-bold tabular-nums text-foreground">{compact(appView.n)}</p><p className="text-xs text-muted-foreground">downloads through {appView.name}</p></div>
+              <div className="rounded-xl bg-muted/50 px-3 py-2.5"><p className="text-xl font-bold tabular-nums text-foreground">{appTotal ? `${Math.round((appView.n / appTotal) * 100)}%` : "–"}</p><p className="text-xs text-muted-foreground">of all your downloads</p></div>
+            </div>
+          )}
+          {pick === "app:spotify" ? (
+            <p className="text-sm text-muted-foreground" data-testid="spotify-note">{reads.has("Spotify") ? "Spotify reads your MilitaryVoices feed now. It keeps its own copy of each episode and plays that copy to listeners, so Spotify's plays don't come through any podcast host, us included. Spotify counts them in Spotify for Creators: add those details below to see them here." : "Once your show's address in Spotify points at your MilitaryVoices feed, Spotify takes each new episode from us. It plays its own copy, so its plays show in Spotify for Creators: add those details below to see them here."}</p>
+          ) : appView.n === 0 && (
+            <p className="mt-4 text-sm text-muted-foreground" data-testid="apple-note">{reads.has("Apple Podcasts") ? "Apple Podcasts reads your MilitaryVoices feed now. A download through Apple shows here each time a listener plays or downloads an episode, so most arrive the day a new one is out. Earlier history is in your Buzzsprout tab." : "Nothing yet. Once your show's address in Apple Podcasts points at your MilitaryVoices feed, each listen shows here. Earlier history is in your Buzzsprout tab."}</p>
+          )}
         </div>
       )}
       {pick === "yt" && yt && (
         <div className="rounded-2xl border border-border bg-card p-5" data-testid="listens-yt">
-          <p className="font-semibold text-foreground">YouTube{yt.username ? <span className="font-normal text-muted-foreground"> · @{yt.username.replace(/^@/, "")}</span> : null}</p>
-          <p className="text-xs text-muted-foreground">Your connected channel. Views and how each post did are under Social → Analytics.</p>
-          <div className="mt-4 grid grid-cols-2 gap-3 sm:grid-cols-4">
+          <CardHead art={art} mark={markImg("/brands/youtube.svg")} title={<>YouTube{yt.username ? <span className="font-normal text-muted-foreground"> · @{yt.username.replace(/^@/, "")}</span> : null}</>} sub="Your connected channel. Views and how each post did are under Social → Analytics." />
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
             <div className="rounded-xl bg-muted/50 px-3 py-2.5"><p className="text-xl font-bold tabular-nums text-foreground">{compact(yt.followers ?? 0)}</p><p className="text-xs text-muted-foreground">subscribers</p></div>
           </div>
         </div>
@@ -381,26 +408,22 @@ export function PodcastListens({ onConnect, bare = false }: { onConnect: () => v
         ];
         return (
           <div key={s.source} className="rounded-2xl border border-border bg-card p-5" data-testid={`listens-${isAll ? "all" : s.source}`}>
-            <div className="mb-4 flex flex-wrap items-center gap-3">
-              <span className="relative shrink-0">
-                {d.artwork ? <img src={d.artwork} alt="" className="h-12 w-12 rounded-xl object-cover" /> : isAll ? <span className="flex h-12 w-12 items-center justify-center rounded-xl bg-[#053877] text-white"><Headphones className="h-6 w-6" /></span> : <Badge source={s.source} />}
-                {!isAll && d.artwork && MARK[s.source] && <img src={MARK[s.source]} alt="" className="absolute -bottom-1 -right-1 h-5 w-5 rounded-full bg-white object-contain p-px ring-2 ring-card" />}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="font-semibold text-foreground">{s.showName || (isAll ? "Your show" : NAME[s.source])}</p>
-                <p className="text-xs text-muted-foreground">
-                  {isAll ? `All your sources together: ${sources.map((x) => NAME[x.source]).join(", ")}` : s.source === "militaryvoices" ? "Hosted on MilitaryVoices" : s.source === "spotify" ? "From Spotify for Creators" : `From ${NAME[s.source]}`}
-                  {" · "}{s.source === "spotify" ? `Uploaded ${when(s.fetchedAt)}` : `Updated ${when(s.fetchedAt)}`}
-                  {stale && <span className="font-semibold text-amber-700 dark:text-amber-400"> · a month old: upload this month's {hostedHere ? "below" : "in Integrations"}</span>}
-                  {s.status === "failed" && <span className="text-destructive"> · {s.error}</span>}
-                </p>
-              </div>
-              {!isAll && s.source !== "spotify" && s.source !== "militaryvoices" && (
+            <CardHead
+              art={d.artwork || art}
+              mark={isAll ? ALL_MARK : MARK[s.source] ? markImg(MARK[s.source]!) : <span className="text-[10px] font-bold text-foreground">{NAME[s.source][0]}</span>}
+              title={s.showName || (isAll ? "Your show" : NAME[s.source])}
+              sub={<>
+                {isAll ? `All your sources together: ${sources.map((x) => NAME[x.source]).join(", ")}` : s.source === "militaryvoices" ? "Hosted on MilitaryVoices" : s.source === "spotify" ? "From Spotify for Creators" : `From ${NAME[s.source]}`}
+                {" · "}{s.source === "spotify" ? `Uploaded ${when(s.fetchedAt)}` : `Updated ${when(s.fetchedAt)}`}
+                {stale && <span className="font-semibold text-amber-700 dark:text-amber-400"> · a month old: upload this month's {hostedHere ? "below" : "in Integrations"}</span>}
+                {s.status === "failed" && <span className="text-destructive"> · {s.error}</span>}
+              </>}
+              right={!isAll && s.source !== "spotify" && s.source !== "militaryvoices" ? (
                 <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs" onClick={() => void refresh(s.source)} disabled={refreshing === s.source}>
                   <RefreshCw className={`h-3.5 w-3.5 ${refreshing === s.source ? "animate-spin" : ""}`} /> Refresh
                 </Button>
-              )}
-            </div>
+              ) : undefined}
+            />
             <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
               {stats.map(([label, n]) => (
                 <div key={label} className="rounded-xl bg-muted/50 px-3 py-2.5">
