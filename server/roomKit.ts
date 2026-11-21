@@ -17,6 +17,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { db, schemaIsReady } from "./storage.js";
 import { getSessionEmail } from "./session.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
+import { libraryAsset, libraryReady, registerStudioLibrary, type LibraryItem, type LibrarySource } from "./studioLibrary.js";
 import { personalStudios, recordings, roomAssets, roomLooks, roomMarks, type PersonalStudioRow, type RoomAssetRow } from "../shared/schema.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
@@ -41,13 +42,17 @@ type SceneLook = { background?: Background; logo?: { asset: Asset; corner: "tl" 
 export type SceneType = "single" | "two" | "group" | "media" | "profile";
 const SCENE_TYPES: SceneType[] = ["single", "two", "group", "media", "profile"];
 export const PEOPLE_DEFAULT: Record<SceneType, number> = { single: 1, two: 2, group: 3, media: 0, profile: 1 };
-/** The profile scene: one person's card. Links are shown, not clickable (print only). */
-export type Profile = { photo: Asset | null; name: string; title: string; line: string; links: string[] };
+/** The profile scene: one person's card. who = a participant identity, if it's someone in the studio. Links are shown, not clickable (print only). */
+export type Profile = { who: string; photo: Asset | null; name: string; title: string; line: string; links: string[] };
 export type Scene = {
   id: string; n: number; name: string; layout: Layout; stage: string[];
-  type: SceneType; people: number;
+  type: SceneType;
+  /** People on stage in this scene: 1–9, or 0–9 for media (0 = the media fills it). Engineering's "onStage" is this. */
+  people: number;
   /** look.background is always set in v3 (every scene has its own background). */
   look?: SceneLook;
+  /** A media scene's picture or video (a background, photo, logo or video upload). */
+  media?: Asset | null;
   profile?: Profile;
 };
 
@@ -65,17 +70,21 @@ const freshStyle = (): Style => ({ preset: "classic", brandColor: "#F0A71F", nam
 
 /** Media → Video clips: uploads (intro and outro are just tagged ones), each with its own Loop. */
 export type VideoClip = { asset: Asset; role: "" | "intro" | "outro"; loop: boolean };
-/** Sounds play once; music is a bed. Volume 0–100. */
-export type SoundItem = { asset: Asset; volume: number };
-export type MusicItem = { asset: Asset; volume: number; loop: boolean };
 /**
- * Our built-in cards, drawn live on the stage and the recording in the owner's look (UI/UX spec, 21 Nov):
- * never files. The countdown's minutes are chosen when it's played (live state, Engineering's), and it
- * ends on "We're starting": the host takes the next scene (never a switch on the clock).
+ * Sounds (the pads, played once) and music (the bed). id is what the live keys name (sound {id, at}, music {id, at}):
+ * "lib-<slug>" for our library, the asset id for their own upload. source is set for library items (the licence line).
+ * One volume for all sounds and one for music, 0–1 (look.soundVolume, look.musicVolume).
+ */
+export type SoundItem = { id: string; name: string; asset: Asset; source?: LibrarySource };
+export type MusicItem = SoundItem;
+/**
+ * Our built-in cards, drawn live by Engineering on the stage and the recording in the owner's look (UI/UX spec,
+ * 21 Nov): never files. ids are Engineering's playing slots. The countdown's minutes are chosen when it's played,
+ * and it ends on "We're starting": the host takes the next scene (never a switch on the clock).
  */
 export const CARDS = [
   { id: "brb", title: "Be right back" },
-  { id: "starting", title: "Starting soon" },
+  { id: "soon", title: "Starting soon" },
   { id: "thanks", title: "Thank you for watching" },
   { id: "countdown", title: "We're starting" },
 ] as const;
@@ -97,8 +106,17 @@ export type Look = {
   videos: VideoClip[];
   sounds: SoundItem[];
   music: MusicItem[];
+  /** 0–1. Defaults 0.8 and 0.25. */
+  soundVolume: number;
+  musicVolume: number;
+  /** The music bed loops (default on). */
+  musicLoop: boolean;
   cards: typeof CARDS;
 };
+
+/** Library items as look entries. A fresh studio gets every ready library sound on its pads. */
+const libEntry = (x: LibraryItem): SoundItem => ({ id: `lib-${x.slug}`, name: x.name, asset: libraryAsset(x) as Asset, source: x.source });
+const librarySounds = () => libraryReady().filter((x) => x.kind === "sound").map(libEntry);
 
 const freshLook = (): Look => ({
   rev: 0,
@@ -115,8 +133,11 @@ const freshLook = (): Look => ({
   ],
   style: freshStyle(),
   videos: [],
-  sounds: [],
+  sounds: librarySounds(),
   music: [],
+  soundVolume: 0.8,
+  musicVolume: 0.25,
+  musicLoop: true,
   cards: CARDS,
 });
 
@@ -136,7 +157,18 @@ export function upgrade(l: Look): Look {
     const a = l[role];
     if (a && !videos.some((v) => v.role === role)) videos = [...videos, { asset: a, role, loop: false }];
   }
-  return { ...l, scenes, videos, style: { ...freshStyle(), ...(l.style ?? {}) }, sounds: l.sounds ?? [], music: l.music ?? [], cards: CARDS };
+  // Library entries are re-read from the library each time, so a withdrawn item drops out of every studio.
+  const live = (xs: SoundItem[] | undefined) => (Array.isArray(xs) ? xs : []).flatMap((x) => {
+    if (!x?.id?.startsWith("lib-")) return x?.asset ? [x] : [];
+    const it = libraryReady().find((i) => `lib-${i.slug}` === x.id);
+    return it ? [libEntry(it)] : [];
+  });
+  const v01 = (v: unknown, d: number) => (typeof v === "number" && v >= 0 && v <= 1 ? v : d);
+  return {
+    ...l, scenes, videos, style: { ...freshStyle(), ...(l.style ?? {}) },
+    sounds: Array.isArray(l.sounds) ? live(l.sounds) : librarySounds(), music: live(l.music),
+    soundVolume: v01(l.soundVolume, 0.8), musicVolume: v01(l.musicVolume, 0.25), musicLoop: l.musicLoop !== false, cards: CARDS,
+  };
 }
 
 /** The key the recording page passes to read a room's look without a login. */
@@ -207,6 +239,7 @@ export function clean(raw: any, assets: Map<string, Asset>): Look | string {
     look.background = look.background ?? fallbackBg;
     const p = s?.profile;
     const profile: Profile | undefined = type === "profile" && p && typeof p === "object" ? {
+      who: str(p.who, 80),
       photo: p.photo ? asset(p.photo, "photo") ?? asset(p.photo, "logo") : null,
       name: str(p.name, 60), title: str(p.title, 80), line: str(p.line, 140),
       links: (Array.isArray(p.links) ? p.links : []).map((u: unknown) => str(u, 200)).filter((u: string) => /^https:\/\/[^\s]+\.[^\s]+$/.test(u)).slice(0, 3),
@@ -217,6 +250,7 @@ export function clean(raw: any, assets: Map<string, Asset>): Look | string {
       stage: (Array.isArray(s?.stage) ? s.stage : []).map((x: unknown) => str(x, 80)).filter(Boolean).slice(0, 12),
       type, people,
       look,
+      ...(type === "media" ? { media: ((a) => (a && ["background", "photo", "logo", "video"].includes(a.kind) ? a : null))(asset(s?.media)) } : {}),
       ...(profile ? { profile } : {}),
     });
   }
@@ -237,11 +271,23 @@ export function clean(raw: any, assets: Map<string, Asset>): Look | string {
     const a = raw[role] ? asset(raw[role], role) : null;
     if (a && !roles.has(role) && !raw.videos) { videos.push({ asset: a, role, loop: false }); roles.add(role); }
   }
-  const vol = (v: unknown, d: number) => (Number.isFinite(Number(v)) && v !== null && v !== "" ? Math.max(0, Math.min(100, Math.round(Number(v)))) : d);
-  const sounds: SoundItem[] = (Array.isArray(raw.sounds) ? raw.sounds : []).slice(0, 12)
-    .map((v: any) => { const a = asset(v?.asset, "sound"); return a ? { asset: a, volume: vol(v?.volume, 80) } : null; }).filter(Boolean) as SoundItem[];
-  const music: MusicItem[] = (Array.isArray(raw.music) ? raw.music : []).slice(0, 12)
-    .map((v: any) => { const a = asset(v?.asset, "music"); return a ? { asset: a, volume: vol(v?.volume, 25), loop: v?.loop !== false } : null; }).filter(Boolean) as MusicItem[];
+  // Sounds and music: a library item by its id ("lib-<slug>", only when its licence line is complete), or
+  // one of their own uploads of that kind. No duplicates; the order is theirs (the pads).
+  const lib = libraryReady();
+  const items = (list: unknown, kind: "sound" | "music"): SoundItem[] => {
+    const out: SoundItem[] = [];
+    for (const v of (Array.isArray(list) ? list : []).slice(0, 12) as any[]) {
+      const id = String(v?.id ?? v?.asset?.id ?? "");
+      if (!id || out.some((x) => x.id === id)) continue;
+      if (id.startsWith("lib-")) { const it = lib.find((i) => `lib-${i.slug}` === id && i.kind === kind); if (it) out.push(libEntry(it)); continue; }
+      const a = asset({ id }, kind);
+      if (a) out.push({ id: a.id, name: str(v?.name, 40) || a.name || (kind === "sound" ? "Sound" : "Music"), asset: a });
+    }
+    return out;
+  };
+  const sounds = items(raw.sounds, "sound");
+  const music = items(raw.music, "music");
+  const v01 = (v: unknown, d: number) => (Number.isFinite(Number(v)) && v !== null && v !== "" ? Math.round(Math.max(0, Math.min(1, Number(v))) * 100) / 100 : d);
 
   const st = raw.style && typeof raw.style === "object" ? raw.style : {};
   const base = freshStyle();
@@ -262,7 +308,9 @@ export function clean(raw: any, assets: Map<string, Asset>): Look | string {
     backgrounds: (Array.isArray(raw.backgrounds) ? raw.backgrounds : []).map((v: any) => asset(v, "background")).filter(Boolean).slice(0, 6) as Asset[],
     banners,
     intro: pick("intro"), outro: pick("outro"), scenes,
-    style, videos, sounds, music, cards: CARDS,
+    style, videos, sounds, music,
+    soundVolume: v01(raw.soundVolume, 0.8), musicVolume: v01(raw.musicVolume, 0.25), musicLoop: raw.musicLoop !== false,
+    cards: CARDS,
   };
 }
 
@@ -300,6 +348,7 @@ export async function marksFor(recordingId: number): Promise<number[]> {
 }
 
 export function registerRoomKit(app: Express, requireHostSession: RequestHandler): void {
+  registerStudioLibrary(app, requireHostSession);
   // ---- the look ----
   app.get("/api/host/room/look", requireHostSession, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
