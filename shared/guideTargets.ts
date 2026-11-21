@@ -52,6 +52,18 @@ export const GUIDE_TARGETS: GuideTarget[] = [
       { title: "New episode", at: [t("hosting-new-episode", "Click New episode.")] },
       { title: "Pick the audio", at: [t("new-episode-library", "Pick a recording from your Library."), t("new-episode-drop", "Drop the audio or video file here.")] },
     ] },
+  { id: "guest-invite", label: "Invite a guest", about: "Invite a guest to be on your show: send them a link with the date, where you'll record, and your questions.", path: "/host/dashboard/podcast",
+    steps: [
+      { title: "Your show", at: [t("hosting-all-shows", "Pick your show first.")] },
+      { title: "Invite a guest", at: [t("hosting-tab-invite", "Click Invite a guest.")] },
+      { title: "Fill it in", at: [t("guest-invite-form", "Add their name and email, when, and where you'll record.")] },
+      { title: "Send it", at: [t("guest-invite-submit", "Click here to send the invite.")] },
+    ] },
+  { id: "guest-book", label: "Book a guest", about: "Find people to have on your show: other podcasters and experts open to being a guest.", path: "/host/dashboard/podcast",
+    steps: [
+      { title: "Your show", at: [t("hosting-all-shows", "Pick your show first.")] },
+      { title: "Book a guest", at: [t("hosting-tab-guests", "Click Book a guest to find people to have on.")] },
+    ] },
   { id: "smartlink", label: "your SmartLink", about: "The one link for everything: show, episodes, socials, and the free podcast website.", path: "/host/dashboard/page",
     steps: [
       { title: "Your link", at: [t("bio-handle", "Pick the name for your link here. It saves as you go.")] },
