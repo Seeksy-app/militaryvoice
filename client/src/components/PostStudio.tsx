@@ -404,7 +404,7 @@ function MusicPick({ value, onChange }: { value: string; onChange: (v: string) =
  * and Stripe's billing page. Opened from the credits chip, "Generate more",
  * and wherever an episode can't start for want of credits.
  */
-function PlanDialog({ open, onOpenChange, beta, plan }: { open: boolean; onOpenChange: (v: boolean) => void; beta?: Beta; plan?: Plan | null }) {
+function PlanDialog({ open, onOpenChange, beta, plan, note }: { open: boolean; onOpenChange: (v: boolean) => void; beta?: Beta; plan?: Plan | null; note?: string }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [busy, setBusy] = useState<string | null>(null);
@@ -467,7 +467,7 @@ function PlanDialog({ open, onOpenChange, beta, plan }: { open: boolean; onOpenC
             <DialogHeader>
               <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00]">Beta pricing</p>
               <DialogTitle className="text-2xl">Pick a plan</DialogTitle>
-              <DialogDescription>Credits every month. If you run out, extra credits go on your next bill — up to a limit you set. Cancel any time.</DialogDescription>
+              <DialogDescription>{note ? <><span className="block font-semibold text-foreground">{note}</span>Credits every month. If you run out, extra credits go on your next bill — up to a limit you set. Cancel any time.</> : "Credits every month. If you run out, extra credits go on your next bill — up to a limit you set. Cancel any time."}</DialogDescription>
             </DialogHeader>
             <div className="flex justify-center">
               <div className="inline-flex rounded-full border border-border p-0.5 text-xs font-semibold">
@@ -491,18 +491,28 @@ function PlanDialog({ open, onOpenChange, beta, plan }: { open: boolean; onOpenC
                 );
               })}
             </div>
-            <CreditPacks busy={busy} go={go} label="Or buy credits once, no plan" />
-            <ul className="space-y-1 text-xs text-muted-foreground">
+            {/* Opened for a plan-only reason (posting to socials): credits bought once don't unlock it, so no packs or costs. */}
+            {!note && <CreditPacks busy={busy} go={go} label="Or buy credits once, no plan" />}
+            {!note && <ul className="space-y-1 text-xs text-muted-foreground">
               <li><span className="font-semibold text-foreground">An episode:</span> 8 credits (12 on Pro): every clip in all three shapes with animated captions, and the clean episode. <CreditsInfo /></li>
               <li><span className="font-semibold text-foreground">Classic captions:</span> 5 credits (7 on Pro).</li>
               <li><span className="font-semibold text-foreground">Music and text edits:</span> included. Your first episode is free.</li>
-            </ul>
+            </ul>}
             <p className="text-center text-xs text-muted-foreground">Secure checkout by Stripe. <a href="/pricing" className="underline underline-offset-2 hover:text-foreground">All the details</a></p>
           </>
         )}
       </DialogContent>
     </Dialog>
   );
+}
+
+/**
+ * The plans, opened from anywhere that needs an upgrade first (the free 30 days of social posting
+ * being over, for one). `note` is the one line that says why, above the plans.
+ */
+export function UpgradeDialog({ open, onOpenChange, note }: { open: boolean; onOpenChange: (v: boolean) => void; note?: string }) {
+  const features = useQuery<{ beta?: Beta; plan?: Plan | null }>({ queryKey: ["/api/host/features"], queryFn: async () => (await apiRequest("GET", "/api/host/features")).json(), staleTime: 60_000, enabled: open });
+  return <PlanDialog open={open} onOpenChange={onOpenChange} beta={features.data?.beta} plan={features.data?.plan} note={note} />;
 }
 
 /** Credits bought once — for anyone who'd rather not subscribe, or a subscriber topping up. */

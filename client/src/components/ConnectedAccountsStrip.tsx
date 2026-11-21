@@ -14,6 +14,8 @@ export function ConnectedAccountsStrip({
   extra,
   extraCount = 0,
   ghosts,
+  note,
+  onConnect,
 }: {
   accounts: SocialAccount[];
   onManage?: () => void;
@@ -24,6 +26,10 @@ export function ConnectedAccountsStrip({
   /** Nothing connected yet: these networks, greyed out, each one a door to connecting it.
       The first connection replaces them all with what's really connected (Andrew, 21 Nov). */
   ghosts?: SocialPlatform[];
+  /** One line under the header (the free 30 days of posting). */
+  note?: React.ReactNode;
+  /** What a greyed-out network and the empty header's Connect do; Integrations (onManage) unless the free days are over. */
+  onConnect?: () => void;
 }) {
   // One row on a computer (8 Oct: ten accounts took three rows and pushed the
   // SmartLink and Next steps below the fold); "Show all" opens the rest.
@@ -74,7 +80,7 @@ export function ConnectedAccountsStrip({
         {onManage && (
           <button
             type="button"
-            onClick={onManage}
+            onClick={showGhosts ? onConnect ?? onManage : onManage}
             className="text-xs font-semibold text-primary hover:underline"
             data-testid="button-manage-integrations"
           >
@@ -83,6 +89,7 @@ export function ConnectedAccountsStrip({
         )}
         </span>
       </div>
+      {note && <div className="-mt-1 mb-2">{note}</div>}
 
       {/* On a phone: one row that scrolls sideways, each account its picture and followers. */}
       <div ref={row} className={`-mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] sm:flex-wrap [&::-webkit-scrollbar]:hidden ${open ? "sm:overflow-visible" : "sm:max-h-[3.4rem] sm:overflow-hidden"}`}>
@@ -133,7 +140,7 @@ export function ConnectedAccountsStrip({
           <button
             key={p}
             type="button"
-            onClick={onManage}
+            onClick={onConnect ?? onManage}
             title={`Connect ${platformLabel(p)}. It shows as a follow button on your card, and we post your promo cards there for you.`}
             aria-label={`Connect ${platformLabel(p)}`}
             className={`group flex shrink-0 items-center gap-2 rounded-xl border border-dashed border-border bg-card/60 py-1.5 text-left ${tight ? "px-2" : "pl-2 pr-3"} transition-colors hover:border-solid hover:border-primary/40 hover:bg-card hover:shadow-sm sm:py-2`}

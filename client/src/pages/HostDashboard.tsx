@@ -72,6 +72,7 @@ import { StudioHome } from "@/components/StudioHome";
 import { FanEmails } from "@/components/FanEmails";
 import { RecordingsScreen } from "@/components/RecordingsScreen";
 import { PostStudio, NavCredits } from "@/components/PostStudio";
+import { SocialTrialLine, socialLocked, useSocialUpgrade, type SocialTrial as SocialTrialT } from "@/components/SocialTrial";
 import { FloatingChecklist } from "@/components/FloatingChecklist";
 import { MyEvents } from "@/components/MyEvents";
 import { MyOrganization, OrgInvites } from "@/components/MyOrganization";
@@ -144,6 +145,8 @@ interface HostContact {
 interface SocialStatus {
   configured: boolean;
   accounts: SocialAccount[];
+  /** Free Growth accounts: 30 days of posting (server/socialTrial.ts). */
+  trial?: SocialTrialT;
 }
 
 interface HostDashboardData {
@@ -778,6 +781,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     retry: false,
     enabled: !!data,
   });
+  const socialUpgrade = useSocialUpgrade();
 
   const { data: cohostBoard } = useQuery<{ blocks: { mine: boolean; takenBy: unknown; yourShow: boolean }[] }>({
     queryKey: ["/api/host/cohost-slots", data?.event.id],
@@ -1662,13 +1666,18 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                     {/* Nothing connected yet: the networks greyed out in the same row, each one a door to connecting it;
                         the first connection replaces them with what's really connected (Andrew, 21 Nov). The podcast
                         chip opens the podcast itself, not its downloads. */}
+                    {/* Free accounts: the 30 days of posting under the header; once they're over, connecting opens the plans
+                        (connected accounts still show their numbers). Scale and Pro see none of it. */}
                     <ConnectedAccountsStrip
                       accounts={social?.configured ? social.accounts ?? [] : []}
                       ghosts={social ? ["instagram", "facebook", "youtube", "tiktok", "linkedin"] : undefined}
                       onManage={() => goTo("integrations")}
+                      onConnect={socialLocked(social?.trial) ? socialUpgrade.open : undefined}
+                      note={<SocialTrialLine trial={social?.trial} onUpgrade={socialUpgrade.open} />}
                       extra={<><PodcastChips onOpen={() => goTo("podcast")} hostName={profile?.hostName} /><ListingChips /></>}
                       extraCount={podcastSources.length + listings.length}
                     />
+                    {socialUpgrade.dialog}
                   </div>
                   {/* Someone added them to a brand's, agency's or organizer's team. */}
                   <OrgInvites compact />
