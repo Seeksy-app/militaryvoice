@@ -23,6 +23,8 @@ import { learnedForAlex } from "./helpDesk.js";
 const NOT_SURE = "I'm not sure about that one. Leave a note and someone will get back to you as soon as possible.";
 import { runTool } from "./teamDesk.js";
 import { GUIDE_TARGETS, guideTarget } from "../shared/guideTargets.js";
+import { GUIDES, guideByKey, guideOf, sampleKey } from "../shared/guides.js";
+import { signedRecordingUrl } from "./recordingStorage.js";
 
 export const ERYN = "DXFkLCBUTmvXpp2QwZjA";
 const OPEN = /\[\[OPEN:([a-z-]+)\]\]/;
@@ -106,7 +108,7 @@ export function registerGuide(app: Express, requireHostSession: RequestHandler, 
     // No nudge on a page load (PM, 21 Nov): a view-as cookie is the same host session as theirs, and once the admin
     // cookie lapses our own browser looks exactly like them. Nudges fire on their inbound email or a code sign-in only.
     if (!g.enabled) return res.json({ enabled: false });
-    res.json({ enabled: true, name: g.name, avatarUrl: g.avatarUrl, voice: !!eleven(), targets: GUIDE_TARGETS });
+    res.json({ enabled: true, key: guideOf(g)?.key ?? null, name: g.name, avatarUrl: g.avatarUrl, voice: !!eleven(), targets: GUIDE_TARGETS });
   });
 
   /** Settings → Your guide: rename her. */
@@ -184,6 +186,39 @@ export function registerGuide(app: Express, requireHostSession: RequestHandler, 
     if (!r.ok) { console.error("guide listen", r.status, (await r.text()).slice(0, 200)); return res.status(502).json({ message: "I couldn't hear that just now. Try typing it." }); }
     const j = (await r.json()) as { text?: string };
     res.json({ text: String(j.text ?? "").replace(/\s*\([^)]*\)\s*/g, " ").trim() });
+  });
+
+  // ---- choosing a guide (onboarding "Meet your guide" and Settings, 21 Nov) ----
+  /** The six to choose from, and which one this account has (when signed in). Each card's "Hear me" plays a pre-made clip. */
+  app.get("/api/guides", async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    const g = email ? await guideFor(email) : null;
+    res.json({
+      guides: GUIDES.map(({ key: k, name, blurb, avatarUrl }) => ({ key: k, name, blurb, avatarUrl, sampleUrl: `/api/guides/${k}/sample` })),
+      current: g ? { key: guideOf(g)?.key ?? null, name: g.name, enabled: g.enabled } : null,
+    });
+  });
+  /** "Hear me": the pre-made clip in R2 (no text-to-speech spent here). */
+  app.get("/api/guides/:key/sample", async (req, res) => {
+    const opt = guideByKey(String(req.params.key));
+    if (!opt) return res.status(404).json({ message: "No such guide." });
+    try {
+      res.setHeader("Cache-Control", "public, max-age=3000");
+      res.redirect(302, await signedRecordingUrl(sampleKey(opt.key), 3600));
+    } catch {
+      res.status(404).json({ message: "No sample yet." });
+    }
+  });
+  /** Pick a guide: their face, voice and name. Whether the guide is switched on stays as it was. */
+  app.put("/api/guide/me/choice", requireHostSession, async (req, res) => {
+    const email = me(req);
+    const opt = guideByKey(String(req.body?.key ?? ""));
+    if (!opt) return res.status(400).json({ message: "Pick one of the guides." });
+    const g = await guideFor(email);
+    const next: GuideSettings = { enabled: g.enabled, name: cleanName(req.body?.name) || opt.name, voiceId: opt.voiceId, avatarUrl: opt.avatarUrl };
+    await saveGuide(email, next);
+    res.json({ key: opt.key, name: next.name, avatarUrl: next.avatarUrl, enabled: next.enabled });
   });
 
   // ---- the switch (admin) ----
