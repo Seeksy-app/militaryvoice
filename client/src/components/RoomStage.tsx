@@ -164,10 +164,12 @@ function PlayerAudio({ tile, muted }: { tile: StageTile; muted: boolean }) {
   const ref = useRef<HTMLAudioElement | null>(null);
   useEffect(() => {
     const el = ref.current;
-    if (!el || !tile.audio) return;
+    // Muted (the host's preview): not attached, since attach() unmutes the element. The host
+    // already hears the player bot through the studio's own room.
+    if (!el || !tile.audio || muted) return;
     tile.audio.attach(el);
     return () => { tile.audio?.detach(el); };
-  }, [tile.audio]);
+  }, [tile.audio, muted]);
   return <audio ref={ref} autoPlay muted={muted} data-testid="room-player-audio" />;
 }
 

@@ -409,7 +409,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
           )}
           {v3 && <PhoneStudio kit={kit} />}
           <Backstage kit={kit} />
-          <PeopleStrip kit={kit} owner={owner} onShare={() => void share()} onInvite={copyInvite} />
+          <PeopleStrip kit={kit} owner={owner} sharing={isScreenShareEnabled} onShare={() => void share()} onInvite={copyInvite} onMedia={editing ? () => setTab(v3 ? "media" : "look") : undefined} />
           {/* Below lg the bar sits above Ask Alex (bottom right on every page) so nothing is covered. */}
           <div className="mb-[84px] mt-auto flex items-center gap-0.5 rounded-[18px] border border-[#e4e7ec] bg-white px-1.5 py-2 shadow-[0_8px_24px_rgba(16,24,40,0.1)] sm:gap-1.5 sm:px-3 lg:mb-3" data-testid="my-studio-controls">
             <BarButton label={isMicrophoneEnabled ? "Mic" : "Muted"} off={!isMicrophoneEnabled} onClick={() => void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)}>{isMicrophoneEnabled ? <Mic className="h-[22px] w-[22px]" /> : <MicOff className="h-[22px] w-[22px]" />}</BarButton>
@@ -598,12 +598,16 @@ function Tile({ t, big, small }: { t: TrackReferenceOrPlaceholder; big?: boolean
 }
 
 /** Everyone in the room. The owner brings guests on stage or sends them backstage (phase 2). */
-function PeopleStrip({ kit, owner, onShare, onInvite }: { kit: RoomKit; owner: boolean; onShare: () => void; onInvite: () => void }) {
+function PeopleStrip({ kit, owner, sharing, onShare, onInvite, onMedia }: { kit: RoomKit; owner: boolean; sharing: boolean; onShare: () => void; onInvite: () => void; onMedia?: () => void }) {
   const { cams } = useStageTracks();
   const [menu, setMenu] = useState(false);
   const scenes = !!kit.look;
+  const item = "flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm font-semibold hover:bg-[#f2f4f7]";
   return (
-    <div className="mt-3 flex w-full max-w-[768px] shrink-0 gap-3 overflow-x-auto pb-1" data-testid="my-studio-strip">
+    // The + sits outside the scrolling row: a scrolling row clips anything that pops out of it, so
+    // its menu never showed (Andrew, 21 Nov: "This doesn't work").
+    <div className="mt-3 flex w-full max-w-[768px] shrink-0 gap-3">
+    <div className="flex min-w-0 flex-1 gap-3 overflow-x-auto pb-1" data-testid="my-studio-strip">
       {cams.map((t) => {
         const p = t.participant;
         const name = p.name || p.identity;
@@ -624,15 +628,20 @@ function PeopleStrip({ kit, owner, onShare, onInvite }: { kit: RoomKit; owner: b
           </div>
         );
       })}
-      <div className="relative shrink-0">
-        <button type="button" onClick={() => setMenu(!menu)} className="flex h-24 w-40 flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#98a2b3] bg-white text-[13px] font-semibold text-[#475467] hover:bg-[#f9fafb]" data-testid="strip-add">
-          <Plus className="h-6 w-6" /> Share screen or invite
+    </div>
+      <div className="relative shrink-0 pb-1">
+        <button type="button" onClick={() => setMenu(!menu)} aria-expanded={menu} className="flex h-24 w-40 flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#98a2b3] bg-white px-2 text-center text-[13px] font-semibold text-[#475467] hover:bg-[#f9fafb]" data-testid="strip-add">
+          <Plus className="h-6 w-6" /> {onMedia ? "Add media, screen or guest" : "Share screen or invite"}
         </button>
         {menu && (
-          <div className="absolute bottom-[calc(100%+6px)] left-0 z-20 w-56 rounded-xl border border-[#e4e7ec] bg-white p-1.5 shadow-[0_12px_32px_rgba(16,24,40,0.18)]">
-            <button type="button" onClick={() => { setMenu(false); onShare(); }} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm font-semibold hover:bg-[#f2f4f7]"><MonitorUp className="h-4 w-4" /> Share my screen</button>
-            {owner && <button type="button" onClick={() => { setMenu(false); onInvite(); }} className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm font-semibold hover:bg-[#f2f4f7]"><UserPlus className="h-4 w-4" /> Copy the invite link</button>}
-          </div>
+          <>
+            <button type="button" aria-label="Close" className="fixed inset-0 z-10 cursor-default" onClick={() => setMenu(false)} />
+            <div className="absolute bottom-[calc(100%+6px)] right-0 z-20 w-60 rounded-xl border border-[#e4e7ec] bg-white p-1.5 shadow-[0_12px_32px_rgba(16,24,40,0.18)]" data-testid="strip-add-menu">
+              {onMedia && <button type="button" onClick={() => { setMenu(false); onMedia(); }} className={`${item} hidden lg:flex`} data-testid="strip-add-media"><Clapperboard className="h-4 w-4" /> Show a video or picture</button>}
+              <button type="button" onClick={() => { setMenu(false); onShare(); }} className={item} data-testid="strip-add-screen"><MonitorUp className="h-4 w-4" /> {sharing ? "Stop sharing my screen" : "Share my screen"}</button>
+              {owner && <button type="button" onClick={() => { setMenu(false); onInvite(); }} className={item} data-testid="strip-add-invite"><UserPlus className="h-4 w-4" /> Copy the invite link</button>}
+            </div>
+          </>
         )}
       </div>
     </div>

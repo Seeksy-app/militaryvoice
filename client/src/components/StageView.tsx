@@ -393,12 +393,16 @@ function Tile({ tile, muted, namePos = "bottom", fit, contain = false, flat = fa
   useEffect(() => {
     const el = audioRef.current;
     if (!el || !tile.audio) return;
-    tile.audio.attach(el);
     // The broadcast's copy runs every voice through one leveler, so a quiet
     // mic still reaches broadcast loudness (5 Oct: LiveOne measured -35 LU).
     // The element stays attached but silent: Chrome only feeds a remote track
     // into Web Audio while an element is playing it.
     const lv = broadcastLeveler();
+    // A muted stage (the host's own preview in the studio) never plays a voice. LiveKit's attach()
+    // turns the element's mute back off, so it isn't attached at all: before 21 Nov the host heard
+    // everyone twice, themselves included, a moment late (Andrew: "I'm getting feedback horribly").
+    if (muted && !lv) return;
+    tile.audio.attach(el);
     let src: MediaStreamAudioSourceNode | null = null;
     if (lv && tile.audio.mediaStreamTrack) {
       try {
@@ -416,7 +420,7 @@ function Tile({ tile, muted, namePos = "bottom", fit, contain = false, flat = fa
       try { src?.disconnect(); } catch { /* gone */ }
       tile.audio?.detach(el);
     };
-  }, [tile.audio]);
+  }, [tile.audio, muted]);
 
   return (
     // Every face gets the same box — filling the cell, 16:9 or square, as the
