@@ -244,6 +244,7 @@ function MusicList({ kit }: { kit: RoomKit }) {
   };
   return (
     <div className="mt-2.5 flex flex-col gap-2" data-testid="media-music">
+      {!tracks.length && <p className="rounded-xl bg-[#f9fafb] px-3 py-2.5 text-[12px] text-[#667085]">No music yet. Upload a track you have the rights to use, and it plays under your show.</p>}
       {tracks.map((x) => {
         const on = now === x.id;
         return (
