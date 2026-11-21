@@ -167,6 +167,30 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     res.json(view(out, !!(await storage.getYoutubeAccount(email).catch(() => undefined))));
   });
 
+  /**
+   * The studio's Notes, which are also the teleprompter's script (PM, 21 Nov: "save the teleprompter
+   * script on the server ... per studio"): written ahead on one computer, read live on another. Owner
+   * only, plain text, never sent to guests or the recording. The newest save wins.
+   */
+  const NOTES_MAX = 60_000;
+  const notesKey = (id: number) => `studio-notes:${id}`;
+  const readNotes = async (id: number): Promise<{ text: string; at: string }> => {
+    try { const v = JSON.parse((await storage.getSetting(notesKey(id))) ?? "{}"); return { text: typeof v.text === "string" ? v.text : "", at: typeof v.at === "string" ? v.at : "" }; } catch { return { text: "", at: "" }; }
+  };
+  app.get("/api/host/my-studio/notes", requireHostSession, async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json(await readNotes((await mine(me(req))).id));
+  });
+  app.put("/api/host/my-studio/notes", requireHostSession, async (req, res) => {
+    const text = req.body?.text;
+    if (typeof text !== "string") return res.status(400).json({ message: "Those notes didn't come through." });
+    if (text.length > NOTES_MAX) return res.status(400).json({ message: "Your notes are too long to save. Make them a little shorter." });
+    const s = await mine(me(req));
+    const out = { text, at: now() };
+    await storage.setSetting(notesKey(s.id), JSON.stringify(out));
+    res.json(out);
+  });
+
   /** The owner into their room: publishes, and runs it. */
   app.post("/api/host/my-studio/token", requireHostSession, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");

@@ -27,22 +27,85 @@ function useStored<T>(k: string, d: T): [T, (v: T) => void] {
   return [v, set];
 }
 
-/** The studio's notes, which are also the teleprompter's script. The old key held a plain string. */
-export function useStudioNotes(roomKey: string): [string, (t: string) => void] {
+export type NotesSync = "" | "saving" | "saved" | "error";
+const NOTES_URL = "/api/host/my-studio/notes";
+
+/**
+ * The studio's notes, which are also the teleprompter's script. The old key held a plain string.
+ * With `server` (the owner), they're saved to the studio too (PM, 21 Nov): written ahead on one
+ * computer, read live on another. This computer's copy shows at once; the studio's copy wins when it
+ * loads, and again whenever the window comes back into focus with nothing waiting to save.
+ */
+export function useStudioNotes(roomKey: string, server = false): [string, (t: string) => void, NotesSync] {
   const k = `mv-room-notes-${roomKey}`;
-  const [v, setV] = useState(() => { try { return localStorage.getItem(k) ?? ""; } catch { return ""; } });
-  useEffect(() => {
-    try { setV(localStorage.getItem(k) ?? ""); } catch { /* private window */ }
-    const on = (e: Event) => { if ((e as CustomEvent).detail === k) { try { setV(localStorage.getItem(k) ?? ""); } catch { /* */ } } };
-    window.addEventListener("mv-studio-store", on);
-    return () => window.removeEventListener("mv-studio-store", on);
-  }, [k]);
-  const set = useCallback((t: string) => {
+  const local = () => { try { return localStorage.getItem(k) ?? ""; } catch { return ""; } };
+  const [v, setV] = useState(local);
+  const [sync, setSync] = useState<NotesSync>("");
+  const pending = useRef<string | null>(null);
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const keep = useCallback((t: string) => {
     setV(t);
     try { localStorage.setItem(k, t); } catch { /* private window */ }
     window.dispatchEvent(new CustomEvent("mv-studio-store", { detail: k }));
   }, [k]);
-  return [v, set];
+
+  const save = useCallback(async (t: string, keepalive = false) => {
+    setSync("saving");
+    try {
+      const r = await fetch(NOTES_URL, { method: "PUT", credentials: "include", keepalive, headers: { "content-type": "application/json" }, body: JSON.stringify({ text: t }) });
+      if (!r.ok) throw new Error(String(r.status));
+      if (pending.current === t) pending.current = null;
+      setSync(pending.current === null ? "saved" : "saving");
+    } catch { setSync("error"); }
+  }, []);
+
+  useEffect(() => {
+    setV(local());
+    const on = (e: Event) => { if ((e as CustomEvent).detail === k) setV(local()); };
+    window.addEventListener("mv-studio-store", on);
+    return () => window.removeEventListener("mv-studio-store", on);
+  }, [k]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // The studio's copy: on open, and when the window comes back into focus.
+  useEffect(() => {
+    if (!server) return;
+    let gone = false;
+    const pull = async () => {
+      if (pending.current !== null) return;
+      try {
+        const r = await fetch(NOTES_URL, { credentials: "include", cache: "no-store" });
+        if (!r.ok || gone || pending.current !== null) return;
+        const s = (await r.json()) as { text?: string; at?: string };
+        const mine = local();
+        if (!s.at) { if (mine.trim()) { pending.current = mine; void save(mine); } return; } // first time: this computer's notes go up
+        if ((s.text ?? "") !== mine) keep(s.text ?? "");
+        setSync("saved");
+      } catch { /* offline: this computer's copy stands */ }
+    };
+    void pull();
+    const focus = () => { if (document.visibilityState === "visible") void pull(); };
+    window.addEventListener("focus", focus);
+    document.addEventListener("visibilitychange", focus);
+    return () => { gone = true; window.removeEventListener("focus", focus); document.removeEventListener("visibilitychange", focus); };
+  }, [server, k]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Anything still waiting goes up when the page closes.
+  useEffect(() => {
+    if (!server) return;
+    const flush = () => { if (pending.current !== null) { if (timer.current) clearTimeout(timer.current); void save(pending.current, true); } };
+    window.addEventListener("pagehide", flush);
+    return () => { window.removeEventListener("pagehide", flush); flush(); };
+  }, [server, save]);
+
+  const set = useCallback((t: string) => {
+    keep(t);
+    if (!server) return;
+    pending.current = t;
+    setSync("saving");
+    if (timer.current) clearTimeout(timer.current);
+    timer.current = setTimeout(() => { if (pending.current !== null) void save(pending.current); }, 800);
+  }, [k, server, keep, save]);
+  return [v, set, sync];
 }
 
 export const usePrompter = (roomKey: string) => useStored<Prefs>(`mv-prompter-${roomKey}`, PREFS);

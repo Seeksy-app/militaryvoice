@@ -20,7 +20,7 @@ import { StylePanel } from "@/components/room/StylePanel";
 import { PhoneStudio } from "@/components/room/PhoneStudio";
 import { MarkClip } from "@/components/room/MarkClip";
 import { RoomStage } from "@/components/RoomStage";
-import { PrompterNews, PrompterOverlay, PrompterSwitch, useStudioNotes } from "@/components/room/Teleprompter";
+import { PrompterNews, PrompterOverlay, PrompterSwitch, useStudioNotes, type NotesSync } from "@/components/room/Teleprompter";
 
 /** The room is light in both themes, so always the light logo file. */
 const DASHBOARD = "/host/dashboard";
@@ -284,7 +284,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
   const now = useNow();
   const [picked, setTab] = useState<Tab | null>(null);
   const noteKey = owner ? String(studio?.id ?? "mine") : roomName;
-  const [notes, setNotes] = useStudioNotes(noteKey);
+  const [notes, setNotes, notesSync] = useStudioNotes(noteKey, owner && !!studio?.id);
   const [sheet, setSheet] = useState(false);
   const [settings, setSettings] = useState(false);
   const [busy, setBusy] = useState<"" | "rec" | "live">("");
@@ -460,7 +460,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
             {tab === "media" && v3 && <MediaPanel kit={kit} />}
             {tab === "style" && v3 && <StylePanel kit={kit} />}
             {tab === "people" && <PeoplePanel owner={owner} studio={studio} onCopy={copyInvite} />}
-            {tab === "notes" && <NotesPanel roomKey={noteKey} text={notes} setText={setNotes} prompter={owner} />}
+            {tab === "notes" && <NotesPanel roomKey={noteKey} text={notes} setText={setNotes} prompter={owner} sync={owner ? notesSync : undefined} />}
             {tab === "recording" && owner && <RecordingPanel studio={studio} now={now} busy={busy} onRecord={(on) => void record(on)} onGoLive={() => setSheet(true)} onEndLive={() => void endLive()} />}
             {tab === "chat" && <ChatPanel />}
           </div>
@@ -792,10 +792,15 @@ function PeoplePanel({ owner, studio, onCopy }: { owner: boolean; studio?: Studi
   );
 }
 
-function NotesPanel({ roomKey, text, setText, prompter }: { roomKey: string; text: string; setText: (t: string) => void; prompter: boolean }) {
+function NotesPanel({ roomKey, text, setText, prompter, sync }: { roomKey: string; text: string; setText: (t: string) => void; prompter: boolean; sync?: NotesSync }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PanelHead title="Notes" line="Only you see these. They stay on this computer." />
+      <PanelHead title="Notes" line={sync === undefined ? "Only you see these. They stay on this computer." : "Only you see these. They're saved to your studio, so they're here on any computer."} />
+      {sync !== undefined && sync !== "" && (
+        <p className={`mx-4 mt-2 text-[12px] ${sync === "error" ? "text-[#b42318]" : "text-[#667085]"}`} data-testid="notes-sync">
+          {sync === "saving" ? "Saving…" : sync === "saved" ? "Saved to your studio" : "Couldn't save just now. It's kept on this computer, and we'll try again when you type."}
+        </p>
+      )}
       {prompter && <PrompterSwitch roomKey={roomKey} text={text} />}
       <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={"Questions for your guest, talking points, the sponsor read…"} className="m-4 min-h-0 flex-1 resize-none rounded-xl border border-[#d0d5dd] p-3.5 text-[14px] leading-relaxed outline-none focus:border-[#053877] focus:ring-2 focus:ring-[#053877]/15" data-testid="studio-notes" />
     </div>
