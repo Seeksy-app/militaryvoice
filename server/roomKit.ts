@@ -57,7 +57,7 @@ export type Scene = {
 };
 
 /** v3 style: one set for the whole studio. Fonts are a short hosted list, OFL only. */
-export const FONTS = ["Inter", "Montserrat", "Oswald", "Bebas Neue", "Source Sans 3", "Merriweather", "Playfair Display", "Roboto Slab"] as const;
+export const FONTS = ["Inter", "Montserrat", "Oswald", "Bebas Neue", "Source Sans 3", "Merriweather", "Playfair Display", "Zilla Slab"] as const;
 export type Style = {
   preset: string;
   brandColor: string;
@@ -297,7 +297,8 @@ export function clean(raw: any, assets: Map<string, Asset>): Look | string {
     nameTag: ["bar", "pill", "block", "plain"].includes(st.nameTag) ? st.nameTag : base.nameTag,
     showNames: st.showNames !== false,
     textSize: ["s", "m", "l"].includes(st.textSize) ? st.textSize : base.textSize,
-    font: (FONTS as readonly string[]).includes(st.font) ? st.font : base.font,
+    // Roboto Slab (Apache 2.0) was swapped for Zilla Slab (OFL) on 21 Nov; old saves carry over.
+    font: (FONTS as readonly string[]).includes(st.font) ? st.font : st.font === "Roboto Slab" ? "Zilla Slab" : base.font,
   };
   const pick = (role: "intro" | "outro") => videos.find((v) => v.role === role)?.asset ?? null;
   return {
