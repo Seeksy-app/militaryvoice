@@ -94,7 +94,9 @@ export function RoomPicture({
   // v3: the player bot is heard, never drawn; the scene type decides who is drawn and how.
   const players = tiles.filter((t) => isPlayer(t.identity));
   const people = tiles.filter((t) => !isPlayer(t.identity));
-  const scene = sceneOf(look, live);
+  // Studio v3 drawing only when the server says it's on; otherwise the v2 stage, exactly as before.
+  const v3 = live.v3 === true;
+  const scene = v3 ? sceneOf(look, live) : undefined;
   const cast = castOf(people.map((t) => ({ identity: t.identity, host: /^owner-/.test(t.identity), who: t.identity })), scene);
   const drawn = scene?.type ? cast.drawn.map((id) => people.find((t) => t.identity === id)!).filter(Boolean) : people;
   const heard = scene?.type ? people.filter((t) => !cast.drawn.includes(t.identity)) : [];
@@ -103,8 +105,8 @@ export function RoomPicture({
     // Media with people: the clip or picture big, the people stacked beside it (looping).
     ? { ...meta, stageMediaPlaying: true, stageMediaUrl: media.url, stageMediaKind: (media.mime ?? "").startsWith("image") ? "image" : "video", stageMediaPeople: true, stageMediaLabel: "Scene (loop)", stageOrder: cast.drawn.join(",") }
     : scene?.type && cast.layout ? { ...meta, stageLayout: cast.layout, stageOrder: cast.drawn.join(",") } : meta;
-  const card = live.playing && live.playing.slot !== "intro" && live.playing.slot !== "outro" ? live.playing : null;
-  const style = look?.style;
+  const card = v3 && live.playing && live.playing.slot !== "intro" && live.playing.slot !== "outro" ? live.playing : null;
+  const style = v3 ? look?.style : undefined;
   useRoomFont(style?.font);
   const tag: NameTagStyle | null = style ? { style: style.nameTag, show: style.showNames, size: style.textSize, font: style.font, color: style.brandColor } : null;
   const bg = String((meta as { backgroundUrl?: string }).backgroundUrl ?? "");

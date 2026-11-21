@@ -103,6 +103,8 @@ export interface RoomLive {
   /** v3: a sound pad pressed (plays once per `at`), and the music bed on air. The player bot plays both. */
   sound?: { id: string; at: number } | null;
   music?: { id: string; at: number } | null;
+  /** Studio v3 is switched on (the server's STUDIO_V3, written with every live-state change). Off or missing = the v2 stage. */
+  v3?: boolean;
 }
 
 /** Intro or outro: the slot first, then the v3 video shelf. */

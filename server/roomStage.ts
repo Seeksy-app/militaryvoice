@@ -58,7 +58,8 @@ export async function mergeRoomMeta(room: string, patch: Partial<RoomLive>): Pro
     if (!r) return false;
     let cur: Record<string, unknown> = {};
     try { cur = JSON.parse(r.metadata || "{}") as Record<string, unknown>; } catch { cur = {}; }
-    await rooms().updateRoomMetadata(room, JSON.stringify({ ...cur, ...patch }));
+    // Every view reads the flag from here, so the recording page needs no setting of its own.
+    await rooms().updateRoomMetadata(room, JSON.stringify({ ...cur, ...patch, v3: STUDIO_V3 }));
     return true;
   } catch (err) {
     console.error("Room metadata failed:", (err as Error).message);
