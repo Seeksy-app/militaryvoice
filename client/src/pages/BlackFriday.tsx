@@ -237,7 +237,36 @@ export default function BlackFriday() {
 }
 
 /** Sign in, then the trial: one card, every state. */
+const proPlan = PLANS.pro;
+const proPrice = `$${(proPlan.quarterCents / 100).toFixed(2)}`;
+type FoundingPlan = "creator" | "pro";
+/** Pro in the offer (Andrew, 21 Nov). Flip to true after his own Pro trial checkout passes. */
+const PRO_LIVE = false;
+const PLAN_CHOICE: { key: FoundingPlan; name: string; price: string; credits: string }[] = [
+  { key: "creator", name: "Scale", price: `then ${price} a month`, credits: `${scale.credits} credits today` },
+  { key: "pro", name: "Pro", price: `then ${proPrice} every 3 months`, credits: `${proPlan.credits} credits today` },
+];
+
+/** Scale or Pro: both have the first 30 days free (Andrew, 21 Nov 2026). ?plan=pro picks Pro on arrival. */
+function PlanPick({ plan, setPlan }: { plan: FoundingPlan; setPlan: (p: FoundingPlan) => void }) {
+  return (
+    <div className="mt-4 grid grid-cols-2 gap-2" role="radiogroup" aria-label="Pick a plan">
+      {PLAN_CHOICE.map((c) => (
+        <button key={c.key} type="button" role="radio" aria-checked={plan === c.key} onClick={() => setPlan(c.key)} data-testid={`bf-plan-${c.key}`}
+          className={`rounded-2xl border-2 px-3 py-2.5 text-left transition ${plan === c.key ? "border-[#F0A71F] bg-[#fff7e0]" : "border-[#cbd5e1] bg-white hover:border-[#F0A71F]/60"}`}>
+          <span className="block text-[15px] font-bold leading-tight">{c.name}</span>
+          <span className="mt-0.5 block text-xs leading-snug text-[#4a5568]">30 days free, {c.price}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
 function JoinBox({ src }: { src: string }) {
+  const [plan, setPlan] = useState<FoundingPlan>(() => (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("plan") === "pro" ? "pro" : "creator"));
+  const chosen = PLAN_CHOICE.find((c) => c.key === plan)!;
+  // Pro shows for everyone once Andrew's own Pro trial checkout passes (PRO_LIVE); until then only with ?plan=pro.
+  const proOn = PRO_LIVE || plan === "pro";
   const [signedIn, setSignedIn] = useState<boolean | null>(null);
   const [standing, setStanding] = useState<Standing | null>(null);
   const [step, setStep] = useState<"email" | "code">("email");
@@ -268,7 +297,7 @@ function JoinBox({ src }: { src: string }) {
     setBusy(true);
     setError("");
     try {
-      const { url } = await (await apiRequest("POST", "/api/host/founding/checkout", { src })).json();
+      const { url } = await (await apiRequest("POST", "/api/host/founding/checkout", { src, plan })).json();
       window.location.href = url;
     } catch (e) {
       setError((e as Error).message || "Checkout didn't open. Try again in a moment.");
@@ -333,7 +362,8 @@ function JoinBox({ src }: { src: string }) {
       return (
         <div className={shell} data-testid="bf-box-eligible">
           <p className="text-lg font-bold">Start your 30 days free</p>
-          <p className="mt-1 text-sm text-[#4a5568]">Scale, then {price} a month. {scale.credits} credits today.</p>
+          {proOn && <PlanPick plan={plan} setPlan={setPlan} />}
+          <p className="mt-3 text-sm text-[#4a5568]">{chosen.name}, {chosen.price}. {chosen.credits}.</p>
           <Button onClick={() => void checkout()} disabled={busy} className={`mt-5 ${gold}`} data-testid="bf-checkout">
             {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <>Start my 30 days free <ArrowRight className="h-4 w-4" /></>}
           </Button>
@@ -347,7 +377,7 @@ function JoinBox({ src }: { src: string }) {
       <div className={shell} data-testid={`bf-box-${standing.reason || "member"}`}>
         <p className="text-lg font-bold">{standing.member ? "You're a Founding Member." : standing.reason === "closed" ? `The offer ended on ${standing.endsLabel}.` : "Welcome back."}</p>
         <p className="mt-1 text-sm text-[#4a5568]">
-          {done ? `You're on ${standing.plan}. Everything's ready in your dashboard.` : standing.reason === "had-plan" ? "The 30 days free is for a first plan, and you've had one before. Scale is on the Pricing page." : "Scale is on the Pricing page."}
+          {done ? `You're on ${standing.plan}. Everything's ready in your dashboard.` : standing.reason === "had-plan" ? "The 30 days free is for a first plan, and you've had one before. Scale and Pro are on the Pricing page." : "Scale and Pro are on the Pricing page."}
         </p>
         <a href={done ? "/host/dashboard" : "/pricing"} className="mt-5 block">
           <Button className={gold}>{done ? "Open my dashboard" : "See plans"} <ArrowRight className="h-4 w-4" /></Button>
@@ -362,7 +392,8 @@ function JoinBox({ src }: { src: string }) {
       <p className="text-lg font-bold">Join the Founding Members</p>
       {step === "email" ? (
         <form onSubmit={(e) => { e.preventDefault(); if (email.includes("@") && (!siteKey || human)) void sendCode(); }}>
-          <p className="mt-1 text-sm text-[#4a5568]">30 days free, then {price} a month.</p>
+          <p className="mt-1 text-sm text-[#4a5568]">{proOn ? "Scale or Pro, 30 days free." : `30 days free, then ${price} a month.`}</p>
+          {proOn && <PlanPick plan={plan} setPlan={setPlan} />}
           <Input type="email" required autoComplete="email" placeholder="you@yourshow.com" value={email} onChange={(e) => setEmail(e.target.value)} className="mt-4 h-12 rounded-xl border-[#cbd5e1] bg-white text-base text-[#0b1530]" data-testid="bf-email" />
           {siteKey && <div className="mt-3"><Turnstile siteKey={siteKey} onToken={setHuman} resetSignal={humanReset} appearance="interaction-only" theme="light" /></div>}
           <Button type="submit" disabled={busy || !email.includes("@") || (Boolean(siteKey) && !human)} className={`mt-4 ${gold}`} data-testid="bf-send-code">

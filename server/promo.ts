@@ -15,6 +15,7 @@ import { and, eq, like, sql } from "drizzle-orm";
 import { db, storage } from "./storage.js";
 import { requireHostSession, getSessionEmail } from "./session.js";
 import { createPlanCheckout, hadPlanSubscription, stripeReady } from "./stripe.js";
+import { noteMarathonClick } from "./marathonFounding.js";
 import { siteSettings, sponsorClicks } from "../shared/schema.js";
 import { FOUNDING, foundingOpen, planOf, type PlanKey } from "../shared/tokens.js";
 
@@ -64,6 +65,8 @@ export function registerPromo(app: Express, requireAdmin: RequestHandler): void 
     const src = clean(req.query.src);
     const step = req.params.step === "start" ? "start" : "page";
     count(step, src, req);
+    // Riccoh's Marathon emails carry each person's own opaque token: a click counts as an answer (marathonFounding.ts).
+    if (typeof req.query.u === "string") void noteMarathonClick(req.query.u).catch(() => {});
     res.redirect(302, `/black-friday?src=${encodeURIComponent(src)}${step === "start" ? "#join" : ""}`);
   });
 
@@ -87,20 +90,22 @@ export function registerPromo(app: Express, requireAdmin: RequestHandler): void 
     res.json({ open: foundingOpen(), endsLabel: FOUNDING.endsLabel, ...(await standing(email)) });
   });
 
-  /** Scale with the first 30 days free: Stripe Checkout with a trial, card taken there. */
+  /** Scale or Pro with the first 30 days free: Stripe Checkout with a trial, card taken there. Pro is paid every 3 months. */
   app.post("/api/host/founding/checkout", requireHostSession, async (req, res) => {
     const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
+    const plan = (FOUNDING.plans as readonly string[]).includes(String(req.body?.plan)) ? (String(req.body.plan) as PlanKey) : (FOUNDING.plan as PlanKey);
     if (!stripeReady()) return res.status(503).json({ message: "Payments aren't switched on yet. Try again soon." });
     const s = await standing(email);
     if (!s.eligible) {
-      const message = s.reason === "plan" ? `You're already on ${s.plan}.` : s.reason === "closed" ? `The Founding Members offer ended on ${FOUNDING.endsLabel}.` : "The 30 days free is for a first plan, and you've had one before. Scale is on the Pricing page.";
+      const message = s.reason === "plan" ? `You're already on ${s.plan}.` : s.reason === "closed" ? `The Founding Members offer ended on ${FOUNDING.endsLabel}.` : "The 30 days free is for a first plan, and you've had one before. Scale and Pro are on the Pricing page.";
       return res.status(409).json({ message, reason: s.reason });
     }
     try {
       const sub = await storage.getSubscription(email);
       const origin = (process.env.PUBLIC_ORIGIN || `${req.protocol}://${req.get("host")}`).replace(/\/+$/, "");
-      const url = await createPlanCheckout({ email, plan: FOUNDING.plan as PlanKey, interval: "month", origin, customerId: sub?.customerId || undefined, trialDays: FOUNDING.trialDays, cohort: FOUNDING.cohort, cancelPath: "/black-friday" });
+      const url = await createPlanCheckout({ email, plan, interval: plan === "pro" ? "quarter" : "month", origin, customerId: sub?.customerId || undefined, trialDays: FOUNDING.trialDays, cohort: FOUNDING.cohort, cancelPath: "/black-friday" });
       count("checkout", String(req.body?.src ?? ""), req);
+      if (plan === "pro") count("checkout-pro", String(req.body?.src ?? ""), req);
       res.json({ url });
     } catch (err) {
       console.error("Founding checkout failed:", (err as Error).message);

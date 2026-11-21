@@ -1,7 +1,8 @@
-=== Email 1 · on Andrew's go
+=== Email 1 · when Andrew says
 From: Riccoh Player <hello@militaryvoices.ai>
 Subject: I'm letting you in first
 Preheader: Founding Members opens Black Friday. You're in before everyone else.
+Header image: https://www.militaryvoices.ai/email/founding-hero.jpg
 
 Hi Laura,
 
@@ -12,26 +13,28 @@ Founding Members opens on Black Friday, and you can join today. Scale is free fo
 What you get with Scale:
 
 - Pōstify cuts 4 captioned clips from every episode, ready to post
-- Animated captions that follow whoever is talking
+- Post to all your socials: Instagram, Facebook, YouTube, TikTok and LinkedIn
+- Animated captions that light up each word
 - A clean episode every time: ums and dead air taken out
 - 30 Pōstify credits a month, yours on day 1
 - Your own Studio to record and go live with your guests
 
-[Pro too?] Want more? Pro is in the offer too: 6 clips an episode instead of 4 and 90 credits a month. [drop this line if Pro stays out]
+Want more? Pro is in the offer too: 30 days free, then $147 every 3 months, with 6 clips an episode instead of 4 and 90 credits a month.
 
 Everyone who joins in 2026 is a Founding Member. The offer ends December 31, 2026.
 
-Become a Founding Member: https://www.militaryvoices.ai/go/bf?src=email-marathon-1
+Become a Founding Member: https://www.militaryvoices.ai/go/bf?src=email-marathon-1&u=89d764d753b15d6c
 
 Semper Fi,
 Riccoh Player
 
-Unsubscribe: #
+Unsubscribe: https://www.militaryvoices.ai/api/unsubscribe?email=laura%40example.com&token=1f22f3880bbf889ed5af3060d6b66d35
 
-=== Email 2 · Wed 25 Nov, 9:00 am ET (no reply, no sign-in since email 1)
+=== Email 2 · Wed 25 Nov, 9:00 am ET, only if no reply, sign-in, click or plan since email 1
 From: Riccoh Player <hello@militaryvoices.ai>
 Subject: Your Founding Member spot is still open
 Preheader: Scale free for 30 days. Before Thanksgiving, a quick reminder.
+Header image: https://www.militaryvoices.ai/email/founding-hero.jpg
 
 Hi Laura,
 
@@ -39,23 +42,24 @@ A quick one before Thanksgiving. Your spot as a Founding Member is still open.
 
 Scale is free for your first 30 days, then $19.95 a month. You'll need a card at checkout, and if you cancel before day 30 you pay nothing.
 
-That's clips from every episode, animated captions, a clean edit and your own Studio.
+That's clips from every episode, posting to all your socials (Instagram, Facebook, YouTube, TikTok and LinkedIn), animated captions, a clean edit and your own Studio.
 
-[Pro too?] Want more? Pro is in the offer too: 6 clips an episode instead of 4 and 90 credits a month. [drop this line if Pro stays out]
+Want more? Pro is in the offer too: 30 days free, then $147 every 3 months, with 6 clips an episode instead of 4 and 90 credits a month.
 
 Happy Thanksgiving to you and yours.
 
-Become a Founding Member: https://www.militaryvoices.ai/go/bf?src=email-marathon-2
+Become a Founding Member: https://www.militaryvoices.ai/go/bf?src=email-marathon-2&u=89d764d753b15d6c
 
 Semper Fi,
 Riccoh Player
 
-Unsubscribe: #
+Unsubscribe: https://www.militaryvoices.ai/api/unsubscribe?email=laura%40example.com&token=1f22f3880bbf889ed5af3060d6b66d35
 
-=== Email 3a · Fri 27 Nov, 8:00 am ET (still no reply, no sign-in)
+=== Email 3 · Fri 27 Nov, 8:00 am ET, same test (3a wording)
 From: Riccoh Player <hello@militaryvoices.ai>
 Subject: Closing your account
 Preheader: If you want to come back, just reply.
+Header image: https://www.militaryvoices.ai/email/founding-hero.jpg
 
 Hi Laura,
 
@@ -65,37 +69,13 @@ So we'll close and archive your MilitaryVoices.ai account. If you'd like to come
 
 And if you'd rather stay as a Founding Member, today is Black Friday. Scale is free for your first 30 days, then $19.95 a month. You'll need a card at checkout, and if you cancel before day 30 you pay nothing.
 
-[Pro too?] Want more? Pro is in the offer too: 6 clips an episode instead of 4 and 90 credits a month. [drop this line if Pro stays out]
+Want more? Pro is in the offer too: 30 days free, then $147 every 3 months, with 6 clips an episode instead of 4 and 90 credits a month.
 
 Thank you for being on the Marathon.
 
-Stay as a Founding Member: https://www.militaryvoices.ai/go/bf?src=email-marathon-3
+Stay as a Founding Member: https://www.militaryvoices.ai/go/bf?src=email-marathon-3&u=89d764d753b15d6c
 
 Semper Fi,
 Riccoh Player
 
-Unsubscribe: #
-
-=== Email 3b · Fri 27 Nov, 8:00 am ET (still no reply, no sign-in)
-From: Riccoh Player <hello@militaryvoices.ai>
-Subject: Last note from me on Founding Members
-Preheader: Your free account stays. This is my last note about the offer.
-
-Hi Laura,
-
-This is my last note about Founding Members, and I understand you may have other options.
-
-Your free account stays as it is: your SmartLink, your show and your podcast hosting don't go anywhere.
-
-If you want Scale, today is Black Friday and the offer is open until December 31, 2026. Scale is free for your first 30 days, then $19.95 a month. You'll need a card at checkout, and if you cancel before day 30 you pay nothing.
-
-[Pro too?] Want more? Pro is in the offer too: 6 clips an episode instead of 4 and 90 credits a month. [drop this line if Pro stays out]
-
-If something isn't working for you, reply and tell me. Thank you for being on the Marathon.
-
-Become a Founding Member: https://www.militaryvoices.ai/go/bf?src=email-marathon-3
-
-Semper Fi,
-Riccoh Player
-
-Unsubscribe: #
+Unsubscribe: https://www.militaryvoices.ai/api/unsubscribe?email=laura%40example.com&token=1f22f3880bbf889ed5af3060d6b66d35

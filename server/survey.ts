@@ -13,6 +13,7 @@ import { emailShell, EMAIL_BANNERS, sendOneOffEmail, bccFor } from "./email.js";
 import { clips, outboxMail, postifySubscriptions, recordings, scheduledGrants, scheduledTexts, smsOptOuts, surveyInvites } from "../shared/schema.js";
 import { peopleFor, sendSms, toE164 } from "./sms.js";
 import { sendFoundingReminders } from "./foundingReminder.js";
+import { MARATHON_KIND, marathonSkip, senderFrom, bccForSender } from "./marathonFounding.js";
 import { SURVEY_QUESTIONS } from "../shared/survey.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
@@ -434,8 +435,13 @@ export function registerSurvey(app: Express, requireAdmin: RequestHandler): void
         const [inv] = await db.select({ completedAt: surveyInvites.completedAt }).from(surveyInvites).where(and(eq(surveyInvites.survey, SURVEY), eq(surveyInvites.email, m.to)));
         if (inv?.completedAt) { await db.update(outboxMail).set({ status: "cancelled", error: "Answered before it went." }).where(eq(outboxMail.id, m.id)); continue; }
       }
+      // Riccoh's Founding Members emails to the Marathon: 2 and 3 only to people who haven't answered (marathonFounding.ts).
+      if (m.kind.startsWith(MARATHON_KIND)) {
+        const why = await marathonSkip(m.to, m.kind).catch(() => "Couldn't check, so held.");
+        if (why) { await db.update(outboxMail).set({ status: "cancelled", error: why }).where(eq(outboxMail.id, m.id)); continue; }
+      }
       try {
-        const id = await sendOneOffEmail({ to: m.to, subject: m.subject, html: m.html, text: m.text, kind: m.kind, bcc: m.sender === "riccoh" ? bccFor("riccoh", m.to) : undefined });
+        const id = await sendOneOffEmail({ to: m.to, subject: m.subject, html: m.html, text: m.text, kind: m.kind, from: senderFrom(m.sender), bcc: m.sender === "riccoh" ? bccFor("riccoh", m.to) : bccForSender(m.sender, m.to) });
         await db.update(outboxMail).set(id ? { status: "sent", sentAt: now() } : { status: "failed", error: "The mail service didn't take it." }).where(eq(outboxMail.id, m.id));
         if (id) sent++;
       } catch (err: any) {

@@ -148,6 +148,7 @@ import { registerSite } from "./site.js";
 import { registerGtm } from "./gtm.js";
 import { registerPromo, noteFoundingTrial } from "./promo.js";
 import { socialTrial, socialBlocked } from "./socialTrial.js";
+import { registerMarathonFounding } from "./marathonFounding.js";
 import { registerShareLogin } from "./shareLogin.js";
 import { orgMemberEmails, registerOrgs } from "./orgs.js";
 import { registerProspects } from "./prospects.js";
@@ -6995,6 +6996,7 @@ export function registerRoutes(app: Express): void {
   registerSite(app);
   registerGtm(app, requireAdmin);
   registerPromo(app, requireAdmin);
+  registerMarathonFounding(app, requireAdmin);
   registerShareLogin(app, requireAdmin);
   registerHealth(app, requireAdmin);
   registerNotices(app, requireAdmin, requireHostSession);
@@ -8527,8 +8529,9 @@ export function registerRoutes(app: Express): void {
     const inv = invoiceId || state.latestInvoice;
     const plan = planOf(state.plan);
     if (inv && plan && ["active", "trialing"].includes(state.status)) {
-      // A yearly plan's year of credits comes the day it's paid.
-      const credits = plan.credits * (state.interval === "year" ? 12 : state.interval === "quarter" ? 3 : 1);
+      // A yearly plan's year of credits comes the day it's paid. A free trial (Founding Members) gets one month's,
+      // so a Pro trial starts with 90, not a quarter's 270; the full period's come with the first paid invoice.
+      const credits = plan.credits * (state.status === "trialing" ? 1 : state.interval === "year" ? 12 : state.interval === "quarter" ? 3 : 1);
       await storage.addTokens({ email: state.email, delta: credits, reason: `${plan.name} ${state.interval === "year" ? "yearly" : state.interval === "quarter" ? "quarterly" : "monthly"}: ${credits} credits`, ref: `plan:${inv}` });
     }
   }
