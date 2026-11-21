@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Clapperboard, Loader2, Lock, MoreHorizontal, Pencil, Play, Plus, Square, Trash2, Users, X } from "lucide-react";
+import { Clapperboard, Copy, Loader2, Lock, MoreHorizontal, Pencil, Play, Plus, Square, Trash2, Users, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { LIMITS, PEOPLE_DEFAULT, bgCss, newId, type Layout, type RoomKit, type Scene, type SceneType, type Slot } from "./look";
 
@@ -14,10 +14,11 @@ function reveal(el: HTMLElement | null) {
 
 /** v3 scene types (Studio phase 3 mockup, 21 Nov). The layout follows the type, for players that only know layouts. */
 export const TYPES: { id: SceneType; label: string; line: string; layout: Layout }[] = [
-  { id: "single", label: "Single speaker", line: "One person, full frame", layout: "solo" },
+  // Names after StreamYard's own picker (Andrew, 21 Nov: "mirror the features"), in our words.
+  { id: "single", label: "Speaker view", line: "One person, full frame", layout: "solo" },
   { id: "two", label: "Two people", line: "Side by side", layout: "side" },
-  { id: "group", label: "Group", line: "Everyone on stage", layout: "grid" },
-  { id: "media", label: "Video or picture", line: "A clip, picture or screen fills the scene", layout: "screen" },
+  { id: "group", label: "Group discussion", line: "Everyone on stage", layout: "grid" },
+  { id: "media", label: "Media presentation", line: "A clip, picture or screen fills the scene", layout: "screen" },
   { id: "profile", label: "Profile", line: "A guest's photo, name and a line about them", layout: "solo" },
 ];
 export const typeOf = (s: Scene): SceneType => s.type ?? (s.layout === "solo" || s.layout === "speaker" ? "single" : s.layout === "side" ? "two" : s.layout === "grid" ? "group" : "media");
@@ -77,18 +78,32 @@ export function ScenesPanel({ kit, v3 = false, sheet = false }: { kit: RoomKit; 
     return () => window.removeEventListener("keydown", k);
   }, [look.scenes, kit, sheet]);
 
+  // A new scene goes last, or right below one (`below`), moving the later ones (and their keys) down one.
+  const [below, setBelow] = useState<number | null>(null);
+  const place = (l: typeof look, s: Scene, after: number | null) => {
+    if (after === null) return { ...l, scenes: [...l.scenes, s] };
+    return { ...l, scenes: [...l.scenes.map((x) => (x.n > after ? { ...x, n: x.n + 1 } : x)), { ...s, n: after + 1 }] };
+  };
   const add = (type?: SceneType, people?: number) => {
-    const n = [1, 2, 3, 4, 5, 6, 7, 8, 9].find((x) => !look.scenes.some((s) => s.n === x));
-    if (!n) return;
+    const n = below !== null ? below + 1 : [1, 2, 3, 4, 5, 6, 7, 8, 9].find((x) => !look.scenes.some((s) => s.n === x));
+    if (!n || look.scenes.length >= LIMITS.scenes) return;
     const t = type && TYPES.find((x) => x.id === type)!;
     // v3: a new scene starts with the studio's starting background (look.background).
     const s: Scene = t
       ? { id: newId(), n, name: t.label, layout: t.layout, stage: [], type: t.id, people: people ?? PEOPLE_DEFAULT[t.id], look: { background: look.background }, ...(t.id === "profile" ? { profile: { photo: null, name: "", title: "", line: "", links: [] } } : {}) }
       : { id: newId(), n, name: `Scene ${n}`, layout: "grid", stage: [] };
-    kit.change((l) => ({ ...l, scenes: [...l.scenes, s] }));
+    const after = below;
+    kit.change((l) => place(l, s, after));
     setPicking(false);
+    setBelow(null);
     setEditing(s.id);
   };
+  const duplicate = (s: Scene) => {
+    if (look.scenes.length >= LIMITS.scenes) return;
+    const copy: Scene = { ...JSON.parse(JSON.stringify(s)) as Scene, id: newId(), name: `${s.name} copy`.slice(0, LIMITS.sceneName) };
+    kit.change((l) => place(l, copy, s.n));
+  };
+  const addBelow = (s: Scene) => { setBelow(s.n); setPicking(true); };
   const remove = (s: Scene) => {
     if (!window.confirm(`Delete ${s.name}?`)) return;
     const next = scenes.find((x) => x.id !== s.id);
@@ -103,13 +118,16 @@ export function ScenesPanel({ kit, v3 = false, sheet = false }: { kit: RoomKit; 
       {!v3 && <VideoSlot slot="intro" kit={kit} />}
       {scenes.map((s) => (
         <div key={s.id}>
-          <SceneCard s={s} kit={kit} v3={v3} on={onAir === s.id} next={kit.live.playing?.slot === "countdown" && kit.live.playing.next === s.id} onPick={() => kit.toScene(s.id)} onEdit={() => setEditing(editing === s.id ? null : s.id)} />
+          <SceneCard s={s} kit={kit} v3={v3} on={onAir === s.id} next={kit.live.playing?.slot === "countdown" && kit.live.playing.next === s.id} onPick={() => kit.toScene(s.id)}
+            full={look.scenes.length >= LIMITS.scenes}
+            onRename={() => setEditing(editing === s.id ? null : s.id)} onDuplicate={() => duplicate(s)} onAddBelow={() => addBelow(s)} onDelete={look.scenes.length > 1 ? () => remove(s) : undefined} />
           {editing === s.id && <SceneEditor s={s} kit={kit} v3={v3} onDelete={look.scenes.length > 1 ? () => remove(s) : undefined} onClose={() => setEditing(null)} />}
+          {picking && below === s.n && <div className="mt-3"><TypePicker onPick={add} onClose={() => { setPicking(false); setBelow(null); }} /></div>}
         </div>
       ))}
-      {look.scenes.length < LIMITS.scenes && (v3 && picking
+      {look.scenes.length < LIMITS.scenes && (picking && below === null
         ? <TypePicker onPick={add} onClose={() => setPicking(false)} />
-        : <button type="button" onClick={() => (v3 ? setPicking(true) : add())} className="h-[42px] shrink-0 rounded-xl border border-dashed border-[#98a2b3] bg-white text-sm font-semibold text-[#344054] hover:bg-[#f9fafb]" data-testid="scene-add">+ New scene</button>)}
+        : <button type="button" onClick={() => { setBelow(null); setPicking(true); }} className="h-[42px] shrink-0 rounded-xl border border-dashed border-[#98a2b3] bg-white text-sm font-semibold text-[#344054] hover:bg-[#f9fafb]" data-testid="scene-add">+ New scene</button>)}
       {!v3 && <VideoSlot slot="outro" kit={kit} />}
     </aside>
   );
@@ -142,13 +160,17 @@ function TypePicker({ onPick, onClose }: { onPick: (t: SceneType, people?: numbe
   );
 }
 
-function SceneCard({ s, kit, v3, on, next, onPick, onEdit }: { s: Scene; kit: RoomKit; v3: boolean; on: boolean; next: boolean; onPick: () => void; onEdit: () => void }) {
+function SceneCard({ s, kit, v3, on, next, full, onPick, onRename, onDuplicate, onAddBelow, onDelete }: { s: Scene; kit: RoomKit; v3: boolean; on: boolean; next: boolean; full: boolean; onPick: () => void; onRename: () => void; onDuplicate: () => void; onAddBelow: () => void; onDelete?: () => void }) {
   const look = kit.look!;
+  const [menu, setMenu] = useState(false);
+  const item = "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-semibold text-[#101828] hover:bg-[#f2f4f7] disabled:opacity-40 disabled:hover:bg-transparent";
+  const pick = (fn: () => void) => () => { setMenu(false); fn(); };
   const icon = LAYOUTS.find((l) => l.id === s.layout)?.icon;
   const logo = s.look && "logo" in s.look ? s.look.logo : look.logo;
   return (
-    <div className={`group relative shrink-0 overflow-hidden rounded-[14px] ${on ? "border-2 border-[#053877] shadow-[0_6px_16px_rgba(5,56,119,0.16)]" : next ? "border-2 border-[#F0A71F] shadow-[0_0_0_4px_rgba(240,167,31,0.2)]" : "border border-[#e4e7ec]"}`} data-testid={`scene-${s.n}`}>
-      <button type="button" onClick={onPick} className="block w-full text-left" aria-label={`Put ${s.name} on air (key ${s.n})`} aria-pressed={on}>
+    <div className={`group relative shrink-0 rounded-[14px] ${on ? "border-2 border-[#053877] shadow-[0_6px_16px_rgba(5,56,119,0.16)]" : next ? "border-2 border-[#F0A71F] shadow-[0_0_0_4px_rgba(240,167,31,0.2)]" : "border border-[#e4e7ec]"}`} data-testid={`scene-${s.n}`}>
+      {/* The clip is on the button, not the card, so the ⋯ menu isn't cut off. */}
+      <button type="button" onClick={onPick} className="block w-full overflow-hidden rounded-[12px] text-left" aria-label={`Put ${s.name} on air (key ${s.n})`} aria-pressed={on}>
         <div className="relative flex h-[88px] items-center justify-center" style={{ background: bgCss(s.look?.background ?? look.background) }}>
           <svg width="88" height="64" viewBox="0 0 22 16" fill="rgba(28,44,82,0.92)" aria-hidden>{icon}</svg>
           {logo && <img src={logo.asset.url} alt="" className={`absolute top-1 h-4 w-auto rounded-sm ${logo.corner === "tl" ? "left-1.5" : "right-1.5"}`} />}
@@ -160,7 +182,19 @@ function SceneCard({ s, kit, v3, on, next, onPick, onEdit }: { s: Scene; kit: Ro
           <span className="rounded-md bg-[#f2f4f7] px-[7px] py-px text-xs font-semibold text-[#667085]">{s.n}</span>
         </div>
       </button>
-      <button type="button" onClick={onEdit} aria-label={`Edit ${s.name}`} title="Edit scene" className="absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-[#344054] opacity-0 shadow transition-opacity focus:opacity-100 group-hover:opacity-100" data-testid={`scene-menu-${s.n}`}>{v3 ? <MoreHorizontal className="h-4 w-4" /> : <Pencil className="h-3.5 w-3.5" />}</button>
+      <button type="button" onClick={() => setMenu(!menu)} aria-label={`${s.name}: more`} aria-expanded={menu} title="Scene options" className={`absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-[#344054] shadow transition-opacity focus:opacity-100 group-hover:opacity-100 ${menu ? "opacity-100" : "opacity-0"}`} data-testid={`scene-menu-${s.n}`}><MoreHorizontal className="h-4 w-4" /></button>
+      {menu && (
+        <>
+          <button type="button" aria-label="Close" className="fixed inset-0 z-10 cursor-default" onClick={() => setMenu(false)} />
+          {/* Scene ⋯ (StreamYard's own set, Andrew 21 Nov). Nothing here puts a scene on air. */}
+          <div className="absolute inset-x-1.5 top-10 z-20 rounded-xl border border-[#e4e7ec] bg-white p-1 shadow-[0_12px_32px_rgba(16,24,40,0.18)]" data-testid={`scene-menu-list-${s.n}`}>
+            <button type="button" onClick={pick(onRename)} className={item} data-testid="scene-rename"><Pencil className="h-4 w-4" /> {v3 ? "Rename and edit" : "Rename"}</button>
+            <button type="button" onClick={pick(onDuplicate)} disabled={full} title={full ? "9 scenes is the most" : undefined} className={item} data-testid="scene-duplicate"><Copy className="h-4 w-4" /> Duplicate</button>
+            <button type="button" onClick={pick(onAddBelow)} disabled={full} title={full ? "9 scenes is the most" : undefined} className={item} data-testid="scene-add-below"><Plus className="h-4 w-4" /> Add scene below</button>
+            {onDelete && <><div className="my-1 h-px bg-[#eaecf0]" /><button type="button" onClick={pick(onDelete)} className={`${item} text-[#b42318]`} data-testid="scene-delete"><Trash2 className="h-4 w-4" /> Delete scene</button></>}
+          </div>
+        </>
+      )}
     </div>
   );
 }
