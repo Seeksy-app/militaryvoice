@@ -10610,8 +10610,6 @@ export function registerRoutes(app: Express): void {
     }
     await storage.markLoginTokenUsed(row.id);
     setSessionCookie(res, email, req.body?.remember === true);
-    // Their own sign-in: anything waiting for it (a one-time nudge) goes out now.
-    try { waitUntil(fireNudgeFor(email, "sign-in").catch(() => false)); } catch { /* not on Vercel */ }
     res.json({ ok: true, email });
   });
 

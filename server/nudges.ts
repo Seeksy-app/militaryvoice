@@ -2,10 +2,9 @@
 // Andrew: "Wait for his next email. Or his next login if he logs in trigger the email.").
 //
 // A nudge is armed by an admin with the exact text Andrew approved. It goes out once, on whichever comes
-// first for that address: their next inbound email (it then replaces the auto-acknowledgement, so they get one
-// email, not two) or their next sign-in with an emailed code. Not a page visit (PM, 21 Nov): an admin's view-as sets
-// the same host session as theirs, so our own browser can look exactly like them. Plain text, from hello@, through
-// the normal send hook (so it's in mail_log).
+// only when that address next writes to us (it then replaces the auto-acknowledgement, so they get one email, not
+// two). Andrew, 21 Nov: "send only if he responds to our original email". No sign-in or page-visit trigger: an
+// admin's view-as sets the same host session as theirs. Plain text, from hello@, through the normal send hook.
 import type { Express, RequestHandler } from "express";
 import { sql } from "drizzle-orm";
 import { db, storage } from "./storage.js";
@@ -22,7 +21,7 @@ async function armed(): Promise<Nudge[]> {
 }
 
 /** Sends any nudge waiting for this address. True when one went out. Safe to call often: each ref sends once. */
-export async function fireNudgeFor(email: string, why: "email" | "sign-in"): Promise<boolean> {
+export async function fireNudgeFor(email: string, why: "email"): Promise<boolean> {
   const who = norm(email);
   const list = (await armed()).filter((n) => norm(n.to) === who);
   let sent = false;
