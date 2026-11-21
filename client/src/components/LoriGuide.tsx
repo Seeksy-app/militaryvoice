@@ -26,6 +26,12 @@ export function useGuide(): GuideMe | undefined {
   }).data;
 }
 
+/** Who answers on this account: the guide's name when it has one (Lori, or what he renamed her), else Alex. */
+export function useGuideName(): string {
+  const g = useGuide();
+  return g?.enabled ? g.name : "Alex";
+}
+
 type Offer = { id: string; label: string };
 type Msg = { role: "user" | "assistant"; content: string; offer?: Offer; answered?: boolean };
 type Reply = { text: string; handoff?: boolean; offer?: Offer; name?: string; waiting?: string; waitSec?: number };
@@ -85,7 +91,8 @@ export function LoriGuide({ g, compact = false }: { g: Extract<GuideMe, { enable
   // The same doors into Ask Alex open her: a link to #help, and any "ask" button on the site.
   useEffect(() => {
     if (window.location.hash === "#help") setOpen(true);
-    const onAsk = (e: Event) => { const q = String((e as CustomEvent<{ question?: string }>).detail?.question ?? ""); setOpen(true); if (q) setDraft(q); };
+    // The dashboard's top box sends its question straight in (send: true); other doors just type it for him.
+    const onAsk = (e: Event) => { const d = (e as CustomEvent<{ question?: string; send?: boolean }>).detail; const q = String(d?.question ?? "").trim(); setOpen(true); if (q && d?.send) void sendRef.current(q); else if (q) setDraft(q); };
     window.addEventListener("mv:ask-alex", onAsk);
     return () => window.removeEventListener("mv:ask-alex", onAsk);
   }, []);
@@ -139,6 +146,9 @@ export function LoriGuide({ g, compact = false }: { g: Extract<GuideMe, { enable
     }, 3000);
     return () => { stop = true; window.clearInterval(t); };
   }, [waiting]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const sendRef = useRef(send);
+  sendRef.current = send;
 
   /** "Yes, open it": go there, then point at each control. He makes every click. */
   const take = (m: Msg) => {

@@ -1,8 +1,9 @@
 import { Link } from "wouter";
 import { ArrowRight, ArrowUp, CalendarDays, Check, ListOrdered, Share2, Sparkles } from "lucide-react";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { resolveUploadUrl } from "@/lib/queryClient";
 import { StudioIcon } from "@/components/GreenRoomButton";
+import { useGuideName } from "@/components/LoriGuide";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
@@ -38,6 +39,11 @@ export function CommandCenter({
 }) {
   const now = new Date();
   const [askText, setAskText] = useState("");
+  // The account's own guide when it has one (Lori for Frank): her name here, and the question goes to her panel.
+  const helper = useGuideName();
+  // On a phone the long placeholder ran out of room ("…do…" cut off): a short one there.
+  const [narrow, setNarrow] = useState(() => typeof window !== "undefined" && window.matchMedia("(max-width: 639px)").matches);
+  useEffect(() => { const m = window.matchMedia("(max-width: 639px)"); const on = () => setNarrow(m.matches); m.addEventListener("change", on); return () => m.removeEventListener("change", on); }, []);
   return (
     <section className="pt-2" data-testid="command-center">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -67,7 +73,7 @@ export function CommandCenter({
         data-testid="dashboard-ask"
       >
         <Sparkles className="h-4 w-4 shrink-0 text-[#F0A71F]" />
-        <input value={askText} onChange={(e) => setAskText(e.target.value)} placeholder="Ask Alex anything, or say what you'd like to do…" className="min-w-0 flex-1 bg-transparent py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none" aria-label="Ask Alex" />
+        <input value={askText} onChange={(e) => setAskText(e.target.value)} placeholder={narrow ? `Ask ${helper} anything…` : `Ask ${helper} anything, or say what you'd like to do…`} className="min-w-0 flex-1 bg-transparent py-2 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none" aria-label={`Ask ${helper}`} />
         <button type="submit" aria-label="Ask" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#053877] text-white hover:bg-[#0a4a99]"><ArrowUp className="h-4 w-4" /></button>
       </form>
     </section>

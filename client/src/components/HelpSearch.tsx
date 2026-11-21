@@ -4,6 +4,7 @@ import { Search, ArrowRight } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { searchHelp } from "@/lib/helpIndex";
+import { useGuideName } from "@/components/LoriGuide";
 
 /** Open Alex's chat from anywhere, with a question already typed. */
 export function askAlex(question = "") {
@@ -17,6 +18,7 @@ export function askAlex(question = "") {
  */
 export function HelpSearch({ compact = false, autoFocus = false }: { compact?: boolean; autoFocus?: boolean }) {
   const [q, setQ] = useState("");
+  const helper = useGuideName();
   const results = useMemo(() => (q.trim() ? searchHelp(q).slice(0, compact ? 4 : 8) : []), [q, compact]);
   return (
     <div className="rounded-2xl border border-border bg-card p-4 text-left text-foreground shadow-sm" data-testid="help-search">
@@ -35,7 +37,7 @@ export function HelpSearch({ compact = false, autoFocus = false }: { compact?: b
         </div>
         <Button type="button" onClick={() => askAlex(q.trim())} className="h-11 shrink-0 gap-2 rounded-full bg-[#053877] px-4 text-white hover:bg-[#0a4a99]" data-testid="help-ask-alex">
           <img src="/alex.jpg" alt="" className="-ml-1.5 h-7 w-7 rounded-full object-cover ring-2 ring-white/30" />
-          Ask Alex
+          Ask {helper}
         </Button>
       </div>
       {q.trim() && (
@@ -43,7 +45,7 @@ export function HelpSearch({ compact = false, autoFocus = false }: { compact?: b
           {results.length === 0 ? (
             <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-3 text-sm">
               <span className="text-muted-foreground">Nothing in the help for that yet.</span>
-              <button type="button" onClick={() => askAlex(q.trim())} className="font-medium text-[#053877] hover:underline">Ask Alex instead →</button>
+              <button type="button" onClick={() => askAlex(q.trim())} className="font-medium text-[#053877] hover:underline">Ask {helper} instead →</button>
             </div>
           ) : (
             results.map((r) => {

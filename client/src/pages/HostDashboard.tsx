@@ -79,7 +79,8 @@ import { BrandHome, BrandSetup } from "@/components/BrandHome";
 import { BrandRequests } from "@/components/requests/BrandRequests";
 import { Opportunities } from "@/components/requests/Opportunities";
 import { buildSteps, goToStep } from "@/components/NextSteps";
-import { GuideLayer, HomeTour, HOME_TOUR, showGuide } from "@/components/Guide";
+import { GuideLayer, HomeTour, homeTour, showGuide } from "@/components/Guide";
+import { useGuideName } from "@/components/LoriGuide";
 import { PromotionScreen } from "@/components/PromotionScreen";
 import { SocialScreen } from "@/components/SocialScreen";
 import { GreenRoomScreen } from "@/components/GreenRoomScreen";
@@ -738,6 +739,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
+  const guideName = useGuideName();
   const { data, isLoading, isError } = useQuery<HostDashboardData>({
     queryKey: ["/api/host/dashboard"],
     retry: false,
@@ -1642,14 +1644,14 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                   {/* The home page, after Clay's (28 Oct): a light greeting with one ask box, the accounts with
                       their faces (Andrew likes them across the top), four doors, then Coming up and Your files as
                       quiet rows. The navy and gold slabs it replaced made every block shout. */}
-                  <HomeTour ready />
+                  <HomeTour ready name={guideName} />
                   <CommandCenter
                     firstName={(profile?.hostName || "").trim().split(/\s+/)[0] || "there"}
                     photoUrl={profile?.photoUrl ?? ""}
                     podcastName={profile?.podcastName ?? ""}
                     actions={
                       <div className="flex items-center gap-3">
-                        <button type="button" onClick={() => showGuide(HOME_TOUR)} className="text-xs font-semibold text-[#053877] hover:underline dark:text-[#8ab4f8]" data-testid="todo-tour">Show me around</button>
+                        <button type="button" onClick={() => showGuide(homeTour(guideName))} className="text-xs font-semibold text-[#053877] hover:underline dark:text-[#8ab4f8]" data-testid="todo-tour">Show me around</button>
                         <Button variant="outline" size="sm" className="hidden h-8 shrink-0 gap-1.5 rounded-full px-3 text-xs lg:inline-flex" onClick={() => logout.mutate()} disabled={logout.isPending} data-testid="button-card-logout">
                           <LogOut className="h-3.5 w-3.5" /> Sign out
                         </Button>

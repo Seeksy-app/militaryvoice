@@ -241,18 +241,19 @@ export function GuideLayer() {
 }
 
 /** The first visit to the dashboard home: what the things on it are. Once per browser. */
-export const HOME_TOUR: GuideStep[] = [
-  { title: "Ask Alex", at: [{ sel: '[data-testid="dashboard-ask"]', text: "Ask Alex anything: how to do something, or to do it for you." }] },
+export const homeTour = (name = "Alex"): GuideStep[] => [
+  { title: `Ask ${name}`, at: [{ sel: '[data-testid="dashboard-ask"]', text: `Ask ${name} anything: how to do something, or to do it for you.` }] },
   { title: "Start here", at: [
     { sel: '[data-testid="todo-strip"] button[data-testid^="todo-"]', text: "Your next step, outlined. Click it and we'll take you there and show you exactly where to click." },
     { sel: '[data-testid="todo-strip"]', text: "The things you'll do most, one click each." },
   ] },
   { title: "Your files", at: [{ sel: '[data-testid="dashboard-files"]', text: "Everything you've made: your show and SmartLink, episodes, clips and posts." }] },
 ];
+export const HOME_TOUR = homeTour();
 
 const HOME_KEY = "mv_tour_home";
 /** Runs the home tour on someone's first visit; renders nothing. */
-export function HomeTour({ ready }: { ready: boolean }) {
+export function HomeTour({ ready, name }: { ready: boolean; /** The account's guide, when it has one. */ name?: string }) {
   useEffect(() => {
     if (!ready) return;
     let seen = false;
@@ -260,9 +261,9 @@ export function HomeTour({ ready }: { ready: boolean }) {
     if (seen) return;
     const t = window.setTimeout(() => {
       try { localStorage.setItem(HOME_KEY, "1"); } catch { /* fine */ }
-      showGuide(HOME_TOUR);
+      showGuide(homeTour(name));
     }, 900);
     return () => window.clearTimeout(t);
-  }, [ready]);
+  }, [ready, name]);
   return null;
 }

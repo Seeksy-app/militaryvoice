@@ -12,7 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { NotificationsMenuItem } from "@/components/Notifications";
 import { Link } from "wouter";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { GuideMenuItem } from "@/components/LoriGuide";
+import { GuideMenuItem, useGuideName } from "@/components/LoriGuide";
 
 export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "greenroom" | "recordings" | "contacts" | "pro" | "cohost" | "analytics" | "postify" | "social" | "discovery" | "verified" | "podcast" | "page" | "billing" | "trash" | "studio" | "fans" | "myevents" | "organization" | "requests" | "opportunities" | "calendar" | "podcaststats";
 
@@ -112,6 +112,8 @@ export function HostNav({
   const consoleOn = isAdmin && !(me?.studioHost && !me.teamHost);
   /** Doors that are pages of their own rather than dashboard screens. */
   const pageHref = (it: Item): string | undefined => it.feature === "room" ? "/my-studio" : it.feature === "studio" ? (me?.studioHost ? "/studio/control" : "/admin/studio") : undefined;
+  const guideName = useGuideName();
+  const helpHint = guideName === "Alex" ? "Search the help articles, or ask Alex, our assistant" : `Search the help articles, or ask ${guideName}, your AI guide`;
   const brand = path === "brand";
   // A brand's menu (7 Oct): finding creators and its team, none of the making-content tools.
   const brandGroups: { title: string; items: Item[] }[] = [
@@ -125,7 +127,7 @@ export function HostNav({
         { key: "organization", label: "Your team", hint: "Your company's account: invite the people you work with; lists are shared", icon: Building2 },
       ],
     },
-    { title: "Help", items: [{ key: "dashboard", label: "Help", hint: "Search the help articles, or ask Alex, our assistant", icon: LifeBuoy, href: "/help" }] },
+    { title: "Help", items: [{ key: "dashboard", label: "Help", hint: helpHint, icon: LifeBuoy, href: "/help" }] },
   ];
   // MilitaryVoices Radio booth joins the menu once they've booked (not as a button on pages, Andrew 20 Oct):
   // their next time's booth, which opens an hour before it.
@@ -220,7 +222,7 @@ export function HostNav({
     {
       title: "Help",
       items: [
-        { key: "dashboard", label: "Help", hint: "Search the help articles, or ask Alex, our assistant", icon: LifeBuoy, href: "/help" },
+        { key: "dashboard", label: "Help", hint: helpHint, icon: LifeBuoy, href: "/help" },
       ],
     },
   ];
