@@ -7,14 +7,17 @@ import {
 } from "@livekit/components-react";
 import { ConnectionState, Track, type Participant } from "livekit-client";
 import {
-  ArrowLeft, Check, Circle, Copy, ExternalLink, Loader2, LogOut, MessageSquare, Mic, MicOff, MonitorUp, NotebookPen,
+  ArrowLeft, Check, Circle, Clapperboard, Copy, ExternalLink, Loader2, LogOut, MessageSquare, Mic, MicOff, MonitorUp, NotebookPen,
   Palette, Plus, Settings, Square, UserPlus, Users, Video, VideoOff, X, Youtube,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { BACKGROUNDS, bgCss, sceneLive, useRoomKit, type RoomKit, type Scene } from "@/components/room/look";
+import { BACKGROUNDS, bgCss, sceneLive, useRoomKit, type Playing, type RoomKit, type Scene } from "@/components/room/look";
 import { LayoutPicker, ScenesPanel } from "@/components/room/ScenesPanel";
 import { LookPanel } from "@/components/room/LookPanel";
+import { MediaPanel } from "@/components/room/MediaPanel";
+import { StylePanel } from "@/components/room/StylePanel";
+import { PhoneStudio } from "@/components/room/PhoneStudio";
 import { MarkClip } from "@/components/room/MarkClip";
 import { RoomStage } from "@/components/RoomStage";
 
@@ -33,10 +36,10 @@ const Logo = ({ className }: { className: string }) => <img src="/logo-lockup.pn
  * API); until then the room stays phase 1, a plain grid like the recording, with no layout picker
  * (Andrew: "go, hide layouts").
  */
-type Studio = { you?: string; id: number; name: string; inviteLink: string; recording: { since: string } | null; live: { since: string; watchUrl: string } | null; youtube: boolean; youtubeOn: boolean; streams: { id: string; name: string; on: boolean }[]; ready: boolean; canRecord: boolean };
+type Studio = { you?: string; id: number; name: string; inviteLink: string; recording: { since: string } | null; live: { since: string; watchUrl: string } | null; youtube: boolean; youtubeOn: boolean; streams: { id: string; name: string; on: boolean }[]; ready: boolean; canRecord: boolean; v3?: boolean };
 type Conn = { url: string; token: string; name: string };
 type Setup = { name: string; title: string; mic: boolean; cam: boolean; micId?: string; camId?: string };
-type Tab = "look" | "people" | "notes" | "recording" | "chat";
+type Tab = "look" | "media" | "style" | "people" | "notes" | "recording" | "chat";
 
 const NAVY = "#053877";
 /** Mark a clip stays hidden until Podcasting's POST /api/host/my-studio/mark is on main. */
@@ -53,6 +56,8 @@ function useInter() {
     document.head.appendChild(l);
   }, []);
 }
+/** The studio's sound and music player (Engineering, phase 3): heard by everyone, never shown or counted. */
+const isPlayer = (p: Participant) => p.identity.startsWith("player-") || p.attributes?.role === "player";
 const say = (e: unknown) => ((e as Error).message ?? "").replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, "") || "Try again in a moment.";
 const clock = (since: string, now: number) => { const s = Math.max(0, Math.floor((now - Date.parse(since)) / 1000)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return `${h ? `${h}:${String(m).padStart(2, "0")}` : m}:${String(s % 60).padStart(2, "0")}`; };
 const initials = (n: string) => n.trim().split(/\s+/).map((w) => w[0] ?? "").slice(0, 2).join("").toUpperCase() || "?";
@@ -279,8 +284,10 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
   const kit = useRoomKit(owner, meta);
   const look = kit.look;
   const editing = owner && !!look;
+  // Studio phase 3 (scene types, Media and Style) only when the server says STUDIO_V3 is on.
+  const v3 = editing && studio?.v3 === true;
   const scene = sceneLive(look, kit.live);
-  const tab: Tab = picked ?? (editing ? "look" : "people");
+  const tab: Tab = picked && (v3 ? picked !== "look" : picked !== "media" && picked !== "style") ? picked : editing ? (v3 ? "media" : "look") : "people";
 
   // Once connected, put the scene on air again so the room carries it (Engineering: call /scene after joining).
   const joined = useRef(false);
@@ -292,7 +299,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
 
   // Their title from the set-up screen rides on their participant, so it shows under their name for everyone.
   useEffect(() => {
-    if (state === ConnectionState.Connected && title) void localParticipant.setAttributes({ title }).catch(() => {});
+    if (state === ConnectionState.Connected && title) void localParticipant.setAttributes({ title, displayTitle: title }).catch(() => {});
   }, [state, title, localParticipant]);
 
   const rec = studio?.recording;
@@ -379,7 +386,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
       </header>
 
       <div className="flex min-h-0 flex-1">
-        {editing && <ScenesPanel kit={kit} />}
+        {editing && <ScenesPanel kit={kit} v3={v3} />}
         {/* Stage column */}
         <div className="flex min-w-0 flex-1 flex-col items-center px-4 pt-5 lg:px-6">
           {owner ? (
@@ -390,11 +397,12 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
           ) : (
             <Stage kit={kit} scene={scene} fallbackLogo={look ? undefined : logo} />
           )}
-          {editing && scene && (
+          {editing && !v3 && scene && (
             <div className="mt-3 shrink-0" title={`Layout for ${scene.name}`}>
               <LayoutPicker value={scene.layout} onPick={(layout) => kit.change((l) => ({ ...l, scenes: l.scenes.map((s) => (s.id === scene.id ? { ...s, layout } : s)) }))} />
             </div>
           )}
+          {v3 && <PhoneStudio kit={kit} />}
           <Backstage kit={kit} />
           <PeopleStrip kit={kit} owner={owner} onShare={() => void share()} onInvite={copyInvite} />
           {/* Below lg the bar sits above Ask Alex (bottom right on every page) so nothing is covered. */}
@@ -415,13 +423,17 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
         <aside className={`hidden shrink-0 border-l border-[#e4e7ec] bg-white lg:flex ${editing ? "w-[360px] 2xl:w-[392px]" : "w-[360px]"}`}>
           <div className="flex min-w-0 flex-1 flex-col">
             {tab === "look" && editing && <LookPanel kit={kit} />}
+            {tab === "media" && v3 && <MediaPanel kit={kit} />}
+            {tab === "style" && v3 && <StylePanel kit={kit} />}
             {tab === "people" && <PeoplePanel owner={owner} studio={studio} onCopy={copyInvite} />}
             {tab === "notes" && <NotesPanel roomKey={owner ? String(studio?.id ?? "mine") : roomName} />}
             {tab === "recording" && owner && <RecordingPanel studio={studio} now={now} busy={busy} onRecord={(on) => void record(on)} onGoLive={() => setSheet(true)} onEndLive={() => void endLive()} />}
             {tab === "chat" && <ChatPanel />}
           </div>
           <nav className="flex w-[72px] shrink-0 flex-col items-center gap-1 border-l border-[#eef0f4] pt-3" aria-label="Panels">
-            {editing && <RailButton on={tab === "look"} onClick={() => setTab("look")} icon={<Palette className="h-[22px] w-[22px]" />} label="Look" />}
+            {editing && !v3 && <RailButton on={tab === "look"} onClick={() => setTab("look")} icon={<Palette className="h-[22px] w-[22px]" />} label="Look" />}
+            {v3 && <RailButton on={tab === "media"} onClick={() => setTab("media")} icon={<Clapperboard className="h-[22px] w-[22px]" />} label="Media" />}
+            {v3 && <RailButton on={tab === "style"} onClick={() => setTab("style")} icon={<Palette className="h-[22px] w-[22px]" />} label="Style" />}
             <RailButton on={tab === "people"} onClick={() => setTab("people")} icon={<Users className="h-[22px] w-[22px]" />} label="People" />
             <RailButton on={tab === "notes"} onClick={() => setTab("notes")} icon={<NotebookPen className="h-[22px] w-[22px]" />} label="Notes" />
             {owner && <RailButton on={tab === "recording"} onClick={() => setTab("recording")} icon={<Circle className={`h-[22px] w-[22px] ${rec ? "fill-[#d92d20] text-[#d92d20]" : ""}`} />} label="Recording" />}
@@ -454,7 +466,7 @@ function RailButton({ on, onClick, icon, label }: { on: boolean; onClick: () => 
 
 function useStageTracks() {
   const tracks = useTracks([{ source: Track.Source.Camera, withPlaceholder: true }, { source: Track.Source.ScreenShare, withPlaceholder: false }], { onlySubscribed: false });
-  const cams = tracks.filter((t) => t.source === Track.Source.Camera)
+  const cams = tracks.filter((t) => t.source === Track.Source.Camera && !isPlayer(t.participant))
     .sort((a, b) => Number(b.participant.attributes?.role === "host") - Number(a.participant.attributes?.role === "host") || (a.participant.joinedAt?.getTime() ?? 0) - (b.participant.joinedAt?.getTime() ?? 0));
   const screens = tracks.filter((t) => t.source === Track.Source.ScreenShare);
   return { cams, screens };
@@ -501,7 +513,9 @@ function Stage({ kit, scene, fallbackLogo }: { kit: RoomKit; scene?: Scene; fall
   const logo = look ? logoOn?.asset.url : fallbackLogo;
   const corner = logoOn?.corner ?? "tr";
   const banner = look?.banners.find((b) => b.id === kit.live.showing?.bannerId);
-  const clip = kit.live.playing && look?.[kit.live.playing.slot];
+  const playing = kit.live.playing;
+  const clip = playing && (playing.slot === "intro" || playing.slot === "outro") ? look?.[playing.slot] : null;
+  const card = playing && !clip && playing.slot !== "intro" && playing.slot !== "outro" ? playing : null;
   if (!cams.length && !screens.length) body = <div className="flex h-full items-center justify-center text-center text-[15px] font-semibold text-white/80">No one is on the stage in this scene</div>;
 
   return (
@@ -509,7 +523,21 @@ function Stage({ kit, scene, fallbackLogo }: { kit: RoomKit; scene?: Scene; fall
       <div className={`absolute inset-x-[4.5%] top-[12.5%] transition-[bottom] duration-300 ${banner ? "bottom-[17%]" : "bottom-[8%]"}`}>{body}</div>
       {logo && <img src={logo} alt="Your show's logo" className={`absolute top-2 h-[11%] max-h-[50px] w-auto rounded-md object-contain ${corner === "tl" ? "left-4" : "right-4"}`} />}
       {banner && <div className="absolute bottom-[3%] left-[4.5%] max-w-[80%] truncate rounded-lg bg-[#053877] px-4 py-2 text-[15px] font-bold text-white shadow-[0_6px_18px_rgba(0,0,0,0.3)]" data-testid="stage-banner">{banner.text}</div>}
+      {card && <LiveCard p={card} />}
       {clip && <video key={clip.id} src={clip.url} autoPlay muted playsInline onEnded={() => kit.play(null)} onError={() => kit.play(null)} className="absolute inset-0 h-full w-full bg-black object-contain" data-testid="stage-clip" />}
+    </div>
+  );
+}
+
+/** Our ready-made cards as guests see them (the host sees Engineering's RoomStage). The countdown ends on "We're starting". */
+function LiveCard({ p }: { p: Playing }) {
+  const now = useNow();
+  const left = p.slot === "countdown" ? Math.max(0, Math.round(((p.minutes ?? 5) * 60_000 - (now - p.at)) / 1000)) : 0;
+  const text = p.slot === "brb" ? "Be right back" : p.slot === "soon" ? "Starting soon" : p.slot === "thanks" ? "Thank you for watching" : left ? `${Math.floor(left / 60)}:${String(left % 60).padStart(2, "0")}` : "We're starting";
+  return (
+    <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 bg-[rgba(5,18,48,0.88)] text-center text-white" data-testid="stage-card">
+      {p.slot === "countdown" && left > 0 && <p className="text-[15px] font-semibold uppercase tracking-[0.12em] text-white/70">Starting in</p>}
+      <p className={`font-bold tracking-tight ${p.slot === "countdown" && left ? "text-6xl tabular-nums" : "text-4xl"}`}>{text}</p>
     </div>
   );
 }
@@ -527,7 +555,7 @@ function Meter({ p }: { p: Participant }) {
 }
 
 const key = (t: TrackReferenceOrPlaceholder) => `${t.participant.identity}:${t.source}`;
-const roleOf = (p: Participant) => p.attributes?.title || (p.attributes?.role === "host" ? "Host" : "Guest");
+const roleOf = (p: Participant) => p.attributes?.displayTitle || p.attributes?.title || (p.attributes?.role === "host" ? "Host" : "Guest");
 
 function Tile({ t, big, small }: { t: TrackReferenceOrPlaceholder; big?: boolean; small?: boolean }) {
   const speaking = useIsSpeaking(t.participant);
@@ -611,7 +639,7 @@ function PanelHead({ title, line }: { title: string; line: string }) {
 }
 
 function PeoplePanel({ owner, studio, onCopy }: { owner: boolean; studio?: Studio; onCopy: () => void }) {
-  const people = useParticipants();
+  const people = useParticipants().filter((p) => !isPlayer(p));
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PanelHead title="People" line={(() => { const back = people.filter((p) => p.attributes?.stage === "off").length; return back ? `${people.length} in the studio, ${back} backstage.` : `${people.length} in the studio. Everyone here is on the stage.`; })()} />

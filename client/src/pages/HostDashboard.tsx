@@ -678,6 +678,11 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   // The URL is the source of truth for which screen is showing, so a tab can
   // be linked, bookmarked and reached with the browser's back button.
   const screen: Screen = (tab && SLUG_SCREEN.get(tab.toLowerCase())) || "dashboard";
+  // An old slug (/rooms, /recordings) shows the right screen; put its real address in the bar so the old name never shows.
+  useEffect(() => {
+    const slug = SCREEN_SLUG[screen];
+    if (tab && slug && tab.toLowerCase() !== slug) window.history.replaceState(window.history.state, "", `/host/dashboard/${slug}${window.location.search}${window.location.hash}`);
+  }, [tab, screen]);
   // An admin (in their own seat or viewing as someone): their buttons sit at
   // the top of each screen, not in the nav. Same query SeatSwitcher reads.
   const { data: adminMe } = useQuery<{ email: string }>({ queryKey: ["/api/admin/me"], retry: false, staleTime: 300_000 });

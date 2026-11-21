@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { Loader2, Plus, Trash2, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { BACKGROUNDS, LIMITS, backgroundShelf, newId, type AssetKind, type RoomKit } from "./look";
+import { BACKGROUNDS, LIMITS, backgroundShelf, newId, type Asset, type AssetKind, type RoomKit } from "./look";
 
 /**
  * "Your look" (mockup v8): the logo and its corner, banners to show on air, and the
@@ -18,6 +18,32 @@ export function LookPanel({ kit }: { kit: RoomKit }) {
       <p className="mt-0.5 text-[13px] text-[#667085]">Changes show on the stage right away.</p>
 
       <p className={label}>Logo</p>
+      <LogoSection kit={kit} />
+
+      <p className={label}>Banners</p>
+      <Banners kit={kit} />
+
+      <p className={label}>Background</p>
+      <div className="mt-2.5 flex flex-wrap gap-2">
+        {(["blue", "dark", "light"] as const).map((c) => (
+          <Swatch key={c} on={bg.kind === "color" && bg.value === c} onClick={() => kit.change((l) => ({ ...l, background: { kind: "color", value: c } }))} label={c[0].toUpperCase() + c.slice(1)} className="h-11 w-16" style={{ background: BACKGROUNDS[c] }} />
+        ))}
+        {backgroundShelf(look).map((a) => (
+          <Removable key={a.id} onRemove={() => { if (window.confirm("Delete this picture?")) void kit.removeAsset("background", a.id); }}>
+            <Swatch on={bg.kind === "image" && bg.asset.id === a.id} onClick={() => kit.change((l) => ({ ...l, background: { kind: "image", asset: a } }))} label={`Use ${a.name || "this picture"}`} className="h-11 w-16" style={{ background: `center / cover url("${a.url}")` }} />
+          </Removable>
+        ))}
+        {backgroundShelf(look).length < LIMITS.backgrounds && <AddFile kind="background" accept="image/png,image/jpeg,image/webp" kit={kit} label="Add a picture" className="h-11 w-11" />}
+      </div>
+    </div>
+  );
+}
+
+/** The logo and its corner (Your look, and Media in v3). */
+export function LogoSection({ kit }: { kit: RoomKit }) {
+  const look = kit.look!;
+  return (
+    <>
       <div className="mt-2.5 flex flex-wrap gap-2">
         <Swatch on={!look.logo} onClick={() => kit.change((l) => ({ ...l, logo: null }))} label="No logo" className="bg-[#f5f6fa] text-xs font-semibold text-[#667085]">None</Swatch>
         {look.logos.map((a) => (
@@ -39,33 +65,17 @@ export function LookPanel({ kit }: { kit: RoomKit }) {
           ))}
         </div>
       )}
-
-      <p className={label}>Banners</p>
-      <Banners kit={kit} />
-
-      <p className={label}>Background</p>
-      <div className="mt-2.5 flex flex-wrap gap-2">
-        {(["blue", "dark", "light"] as const).map((c) => (
-          <Swatch key={c} on={bg.kind === "color" && bg.value === c} onClick={() => kit.change((l) => ({ ...l, background: { kind: "color", value: c } }))} label={c[0].toUpperCase() + c.slice(1)} className="h-11 w-16" style={{ background: BACKGROUNDS[c] }} />
-        ))}
-        {backgroundShelf(look).map((a) => (
-          <Removable key={a.id} onRemove={() => { if (window.confirm("Delete this picture?")) void kit.removeAsset("background", a.id); }}>
-            <Swatch on={bg.kind === "image" && bg.asset.id === a.id} onClick={() => kit.change((l) => ({ ...l, background: { kind: "image", asset: a } }))} label={`Use ${a.name || "this picture"}`} className="h-11 w-16" style={{ background: `center / cover url("${a.url}")` }} />
-          </Removable>
-        ))}
-        {backgroundShelf(look).length < LIMITS.backgrounds && <AddFile kind="background" accept="image/png,image/jpeg,image/webp" kit={kit} label="Add a picture" className="h-11 w-11" />}
-      </div>
-    </div>
+    </>
   );
 }
 
-function Swatch({ on, onClick, label: l, className = "", style, children }: { on: boolean; onClick: () => void; label: string; className?: string; style?: React.CSSProperties; children?: React.ReactNode }) {
+export function Swatch({ on, onClick, label: l, className = "", style, children }: { on: boolean; onClick: () => void; label: string; className?: string; style?: React.CSSProperties; children?: React.ReactNode }) {
   return (
     <button type="button" onClick={onClick} aria-label={l} title={l} aria-pressed={on} style={style} className={`flex h-14 w-[72px] items-center justify-center rounded-[10px] ${on ? "border-2 border-[#053877] ring-2 ring-[#053877]/15" : "border border-[#e4e7ec]"} ${className}`}>{children}</button>
   );
 }
 
-function Removable({ onRemove, children }: { onRemove: () => void; children: React.ReactNode }) {
+export function Removable({ onRemove, children }: { onRemove: () => void; children: React.ReactNode }) {
   return (
     <div className="group relative">
       {children}
@@ -74,14 +84,14 @@ function Removable({ onRemove, children }: { onRemove: () => void; children: Rea
   );
 }
 
-function AddFile({ kind, accept, kit, label: l, className }: { kind: AssetKind; accept: string; kit: RoomKit; label: string; className: string }) {
+export function AddFile({ kind, accept, kit, label: l, className, onAdded }: { kind: AssetKind; accept: string; kit: RoomKit; label: string; className: string; onAdded?: (a: Asset) => void }) {
   const { toast } = useToast();
   const input = useRef<HTMLInputElement>(null);
   const [pct, setPct] = useState<number | null>(null);
   const pick = async (f?: File) => {
     if (!f) return;
     setPct(0);
-    try { await kit.addAsset(kind, f, setPct); }
+    try { const a = await kit.addAsset(kind, f, setPct); onAdded?.(a); }
     catch (e) { toast({ title: "Couldn't add that file", description: (e as Error).message, variant: "destructive" }); }
     finally { setPct(null); if (input.current) input.current.value = ""; }
   };
@@ -98,7 +108,7 @@ function AddFile({ kind, accept, kit, label: l, className }: { kind: AssetKind; 
 const SECONDS = [6, 10, 15, 30, 60];
 const secLabel = (s: number) => `Shows ${s} seconds`;
 
-function Banners({ kit }: { kit: RoomKit }) {
+export function Banners({ kit }: { kit: RoomKit }) {
   const look = kit.look!;
   const [adding, setAdding] = useState(false);
   const [text, setText] = useState("");

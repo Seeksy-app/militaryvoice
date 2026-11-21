@@ -149,7 +149,7 @@ export function PodcastHosting() {
     setInSetup(false);
     refresh();
     if (id) setOpenId(id);
-    if (next === "rooms") { window.location.assign("/host/dashboard/rooms"); return; }
+    if (next === "rooms") { window.location.assign("/host/dashboard/studio"); return; }
     if (next === "zoom") { window.location.assign("/help/zoom"); return; }
     go("episodes");
     if (next === "upload") setAdding(true);

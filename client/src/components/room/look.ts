@@ -14,12 +14,28 @@ import { useToast } from "@/hooks/use-toast";
  */
 export type Layout = "solo" | "side" | "grid" | "speaker" | "screen" | "pip";
 export type Corner = "tl" | "tr";
-export type AssetKind = "logo" | "background" | "intro" | "outro";
+export type AssetKind = "logo" | "background" | "intro" | "outro" | "video" | "sound" | "music" | "photo";
 export type Asset = { id: string; kind: AssetKind; name: string; mime: string; sec: number; url: string };
 export type Color = "blue" | "dark" | "light";
 export type Background = { kind: "color"; value: Color } | { kind: "image"; asset: Asset };
 export type Logo = { asset: Asset; corner: Corner } | null;
-export type Scene = { id: string; n: number; name: string; layout: Layout; stage?: string[]; look?: { background?: Background; logo?: Logo; banner?: string } };
+/** v3 (Studio phase 3, contract in server/roomKit.ts): every scene has a type and a people count. */
+export type SceneType = "single" | "two" | "group" | "media" | "profile";
+export const PEOPLE_DEFAULT: Record<SceneType, number> = { single: 1, two: 2, group: 3, media: 0, profile: 1 };
+export type Profile = { photo: Asset | null; name: string; title: string; line: string; links: string[] };
+export type Scene = {
+  id: string; n: number; name: string; layout: Layout; stage?: string[];
+  type?: SceneType; people?: number; profile?: Profile; media?: Asset | null;
+  look?: { background?: Background; logo?: Logo; banner?: string };
+};
+export const FONTS = ["Inter", "Montserrat", "Oswald", "Bebas Neue", "Source Sans 3", "Merriweather", "Playfair Display", "Roboto Slab"] as const;
+export type Style = { preset: string; brandColor: string; nameTag: "bar" | "pill" | "block" | "plain"; showNames: boolean; textSize: "s" | "m" | "l"; font: (typeof FONTS)[number] };
+export const STYLE_DEFAULT: Style = { preset: "classic", brandColor: "#F0A71F", nameTag: "bar", showNames: true, textSize: "m", font: "Inter" };
+export type VideoClip = { asset: Asset; role: "" | "intro" | "outro"; loop: boolean };
+export type SoundItem = { asset: Asset; volume: number };
+export type MusicItem = { asset: Asset; volume: number; loop: boolean };
+/** Ready-made free sounds and music (CC0 / public domain), if the server sends a list; each shows its source line. */
+export type LibraryItem = { id: string; kind: "sound" | "music"; title: string; url: string; source: string; licence: string };
 export type Banner = { id: string; text: string; seconds: number };
 export type Look = {
   rev: number;
@@ -32,9 +48,20 @@ export type Look = {
   intro: Asset | null;
   outro: Asset | null;
   scenes: Scene[];
+  style?: Style;
+  videos?: VideoClip[];
+  sounds?: SoundItem[];
+  music?: MusicItem[];
+  library?: LibraryItem[];
 };
 export type Slot = "intro" | "outro";
-export type Live = { activeScene: string | null; showing: { bannerId: string; until: number } | null; playing: { slot: Slot; at: number } | null; lookRev: number | null };
+/** What can play full screen: a tagged video, or one of our live cards (Engineering's slots). */
+export type PlaySlot = Slot | "brb" | "soon" | "thanks" | "countdown";
+export type Playing = { slot: PlaySlot; at: number; minutes?: number; next?: string };
+export type Live = {
+  activeScene: string | null; showing: { bannerId: string; until: number } | null; playing: Playing | null; lookRev: number | null;
+  sound?: { id: string; at: number } | null; music?: { id: string; at: number } | null;
+};
 
 export const BACKGROUNDS: Record<Color, string> = {
   blue: "linear-gradient(135deg, #0b1f4a 0%, #0a3a8f 55%, #3b6fd6 100%)",
@@ -62,7 +89,10 @@ export function parseLive(meta: string | undefined): Live {
   if (!meta) return none;
   try {
     const j = JSON.parse(meta) as Partial<Live>;
-    return { activeScene: typeof j.activeScene === "string" ? j.activeScene : null, showing: j.showing?.bannerId ? j.showing : null, playing: j.playing?.slot ? j.playing : null, lookRev: typeof j.lookRev === "number" ? j.lookRev : null };
+    return {
+      activeScene: typeof j.activeScene === "string" ? j.activeScene : null, showing: j.showing?.bannerId ? j.showing : null, playing: j.playing?.slot ? j.playing : null, lookRev: typeof j.lookRev === "number" ? j.lookRev : null,
+      sound: j.sound?.id ? j.sound : null, music: j.music?.id ? j.music : null,
+    };
   } catch { return none; }
 }
 
@@ -128,14 +158,19 @@ export function useRoomKit(owner: boolean, meta: string | undefined) {
     else if (flying.current) await flying.current;
   };
 
-  /** Upload a logo, background, intro or outro, then use it. */
-  const addAsset = useCallback(async (kind: AssetKind, file: File, onProgress: (pct: number) => void) => {
-    const sec = kind === "intro" || kind === "outro" ? Math.round(await durationOf(file).catch(() => 0)) || undefined : undefined;
+  /** Upload a file, then use it. Their own clips, sounds and music need `rights` (the "I have the rights" tick). */
+  const addAsset = useCallback(async (kind: AssetKind, file: File, onProgress: (pct: number) => void, rights?: boolean) => {
+    const timed = kind === "intro" || kind === "outro" || kind === "video" || kind === "sound" || kind === "music";
+    const sec = timed ? Math.round(await durationOf(file).catch(() => 0)) || undefined : undefined;
     const storageKey = await uploadToStorage(file, onProgress);
-    const { asset } = await post<{ asset: Asset }>("/api/host/room/assets", { storageKey, kind, name: file.name, sec });
+    const { asset } = await post<{ asset: Asset }>("/api/host/room/assets", { storageKey, kind, name: file.name, sec, ...(rights ? { rights: true } : {}) });
     change((l) => {
       if (kind === "logo") return { ...l, logos: [...l.logos.filter((x) => x.id !== asset.id), asset].slice(-LIMITS.logos), logo: { asset, corner: l.logo?.corner ?? "tr" } };
       if (kind === "background") return { ...l, backgrounds: [...backgroundShelf(l).filter((x) => x.id !== asset.id), asset].slice(-LIMITS.backgrounds), background: { kind: "image", asset } };
+      if (kind === "video") return { ...l, videos: [...(l.videos ?? []), { asset, role: "", loop: false }] };
+      if (kind === "sound") return { ...l, sounds: [...(l.sounds ?? []), { asset, volume: 80 }] };
+      if (kind === "music") return { ...l, music: [...(l.music ?? []), { asset, volume: 25, loop: true }] };
+      if (kind === "photo") return l;
       return { ...l, [kind]: asset };
     });
     return asset;
@@ -146,6 +181,10 @@ export function useRoomKit(owner: boolean, meta: string | undefined) {
     change((l) => {
       if (kind === "logo") return { ...l, logos: l.logos.filter((x) => x.id !== id), logo: l.logo?.asset.id === id ? null : l.logo };
       if (kind === "background") return { ...l, backgrounds: backgroundShelf(l).filter((x) => x.id !== id), background: l.background.kind === "image" && l.background.asset.id === id ? { kind: "color", value: "blue" } : l.background };
+      if (kind === "video" || kind === "intro" || kind === "outro") return { ...l, videos: (l.videos ?? []).filter((v) => v.asset.id !== id), ...(l.intro?.id === id ? { intro: null } : {}), ...(l.outro?.id === id ? { outro: null } : {}) };
+      if (kind === "sound") return { ...l, sounds: (l.sounds ?? []).filter((v) => v.asset.id !== id) };
+      if (kind === "music") return { ...l, music: (l.music ?? []).filter((v) => v.asset.id !== id) };
+      if (kind === "photo") return l;
       return { ...l, [kind]: null };
     });
     await settle();
@@ -199,9 +238,17 @@ export function useRoomKit(owner: boolean, meta: string | undefined) {
     }, bannerId ? "Couldn't show the banner" : "Couldn't take the banner down");
   };
 
-  /** Play the intro or outro full screen, or stop it (null; also when it ends). */
-  const play = (slot: Slot | null) => {
-    void optimistic({ playing: slot ? { slot, at: Date.now() } : null }, async () => { await post("/api/host/my-studio/media", { action: slot ?? "stop" }); }, slot ? `Couldn't play your ${slot}` : "Couldn't stop it");
+  /** Play the intro, outro or a ready-made card full screen, or stop it (null; also when it ends). */
+  const play = (slot: PlaySlot | null, extra?: { minutes?: number; next?: string }) => {
+    void optimistic({ playing: slot ? { slot, at: Date.now(), ...extra } : null }, async () => { await post("/api/host/my-studio/media", { action: slot ?? "stop", ...extra }); }, slot ? "Couldn't play that" : "Couldn't stop it");
+  };
+
+  /** v3: a sound plays once for everyone; music plays (or stops, null) under the show. */
+  const playSound = (id: string) => {
+    void optimistic({ sound: { id, at: Date.now() } }, async () => { await post("/api/host/my-studio/sound", { id }); }, "Couldn't play that sound");
+  };
+  const playMusic = (id: string | null) => {
+    void optimistic({ music: id ? { id, at: Date.now() } : null }, async () => { await post("/api/host/my-studio/music", { id }); }, id ? "Couldn't start the music" : "Couldn't stop the music");
   };
 
   /** Bring a guest on stage, or send them backstage. */
@@ -215,7 +262,7 @@ export function useRoomKit(owner: boolean, meta: string | undefined) {
   /** On stage? The host always is; guests by their stage attribute (or the click that's on its way). */
   const isOnStage = (identity: string, attr?: string) => (identity in stageOver ? stageOver[identity] : attr !== "off");
 
-  return { look, loading: owner && q.isLoading, live, change, addAsset, removeAsset, toScene, showBanner, play, backstage, isOnStage };
+  return { look, loading: owner && q.isLoading, live, change, addAsset, removeAsset, toScene, showBanner, play, playSound, playMusic, backstage, isOnStage };
 }
 
 export type RoomKit = ReturnType<typeof useRoomKit>;
