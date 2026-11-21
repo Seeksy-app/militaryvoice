@@ -11,12 +11,12 @@ import type { Express, RequestHandler } from "express";
 import crypto from "node:crypto";
 import { AccessToken, TrackSource } from "livekit-server-sdk";
 import { bearer } from "./ingestEngine.js";
-import { noteMusicPlayed } from "./roomKit.js";
-import { eq } from "drizzle-orm";
-import { db, schemaIsReady } from "./storage.js";
+import { noteMusicPlayed, toAsset } from "./roomKit.js";
+import { and, eq, inArray } from "drizzle-orm";
+import { db, schemaIsReady, storage } from "./storage.js";
 import { getSessionEmail } from "./session.js";
 import { isLiveKitConfigured, publicLiveKitUrl, rooms } from "./livekit.js";
-import { personalStudios, type PersonalStudioRow } from "../shared/schema.js";
+import { personalStudios, roomAssets, type PersonalStudioRow } from "../shared/schema.js";
 import { clipOf, ROOM_CARD_SLOTS, type RoomCardSlot, type RoomLook, type RoomLive } from "../shared/roomLook.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
@@ -241,7 +241,7 @@ export function registerRoomStage(app: Express, requireHostSession: RequestHandl
     const got = await studioOf(req);
     if (!got) return res.status(404).json({ message: "Open your studio first." });
     const identity = String(req.body?.identity ?? "");
-    if (!/^guest-[a-z0-9]+$/i.test(identity)) return res.status(400).json({ message: "Only guests can be moved." });
+    if (!/^guest-[a-z0-9]+$/i.test(identity) && !new RegExp(`^owner-${got.row.id}-cam-[a-f0-9]+$`).test(identity)) return res.status(400).json({ message: "Only guests and extra cameras can be moved." });
     const on = req.body?.on === true;
     try {
       const people = await rooms().listParticipants(roomOf(got.row));
@@ -286,5 +286,58 @@ export function registerRoomStage(app: Express, requireHostSession: RequestHandl
       return res.status(502).json({ message: "The studio didn't answer. Try again in a moment." });
     }
     res.json({ identity, removed: true });
+  });
+
+  /**
+   * Slides (StreamYard's "Slides", 21 Nov): the browser turns a PDF into one picture per page and
+   * uploads them as photos; this keeps the deck per studio, so its ← → work from any computer. The
+   * page on air is the Presenting scene's media, as with any picture.
+   */
+  const DECK_PAGES = 60;
+  const deckKey = (id: number) => `studio-deck:${id}`;
+  const readDeck = async (studioId: number): Promise<{ name: string; pages: ReturnType<typeof toAsset>[] } | null> => {
+    let saved: { name?: string; ids?: string[] } = {};
+    try { saved = JSON.parse((await storage.getSetting(deckKey(studioId))) || "{}"); } catch { saved = {}; }
+    const ids = Array.isArray(saved.ids) ? saved.ids.map(String).slice(0, DECK_PAGES) : [];
+    if (!ids.length) return null;
+    const rows = await db.select().from(roomAssets).where(and(eq(roomAssets.studioId, studioId), inArray(roomAssets.id, ids)));
+    const byId = new Map(rows.map((r) => [r.id, toAsset(r)]));
+    const pages = ids.map((i) => byId.get(i)).filter((a): a is NonNullable<typeof a> => !!a);
+    return pages.length ? { name: String(saved.name ?? "").slice(0, 120), pages } : null;
+  };
+  app.get("/api/host/my-studio/deck", requireHostSession, async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const got = await studioOf(req);
+    if (!got) return res.status(404).json({ message: "Open your studio first." });
+    res.json({ deck: await readDeck(got.row.id) });
+  });
+  app.put("/api/host/my-studio/deck", requireHostSession, async (req, res) => {
+    const got = await studioOf(req);
+    if (!got) return res.status(404).json({ message: "Open your studio first." });
+    const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).map((x: unknown) => String(x)).filter((x: string) => /^[\w-]{1,64}$/.test(x));
+    if (!ids.length) { await storage.setSetting(deckKey(got.row.id), ""); return res.json({ deck: null }); }
+    if (ids.length > DECK_PAGES) return res.status(400).json({ message: `Present up to ${DECK_PAGES} slides at a time.` });
+    const rows = await db.select({ id: roomAssets.id, kind: roomAssets.kind }).from(roomAssets).where(and(eq(roomAssets.studioId, got.row.id), inArray(roomAssets.id, ids)));
+    if (rows.length !== new Set(ids).size || rows.some((r) => r.kind !== "photo")) return res.status(400).json({ message: "Those slides didn't all come through. Try the PDF again." });
+    await storage.setSetting(deckKey(got.row.id), JSON.stringify({ name: String(req.body?.name ?? "").slice(0, 120), ids }));
+    res.json({ deck: await readDeck(got.row.id) });
+  });
+
+  /**
+   * An extra camera (StreamYard's "Add another camera"): a second camera on the owner's computer
+   * joins as its own picture, owner-<id>-cam-<hex>, so it goes on stage or backstage like a guest.
+   * Video only: it can't publish sound or listen in.
+   */
+  app.post("/api/host/my-studio/camera-token", requireHostSession, async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const got = await studioOf(req);
+    if (!got) return res.status(404).json({ message: "Open your studio first." });
+    if (!isLiveKitConfigured()) return res.status(503).json({ message: "The studio isn't switched on yet." });
+    const identity = `owner-${got.row.id}-cam-${crypto.randomBytes(3).toString("hex")}`;
+    const name = String(req.body?.name ?? "").replace(/\s+/g, " ").trim().slice(0, 60) || "Camera 2";
+    const at = new AccessToken(process.env.LIVEKIT_API_KEY ?? "", process.env.LIVEKIT_API_SECRET ?? "", { identity, name, ttl: "12h" });
+    at.addGrant({ room: roomOf(got.row), roomJoin: true, canPublish: true, canPublishSources: [TrackSource.CAMERA], canPublishData: false, canSubscribe: false });
+    at.attributes = { role: "camera", stage: "on", who: identity };
+    res.json({ url: publicLiveKitUrl(), token: await at.toJwt(), identity });
   });
 }

@@ -7,12 +7,12 @@ import {
 } from "@livekit/components-react";
 import { ConnectionState, DisconnectReason, Track, type Participant } from "livekit-client";
 import {
-  ArrowLeft, Check, Circle, Clapperboard, Copy, ExternalLink, Image as ImageIcon, Loader2, LogOut, MessageSquare, Mic, MicOff, MonitorUp, MoreHorizontal, NotebookPen,
-  Palette, Plus, Settings, Square, UserPlus, Users, Video, VideoOff, X, Youtube,
+  ArrowLeft, Check, Circle, Clapperboard, Copy, ExternalLink, Image as ImageIcon, Loader2, LogOut, MessageSquare, Mic, MicOff, MonitorUp, MoreHorizontal, NotebookPen, Presentation,
+  ChevronLeft, ChevronRight, Palette, Plus, Settings, Square, UserPlus, Users, Video, VideoOff, X, Youtube,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { BACKGROUNDS, LIMITS, bgCss, newId, sceneLive, useRoomKit, type Playing, type RoomKit, type Scene } from "@/components/room/look";
+import { BACKGROUNDS, LIMITS, bgCss, newId, sceneLive, useRoomKit, type Asset, type Playing, type RoomKit, type Scene } from "@/components/room/look";
 import { LayoutPicker, ScenesPanel } from "@/components/room/ScenesPanel";
 import { LookPanel } from "@/components/room/LookPanel";
 import { MediaPanel } from "@/components/room/MediaPanel";
@@ -21,6 +21,8 @@ import { PhoneStudio } from "@/components/room/PhoneStudio";
 import { MarkClip } from "@/components/room/MarkClip";
 import { RoomStage } from "@/components/RoomStage";
 import { PrompterNews, PrompterOverlay, PrompterSwitch, useStudioNotes, type NotesSync } from "@/components/room/Teleprompter";
+import { pdfToPictures, useDeck } from "@/components/room/slides";
+import { EXTRA_CAMS, addExtraCamera, freeCameras, isExtraCam, stopAllExtraCameras, stopExtraCamera, useExtraCams } from "@/components/room/extraCamera";
 
 /** The room is light in both themes, so always the light logo file. */
 const DASHBOARD = "/host/dashboard";
@@ -130,7 +132,7 @@ export default function MyStudio({ invite }: { invite?: string }) {
       connect
       video={setup.cam ? (setup.camId ? { deviceId: setup.camId } : true) : false}
       audio={setup.mic ? (setup.micId ? { deviceId: setup.micId } : true) : false}
-      onDisconnected={(why) => { setRemoved(why === DisconnectReason.PARTICIPANT_REMOVED); setLeft(true); }}
+      onDisconnected={(why) => { void stopAllExtraCameras(); setRemoved(why === DisconnectReason.PARTICIPANT_REMOVED); setLeft(true); }}
       style={{ height: "100dvh" }}
     >
       <RoomAudioRenderer />
@@ -355,6 +357,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
   // first while live or recording, by the same rules.
   const exitTo = useRef<string | null>(null);
   const go = async () => {
+    await stopAllExtraCameras();
     await room.disconnect();
     if (exitTo.current) window.location.assign(exitTo.current);
   };
@@ -427,6 +430,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
               <RoomStage muted onMediaEnded={() => kit.play(null)} />
               {/* The teleprompter: on this screen only, over the preview; the program is drawn elsewhere. */}
               <PrompterOverlay roomKey={noteKey} text={notes} />
+              <SlidesBar kit={kit} />
             </div>
           ) : (
             <Stage kit={kit} scene={scene} fallbackLogo={look ? undefined : logo} />
@@ -654,6 +658,7 @@ function PersonTile({ t, kit, owner, scenes }: { t: TrackReferenceOrPlaceholder;
   const name = p.name || p.identity;
   const on = kit.isOnStage(p.identity, p.attributes?.stage);
   const guest = p.identity.startsWith("guest-");
+  const cam = isExtraCam(p.identity);
   const micPub = p.getTrackPublication(Track.Source.Microphone);
   const muted = useIsMuted(micPub ? { participant: p, source: Track.Source.Microphone, publication: micPub } : { participant: p, source: Track.Source.Microphone });
   const speaking = useIsSpeaking(p);
@@ -676,18 +681,18 @@ function PersonTile({ t, kit, owner, scenes }: { t: TrackReferenceOrPlaceholder;
     <div className={`relative h-24 w-40 shrink-0 overflow-hidden rounded-xl border bg-white ${speaking && !muted ? "border-[#12b76a] ring-2 ring-[#12b76a]/40" : "border-[#e4e7ec]"} ${on ? "" : "opacity-70"}`} data-testid="strip-person">
       <div className="absolute inset-x-0 top-0 bottom-6"><MiniFace t={t} /></div>
       <div className="absolute inset-x-2 bottom-1 flex items-center gap-1 text-left text-xs font-semibold">
-        <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${muted ? "bg-[#fee4e2] text-[#b42318]" : speaking ? "bg-[#d1fadf] text-[#067647]" : "text-[#667085]"}`} data-testid="strip-mic" aria-label={muted ? "Mic off" : "Mic on"}>
+        {cam ? <Video className="h-3.5 w-3.5 shrink-0 text-[#667085]" aria-label="Extra camera" /> : <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${muted ? "bg-[#fee4e2] text-[#b42318]" : speaking ? "bg-[#d1fadf] text-[#067647]" : "text-[#667085]"}`} data-testid="strip-mic" aria-label={muted ? "Mic off" : "Mic on"}>
           {muted ? <MicOff className="h-3 w-3" /> : <Mic className="h-3 w-3" />}
-        </span>
+        </span>}
         <span className="min-w-0 flex-1 truncate">{name}{p.isLocal ? " (you)" : ""}</span>
-        {owner && guest && (
+        {owner && (guest || cam) && (
           <button type="button" onClick={open} aria-label={`More for ${name}`} aria-expanded={!!menu} className="-mr-1 flex h-5 w-6 shrink-0 items-center justify-center rounded-md text-[#475467] hover:bg-[#f2f4f7]" data-testid="strip-more"><MoreHorizontal className="h-4 w-4" /></button>
         )}
       </div>
       {(scenes || !on) && (on
         ? <div className="absolute left-2 top-2 rounded-full bg-[#d1fadf] px-2 py-0.5 text-[10px] font-bold text-[#067647]">ON STAGE</div>
         : <div className="absolute left-2 top-2 rounded-full bg-[#f2f4f7] px-2 py-0.5 text-[10px] font-bold text-[#475467]">BACKSTAGE</div>)}
-      {owner && scenes && guest && (
+      {owner && scenes && (guest || cam) && (
         <button type="button" onClick={() => void kit.backstage(p.identity, !on)} className={`absolute right-1.5 top-1.5 rounded-lg px-2 py-1 text-[11px] font-bold shadow-sm ${on ? "bg-white text-[#344054] ring-1 ring-[#d0d5dd] hover:bg-[#f9fafb]" : "bg-[#053877] text-white hover:bg-[#0a4a99]"}`} data-testid="strip-stage-toggle">
           {on ? "Send backstage" : "Bring on stage"}
         </button>
@@ -707,9 +712,14 @@ function PersonTile({ t, kit, owner, scenes }: { t: TrackReferenceOrPlaceholder;
               </div>
             ) : <>
               {scenes && <button type="button" onClick={() => { setMenu(null); void kit.backstage(p.identity, !on); }} className={item}><Users className="h-[18px] w-[18px]" /> {on ? "Send backstage" : "Bring on stage"}</button>}
-              <button type="button" disabled={muted || busy} onClick={() => void act("/api/host/my-studio/mute", `Couldn't mute ${first}`)} className={item} data-testid="strip-mute"><MicOff className="h-[18px] w-[18px]" /> {muted ? "Their mic is off" : `Mute ${first}'s mic`}</button>
-              <div className="my-1 h-px bg-[#eaecf0]" />
-              <button type="button" onClick={() => setMenu({ ...menu, confirm: true })} className={`${item} text-[#b42318]`} data-testid="strip-remove"><LogOut className="h-[18px] w-[18px]" /> Remove from studio</button>
+              {cam ? <>
+                {scenes && <div className="my-1 h-px bg-[#eaecf0]" />}
+                <button type="button" onClick={() => { setMenu(null); void stopExtraCamera(p.identity); }} className={`${item} text-[#b42318]`} data-testid="strip-cam-off"><VideoOff className="h-[18px] w-[18px]" /> Turn off this camera</button>
+              </> : <>
+                <button type="button" disabled={muted || busy} onClick={() => void act("/api/host/my-studio/mute", `Couldn't mute ${first}`)} className={item} data-testid="strip-mute"><MicOff className="h-[18px] w-[18px]" /> {muted ? "Their mic is off" : `Mute ${first}'s mic`}</button>
+                <div className="my-1 h-px bg-[#eaecf0]" />
+                <button type="button" onClick={() => setMenu({ ...menu, confirm: true })} className={`${item} text-[#b42318]`} data-testid="strip-remove"><LogOut className="h-[18px] w-[18px]" /> Remove from studio</button>
+              </>}
             </>}
           </div>
         </>
@@ -722,36 +732,119 @@ function PersonTile({ t, kit, owner, scenes }: { t: TrackReferenceOrPlaceholder;
 const PRESENT_NAME = "Presenting";
 
 /**
+ * Slides on air: ‹ Slide 3 of 12 › over the host's own preview (never in the program), and the ← →
+ * keys (Page Up / Page Down too, which most clickers send) while nobody's typing. Each turn puts that
+ * page on the Presenting scene.
+ */
+function SlidesBar({ kit }: { kit: RoomKit }) {
+  const { deck } = useDeck(true);
+  const look = kit.look;
+  const onAir = look ? sceneLive(look, kit.live) : undefined;
+  const pages = deck?.pages ?? [];
+  const i = onAir && onAir.type === "media" && onAir.name === PRESENT_NAME && onAir.media ? pages.findIndex((p) => p.id === onAir.media?.id) : -1;
+  const show = i >= 0;
+  const turn = (j: number) => {
+    if (!onAir || j < 0 || j >= pages.length || j === i) return;
+    const page = pages[j];
+    kit.change((l) => ({ ...l, scenes: l.scenes.map((x) => (x.id === onAir.id ? { ...x, media: page } : x)) }));
+  };
+  const turnRef = useRef(turn);
+  turnRef.current = turn;
+  useEffect(() => {
+    if (!show) return;
+    const key = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(t.tagName))) return;
+      if (e.key === "ArrowRight" || e.key === "PageDown") { e.preventDefault(); turnRef.current(i + 1); }
+      if (e.key === "ArrowLeft" || e.key === "PageUp") { e.preventDefault(); turnRef.current(i - 1); }
+    };
+    window.addEventListener("keydown", key);
+    return () => window.removeEventListener("keydown", key);
+  }, [show, i]);
+  if (!show) return null;
+  const btn = "flex h-9 w-9 items-center justify-center rounded-full text-white hover:bg-white/15 disabled:opacity-35";
+  return (
+    <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-full bg-[rgba(4,12,32,0.82)] px-1.5 py-1 text-white shadow-lg" data-testid="slides-bar">
+      <button type="button" onClick={() => turn(i - 1)} disabled={i === 0} className={btn} aria-label="Previous slide" data-testid="slides-prev"><ChevronLeft className="h-5 w-5" /></button>
+      <span className="min-w-[96px] text-center text-[13px] font-semibold tabular-nums" data-testid="slides-count">Slide {i + 1} of {pages.length}</span>
+      <button type="button" onClick={() => turn(i + 1)} disabled={i === pages.length - 1} className={btn} aria-label="Next slide" data-testid="slides-next"><ChevronRight className="h-5 w-5" /></button>
+    </div>
+  );
+}
+
+/**
  * "Present or invite" (Andrew, 21 Nov, from StreamYard's own): a video or picture of yours fills the
  * stage, your screen, or a guest's link. A file goes onto one Presenting scene that's put on air at
  * once; Stop presenting goes back to the scene before it.
  */
 function PresentButton({ kit, owner, sharing, canPresent, onShare, onInvite }: { kit: RoomKit; owner: boolean; sharing: boolean; canPresent: boolean; onShare: () => void; onInvite: () => void }) {
   const { toast } = useToast();
-  const [menu, setMenu] = useState<"" | "menu" | "rights">("");
-  const [pct, setPct] = useState<number | null>(null);
+  const [menu, setMenu] = useState<"" | "menu" | "rights" | "cams">("");
+  const [busy, setBusy] = useState<string | null>(null);
+  const [free, setFree] = useState<MediaDeviceInfo[] | null>(null);
   const video = useRef<HTMLInputElement | null>(null);
   const image = useRef<HTMLInputElement | null>(null);
+  const pdf = useRef<HTMLInputElement | null>(null);
   const before = useRef<string | null>(null);
+  const { localParticipant } = useLocalParticipant();
+  const { deck, save: saveDeck } = useDeck(owner);
+  const extra = useExtraCams();
   const look = kit.look;
   const onAir = look ? sceneLive(look, kit.live) : undefined;
   const presenting = !!onAir && onAir.type === "media" && onAir.name === PRESENT_NAME && !!onAir.media;
 
-  const present = async (f: File | undefined, kind: "video" | "photo") => {
-    if (!f || !look) return;
+  /** Puts a picture or video on the one Presenting scene and that scene on air. */
+  const onPresenting = (asset: Asset) => {
+    const reuse = kit.look?.scenes.find((x) => x.type === "media" && x.name === PRESENT_NAME);
+    const id = reuse?.id ?? newId();
+    kit.change((l) => reuse
+      ? { ...l, scenes: l.scenes.map((x) => (x.id === id ? { ...x, media: asset } : x)) }
+      : { ...l, scenes: [...l.scenes, { id, n: Math.max(0, ...l.scenes.map((x) => x.n)) + 1, name: PRESENT_NAME, layout: "screen", stage: [], type: "media", people: 0, media: asset, look: { background: l.background } }] });
+    if (onAir && onAir.id !== id) before.current = onAir.id;
+    kit.toScene(id);
+  };
+  const roomForScene = () => {
+    if (!look) return false;
     const reuse = look.scenes.find((x) => x.type === "media" && x.name === PRESENT_NAME);
-    if (!reuse && look.scenes.length >= LIMITS.scenes) { toast({ title: `You have ${LIMITS.scenes} scenes`, description: "Delete one, then present your file.", variant: "destructive" }); return; }
-    setPct(0);
+    if (!reuse && look.scenes.length >= LIMITS.scenes) { toast({ title: `You have ${LIMITS.scenes} scenes`, description: "Delete one, then present your file.", variant: "destructive" }); return false; }
+    return true;
+  };
+
+  const present = async (f: File | undefined, kind: "video" | "photo") => {
+    if (!f || !roomForScene()) return;
+    setBusy("Uploading 0%");
     try {
-      const asset = await kit.addAsset(kind, f, setPct, kind === "video" ? true : undefined);
-      const id = reuse?.id ?? newId();
-      kit.change((l) => reuse
-        ? { ...l, scenes: l.scenes.map((x) => (x.id === id ? { ...x, media: asset } : x)) }
-        : { ...l, scenes: [...l.scenes, { id, n: Math.max(0, ...l.scenes.map((x) => x.n)) + 1, name: PRESENT_NAME, layout: "screen", stage: [], type: "media", people: 0, media: asset, look: { background: l.background } }] });
-      if (onAir && onAir.id !== id) before.current = onAir.id;
-      kit.toScene(id);
+      onPresenting(await kit.addAsset(kind, f, (p) => setBusy(`Uploading ${p}%`), kind === "video" ? true : undefined));
     } catch (e) { toast({ title: kind === "video" ? "Couldn't present that video" : "Couldn't present that picture", description: say(e), variant: "destructive" }); }
-    finally { setPct(null); if (video.current) video.current.value = ""; if (image.current) image.current.value = ""; }
+    finally { setBusy(null); if (video.current) video.current.value = ""; if (image.current) image.current.value = ""; }
+  };
+
+  /** A PDF: each page a picture, the deck kept for the arrows, page 1 on air. The last deck's pages are then deleted. */
+  const presentSlides = async (f: File | undefined) => {
+    if (!f || !roomForScene()) return;
+    const old = deck?.pages ?? [];
+    setBusy("Reading slides");
+    try {
+      const pictures = await pdfToPictures(f, (i, n) => setBusy(`Preparing ${i} of ${n}`));
+      const pages: Asset[] = [];
+      for (let i = 0; i < pictures.length; i++) pages.push(await kit.addAsset("photo", pictures[i], () => setBusy(`Uploading ${i + 1} of ${pictures.length}`)));
+      await saveDeck(f.name.replace(/\.pdf$/i, ""), pages);
+      onPresenting(pages[0]);
+      for (const a of old) void apiRequest("DELETE", `/api/host/room/assets/${encodeURIComponent(a.id)}`).catch(() => {});
+    } catch (e) { toast({ title: "Couldn't present those slides", description: say(e), variant: "destructive" }); }
+    finally { setBusy(null); if (pdf.current) pdf.current.value = ""; }
+  };
+
+  const openCams = async () => {
+    setMenu("cams"); setFree(null);
+    const using = (localParticipant.getTrackPublication(Track.Source.Camera)?.track?.mediaStreamTrack.getSettings().deviceId) ?? "";
+    try { setFree(await freeCameras(using ? [using] : [])); } catch { setFree([]); }
+  };
+  const addCam = async (d: MediaDeviceInfo) => {
+    setMenu(""); setBusy("Adding camera");
+    try { await addExtraCamera(d, localParticipant.name || "You"); }
+    catch (e) { toast({ title: "Couldn't add that camera", description: say(e), variant: "destructive" }); }
+    finally { setBusy(null); }
   };
   const stop = () => {
     const back = look?.scenes.find((x) => x.id === before.current) ?? [...(look?.scenes ?? [])].filter((x) => x.name !== PRESENT_NAME).sort((a, b) => a.n - b.n)[0];
@@ -762,19 +855,28 @@ function PresentButton({ kit, owner, sharing, canPresent, onShare, onInvite }: {
   const pick = (fn: () => void) => () => { setMenu(""); fn(); };
   return (
     <div className="relative shrink-0 pb-1">
-      <button type="button" onClick={() => setMenu(menu ? "" : "menu")} disabled={pct !== null} aria-expanded={!!menu} className={`flex h-24 w-40 flex-col items-center justify-center gap-1.5 rounded-xl border bg-white text-[13px] font-semibold text-[#344054] hover:bg-[#f9fafb] disabled:opacity-80 ${menu ? "border-[#84adff] ring-2 ring-[#d1e0ff]" : "border-[#d0d5dd]"}`} data-testid="strip-add">
-        {pct !== null ? <><Loader2 className="h-5 w-5 animate-spin" /> Uploading {pct}%</> : <>
+      <button type="button" onClick={() => setMenu(menu ? "" : "menu")} disabled={busy !== null} aria-expanded={!!menu} className={`flex h-24 w-40 flex-col items-center justify-center gap-1.5 rounded-xl border bg-white text-[13px] font-semibold text-[#344054] hover:bg-[#f9fafb] disabled:opacity-80 ${menu ? "border-[#84adff] ring-2 ring-[#d1e0ff]" : "border-[#d0d5dd]"}`} data-testid="strip-add">
+        {busy !== null ? <><Loader2 className="h-5 w-5 animate-spin" /> {busy}</> : <>
           <span className="flex items-center gap-2 rounded-full border border-[#e4e7ec] px-3.5 py-1.5"><MonitorUp className="h-5 w-5" />{owner && <UserPlus className="h-5 w-5" />}</span>
           {owner ? "Present or invite" : "Share your screen"}
         </>}
       </button>
       <input ref={video} type="file" accept="video/mp4,video/quicktime,video/webm" className="hidden" onChange={(e) => void present(e.target.files?.[0], "video")} />
       <input ref={image} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={(e) => void present(e.target.files?.[0], "photo")} />
+      <input ref={pdf} type="file" accept="application/pdf,.pdf" className="hidden" onChange={(e) => void presentSlides(e.target.files?.[0])} data-testid="present-pdf-input" />
       {menu && (
         <>
           <button type="button" aria-label="Close" className="fixed inset-0 z-10 cursor-default" onClick={() => setMenu("")} />
           <div className="absolute bottom-[calc(100%+8px)] right-0 z-20 w-64 rounded-xl border border-[#e4e7ec] bg-white p-1.5 shadow-[0_12px_32px_rgba(16,24,40,0.18)]" data-testid="strip-add-menu">
-            {menu === "rights" ? (
+            {menu === "cams" ? (
+              <div className="p-1">
+                <p className="px-2 pb-1 pt-1.5 text-sm font-semibold">Add another camera</p>
+                <p className="px-2 pb-2 text-[13px] text-[#667085]">A second camera on this computer joins as its own picture. Put it on stage like a guest.</p>
+                {free === null ? <p className="flex items-center gap-2 px-2 py-2 text-[13px] text-[#667085]"><Loader2 className="h-4 w-4 animate-spin" /> Looking for cameras…</p>
+                  : free.length === 0 ? <p className="rounded-lg bg-[#f9fafb] px-2.5 py-2 text-[13px] text-[#475467]" data-testid="cams-none">We found no other camera on this computer. Plug one in (a USB webcam or a camera with a USB cable), then try again.</p>
+                  : free.map((d) => <button key={d.deviceId} type="button" onClick={() => void addCam(d)} className={item} data-testid="cams-pick"><Video className="h-[18px] w-[18px]" /> <span className="truncate">{d.label || "Camera"}</span></button>)}
+              </div>
+            ) : menu === "rights" ? (
               <div className="p-2.5">
                 <p className="text-sm font-semibold">Present a video</p>
                 <p className="mt-1 text-[13px] text-[#667085]">It fills the stage, with its sound, in the recording and the live show.</p>
@@ -785,9 +887,11 @@ function PresentButton({ kit, owner, sharing, canPresent, onShare, onInvite }: {
               {canPresent && <>
                 <button type="button" onClick={() => setMenu("rights")} className={item} data-testid="present-video"><Clapperboard className="h-[18px] w-[18px]" /> Video file</button>
                 <button type="button" onClick={pick(() => image.current?.click())} className={item} data-testid="present-image"><ImageIcon className="h-[18px] w-[18px]" /> Image file</button>
+                <button type="button" onClick={pick(() => pdf.current?.click())} className={item} data-testid="present-slides"><Presentation className="h-[18px] w-[18px]" /> <span>Slides <span className="text-[13px] text-[#667085]">(PDF)</span></span></button>
                 <div className="my-1 h-px bg-[#eaecf0]" />
               </>}
               <button type="button" onClick={pick(onShare)} className={item} data-testid="strip-add-screen"><MonitorUp className="h-[18px] w-[18px]" /> {sharing ? "Stop sharing screen" : "Share screen"}</button>
+              {owner && extra.length < EXTRA_CAMS && <button type="button" onClick={() => void openCams()} className={item} data-testid="present-camera"><Video className="h-[18px] w-[18px]" /> Extra camera</button>}
               {owner && <><div className="my-1 h-px bg-[#eaecf0]" /><button type="button" onClick={pick(onInvite)} className={item} data-testid="strip-add-invite"><UserPlus className="h-[18px] w-[18px]" /> Invite guest</button></>}
             </>}
           </div>

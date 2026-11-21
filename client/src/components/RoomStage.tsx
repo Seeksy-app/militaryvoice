@@ -97,7 +97,7 @@ export function RoomPicture({
   // Studio v3 drawing only when the server says it's on; otherwise the v2 stage, exactly as before.
   const v3 = live.v3 === true;
   const scene = v3 ? sceneOf(look, live) : undefined;
-  const cast = castOf(people.map((t) => ({ identity: t.identity, host: /^owner-/.test(t.identity), who: t.identity })), scene);
+  const cast = castOf(people.map((t) => ({ identity: t.identity, host: /^owner-/.test(t.identity) && !/-cam-/.test(t.identity), who: t.identity })), scene);
   const drawn = scene?.type ? cast.drawn.map((id) => people.find((t) => t.identity === id)!).filter(Boolean) : people;
   const heard = scene?.type ? people.filter((t) => !cast.drawn.includes(t.identity)) : [];
   const media = !live.playing && scene?.type === "media" && scene.media?.url ? scene.media : null;

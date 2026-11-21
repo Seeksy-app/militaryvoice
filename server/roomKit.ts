@@ -179,7 +179,7 @@ const keyOk = (studioId: number, k: unknown) => {
   return got.length === want.length && crypto.timingSafeEqual(got, want);
 };
 const assetUrl = (id: string) => `${ORIGIN}/api/room-assets/${id}`;
-const toAsset = (a: RoomAssetRow): Asset => ({ id: a.id, kind: a.kind as AssetKind, name: a.name, mime: a.mime, sec: a.sec, url: assetUrl(a.id) });
+export const toAsset = (a: RoomAssetRow): Asset => ({ id: a.id, kind: a.kind as AssetKind, name: a.name, mime: a.mime, sec: a.sec, url: assetUrl(a.id) });
 
 async function studioOf(email: string): Promise<PersonalStudioRow | undefined> {
   await schemaIsReady();
