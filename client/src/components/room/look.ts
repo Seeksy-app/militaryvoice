@@ -28,7 +28,7 @@ export type Scene = {
   type?: SceneType; people?: number; profile?: Profile; media?: Asset | null;
   look?: { background?: Background; logo?: Logo; banner?: string };
 };
-export const FONTS = ["Inter", "Montserrat", "Oswald", "Bebas Neue", "Source Sans 3", "Merriweather", "Playfair Display", "Roboto Slab"] as const;
+export const FONTS = ["Inter", "Montserrat", "Oswald", "Bebas Neue", "Source Sans 3", "Merriweather", "Playfair Display", "Zilla Slab"] as const;
 export type Style = { preset: string; brandColor: string; nameTag: "bar" | "pill" | "block" | "plain"; showNames: boolean; textSize: "s" | "m" | "l"; font: (typeof FONTS)[number] };
 export const STYLE_DEFAULT: Style = { preset: "classic", brandColor: "#F0A71F", nameTag: "bar", showNames: true, textSize: "m", font: "Inter" };
 export type VideoClip = { asset: Asset; role: "" | "intro" | "outro"; loop: boolean };

@@ -77,7 +77,7 @@ export function StylePanel({ kit }: { kit: RoomKit }) {
       </div>
 
       <p className={label}>Font</p>
-      <select value={style.font} onChange={(e) => set({ font: e.target.value as Style["font"] })} aria-label="Font" className="mt-2.5 h-10 rounded-lg border border-[#d0d5dd] bg-white px-2.5 text-sm" data-testid="style-font">
+      <select value={String(style.font) === "Roboto Slab" ? "Zilla Slab" : style.font} onChange={(e) => set({ font: e.target.value as Style["font"] })} aria-label="Font" className="mt-2.5 h-10 rounded-lg border border-[#d0d5dd] bg-white px-2.5 text-sm" data-testid="style-font">
         {FONTS.map((f) => <option key={f} value={f}>{f}</option>)}
       </select>
     </div>
