@@ -193,6 +193,7 @@ import { registerAutomations } from "./automations.js";
 import { registerTrash, toTrash } from "./trash.js";
 import { registerMyStudio } from "./myStudio.js";
 import { registerRoomKit, marksFor, withCredits } from "./roomKit.js";
+import { registerFreesoundImport } from "./studioLibrary.js";
 import { registerCreatorCampaigns } from "./creatorCampaigns.js";
 import { registerContactProfile } from "./contactProfile.js";
 import { registerAskShow, claimTranscript } from "./askShow.js";
@@ -6975,6 +6976,7 @@ export function registerRoutes(app: Express): void {
   registerTrash(app, requireHostSession);
   registerMyStudio(app, requireHostSession, { youtubeToken });
   registerRoomKit(app, requireHostSession);
+  registerFreesoundImport(app, requireAdmin);
   registerCreatorCampaigns(app, requireHostSession);
   registerMagazine(app, requireAdmin, requireAgent);
   registerBioPrefill(app, requireAdmin);

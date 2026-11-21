@@ -6,7 +6,7 @@
 // in our bucket, and its source page, the licence as the page states it, and the date we checked it are on
 // file. An item missing any of them stays hidden, even if it's listed here.
 import type { Express, RequestHandler } from "express";
-import { signedRecordingUrl } from "./recordingStorage.js";
+import { putRecordingObject, signedRecordingUrl } from "./recordingStorage.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 
@@ -54,6 +54,46 @@ export const libraryReady = (): LibraryItem[] => LIBRARY.filter(complete);
 
 /** The asset shape the look uses, for a library item (id "lib-<slug>"). */
 export const libraryAsset = (x: LibraryItem) => ({ id: `lib-${x.slug}`, kind: x.kind, name: x.name, mime: "audio/mpeg", sec: x.sec, url: `${ORIGIN}/api/room-library/${x.slug}` });
+
+/** Freesound (admin only): find CC0 sounds for the pads and copy one into the bucket. Nothing shows in the
+ *  Studio until its LIBRARY entry is added by hand, with the page, licence and date from the import reply. */
+const FS = "https://freesound.org/apiv2";
+const CC0 = /publicdomain\/zero\/1\.0/;
+export function registerFreesoundImport(app: Express, requireAdmin: RequestHandler): void {
+  const key = () => process.env.FREESOUND_API_KEY?.trim() || "";
+  app.get("/api/admin/studio-library/freesound", requireAdmin, async (req, res) => {
+    if (!key()) return res.status(503).json({ message: "FREESOUND_API_KEY isn't set." });
+    const q = String(req.query.q ?? "").slice(0, 80);
+    const u = new URL(`${FS}/search/text/`);
+    u.searchParams.set("query", q);
+    u.searchParams.set("filter", 'license:"Creative Commons 0" duration:[0.3 TO 8]');
+    u.searchParams.set("fields", "id,name,username,license,duration,url,avg_rating,num_ratings,num_downloads,previews,tags");
+    u.searchParams.set("sort", String(req.query.sort ?? "downloads_desc"));
+    u.searchParams.set("page_size", "15");
+    u.searchParams.set("token", key());
+    const r = await fetch(u);
+    if (!r.ok) return res.status(502).json({ message: `Freesound ${r.status}`, body: (await r.text()).slice(0, 300) });
+    const j: any = await r.json();
+    res.json({ count: j.count, results: (j.results ?? []).filter((s: any) => CC0.test(s.license)) });
+  });
+  app.post("/api/admin/studio-library/freesound/:id", requireAdmin, async (req, res) => {
+    if (!key()) return res.status(503).json({ message: "FREESOUND_API_KEY isn't set." });
+    const slug = String(req.body?.slug ?? "").toLowerCase();
+    if (!/^[a-z0-9-]{2,40}$/.test(slug)) return res.status(400).json({ message: "slug: a-z, 0-9 and dashes." });
+    const r = await fetch(`${FS}/sounds/${encodeURIComponent(String(req.params.id))}/?fields=id,name,username,license,duration,url,previews&token=${key()}`);
+    if (!r.ok) return res.status(502).json({ message: `Freesound ${r.status}` });
+    const s: any = await r.json();
+    // Read on the sound's own record at import time; only CC0 comes in.
+    if (!CC0.test(String(s.license))) return res.status(400).json({ message: `Not CC0: ${s.license}` });
+    const mp3 = await fetch(s.previews?.["preview-hq-mp3"]);
+    if (!mp3.ok) return res.status(502).json({ message: `Preview ${mp3.status}` });
+    const buf = Buffer.from(await mp3.arrayBuffer());
+    const k = `studio-library/${slug}.mp3`;
+    await putRecordingObject(k, buf, "audio/mpeg");
+    res.json({ key: k, bytes: buf.length, entry: { slug, kind: "sound", name: s.name, key: k, sec: Math.round(s.duration * 10) / 10,
+      source: { site: "Freesound", title: s.name, artist: s.username, page: s.url, licence: "CC0 1.0 Universal", checked: new Date().toISOString().slice(0, 10) } } });
+  });
+}
 
 export function registerStudioLibrary(app: Express, requireHostSession: RequestHandler): void {
   /** The picker: ready items, each with its source and licence line. */
