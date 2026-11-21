@@ -7,12 +7,12 @@ import {
 } from "@livekit/components-react";
 import { ConnectionState, Track, type Participant } from "livekit-client";
 import {
-  ArrowLeft, Check, Circle, Clapperboard, Copy, ExternalLink, Loader2, LogOut, MessageSquare, Mic, MicOff, MonitorUp, NotebookPen,
+  ArrowLeft, Check, Circle, Clapperboard, Copy, ExternalLink, Image as ImageIcon, Loader2, LogOut, MessageSquare, Mic, MicOff, MonitorUp, NotebookPen,
   Palette, Plus, Settings, Square, UserPlus, Users, Video, VideoOff, X, Youtube,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { BACKGROUNDS, bgCss, sceneLive, useRoomKit, type Playing, type RoomKit, type Scene } from "@/components/room/look";
+import { BACKGROUNDS, LIMITS, bgCss, newId, sceneLive, useRoomKit, type Playing, type RoomKit, type Scene } from "@/components/room/look";
 import { LayoutPicker, ScenesPanel } from "@/components/room/ScenesPanel";
 import { LookPanel } from "@/components/room/LookPanel";
 import { MediaPanel } from "@/components/room/MediaPanel";
@@ -409,7 +409,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
           )}
           {v3 && <PhoneStudio kit={kit} />}
           <Backstage kit={kit} />
-          <PeopleStrip kit={kit} owner={owner} sharing={isScreenShareEnabled} onShare={() => void share()} onInvite={copyInvite} onMedia={editing ? () => setTab(v3 ? "media" : "look") : undefined} />
+          <PeopleStrip kit={kit} owner={owner} sharing={isScreenShareEnabled} onShare={() => void share()} onInvite={copyInvite} />
           {/* Below lg the bar sits above Ask Alex (bottom right on every page) so nothing is covered. */}
           <div className="mb-[84px] mt-auto flex items-center gap-0.5 rounded-[18px] border border-[#e4e7ec] bg-white px-1.5 py-2 shadow-[0_8px_24px_rgba(16,24,40,0.1)] sm:gap-1.5 sm:px-3 lg:mb-3" data-testid="my-studio-controls">
             <BarButton label={isMicrophoneEnabled ? "Mic" : "Muted"} off={!isMicrophoneEnabled} onClick={() => void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)}>{isMicrophoneEnabled ? <Mic className="h-[22px] w-[22px]" /> : <MicOff className="h-[22px] w-[22px]" />}</BarButton>
@@ -598,11 +598,9 @@ function Tile({ t, big, small }: { t: TrackReferenceOrPlaceholder; big?: boolean
 }
 
 /** Everyone in the room. The owner brings guests on stage or sends them backstage (phase 2). */
-function PeopleStrip({ kit, owner, sharing, onShare, onInvite, onMedia }: { kit: RoomKit; owner: boolean; sharing: boolean; onShare: () => void; onInvite: () => void; onMedia?: () => void }) {
+function PeopleStrip({ kit, owner, sharing, onShare, onInvite }: { kit: RoomKit; owner: boolean; sharing: boolean; onShare: () => void; onInvite: () => void }) {
   const { cams } = useStageTracks();
-  const [menu, setMenu] = useState(false);
   const scenes = !!kit.look;
-  const item = "flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left text-sm font-semibold hover:bg-[#f2f4f7]";
   return (
     // The + sits outside the scrolling row: a scrolling row clips anything that pops out of it, so
     // its menu never showed (Andrew, 21 Nov: "This doesn't work").
@@ -629,21 +627,86 @@ function PeopleStrip({ kit, owner, sharing, onShare, onInvite, onMedia }: { kit:
         );
       })}
     </div>
-      <div className="relative shrink-0 pb-1">
-        <button type="button" onClick={() => setMenu(!menu)} aria-expanded={menu} className="flex h-24 w-40 flex-col items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#98a2b3] bg-white px-2 text-center text-[13px] font-semibold text-[#475467] hover:bg-[#f9fafb]" data-testid="strip-add">
-          <Plus className="h-6 w-6" /> {onMedia ? "Add media, screen or guest" : "Share screen or invite"}
-        </button>
-        {menu && (
-          <>
-            <button type="button" aria-label="Close" className="fixed inset-0 z-10 cursor-default" onClick={() => setMenu(false)} />
-            <div className="absolute bottom-[calc(100%+6px)] right-0 z-20 w-60 rounded-xl border border-[#e4e7ec] bg-white p-1.5 shadow-[0_12px_32px_rgba(16,24,40,0.18)]" data-testid="strip-add-menu">
-              {onMedia && <button type="button" onClick={() => { setMenu(false); onMedia(); }} className={`${item} hidden lg:flex`} data-testid="strip-add-media"><Clapperboard className="h-4 w-4" /> Show a video or picture</button>}
-              <button type="button" onClick={() => { setMenu(false); onShare(); }} className={item} data-testid="strip-add-screen"><MonitorUp className="h-4 w-4" /> {sharing ? "Stop sharing my screen" : "Share my screen"}</button>
-              {owner && <button type="button" onClick={() => { setMenu(false); onInvite(); }} className={item} data-testid="strip-add-invite"><UserPlus className="h-4 w-4" /> Copy the invite link</button>}
-            </div>
-          </>
-        )}
-      </div>
+      <PresentButton kit={kit} owner={owner} sharing={sharing} canPresent={scenes && owner} onShare={onShare} onInvite={onInvite} />
+    </div>
+  );
+}
+
+/** The scene StreamYard calls the media slot: one "Presenting" scene, reused for each file shown. */
+const PRESENT_NAME = "Presenting";
+
+/**
+ * "Present or invite" (Andrew, 21 Nov, from StreamYard's own): a video or picture of yours fills the
+ * stage, your screen, or a guest's link. A file goes onto one Presenting scene that's put on air at
+ * once; Stop presenting goes back to the scene before it.
+ */
+function PresentButton({ kit, owner, sharing, canPresent, onShare, onInvite }: { kit: RoomKit; owner: boolean; sharing: boolean; canPresent: boolean; onShare: () => void; onInvite: () => void }) {
+  const { toast } = useToast();
+  const [menu, setMenu] = useState<"" | "menu" | "rights">("");
+  const [pct, setPct] = useState<number | null>(null);
+  const video = useRef<HTMLInputElement | null>(null);
+  const image = useRef<HTMLInputElement | null>(null);
+  const before = useRef<string | null>(null);
+  const look = kit.look;
+  const onAir = look ? sceneLive(look, kit.live) : undefined;
+  const presenting = !!onAir && onAir.type === "media" && onAir.name === PRESENT_NAME && !!onAir.media;
+
+  const present = async (f: File | undefined, kind: "video" | "photo") => {
+    if (!f || !look) return;
+    const reuse = look.scenes.find((x) => x.type === "media" && x.name === PRESENT_NAME);
+    if (!reuse && look.scenes.length >= LIMITS.scenes) { toast({ title: `You have ${LIMITS.scenes} scenes`, description: "Delete one, then present your file.", variant: "destructive" }); return; }
+    setPct(0);
+    try {
+      const asset = await kit.addAsset(kind, f, setPct, kind === "video" ? true : undefined);
+      const id = reuse?.id ?? newId();
+      kit.change((l) => reuse
+        ? { ...l, scenes: l.scenes.map((x) => (x.id === id ? { ...x, media: asset } : x)) }
+        : { ...l, scenes: [...l.scenes, { id, n: Math.max(0, ...l.scenes.map((x) => x.n)) + 1, name: PRESENT_NAME, layout: "screen", stage: [], type: "media", people: 0, media: asset, look: { background: l.background } }] });
+      if (onAir && onAir.id !== id) before.current = onAir.id;
+      kit.toScene(id);
+    } catch (e) { toast({ title: kind === "video" ? "Couldn't present that video" : "Couldn't present that picture", description: say(e), variant: "destructive" }); }
+    finally { setPct(null); if (video.current) video.current.value = ""; if (image.current) image.current.value = ""; }
+  };
+  const stop = () => {
+    const back = look?.scenes.find((x) => x.id === before.current) ?? [...(look?.scenes ?? [])].filter((x) => x.name !== PRESENT_NAME).sort((a, b) => a.n - b.n)[0];
+    if (back) kit.toScene(back.id);
+  };
+
+  const item = "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#101828] hover:bg-[#f2f4f7]";
+  const pick = (fn: () => void) => () => { setMenu(""); fn(); };
+  return (
+    <div className="relative shrink-0 pb-1">
+      <button type="button" onClick={() => setMenu(menu ? "" : "menu")} disabled={pct !== null} aria-expanded={!!menu} className={`flex h-24 w-40 flex-col items-center justify-center gap-1.5 rounded-xl border bg-white text-[13px] font-semibold text-[#344054] hover:bg-[#f9fafb] disabled:opacity-80 ${menu ? "border-[#84adff] ring-2 ring-[#d1e0ff]" : "border-[#d0d5dd]"}`} data-testid="strip-add">
+        {pct !== null ? <><Loader2 className="h-5 w-5 animate-spin" /> Uploading {pct}%</> : <>
+          <span className="flex items-center gap-2 rounded-full border border-[#e4e7ec] px-3.5 py-1.5"><MonitorUp className="h-5 w-5" />{owner && <UserPlus className="h-5 w-5" />}</span>
+          {owner ? "Present or invite" : "Share your screen"}
+        </>}
+      </button>
+      <input ref={video} type="file" accept="video/mp4,video/quicktime,video/webm" className="hidden" onChange={(e) => void present(e.target.files?.[0], "video")} />
+      <input ref={image} type="file" accept="image/png,image/jpeg,image/webp,image/gif" className="hidden" onChange={(e) => void present(e.target.files?.[0], "photo")} />
+      {menu && (
+        <>
+          <button type="button" aria-label="Close" className="fixed inset-0 z-10 cursor-default" onClick={() => setMenu("")} />
+          <div className="absolute bottom-[calc(100%+8px)] right-0 z-20 w-64 rounded-xl border border-[#e4e7ec] bg-white p-1.5 shadow-[0_12px_32px_rgba(16,24,40,0.18)]" data-testid="strip-add-menu">
+            {menu === "rights" ? (
+              <div className="p-2.5">
+                <p className="text-sm font-semibold">Present a video</p>
+                <p className="mt-1 text-[13px] text-[#667085]">It fills the stage, with its sound, in the recording and the live show.</p>
+                <label className="mt-3 flex items-start gap-2 text-[13px] font-medium"><input type="checkbox" className="mt-0.5" onChange={(e) => { if (e.target.checked) { setMenu(""); video.current?.click(); } }} data-testid="present-rights" /> I have the rights to use this video</label>
+              </div>
+            ) : <>
+              {canPresent && presenting && <><button type="button" onClick={pick(stop)} className={item} data-testid="present-stop"><Square className="h-[18px] w-[18px] fill-current text-[#b42318]" /> Stop presenting</button><div className="my-1 h-px bg-[#eaecf0]" /></>}
+              {canPresent && <>
+                <button type="button" onClick={() => setMenu("rights")} className={item} data-testid="present-video"><Clapperboard className="h-[18px] w-[18px]" /> Video file</button>
+                <button type="button" onClick={pick(() => image.current?.click())} className={item} data-testid="present-image"><ImageIcon className="h-[18px] w-[18px]" /> Image file</button>
+                <div className="my-1 h-px bg-[#eaecf0]" />
+              </>}
+              <button type="button" onClick={pick(onShare)} className={item} data-testid="strip-add-screen"><MonitorUp className="h-[18px] w-[18px]" /> {sharing ? "Stop sharing screen" : "Share screen"}</button>
+              {owner && <><div className="my-1 h-px bg-[#eaecf0]" /><button type="button" onClick={pick(onInvite)} className={item} data-testid="strip-add-invite"><UserPlus className="h-[18px] w-[18px]" /> Invite guest</button></>}
+            </>}
+          </div>
+        </>
+      )}
     </div>
   );
 }
