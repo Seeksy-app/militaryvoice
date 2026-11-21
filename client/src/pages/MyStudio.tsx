@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   LiveKitRoom, RoomAudioRenderer, VideoTrack, isTrackReference, useChat, useConnectionState, useIsSpeaking,
-  useLocalParticipant, useMediaDeviceSelect, useParticipants, useRoomContext, useRoomInfo, useSpeakingParticipants, useTracks,
+  useLocalParticipant, useMediaDeviceSelect, useParticipantAttribute, useParticipants, useRoomContext, useRoomInfo, useSpeakingParticipants, useTracks,
   type TrackReferenceOrPlaceholder,
 } from "@livekit/components-react";
 import { ConnectionState, Track, type Participant } from "livekit-client";
@@ -397,15 +397,17 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
           )}
           <Backstage kit={kit} />
           <PeopleStrip kit={kit} owner={owner} onShare={() => void share()} onInvite={copyInvite} />
-          <div className="mb-3 mt-auto flex items-center gap-1 rounded-[18px] border border-[#e4e7ec] bg-white px-2 py-2 shadow-[0_8px_24px_rgba(16,24,40,0.1)] sm:gap-1.5 sm:px-3" data-testid="my-studio-controls">
+          {/* Below lg the bar sits above Ask Alex (bottom right on every page) so nothing is covered. */}
+          <div className="mb-[84px] mt-auto flex items-center gap-0.5 rounded-[18px] border border-[#e4e7ec] bg-white px-1.5 py-2 shadow-[0_8px_24px_rgba(16,24,40,0.1)] sm:gap-1.5 sm:px-3 lg:mb-3" data-testid="my-studio-controls">
             <BarButton label={isMicrophoneEnabled ? "Mic" : "Muted"} off={!isMicrophoneEnabled} onClick={() => void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)}>{isMicrophoneEnabled ? <Mic className="h-[22px] w-[22px]" /> : <MicOff className="h-[22px] w-[22px]" />}</BarButton>
             <BarButton label={isCameraEnabled ? "Camera" : "Camera off"} off={!isCameraEnabled} onClick={() => void localParticipant.setCameraEnabled(!isCameraEnabled)}>{isCameraEnabled ? <Video className="h-[22px] w-[22px]" /> : <VideoOff className="h-[22px] w-[22px]" />}</BarButton>
             <BarButton label={isScreenShareEnabled ? "Stop share" : "Share"} active={isScreenShareEnabled} onClick={() => void share()}><MonitorUp className="h-[22px] w-[22px]" /></BarButton>
             {owner && <BarButton label="Invite" onClick={copyInvite}><UserPlus className="h-[22px] w-[22px]" /></BarButton>}
-            <BarButton label="Notes" active={tab === "notes"} onClick={() => setTab("notes")}><NotebookPen className="h-[22px] w-[22px]" /></BarButton>
+            {/* Notes opens a side panel, which only shows at lg and up. */}
+            <BarButton label="Notes" wide active={tab === "notes"} onClick={() => setTab("notes")}><NotebookPen className="h-[22px] w-[22px]" /></BarButton>
             <BarButton label="Settings" onClick={() => setSettings(true)}><Settings className="h-[22px] w-[22px]" /></BarButton>
             <div className="mx-1 h-9 w-px bg-[#e4e7ec]" />
-            <button type="button" onClick={() => void leave()} className="flex h-[58px] w-[60px] flex-col items-center justify-center gap-1 rounded-xl bg-[#fef3f2] text-xs font-bold text-[#b42318] hover:bg-[#fee4e2] sm:w-[76px]" data-testid="my-studio-leave"><LogOut className="h-[22px] w-[22px]" />Leave</button>
+            <button type="button" onClick={() => void leave()} className="flex h-[58px] w-[54px] flex-col items-center justify-center gap-1 rounded-xl bg-[#fef3f2] text-[11px] font-bold text-[#b42318] hover:bg-[#fee4e2] sm:w-[76px] sm:text-xs" data-testid="my-studio-leave"><LogOut className="h-[22px] w-[22px]" />Leave</button>
           </div>
         </div>
 
@@ -434,9 +436,9 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
   );
 }
 
-function BarButton({ label, onClick, off, active, children }: { label: string; onClick: () => void; off?: boolean; active?: boolean; children: ReactNode }) {
+function BarButton({ label, onClick, off, active, wide, children }: { label: string; onClick: () => void; off?: boolean; active?: boolean; wide?: boolean; children: ReactNode }) {
   return (
-    <button type="button" onClick={onClick} aria-pressed={active || off ? true : undefined} className={`flex h-[58px] w-[60px] flex-col items-center justify-center gap-1 rounded-xl text-xs font-semibold sm:w-[76px] ${off ? "bg-[#fef3f2] text-[#b42318]" : active ? "bg-[#eef3fb] text-[#053877]" : "text-[#344054] hover:bg-[#f2f4f7]"}`}>
+    <button type="button" onClick={onClick} aria-pressed={active || off ? true : undefined} className={`${wide ? "hidden lg:flex" : "flex"} h-[58px] w-[54px] flex-col items-center justify-center gap-1 rounded-xl text-center text-[11px] font-semibold leading-tight sm:w-[76px] sm:text-xs ${off ? "bg-[#fef3f2] text-[#b42318]" : active ? "bg-[#eef3fb] text-[#053877]" : "text-[#344054] hover:bg-[#f2f4f7]"}`}>
       {children}{label}
     </button>
   );
@@ -588,7 +590,9 @@ function PeopleStrip({ kit, owner, onShare, onInvite }: { kit: RoomKit; owner: b
 /** A guest who's backstage is told so: they're in the room, not in the recording or the show. */
 function Backstage({ kit }: { kit: RoomKit }) {
   const { localParticipant } = useLocalParticipant();
-  if (kit.isOnStage(localParticipant.identity, localParticipant.attributes?.stage)) return null;
+  // useLocalParticipant doesn't re-render on attribute changes; this does, so the notice shows the moment the host sends you backstage.
+  const stage = useParticipantAttribute("stage", { participant: localParticipant });
+  if (kit.isOnStage(localParticipant.identity, stage)) return null;
   return <p className="mt-3 w-full max-w-[768px] shrink-0 rounded-xl bg-[#fff8e6] px-4 py-2.5 text-sm font-semibold text-[#7a4e00]" data-testid="you-backstage">You're backstage. You're not in the recording or the live show until the host brings you on.</p>;
 }
 
