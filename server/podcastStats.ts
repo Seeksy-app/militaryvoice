@@ -36,7 +36,7 @@ async function bz<T>(token: string, path: string): Promise<T> {
   return r.json() as Promise<T>;
 }
 
-async function buzzsprout(creds: { token: string; podcastId?: string }, prev?: PodcastStatsData | null): Promise<{ showName: string; podcastId: string; data: PodcastStatsData }> {
+async function buzzsprout(creds: { token: string; podcastId?: string }, prev?: PodcastStatsData | null, opts: { backfill?: boolean } = {}): Promise<{ showName: string; podcastId: string; data: PodcastStatsData }> {
   const shows = await bz<{ id: number; title: string; artwork_url?: string }[]>(creds.token, "podcasts.json");
   const show = creds.podcastId ? shows.find((s) => String(s.id) === String(creds.podcastId)) : shows[0];
   if (!show) throw new StatsError(shows.length ? "That podcast ID isn't on this Buzzsprout account." : "No podcasts on this Buzzsprout account.");
@@ -54,12 +54,15 @@ async function buzzsprout(creds: { token: string; podcastId?: string }, prev?: P
   const firstEp = episodes.map((e) => e.published).filter(Boolean).sort()[0] ?? recent[0];
   const floor = [firstEp, day(new Date(Date.now() - 365 * 86400000))].sort().slice(-1)[0];
   const oldest = [recent[0], ...Array.from(kept.keys())].sort()[0];
+  // Once the year is all here (history.complete), stop reaching back: the show may have left Buzzsprout.
+  const done = !!prev?.history?.complete;
   const older: string[] = [];
-  for (let t = Date.parse(oldest) - 86400000; older.length < 30 && day(new Date(t)) >= floor; t -= 86400000) older.push(day(new Date(t)));
-  // Days missed while nobody opened the page (between what we kept and the last 30), up to 30 a time.
+  for (let t = Date.parse(oldest) - 86400000; !done && older.length < 55 && day(new Date(t)) >= floor; t -= 86400000) older.push(day(new Date(t)));
+  // Days missed while nobody opened the page (between what we kept and the last 30).
   const gaps: string[] = [];
-  for (let t = Date.parse(oldest); gaps.length < 30 && day(new Date(t)) < recent[0]; t += 86400000) if (!kept.has(day(new Date(t)))) gaps.push(day(new Date(t)));
-  const want = [...recent, ...gaps, ...older].slice(0, 55); // under Buzzsprout's 60 a minute
+  for (let t = Date.parse(oldest); gaps.length < 55 && day(new Date(t)) < recent[0]; t += 86400000) if (!kept.has(day(new Date(t)))) gaps.push(day(new Date(t)));
+  // A backfill (admin, 21 Nov) skips the recent days and spends the whole minute on older ones.
+  const want = (opts.backfill ? [...gaps, ...older] : [...recent, ...gaps.slice(0, 30), ...older.slice(0, 30)]).slice(0, 55); // under Buzzsprout's 60 a minute
   for (let i = 0; i < want.length; i += 5) {
     const batch = await Promise.all(want.slice(i, i + 5).map(async (d) => {
       const rows = await bz<{ total: number }[]>(creds.token, `${show.id}/downloads.json?date=${d}`).catch(() => null);
@@ -68,10 +71,14 @@ async function buzzsprout(creds: { token: string; podcastId?: string }, prev?: P
     for (const b of batch) if (b) kept.set(b.date, b.count);
   }
   const series = Array.from(kept, ([date, count]) => ({ date, count })).sort((a, b) => a.date.localeCompare(b.date)).slice(-730);
+  // Complete: every day from the floor (first episode or a year back) to yesterday is here.
+  let missing = 0;
+  for (let t = Date.parse(floor); day(new Date(t)) <= recent[recent.length - 1]; t += 86400000) if (!kept.has(day(new Date(t)))) missing++;
+  const history = { complete: done || missing === 0, from: series[0]?.date ?? "", missing, at: prev?.history?.complete ? prev.history.at : missing === 0 ? new Date().toISOString() : "" };
   return {
     showName: show.title,
     podcastId: String(show.id),
-    data: { total: episodes.reduce((a, e) => a + e.count, 0), unit: "downloads", episodes, series, from: series[0]?.date, to: series[series.length - 1]?.date, artwork: /^https:\/\//.test(show.artwork_url ?? "") ? show.artwork_url : undefined },
+    data: { total: episodes.reduce((a, e) => a + e.count, 0), unit: "downloads", episodes, series, history, from: series[0]?.date, to: series[series.length - 1]?.date, artwork: /^https:\/\//.test(show.artwork_url ?? "") ? show.artwork_url : undefined },
   };
 }
 
@@ -332,6 +339,27 @@ export function registerPodcastStats(app: Express) {
     // Hosted here: counted by us, always current, first in the list.
     const hosted = await hostedAsStats(email(req)).catch((err) => { console.warn("Hosted stats failed:", (err as Error).message); return []; });
     res.json({ sources: [...hosted, ...rows.map(view)], benchmark: await benchmark(rows) });
+  });
+
+  // Every 5 minutes: each Buzzsprout connection whose year isn't all saved yet gets one backfill pass
+  // (55 days, one minute's allowance on its own token), so a show's history is whole within the hour
+  // (Andrew, 21 Nov: Frank's whole year before he cancels Buzzsprout). Read-only on Buzzsprout.
+  app.get("/api/cron/podcast-stats-backfill", async (req, res) => {
+    const secret = process.env.CRON_SECRET;
+    if (secret && (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "") !== secret) return res.status(401).json({ message: "Not authorised." });
+    const out: { show: string; days: number; from?: string; missing: number; complete: boolean }[] = [];
+    for (const row of (await storage.allPodcastStats()).filter((r) => r.source === "buzzsprout" && r.status === "ok")) {
+      const prev = parse(row.data);
+      if (prev?.history?.complete) continue;
+      try {
+        const r = await buzzsprout(JSON.parse(unseal(row.creds) || "{}"), prev, { backfill: true });
+        await storage.upsertPodcastStats(row.email, "buzzsprout", { showName: r.showName, data: JSON.stringify(r.data), status: "ok", error: "", fetchedAt: new Date().toISOString() });
+        out.push({ show: r.showName, days: r.data.series?.length ?? 0, from: r.data.from, missing: r.data.history?.missing ?? -1, complete: !!r.data.history?.complete });
+      } catch (e) {
+        console.warn("Buzzsprout backfill failed:", row.showName, (e as Error).message);
+      }
+    }
+    res.json({ backfilled: out });
   });
 
   app.post("/api/host/podcast-stats/buzzsprout", requireHostSession, async (req, res) => {

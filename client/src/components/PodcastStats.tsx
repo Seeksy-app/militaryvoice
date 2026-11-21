@@ -611,7 +611,7 @@ export function PodcastListens({ onConnect, bare = false }: { onConnect: () => v
         // What this source can't do for these dates, said once, quietly.
         const notes: string[] = [];
         if (v.monthly && !span.all) notes.push(`${who} counts by the month, so this shows whole months.`);
-        if (v.startsLate) notes.push(s.source === "militaryvoices" ? `Hosted here from ${fmtDay(v.first)}, so this starts there.` : s.source === "buzzsprout" ? `Buzzsprout's day-by-day numbers start ${fmtDay(v.first)} here; each refresh adds a month further back.` : `${isAll ? who : `${who}'s numbers`} start ${fmtDay(v.first)}, so this starts there.`);
+        if (v.startsLate) notes.push(s.source === "militaryvoices" ? `Hosted here from ${fmtDay(v.first)}, so this starts there.` : s.source === "buzzsprout" ? d.history?.complete ? `Buzzsprout's day-by-day numbers start ${fmtDay(v.first)}.` : `Buzzsprout's day-by-day numbers start ${fmtDay(v.first)} here; each refresh adds a month further back.` : `${isAll ? who : `${who}'s numbers`} start ${fmtDay(v.first)}, so this starts there.`);
         if (v.endsEarly) notes.push(s.source === "spotify" ? `Spotify's numbers run to ${fmtDay(v.last)}, from your last upload.` : `${isAll ? who : `${who}'s numbers`} run to ${fmtDay(v.last)}.`);
         if (!span.all && !v.byDate && d.episodes.length) notes.push(`${isAll ? "Buzzsprout gives" : `${who} gives`} each episode's total, not by date, so Top episodes is all time.`);
         return (

@@ -2616,6 +2616,8 @@ export interface PodcastStatsData {
   episodes: { title: string; published: string; count: number; days?: Record<string, number> }[];
   /** Per day or per month, oldest first. */
   series?: { date: string; count: number }[];
+  /** Buzzsprout: whether every day back to the first episode (or a year) is saved; once complete, refreshes stop reaching back. */
+  history?: { complete: boolean; from: string; missing: number; at: string };
   /** Hosted shows: each app's count on each day it had any, for Apple Podcasts and "Where they listen" in a date range. */
   appDays?: Record<string, Record<string, number>>;
   followers?: number;
