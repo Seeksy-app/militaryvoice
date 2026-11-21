@@ -20,11 +20,11 @@ export const LAYOUTS: { id: Layout; label: string; icon: ReactNode }[] = [
 export function LayoutPicker({ value, onPick, size = "md" }: { value: Layout; onPick: (l: Layout) => void; size?: "sm" | "md" }) {
   const sm = size === "sm";
   return (
-    <div className="flex flex-wrap items-center gap-2" role="radiogroup" aria-label="Layouts">
+    <div className="flex flex-wrap items-center gap-1.5 sm:gap-2" role="radiogroup" aria-label="Layouts">
       {LAYOUTS.map((l) => {
         const on = l.id === value;
         return (
-          <button key={l.id} type="button" role="radio" aria-checked={on} aria-label={l.label} title={l.label} onClick={() => onPick(l.id)} className={`flex items-center justify-center rounded-[10px] ${sm ? "h-8 w-10" : "h-10 w-[54px]"} ${on ? "border-2 border-[#053877] bg-[#eef3fb]" : "border border-[#e4e7ec] bg-white hover:border-[#98a2b3]"}`} data-testid={`layout-${l.id}`}>
+          <button key={l.id} type="button" role="radio" aria-checked={on} aria-label={l.label} title={l.label} onClick={() => onPick(l.id)} className={`flex items-center justify-center rounded-[10px] ${sm ? "h-8 w-10" : "h-10 w-[46px] sm:w-[54px]"} ${on ? "border-2 border-[#053877] bg-[#eef3fb]" : "border border-[#e4e7ec] bg-white hover:border-[#98a2b3]"}`} data-testid={`layout-${l.id}`}>
             <svg width="22" height="16" viewBox="0 0 22 16" fill={on ? "#053877" : "#98a2b3"} aria-hidden>{l.icon}</svg>
           </button>
         );

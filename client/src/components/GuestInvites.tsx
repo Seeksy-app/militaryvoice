@@ -146,7 +146,7 @@ export function GuestInvites({ prefill }: { prefill?: { name: string; email: str
           <div className="space-y-1.5 sm:col-span-2" data-testid="invite-where">
             <Label>Where will you talk?</Label>
             <div className="flex flex-wrap gap-2">
-              {([["zoom", "On Zoom"], ["studio", "In my Room"], ...(coming.length > 0 ? [["booth", "In my Radio booth"]] : [])] as [("zoom" | "studio" | "booth"), string][]).map(([v, label]) => (
+              {([["zoom", "On Zoom"], ["studio", "In my studio"], ...(coming.length > 0 ? [["booth", "In my Radio booth"]] : [])] as [("zoom" | "studio" | "booth"), string][]).map(([v, label]) => (
                 <button key={v} type="button" onClick={() => setWhere(v)} aria-pressed={where === v} className={`rounded-full border px-4 py-1.5 text-sm font-semibold ${where === v ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:bg-muted"}`} data-testid={`invite-where-${v}`}>{label}</button>
               ))}
             </div>
@@ -162,7 +162,7 @@ export function GuestInvites({ prefill }: { prefill?: { name: string; email: str
           ) : (
             <>
           <div className="space-y-1.5"><Label htmlFor="gi-f-when">When is the interview?</Label><Input id="gi-f-when" type="datetime-local" value={f.when} onChange={set("when")} />{where === "zoom" && !f.when && <p className="text-xs text-amber-800" data-testid="invite-when-nudge">Add the day and time so your guest knows when to join.</p>}</div>
-          {where === "studio" && <p className="self-end pb-2 text-xs text-muted-foreground" data-testid="invite-studio-note">Your guest gets the link to your own Room, the quick Zoom-like place on your dashboard. They open it at that time, allow their camera and microphone, and they're in. No account needed.</p>}
+          {where === "studio" && <p className="self-end pb-2 text-xs text-muted-foreground" data-testid="invite-studio-note">Your guest gets the link to your own studio, the one under Studio in your menu. They open it at that time, allow their camera and microphone, and they're in. No account needed.</p>}
           {where === "zoom" && (
             <div className="space-y-1.5">
               <Label htmlFor="gi-f-zoom">Zoom link</Label>

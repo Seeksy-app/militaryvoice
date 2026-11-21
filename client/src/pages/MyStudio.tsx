@@ -73,7 +73,7 @@ export default function MyStudio({ invite }: { invite?: string }) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#f3f4f7] p-6 text-center text-[#101828]">
         <Logo className="h-12" />
-        <p className="mt-4 text-2xl font-bold">{owner ? "You've left your room" : "Thanks for joining"}</p>
+        <p className="mt-4 text-2xl font-bold">{owner ? "You've left your studio" : "Thanks for joining"}</p>
         {owner ? (
           <>
             <p className="max-w-md text-[#475467]">Anything you recorded is on its way to your Library, ready for clips.</p>
@@ -88,7 +88,7 @@ export default function MyStudio({ invite }: { invite?: string }) {
   }
 
   if (!conn || !setup) {
-    const blocked = owner ? (studio.error ? "Sign in to open your room." : "") : guestInfo.error ? say(guestInfo.error) : "";
+    const blocked = owner ? (studio.error ? "Sign in to open your studio." : "") : guestInfo.error ? say(guestInfo.error) : "";
     return (
       <SetupScreen
         owner={owner}
@@ -185,7 +185,7 @@ function SetupScreen({ owner, roomName, blocked, defaultName, onEnter }: { owner
     setBusy(true); setError("");
     stream.current?.getTracks().forEach((t) => t.stop());
     try { await onEnter({ name: name.trim(), title: title.trim(), mic, cam, micId, camId }); }
-    catch (e) { setError((e as { status?: number }).status === 401 ? "Sign in to open your room." : say(e)); setBusy(false); }
+    catch (e) { setError((e as { status?: number }).status === 401 ? "Sign in to open your studio." : say(e)); setBusy(false); }
   };
   const select = "h-9 min-w-0 flex-1 truncate rounded-lg border border-[#d0d5dd] bg-white px-2 text-[13px] text-[#344054]";
 
@@ -193,12 +193,12 @@ function SetupScreen({ owner, roomName, blocked, defaultName, onEnter }: { owner
     <div className="min-h-screen bg-[#f3f4f7] text-[#101828]" data-testid="my-studio-setup" style={{ fontFamily: INTER }}>
       <header className="flex h-16 items-center gap-4 border-b border-[#e4e7ec] bg-white px-5">
         <Logo className="h-10" />
-        {owner && <a href="/host/dashboard/rooms" className="ml-auto flex items-center gap-1.5 text-sm font-semibold text-[#475467] hover:text-[#101828]"><ArrowLeft className="h-4 w-4" /> Back to your dashboard</a>}
+        {owner && <a href="/host/dashboard/studio" className="ml-auto flex items-center gap-1.5 text-sm font-semibold text-[#475467] hover:text-[#101828]"><ArrowLeft className="h-4 w-4" /> Back to your dashboard</a>}
       </header>
       {blocked ? (
         <div className="mx-auto mt-24 max-w-md rounded-2xl bg-white p-8 text-center shadow-sm">
           <p className="text-lg font-semibold">{blocked}</p>
-          {owner && <a href="/host/dashboard/rooms" className="mt-4 inline-flex h-11 items-center rounded-xl px-5 font-semibold text-white" style={{ background: NAVY }}>Sign in</a>}
+          {owner && <a href="/host/dashboard/studio" className="mt-4 inline-flex h-11 items-center rounded-xl px-5 font-semibold text-white" style={{ background: NAVY }}>Sign in</a>}
         </div>
       ) : (
         <main className="mx-auto flex max-w-[1180px] flex-col gap-8 px-4 py-6 lg:flex-row lg:items-start lg:px-8 lg:py-10">
@@ -235,7 +235,7 @@ function SetupScreen({ owner, roomName, blocked, defaultName, onEnter }: { owner
           </section>
 
           <section className="w-full lg:max-w-[420px] lg:pt-2">
-            <p className="text-sm font-semibold uppercase tracking-[0.08em] text-[#667085]">{owner ? roomName || "Your room" : `You're invited to ${roomName || "a show"}`}</p>
+            <p className="text-sm font-semibold uppercase tracking-[0.08em] text-[#667085]">{owner ? roomName || "Your studio" : `You're invited to ${roomName || "a show"}`}</p>
             <h1 className="mt-1 text-balance text-[28px] font-bold leading-tight tracking-tight">{owner ? "Set up your studio" : "Get ready to join"}</h1>
             <p className="mt-2 text-[15px] leading-relaxed text-[#475467]">{owner ? "Check your picture and sound. Going in doesn't start anything; you choose when to record and when to go live." : "Check your picture and sound. The host brings you in when you join."}</p>
             <label className="mt-6 block text-sm font-semibold" htmlFor="studio-name">Your name on screen</label>
@@ -344,7 +344,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
         <div className="hidden h-7 w-px bg-[#e4e7ec] sm:block" />
         <div className="min-w-0">
           <p className="truncate text-[15px] font-bold tracking-tight">{roomName}</p>
-          <p className="text-xs text-[#667085]">{today()} · {owner ? "Your room" : "You're a guest"}</p>
+          <p className="text-xs text-[#667085]">{today()} · {owner ? "Your studio" : "You're a guest"}</p>
         </div>
         {owner && studio && (
           <div className="ml-2 hidden items-center gap-2 md:flex">
@@ -614,7 +614,7 @@ function PeoplePanel({ owner, studio, onCopy }: { owner: boolean; studio?: Studi
   const people = useParticipants();
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PanelHead title="People" line={(() => { const back = people.filter((p) => p.attributes?.stage === "off").length; return back ? `${people.length} in the room, ${back} backstage.` : `${people.length} in the room. Everyone here is on the stage.`; })()} />
+      <PanelHead title="People" line={(() => { const back = people.filter((p) => p.attributes?.stage === "off").length; return back ? `${people.length} in the studio, ${back} backstage.` : `${people.length} in the studio. Everyone here is on the stage.`; })()} />
       <ul className="mt-4 min-h-0 flex-1 space-y-1 overflow-y-auto px-3">
         {people.map((p) => (
           <li key={p.identity} className="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-[#f9fafb]">
@@ -660,7 +660,7 @@ function RecordingPanel({ studio, now, busy, onRecord, onGoLive, onEndLive }: { 
       <div className="mt-4 space-y-3 px-4">
         <div className={`rounded-2xl border p-4 ${rec ? "border-[#fecdca] bg-[#fef3f2]" : "border-[#e4e7ec]"}`}>
           <p className="flex items-center gap-2 text-sm font-bold">{rec ? <><span className="h-2 w-2 animate-pulse rounded-full bg-[#d92d20]" /> Recording · <span className="tabular-nums">{clock(rec.since, now)}</span></> : "Not recording"}</p>
-          <p className="mt-1 text-[13px] text-[#475467]">{!studio.canRecord ? "Recording isn't switched on for rooms yet." : rec ? "Stop when you're done. It's in your Library a minute or two later." : "Starts recording the whole room to your Library."}</p>
+          <p className="mt-1 text-[13px] text-[#475467]">{!studio.canRecord ? "Recording isn't switched on for your studio yet." : rec ? "Stop when you're done. It's in your Library a minute or two later." : "Starts recording the whole studio to your Library."}</p>
           {studio.canRecord && (
             <button type="button" onClick={() => onRecord(!rec)} disabled={busy !== ""} className={`mt-3 flex h-10 items-center gap-2 rounded-xl px-4 text-sm font-bold disabled:opacity-60 ${rec ? "border border-[#fda29b] bg-white text-[#b42318]" : "bg-[#d92d20] text-white"}`} data-testid="panel-record">
               {busy === "rec" ? <Loader2 className="h-4 w-4 animate-spin" /> : rec ? <Square className="h-3.5 w-3.5 fill-current" /> : <Circle className="h-3 w-3 fill-current" />}{rec ? "Stop recording" : "Start recording"}
@@ -690,7 +690,7 @@ function ChatPanel() {
   const go = async () => { const t = text.trim(); if (!t) return; setText(""); await send(t).catch(() => setText(t)); };
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PanelHead title="Chat" line="Messages go to everyone in the room. They aren't saved." />
+      <PanelHead title="Chat" line="Messages go to everyone in the studio. They aren't saved." />
       <div className="mt-3 min-h-0 flex-1 space-y-3 overflow-y-auto px-5">
         {chatMessages.length === 0 && <p className="pt-6 text-center text-[13px] text-[#98a2b3]">No messages yet.</p>}
         {chatMessages.map((m) => (

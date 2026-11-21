@@ -1432,13 +1432,14 @@ export async function sendOpportunityEmail(input: { to: string; name: string; br
 export async function sendInterviewInvite(input: { fromLocal?: string; to: string; guestName: string; hostName: string; hostEmail: string; show: string; whenText: string; zoomLink: string; linkLater?: boolean; note: string; link: string }): Promise<boolean> {
   const first = input.guestName.trim().split(/\s+/)[0] || "there";
   const who = input.hostName || input.show || "Your host";
-  // Our own links (a Room or a Radio booth) are "your link to join"; anything else is the host's Zoom.
-  const ours = /\/room\/join\/|\/booth\//.test(input.zoomLink);
+  // Our own links (the host's studio, /my-studio/join or the old /room/join, or a Radio booth) are "your link to join"; anything else is the host's Zoom.
+  const studioLink = /\/(my-studio|room)\/join\//.test(input.zoomLink);
+  const ours = studioLink || /\/booth\//.test(input.zoomLink);
   const later = !input.zoomLink && input.linkLater ? `${who} will send you the Zoom link in a separate email.` : "";
   const details = [
     input.whenText ? `<p style="margin:0 0 6px;"><b>When:</b> ${escapeHtml(input.whenText)}</p>` : "",
-    input.zoomLink ? (/\/room\/join\//.test(input.zoomLink)
-      ? `<p style="margin:0 0 6px;"><b>Your link to join:</b> <a href="${escapeHtml(input.zoomLink)}">${escapeHtml(input.zoomLink)}</a></p><p style="margin:0 0 6px;color:#374151;">Open it at the time, allow your camera and microphone, and you're in the room with ${escapeHtml(who)}. No account needed.</p>`
+    input.zoomLink ? (studioLink
+      ? `<p style="margin:0 0 6px;"><b>Your link to join:</b> <a href="${escapeHtml(input.zoomLink)}">${escapeHtml(input.zoomLink)}</a></p><p style="margin:0 0 6px;color:#374151;">Open it at the time, allow your camera and microphone, and you're in the studio with ${escapeHtml(who)}. No account needed.</p>`
       : /\/booth\//.test(input.zoomLink)
       ? `<p style="margin:0 0 6px;"><b>Your link to join:</b> <a href="${escapeHtml(input.zoomLink)}">${escapeHtml(input.zoomLink)}</a></p><p style="margin:0 0 6px;color:#374151;">Open it on the day, allow your camera and microphone, and you're in the booth with ${escapeHtml(who)}. No account needed. It's live on MilitaryVoices Radio.</p>`
       : `<p style="margin:0 0 6px;"><b>Zoom:</b> <a href="${escapeHtml(input.zoomLink)}">${escapeHtml(input.zoomLink)}</a></p>`)

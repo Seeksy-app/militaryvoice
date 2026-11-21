@@ -110,7 +110,7 @@ export function HostNav({
   const me = adminMe as { studioHost?: boolean; teamHost?: boolean } | null;
   const consoleOn = isAdmin && !(me?.studioHost && !me.teamHost);
   /** Doors that are pages of their own rather than dashboard screens. */
-  const pageHref = (it: Item): string | undefined => it.feature === "room" ? "/room" : it.feature === "studio" ? (me?.studioHost ? "/studio/control" : "/admin/studio") : undefined;
+  const pageHref = (it: Item): string | undefined => it.feature === "room" ? "/my-studio" : it.feature === "studio" ? (me?.studioHost ? "/studio/control" : "/admin/studio") : undefined;
   const brand = path === "brand";
   // A brand's menu (7 Oct): finding creators and its team, none of the making-content tools.
   const brandGroups: { title: string; items: Item[] }[] = [
@@ -152,7 +152,7 @@ export function HostNav({
     if (seen || !toured) return;
     const t = window.setTimeout(() => {
       try { localStorage.setItem("mv_guide_booth", "1"); } catch { /* fine */ }
-      showGuide([{ at: [{ sel: 'a[data-nav-label="Booth"]', text: "Your Radio booth is here. It opens an hour before your show." }] }]);
+      showGuide([{ at: [{ sel: 'a[data-nav-label="Radio"]', text: "Your Radio show is here. It opens an hour before your time." }] }]);
     }, 1500);
     return () => window.clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -172,7 +172,7 @@ export function HostNav({
       items: [
         { key: "dashboard", label: "Dashboard", hint: "Your home base: your events, your audience and what to do next", icon: LayoutDashboard },
         { key: "page", label: "SmartLink", hint: "Your SmartLink at militaryvoices.ai/you: your podcast, links, messages from listeners, and a media kit for brands", icon: Globe },
-        ...(nextBooth ? [{ key: "dashboard" as const, label: "Booth", hint: "Your MilitaryVoices Radio booth: it opens an hour before your time", icon: Radio, href: `/booth/${nextBooth.id}`, status: boothStatus }] : []),
+        ...(nextBooth ? [{ key: "dashboard" as const, label: "Radio", hint: "Your MilitaryVoices Radio show: it opens an hour before your time", icon: Radio, href: `/booth/${nextBooth.id}`, status: boothStatus }] : []),
         ...(cohostHours > 0 ? [{ key: "cohost" as const, label: "Co-host dashboard", hint: `The ${cohostHours} ${cohostHours === 1 ? "hour" : "hours"} you're co-hosting at the desk, and who's on with you`, icon: Mic2 }] : []),
       ],
     },
@@ -182,7 +182,7 @@ export function HostNav({
       title: "Record & host",
       items: [
         // Studio is the Room for every creator (20 Nov 2026, Andrew): the one we're making StreamYard-like, on every plan.
-        { key: "pro", feature: "room", label: "Studio", hint: "Your room: check your camera and mic, invite guests, record or go live. It all lands in your Library.", icon: MonitorPlay, tag: "Beta" },
+        { key: "pro", feature: "room", label: "Studio", hint: "Your studio: check your camera and mic, invite guests, record or go live. It all lands in your Library.", icon: MonitorPlay, tag: "Beta" },
         // The producer console (Radio and events) only for the people who run it: admins and studio hosts on a real event.
         ...(consoleOn ? [{ key: "pro" as const, feature: "studio", label: "Studio console", hint: "The producer console for Radio and events: scenes, run of show and lower thirds", icon: SlidersHorizontal }] : []),
         { key: "podcast", label: "Podcast", hint: "Host your show: your RSS feed for Apple and Spotify, episodes, and downloads sponsors trust", icon: Podcast },
@@ -245,7 +245,7 @@ export function HostNav({
           className={compact
             ? "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full bg-[#053877]/[0.06] px-3 py-1.5 text-sm font-medium text-foreground"
             : "flex items-center gap-3 rounded-full px-4 py-2 text-left text-foreground/80 transition-colors hover:bg-muted hover:text-foreground"}
-          data-testid={`nav-host-${it.label === "Booth" ? "booth" : "help"}`}
+          data-testid={`nav-host-${it.label === "Radio" ? "booth" : "help"}`}
           data-nav-label={it.label}
         >
           <Icon className={`h-4 w-4 shrink-0 ${compact ? "text-[#053877]" : "text-muted-foreground"}`} />

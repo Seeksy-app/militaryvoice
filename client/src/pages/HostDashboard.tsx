@@ -639,7 +639,7 @@ const SCREEN_SLUG: Record<Screen, string> = {
   postify: "postify",
   billing: "billing",
   trash: "recently-deleted",
-  studio: "rooms",
+  studio: "studio",
   fans: "fans",
   social: "social",
   calendar: "calendar",
@@ -663,6 +663,7 @@ const SCREEN_SLUG: Record<Screen, string> = {
 const SLUG_SCREEN = new Map<string, Screen>([
   ...(Object.entries(SCREEN_SLUG) as [Screen, string][]).filter(([, v]) => v).map(([k, v]) => [v, k] as [string, Screen]),
   ["recordings", "recordings"],
+  ["rooms", "studio"], // the Studio screen was /host/dashboard/rooms until 21 Nov 2026; old links still land
 ]);
 export function hostScreenPath(screen: Screen): string {
   const slug = SCREEN_SLUG[screen];
@@ -1702,7 +1703,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                                 <h4 className="text-[17px] font-bold text-foreground">In our studio</h4>
                               </div>
                               <p className="text-sm leading-relaxed text-muted-foreground">Check your camera and mic, invite guests, and go. Nothing else to set up.</p>
-                              <a href="/room" className="mt-1.5 self-start rounded-[10px] bg-[#053877] px-[18px] py-[11px] text-sm font-semibold text-white hover:bg-[#022a5c]" data-testid="go-live-room">Open my room</a>
+                              <a href="/my-studio" className="mt-1.5 self-start rounded-[10px] bg-[#053877] px-[18px] py-[11px] text-sm font-semibold text-white hover:bg-[#022a5c]" data-testid="go-live-room">Open my studio</a>
                             </div>
                             <div className="flex flex-col gap-2.5 rounded-2xl border border-border p-[18px]">
                               <div className="flex items-center gap-3">

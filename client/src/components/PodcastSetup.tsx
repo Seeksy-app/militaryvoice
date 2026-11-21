@@ -308,7 +308,7 @@ export function PodcastSetup({ initialFeed, onImported, onCreating, onFinish, on
         <h1 className="mt-2 text-4xl font-bold tracking-tight [text-wrap:balance] sm:text-5xl">How will you record?</h1>
         <p className="mt-3 text-lg text-muted-foreground">Pick one to start. You can use all of them later.</p>
         <div className="mt-8 grid gap-4 sm:grid-cols-3">
-          <BeginCard icon={Video} withIcon title="Record in Rooms" text="Quick, like Zoom. Guests join on a link." onClick={() => onFinish("rooms", madeId)} testid="setup-record-rooms" />
+          <BeginCard icon={Video} withIcon title="Record in your studio" text="Guests join on a link. It lands in your Library." onClick={() => onFinish("rooms", madeId)} testid="setup-record-rooms" />
           <BeginCard icon={Upload} withIcon title="Upload an episode" text="Audio or video you already have." onClick={() => onFinish("upload", madeId)} testid="setup-record-upload" />
           <BeginCard icon={Mic} img="/brands/zoom.svg" withIcon title="Use Zoom" text="Your Zoom cloud recordings land in your Library." onClick={() => onFinish("zoom", madeId)} testid="setup-record-zoom" />
         </div>

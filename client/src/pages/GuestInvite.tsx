@@ -81,7 +81,7 @@ export default function GuestInvite({ token }: { token: string }) {
             <div className="mt-4 space-y-1 rounded-xl bg-[#f5f7fb] p-4 text-sm">
               {d.whenText && <p><b>When:</b> {d.whenText}</p>}
               {d.zoomLink
-                ? <p className="break-all"><b>{/\/room\/join\/|\/booth\//.test(d.zoomLink) ? "Your link to join" : "Zoom"}:</b> <a className="text-[#053877] underline" href={d.zoomLink}>{d.zoomLink}</a></p>
+                ? <p className="break-all"><b>{/\/(my-studio|room)\/join\/|\/booth\//.test(d.zoomLink) ? "Your link to join" : "Zoom"}:</b> <a className="text-[#053877] underline" href={d.zoomLink}>{d.zoomLink}</a></p>
                 : d.linkLater && <p><b>Zoom:</b> {d.hostName || "Your host"} will send you the link in a separate email.</p>}
               {d.note && <p className="whitespace-pre-line">{d.note}</p>}
             </div>

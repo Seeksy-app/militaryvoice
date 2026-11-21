@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { Switch, Route, Router, useLocation } from "wouter";
+import { Switch, Route, Router, Redirect, useLocation } from "wouter";
 import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
@@ -135,7 +135,8 @@ function AppRouter() {
       <Route path="/help/zoom">{() => <HelpZoom />}</Route>
       <Route path="/help/zoom-story">{() => <HelpZoomStory />}</Route>
       <Route path="/help/podcast">{() => <HelpPodcast />}</Route>
-      <Route path="/help/rooms">{() => <HelpRooms />}</Route>
+      <Route path="/help/studio">{() => <HelpRooms />}</Route>
+      <Route path="/help/rooms">{() => <Redirect to={`/help/studio${window.location.hash}`} replace />}</Route>
       <Route path="/help/booth">{() => <HelpBooth />}</Route>
       <Route path="/help/library">{() => <HelpLibrary />}</Route>
       <Route path="/help/postify">{() => <HelpPostify />}</Route>
@@ -172,8 +173,9 @@ function AppRouter() {
       <Route path="/directory">{() => <Directory />}</Route>
       <Route path="/podcast/:slug">{(p) => <PodcastPage slug={p.slug} />}</Route>
       <Route path="/stream-in">{() => <StreamIn />}</Route>
-      <Route path="/room">{() => <MyStudio />}</Route>
-      <Route path="/room/join/:token">{(p) => <MyStudio invite={p.token} />}</Route>
+      {/* The creator's studio was "the Room" until 21 Nov 2026; old links and invites land on /my-studio (vercel.json 301s them too). */}
+      <Route path="/room">{() => <Redirect to="/my-studio" replace />}</Route>
+      <Route path="/room/join/:token">{(p) => <Redirect to={`/my-studio/join/${p.token}`} replace />}</Route>
       <Route path="/my-studio">{() => <MyStudio />}</Route>
       <Route path="/my-studio/join/:token">{(p) => <MyStudio invite={p.token} />}</Route>
       <Route path="/studio">{() => <Studio />}</Route>

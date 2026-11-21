@@ -154,6 +154,9 @@
     }
   ],
   "redirects": [
+    { "source": "/room", "destination": "/my-studio", "permanent": true },
+    { "source": "/room/join/:token", "destination": "/my-studio/join/:token", "permanent": true },
+    { "source": "/help/rooms", "destination": "/help/studio", "permanent": true },
     {
       "source": "/((?!api/|s/|og/|go/).*)",
       "has": [

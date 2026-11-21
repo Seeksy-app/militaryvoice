@@ -37,8 +37,8 @@ export function StudioHome() {
   return (
     <div className="mx-auto max-w-3xl space-y-5" data-testid="studio-home">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight">Rooms</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Quick, like Zoom: hop in any time, bring guests on a link, record it or don't, and go live if you like. Recordings land in your Library, ready for Pōstify.</p>
+        <h1 className="text-2xl font-bold tracking-tight">Studio</h1>
+        <p className="mt-1 text-sm text-muted-foreground">Hop in any time, bring guests on a link, record it or don't, and go live if you like. Recordings land in your Library, ready for Pōstify.</p>
       </div>
 
       <section className="flex flex-wrap items-center gap-4 rounded-2xl bg-[#04102b] p-6 text-white shadow-sm">
@@ -47,7 +47,7 @@ export function StudioHome() {
           <p className="text-lg font-bold">{s.name}</p>
           <p className="text-sm text-white/70">{s.live ? "You're live now." : s.recording ? "Recording now." : "Check your camera and mic, then you're in."}</p>
         </div>
-        <a href="/room" className="inline-flex h-11 items-center gap-2 rounded-full bg-[#F0A71F] px-6 font-bold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="studio-enter"><Radio className="h-5 w-5" /> Enter my room</a>
+        <a href="/my-studio" className="inline-flex h-11 items-center gap-2 rounded-full bg-[#F0A71F] px-6 font-bold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="studio-enter"><Radio className="h-5 w-5" /> Enter my studio</a>
       </section>
 
       <section className={card}>
@@ -62,7 +62,7 @@ export function StudioHome() {
 
       <section className={card}>
         <p className="font-semibold">When you go live</p>
-        <p className="mt-0.5 text-sm text-muted-foreground">Go live streams your room to everywhere switched on here, all at once.</p>
+        <p className="mt-0.5 text-sm text-muted-foreground">Go live streams your studio to everywhere switched on here, all at once.</p>
         <div className="mt-3 divide-y divide-border rounded-xl border border-border">
           <div className="flex items-center gap-3 px-3 py-2.5">
             <Youtube className="h-5 w-5 shrink-0 text-red-600" />
