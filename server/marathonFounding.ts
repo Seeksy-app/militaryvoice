@@ -26,10 +26,9 @@ export const MARATHON_KIND = "founding-marathon-";
 const HEADER = `${ORIGIN}/email/founding-hero.jpg`;
 
 const scale = PLANS.creator;
-const pro = PLANS.pro;
 const money = (c: number) => `$${(c / 100).toFixed(2).replace(/\.00$/, "")}`;
-const OFFER = `Scale is free for your first 30 days, then ${money(scale.cents)} a month. You'll need a card at checkout, and if you cancel before day 30 you pay nothing.`;
-const PRO_LINE = `Want more? Pro is in the offer too: 30 days free, then ${money(pro.quarterCents)} every 3 months, with ${pro.clipsPerEpisode} clips an episode instead of ${scale.clipsPerEpisode} and ${pro.credits} credits a month.`;
+const OFFER = `Scale is free for your first 30 days, then ${money(scale.cents)} a month.`;
+// Pro line and card sentence out of the emails (Andrew, 21 Nov, after the first test).
 const GETS = [
   `Pōstify cuts ${scale.clipsPerEpisode} captioned clips from every episode, ready to post`,
   "Post to all your socials: Instagram, Facebook, YouTube, TikTok and LinkedIn",
@@ -52,7 +51,6 @@ export const STEPS: Record<MarathonStep, { subject: string; preheader: string; h
       `Founding Members opens on Black Friday, and you can join today. ${OFFER}`,
       "What you get with Scale:",
       GETS,
-      PRO_LINE,
       "Everyone who joins in 2026 is a Founding Member. The offer ends December 31, 2026.",
     ],
     cta: "Become a Founding Member",
@@ -66,7 +64,6 @@ export const STEPS: Record<MarathonStep, { subject: string; preheader: string; h
       "A quick one before Thanksgiving. Your spot as a Founding Member is still open.",
       OFFER,
       "That's clips from every episode, posting to all your socials (Instagram, Facebook, YouTube, TikTok and LinkedIn), animated captions, a clean edit and your own Studio.",
-      PRO_LINE,
       "Happy Thanksgiving to you and yours.",
     ],
     cta: "Become a Founding Member",
@@ -80,7 +77,6 @@ export const STEPS: Record<MarathonStep, { subject: string; preheader: string; h
       "I haven't heard back from you, and I understand you may have other options.",
       "So we'll close and archive your MilitaryVoices.ai account. If you'd like to come back, reply to this email and let us know.",
       `And if you'd rather stay as a Founding Member, today is Black Friday. ${OFFER}`,
-      PRO_LINE,
       "Thank you for being on the Marathon.",
     ],
     cta: "Stay as a Founding Member",
