@@ -62,7 +62,7 @@ async function buzzsprout(creds: { token: string; podcastId?: string }, prev?: P
   const gaps: string[] = [];
   for (let t = Date.parse(oldest); gaps.length < 55 && day(new Date(t)) < recent[0]; t += 86400000) if (!kept.has(day(new Date(t)))) gaps.push(day(new Date(t)));
   // A backfill (admin, 21 Nov) skips the recent days and spends the whole minute on older ones.
-  const want = (opts.backfill ? [...gaps, ...older] : [...recent, ...gaps.slice(0, 30), ...older.slice(0, 30)]).slice(0, 55); // under Buzzsprout's 60 a minute
+  const want = (opts.backfill ? [...recent.filter((d) => !kept.has(d)), ...gaps, ...older] : [...recent, ...gaps.slice(0, 30), ...older.slice(0, 30)]).slice(0, 55); // under Buzzsprout's 60 a minute
   for (let i = 0; i < want.length; i += 5) {
     const batch = await Promise.all(want.slice(i, i + 5).map(async (d) => {
       const rows = await bz<{ total: number }[]>(creds.token, `${show.id}/downloads.json?date=${d}`).catch(() => null);
