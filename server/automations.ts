@@ -114,7 +114,7 @@ async function startersSince(trigger: string, since: string): Promise<{ email: s
       return (await db.select({ email: podcasterProfiles.email, name: podcasterProfiles.hostName }).from(podcasterProfiles).where(gte(podcasterProfiles.createdAt, since)))
         .map((r) => ({ email: r.email, firstName: firstWord(r.name) }));
     case "smartlink":
-      return (await db.select({ email: bioPages.email, name: bioPages.displayName }).from(bioPages).where(gte(bioPages.createdAt, since)))
+      return (await db.select({ email: bioPages.email, name: bioPages.displayName }).from(bioPages).where(and(gte(bioPages.createdAt, since), eq(bioPages.published, true))))
         .map((r) => ({ email: r.email, firstName: firstWord(r.name) }));
     case "podcast":
       return (await db.select({ email: hostedShows.email, owner: hostedShows.ownerEmail }).from(hostedShows).where(gte(hostedShows.createdAt, since)))

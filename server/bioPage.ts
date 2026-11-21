@@ -4,7 +4,7 @@ import multer from "multer";
 import sharp from "sharp";
 import { and, desc, eq, gte, inArray, ne, sql } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
-import { requireHostSession, getSessionEmail } from "./session.js";
+import { requireHostSession, getSessionEmail, getAdminEmail } from "./session.js";
 import { uploadPhoto, uploadShowAsset } from "./photoStorage.js";
 import { sendListenerQuestionEmail, sendListenerReplyEmail, sendSponsorInquiryEmail } from "./email.js";
 import { parseSocialAccounts } from "./uploadPost.js";
@@ -28,6 +28,9 @@ import type { PodcastStatsData } from "../shared/schema.js";
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 const now = () => new Date().toISOString();
 const emailOf = (req: Request) => (getSessionEmail(req) ?? "").trim().toLowerCase();
+// An admin looking at someone else's account ("View as"). A SmartLink made then starts switched off,
+// so stepping into an account never puts a public page up (or starts the SmartLink emails) for them.
+const viewingAs = (req: Request) => { const a = (getAdminEmail(req) ?? "").trim().toLowerCase(); return !!a && a !== emailOf(req); };
 /** On a paid plan (Pōstify, active or trialing). */
 async function isPaid(email: string): Promise<boolean> {
   const sub = await storage.getSubscription(email.trim().toLowerCase()).catch(() => undefined);
@@ -49,8 +52,8 @@ export async function freeHandle(base: string): Promise<string> {
   return `${b}${crypto.randomBytes(2).toString("hex")}`;
 }
 
-/** Their page, made on first visit from what we already know about them. */
-async function pageFor(email: string): Promise<BioPageRow> {
+/** Their page, made on first visit from what we already know about them (switched off when `draft`). */
+async function pageFor(email: string, draft = false): Promise<BioPageRow> {
   await schemaIsReady();
   const [row] = await db.select().from(bioPages).where(eq(bioPages.email, email)).limit(1);
   if (row) return row;
@@ -63,6 +66,7 @@ async function pageFor(email: string): Promise<BioPageRow> {
     rssUrl: p?.rssUrl || "",
     theme: JSON.stringify({ ...TEMPLATES.bold.theme, template: "bold", color: "#F0A71F" }),
     sections: "[]", socials: "[]",
+    ...(draft ? { published: false } : {}),
     createdAt: now(), updatedAt: now(),
   }).onConflictDoNothing().returning();
   if (made) return made;
@@ -501,7 +505,7 @@ export function registerBioPage(app: Express) {
   // The builder.
   app.get("/api/host/bio", requireHostSession, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
-    const row = await pageFor(emailOf(req));
+    const row = await pageFor(emailOf(req), viewingAs(req));
     // Line up any new episodes for Ask my show to learn (the worker transcribes them).
     void syncKnowledge(row.email).catch((err) => console.warn("Ask my show sync failed:", (err as Error).message));
     const since = new Date(Date.now() - 29 * 86400000).toISOString().slice(0, 10);
@@ -523,7 +527,7 @@ export function registerBioPage(app: Express) {
   });
 
   app.patch("/api/host/bio", requireHostSession, async (req, res) => {
-    const row = await pageFor(emailOf(req));
+    const row = await pageFor(emailOf(req), viewingAs(req));
     const b = req.body ?? {};
     const patch: Partial<BioPageRow> = { updatedAt: now() };
     if (typeof b.handle === "string" && b.handle !== row.handle) {
@@ -575,7 +579,7 @@ export function registerBioPage(app: Express) {
 
   // The photo (square) and the cover (wide), sized for the page.
   app.post("/api/host/bio/image/:kind", requireHostSession, art.single("file"), async (req, res) => {
-    const row = await pageFor(emailOf(req));
+    const row = await pageFor(emailOf(req), viewingAs(req));
     const kind = req.params.kind === "hero" ? "hero" : ["family", "brands", "bg"].includes(String(req.params.kind)) ? "family" : "avatar";
     if (!req.file) return res.status(400).json({ message: "Choose an image." });
     try {
@@ -606,7 +610,7 @@ export function registerBioPage(app: Express) {
   const livingRuns = new Map<number, number[]>();
   type LivingJob = LivingState;
   app.post("/api/host/bio/living", requireHostSession, async (req, res) => {
-    const row = await pageFor(emailOf(req));
+    const row = await pageFor(emailOf(req), viewingAs(req));
     if (!process.env.FAL_KEY) return res.status(503).json({ message: "Living photos aren't switched on yet." });
     const photo = row.heroUrl || row.avatarUrl;
     if (!photo) return res.status(400).json({ message: "Add a photo first." });
@@ -636,7 +640,7 @@ export function registerBioPage(app: Express) {
   });
   // How it's going: when fal has it, the video is copied to our storage and kept.
   app.get("/api/host/bio/living", requireHostSession, async (req, res) => {
-    const row = await pageFor(emailOf(req));
+    const row = await pageFor(emailOf(req), viewingAs(req));
     const photo = row.heroUrl || row.avatarUrl;
     const job = row.livingJob ? (JSON.parse(row.livingJob) as LivingJob) : null;
     // Made, and waiting to be made smaller for phones: it's already on the page.
@@ -669,7 +673,7 @@ export function registerBioPage(app: Express) {
   const VOICES = INTRO_VOICES.map((v) => v.id);
   const introRuns = new Map<number, number[]>();
   app.post("/api/host/bio/intro", requireHostSession, async (req, res) => {
-    const row = await pageFor(emailOf(req));
+    const row = await pageFor(emailOf(req), viewingAs(req));
     if (!process.env.FAL_KEY) return res.status(503).json({ message: "Talking intros aren't switched on yet." });
     if (!row.avatarUrl) return res.status(400).json({ message: "Add a profile photo first: a clear one of your face works best." });
     const job = row.introJob ? (JSON.parse(row.introJob) as LivingState) : null;
@@ -730,7 +734,7 @@ export function registerBioPage(app: Express) {
     }
   });
   app.get("/api/host/bio/intro", requireHostSession, async (req, res) => {
-    const row = await pageFor(emailOf(req));
+    const row = await pageFor(emailOf(req), viewingAs(req));
     const job = row.introJob ? (JSON.parse(row.introJob) as LivingState) : null;
     if (!job || job.squeeze) return res.json(row.introUrl ? { status: "done", livingUrl: row.introUrl } : { status: "none" });
     try {
@@ -759,7 +763,7 @@ export function registerBioPage(app: Express) {
   // Sent back to look at first; it becomes their photo only when they choose it.
   const fixRuns = new Map<number, number[]>();
   app.post("/api/host/bio/fixup", requireHostSession, async (req, res) => {
-    const row = await pageFor(emailOf(req));
+    const row = await pageFor(emailOf(req), viewingAs(req));
     if (!process.env.FAL_KEY) return res.status(503).json({ message: "Fix-up isn't switched on yet." });
     const kind = req.body?.kind === "hero" ? "hero" : "avatar";
     const src = kind === "hero" ? row.heroUrl : row.avatarUrl;
@@ -803,7 +807,7 @@ export function registerBioPage(app: Express) {
   };
   const styleRuns = new Map<number, number[]>();
   app.post("/api/host/bio/style", requireHostSession, async (req, res) => {
-    const row = await pageFor(emailOf(req));
+    const row = await pageFor(emailOf(req), viewingAs(req));
     if (!process.env.FAL_KEY) return res.status(503).json({ message: "Styles aren't switched on yet." });
     const kind = req.body?.kind === "hero" ? "hero" : "avatar";
     const key = String(req.body?.style ?? "");
@@ -851,7 +855,7 @@ export function registerBioPage(app: Express) {
   };
   const sceneRuns = new Map<number, number[]>();
   app.post("/api/host/bio/scene", requireHostSession, async (req, res) => {
-    const row = await pageFor(emailOf(req));
+    const row = await pageFor(emailOf(req), viewingAs(req));
     if (!process.env.FAL_KEY) return res.status(503).json({ message: "Scenes aren't switched on yet." });
     const preset = SCENES[String(req.body?.preset ?? "")];
     const own = String(req.body?.prompt ?? "").trim().slice(0, 300);
@@ -910,7 +914,7 @@ export function registerBioPage(app: Express) {
   });
 
   app.post("/api/host/bio/cutout", requireHostSession, async (req, res) => {
-    const row = await pageFor(emailOf(req));
+    const row = await pageFor(emailOf(req), viewingAs(req));
     if (!process.env.FAL_KEY) return res.status(503).json({ message: "Cutout isn't switched on yet." });
     // The photo the builder is showing (it may be a moment ahead of what's saved): their own photo, or this page's own copy of one.
     const store = (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(/\/+$/, "");
@@ -947,7 +951,7 @@ export function registerBioPage(app: Express) {
 
   // Write it for me: a first draft of their bio from what we know (the show, its episodes, their service). They edit it.
   app.post("/api/host/bio/draft-bio", requireHostSession, async (req, res) => {
-    const row = await pageFor(emailOf(req));
+    const row = await pageFor(emailOf(req), viewingAs(req));
     const p = await storage.getProfileByEmail(row.email).catch(() => undefined);
     const pod = await podcastFor(row).catch(() => null);
     const facts = [
@@ -975,7 +979,7 @@ export function registerBioPage(app: Express) {
 
   // Be a guest: a short pitch to a show's host, from what we know about this podcaster. They send it themselves.
   app.post("/api/host/pitch", requireHostSession, async (req, res) => {
-    const row = await pageFor(emailOf(req));
+    const row = await pageFor(emailOf(req), viewingAs(req));
     const p = await storage.getProfileByEmail(row.email).catch(() => undefined);
     const pod = await podcastFor(row).catch(() => null);
     const show = { title: str(req.body?.show?.title, 200), about: str(req.body?.show?.about, 1200), host: str(req.body?.show?.host, 120) };
@@ -1007,7 +1011,7 @@ export function registerBioPage(app: Express) {
   });
 
   app.patch("/api/host/bio/questions/:id", requireHostSession, async (req, res) => {
-    const row = await pageFor(emailOf(req));
+    const row = await pageFor(emailOf(req), viewingAs(req));
     const status = ["new", "answered", "archived"].includes(req.body?.status) ? req.body.status : "answered";
     await db.update(listenerQuestions).set({ status }).where(and(eq(listenerQuestions.id, Number(req.params.id)), eq(listenerQuestions.pageId, row.id)));
     res.json({ ok: true });
@@ -1015,7 +1019,7 @@ export function registerBioPage(app: Express) {
 
   // The podcaster answers: it shows in the listener's chat on the page, and by email when they left one.
   app.post("/api/host/bio/questions/:id/reply", requireHostSession, async (req, res) => {
-    const row = await pageFor(emailOf(req));
+    const row = await pageFor(emailOf(req), viewingAs(req));
     const reply = str(req.body?.reply, 3000).trim();
     if (reply.length < 1) return res.status(400).json({ message: "Write your reply first." });
     const [q] = await db.update(listenerQuestions).set({ reply, repliedAt: now(), status: "answered" })
