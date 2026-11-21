@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { useToast } from "@/hooks/use-toast";
+import { CreditsInfo } from "@/components/CreditsInfo";
 
 export type PodShow = {
   kind: "show"; id: string; title: string; about: string; image: string; web: string; site: string; rss: string;
@@ -489,8 +490,8 @@ function GuestActions({ person, saved, onSave, reveals, onRevealed, onInvite }: 
           {!handle ? "No X account on file, so their email can't be looked up here. Their shows below list how to reach them."
             : left == null ? `Find their email looks them up by their X account (@${handle}).`
             : left > 0 ? <>Find their email looks them up by their X account (@{handle}). It uses one of your contact reveals: <b className="text-foreground">{left} of {reveals!.allowance}</b> left this month{me.data?.discoveryPro ? "" : " (Discovery Pro: 50 a month)"}.</>
-            : credits >= 1 ? <>This month's contact reveals are used, so this one is <b className="text-foreground">1 credit</b> (you have {credits}).</>
-            : <>This month's contact reveals are used. <a href="/pricing#discovery" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Discovery Pro</a> gives 50 a month, or <a href="/host/dashboard/postify" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">add credits</a> (1 a contact).</>}
+            : credits >= 1 ? <>This month's contact reveals are used, so this one is <b className="text-foreground">1 credit</b> (you have {credits}). <CreditsInfo /></>
+            : <>This month's contact reveals are used. <a href="/pricing#discovery" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Discovery Pro</a> gives 50 a month, or <a href="/host/dashboard/postify" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">add credits</a> (1 a contact). <CreditsInfo /></>}
         </p>
       )}
       {contact && (

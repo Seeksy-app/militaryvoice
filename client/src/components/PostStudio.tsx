@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from "framer-motion";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
+import { CreditsInfo } from "@/components/CreditsInfo";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PLANS, CREDIT_PACKS, OVERAGE_CAP_CHOICES, episodeCredits, cents, SHORT_VIDEO_SEC, type PlanKey } from "@shared/tokens";
@@ -437,7 +438,7 @@ function PlanDialog({ open, onOpenChange, beta, plan }: { open: boolean; onOpenC
             </DialogHeader>
             <div className={`grid gap-3 ${plan.interval === "year" ? "grid-cols-1" : "grid-cols-2"}`}>
               <div className="rounded-xl border border-border p-3">
-                <p className="text-xs text-muted-foreground">Credits left</p>
+                <p className="flex items-center gap-1 text-xs text-muted-foreground">Credits left <CreditsInfo /></p>
                 <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">{beta?.tokens ?? 0}</p>
               </div>
               {plan.interval !== "year" && <div className="rounded-xl border border-border p-3">
@@ -492,7 +493,7 @@ function PlanDialog({ open, onOpenChange, beta, plan }: { open: boolean; onOpenC
             </div>
             <CreditPacks busy={busy} go={go} label="Or buy credits once, no plan" />
             <ul className="space-y-1 text-xs text-muted-foreground">
-              <li><span className="font-semibold text-foreground">An episode:</span> 8 credits (12 on Pro): every clip in all three shapes with animated captions, and the clean episode.</li>
+              <li><span className="font-semibold text-foreground">An episode:</span> 8 credits (12 on Pro): every clip in all three shapes with animated captions, and the clean episode. <CreditsInfo /></li>
               <li><span className="font-semibold text-foreground">Classic captions:</span> 5 credits (7 on Pro).</li>
               <li><span className="font-semibold text-foreground">Music and text edits:</span> included. Your first episode is free.</li>
             </ul>
@@ -562,14 +563,14 @@ function GenerateMore({ rec, beta, plan, count, captions }: { rec: Rec; beta?: B
         type="button"
         onClick={() => (canPay ? more.mutate() : setOpen(true))}
         disabled={more.isPending}
-        className="flex min-h-[14rem] flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#053877]/25 bg-[#053877]/[0.03] p-4 text-center transition-colors hover:border-[#053877]/50 hover:bg-[#053877]/[0.06] disabled:opacity-60"
+        className="flex min-h-[14rem] flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#053877]/25 bg-[#053877]/[0.03] px-2.5 py-4 sm:px-4 text-center transition-colors hover:border-[#053877]/50 hover:bg-[#053877]/[0.06] disabled:opacity-60"
         data-testid="post-generate-more"
       >
         <IconTile icon={more.isPending ? Loader2 : Sparkles} spin={more.isPending} />
         <span className="text-sm font-semibold text-foreground">{count} more clips</span>
         <span className="max-w-[14rem] text-balance text-xs text-muted-foreground">
           Different moments from this episode, in all three shapes.{" "}
-          {beta?.unlimited ? "Included." : `${credits} credits${beta?.tokens != null ? ` · you have ${beta.tokens}` : ""}.`}
+          <span className="whitespace-nowrap">{beta?.unlimited ? "Included." : `${credits} credits${beta?.tokens != null ? ` · you have ${beta.tokens}` : ""}.`}</span>
         </span>
       </button>
       <PlanDialog open={open} onOpenChange={setOpen} beta={beta} plan={plan} />
@@ -609,14 +610,14 @@ function CleanAgain({ rec, beta, plan }: { rec: Rec; beta?: Beta; plan?: Plan | 
         type="button"
         onClick={() => go.mutate()}
         disabled={go.isPending || working}
-        className="flex min-h-[14rem] flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#F0A71F]/40 bg-[#F0A71F]/[0.05] p-4 text-center transition-colors hover:border-[#F0A71F]/70 hover:bg-[#F0A71F]/[0.09] disabled:opacity-60"
+        className="flex min-h-[14rem] flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-[#F0A71F]/40 bg-[#F0A71F]/[0.05] px-2.5 py-4 sm:px-4 text-center transition-colors hover:border-[#F0A71F]/70 hover:bg-[#F0A71F]/[0.09] disabled:opacity-60"
         data-testid="post-clean-again"
       >
         <IconTile icon={go.isPending || working ? Loader2 : Wand2} spin={go.isPending || working} />
         <span className="text-sm font-semibold text-foreground">{working ? "Cleaning…" : "Clean it again"}</span>
         <span className="max-w-[14rem] text-balance text-xs text-muted-foreground">
           Takes out the ums, false starts and long pauses into a fresh clean copy.{" "}
-          {beta?.unlimited ? "Included." : `1 credit${beta?.tokens != null ? ` · you have ${beta.tokens}` : ""}.`}
+          <span className="whitespace-nowrap">{beta?.unlimited ? "Included." : `1 credit${beta?.tokens != null ? ` · you have ${beta.tokens}` : ""}.`}</span>
         </span>
       </button>
       <PlanDialog open={open} onOpenChange={setOpen} beta={beta} plan={plan} />
@@ -2389,7 +2390,8 @@ export function PostStudio() {
                         : plan
                           ? `${cost} credits: ${beta?.tokens ?? 0} left + ${cost - (beta?.tokens ?? 0)} extra at ${cents(plan.overageCents)}`
                           : `${cost} credits`}
-                  {" · "}
+                  {/* The mark's own padding is the gap, so no space before the dot. */}
+                  {!(beta?.unlimited || rec.postifyBeta) ? <> <CreditsInfo className="text-white/60 hover:bg-white/10 hover:text-white" />{"· "}</> : " · "}
                   <button type="button" onClick={() => setShowOptions((v) => !v)} className="underline underline-offset-2 hover:text-white" data-testid="post-options">Options</button>
                 </p>
                 {showOptions && (
@@ -2639,6 +2641,9 @@ export function PostStudio() {
                   );
                 })}
           </div>
+          {/* Under the cards, once, not on them: a tap on "More clips" or "Clean it again" spends
+              straight away, so a near-miss on a mark in their corner mustn't start a paid job (PM, 21 Nov). */}
+          {done && !beta?.unlimited && <p className="mt-2 flex justify-end"><CreditsInfo label="What uses credits" /></p>}
         </div>
       )}
     </section>

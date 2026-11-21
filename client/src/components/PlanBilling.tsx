@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { PLANS, ADDONS, FREE_DISCOVERY, CREDIT_PACKS, cents } from "@shared/tokens";
 import { startPlanCheckout, startAddonCheckout, startTokenCheckout, openBillingPortal } from "@/lib/tokens";
 import { IconTile } from "@/components/ui/icon-tile";
+import { CreditsInfo } from "@/components/CreditsInfo";
 
 type Features = {
   beta: { tokens: number; payments: boolean; unlimited?: boolean };
@@ -89,7 +90,7 @@ export function PlanBilling() {
         <div className="flex min-w-0 items-center gap-3">
           <IconTile icon={Coins} />
           <div className="min-w-0">
-            <p className="font-semibold">{credits} credit{credits === 1 ? "" : "s"}</p>
+            <p className="flex items-center gap-1 font-semibold">{credits} credit{credits === 1 ? "" : "s"} <CreditsInfo /></p>
             <p className="text-sm text-muted-foreground">For clips, clean episodes and contact emails past your monthly ones. They don't run out.</p>
           </div>
         </div>
