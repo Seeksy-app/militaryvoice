@@ -6,6 +6,7 @@
 // Step lines: start with the verb, one control each, 15 words at most (UI/UX copy pass).
 
 export interface GuideTargetStep { sel: string; text: string }
+/** optional: skipped at once (0.7 s) when its control isn't on screen, e.g. "Pick your show" when a show is already open. */
 export interface GuideTarget {
   id: string;
   /** What she calls it in the offer: "Want me to open <label> for you?" */
@@ -14,10 +15,12 @@ export interface GuideTarget {
   about: string;
   path: string;
   /** One control per step, in order. Each step lists places to point, best first. */
-  steps: { title: string; at: GuideTargetStep[] }[];
+  steps: { title: string; optional?: boolean; at: GuideTargetStep[] }[];
 }
 
 const t = (id: string, text: string): GuideTargetStep => ({ sel: `[data-testid="${id}"]`, text });
+/** The show cards in the all-shows list (hosting-show-<id>; the dash keeps the hosting-shows grid out). */
+const pickShow = { title: "Pick your show", optional: true, at: [{ sel: '[data-testid^="hosting-show-"]', text: "Pick your show first." }] };
 
 export const GUIDE_TARGETS: GuideTarget[] = [
   { id: "home", label: "your home page", about: "The dashboard home: next steps, what's coming up, your files.", path: "/host/dashboard",
@@ -45,7 +48,7 @@ export const GUIDE_TARGETS: GuideTarget[] = [
     steps: [{ title: "Your podcast", at: [
       t("hosting-move-yours", "Click here to move your show. Apple and Spotify keep your listing."),
       t("hosting-start", "Click here to set up your show. It's free."),
-      t("hosting-all-shows", "Pick your show to see its episodes and settings."),
+      { sel: '[data-testid^="hosting-show-"]', text: "Pick your show to see its episodes and settings." },
     ] }] },
   { id: "new-episode", label: "a new episode", about: "Add a new podcast episode from the Library or a file, and publish it or schedule it.", path: "/host/dashboard/podcast",
     steps: [
@@ -54,14 +57,14 @@ export const GUIDE_TARGETS: GuideTarget[] = [
     ] },
   { id: "guest-invite", label: "Invite a guest", about: "Invite a guest to be on your show: send them a link with the date, where you'll record, and your questions.", path: "/host/dashboard/podcast",
     steps: [
-      { title: "Your show", at: [t("hosting-all-shows", "Pick your show first.")] },
+      pickShow,
       { title: "Invite a guest", at: [t("hosting-tab-invite", "Click Invite a guest.")] },
       { title: "Fill it in", at: [t("guest-invite-form", "Add their name and email, when, and where you'll record.")] },
       { title: "Send it", at: [t("guest-invite-submit", "Click here to send the invite.")] },
     ] },
   { id: "guest-book", label: "Book a guest", about: "Find people to have on your show: other podcasters and experts open to being a guest.", path: "/host/dashboard/podcast",
     steps: [
-      { title: "Your show", at: [t("hosting-all-shows", "Pick your show first.")] },
+      pickShow,
       { title: "Book a guest", at: [t("hosting-tab-guests", "Click Book a guest to find people to have on.")] },
     ] },
   { id: "smartlink", label: "your SmartLink", about: "The one link for everything: show, episodes, socials, and the free podcast website.", path: "/host/dashboard/page",
