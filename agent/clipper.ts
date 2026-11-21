@@ -143,7 +143,7 @@ interface Job {
   /** Clips to make from this episode (Pro: 6). Absent = CLIP_COUNT. */
   clipCount?: number;
   /** What the podcaster picked: which shapes, and the caption style. Absent = all three, animated. */
-  options?: { formats: Shape[]; captions: "animated" | "classic"; layout?: "stacked" | "single" | "radio" | "side"; more?: { count: number; avoid: [number, number][] } };
+  options?: { formats: Shape[]; captions: "animated" | "classic"; layout?: "stacked" | "single" | "radio" | "side"; more?: { count: number; avoid: [number, number][] }; marks?: number[] };
   /** Picked up again after a stop: the moments that run chose, and the clips already made ("start-end"). */
   resume?: { moments: Moment[]; done: string[] };
   /** A track to play under the clips (a signed link to the MP3). */
@@ -1120,6 +1120,9 @@ export async function pickMoments(job: Job, lines: Line[]): Promise<Moment[]> {
   const n = more ? Math.min(8, more.count) : job.clipCount && job.clipCount > 0 ? Math.min(12, job.clipCount) : WANTED;
   const avoid = more?.avoid ?? [];
   const clear = (m: Moment) => !avoid.some(([a, b]) => m.startSec < b && m.endSec > a);
+  // Room "Mark a clip" (20 Nov): the host pressed it live, just after something worth keeping. Each mark
+  // asks for a clip of the thought ending at or near it; they come first, inside the usual count.
+  const marks = more ? [] : (job.options?.marks ?? []).filter((s) => Number.isFinite(s) && s >= 0 && s <= job.durationSec + 5).sort((a, b) => a - b);
   if (!key) {
     console.warn("   ANTHROPIC_API_KEY isn't set on this worker: rough cuts by speech density, with first-words titles");
     return densestStretches(lines, n, "no-key");
@@ -1143,7 +1146,12 @@ Pick the ${n} strongest moments to post on their own. What makes a moment strong
 
 This community's stories carry real weight. Do not pick a moment because it sounds dramatic out of context, and do not write a caption that makes someone's service or loss into bait. Write the caption the way the host would say it.
 
-If the segment genuinely has fewer than ${n} moments that stand alone, return fewer. Returning two good ones is better than four with filler.${avoid.length ? `
+If the segment genuinely has fewer than ${n} moments that stand alone, return fewer. Returning two good ones is better than four with filler.${marks.length ? `
+
+The host pressed "Mark a clip" while recording at these times. They press it just after something they want to keep, so the moment usually ends at the mark or up to about 30 seconds before it:
+${marks.map((s) => `- ${Math.round(s)}s`).join("\n")}
+
+For each mark, include the clip of the complete thought that ends at or just before it, following the same rules (first word to last, ${MIN_SEC} to ${MAX_SEC} seconds). Marks close together may share one clip. These come first: if there are more marks than ${n}, pick the ${n} strongest marked moments; if there are fewer, fill the rest with the strongest other moments. Only skip a mark when nothing near it stands on its own.` : ""}${avoid.length ? `
 
 These moments already have clips. Pick different ones that do not overlap them:
 ${avoid.map(([a, b]) => `- ${Math.round(a)}s to ${Math.round(b)}s`).join("\n")}` : ""}
