@@ -4,6 +4,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Clapperboard, Film, Globe, Headphones, Send } from "lucide-react";
 import type { ClipRow, HostPostRow, RecordingRow } from "@shared/schema";
 import { apiRequest } from "@/lib/queryClient";
+import { isHowTo } from "@/lib/howTo";
 import { useToast } from "@/hooks/use-toast";
 
 // The Dashboard's "Your files" (28 Oct, after Clay's home): what they've made,
@@ -47,7 +48,8 @@ export function HomeFiles({ goTo, handle }: { goTo: (s: Screen) => void; handle:
       ? { key: "smartlink", icon: icon(Globe), name: `SmartLink · militaryvoices.ai/${handle}`, detail: "One link for every bio", when: "", action: "Copy", go: () => void navigator.clipboard.writeText(`https://www.militaryvoices.ai/${handle}`).then(() => toast({ title: "Link copied" })) }
       : { key: "smartlink", icon: icon(Globe), name: "SmartLink", detail: "One link for every bio", when: "", action: "Make it", go: () => goTo("page") },
   ];
-  const episodes: Row[] = [...(recs.data ?? [])]
+  // His own episodes; our how-to videos live in their own Library row (lib/howTo.ts).
+  const episodes: Row[] = (recs.data ?? []).filter((r) => !isHowTo(r.title))
     .sort((a, b) => Date.parse(b.startedAt) - Date.parse(a.startedAt))
     .map((r) => ({ key: `rec-${r.id}`, icon: icon(Film), name: r.title || "Untitled recording", detail: length(r.durationSec), when: date(r.startedAt), action: "Open", go: () => goTo("recordings") }));
   const clipRows: Row[] = [...(clips.data ?? [])]

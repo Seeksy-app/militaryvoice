@@ -12,6 +12,8 @@ import { CalendarClock, Download, Library, Loader2, Mic2, MoreHorizontal, Pencil
 import { PodcastEpisodeGrid, usePodcastEpisodes } from "@/components/PodcastEpisodes";
 import { MoveToFolder, dragToFolder, useLibraryFolders } from "@/components/LibraryFolders";
 import { seesTwoPeople } from "@/components/LayoutPicker";
+import { Art3D } from "@/components/ui/icon-tile";
+import { howToArt, howToLabel, isHowTo } from "@/lib/howTo";
 
 // A podcaster's own sessions. The studio writes them; nothing here is uploaded
 // by hand. The bucket is private, so every download is a fresh signed link.
@@ -153,7 +155,9 @@ export function MyRecordings({
   });
   const data = eventId == null ? all : (all ?? []).filter((r) => r.eventId === eventId);
   const eps = episodes(data ?? []);
-  const shown = folder == null ? eps : eps.filter((e) => e.main.folderId === folder);
+  // Our how-to videos get their own row after the podcaster's own work, and never in a folder view.
+  const howTos = folder == null && eventId == null ? eps.filter((e) => isHowTo(e.main.title)) : [];
+  const shown = (folder == null ? eps : eps.filter((e) => e.main.folderId === folder)).filter((e) => !isHowTo(e.main.title));
 
   if (isLoading) return null;
   if (folder != null && shown.length === 0) return null;
@@ -223,7 +227,7 @@ export function MyRecordings({
   return (
     <section className="mt-2">
       {/* Thumbnails, each with one menu: the things you do with an episode. */}
-      <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      {shown.length > 0 && <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {shown.map(({ main, versions, earlier }) => {
           // Their latest edit first when there is one (it's the one they made to use); otherwise the clean copy.
           const all = [...versions, ...earlier];
@@ -398,7 +402,42 @@ export function MyRecordings({
           </li>
           );
         })}
-      </ul>
+      </ul>}
+
+      {/* Our how-to videos: watch-only, smaller, after his own work (PM, 21 Nov). A drawn poster, since their frames come out black. */}
+      {howTos.length > 0 && (
+        <div className={shown.length > 0 ? "mt-8" : ""} data-testid="library-how-to">
+          <h3 className="text-base font-bold text-foreground">How-to videos</h3>
+          <p className="mb-3 mt-0.5 text-sm text-muted-foreground">Short videos from us on using MilitaryVoices.ai.</p>
+          <ul className="grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {howTos.map(({ main: r }) => (
+              <li key={r.id} className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm" data-testid={`howto-${r.id}`}>
+                <div className="relative aspect-video overflow-hidden bg-gradient-to-br from-[#000741] via-[#053877] to-[#0a5bb5]">
+                  {playing === r.id ? (
+                    <video src={`/api/host/recordings/${r.id}/video`} controls autoPlay playsInline className="h-full w-full bg-black object-contain" />
+                  ) : (
+                    <button type="button" onClick={() => setPlaying(r.id)} className="absolute inset-0 flex items-center justify-center" aria-label={`Watch ${plainTitle(r.title)}`}>
+                      <span className="absolute inset-0 bg-[radial-gradient(circle_at_50%_55%,rgba(255,255,255,0.22),transparent_60%)]" />
+                      <Art3D name={howToArt(r.title)!} size={64} className="relative drop-shadow-[0_8px_16px_rgba(0,0,0,0.35)] transition-transform duration-200 group-hover:scale-110" />
+                      <span className="absolute left-2 top-2 rounded-full bg-white/90 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-[#000741]">How-to</span>
+                      {r.durationSec > 0 && <span className="absolute bottom-2 right-2 rounded bg-black/60 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white">{clock(r.durationSec)}</span>}
+                    </button>
+                  )}
+                </div>
+                <div className="flex flex-1 flex-col gap-2 p-3">
+                  {/* No lone last word: the last two words stay together. */}
+                  <p className="text-balance text-sm font-semibold leading-snug text-card-foreground" title={plainTitle(r.title)}>{howToLabel(plainTitle(r.title)).replace(/ (\S+)$/, "\u00a0$1")}</p>
+                  {r.status === "Ready" && (
+                    <Button size="sm" variant="outline" onClick={() => setPlaying(playing === r.id ? null : r.id)} className="mt-auto h-8 w-fit gap-1.5 rounded-full px-3 text-xs" data-testid={`button-watch-${r.id}`}>
+                      {playing === r.id ? <><X className="h-3.5 w-3.5" /> Close</> : <><Play className="h-3.5 w-3.5 fill-current" /> Watch</>}
+                    </Button>
+                  )}
+                </div>
+              </li>
+            ))}
+          </ul>
+        </div>
+      )}
 
       <PostDialog target={publishing ? { kind: "recording", id: publishing.id, title: publishing.title, clipsFrom: sourceOf(publishing) ?? publishing.id } : null} onClose={() => setPublishing(null)} schedule={scheduling} />
       <ConfirmDelete
