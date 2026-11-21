@@ -20,6 +20,7 @@ import { StylePanel } from "@/components/room/StylePanel";
 import { PhoneStudio } from "@/components/room/PhoneStudio";
 import { MarkClip } from "@/components/room/MarkClip";
 import { RoomStage } from "@/components/RoomStage";
+import { PrompterNews, PrompterOverlay, PrompterSwitch, useStudioNotes } from "@/components/room/Teleprompter";
 
 /** The room is light in both themes, so always the light logo file. */
 const DASHBOARD = "/host/dashboard";
@@ -282,6 +283,8 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } = useLocalParticipant();
   const now = useNow();
   const [picked, setTab] = useState<Tab | null>(null);
+  const noteKey = owner ? String(studio?.id ?? "mine") : roomName;
+  const [notes, setNotes] = useStudioNotes(noteKey);
   const [sheet, setSheet] = useState(false);
   const [settings, setSettings] = useState(false);
   const [busy, setBusy] = useState<"" | "rec" | "live">("");
@@ -419,8 +422,10 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
         <div className="flex min-w-0 flex-1 flex-col items-center px-4 pt-5 lg:px-6">
           {owner ? (
             // The host sees exactly what's recorded and streamed (Engineering's RoomStage); guests keep the plain grid.
-            <div className="shrink-0 rounded-2xl shadow-[0_12px_32px_rgba(16,24,40,0.22)]" style={{ width: "min(768px, 100%, calc((100dvh - 336px) * 16 / 9))" }}>
+            <div className="relative shrink-0 rounded-2xl shadow-[0_12px_32px_rgba(16,24,40,0.22)]" style={{ width: "min(768px, 100%, calc((100dvh - 336px) * 16 / 9))" }}>
               <RoomStage muted onMediaEnded={() => kit.play(null)} />
+              {/* The teleprompter: on this screen only, over the preview; the program is drawn elsewhere. */}
+              <PrompterOverlay roomKey={noteKey} text={notes} />
             </div>
           ) : (
             <Stage kit={kit} scene={scene} fallbackLogo={look ? undefined : logo} />
@@ -432,6 +437,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
           )}
           {v3 && <PhoneStudio kit={kit} />}
           <Backstage kit={kit} />
+          {owner && <PrompterNews onOpen={() => setTab("notes")} />}
           <PeopleStrip kit={kit} owner={owner} sharing={isScreenShareEnabled} onShare={() => void share()} onInvite={copyInvite} />
           {/* Below lg the bar sits above Ask Alex (bottom right on every page) so nothing is covered. */}
           <div className="mb-[84px] mt-auto flex items-center gap-0.5 rounded-[18px] border border-[#e4e7ec] bg-white px-1.5 py-2 shadow-[0_8px_24px_rgba(16,24,40,0.1)] sm:gap-1.5 sm:px-3 lg:mb-3" data-testid="my-studio-controls">
@@ -454,7 +460,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
             {tab === "media" && v3 && <MediaPanel kit={kit} />}
             {tab === "style" && v3 && <StylePanel kit={kit} />}
             {tab === "people" && <PeoplePanel owner={owner} studio={studio} onCopy={copyInvite} />}
-            {tab === "notes" && <NotesPanel roomKey={owner ? String(studio?.id ?? "mine") : roomName} />}
+            {tab === "notes" && <NotesPanel roomKey={noteKey} text={notes} setText={setNotes} prompter={owner} />}
             {tab === "recording" && owner && <RecordingPanel studio={studio} now={now} busy={busy} onRecord={(on) => void record(on)} onGoLive={() => setSheet(true)} onEndLive={() => void endLive()} />}
             {tab === "chat" && <ChatPanel />}
           </div>
@@ -786,13 +792,11 @@ function PeoplePanel({ owner, studio, onCopy }: { owner: boolean; studio?: Studi
   );
 }
 
-function NotesPanel({ roomKey }: { roomKey: string }) {
-  const k = `mv-room-notes-${roomKey}`;
-  const [text, setText] = useState(() => { try { return localStorage.getItem(k) ?? ""; } catch { return ""; } });
-  useEffect(() => { try { localStorage.setItem(k, text); } catch { /* private window */ } }, [k, text]);
+function NotesPanel({ roomKey, text, setText, prompter }: { roomKey: string; text: string; setText: (t: string) => void; prompter: boolean }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PanelHead title="Notes" line="Only you see these. They stay on this computer." />
+      {prompter && <PrompterSwitch roomKey={roomKey} text={text} />}
       <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={"Questions for your guest, talking points, the sponsor read…"} className="m-4 min-h-0 flex-1 resize-none rounded-xl border border-[#d0d5dd] p-3.5 text-[14px] leading-relaxed outline-none focus:border-[#053877] focus:ring-2 focus:ring-[#053877]/15" data-testid="studio-notes" />
     </div>
   );
