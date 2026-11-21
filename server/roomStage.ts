@@ -92,20 +92,20 @@ export function registerRoomStage(app: Express, requireHostSession: RequestHandl
   /** Switch scene. Idempotent, so the room UI can also call it after joining to put the live state on the room. */
   app.post("/api/host/my-studio/scene", requireHostSession, async (req, res) => {
     const got = await studioOf(req);
-    if (!got) return res.status(404).json({ message: "Open your room first." });
+    if (!got) return res.status(404).json({ message: "Open your studio first." });
     const want = String(req.body?.sceneId ?? "").trim();
     if (!want) return res.status(400).json({ message: "Which scene?" });
     const look = await readLook(got.row.id);
-    if (look && !look.scenes.some((s) => s.id === want)) return res.status(400).json({ message: "That scene isn't in your room." });
+    if (look && !look.scenes.some((s) => s.id === want)) return res.status(400).json({ message: "That scene isn't in your studio." });
     const ok = await mergeRoomMeta(roomOf(got.row), { activeScene: want });
-    if (!ok) return res.status(409).json({ message: "Join your room first." });
+    if (!ok) return res.status(409).json({ message: "Join your studio first." });
     res.json({ ok: true, scene: want });
   });
 
   /** Show a banner on the stage for its own number of seconds, or take it off (bannerId null). */
   app.post("/api/host/my-studio/banner", requireHostSession, async (req, res) => {
     const got = await studioOf(req);
-    if (!got) return res.status(404).json({ message: "Open your room first." });
+    if (!got) return res.status(404).json({ message: "Open your studio first." });
     const id = req.body?.bannerId == null ? "" : String(req.body.bannerId);
     if (!id) {
       const ok = await mergeRoomMeta(roomOf(got.row), { showing: null });
@@ -113,17 +113,17 @@ export function registerRoomStage(app: Express, requireHostSession: RequestHandl
     }
     const look = await readLook(got.row.id);
     const banner = look?.banners?.find((b) => b.id === id);
-    if (!banner) return res.status(404).json({ message: "That banner isn't in your room." });
+    if (!banner) return res.status(404).json({ message: "That banner isn't in your studio." });
     const until = Date.now() + Math.max(1, Math.min(120, Number(banner.seconds) || 6)) * 1000;
     const ok = await mergeRoomMeta(roomOf(got.row), { showing: { bannerId: id, until } });
-    if (!ok) return res.status(409).json({ message: "Join your room first." });
+    if (!ok) return res.status(409).json({ message: "Join your studio first." });
     res.json({ ok, showing: { bannerId: id, until } });
   });
 
   /** Play the room's intro or outro on the stage (so the recording and the stream carry it), or stop. */
   app.post("/api/host/my-studio/media", requireHostSession, async (req, res) => {
     const got = await studioOf(req);
-    if (!got) return res.status(404).json({ message: "Open your room first." });
+    if (!got) return res.status(404).json({ message: "Open your studio first." });
     const action = String(req.body?.action ?? "");
     const room = roomOf(got.row);
     if (action === "stop") return res.json({ ok: await mergeRoomMeta(room, { playing: null }), playing: false });
@@ -132,7 +132,7 @@ export function registerRoomStage(app: Express, requireHostSession: RequestHandl
     const clip = action === "intro" ? look?.intro : look?.outro;
     if (!clip?.url) return res.status(400).json({ message: `Upload your ${action} first.` });
     const ok = await mergeRoomMeta(room, { playing: { slot: action, at: Date.now() } });
-    if (!ok) return res.status(409).json({ message: "Join your room first, then play it." });
+    if (!ok) return res.status(409).json({ message: "Join your studio first, then play it." });
     res.json({ ok, playing: true, action });
   });
 
@@ -145,8 +145,8 @@ export function registerRoomStage(app: Express, requireHostSession: RequestHandl
   app.post("/api/host/my-studio/preview-token", requireHostSession, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     const got = await studioOf(req);
-    if (!got) return res.status(404).json({ message: "Open your room first." });
-    if (!isLiveKitConfigured()) return res.status(503).json({ message: "Rooms aren't switched on yet." });
+    if (!got) return res.status(404).json({ message: "Open your studio first." });
+    if (!isLiveKitConfigured()) return res.status(503).json({ message: "The studio isn't switched on yet." });
     const at = new AccessToken(process.env.LIVEKIT_API_KEY ?? "", process.env.LIVEKIT_API_SECRET ?? "", { identity: `view-${got.row.id}-${crypto.randomBytes(3).toString("hex")}`, name: "Stage view", ttl: "6h" });
     at.addGrant({ room: roomOf(got.row), roomJoin: true, canPublish: false, canPublishData: false, canSubscribe: true, hidden: true });
     res.json({ url: publicLiveKitUrl(), token: await at.toJwt(), studioId: got.row.id, name: got.row.name, lookKey: kit?.roomLookKey(got.row.id) ?? "" });
@@ -155,16 +155,16 @@ export function registerRoomStage(app: Express, requireHostSession: RequestHandl
   /** Bring a guest on stage, or send them backstage. Only guests move; the host is always on stage. */
   app.post("/api/host/my-studio/backstage", requireHostSession, async (req, res) => {
     const got = await studioOf(req);
-    if (!got) return res.status(404).json({ message: "Open your room first." });
+    if (!got) return res.status(404).json({ message: "Open your studio first." });
     const identity = String(req.body?.identity ?? "");
     if (!/^guest-[a-z0-9]+$/i.test(identity)) return res.status(400).json({ message: "Only guests can be moved." });
     const on = req.body?.on === true;
     try {
       const people = await rooms().listParticipants(roomOf(got.row));
-      if (!people.some((p) => p.identity === identity)) return res.status(404).json({ message: "They've left the room." });
+      if (!people.some((p) => p.identity === identity)) return res.status(404).json({ message: "They've left the studio." });
       await rooms().updateParticipant(roomOf(got.row), identity, { attributes: { stage: on ? "on" : "off" } });
     } catch {
-      return res.status(502).json({ message: "The room didn't answer. Try again in a moment." });
+      return res.status(502).json({ message: "The studio didn't answer. Try again in a moment." });
     }
     res.json({ identity, onStage: on });
   });

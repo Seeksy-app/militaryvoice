@@ -30,7 +30,7 @@ async function mine(email: string): Promise<PersonalStudioRow> {
   const [row] = await db.select().from(personalStudios).where(eq(personalStudios.ownerEmail, email)).limit(1);
   if (row) return row;
   const profile = await storage.getProfileByEmail(email).catch(() => undefined);
-  const name = profile?.podcastName?.trim() || profile?.hostName?.trim() || "My room";
+  const name = profile?.podcastName?.trim() || profile?.hostName?.trim() || "My studio";
   const [made] = await db.insert(personalStudios).values({ ownerEmail: email, name, inviteToken: newToken(), createdAt: now() }).onConflictDoNothing().returning();
   if (made) return made;
   const [again] = await db.select().from(personalStudios).where(eq(personalStudios.ownerEmail, email)).limit(1);
@@ -58,7 +58,7 @@ async function settle(s: PersonalStudioRow): Promise<PersonalStudioRow> {
 /** The link a guest uses to join this host's own studio room (made on first use). */
 export async function roomInviteLink(email: string): Promise<string> {
   const s = await mine(email.trim().toLowerCase());
-  return `${ORIGIN}/room/join/${s.inviteToken}`;
+  return `${ORIGIN}/my-studio/join/${s.inviteToken}`;
 }
 
 export function registerMyStudio(app: Express, requireHostSession: RequestHandler, deps: { youtubeToken: (email: string) => Promise<string | null> }) {
@@ -69,7 +69,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
   const view = (s: PersonalStudioRow, youtube: boolean) => ({
     id: s.id,
     name: s.name,
-    inviteLink: `${ORIGIN}/room/join/${s.inviteToken}`,
+    inviteLink: `${ORIGIN}/my-studio/join/${s.inviteToken}`,
     recording: s.recordingEgressId ? { since: s.recordingSince } : null,
     live: s.liveEgressId ? { since: s.liveSince, watchUrl: s.liveWatchUrl } : null,
     youtube,
@@ -113,7 +113,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
   /** The owner into their room: publishes, and runs it. */
   app.post("/api/host/my-studio/token", requireHostSession, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
-    if (!isLiveKitConfigured()) return res.status(503).json({ message: "Rooms aren't switched on yet." });
+    if (!isLiveKitConfigured()) return res.status(503).json({ message: "The studio isn't switched on yet." });
     const email = me(req);
     const s = await mine(email);
     const profile = await storage.getProfileByEmail(email).catch(() => undefined);
@@ -133,7 +133,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
   app.post("/api/my-studio/invite/:token/token", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     await schemaIsReady();
-    if (!isLiveKitConfigured()) return res.status(503).json({ message: "Rooms aren't switched on yet." });
+    if (!isLiveKitConfigured()) return res.status(503).json({ message: "The studio isn't switched on yet." });
     const [s] = await db.select().from(personalStudios).where(eq(personalStudios.inviteToken, String(req.params.token))).limit(1);
     if (!s) return res.status(404).json({ message: "This invite link has expired. Ask the host for a new one." });
     const name = String(req.body?.name ?? "").trim().slice(0, 60);
