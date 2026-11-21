@@ -149,6 +149,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/api/cron/studio-empty",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/api/cron/health",
       "schedule": "*/5 * * * *"
     }

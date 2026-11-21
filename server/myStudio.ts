@@ -5,10 +5,11 @@
 // them by egress id.
 import type { Express, Request, RequestHandler } from "express";
 import crypto from "node:crypto";
-import { eq } from "drizzle-orm";
+import { eq, ne } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { getSessionEmail } from "./session.js";
-import { isLiveKitConfigured, isRecordingConfigured, publicLiveKitUrl, startBroadcast, startSegmentRecording, stopEgressById, studioToken, runningEgressIds } from "./livekit.js";
+import { isLiveKitConfigured, isRecordingConfigured, publicLiveKitUrl, startBroadcast, startSegmentRecording, stopEgressById, studioToken, runningEgressIds, rooms } from "./livekit.js";
+import { sendStudioLeftLiveEmail } from "./email.js";
 import { ensureRecordingsBucket } from "./recordingStorage.js";
 import { createBroadcast } from "./youtube.js";
 import { onLookSaved, roomLookKey } from "./roomKit.js";
@@ -60,6 +61,45 @@ async function settle(s: PersonalStudioRow): Promise<PersonalStudioRow> {
   return out;
 }
 
+/**
+ * The leave-live safety net (Andrew, 21 Nov): an owner can leave and keep the show live, but a
+ * studio with nobody real in it (the player bot, the hidden stage view and the recorder don't
+ * count) for 2 minutes ends the live show and stops the recording by itself, then emails the
+ * owner. Anyone coming back inside the 2 minutes cancels it. Run every minute by the cron, so
+ * the "first seen empty" time is kept in settings between passes.
+ */
+const EMPTY_GRACE_MS = 2 * 60_000;
+const realPerson = (identity: string) => /^(owner|guest)-/.test(identity);
+const emptyKey = (id: number) => `studio-empty:${id}`;
+export async function runStudioEmptyPass(nowMs = Date.now()): Promise<{ live: number; waiting: number[]; ended: number[] }> {
+  await schemaIsReady();
+  const rows = await db.select().from(personalStudios).where(ne(personalStudios.liveEgressId, ""));
+  const waiting: number[] = [];
+  const ended: number[] = [];
+  for (const row of rows) {
+    const s = await settle(row);
+    const key = emptyKey(s.id);
+    const since = (await storage.getSetting(key)) || "";
+    if (!s.liveEgressId) { if (since) await storage.setSetting(key, ""); continue; }
+    let people: number;
+    // A LiveKit hiccup is never read as "everyone left".
+    try { people = (await rooms().listParticipants(room(s))).filter((p) => realPerson(p.identity)).length; } catch { continue; }
+    if (people > 0) { if (since) await storage.setSetting(key, ""); continue; }
+    if (!since) { await storage.setSetting(key, new Date(nowMs).toISOString()); waiting.push(s.id); continue; }
+    // A little slack for the cron's own timing, so it ends on the second pass after it first saw nobody.
+    if (nowMs - Date.parse(since) < EMPTY_GRACE_MS - 15_000) { waiting.push(s.id); continue; }
+    const recorded = !!s.recordingEgressId;
+    await stopEgressById(s.liveEgressId).catch(() => {});
+    if (recorded) await stopEgressById(s.recordingEgressId).catch(() => {});
+    await db.update(personalStudios).set({ liveEgressId: "", liveSince: "", liveWatchUrl: "", ...(recorded ? { recordingEgressId: "", recordingSince: "" } : {}) }).where(eq(personalStudios.id, s.id));
+    await storage.setSetting(key, "");
+    console.log(`My studio ${s.id}: live show ended after 2 minutes with nobody in the studio${recorded ? " (recording stopped too)" : ""}.`);
+    await sendStudioLeftLiveEmail({ to: s.ownerEmail, studioName: s.name, recorded }).catch((err) => console.error("Left-live email failed:", (err as Error).message));
+    ended.push(s.id);
+  }
+  return { live: rows.length, waiting, ended };
+}
+
 /** The link a guest uses to join this host's own studio room (made on first use). */
 export async function roomInviteLink(email: string): Promise<string> {
   const s = await mine(email.trim().toLowerCase());
@@ -85,6 +125,15 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     // Studio v3 (scene types, cards, sounds and music): the UI switches to it only when this is true.
     v3: STUDIO_V3,
   });
+
+  // The leave-live safety net, every minute (vercel.json).
+  const emptyCron: RequestHandler = async (req, res) => {
+    if (process.env.CRON_SECRET && (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "") !== process.env.CRON_SECRET) return void res.status(401).json({ message: "Not authorised." });
+    if (!isLiveKitConfigured()) return void res.json({ skipped: "no media layer" });
+    try { res.json(await runStudioEmptyPass()); } catch (err) { console.error("Studio empty pass failed:", (err as Error).message); res.status(500).json({ message: "Studio empty pass failed." }); }
+  };
+  app.get("/api/cron/studio-empty", emptyCron);
+  app.post("/api/cron/studio-empty", emptyCron);
 
   app.get("/api/host/my-studio", requireHostSession, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
