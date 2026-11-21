@@ -1,7 +1,9 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useRef, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { apiRequest } from "@/lib/queryClient";
 import { Clapperboard, Loader2, Music2, Play, Plus, Repeat, Square, Trash2, Volume2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { BACKGROUNDS, LIMITS, backgroundShelf, sceneLive, type AssetKind, type Background, type LibraryItem, type PlaySlot, type RoomKit, type VideoClip } from "./look";
+import { BACKGROUNDS, LIMITS, backgroundShelf, sceneLive, type AssetKind, type Background, type LibraryItem, type LibrarySource, type MusicItem, type PlaySlot, type RoomKit, type SoundItem, type VideoClip } from "./look";
 import { AddFile, Banners, LogoSection, Removable, Swatch } from "./LookPanel";
 
 /**
@@ -167,73 +169,103 @@ function SceneBackground({ kit }: { kit: RoomKit }) {
 
 /* ── Sounds and music ── */
 
-function Sounds({ kit }: { kit: RoomKit }) {
-  const look = kit.look!;
-  const own = look.sounds ?? [];
-  const lib = (look.library ?? []).filter((x) => x.kind === "sound");
-  const volume = own[0]?.volume ?? 80;
-  const [flash, setFlash] = useState("");
-  const hit = (id: string) => { kit.playSound(id); setFlash(id); window.setTimeout(() => setFlash((f) => (f === id ? "" : f)), 700); };
-  const pad = (id: string, title: string, extra?: ReactNode) => (
-    <div key={id} className="group relative">
-      <button type="button" onClick={() => hit(id)} className={`flex h-12 w-full items-center justify-center rounded-xl border px-1.5 text-center text-[12px] font-bold leading-tight transition-colors ${flash === id ? "border-[#053877] bg-[#053877] text-white" : "border-[#e4e7ec] bg-white text-[#344054] hover:border-[#98a2b3]"}`} data-testid="sound-pad">{title}</button>
-      {extra}
+/** Our CC0 / public-domain library (only items with a full licence line are listed; it can be empty). */
+function useLibrary() {
+  return useQuery<{ items: LibraryItem[] }>({ queryKey: ["/api/host/room/library"], staleTime: 300_000, retry: false, queryFn: async () => (await apiRequest("GET", "/api/host/room/library")).json() }).data?.items ?? [];
+}
+const LIMIT = 12;
+
+/** "Title · Artist · CC0 1.0 · source", with source opening the item's own page. */
+function SourceLine({ s, name }: { s?: LibrarySource; name: string }) {
+  if (!s) return <>Your upload</>;
+  return <>{s.title && s.title !== name ? `${s.title} · ` : ""}{s.artist} · {s.licence} · <a href={s.page} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-[#053877]">source</a></>;
+}
+
+/** Add one of our library items that isn't in the studio yet. */
+function AddFromLibrary({ items, onAdd, what }: { items: LibraryItem[]; onAdd: (x: LibraryItem) => void; what: string }) {
+  const [open, setOpen] = useState(false);
+  if (!items.length) return null;
+  if (!open) return <button type="button" onClick={() => setOpen(true)} className="flex h-10 w-full items-center justify-center gap-1.5 rounded-xl border border-dashed border-[#98a2b3] bg-white text-[13px] font-semibold text-[#475467] hover:bg-[#f9fafb]" data-testid={`library-${what}`}><Plus className="h-4 w-4" /> Add free {what}</button>;
+  return (
+    <div className="rounded-xl border border-[#e4e7ec] bg-[#fcfcfd] p-1.5" data-testid={`library-${what}-list`}>
+      {items.map((x) => (
+        <button key={x.id} type="button" onClick={() => { onAdd(x); if (items.length === 1) setOpen(false); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-white">
+          <Plus className="h-3.5 w-3.5 shrink-0 text-[#053877]" />
+          <span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-semibold">{x.name}</span><span className="block truncate text-[11px] text-[#667085]">{x.source.artist} · {x.source.licence}</span></span>
+        </button>
+      ))}
+      <button type="button" onClick={() => setOpen(false)} className="mt-1 h-8 w-full text-[12px] font-semibold text-[#475467]">Done</button>
     </div>
   );
+}
+
+function Sounds({ kit }: { kit: RoomKit }) {
+  const look = kit.look!;
+  const pads = look.sounds ?? [];
+  const lib = useLibrary().filter((x) => x.kind === "sound" && !pads.some((p) => p.id === x.id));
+  const [flash, setFlash] = useState("");
+  const hit = (id: string) => { kit.playSound(id); setFlash(id); window.setTimeout(() => setFlash((f) => (f === id ? "" : f)), 700); };
+  const drop = (x: SoundItem) => {
+    if (!window.confirm(`Take ${x.name || "this sound"} off your pads?`)) return;
+    if (x.source) kit.change((l) => ({ ...l, sounds: (l.sounds ?? []).filter((p) => p.id !== x.id) }));
+    else void kit.removeAsset("sound", x.asset.id);
+  };
   return (
-    <div className="mt-2.5" data-testid="media-sounds">
-      {lib.length + own.length > 0 && (
+    <div className="mt-2.5 flex flex-col gap-2" data-testid="media-sounds">
+      {pads.length > 0 ? (
         <div className="grid grid-cols-3 gap-1.5">
-          {lib.map((x) => pad(x.id, x.title))}
-          {own.map((x) => pad(x.asset.id, (x.asset.name || "Sound").replace(/\.[a-z0-9]+$/i, ""), <DeleteDot onClick={() => { if (window.confirm("Delete this sound?")) void kit.removeAsset("sound", x.asset.id); }} />))}
+          {pads.map((x) => (
+            <div key={x.id} className="group relative">
+              <button type="button" onClick={() => hit(x.id)} title={x.source ? `${x.source.title} · ${x.source.artist} · ${x.source.licence}` : "Your upload"} className={`flex h-12 w-full items-center justify-center rounded-xl border px-1.5 text-center text-[12px] font-bold leading-tight transition-colors ${flash === x.id ? "border-[#053877] bg-[#053877] text-white" : "border-[#e4e7ec] bg-white text-[#344054] hover:border-[#98a2b3]"}`} data-testid="sound-pad">{x.name || "Sound"}</button>
+              <DeleteDot onClick={() => drop(x)} />
+            </div>
+          ))}
         </div>
-      )}
-      {own.length > 0 && <Volume value={volume} onChange={(v) => kit.change((l) => ({ ...l, sounds: (l.sounds ?? []).map((x) => ({ ...x, volume: v })) }))} />}
-      <Sources items={lib} />
-      {own.length < 12 && <div className="mt-2"><RightsUpload kind="sound" accept="audio/*" kit={kit} label="Upload a sound" /></div>}
-      <p className="mt-2 text-[12px] leading-snug text-[#667085]">{EVERYONE}</p>
+      ) : <p className="rounded-xl bg-[#f9fafb] px-3 py-2.5 text-[12px] text-[#667085]">No sounds yet. Upload one, and it becomes a pad you press on air.</p>}
+      {pads.length > 0 && <Volume value={Math.round((look.soundVolume ?? 0.8) * 100)} onChange={(v) => kit.change((l) => ({ ...l, soundVolume: v / 100 }))} />}
+      {pads.some((x) => x.source) && <p className="text-[11px] text-[#98a2b3]">Free sounds from {pads.filter((x) => x.source).map((x) => x.source!.site).filter((v, i, a) => a.indexOf(v) === i).join(", ")}, each {pads.find((x) => x.source)!.source!.licence}. Hover a pad for its source.</p>}
+      {pads.length < LIMIT && <AddFromLibrary items={lib} what="sounds" onAdd={(x) => kit.change((l) => ({ ...l, sounds: [...(l.sounds ?? []), { id: x.id, name: x.name, asset: x.asset, source: x.source }].slice(0, LIMIT) }))} />}
+      {pads.length < LIMIT && <RightsUpload kind="sound" accept="audio/*" kit={kit} label="Upload a sound" />}
+      <p className="text-[12px] leading-snug text-[#667085]">{EVERYONE}</p>
     </div>
   );
 }
 
 function MusicList({ kit }: { kit: RoomKit }) {
   const look = kit.look!;
-  const own = look.music ?? [];
-  const lib = (look.library ?? []).filter((x) => x.kind === "music");
+  const tracks = look.music ?? [];
+  const lib = useLibrary().filter((x) => x.kind === "music" && !tracks.some((t) => t.id === x.id));
   const now = kit.live.music?.id ?? null;
-  const volume = own[0]?.volume ?? 25;
-  const loop = own[0]?.loop ?? true;
-  const row = (id: string, title: string, sub: string, del?: () => void) => {
-    const on = now === id;
-    return (
-      <div key={id} className={`group flex items-center gap-2 rounded-xl border px-2 py-2 ${on ? "border-[#053877] bg-[#f5f8fd]" : "border-[#e4e7ec]"}`} data-testid="music-row">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] bg-[#eef3fb] text-[#053877]"><Music2 className="h-3.5 w-3.5" /></div>
-        <div className="min-w-0 flex-1"><p className="truncate text-[13px] font-semibold">{title}</p><p className="truncate text-[11px] text-[#667085]">{on ? "Playing now" : sub}</p></div>
-        {del && !on && <button type="button" onClick={del} aria-label="Delete track" className="hidden shrink-0 text-[#98a2b3] hover:text-[#b42318] group-focus-within:block group-hover:block"><Trash2 className="h-4 w-4" /></button>}
-        <PlayButton on={on} label={title} onClick={() => kit.playMusic(on ? null : id)} />
-      </div>
-    );
+  const loop = look.musicLoop !== false;
+  const drop = (x: MusicItem) => {
+    if (!window.confirm(`Take ${x.name || "this track"} off your list?`)) return;
+    if (x.source) kit.change((l) => ({ ...l, music: (l.music ?? []).filter((t) => t.id !== x.id) }));
+    else void kit.removeAsset("music", x.asset.id);
   };
   return (
     <div className="mt-2.5 flex flex-col gap-2" data-testid="media-music">
-      {lib.map((x) => row(x.id, x.title, `${x.source} · ${x.licence}`))}
-      {own.map((x) => row(x.asset.id, (x.asset.name || "Track").replace(/\.[a-z0-9]+$/i, ""), `Your upload${x.asset.sec ? ` · ${mmss(x.asset.sec)}` : ""}`, () => { if (window.confirm("Delete this track?")) void kit.removeAsset("music", x.asset.id); }))}
-      {own.length > 0 && (
+      {tracks.map((x) => {
+        const on = now === x.id;
+        return (
+          <div key={x.id} className={`group flex items-center gap-2 rounded-xl border px-2 py-2 ${on ? "border-[#053877] bg-[#f5f8fd]" : "border-[#e4e7ec]"}`} data-testid="music-row">
+            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] bg-[#eef3fb] text-[#053877]"><Music2 className="h-3.5 w-3.5" /></div>
+            <div className="min-w-0 flex-1"><p className="truncate text-[13px] font-semibold">{x.name || "Track"}</p><p className="truncate text-[11px] text-[#667085]">{on ? "Playing now" : <SourceLine s={x.source} name={x.name} />}</p></div>
+            {!on && <button type="button" onClick={() => drop(x)} aria-label="Remove track" className="hidden shrink-0 text-[#98a2b3] hover:text-[#b42318] group-focus-within:block group-hover:block"><Trash2 className="h-4 w-4" /></button>}
+            <PlayButton on={on} label={x.name || "this track"} onClick={() => kit.playMusic(on ? null : x.id)} />
+          </div>
+        );
+      })}
+      {tracks.length > 0 && (
         <div className="flex items-center gap-3">
-          <div className="flex-1"><Volume value={volume} onChange={(v) => kit.change((l) => ({ ...l, music: (l.music ?? []).map((x) => ({ ...x, volume: v })) }))} /></div>
-          <LoopButton on={loop} onClick={() => kit.change((l) => ({ ...l, music: (l.music ?? []).map((x) => ({ ...x, loop: !loop })) }))} />
+          <div className="flex-1"><Volume value={Math.round((look.musicVolume ?? 0.25) * 100)} onChange={(v) => kit.change((l) => ({ ...l, musicVolume: v / 100 }))} /></div>
+          <LoopButton on={loop} onClick={() => kit.change((l) => ({ ...l, musicLoop: !loop }))} />
         </div>
       )}
-      {own.length < 12 && <RightsUpload kind="music" accept="audio/*" kit={kit} label="Upload your own music" />}
+      {tracks.length < LIMIT && <AddFromLibrary items={lib} what="music" onAdd={(x) => kit.change((l) => ({ ...l, music: [...(l.music ?? []), { id: x.id, name: x.name, asset: x.asset, source: x.source }].slice(0, LIMIT) }))} />}
+      {tracks.length < LIMIT && <RightsUpload kind="music" accept="audio/*" kit={kit} label="Upload your own music" />}
       <p className="text-[12px] leading-snug text-[#667085]">Music dips while someone talks. Everyone in your studio hears it.</p>
     </div>
   );
-}
-
-/** Where the ready-made sounds come from (each has a licence on file, or it doesn't show). */
-function Sources({ items }: { items: LibraryItem[] }) {
-  const lines = items.map((x) => `${x.source} · ${x.licence}`).filter((v, i, a) => a.indexOf(v) === i);
-  return lines.length ? <p className="mt-1.5 text-[11px] text-[#98a2b3]">{lines.join(" · ")}</p> : null;
 }
 
 /* ── Small parts ── */

@@ -333,13 +333,18 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
     }
     catch (e) { if ((e as Error).name !== "NotAllowedError") toast({ title: "Couldn't share your screen", description: say(e), variant: "destructive" }); }
   };
-  const leave = async () => {
-    if (owner && (rec || live)) {
-      if (!window.confirm(`Leaving stops the ${rec && live ? "recording and the live show" : rec ? "recording" : "live show"}. Leave now?`)) return;
-      if (live) await apiRequest("POST", "/api/host/my-studio/live", { on: false }).catch(() => {});
-      if (rec) await apiRequest("POST", "/api/host/my-studio/record", { on: false }).catch(() => {});
-      void qc.invalidateQueries({ queryKey: ["/api/host/my-studio"] });
-    }
+  // Andrew, 21 Nov: Leave never ends a live show on its own. Guests just leave; the owner, while live or
+  // recording, chooses to end it and leave, or leave and keep it going (guests carry on).
+  const [leaving, setLeaving] = useState(false);
+  const leave = () => {
+    if (owner && (rec || live)) { setLeaving(true); return; }
+    void room.disconnect();
+  };
+  const endAndLeave = async () => {
+    setLeaving(false);
+    if (live) await apiRequest("POST", "/api/host/my-studio/live", { on: false }).catch(() => {});
+    if (rec) await apiRequest("POST", "/api/host/my-studio/record", { on: false }).catch(() => {});
+    void qc.invalidateQueries({ queryKey: ["/api/host/my-studio"] });
     void room.disconnect();
   };
 
@@ -415,7 +420,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
             <BarButton label="Notes" wide active={tab === "notes"} onClick={() => setTab("notes")}><NotebookPen className="h-[22px] w-[22px]" /></BarButton>
             <BarButton label="Settings" onClick={() => setSettings(true)}><Settings className="h-[22px] w-[22px]" /></BarButton>
             <div className="mx-1 h-9 w-px bg-[#e4e7ec]" />
-            <button type="button" onClick={() => void leave()} className="flex h-[58px] w-[54px] flex-col items-center justify-center gap-1 rounded-xl bg-[#fef3f2] text-[11px] font-bold text-[#b42318] hover:bg-[#fee4e2] sm:w-[76px] sm:text-xs" data-testid="my-studio-leave"><LogOut className="h-[22px] w-[22px]" />Leave</button>
+            <button type="button" onClick={leave} className="flex h-[58px] w-[54px] flex-col items-center justify-center gap-1 rounded-xl bg-[#fef3f2] text-[11px] font-bold text-[#b42318] hover:bg-[#fee4e2] sm:w-[76px] sm:text-xs" data-testid="my-studio-leave"><LogOut className="h-[22px] w-[22px]" />Leave</button>
           </div>
         </div>
 
@@ -444,6 +449,25 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
 
       {sheet && owner && studio && <GoLiveSheet studio={studio} onClose={() => setSheet(false)} />}
       {settings && <SettingsSheet onClose={() => setSettings(false)} />}
+      {leaving && <LeaveDialog live={!!live} onEnd={() => void endAndLeave()} onKeep={() => { setLeaving(false); void room.disconnect(); }} onCancel={() => setLeaving(false)} />}
+    </div>
+  );
+}
+
+/** Leaving while live or recording: end it, or keep it going for the people still in the studio. */
+export function LeaveDialog({ live, onEnd, onKeep, onCancel }: { live: boolean; onEnd: () => void; onKeep: () => void; onCancel: () => void }) {
+  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [onCancel]);
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[rgba(16,24,40,0.55)] p-4" onClick={onCancel}>
+      <div role="alertdialog" aria-modal="true" aria-labelledby="leave-title" className="w-full max-w-[420px] rounded-2xl bg-white p-6 shadow-[0_24px_48px_rgba(16,24,40,0.28)]" onClick={(e) => e.stopPropagation()} data-testid="leave-dialog">
+        <p id="leave-title" className="text-balance text-xl font-bold tracking-tight">{live ? "You're live. End the show or keep it going?" : "You're recording. Stop or keep it going?"}</p>
+        <p className="mt-2 text-[14px] leading-relaxed text-[#475467]">{live ? "If you keep it live, your guests carry on without you. The recording keeps going too." : "If you keep recording, it carries on with your guests until you come back and stop it."}</p>
+        <div className="mt-5 flex flex-col gap-2.5">
+          <button type="button" onClick={onEnd} className="h-12 rounded-xl bg-[#d92d20] text-[15px] font-bold text-white hover:bg-[#b42318]" data-testid="leave-end">{live ? "End live and leave" : "Stop recording and leave"}</button>
+          <button type="button" onClick={onKeep} className="h-12 rounded-xl border border-[#d0d5dd] bg-white text-[15px] font-bold text-[#344054] hover:bg-[#f9fafb]" data-testid="leave-keep">{live ? "Leave, keep it live" : "Leave, keep recording"}</button>
+          <button type="button" autoFocus onClick={onCancel} className="h-11 rounded-xl text-[15px] font-semibold text-[#475467] hover:bg-[#f2f4f7]" data-testid="leave-cancel">Cancel</button>
+        </div>
+      </div>
     </div>
   );
 }

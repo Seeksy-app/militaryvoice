@@ -22,7 +22,7 @@ export type Logo = { asset: Asset; corner: Corner } | null;
 /** v3 (Studio phase 3, contract in server/roomKit.ts): every scene has a type and a people count. */
 export type SceneType = "single" | "two" | "group" | "media" | "profile";
 export const PEOPLE_DEFAULT: Record<SceneType, number> = { single: 1, two: 2, group: 3, media: 0, profile: 1 };
-export type Profile = { photo: Asset | null; name: string; title: string; line: string; links: string[] };
+export type Profile = { who?: string; photo: Asset | null; name: string; title: string; line: string; links: string[] };
 export type Scene = {
   id: string; n: number; name: string; layout: Layout; stage?: string[];
   type?: SceneType; people?: number; profile?: Profile; media?: Asset | null;
@@ -32,10 +32,13 @@ export const FONTS = ["Inter", "Montserrat", "Oswald", "Bebas Neue", "Source San
 export type Style = { preset: string; brandColor: string; nameTag: "bar" | "pill" | "block" | "plain"; showNames: boolean; textSize: "s" | "m" | "l"; font: (typeof FONTS)[number] };
 export const STYLE_DEFAULT: Style = { preset: "classic", brandColor: "#F0A71F", nameTag: "bar", showNames: true, textSize: "m", font: "Inter" };
 export type VideoClip = { asset: Asset; role: "" | "intro" | "outro"; loop: boolean };
-export type SoundItem = { asset: Asset; volume: number };
-export type MusicItem = { asset: Asset; volume: number; loop: boolean };
-/** Ready-made free sounds and music (CC0 / public domain), if the server sends a list; each shows its source line. */
-export type LibraryItem = { id: string; kind: "sound" | "music"; title: string; url: string; source: string; licence: string };
+/** Where a library item comes from; it's only listed when every part is on file (CC0 / public domain only). */
+export type LibrarySource = { site: string; title: string; artist: string; page: string; licence: string; checked: string };
+/** A pad (played once) or a music bed. id is "lib-<slug>" for our library, the asset id for their own upload. */
+export type SoundItem = { id: string; name: string; asset: Asset; source?: LibrarySource };
+export type MusicItem = SoundItem;
+/** GET /api/host/room/library. */
+export type LibraryItem = { id: string; kind: "sound" | "music"; name: string; sec: number; asset: Asset; source: LibrarySource };
 export type Banner = { id: string; text: string; seconds: number };
 export type Look = {
   rev: number;
@@ -52,7 +55,10 @@ export type Look = {
   videos?: VideoClip[];
   sounds?: SoundItem[];
   music?: MusicItem[];
-  library?: LibraryItem[];
+  /** 0–1, one for all sounds and one for music (defaults 0.8 and 0.25). */
+  soundVolume?: number;
+  musicVolume?: number;
+  musicLoop?: boolean;
 };
 export type Slot = "intro" | "outro";
 /** What can play full screen: a tagged video, or one of our live cards (Engineering's slots). */
@@ -168,8 +174,10 @@ export function useRoomKit(owner: boolean, meta: string | undefined) {
       if (kind === "logo") return { ...l, logos: [...l.logos.filter((x) => x.id !== asset.id), asset].slice(-LIMITS.logos), logo: { asset, corner: l.logo?.corner ?? "tr" } };
       if (kind === "background") return { ...l, backgrounds: [...backgroundShelf(l).filter((x) => x.id !== asset.id), asset].slice(-LIMITS.backgrounds), background: { kind: "image", asset } };
       if (kind === "video") return { ...l, videos: [...(l.videos ?? []), { asset, role: "", loop: false }] };
-      if (kind === "sound") return { ...l, sounds: [...(l.sounds ?? []), { asset, volume: 80 }] };
-      if (kind === "music") return { ...l, music: [...(l.music ?? []), { asset, volume: 25, loop: true }] };
+      if (kind === "sound" || kind === "music") {
+        const item = { id: asset.id, name: file.name.replace(/\.[a-z0-9]+$/i, "").slice(0, 60), asset };
+        return kind === "sound" ? { ...l, sounds: [...(l.sounds ?? []), item] } : { ...l, music: [...(l.music ?? []), item] };
+      }
       if (kind === "photo") return l;
       return { ...l, [kind]: asset };
     });
@@ -184,7 +192,7 @@ export function useRoomKit(owner: boolean, meta: string | undefined) {
       if (kind === "video" || kind === "intro" || kind === "outro") return { ...l, videos: (l.videos ?? []).filter((v) => v.asset.id !== id), ...(l.intro?.id === id ? { intro: null } : {}), ...(l.outro?.id === id ? { outro: null } : {}) };
       if (kind === "sound") return { ...l, sounds: (l.sounds ?? []).filter((v) => v.asset.id !== id) };
       if (kind === "music") return { ...l, music: (l.music ?? []).filter((v) => v.asset.id !== id) };
-      if (kind === "photo") return l;
+      if (kind === "photo") return { ...l, scenes: l.scenes.map((s) => (s.media?.id === id ? { ...s, media: null } : s)) };
       return { ...l, [kind]: null };
     });
     await settle();

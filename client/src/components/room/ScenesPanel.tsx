@@ -3,6 +3,15 @@ import { Clapperboard, Loader2, Lock, MoreHorizontal, Pencil, Play, Plus, Square
 import { useToast } from "@/hooks/use-toast";
 import { LIMITS, PEOPLE_DEFAULT, bgCss, newId, type Layout, type RoomKit, type Scene, type SceneType, type Slot } from "./look";
 
+/** Scroll the rail (only the rail, never the page) so a just-opened editor or picker is in view. */
+function reveal(el: HTMLElement | null) {
+  let p = el?.parentElement ?? null;
+  while (p && !/(auto|scroll)/.test(getComputedStyle(p).overflowY)) p = p.parentElement;
+  if (!el || !p) return;
+  const r = el.getBoundingClientRect(), pr = p.getBoundingClientRect();
+  if (r.bottom > pr.bottom) p.scrollTop += Math.min(r.bottom - pr.bottom + 8, r.top - pr.top - 8);
+}
+
 /** v3 scene types (Studio phase 3 mockup, 21 Nov). The layout follows the type, for players that only know layouts. */
 export const TYPES: { id: SceneType; label: string; line: string; layout: Layout }[] = [
   { id: "single", label: "Single speaker", line: "One person, full frame", layout: "solo" },
@@ -110,7 +119,7 @@ export function ScenesPanel({ kit, v3 = false, sheet = false }: { kit: RoomKit; 
 function TypePicker({ onPick, onClose }: { onPick: (t: SceneType, people?: number) => void; onClose: () => void }) {
   const [group, setGroup] = useState(3);
   const box = useRef<HTMLDivElement>(null);
-  useEffect(() => { box.current?.scrollIntoView({ block: "nearest" }); }, []);
+  useEffect(() => { reveal(box.current); }, []);
   return (
     <div ref={box} className="shrink-0 rounded-xl border border-[#e4e7ec] bg-white p-2 shadow-[0_12px_32px_rgba(16,24,40,0.14)]" data-testid="scene-type-picker">
       <div className="flex items-center justify-between px-1.5 pb-1"><span className="text-xs font-bold uppercase tracking-[0.06em] text-[#667085]">New scene</span><button type="button" onClick={onClose} aria-label="Close" className="text-[#667085] hover:text-[#101828]"><X className="h-4 w-4" /></button></div>
@@ -162,7 +171,7 @@ function SceneEditor({ s, kit, v3, onDelete, onClose }: { s: Scene; kit: RoomKit
   const people = peopleOf(s);
   const min = type === "media" ? 0 : 1;
   const box = useRef<HTMLDivElement>(null);
-  useEffect(() => { if (v3) box.current?.scrollIntoView({ block: "nearest" }); }, [v3]);
+  useEffect(() => { if (v3) reveal(box.current); }, [v3]);
   return (
     <div ref={box} className="mt-2 rounded-xl border border-[#e4e7ec] bg-[#fcfcfd] p-3" data-testid="scene-editor">
       <div className="flex items-center justify-between"><span className="text-xs font-bold uppercase tracking-[0.06em] text-[#667085]">Scene {s.n}</span><button type="button" onClick={onClose} aria-label="Done editing" className="text-[#667085] hover:text-[#101828]"><X className="h-4 w-4" /></button></div>
@@ -180,6 +189,7 @@ function SceneEditor({ s, kit, v3, onDelete, onClose }: { s: Scene; kit: RoomKit
             <button type="button" onClick={() => set({ people: Math.min(9, people + 1) })} disabled={people >= 9} aria-label="More people" className="h-8 w-8 rounded-lg border border-[#d0d5dd] bg-white text-base font-bold disabled:opacity-40">+</button>
             <span className="text-[11px] leading-snug text-[#667085]">{type === "media" ? (people === 0 ? "The media fills the scene" : people === 1 ? "One person in a corner" : "People in a strip") : ""}</span>
           </div>
+          {type === "media" && <MediaPick s={s} kit={kit} set={set} />}
           {type === "profile" && <ProfileFields s={s} kit={kit} set={set} />}
         </>
       ) : (
@@ -193,6 +203,22 @@ function SceneEditor({ s, kit, v3, onDelete, onClose }: { s: Scene; kit: RoomKit
         {onDelete && <button type="button" onClick={onDelete} className="flex items-center gap-1 text-xs font-semibold text-[#667085] hover:text-[#b42318]"><Trash2 className="h-3.5 w-3.5" /> Delete</button>}
       </div>
     </div>
+  );
+}
+
+/** A media scene shows one clip or picture from Media (or a shared screen when it has none). */
+function MediaPick({ s, kit, set }: { s: Scene; kit: RoomKit; set: (p: Partial<Scene>) => void }) {
+  const look = kit.look!;
+  const all = [...(look.videos ?? []).map((v) => v.asset), ...(look.backgrounds ?? []), ...look.logos].filter((a, i, xs) => xs.findIndex((b) => b.id === a.id) === i);
+  return (
+    <>
+      <label className="mt-3 block text-xs font-semibold text-[#475467]" htmlFor={`media-${s.id}`}>Shows</label>
+      <select id={`media-${s.id}`} value={s.media?.id ?? ""} onChange={(e) => set({ media: all.find((a) => a.id === e.target.value) ?? null })} className="mt-1.5 h-9 w-full rounded-lg border border-[#d0d5dd] bg-white px-2 text-sm" data-testid="scene-media">
+        <option value="">A shared screen</option>
+        {all.map((a) => <option key={a.id} value={a.id}>{a.name || (a.kind === "video" ? "Video" : "Picture")}</option>)}
+      </select>
+      {!all.length && <p className="mt-1 text-[11px] text-[#98a2b3]">Add clips or pictures in Media to show one here.</p>}
+    </>
   );
 }
 
