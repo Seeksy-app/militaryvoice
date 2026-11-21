@@ -41,13 +41,15 @@ const guide = (id: GuideId, name: string, voice: string, defaultAge: GuideAge, l
 export const GUIDES: Guide[] = [
   guide("lori", "Lori", "Warm, steady", "older", "Woman with shoulder-length light brown hair, navy blazer", ["zHGX9VSXpW8cGSDRCqy0", "Emily"], ["DXFkLCBUTmvXpp2QwZjA", "Eryn"]),
   guide("marcus", "Marcus", "Deep, calm", "older", "Black man with a close-cut beard, field jacket", ["sR8sxaLJeFSh308Gi6HS", "Bill (calm, friendly)"], ["nPczCjzI2devNBz1zQrb", "Brian"]),
-  guide("rosa", "Rosa", "Bright, quick", "younger", "Latina woman with a dark ponytail, navy quarter-zip", ["cgSgspJ2msm6clMCkdW9", "Jessica"], ["hpp4J3VqNfWAUOO0d1Us", "Bella"]),
+  guide("rosa", "Rosa", "Bright, quick", "older", "Latina woman with a dark ponytail, navy quarter-zip", ["cgSgspJ2msm6clMCkdW9", "Jessica"], ["hpp4J3VqNfWAUOO0d1Us", "Bella"]),
   guide("dan", "Dan", "Gravelly, easy", "older", "White man with a crew cut, olive work shirt", ["bIHbv24MWmeRgasZH58o", "Will"], ["pqHfZKP75CvOlQylNhV4", "Bill (wise, mature)"]),
   guide("mei", "Mei", "Clear, crisp", "older", "East Asian woman with a short bob, flight-style jacket", ["EXAVITQu4vr4xnSDxMaL", "Sarah"], ["56AoDkrOh6qfVPDXZ7Pt", "Cassidy"]),
-  guide("jay", "Jay", "Upbeat, friendly", "younger", "South Asian man with short dark hair, grey sweatshirt", ["TX3LPaxmHKxFdv7VOQHJ", "Liam"], ["iP95p4xoKVk53GoZ742B", "Chris"]),
+  guide("jay", "Jay", "Upbeat, friendly", "older", "South Asian man with short dark hair, grey sweatshirt", ["TX3LPaxmHKxFdv7VOQHJ", "Liam"], ["iP95p4xoKVk53GoZ742B", "Chris"]),
 ];
 
 export const DEFAULT_GUIDE: GuideId = "lori";
+/** The picker's Younger · Older toggle starts on Older, for all six together. */
+export const DEFAULT_AGE: GuideAge = "older";
 export const guideById = (id: string): Guide | undefined => GUIDES.find((g) => g.id === id);
 export const isAge = (a: unknown): a is GuideAge => a === "younger" || a === "older";
 const ageOf = (id: string, age?: string): GuideAge => (isAge(age) ? age : guideById(id)?.defaultAge ?? "older");
