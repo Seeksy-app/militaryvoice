@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { PostDialog, type PostTarget } from "@/components/PostDialog";
+import { SocialTrialLine, isSocialLocked402, socialLocked, useSocialUpgrade, type SocialTrial } from "@/components/SocialTrial";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { UploadRecording } from "@/components/UploadRecording";
 import { PodcastEpisodeGrid } from "@/components/PodcastEpisodes";
@@ -50,7 +51,10 @@ export function SocialScreen({ view = "social" }: { view?: "social" | "calendar"
   const [picking, setPicking] = useState<string | null>(null); // Create post, optionally for a slot (datetime-local)
   const [pickKind, setPickKind] = useState<"clips" | "episodes" | "upload">("clips");
   const [dropped, setDropped] = useState<File | null>(null);
-  const create = (k: "clips" | "episodes" | "upload", file?: File) => { setPickKind(k); setDropped(file ?? null); setPicking(""); };
+  // Read by create(), which the nav's + Create post calls from an effect.
+  const lockedRef = useRef(false);
+  const upgradeRef = useRef<() => void>(() => {});
+  const create = (k: "clips" | "episodes" | "upload", file?: File) => { if (lockedRef.current) return upgradeRef.current(); setPickKind(k); setDropped(file ?? null); setPicking(""); };
   // + Create post from the nav: arrive with it started (or start it here, if Social is already open).
   useEffect(() => {
     const go = (k: unknown) => { if (k === "clips" || k === "episodes" || k === "upload") create(k); };
@@ -65,7 +69,13 @@ export function SocialScreen({ view = "social" }: { view?: "social" | "calendar"
   const [viewing, setViewing] = useState<{ src: string; title: string } | null>(null);
   const [removing, setRemoving] = useState<Post | null>(null);
 
-  const social = useQuery<{ configured: boolean; accounts: { platform: SocialPlatform; username?: string; followers?: number }[] }>({ queryKey: ["/api/host/social"], queryFn: async () => (await apiRequest("GET", "/api/host/social")).json() });
+  const social = useQuery<{ configured: boolean; accounts: { platform: SocialPlatform; username?: string; followers?: number }[]; trial?: SocialTrial }>({ queryKey: ["/api/host/social"], queryFn: async () => (await apiRequest("GET", "/api/host/social")).json() });
+  // Growth's 30 days of free posting (Andrew, 21 Nov): once over, making a post opens the plans. Moving or deleting what's queued stays open.
+  const upgrade = useSocialUpgrade();
+  const locked = socialLocked(social.data?.trial);
+  lockedRef.current = locked;
+  upgradeRef.current = upgrade.open;
+  const onLocked = () => { void qc.invalidateQueries({ queryKey: ["/api/host/social"] }); upgrade.open(); };
   const clips = useQuery<ClipRow[]>({ queryKey: ["/api/host/clips"], queryFn: async () => (await apiRequest("GET", "/api/host/clips")).json() });
   const recs = useQuery<RecordingRow[]>({ queryKey: ["/api/host/recordings"], queryFn: async () => (await apiRequest("GET", "/api/host/recordings")).json() });
   const postsQ = useQuery<HostPostRow[]>({ queryKey: ["/api/host/posts"], queryFn: async () => (await apiRequest("GET", "/api/host/posts")).json(), refetchInterval: 60_000 });
@@ -138,7 +148,7 @@ export function SocialScreen({ view = "social" }: { view?: "social" | "calendar"
       return times;
     },
     onSuccess: (times) => { refresh(); toast({ title: `Your week is set: ${times.length} clip${times.length === 1 ? "" : "s"} queued`, description: times.length ? times.map((t) => fmtWhen(t)).join(" · ") : undefined }); },
-    onError: (e: Error) => { refresh(); toast({ title: "Couldn't fill all of it", description: e.message, variant: "destructive" }); },
+    onError: (e: Error) => { refresh(); if (isSocialLocked402(e)) return onLocked(); toast({ title: "Couldn't fill all of it", description: e.message, variant: "destructive" }); },
   });
   const followersTotal = accounts.reduce((n, x) => n + (x.followers ?? 0), 0);
   const week7 = useQuery<Analytics>({ queryKey: ["/api/host/social/analytics", 7], queryFn: async () => (await apiRequest("GET", "/api/host/social/analytics?days=7")).json(), enabled: connected.length > 0, retry: false });
@@ -155,22 +165,23 @@ export function SocialScreen({ view = "social" }: { view?: "social" | "calendar"
             {reach7 && <> · <b className="font-semibold tabular-nums text-foreground">{compact(reach7.last)}</b> views this week</>}
           </span>
         )}
+        {view !== "analytics" && <SocialTrialLine trial={social.data?.trial} onUpgrade={upgrade.open} className="basis-full sm:basis-auto" />}
         <span className="ml-auto flex items-center gap-1.5">
           {accounts.map((a, i) => (
             <Tip key={`${a.platform}-${i}`} text={`${platformLabel(a.platform)}${a.username ? ` · @${a.username.replace(/^@/, "")}` : ""}${typeof a.followers === "number" ? ` · ${compact(a.followers)} followers` : ""}`}>
               <span className="flex h-7 w-7 items-center justify-center rounded-full border border-border bg-card text-foreground/80"><PlatformIcon platform={a.platform} className="h-3.5 w-3.5" /></span>
             </Tip>
           ))}
-          <a href="/host/dashboard/integrations" className="ml-1 inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground"><Link2 className="h-3.5 w-3.5" /> {accounts.length ? "Manage" : "Connect accounts"}</a>
+          <a href="/host/dashboard/integrations" onClick={(e) => { if (locked && !accounts.length) { e.preventDefault(); upgrade.open(); } }} className="ml-1 inline-flex items-center gap-1 text-xs font-semibold text-muted-foreground hover:text-foreground"><Link2 className="h-3.5 w-3.5" /> {accounts.length ? "Manage" : "Connect accounts"}</a>
         </span>
       </div>
 
       {/* The two views, and on the same line the queue's times and the way to make a post. */}
       <div className="mb-4 flex items-end gap-1 border-b border-border" role="tablist">
         {/* + Create first: what to post from. Then the calendar (where you land) and how it's doing. */}
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <button type="button" disabled={noAccounts} className="mb-1.5 mr-2 inline-flex items-center gap-1.5 rounded-full bg-[#053877] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#0a4a99] disabled:opacity-50" data-testid="social-create"><Plus className="h-4 w-4" /> Create <ChevronDown className="h-3.5 w-3.5 opacity-80" /></button>
+        <DropdownMenu open={locked ? false : undefined}>
+          <DropdownMenuTrigger asChild onClick={() => { if (locked) upgrade.open(); }}>
+            <button type="button" disabled={noAccounts && !locked} className="mb-1.5 mr-2 inline-flex items-center gap-1.5 rounded-full bg-[#053877] px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-[#0a4a99] disabled:opacity-50" data-testid="social-create"><Plus className="h-4 w-4" /> Create <ChevronDown className="h-3.5 w-3.5 opacity-80" /></button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-56 rounded-xl p-1.5">
             <DropdownMenuItem onSelect={() => create("upload")} className="gap-3 rounded-lg px-3 py-2.5 text-sm" data-testid="social-create-upload"><Upload className="h-5 w-5" /> Upload new</DropdownMenuItem>
@@ -180,7 +191,7 @@ export function SocialScreen({ view = "social" }: { view?: "social" | "calendar"
         </DropdownMenu>
         <div className="mb-1.5 ml-auto flex items-center gap-2">
           {view !== "analytics" && fillN > 0 && (
-            <Button onClick={() => fill.mutate()} disabled={fill.isPending || noAccounts} className="h-9 gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="social-fill-week">
+            <Button onClick={() => (locked ? upgrade.open() : fill.mutate())} disabled={fill.isPending || noAccounts} className="h-9 gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="social-fill-week">
               {fill.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Fill my week with {fillN} clip{fillN === 1 ? "" : "s"}
             </Button>
           )}
@@ -194,7 +205,7 @@ export function SocialScreen({ view = "social" }: { view?: "social" | "calendar"
         <div className="mb-4 rounded-2xl border border-dashed border-border bg-card p-6 text-center">
           <p className="text-sm font-semibold">Connect your accounts to start posting</p>
           <p className="mt-1 text-sm text-muted-foreground">Instagram, YouTube, TikTok, Facebook, LinkedIn, X and more.</p>
-          <Button asChild className="mt-3 rounded-full"><a href="/host/dashboard/integrations">Connect accounts</a></Button>
+          {locked ? <Button className="mt-3 rounded-full" onClick={upgrade.open}>See plans</Button> : <Button asChild className="mt-3 rounded-full"><a href="/host/dashboard/integrations">Connect accounts</a></Button>}
         </div>
       )}
 
@@ -240,7 +251,7 @@ export function SocialScreen({ view = "social" }: { view?: "social" | "calendar"
           onRemove={setRemoving}
           slots={(queue.data?.slots ?? []).filter((s) => s.available && s.post_count === 0).map((s) => Date.parse(s.datetime_utc))}
           onOpen={setOpen}
-          onSlot={(t) => { setPickKind("clips"); setPicking(local(t)); }}
+          onSlot={(t) => { if (locked) return upgrade.open(); setPickKind("clips"); setPicking(local(t)); }}
           onMove={(p, t) => {
             if (t < Date.now() + 60_000) return toast({ title: "That's in the past", description: "Drop it on today or a later day.", variant: "destructive" });
             move.mutate({ id: p.id, at: t });
@@ -290,7 +301,7 @@ export function SocialScreen({ view = "social" }: { view?: "social" | "calendar"
         onDeleted={() => { setRemoving(null); setOpen(null); void qc.invalidateQueries({ queryKey: ["/api/host/social/queue"] }); }}
       />
 
-      <QueueDialog open={queueOpen} onClose={() => setQueueOpen(false)} settings={queue.data?.settings ?? null} onSaved={refresh} goal={goal} setGoal={(g) => { setGoal(g); try { localStorage.setItem("mv_post_goal", String(g)); } catch { /* this visit */ } }} />
+      <QueueDialog open={queueOpen} onClose={() => setQueueOpen(false)} settings={queue.data?.settings ?? null} onSaved={refresh} onLocked={() => { setQueueOpen(false); onLocked(); }} goal={goal} setGoal={(g) => { setGoal(g); try { localStorage.setItem("mv_post_goal", String(g)); } catch { /* this visit */ } }} />
 
       <Dialog open={!!viewing} onOpenChange={(v) => !v && setViewing(null)}>
         <DialogContent className="max-w-md p-3">
@@ -299,6 +310,7 @@ export function SocialScreen({ view = "social" }: { view?: "social" | "calendar"
         </DialogContent>
       </Dialog>
       <PostDialog target={target} at={targetAt} onClose={() => { setTarget(null); setTargetAt(undefined); }} />
+      {upgrade.dialog}
     </section>
   );
 }
@@ -609,7 +621,7 @@ function PostDetail({ p, onClose, onMove, onCancel, busy }: { p: Post | null; on
 const DAYS = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"];
 
 /** The queue's times: which days, and what times of day, posts go out. */
-function QueueDialog({ open, onClose, settings, onSaved, goal, setGoal }: { open: boolean; onClose: () => void; settings: Queue["settings"]; onSaved: () => void; goal: number; setGoal: (g: number) => void }) {
+function QueueDialog({ open, onClose, settings, onSaved, onLocked, goal, setGoal }: { open: boolean; onClose: () => void; settings: Queue["settings"]; onSaved: () => void; onLocked: () => void; goal: number; setGoal: (g: number) => void }) {
   const { toast } = useToast();
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -625,7 +637,7 @@ function QueueDialog({ open, onClose, settings, onSaved, goal, setGoal }: { open
   const save = useMutation({
     mutationFn: async () => (await apiRequest("POST", "/api/host/social/queue", { days, timezone: tz, slots: times.filter(Boolean).map((t) => ({ hour: Number(t.split(":")[0]), minute: Number(t.split(":")[1]) })) })).json(),
     onSuccess: () => { onSaved(); onClose(); toast({ title: "Queue times saved" }); },
-    onError: (e: Error) => toast({ title: "Couldn't save that", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => (isSocialLocked402(e) ? onLocked() : toast({ title: "Couldn't save that", description: e.message, variant: "destructive" })),
   });
   return (
     <Dialog open={open} onOpenChange={(v) => !v && onClose()}>

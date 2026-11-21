@@ -39,6 +39,13 @@ export function SocialTrialLine({ trial, onUpgrade, className = "" }: { trial?: 
   );
 }
 
+/** The server's answer once the free days are over: 402 with the trial in the body (server/socialTrial.ts).
+    A 402 without it is something else (out of credits) and keeps its own message. */
+export const isSocialLocked402 = (e: unknown) => {
+  const x = e as { status?: number; body?: { trial?: unknown } } | null;
+  return x?.status === 402 && !!x.body?.trial;
+};
+
 /** The plans dialog with the posting note, and a way to open it. */
 export function useSocialUpgrade() {
   const [open, setOpen] = useState(false);

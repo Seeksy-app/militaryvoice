@@ -72,7 +72,7 @@ import { StudioHome } from "@/components/StudioHome";
 import { FanEmails } from "@/components/FanEmails";
 import { RecordingsScreen } from "@/components/RecordingsScreen";
 import { PostStudio, NavCredits } from "@/components/PostStudio";
-import { SocialTrialLine, socialLocked, useSocialUpgrade, type SocialTrial as SocialTrialT } from "@/components/SocialTrial";
+import { SocialTrialLine, isSocialLocked402, socialLocked, useSocialUpgrade, type SocialTrial as SocialTrialT } from "@/components/SocialTrial";
 import { FloatingChecklist } from "@/components/FloatingChecklist";
 import { MyEvents } from "@/components/MyEvents";
 import { MyOrganization, OrgInvites } from "@/components/MyOrganization";
@@ -881,7 +881,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     onSuccess: ({ url }) => {
       window.location.href = url;
     },
-    onError: (err: Error) => toast({ title: "Couldn't open the connection page", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => (isSocialLocked402(err) ? socialUpgrade.open() : toast({ title: "Couldn't open the connection page", description: err.message, variant: "destructive" })),
   });
 
   const refreshSocial = useMutation({

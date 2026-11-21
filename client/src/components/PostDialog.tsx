@@ -11,6 +11,8 @@ import { apiRequest } from "@/lib/queryClient";
 import { PlatformIcon, platformLabel } from "@/components/SocialIcons";
 import type { SocialPlatform } from "@shared/schema";
 import { uploadToStorage } from "@/lib/upload";
+import { isSocialLocked402, socialLocked, SOCIAL_UPGRADE_NOTE, type SocialTrial } from "@/components/SocialTrial";
+import { UpgradeDialog } from "@/components/PostStudio";
 import { CalendarClock, ImagePlus, Loader2, Send, Sparkles, X } from "lucide-react";
 
 interface YouTubeSettings { title: string; description: string; privacyStatus: "public" | "unlisted" | "private"; tags: string; thumbnailKey: string; thumbnailName: string; madeForKids: boolean; notifySubscribers: boolean }
@@ -131,7 +133,7 @@ function inAnHour(): string {
 export function PostDialog({ target, onClose, at, schedule = false }: { target: PostTarget | null; onClose: () => void; /** A time already chosen (an open slot on the calendar): datetime-local. */ at?: string; /** Opened from "Schedule…": the date and time are what's asked first. */ schedule?: boolean }) {
   const { toast } = useToast();
   const qc = useQueryClient();
-  const social = useQuery<{ configured: boolean; accounts: { platform: SocialPlatform }[] }>({
+  const social = useQuery<{ configured: boolean; accounts: { platform: SocialPlatform }[]; trial?: SocialTrial }>({
     queryKey: ["/api/host/social"],
     queryFn: async () => (await apiRequest("GET", "/api/host/social")).json(),
     enabled: !!target,
@@ -195,8 +197,19 @@ export function PostDialog({ target, onClose, at, schedule = false }: { target: 
       );
       onClose();
     },
-    onError: (e: Error) => toast({ title: "Couldn't post that", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => {
+      // The free 30 days ran out while it was open: the plans, not an error.
+      if (isSocialLocked402(e)) { void qc.invalidateQueries({ queryKey: ["/api/host/social"] }); setUpgrade(true); onClose(); return; }
+      toast({ title: "Couldn't post that", description: e.message, variant: "destructive" });
+    },
   });
+  // Growth's 30 days of free posting are over: Post opens the plans instead (Andrew, 21 Nov).
+  const [upgrade, setUpgrade] = useState(false);
+  const locked = !!target && socialLocked(social.data?.trial);
+
+  if (locked || upgrade) {
+    return <UpgradeDialog open onOpenChange={(o) => { if (!o) { setUpgrade(false); if (target) onClose(); } }} note={SOCIAL_UPGRADE_NOTE} />;
+  }
 
   return (
     <Dialog open={!!target} onOpenChange={(o) => !o && onClose()}>

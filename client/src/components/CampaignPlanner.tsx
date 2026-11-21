@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { PlatformIcon, platformLabel, platformBackground } from "@/components/SocialIcons";
 import type { SocialPlatform } from "@shared/schema";
+import { isSocialLocked402, useSocialUpgrade } from "@/components/SocialTrial";
 import { CalendarCheck, Check, Loader2, Megaphone, AlertCircle } from "lucide-react";
 
 // Six posts we've already designed for them. They tick the ones they want,
@@ -71,6 +72,8 @@ function nextRun(): Date {
 
 export function CampaignPlanner({ signupId }: { signupId: number }) {
   const { toast } = useToast();
+  // Growth's 30 days of free posting are over: saving the plan answers 402 and the plans open (21 Nov).
+  const socialUpgrade = useSocialUpgrade();
   const queryClient = useQueryClient();
   const key = ["/api/host/campaign", signupId] as const;
   const { data, isLoading } = useQuery<Plan>({
@@ -103,7 +106,7 @@ export function CampaignPlanner({ signupId }: { signupId: number }) {
         description: r.planned === 0 ? "Nothing will be posted." : "Anything already due goes out within the hour.",
       });
     },
-    onError: (e: Error) => toast({ title: "Couldn't save the plan", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => (isSocialLocked402(e) ? socialUpgrade.open() : toast({ title: "Couldn't save the plan", description: e.message, variant: "destructive" })),
   });
 
   if (isLoading || !data) return null;
@@ -327,6 +330,7 @@ export function CampaignPlanner({ signupId }: { signupId: number }) {
           })()}
         </div>
       </div>
+      {socialUpgrade.dialog}
     </section>
   );
 }

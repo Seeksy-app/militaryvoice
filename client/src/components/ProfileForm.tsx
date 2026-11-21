@@ -47,6 +47,7 @@ import {
   Film,
 } from "lucide-react";
 import { IconTile } from "@/components/ui/icon-tile";
+import { isSocialLocked402, useSocialUpgrade } from "@/components/SocialTrial";
 
 const DRAFT_KEY = "mv_profile_draft";
 interface Draft {
@@ -169,6 +170,8 @@ const FIELD_LABEL: Record<string, string> = {
 
 export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, variant = "setup", onDirtyChange, interests: interestsProp, eventOpen = true, demo = false }: Props) {
   const { toast } = useToast();
+  // Growth's 30 days of free posting are over: Connect answers 402 and the plans open (21 Nov).
+  const socialUpgrade = useSocialUpgrade();
   // Show questions only for people with a show. Anyone who came through a
   // time on the schedule is booking one, whatever they ticked.
   const interestList = profile?.interests || interestsProp || "";
@@ -329,7 +332,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
       bypassGuard.current = true;
       window.location.href = url;
     },
-    onError: (err: Error) => toast({ title: "Couldn't open the connection page", description: err.message, variant: "destructive" }),
+    onError: (err: Error) => (isSocialLocked402(err) ? socialUpgrade.open() : toast({ title: "Couldn't open the connection page", description: err.message, variant: "destructive" })),
   });
 
   const existingPhotoUrl = profile?.photoUrl ? resolveUploadUrl(profile.photoUrl) : null;
@@ -1119,6 +1122,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
           </div>
         </div>
       </form>
+      {socialUpgrade.dialog}
     </Form>
   );
 }
