@@ -13,7 +13,7 @@ type Features = {
   /** comp: a gift from us (no Stripe behind it, so no billing page to manage). */
   plan: { key: string; name: string; comp?: boolean; interval: "month" | "year"; credits: number; periodEnd: string; status: string } | null;
 };
-type DiscoverMe = { member: object | null; discoveryPro?: boolean; verifiedLocked?: boolean; verifiedWithPlan?: boolean; reveals: { used: number; allowance: number } | null; searches?: { used: number; allowance: number | null } | null; lookups?: { used: number; allowance: number } | null };
+type DiscoverMe = { member: object | null; discoveryPro?: boolean; verifiedLocked?: boolean; withProPlan?: boolean; reveals: { used: number; allowance: number } | null; searches?: { used: number; allowance: number | null } | null; lookups?: { used: number; allowance: number } | null };
 
 const day = (iso: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" }) : "");
 
@@ -35,6 +35,7 @@ export function PlanBilling() {
   const onPlan = !!plan && ["active", "trialing", "past_due"].includes(plan.status);
   const credits = features.data?.beta.tokens ?? 0;
   const pro = !!me.data?.discoveryPro;
+  const withPlan = !!me.data?.withProPlan;
   const reveals = me.data?.reveals;
   const spin = (k: string) => busy === k && <Loader2 className="h-4 w-4 animate-spin" />;
 
@@ -99,21 +100,21 @@ export function PlanBilling() {
         </Button>
       </section>
 
-      {/* Discovery Pro: its own monthly add-on. */}
+      {/* Discovery Pro: its own monthly add-on, or included with the Pro plan. */}
       <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-card p-5 shadow-sm">
         <div className="flex min-w-0 items-center gap-3">
           <IconTile icon={Search} />
           <div className="min-w-0">
-            <p className="font-semibold">{ADDONS.discovery.name}{pro ? " · on" : ""}</p>
+            <p className="font-semibold">{ADDONS.discovery.name}{withPlan ? ` · included with ${PLANS.pro.name}` : pro ? " · on" : ""}</p>
             <p className="text-sm text-muted-foreground">
-              {pro ? `${ADDONS.discovery.searches} searches, ${ADDONS.discovery.lookups} full profiles and ${ADDONS.discovery.reveals} contact emails a month` : `${ADDONS.discovery.searches} searches, ${ADDONS.discovery.lookups} full profiles, ${ADDONS.discovery.reveals} contact emails and Verified creators, for ${cents(ADDONS.discovery.cents)}/month`}
+              {pro ? `${ADDONS.discovery.searches} searches, ${ADDONS.discovery.lookups} full profiles and ${ADDONS.discovery.reveals} contact emails a month${withPlan ? ", and Verified creators" : ""}` : `${ADDONS.discovery.searches} searches, ${ADDONS.discovery.lookups} full profiles, ${ADDONS.discovery.reveals} contact emails and Verified creators, for ${cents(ADDONS.discovery.cents)}/month`}
               {me.data?.searches?.allowance ? ` · ${Math.max(0, me.data.searches.allowance - me.data.searches.used)} searches` : ""}
               {me.data?.lookups ? ` · ${Math.max(0, me.data.lookups.allowance - me.data.lookups.used)} profiles` : ""}
               {reveals ? ` · ${Math.max(0, reveals.allowance - reveals.used)} contacts left this month` : ""}
             </p>
           </div>
         </div>
-        {pro ? (
+        {withPlan ? null : pro ? (
           <Button variant="outline" onClick={() => void go("portal-d", openBillingPortal)} disabled={busy !== null} className="gap-2 rounded-full" data-testid="billing-manage-discovery">{spin("portal-d")} Manage</Button>
         ) : (
           <Button onClick={() => void go("discovery", () => startAddonCheckout("discovery"))} disabled={busy !== null} className="gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="billing-add-discovery">{spin("discovery")} Add {ADDONS.discovery.name}</Button>
@@ -126,11 +127,11 @@ export function PlanBilling() {
           <div className="flex min-w-0 items-center gap-3">
             <IconTile icon={BadgeCheck} />
             <div className="min-w-0">
-              <p className="font-semibold">{ADDONS.verified.name}{me.data?.verifiedWithPlan ? ` · included with ${PLANS.pro.name}` : me.data?.verifiedLocked === false ? " · on" : ""}</p>
-              <p className="text-sm text-muted-foreground">{ADDONS.verified.blurb} {me.data?.verifiedWithPlan ? "" : `${cents(ADDONS.verified.cents)}/month, or included with ${PLANS.pro.name} and ${ADDONS.discovery.name}.`}</p>
+              <p className="font-semibold">{ADDONS.verified.name}{me.data?.withProPlan ? ` · included with ${PLANS.pro.name}` : me.data?.verifiedLocked === false ? " · on" : ""}</p>
+              <p className="text-sm text-muted-foreground">{ADDONS.verified.blurb} {me.data?.withProPlan ? "" : `${cents(ADDONS.verified.cents)}/month, or included with ${PLANS.pro.name} and ${ADDONS.discovery.name}.`}</p>
             </div>
           </div>
-          {me.data?.verifiedWithPlan ? null : me.data?.verifiedLocked === false ? (
+          {me.data?.withProPlan ? null : me.data?.verifiedLocked === false ? (
             <Button variant="outline" onClick={() => void go("portal-v", openBillingPortal)} disabled={busy !== null} className="gap-2 rounded-full">{spin("portal-v")} Manage</Button>
           ) : (
             <Button onClick={() => void go("verified", () => startAddonCheckout("verified"))} disabled={busy !== null} className="gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="billing-add-verified">{spin("verified")} Add {ADDONS.verified.name}</Button>

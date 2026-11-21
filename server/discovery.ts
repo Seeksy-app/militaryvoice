@@ -57,11 +57,11 @@ async function isHouse(e: string): Promise<boolean> {
   const [m] = await db.select({ role: discoveryMembers.role }).from(discoveryMembers).where(eq(discoveryMembers.email, e));
   return !!m && ["brand", "agency", "event"].includes(m.role);
 }
-/** This member's monthly allowances: Discovery Pro's, the house's, or the taste that comes with Scale and Pro. */
+/** This member's monthly allowances: Discovery Pro's (the add-on or the Pro plan), the house's, or the taste that comes with Scale and Pro. */
 async function allowanceFor(email: string): Promise<{ reveals: number; lookups: number; searches: number; pro: boolean }> {
   const a = await storage.getAddon(email, "discovery");
   // "comped": given by an admin, no Stripe subscription behind it.
-  if (a && ["active", "trialing", "comped"].includes(a.status)) return { reveals: ADDONS.discovery.reveals, lookups: ADDONS.discovery.lookups, searches: ADDONS.discovery.searches, pro: true };
+  if ((a && ["active", "trialing", "comped"].includes(a.status)) || (await onProPlan(email))) return { reveals: ADDONS.discovery.reveals, lookups: ADDONS.discovery.lookups, searches: ADDONS.discovery.searches, pro: true };
   if (await isHouse(email.trim().toLowerCase())) return { reveals: HOUSE_DISCOVERY.reveals, lookups: HOUSE_DISCOVERY.lookups, searches: Number.POSITIVE_INFINITY, pro: false };
   return { reveals: FREE_DISCOVERY.reveals, lookups: FREE_DISCOVERY.lookups, searches: FREE_DISCOVERY.searches, pro: false };
 }
@@ -79,10 +79,10 @@ export async function verifiedOpenTo(email: string): Promise<boolean> {
     const a = await storage.getAddon(e, key);
     if (a && ["active", "trialing", "comped"].includes(a.status)) return true;
   }
-  return verifiedWithPlan(e);
+  return onProPlan(e);
 }
-/** Pro includes Verified creators (Andrew, 21 Nov 2026: "Yes, include it"). Comped Pro counts too. */
-export async function verifiedWithPlan(email: string): Promise<boolean> {
+/** The Pro plan includes Verified creators and Discovery Pro (Andrew, 21 Nov 2026: "Yes, include it", "both should be included"). Comped Pro counts too. */
+export async function onProPlan(email: string): Promise<boolean> {
   const subs = await db.select({ plan: postifySubscriptions.plan, status: postifySubscriptions.status }).from(postifySubscriptions).where(eq(postifySubscriptions.email, email.trim().toLowerCase()));
   return subs.some((x) => x.plan === "pro" && ["active", "trialing", "past_due"].includes(x.status));
 }
@@ -786,7 +786,8 @@ export function registerDiscoveryRoutes(app: Express): void {
         searches: member && member.role !== "admin" ? { used: await searchesThisMonth(email), allowance: Number.isFinite((await allowanceFor(email)).searches) ? (await allowanceFor(email)).searches : null } : null,
         // Verified creators: the house, Discovery Pro, the Pro plan, or its own $10 add-on.
         verifiedLocked: getSessionEmail(req) ? !(await verifiedOpenTo(String(getSessionEmail(req)))) : false,
-        verifiedWithPlan: getSessionEmail(req) ? await verifiedWithPlan(String(getSessionEmail(req))) : false,
+        // On the Pro plan: Discovery Pro and Verified creators come with it.
+        withProPlan: getSessionEmail(req) ? await onProPlan(String(getSessionEmail(req))) : false,
         lookups: member && member.role !== "admin" ? { used: await lookupsThisMonth(email), allowance: (await allowanceFor(email)).lookups } : null,
         // Signed in to the admin too: they can spend credits on filling a page.
         isAdmin: !!adminEmail,

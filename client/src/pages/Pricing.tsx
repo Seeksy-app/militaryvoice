@@ -47,7 +47,8 @@ const PLAN_FEATURES: Record<string, Feature[]> = {
     { t: "Extra credits 50¢ each, up to a limit you set", tip: "Run out, and Pōstify keeps going. Extras go on your next bill, never past the limit you set." },
     { t: "Book a guest", tip: "Search people who have been guests on podcasts, the most-booked first. Invite them onto your show, find their email, or save them for later." },
     { t: "Be a guest", tip: "Find shows that take guests in your field, and have SI help write your pitch." },
-    { t: "Verified creators", tip: "Everyone MilitaryVoices knows, with their pictures and real numbers, ready to invite as guests or collaborators. $10 a month on its own." },
+    { t: "Discovery Pro included", tip: "Search 800M+ creator profiles for military and veteran guests, partners and sponsors: 100 searches, 25 full profiles and 50 contact emails a month. $50 a month on its own." },
+    { t: "Verified creators included", tip: "Everyone MilitaryVoices knows, with their pictures and real numbers, ready to invite as guests or collaborators. $10 a month on its own." },
     { t: "Live Studio hours (soon)", tip: "When the MilitaryVoices Studio opens to every show, Pro includes live studio hours for yours." },
   ],
 };
@@ -201,8 +202,16 @@ export default function Pricing() {
                 <label className={`mt-5 flex items-start gap-2.5 rounded-2xl border p-3 text-sm ${yearly ? "border-dashed border-border opacity-70" : "cursor-pointer border-[#F0A71F]/60 bg-[#F0A71F]/[0.08]"}`} data-testid={`plan-${p.key}-discovery`}>
                   <Checkbox checked={addDisc} disabled={yearly} onCheckedChange={(v) => setWithDiscovery((w) => ({ ...w, [p.key]: v === true }))} className="mt-0.5 border-[#b36b00] data-[state=checked]:bg-[#b36b00] data-[state=checked]:text-white" />
                   <span className="min-w-0">
-                    <span className="flex items-center gap-1.5 font-semibold text-[#8a5200]"><Compass className="h-3.5 w-3.5 shrink-0" /> + Discovery Pro {cents(disc.cents)}/mo</span>
-                    <span className="mt-0.5 block text-xs text-muted-foreground">{yearly ? "Monthly only: add it on a monthly plan, or later." : `${disc.reveals} contacts and ${disc.lookups.toLocaleString()} profile look-ups a month.`}</span>
+                    <span className="flex items-center gap-1.5 font-semibold text-[#8a5200]">
+                      <Compass className="h-3.5 w-3.5 shrink-0" /> + Discovery Pro {cents(disc.cents)}/mo
+                      <Tooltip delayDuration={150}>
+                        <TooltipTrigger asChild>
+                          <button type="button" onClick={(e) => e.preventDefault()} aria-label="What is Discovery Pro?" className="text-[#8a5200]/70 hover:text-[#8a5200]" data-testid="plan-discovery-info"><Info className="h-3.5 w-3.5" /></button>
+                        </TooltipTrigger>
+                        <TooltipContent className="max-w-[280px] text-xs leading-relaxed">Search 800M+ creator profiles across 6 platforms. Filter for military and veteran creators by topic, branch and audience, see their real reach, and get their email to invite them as a guest, partner or sponsor. Verified creators is included. Discovery Pro comes with Pro.</TooltipContent>
+                      </Tooltip>
+                    </span>
+                    <span className="mt-0.5 block text-xs text-muted-foreground [text-wrap:pretty]">{yearly ? "Monthly only: add it on a monthly plan, or later." : `Find guests, partners and sponsors among 800M+ creators. ${disc.searches} searches, ${disc.lookups} full profiles and ${disc.reveals} contact emails a month.`}</span>
                   </span>
                 </label>
 
@@ -211,12 +220,13 @@ export default function Pricing() {
                 <Button
                   onClick={() => void go(p.key, () => startPlanCheckout(p.key, quarterly ? "quarter" : yearly ? "year" : "month", addProd ? ["production"] : addDisc ? ["discovery"] : []))}
                   disabled={busy !== null}
-                  className={`mt-4 w-full gap-2 rounded-full ${popular ? "bg-[#053877] text-white hover:bg-[#0a4a99]" : ""}`}
+                  className={`mt-4 h-auto min-h-10 w-full gap-2 whitespace-normal rounded-full py-2.5 ${popular ? "bg-[#053877] text-white hover:bg-[#0a4a99]" : ""}`}
                   variant={popular ? "default" : "outline"}
                 >
                   {busy === p.key && <Loader2 className="h-4 w-4 animate-spin" />}
-                  {quarterly ? `Choose ${p.name} · ${cents("quarterCents" in p ? p.quarterCents : 0)} every 3 months` : `Choose ${p.name}${yearly ? " yearly" : ""}`}{addDisc ? ` + Discovery Pro · ${cents(p.cents + disc.cents)}/mo` : ""}{addProd ? ` + ${prod.name}` : ""}
+                  {quarterly ? `Choose ${p.name} · ${cents("quarterCents" in p ? p.quarterCents : 0)} every 3 months` : `Choose ${p.name}${yearly ? " yearly" : ""}`}{addDisc ? ` · ${cents(p.cents + disc.cents)}/mo` : ""}{addProd ? ` + ${prod.name}` : ""}
                 </Button>
+                {addDisc && <p className="mt-2 text-center text-xs text-muted-foreground" data-testid={`plan-${p.key}-discovery-note`}>{p.name} {cents(p.cents)} + Discovery Pro {cents(disc.cents)}, on one payment.</p>}
                 {addProd && <p className="mt-2 text-center text-xs text-muted-foreground" data-testid="plan-pro-production-note">On one payment page: Pro, {cents("quarterCents" in p ? p.quarterCents : 0)}, and Production, {cents(prod.quarterCents)}, together {cents(("quarterCents" in p ? p.quarterCents : 0) + prod.quarterCents)} every 3 months. Want to stop just one? Write to us.</p>}
               </div>
             );
@@ -242,7 +252,7 @@ export default function Pricing() {
           <div className="flex flex-col gap-4 rounded-3xl border border-[#F0A71F]/50 bg-[#F0A71F]/[0.06] p-6 sm:flex-row sm:items-center" data-testid="addon-discovery">
             <div className="min-w-0 flex-1">
               <p className="flex items-center gap-2 text-lg font-bold text-foreground" style={HEADLINE_FONT}><Compass className="h-5 w-5 text-[#b36b00]" /> {disc.name} <span className="text-base font-semibold text-muted-foreground">· {cents(disc.cents)}/month</span></p>
-              <p className="mt-1 text-sm text-muted-foreground">{disc.blurb} Add it with Scale or Pro above in one payment, or here. Verified creators comes with Pro, or is {cents(ADDONS.verified.cents)}/month on its own.</p>
+              <p className="mt-1 text-sm text-muted-foreground">{disc.blurb} Search 800M+ creator profiles across 6 platforms. It comes with Pro; on Scale, add it above in one payment, or here. Verified creators comes with Pro too, or is {cents(ADDONS.verified.cents)}/month on its own.</p>
               <ul className="mt-2 space-y-1 text-sm text-foreground/85">
                 {disc.features.map((f) => <li key={f} className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#b36b00]" /> {f}</li>)}
               </ul>
