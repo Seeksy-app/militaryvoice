@@ -1,7 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { StageGrid, useStageRoom, type RoomMeta } from "@/components/StageView";
+import { HiddenVoices, NameTagContext, StageGrid, useStageRoom, type NameTagStyle, type RoomMeta, type StageTile } from "@/components/StageView";
 import { apiRequest } from "@/lib/queryClient";
-import { roomStageMeta, shownOnStage, studioIdFromRoom, type RoomLive, type RoomLook } from "@shared/roomLook";
+import {
+  CARD_TITLE, castOf, countdownText, isPlayer, roomStageMeta, sceneOf, shownOnStage, studioIdFromRoom,
+  type RoomCardSlot, type RoomLive, type RoomLook, type RoomProfile,
+} from "@shared/roomLook";
 
 /** The room name inside a LiveKit token ("my-12"), without verifying anything: the page only needs to know which look to read. */
 function roomOfToken(token: string | null): string {
@@ -88,9 +91,49 @@ export function RoomPicture({
     [look, live.activeScene, live.showing, live.playing, name, now], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
+  // v3: the player bot is heard, never drawn; the scene type decides who is drawn and how.
+  const players = tiles.filter((t) => isPlayer(t.identity));
+  const people = tiles.filter((t) => !isPlayer(t.identity));
+  const scene = sceneOf(look, live);
+  const cast = castOf(people.map((t) => ({ identity: t.identity, host: /^owner-/.test(t.identity), who: t.identity })), scene);
+  const drawn = scene?.type ? cast.drawn.map((id) => people.find((t) => t.identity === id)!).filter(Boolean) : people;
+  const heard = scene?.type ? people.filter((t) => !cast.drawn.includes(t.identity)) : [];
+  const stageMeta = scene?.type && cast.layout ? { ...meta, stageLayout: cast.layout, stageOrder: cast.drawn.join(",") } : meta;
+  const card = live.playing && live.playing.slot !== "intro" && live.playing.slot !== "outro" ? live.playing : null;
+  const style = look?.style;
+  const tag: NameTagStyle | null = style ? { style: style.nameTag, show: style.showNames, size: style.textSize, font: style.font, color: style.brandColor } : null;
+  const bg = String((meta as { backgroundUrl?: string }).backgroundUrl ?? "");
+  const logo = String((meta as { logoUrl?: string }).logoUrl ?? "");
+
+  // Countdown: re-read the clock every second while it runs.
+  useEffect(() => {
+    if (card?.slot !== "countdown") return;
+    const t = window.setInterval(() => setNow(Date.now()), 1000);
+    return () => window.clearInterval(t);
+  }, [card?.slot, card?.at]);
+
+  const full = card ? (
+    <RoomCard slot={card.slot as RoomCardSlot} text={card.slot === "countdown" ? countdownText(card, now) : ""} name={name || (raw as RoomMeta).studioName || ""} bg={bg} logo={logo} color={style?.brandColor} font={style?.font} />
+  ) : !live.playing && scene?.type === "media" && scene.media?.url ? (
+    <SceneMedia url={scene.media.url} image={(scene.media.mime ?? "").startsWith("image")} muted={muted} />
+  ) : !live.playing && scene?.type === "profile" ? (
+    <ProfileCard p={scene.profile ?? {}} people={people} bg={bg} logo={logo} color={style?.brandColor} font={style?.font} />
+  ) : null;
+
   return (
     <div className="relative h-full w-full" style={{ containerType: "inline-size" }}>
-      <StageGrid tiles={tiles} meta={meta as unknown as RoomMeta} muted={muted} caption={caption} idleTitle={name || "Starting soon"} onMediaEnded={onMediaEnded} />
+      {players.map((t) => <PlayerAudio key={t.identity} tile={t} muted={muted} />)}
+      {full ? (
+        <>
+          {full}
+          <HiddenVoices tiles={people} muted={muted} />
+        </>
+      ) : (
+        <NameTagContext.Provider value={tag}>
+          <StageGrid tiles={drawn} meta={stageMeta as unknown as RoomMeta} muted={muted} caption={caption} idleTitle={name || "Starting soon"} onMediaEnded={onMediaEnded} />
+          <HiddenVoices tiles={heard} muted={muted} />
+        </NameTagContext.Provider>
+      )}
       {banner && (
         <div className="pointer-events-none absolute z-30" style={{ left: "4%", right: "4%", bottom: "9%" }} data-testid="room-banner">
           <div className="text-white shadow-lg" style={{ background: "rgba(5,56,119,0.96)", borderLeft: "0.7cqw solid #F0A71F", borderRadius: "1cqw", padding: "1.1cqw 2cqw", fontSize: "2.6cqw", fontWeight: 600, lineHeight: 1.25 }}>
@@ -98,6 +141,82 @@ export function RoomPicture({
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** The player bot's sounds and music, straight to the speakers (not through the voice leveler, so its own volume holds). */
+function PlayerAudio({ tile, muted }: { tile: StageTile; muted: boolean }) {
+  const ref = useRef<HTMLAudioElement | null>(null);
+  useEffect(() => {
+    const el = ref.current;
+    if (!el || !tile.audio) return;
+    tile.audio.attach(el);
+    return () => { tile.audio?.detach(el); };
+  }, [tile.audio]);
+  return <audio ref={ref} autoPlay muted={muted} data-testid="room-player-audio" />;
+}
+
+const fontOf = (font?: string) => ({ fontFamily: font ? `'${font}', 'Inter', sans-serif` : "'General Sans', 'Inter', sans-serif" });
+const colorOf = (c?: string) => (/^#[0-9a-f]{6}$/i.test(c ?? "") ? (c as string) : "#F0A71F");
+
+function Backdrop({ bg }: { bg: string }) {
+  if (/^#[0-9a-f]{6}$/i.test(bg)) return <div className="absolute inset-0" style={{ background: bg }} aria-hidden="true" />;
+  if (bg) return <div className="absolute inset-0 bg-cover bg-center" style={{ backgroundImage: `url(${JSON.stringify(bg).slice(1, -1)})` }} aria-hidden="true" />;
+  return <div className="absolute inset-0 bg-gradient-to-br from-[#0a3a8f] to-[#04102b]" aria-hidden="true" />;
+}
+
+/** Be right back, Starting soon, Thank you and the Countdown: drawn live in the owner's look, no video file. */
+function RoomCard({ slot, text, name, bg, logo, color, font }: { slot: RoomCardSlot; text: string; name: string; bg: string; logo: string; color?: string; font?: string }) {
+  const accent = colorOf(color);
+  const done = slot === "countdown" && text === "We're starting";
+  return (
+    <div className="absolute inset-0 overflow-hidden text-white" data-testid={`room-card-${slot}`}>
+      <Backdrop bg={bg} />
+      <div className="absolute inset-0 bg-[#04102b]/45" aria-hidden="true" />
+      <div className="relative flex h-full w-full flex-col items-center justify-center gap-[2.4cqw] px-[6cqw] text-center" style={fontOf(font)}>
+        {logo && <img src={logo} alt="" className="h-[9cqw] w-auto max-w-[40cqw] object-contain" />}
+        <p className="font-bold uppercase tracking-[0.3em]" style={{ color: accent, fontSize: "1.7cqw" }}>{name}</p>
+        <p className="font-semibold leading-tight [text-wrap:balance]" style={{ fontSize: slot === "countdown" && !done ? "3.2cqw" : "6cqw" }}>{done ? text : CARD_TITLE[slot]}</p>
+        {slot === "countdown" && !done && <p className="font-bold tabular-nums leading-none" style={{ fontSize: "13cqw" }} data-testid="room-countdown">{text}</p>}
+        <div className="h-[0.5cqw] w-[12cqw] rounded-full" style={{ background: accent }} aria-hidden="true" />
+      </div>
+    </div>
+  );
+}
+
+/** A Video or picture scene: the clip (looping, with its sound) or the picture fills the frame. */
+function SceneMedia({ url, image, muted }: { url: string; image: boolean; muted: boolean }) {
+  return (
+    <div className="absolute inset-0 bg-black" data-testid="room-scene-media">
+      {image ? <img src={url} alt="" className="h-full w-full object-contain" /> : <video key={url} src={url} autoPlay playsInline loop muted={muted} className="h-full w-full object-contain" />}
+    </div>
+  );
+}
+
+/** A Profile scene: the guest's card, full frame. The photo is theirs, or their camera picture when they joined with one. */
+function ProfileCard({ p, people, bg, logo, color, font }: { p: RoomProfile; people: StageTile[]; bg: string; logo: string; color?: string; font?: string }) {
+  const accent = colorOf(color);
+  const person = p.who ? people.find((t) => t.identity === p.who) : undefined;
+  const name = p.name || person?.name || "";
+  const title = p.title || person?.displayTitle || "";
+  const photo = p.photo?.url || person?.photoUrl || "";
+  return (
+    <div className="absolute inset-0 overflow-hidden text-white" data-testid="room-profile">
+      <Backdrop bg={bg} />
+      <div className="absolute inset-0 bg-[#04102b]/35" aria-hidden="true" />
+      {logo && <img src={logo} alt="" className="absolute right-[3cqw] top-[3cqw] h-[6cqw] w-auto object-contain" />}
+      <div className="relative flex h-full w-full items-center gap-[5cqw] px-[8cqw]" style={fontOf(font)}>
+        <div className="aspect-square w-[30cqw] shrink-0 overflow-hidden rounded-full ring-[0.6cqw]" style={{ ["--tw-ring-color" as string]: accent }}>
+          {photo ? <img src={photo} alt="" className="h-full w-full object-cover object-[50%_28%]" /> : <div className="flex h-full w-full items-center justify-center bg-[#053877] font-bold" style={{ fontSize: "9cqw" }}>{name.split(/\s+/).map((w) => w[0]).join("").slice(0, 2).toUpperCase()}</div>}
+        </div>
+        <div className="min-w-0 space-y-[1.2cqw]">
+          <p className="font-bold leading-tight [text-wrap:balance]" style={{ fontSize: "5.2cqw" }}>{name}</p>
+          {title && <p className="font-semibold" style={{ fontSize: "2.6cqw", color: accent }}>{title}</p>}
+          {p.line && <p className="leading-snug text-white/90 [text-wrap:pretty]" style={{ fontSize: "2.2cqw" }}>{p.line}</p>}
+          {(p.links ?? []).slice(0, 3).filter(Boolean).map((l) => <p key={l} className="truncate text-white/80" style={{ fontSize: "1.8cqw" }}>{l.replace(/^https?:\/\//, "").replace(/\/$/, "")}</p>)}
+        </div>
+      </div>
     </div>
   );
 }

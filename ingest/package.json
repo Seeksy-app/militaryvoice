@@ -5,6 +5,7 @@
   "description": "The agent that runs beside MediaMTX on the MilitaryVoices ingest box",
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1136.0",
-    "@aws-sdk/lib-storage": "^3.1136.0"
+    "@aws-sdk/lib-storage": "^3.1136.0",
+    "@livekit/rtc-node": "0.13.35"
   }
 }

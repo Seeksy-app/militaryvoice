@@ -39,3 +39,13 @@ The site side is `server/ingestEngine.ts` (routes) and `server/streamIn.ts` (eng
 - Security: SSH keys only, ufw open on 22/80/443/1935, fail2ban, automatic security updates, MediaMTX API on localhost.
   A key is 144 random bits; the agent refuses every read; revoking a key (new key or off) kicks its stream within 30 seconds.
 - At 2 am: systemd restarts both services if they die; the System health check pages Slack if the box is silent.
+
+## The studio player (Studio v3)
+`player.mjs` runs as its own service, `mv-player`, so a fault there never touches Stream in. It plays the studio's
+sounds and music into each live creator studio, where everyone hears them: the people in the studio, the recording and
+the stream. Every 10 s it asks the site which studios have a real person in them (`GET /api/ingest/players`, the same
+INGEST_TOKEN). It joins each as `player-<id>` with one mono audio track and leaves 20 s after the last person goes, so
+it costs one LiveKit participant only while people are in the studio. Music dips about 12 dB under voices.
+The site answers an empty list until `STUDIO_V3=1`, so the service idles until then.
+- Test without a room: `node /opt/mvingest/player.mjs --selftest` (checks the mix and the ducking).
+- Logs: `journalctl -u mv-player -f`. Restart: `systemctl restart mv-player`.

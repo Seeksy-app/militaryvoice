@@ -25,8 +25,13 @@ export default function RoomComposite({ k }: { k: string }) {
   const onState = useCallback(({ connected, failed }: { connected: boolean; failed: boolean }) => {
     if (started.current || !(connected || failed)) return;
     started.current = true;
-    console.log("START_RECORDING");
-    if (failed) console.log("END_RECORDING");
+    if (failed) {
+      console.log("START_RECORDING");
+      console.log("END_RECORDING");
+      return;
+    }
+    // The name tags' font must be in before the first frame is filmed (never more than 3 s).
+    void Promise.race([document.fonts?.ready ?? Promise.resolve(), new Promise((r) => setTimeout(r, 3000))]).then(() => console.log("START_RECORDING"));
   }, []);
 
   return (

@@ -47,6 +47,7 @@ echo "MediaMTX $VER installed"
 
 echo "== Agent and config"
 install -m 644 "$SRC/agent.mjs" "$APP/agent.mjs"
+install -m 644 "$SRC/player.mjs" "$APP/player.mjs"
 install -m 644 "$SRC/package.json" "$APP/package.json"
 install -m 644 "$SRC/mediamtx.yml" /etc/mvingest/mediamtx.yml
 ( cd "$APP" && npm install --omit=dev --no-audit --no-fund )
@@ -99,8 +100,22 @@ RestartSec=3
 [Install]
 WantedBy=multi-user.target
 UNIT
+cat > /etc/systemd/system/mv-player.service <<'UNIT'
+[Unit]
+Description=MilitaryVoices studio player (sounds and music, Studio v3)
+After=network-online.target
+Wants=network-online.target
+[Service]
+User=mvingest
+EnvironmentFile=/etc/mvingest/agent.env
+ExecStart=/usr/bin/node /opt/mvingest/player.mjs
+Restart=always
+RestartSec=5
+[Install]
+WantedBy=multi-user.target
+UNIT
 systemctl daemon-reload
-systemctl enable mediamtx mv-ingest-agent >/dev/null
+systemctl enable mediamtx mv-ingest-agent mv-player >/dev/null
 
 echo "== Firewall, fail2ban, automatic security updates"
 ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 1935/tcp
@@ -109,7 +124,7 @@ systemctl enable --now fail2ban
 dpkg-reconfigure -f noninteractive unattended-upgrades || true
 
 if grep -Eq '^INGEST_TOKEN=.+' /etc/mvingest/agent.env; then
-  systemctl restart mv-ingest-agent mediamtx
+  systemctl restart mv-ingest-agent mediamtx mv-player
   echo "Started. Check: systemctl status mediamtx mv-ingest-agent"
 else
   echo

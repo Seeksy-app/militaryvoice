@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties } from "react";
+import { createContext, useContext, useEffect, useRef, useState, type CSSProperties } from "react";
 import QRCode from "qrcode";
 import type { StageThanks } from "@shared/stageMeta";
 import {
@@ -292,9 +292,43 @@ function broadcastLeveler(): { ctx: AudioContext; input: AudioNode } | null {
   return leveler;
 }
 
+/**
+ * Studio v3 name tags: the creator's chosen style. Only the creator's studio provides it; without
+ * a provider (the Radio, the event studio) names draw exactly as they always have.
+ */
+export type NameTagStyle = { style?: "bar" | "pill" | "block" | "plain"; show?: boolean; size?: "s" | "m" | "l"; font?: string; color?: string };
+export const NameTagContext = createContext<NameTagStyle | null>(null);
+
+function StyledNameTag({ tile, tag }: { tile: StageTile; tag: NameTagStyle }) {
+  const color = /^#[0-9a-f]{6}$/i.test(tag.color ?? "") ? (tag.color as string) : "#F0A71F";
+  const scale = tag.size === "s" ? 0.85 : tag.size === "l" ? 1.25 : 1;
+  const font = tag.font ? { fontFamily: `'${tag.font}', 'Inter', sans-serif` } : HEADLINE_FONT;
+  const title = tile.displayTitle ? <p className="truncate whitespace-nowrap text-[0.72em] leading-tight opacity-90" style={font}>{tile.displayTitle}</p> : null;
+  const name = <p className="truncate whitespace-nowrap font-bold leading-tight" style={font}>{tile.name}</p>;
+  const body =
+    tag.style === "pill" ? (
+      <div className="rounded-full px-[0.9em] py-[0.3em] text-[#0a1633] shadow-lg" style={{ background: color }}>{name}</div>
+    ) : tag.style === "block" ? (
+      <div className="bg-[#0a1633] px-[0.7em] py-[0.35em] uppercase tracking-wider text-white shadow-lg">{name}{title && <div style={{ color }}>{title}</div>}</div>
+    ) : tag.style === "plain" ? (
+      <div className="text-white [text-shadow:0_1px_4px_rgba(0,0,0,0.85)]">{name}{title}</div>
+    ) : (
+      <div className="flex items-stretch overflow-hidden rounded-md shadow-lg">
+        <div className="w-[0.22em] shrink-0" style={{ background: color }} />
+        <div className="min-w-0 bg-white px-[0.6em] py-[0.3em] text-[#0a1633]">{name}{title && <div className="text-[#475467]">{title}</div>}</div>
+      </div>
+    );
+  return (
+    <div className="absolute bottom-0 left-0 max-w-[85%]" style={{ padding: "0 0 clamp(4px, 2.6cqh, 16px) clamp(4px, 1.8cqw, 16px)", fontSize: `calc(clamp(10px, 3.6cqh, 18px) * ${scale})` }} data-testid="stage-name-tag">
+      {body}
+    </div>
+  );
+}
+
 function Tile({ tile, muted, namePos = "bottom", fit, contain = false, flat = false, cover = false, bare = false }: { tile: StageTile; muted: boolean; namePos?: "bottom" | "top" | "none"; fit?: string; contain?: boolean; flat?: boolean; cover?: boolean; bare?: boolean }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const nameTag = useContext(NameTagContext);
 
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [portrait, setPortrait] = useState(false);
@@ -432,6 +466,7 @@ function Tile({ tile, muted, namePos = "bottom", fit, contain = false, flat = fa
       {/* The one name on screen: each person's own, bottom left of their
           frame, as they typed it in the green room, with their title under
           it. Sized to the frame, so it reads the same big or small. */}
+      {nameTag ? (nameTag.show !== false && namePos !== "none" && <StyledNameTag tile={tile} tag={nameTag} />) : (
       <div
         className={`absolute bottom-0 left-0 max-w-[85%] ${namePos === "none" ? "hidden" : ""}`}
         style={{ padding: "0 0 clamp(4px, 2.6cqh, 16px) clamp(4px, 1.8cqw, 16px)", fontSize: "clamp(10px, 3.6cqh, 18px)" }}
@@ -450,9 +485,16 @@ function Tile({ tile, muted, namePos = "bottom", fit, contain = false, flat = fa
           </div>
         </div>
       </div>
+      )}
     </div>
     </div>
   );
+}
+
+/** People who are heard but not drawn (a full-frame card or clip, or more people than the scene shows). */
+export function HiddenVoices({ tiles, muted }: { tiles: StageTile[]; muted: boolean }) {
+  if (!tiles.length) return null;
+  return <div className="hidden" aria-hidden="true">{tiles.map((t) => <Tile key={t.identity} tile={t} muted={muted} namePos="none" />)}</div>;
 }
 
 /**

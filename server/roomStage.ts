@@ -9,15 +9,18 @@
 //     GET /api/room/:studioId/look?k=<key>. We keep no copy of it.
 import type { Express, RequestHandler } from "express";
 import crypto from "node:crypto";
-import { AccessToken } from "livekit-server-sdk";
+import { AccessToken, TrackSource } from "livekit-server-sdk";
+import { bearer } from "./ingestEngine.js";
 import { eq } from "drizzle-orm";
 import { db, schemaIsReady } from "./storage.js";
 import { getSessionEmail } from "./session.js";
 import { isLiveKitConfigured, publicLiveKitUrl, rooms } from "./livekit.js";
 import { personalStudios, type PersonalStudioRow } from "../shared/schema.js";
-import type { RoomLook, RoomLive } from "../shared/roomLook.js";
+import { clipOf, ROOM_CARD_SLOTS, type RoomCardSlot, type RoomLook, type RoomLive } from "../shared/roomLook.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
+/** Studio v3 (scene types, ready-made cards, sounds and music through the player bot). Off until all three teams are in. */
+export const STUDIO_V3 = process.env.STUDIO_V3 === "1";
 
 /** Podcasting's roomKit plugs in here (see myStudio.ts): the key that lets a page read a room's look without a login. */
 let kit: { roomLookKey: (studioId: number) => string } | null = null;
@@ -88,7 +91,36 @@ export async function roomTemplateUrl(studioId: number): Promise<string | undefi
   return ok ? url : undefined;
 }
 
+/** A real person (the owner or a guest), not the recorder, a stage view or the player bot. */
+const isPerson = (identity: string) => /^(owner|guest)-/.test(identity);
+
 export function registerRoomStage(app: Express, requireHostSession: RequestHandler) {
+  /**
+   * The player bot on the stream box asks every few seconds which studios have someone in them,
+   * and gets a token to join each one. Only occupied studios, so it is in a room (and costs) only
+   * while people are. Bearer INGEST_TOKEN, the box's one secret.
+   */
+  app.get("/api/ingest/players", bearer, async (_req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    if (!STUDIO_V3 || !isLiveKitConfigured()) return res.json({ rooms: [] });
+    try {
+      const all = (await rooms().listRooms()).filter((r) => /^my-\d+$/.test(r.name) && r.numParticipants > 0);
+      const out: { studioId: number; room: string; url: string; token: string; lookKey: string }[] = [];
+      for (const r of all) {
+        const people = await rooms().listParticipants(r.name);
+        if (!people.some((p) => isPerson(p.identity))) continue;
+        const studioId = Number(r.name.slice(3));
+        const at = new AccessToken(process.env.LIVEKIT_API_KEY ?? "", process.env.LIVEKIT_API_SECRET ?? "", { identity: `player-${studioId}`, name: "Studio sound", ttl: "2h" });
+        at.addGrant({ room: r.name, roomJoin: true, canPublish: true, canPublishSources: [TrackSource.MICROPHONE], canPublishData: false, canSubscribe: true });
+        at.attributes = { role: "player", stage: "on" };
+        out.push({ studioId, room: r.name, url: publicLiveKitUrl(), token: await at.toJwt(), lookKey: kit?.roomLookKey(studioId) ?? "" });
+      }
+      res.json({ rooms: out });
+    } catch (err) {
+      res.status(502).json({ message: (err as Error).message.slice(0, 120) });
+    }
+  });
+
   /** Switch scene. Idempotent, so the room UI can also call it after joining to put the live state on the room. */
   app.post("/api/host/my-studio/scene", requireHostSession, async (req, res) => {
     const got = await studioOf(req);
@@ -127,13 +159,51 @@ export function registerRoomStage(app: Express, requireHostSession: RequestHandl
     const action = String(req.body?.action ?? "");
     const room = roomOf(got.row);
     if (action === "stop") return res.json({ ok: await mergeRoomMeta(room, { playing: null }), playing: false });
+    // The ready-made cards are drawn live in the owner's look, so there is no file to check.
+    if (STUDIO_V3 && (ROOM_CARD_SLOTS as string[]).includes(action)) {
+      const minutes = action === "countdown" ? Math.max(1, Math.min(60, Math.round(Number(req.body?.minutes) || 5))) : undefined;
+      const next = action === "countdown" && req.body?.next ? String(req.body.next).slice(0, 40) : undefined;
+      const playing = { slot: action as RoomCardSlot, at: Date.now(), ...(minutes ? { minutes } : {}), ...(next ? { next } : {}) };
+      const ok = await mergeRoomMeta(room, { playing });
+      if (!ok) return res.status(409).json({ message: "Join your studio first, then play it." });
+      return res.json({ ok, playing: true, action, ...(minutes ? { minutes } : {}) });
+    }
     if (action !== "intro" && action !== "outro") return res.status(400).json({ message: "Play the intro or the outro." });
     const look = await readLook(got.row.id);
-    const clip = action === "intro" ? look?.intro : look?.outro;
+    const clip = clipOf(look, action);
     if (!clip?.url) return res.status(400).json({ message: `Upload your ${action} first.` });
     const ok = await mergeRoomMeta(room, { playing: { slot: action, at: Date.now() } });
     if (!ok) return res.status(409).json({ message: "Join your studio first, then play it." });
     res.json({ ok, playing: true, action });
+  });
+
+  /** Play a sound pad once. Everyone in the studio hears it, and so do the recording and the stream (the player bot). */
+  app.post("/api/host/my-studio/sound", requireHostSession, async (req, res) => {
+    if (!STUDIO_V3) return res.status(404).json({ message: "Sounds aren't switched on yet." });
+    const got = await studioOf(req);
+    if (!got) return res.status(404).json({ message: "Open your studio first." });
+    const id = String(req.body?.id ?? "");
+    const look = await readLook(got.row.id);
+    if (!look?.sounds?.some((s) => s.id === id)) return res.status(404).json({ message: "That sound isn't in your studio." });
+    const sound = { id, at: Date.now() };
+    const ok = await mergeRoomMeta(roomOf(got.row), { sound });
+    if (!ok) return res.status(409).json({ message: "Join your studio first." });
+    res.json({ ok, sound });
+  });
+
+  /** Start a music bed (it loops under the voices) or stop it (id null). */
+  app.post("/api/host/my-studio/music", requireHostSession, async (req, res) => {
+    if (!STUDIO_V3) return res.status(404).json({ message: "Music isn't switched on yet." });
+    const got = await studioOf(req);
+    if (!got) return res.status(404).json({ message: "Open your studio first." });
+    const id = req.body?.id == null ? "" : String(req.body.id);
+    if (!id) return res.json({ ok: await mergeRoomMeta(roomOf(got.row), { music: null }), music: null });
+    const look = await readLook(got.row.id);
+    if (!look?.music?.some((m) => m.id === id)) return res.status(404).json({ message: "That track isn't in your studio." });
+    const music = { id, at: Date.now() };
+    const ok = await mergeRoomMeta(roomOf(got.row), { music });
+    if (!ok) return res.status(409).json({ message: "Join your studio first." });
+    res.json({ ok, music });
   });
 
   /**

@@ -41,6 +41,11 @@ const room = (s: PersonalStudioRow) => `my-${s.id}`;
 // button for it (ROOM_BACKSTAGE=1). Until then they go straight on stage (stage = "on"), as
 // before, so nobody is ever left out of a recording by a control that isn't there yet.
 const GUEST_STAGE = process.env.ROOM_BACKSTAGE === "1" ? "off" : "on";
+// The title under a name on stage ("Host", "Army veteran, author"), from the setup page.
+const titleOf = (req: Request): { displayTitle?: string } => {
+  const t = String(req.body?.title ?? "").replace(/\s+/g, " ").trim().slice(0, 40);
+  return t ? { displayTitle: t } : {};
+};
 
 /** Recording and live flags checked against LiveKit, so a stopped egress never shows as running. */
 async function settle(s: PersonalStudioRow): Promise<PersonalStudioRow> {
@@ -119,7 +124,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     const profile = await storage.getProfileByEmail(email).catch(() => undefined);
     const name = String(req.body?.name ?? "").trim().slice(0, 60) || profile?.hostName || email.split("@")[0];
     const identity = `owner-${s.id}-${crypto.randomBytes(3).toString("hex")}`;
-    const token = await studioToken({ room: room(s), identity, name, canPublish: true, admin: true, attributes: { role: "host", stage: "on", who: identity } });
+    const token = await studioToken({ room: room(s), identity, name, canPublish: true, admin: true, attributes: { role: "host", stage: "on", who: identity, ...titleOf(req) } });
     res.json({ url: publicLiveKitUrl(), token, name: s.name });
   });
 
@@ -139,7 +144,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     const name = String(req.body?.name ?? "").trim().slice(0, 60);
     if (!name) return res.status(400).json({ message: "Your name, please." });
     const identity = `guest-${crypto.randomBytes(5).toString("hex")}`;
-    const token = await studioToken({ room: room(s), identity, name, canPublish: true, attributes: { role: "guest", stage: GUEST_STAGE, who: identity } });
+    const token = await studioToken({ room: room(s), identity, name, canPublish: true, attributes: { role: "guest", stage: GUEST_STAGE, who: identity, ...titleOf(req) } });
     res.json({ url: publicLiveKitUrl(), token, name: s.name });
   });
 

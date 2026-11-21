@@ -21,7 +21,7 @@ import { streamKeys, streamSessions, type StreamKeyRow } from "../shared/schema.
 const token = () => (process.env.INGEST_TOKEN ?? "").trim();
 const now = () => new Date().toISOString();
 
-const bearer: RequestHandler = (req: Request, res: Response, next: NextFunction) => {
+export const bearer: RequestHandler = (req: Request, res: Response, next: NextFunction) => {
   const want = token();
   if (!want) return void res.status(503).json({ message: "Ingest isn't switched on." });
   const got = (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "");
