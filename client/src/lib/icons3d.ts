@@ -43,7 +43,7 @@ const FROM_LINE = new Map<AnyIcon, Icon3D>([
   [L.Eye, "eyes"], [L.Crown, "crown"], [L.Gift, "gift"], [L.Trophy, "trophy"], [L.Bell, "bell"], [L.Package, "package"],
   [L.Smartphone, "phone"], [L.Laptop, "laptop"], [L.ClipboardList, "clipboard"], [L.Clipboard, "clipboard"], [L.ClipboardCheck, "clipboard"],
   [L.Star, "star"], [L.PartyPopper, "party"], [L.Palette, "palette"], [L.Notebook, "notebook"], [L.NotebookPen, "memo"], [L.FileEdit, "memo"],
-  [L.Check, "check"], [L.Share2, "megaphone"], [L.Type, "memo"], [L.Captions, "memo"], [L.Presentation, "tv"], [L.Move, "package"],
+  [L.Check, "check"], [L.Youtube, "tv"], [L.Crop, "scissors"], [L.Share2, "megaphone"], [L.Type, "memo"], [L.Captions, "memo"], [L.Presentation, "tv"], [L.Move, "package"],
   [L.LayoutGrid, "picture"], [L.Keyboard, "laptop"], [L.IdCard, "cardindex"], [L.Globe2, "globe"], [L.MessageSquareQuote, "chat"],
   [L.MessageSquareText, "chat"], [L.ListPlus, "clipboard"], [L.AtSign, "mail"],
   [L.Newspaper, "newspaper"], [L.Ticket, "ticket"], [L.MapPin, "pin"], [L.Briefcase, "briefcase"], [L.Hourglass, "hourglass"], [L.Tag, "label"],

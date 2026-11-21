@@ -116,7 +116,7 @@ export default function Events() {
             intent="register"
             trigger={
               <button type="button" className="flex min-h-64 flex-col items-center justify-center rounded-3xl border-2 border-dashed border-[#053877]/30 bg-[#053877]/[0.03] p-8 text-center transition-colors hover:border-[#053877]/60 hover:bg-[#053877]/[0.06] dark:border-white/20 dark:bg-white/[0.03]" data-testid="card-add-event">
-                <IconTile icon={Plus} />
+                <IconTile icon={Plus} art="calendar" />
                 <span className="mt-4 text-xl font-bold tracking-tight text-foreground" style={HEADLINE_FONT}>Add your event</span>
                 <span className="mt-2 max-w-xs text-sm text-muted-foreground">
                   Running a day for your community? Put it on MilitaryVoices, with the studio, the green room and a page like this one.
