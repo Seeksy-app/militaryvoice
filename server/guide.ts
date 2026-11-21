@@ -1,8 +1,9 @@
 // An account's own AI guide (21 Nov 2026; Andrew: "Yes" to Lori, Frank Zaccari's account first).
 //
-// - Built on Ask Alex: the same knowledge (help articles), the team's learned answers, and the same "Hold on,
-//   let me check with the team" path (help desk, 5 minutes, then "Someone will get back to you as soon as
-//   possible" and the form). Money, legal, press and complaints only ever get that last line.
+// - Built on Ask Alex: the same knowledge (help articles) and the team's learned answers. When she doesn't know,
+//   she says "I'm not sure about that one. Leave a note and someone will get back to you as soon as possible."
+//   and the client shows the note form (no help-desk wait, PM 21 Nov). Money, legal, press and complaints get
+//   "Someone will get back to you as soon as possible."
 // - Knows the account: a read-only snapshot of the signed-in person's own account (the Team desk's
 //   account_status), built fresh on every message.
 // - Offers to open a page from a fixed list (shared/guideTargets.ts): "Want me to open that for you?". Nothing
@@ -17,7 +18,9 @@ import express, { type Express, type Request, type RequestHandler } from "expres
 import { storage } from "./storage.js";
 import { getSessionEmail } from "./session.js";
 import { KNOWLEDGE, CHECKING, GET_BACK } from "./help.js";
-import { learnedForAlex, openQuestion, WAIT_MS } from "./helpDesk.js";
+import { learnedForAlex } from "./helpDesk.js";
+
+const NOT_SURE = "I'm not sure about that one. Leave a note and someone will get back to you as soon as possible.";
 import { runTool } from "./teamDesk.js";
 import { GUIDE_TARGETS, guideTarget } from "../shared/guideTargets.js";
 
@@ -135,13 +138,9 @@ export function registerGuide(app: Express, requireHostSession: RequestHandler, 
         log.unshift({ at: new Date().toISOString(), ask: turns[turns.length - 1].content.slice(0, 400), reply: out.text.slice(0, 600), open: out.open ?? "", handoff: out.handoff });
         await storage.setSetting(k, JSON.stringify(log.slice(0, 40)));
       } catch { /* the answer matters more than the log */ }
-      if (out.handoff && !out.sensitive) {
-        if (req.body?.canWait === true) {
-          const q = await openQuestion({ turns, page: String(req.body?.page ?? ""), email });
-          return res.json({ text: CHECKING, waiting: q.token, waitSec: WAIT_MS / 1000 });
-        }
-        return res.json({ text: GET_BACK, handoff: true });
-      }
+      // Don't-know path (PM, 21 Nov): no "let me check with the team" wait for a guide. The server sends the
+      // line itself and the client shows the leave-a-note form under it.
+      if (out.handoff && !out.sensitive) return res.json({ text: NOT_SURE, handoff: true });
       const target = out.open ? guideTarget(out.open) : undefined;
       res.json({ text: out.text, handoff: out.handoff, ...(target ? { offer: { id: target.id, label: target.label } } : {}), ...(out.rename ? { name: out.rename } : {}) });
     } catch (err) {
