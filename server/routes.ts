@@ -192,7 +192,7 @@ import { registerMail } from "./mail.js";
 import { registerAutomations } from "./automations.js";
 import { registerTrash, toTrash } from "./trash.js";
 import { registerMyStudio } from "./myStudio.js";
-import { registerRoomKit, marksFor } from "./roomKit.js";
+import { registerRoomKit, marksFor, withCredits } from "./roomKit.js";
 import { registerCreatorCampaigns } from "./creatorCampaigns.js";
 import { registerContactProfile } from "./contactProfile.js";
 import { registerAskShow, claimTranscript } from "./askShow.js";
@@ -7412,7 +7412,7 @@ export function registerRoutes(app: Express): void {
     const c = parsed.data;
     const row = {
       eventId: rec.eventId, signupId: rec.signupId ?? null, email: rec.email,
-      title: c.title, caption: c.caption, reason: c.reason, startSec: c.startSec, endSec: c.endSec, transcript: c.transcript,
+      title: c.title, caption: await withCredits(c.caption, rec.id), reason: c.reason, startSec: c.startSec, endSec: c.endSec, transcript: c.transcript,
       url: c.url, verticalUrl: c.verticalUrl, squareUrl: c.squareUrl, subtitlesUrl: c.subtitlesUrl,
       sourceAssetId: 0, cutAssetId: 0, subtitle: await showNameFor(rec),
     };
@@ -7442,6 +7442,8 @@ export function registerRoutes(app: Express): void {
       return;
     }
     const show = await showNameFor(rec);
+    // CC BY music played in this recording: its credit goes on every clip's caption (plain text).
+    const credit = await withCredits("", rec.id);
     const rows = parsed.data
       .filter((c) => c.endSec > c.startSec)
       .map((c) => ({
@@ -7449,7 +7451,7 @@ export function registerRoutes(app: Express): void {
         signupId: rec.signupId ?? null,
         email: rec.email,
         title: c.title,
-        caption: c.caption,
+        caption: credit && !c.caption.includes(credit) ? `${c.caption.trim()}${c.caption.trim() ? "\n\n" : ""}${credit}` : c.caption,
         reason: c.reason,
         startSec: c.startSec,
         endSec: c.endSec,

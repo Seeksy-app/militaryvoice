@@ -5,6 +5,7 @@ import multer from "multer";
 import sharp from "sharp";
 import { and, desc, eq, gte, sql } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
+import { withCredits } from "./roomKit.js";
 import { fillFooter } from "../shared/footer.js";
 import { hostedSpots, type HostedSpotRow } from "../shared/schema.js";
 import { requireHostSession, getSessionEmail } from "./session.js";
@@ -506,6 +507,7 @@ export async function startEpisodeFromRecording(email: string, rec: { id: number
   const eps = await episodesOf(show.id);
   await db.insert(hostedEpisodes).values({
     showId: show.id, title: (rec.title || "New episode").slice(0, 300), recordingId: rec.id, durationSec: Math.round(rec.durationSec || 0),
+    description: await withCredits("", rec.id),
     episodeNumber: show.showType === "serial" ? null : eps.filter((x) => x.episodeType === "full").length + 1,
     guid: crypto.randomUUID(), status: "draft", stage: "post", createdAt: now(), audioJob: "queued", audioJobAt: now(), bookends: "off",
   });
@@ -1103,7 +1105,7 @@ Return JSON only: {"titles":["","",""],"description":""}`,
     if (!audioKey && !recordingId && b.later !== true) return res.status(400).json({ message: "Add the episode's audio." });
     const eps = await episodesOf(s.id);
     const [e] = await db.insert(hostedEpisodes).values({
-      showId: s.id, title: title || "New episode", description: String(b.description ?? "").slice(0, 20000),
+      showId: s.id, title: title || "New episode", description: (await withCredits(String(b.description ?? ""), recordingId)).slice(0, 20000),
       audioKey, mime, sizeBytes: num(b.sizeBytes) ?? 0, durationSec, recordingId,
       episodeNumber: num(b.episodeNumber) ?? (s.showType === "serial" ? null : eps.filter((x) => x.episodeType === "full").length + 1),
       season: num(b.season), guid: crypto.randomUUID(), status: "draft", createdAt: now(), spotsOff: true,

@@ -14,7 +14,7 @@
 import type { Express, Request, RequestHandler } from "express";
 import crypto from "node:crypto";
 import { and, asc, eq } from "drizzle-orm";
-import { db, schemaIsReady } from "./storage.js";
+import { db, storage, schemaIsReady } from "./storage.js";
 import { getSessionEmail } from "./session.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
 import { libraryAsset, libraryReady, registerStudioLibrary, type LibraryItem, type LibrarySource } from "./studioLibrary.js";
@@ -317,6 +317,34 @@ export function clean(raw: any, assets: Map<string, Asset>): Look | string {
 async function assetsOf(studioId: number): Promise<Map<string, Asset>> {
   const rows = await db.select().from(roomAssets).where(eq(roomAssets.studioId, studioId)).orderBy(asc(roomAssets.createdAt));
   return new Map(rows.map((a) => [a.id, toAsset(a)]));
+}
+
+/**
+ * Credits a recording owes (CC BY music, 21 Nov: the credit goes on the composite while it plays, Engineering's,
+ * AND into that recording's episode and clip descriptions, ours). Engineering calls noteMusicPlayed() when a
+ * music item starts. If the studio is recording and the item carries a credit, it's kept against that recording
+ * (setting rec-credits:<recordingId>). creditsFor() gives the plain-text lines for the descriptions.
+ */
+export async function noteMusicPlayed(studioId: number, itemId: string): Promise<void> {
+  const credit = libraryReady().find((i) => `lib-${i.slug}` === itemId)?.source.credit?.trim();
+  if (!credit) return;
+  const [s] = await db.select().from(personalStudios).where(eq(personalStudios.id, studioId)).limit(1);
+  if (!s?.recordingEgressId) return;
+  const [rec] = await db.select({ id: recordings.id }).from(recordings).where(eq(recordings.egressId, s.recordingEgressId)).limit(1);
+  if (!rec) return;
+  const k = `rec-credits:${rec.id}`;
+  let list: string[] = [];
+  try { list = JSON.parse((await storage.getSetting(k)) ?? "[]"); } catch { list = []; }
+  if (!list.includes(credit)) await storage.setSetting(k, JSON.stringify([...list, credit].slice(0, 10)));
+}
+/** Plain text: the description with the recording's credits on their own lines at the end (once each). */
+export async function withCredits(text: string, recordingId: number | null | undefined): Promise<string> {
+  if (!recordingId) return text;
+  const missing = (await creditsFor(recordingId)).filter((c) => !text.includes(c));
+  return missing.length ? `${text.trim()}${text.trim() ? "\n\n" : ""}${missing.join("\n")}` : text;
+}
+export async function creditsFor(recordingId: number): Promise<string[]> {
+  try { const v = JSON.parse((await storage.getSetting(`rec-credits:${recordingId}`)) ?? "[]"); return Array.isArray(v) ? v.map(String) : []; } catch { return []; }
 }
 
 /** Engineering's hook (server/roomStage.ts): told after every save, e.g. to refresh a room that's live. */
