@@ -61,7 +61,12 @@ app.use((req, res, next) => {
     if (path.startsWith("/api")) {
       let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
-        logLine += ` :: ${JSON.stringify(capturedJsonResponse)}`;
+        const body = JSON.stringify(capturedJsonResponse);
+        // A response that hands out a token, key, code, secret or invite link is logged as its
+        // status and size only (the status is already on this line), so no credential sits in the logs.
+        const secret = /token|key|secret|password|passcode|code|link|invite|rtmp/i;
+        const hidden = secret.test(path) || /"[^"]*(token|key|secret|password|passcode|code|link|invite|rtmp)[^"]*"\s*:/i.test(body);
+        logLine += hidden ? ` :: [response hidden, ${body.length} bytes]` : ` :: ${body}`;
       }
 
       log(logLine);
