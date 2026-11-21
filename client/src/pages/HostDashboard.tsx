@@ -83,7 +83,8 @@ import { BrandRequests } from "@/components/requests/BrandRequests";
 import { Opportunities } from "@/components/requests/Opportunities";
 import { buildSteps, goToStep } from "@/components/NextSteps";
 import { GuideLayer, HomeTour, homeTour, showGuide } from "@/components/Guide";
-import { useGuideName } from "@/components/LoriGuide";
+import { useGuide, useGuideName } from "@/components/LoriGuide";
+import { GuideStep, guideOffered } from "@/components/GuidePicker";
 import { PromotionScreen } from "@/components/PromotionScreen";
 import { SocialScreen } from "@/components/SocialScreen";
 import { GreenRoomScreen } from "@/components/GreenRoomScreen";
@@ -745,6 +746,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   }, [search]);
 
   const guideName = useGuideName();
+  const guide = useGuide();
   const { data, isLoading, isError } = useQuery<HostDashboardData>({
     queryKey: ["/api/host/dashboard"],
     retry: false,
@@ -1136,6 +1138,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   const onTeamForGreenRoom = Boolean(crew?.isCrew || cohost?.isCohost);
   const crewMode = !!data && !loadingProfile && !hasProfile && crewLive;
   const inSetup = !!data && !loadingProfile && !hasProfile && !crewMode;
+  const guideStep = guideOffered(guide) && hasProfile && !inSetup && !crewMode && screen === "dashboard";
   // Who's signed in, for the account menu (the nav's foot on a computer, the header on a phone).
   const account = data ? {
     name: profile?.podcastName || profile?.hostName || data.email,
@@ -1334,7 +1337,10 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
             <Skeleton className="h-24 w-full rounded-xl" />
             <Skeleton className="h-48 w-full rounded-xl" />
           </div>
-        ) : !data ? null : (cohostOnly || screen === "cohost") && cohost?.isCohost ? (
+        ) : !data ? null : guideStep ? (
+          // Once, after sign-up: pick an AI guide (or skip). Only while the server offers it.
+          <section className="mt-6"><GuideStep /></section>
+        ) : (cohostOnly || screen === "cohost") && cohost?.isCohost ? (
           <section className="mt-6">
             <CohostDashboard info={cohost} onBack={cohostOnly ? undefined : () => goTo("dashboard")} />
           </section>

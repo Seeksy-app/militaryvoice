@@ -6,6 +6,8 @@ import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 import { GuideLayer, showGuide, hideGuide } from "@/components/Guide";
 import type { GuideTarget } from "@shared/guideTargets";
+import { DEFAULT_GUIDE, GUIDES, guideById, type GuideId } from "@shared/guides";
+import { GuidePicker, guidePickable, useSaveGuide } from "@/components/GuidePicker";
 
 /**
  * An account's own AI guide (Lori for Frank, mockup approved 21 Nov 2026). Only when GET /api/guide/me says
@@ -13,7 +15,10 @@ import type { GuideTarget } from "@shared/guideTargets";
  * open that for you?"). Only after "Yes, open it" does she go there and point at each control (showGuide with
  * Back / Stop / Next). He makes every click. Voice is off until he taps the mic. She's AI, never a person.
  */
-export type GuideMe = { enabled: false } | { enabled: true; name: string; avatarUrl: string; voice: boolean; targets: GuideTarget[] };
+export type GuideMe =
+  /** offer: show the one-time "Pick your guide" step; canPick: Settings → Your guide can switch one on. */
+  | { enabled: false; offer?: boolean; canPick?: boolean }
+  | { enabled: true; guideId?: string | null; name: string; avatarUrl: string; voice: boolean; targets: GuideTarget[] };
 const KEY = ["/api/guide/me"];
 const SPEAK = "mv-guide-speak";
 /** When she doesn't know (Alex's rule): never promise a person, never say someone is looking. */
@@ -31,6 +36,14 @@ export function useGuideName(): string {
   const g = useGuide();
   return g?.enabled ? g.name : "Alex";
 }
+
+/** The guide's face and name for the dashboard's Ask box; null while Alex answers. */
+export function useGuideFace(): { name: string; avatarUrl: string } | null {
+  const g = useGuide();
+  return g?.enabled ? { name: g.name, avatarUrl: g.avatarUrl } : null;
+}
+
+export { Face as GuideFace };
 
 type Offer = { id: string; label: string };
 type Msg = { role: "user" | "assistant"; content: string; offer?: Offer; answered?: boolean };
@@ -226,7 +239,8 @@ export function LoriGuide({ g, compact = false }: { g: Extract<GuideMe, { enable
       ) : (
         <button type="button" onClick={() => setOpen(true)} className={`fixed right-4 z-50 inline-flex items-center gap-2 rounded-full bg-[#053877] text-sm font-semibold text-white shadow-lg transition-transform hover:scale-[1.03] lg:right-5 ${compact ? "lg:p-1.5" : "lg:px-4 lg:py-3"} ${inApp ? "bottom-[calc(4.75rem+env(safe-area-inset-bottom))] p-1.5 lg:bottom-5" : compact ? "bottom-5 p-1.5" : "bottom-5 px-4 py-3"}`} aria-label={`Ask ${g.name}`} data-testid="lori-button">
           <Face g={g} size={`h-8 w-8 ${inApp ? (compact ? "" : "lg:-ml-1.5") : compact ? "" : "-ml-1.5"}`} />
-          <span className={`whitespace-nowrap ${compact ? "sr-only" : inApp ? "hidden lg:inline" : ""}`}>Ask {g.name}</span>
+          {/* Always labelled AI guide, never a person (mockup 21 Nov). */}
+          <span className={`whitespace-nowrap text-left leading-tight ${compact ? "sr-only" : inApp ? "hidden lg:block" : "block"}`}>Ask {g.name}<span className="block text-[10px] font-semibold uppercase tracking-wide text-white/75">AI guide</span></span>
         </button>
       ))}
 
@@ -281,7 +295,6 @@ export function LoriGuide({ g, compact = false }: { g: Extract<GuideMe, { enable
           </form>
         </div>
       )}
-      <GuideSettings g={g} />
       {/* The dashboard has its own pointer layer; anywhere else (the studio) she brings one. */}
       {!inApp && <GuideLayer />}
     </>
@@ -331,21 +344,33 @@ const SETTINGS = "mv:guide-settings";
 /** In the account menu, only when the account has a guide. */
 export function GuideMenuItem() {
   const g = useGuide();
-  if (!g?.enabled) return null;
+  if (!guidePickable(g)) return null;
   return <DropdownMenuItem onSelect={() => window.dispatchEvent(new Event(SETTINGS))} className="gap-2" data-testid="account-guide"><Sparkles className="h-4 w-4" /> Your guide</DropdownMenuItem>;
 }
 
-function GuideSettings({ g }: { g: Extract<GuideMe, { enabled: true }> }) {
+/**
+ * Settings → Your guide: pick a face and voice, switch it on or off, rename it, and speak its answers
+ * (mockup approved 21 Nov 2026). Opens from the account menu; rendered once, by HelpChat.
+ */
+export function GuideSettingsRoot() {
+  const g = useGuide();
   const qc = useQueryClient();
   const [open, setOpen] = useState(false);
-  const [name, setName] = useState(g.name);
+  const [name, setName] = useState("");
   const [speak, setSpeak] = useState(speakOn);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState("");
-  const audio = useRef<HTMLAudioElement | null>(null);
-  useEffect(() => { const on = () => { setName(g.name); setMsg(""); setOpen(true); }; window.addEventListener(SETTINGS, on); return () => window.removeEventListener(SETTINGS, on); }, [g.name]);
-  if (!open) return null;
-  const save = async () => {
+  const { save, busy: saving, err } = useSaveGuide();
+  const current: GuideId = g?.enabled ? ((guideById(g.guideId ?? "")?.id) ?? GUIDES.find((x) => x.name === g.name)?.id ?? DEFAULT_GUIDE) : DEFAULT_GUIDE;
+  const [pick, setPick] = useState<GuideId>(current);
+  useEffect(() => {
+    const on = () => { setName(g?.enabled ? g.name : ""); setPick(current); setMsg(""); setOpen(true); };
+    window.addEventListener(SETTINGS, on);
+    return () => window.removeEventListener(SETTINGS, on);
+  }, [g, current]);
+  if (!open || !guidePickable(g)) return null;
+  const on = !!g?.enabled;
+  const rename = async () => {
     setBusy(true); setMsg("");
     try {
       const r = await fetch("/api/guide/me", { method: "PUT", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ name: name.trim() }) });
@@ -355,34 +380,45 @@ function GuideSettings({ g }: { g: Extract<GuideMe, { enabled: true }> }) {
       setMsg("Saved.");
     } catch (e) { setMsg((e as Error).message); } finally { setBusy(false); }
   };
-  const toggle = () => { const v = !speak; setSpeak(v); try { localStorage.setItem(SPEAK, v ? "1" : "0"); } catch { /* private window */ } };
+  // A pick saves at once (and switches it on); its name is the new guide's.
+  const choose = async (id: GuideId) => { setPick(id); if (await save({ guideId: id })) { setName(guideById(id)!.name); setMsg(""); } };
+  const toggleSpeak = () => { const v = !speak; setSpeak(v); try { localStorage.setItem(SPEAK, v ? "1" : "0"); } catch { /* private window */ } };
+  const who = on && g?.enabled ? g.name : guideById(pick)!.name;
+  // The faces show once the server knows picks (it sends guideId); before that, Settings is name and voice as it was.
+  const picking = g?.enabled ? g.guideId !== undefined : !!g?.canPick;
   return (
-    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[rgba(16,24,40,0.5)] p-4" onClick={() => setOpen(false)}>
-      <div role="dialog" aria-modal="true" aria-label="Your guide" className="w-full max-w-[440px] rounded-2xl bg-white p-6 text-[#101828] shadow-2xl" onClick={(e) => e.stopPropagation()} data-testid="guide-settings">
-        <div className="flex items-start justify-between">
-          <div className="flex items-center gap-3"><Face g={g} size="h-12 w-12" /><div><p className="text-lg font-bold">Your guide</p><p className="text-[13px] text-[#667085]">An AI guide for your account</p></div></div>
-          <button type="button" onClick={() => setOpen(false)} aria-label="Close" className="rounded-full p-1 text-[#667085] hover:bg-[#f2f4f7]"><X className="h-4 w-4" /></button>
+    <div className="fixed inset-0 z-[70] flex items-end justify-center bg-[rgba(16,24,40,0.5)] p-0 sm:items-center sm:p-4" onClick={() => setOpen(false)}>
+      <div role="dialog" aria-modal="true" aria-label="Your guide" className="max-h-[92dvh] w-full max-w-[640px] overflow-y-auto rounded-t-2xl bg-white p-5 text-[#101828] shadow-2xl sm:rounded-2xl sm:p-6" onClick={(e) => e.stopPropagation()} data-testid="guide-settings">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0">
+            <p className="text-lg font-bold">Your guide <span className="ml-1 rounded-full bg-[#eef2fa] px-1.5 py-0.5 align-[2px] text-[10px] font-bold uppercase tracking-wide text-[#053877]">AI guide</span></p>
+            <p className="mt-0.5 text-[13px] text-[#667085]">Shows you around and points to the right place. It never pays, posts, sends or deletes for you.</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            {picking && <button type="button" role="switch" aria-checked={on} aria-label="Guide on" disabled={saving} onClick={() => void save(on ? { enabled: false } : { guideId: pick })} className={`relative h-6 w-11 rounded-full transition-colors ${on ? "bg-[#053877]" : "bg-[#d0d5dd]"}`} data-testid="guide-switch"><span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-[left] ${on ? "left-[22px]" : "left-0.5"}`} /></button>}
+            <button type="button" onClick={() => setOpen(false)} aria-label="Close" className="rounded-full p-1 text-[#667085] hover:bg-[#f2f4f7]"><X className="h-4 w-4" /></button>
+          </div>
         </div>
-        <label className="mt-5 block text-sm font-semibold" htmlFor="guide-name">Her name</label>
-        <div className="mt-1.5 flex gap-2">
-          <input id="guide-name" value={name} onChange={(e) => setName(e.target.value.slice(0, 24))} className="h-11 min-w-0 flex-1 rounded-xl border border-[#d0d5dd] px-3.5 text-[15px] outline-none focus:border-[#053877]" data-testid="guide-name" />
-          <button type="button" onClick={() => void save()} disabled={busy || !name.trim() || name.trim() === g.name} className="h-11 rounded-xl bg-[#053877] px-4 text-sm font-bold text-white disabled:opacity-40">{busy ? "Saving…" : "Save"}</button>
-        </div>
-        {msg && <p className="mt-1.5 text-[13px] text-[#475467]">{msg}</p>}
-        {g.voice && (
+        {picking && <><div className={`mt-4 ${on ? "" : "opacity-60"}`}><GuidePicker small value={pick} onChange={(id) => void choose(id)} /></div>
+        <p className="mt-2 text-[13px] text-[#667085]">{saving ? "Saving…" : err ? <span className="text-[#b42318]">{err}</span> : on ? `Saved as soon as you pick.` : "Pick one to switch your guide on. While it's off, the site's own Ask Alex answers."}</p></>}
+        {on && g?.enabled && (
           <>
-            <div className="mt-5 flex items-center justify-between">
-              <p className="text-sm font-semibold">Her voice: Eryn</p>
-              <button type="button" onClick={() => void say(`Hi, I'm ${g.name}. Ask me how to do anything here and I'll show you where to click.`, audio)} className="inline-flex items-center gap-1.5 text-sm font-semibold text-[#053877] hover:underline"><Volume2 className="h-4 w-4" /> Hear a sample</button>
+            <label className="mt-5 block text-sm font-semibold" htmlFor="guide-name">Name</label>
+            <div className="mt-1.5 flex gap-2">
+              <input id="guide-name" value={name} onChange={(e) => setName(e.target.value.slice(0, 24))} className="h-11 min-w-0 flex-1 rounded-xl border border-[#d0d5dd] px-3.5 text-[15px] outline-none focus:border-[#053877]" data-testid="guide-name" />
+              <button type="button" onClick={() => void rename()} disabled={busy || !name.trim() || name.trim() === g.name} className="h-11 rounded-xl bg-[#053877] px-4 text-sm font-bold text-white disabled:opacity-40">{busy ? "Saving…" : "Save"}</button>
             </div>
-            <div className="mt-4 flex items-start justify-between gap-4">
-              <div><p className="text-sm font-semibold">Speak her answers</p><p className="text-[13px] text-[#667085]">Only after you tap the mic. Her words are always on screen too.</p></div>
-              <button type="button" role="switch" aria-checked={speak} onClick={toggle} className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full ${speak ? "bg-[#053877]" : "bg-[#d0d5dd]"}`}><span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-[left] ${speak ? "left-[22px]" : "left-0.5"}`} /></button>
-            </div>
+            {msg && <p className="mt-1.5 text-[13px] text-[#475467]">{msg}</p>}
+            {g.voice && (
+              <div className="mt-5 flex items-start justify-between gap-4">
+                <div><p className="text-sm font-semibold">Speak answers out loud</p><p className="text-[13px] text-[#667085]">Only after you tap the mic. The words are always on screen too.</p></div>
+                <button type="button" role="switch" aria-checked={speak} onClick={toggleSpeak} className={`relative mt-0.5 h-6 w-11 shrink-0 rounded-full ${speak ? "bg-[#053877]" : "bg-[#d0d5dd]"}`}><span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-[left] ${speak ? "left-[22px]" : "left-0.5"}`} /></button>
+              </div>
+            )}
           </>
         )}
         <div className="mt-5 rounded-xl bg-[#f9fafb] p-3.5 text-[13px] leading-relaxed text-[#475467]">
-          {g.name} shows you where to click. She can't pay, send, post, delete or change settings, and you make every click.
+          {who} is an AI guide. It shows you where to click; it can't pay, send, post, delete or change settings, and you make every click.
         </div>
       </div>
     </div>

@@ -6,7 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { apiRequest } from "@/lib/queryClient";
 import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
-import { LoriGuide, useGuide } from "@/components/LoriGuide";
+import { GuideSettingsRoot, LoriGuide, useGuide } from "@/components/LoriGuide";
 import { X, Send, User, Check, Loader2 } from "lucide-react";
 
 // The help bubble. Ask a question, get an answer from what we know about the
@@ -70,6 +70,11 @@ const OPENER: Msg = {
 
 /** An account with its own AI guide (GET /api/guide/me enabled) gets her in Alex's place; everyone else keeps Alex. */
 export function HelpChat() {
+  // Settings → Your guide lives here, once, wherever the account menu opens it.
+  return <><HelpChat_ /><GuideSettingsRoot /></>;
+}
+
+function HelpChat_() {
   const [location] = useLocation();
   const g = useGuide();
   if (g?.enabled) {
