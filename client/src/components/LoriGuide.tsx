@@ -30,6 +30,9 @@ type Offer = { id: string; label: string };
 type Msg = { role: "user" | "assistant"; content: string; offer?: Offer; answered?: boolean };
 type Reply = { text: string; handoff?: boolean; offer?: Offer; name?: string; waiting?: string; waitSec?: number };
 
+/** With an offer the card asks "Want me to open that for you?", so her own closing "Want me to open…?" goes. */
+const withoutAsk = (t: string) => t.replace(/\s*(?:Want|Would you like|Shall|Should) (?:me|I) (?:to )?(?:open|take|show)[^.?!]*\?\s*$/i, "").trim() || t;
+
 const speakOn = () => { try { return localStorage.getItem(SPEAK) !== "0"; } catch { return true; } };
 
 /** Her face: the avatar when there is one, else her initial in the same round slot (three sizes). */
@@ -65,6 +68,10 @@ export function LoriGuide({ g, compact = false }: { g: Extract<GuideMe, { enable
   const msgsRef = useRef(msgs);
   msgsRef.current = msgs;
   const [draft, setDraft] = useState("");
+  const [heard, setHeard] = useState(false); // the box holds what she heard: check it, then Send
+  const box = useRef<HTMLTextAreaElement>(null);
+  // The box grows with what's in it, up to four lines.
+  useEffect(() => { const el = box.current; if (el) { el.style.height = "auto"; el.style.height = `${Math.min(el.scrollHeight, 112)}px`; } }, [draft, open]);
   const [busy, setBusy] = useState(false);
   const [waiting, setWaiting] = useState<{ token: string; until: number } | null>(null);
   const [form, setForm] = useState<"" | "open" | "sent">("");
@@ -92,7 +99,7 @@ export function LoriGuide({ g, compact = false }: { g: Extract<GuideMe, { enable
     const text = (said ?? draft).trim();
     if (!text || busy) return;
     const history = [...msgsRef.current, { role: "user" as const, content: text }];
-    setMsgs(history); setDraft(""); setBusy(true);
+    setMsgs(history); setDraft(""); setHeard(false); setBusy(true);
     try {
       const r = await fetch("/api/guide/chat", {
         method: "POST", credentials: "include", headers: { "content-type": "application/json" },
@@ -108,7 +115,7 @@ export function LoriGuide({ g, compact = false }: { g: Extract<GuideMe, { enable
         setForm("open");
         // If the question did go to the team and an answer comes back while the panel is open, it shows here.
         if (j.waiting) setWaiting({ token: j.waiting, until: Date.now() + ((j.waitSec ?? 300) + 30) * 1000 });
-      } else add({ role: "assistant", content: j.text, offer: j.offer });
+      } else add({ role: "assistant", content: j.offer ? withoutAsk(j.text) : j.text, offer: j.offer });
     } catch (e) {
       add({ role: "assistant", content: (e as Error).message || "I couldn't answer that just now. Try again in a moment." });
     } finally { setBusy(false); }
@@ -163,7 +170,8 @@ export function LoriGuide({ g, compact = false }: { g: Extract<GuideMe, { enable
           const blob = new Blob(parts, { type: mr.mimeType || "audio/webm" });
           const r = await fetch("/api/guide/listen", { method: "POST", credentials: "include", headers: { "content-type": blob.type }, body: blob });
           const j = (await r.json().catch(() => ({}))) as { text?: string; message?: string };
-          if (r.ok && j.text) void send(j.text);
+          // What she heard goes into the box: a room can talk over him, so he checks it and presses Send.
+          if (r.ok && j.text) { setDraft((d) => (d.trim() ? `${d.trim()} ${j.text}` : j.text!)); setHeard(true); window.setTimeout(() => { const el = box.current; if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length); } }, 0); }
           else add({ role: "assistant", content: j.message || "I didn't catch that. Try again, or type it." });
         } finally { setRec(""); }
       };
@@ -256,10 +264,10 @@ export function LoriGuide({ g, compact = false }: { g: Extract<GuideMe, { enable
                   {rec === "hearing" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic className="h-4 w-4" />}
                 </button>
               )}
-              <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={`Ask ${g.name} how to do something…`} className="h-10 min-w-0 flex-1 rounded-xl border border-[#d0d5dd] bg-white px-3 text-sm outline-none focus:border-[#053877]" aria-label={`Ask ${g.name}`} data-testid="lori-input" />
+              <textarea ref={box} rows={1} value={draft} onChange={(e) => { setDraft(e.target.value); if (!e.target.value.trim()) setHeard(false); }} onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) { e.preventDefault(); void send(); } }} placeholder={`Ask ${g.name} how to do something…`} className={`block min-h-10 min-w-0 flex-1 resize-none rounded-xl border bg-white px-3 py-[9px] text-sm leading-5 outline-none focus:border-[#053877] ${heard ? "border-[#053877]" : "border-[#d0d5dd]"}`} aria-label={`Ask ${g.name}`} data-testid="lori-input" />
               <button type="submit" disabled={!draft.trim() || busy} aria-label="Send" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#053877] text-white disabled:opacity-40" data-testid="lori-send"><Send className="h-4 w-4" /></button>
             </div>
-            <p className="mt-2 text-[11px] text-[#98a2b3]">{g.name} is AI.{g.voice ? " Tap the mic to talk out loud." : ""}</p>
+            <p className={`mt-2 text-[11px] ${heard ? "font-semibold text-[#053877]" : "text-[#98a2b3]"}`} data-testid="lori-hint">{heard ? "Check what I heard, then press Send." : `${g.name} is AI.${g.voice ? " Tap the mic to talk out loud." : ""}`}</p>
           </form>
         </div>
       )}
