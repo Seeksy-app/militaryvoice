@@ -1,9 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { HiddenVoices, NameTagContext, StageGrid, useStageRoom, type NameTagStyle, type RoomMeta, type StageTile } from "@/components/StageView";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { Captions, HiddenVoices, LogoOverlay, NameTagContext, StageGrid, Tile, useStageRoom, type NameTagStyle, type RoomMeta, type StageTile } from "@/components/StageView";
 import { apiRequest } from "@/lib/queryClient";
 import {
-  CARD_TITLE, castOf, countdownText, isPlayer, musicCreditOf, roomStageMeta, sceneOf, shownOnStage, studioIdFromRoom,
-  type RoomCardSlot, type RoomLive, type RoomLook, type RoomProfile,
+  CARD_TITLE, boxCast, castOf, countdownText, gridColumns, isPlayer, musicCreditOf, roomStageMeta, sceneOf, shownOnStage, studioIdFromRoom,
+  type RoomBox, type RoomBoxShape, type RoomCardSlot, type RoomLive, type RoomLook, type RoomProfile,
 } from "@shared/roomLook";
 
 /** The room name inside a LiveKit token ("my-12"), without verifying anything: the page only needs to know which look to read. */
@@ -120,7 +120,16 @@ export function RoomPicture({
     return () => window.clearInterval(t);
   }, [card?.slot, card?.at]);
 
-  const full = card ? (
+  // The scene's own layout (the layout editor): its boxes replace the type's layout. Cards, the
+  // intro and the outro still take the whole frame while they play.
+  const boxed = v3 && !live.playing && !!scene?.boxes?.length;
+  const bc = boxed ? boxCast(people.map((t) => ({ identity: t.identity, host: /^owner-/.test(t.identity) && !/-cam-/.test(t.identity), who: t.identity })), scene) : null;
+
+  const full = boxed && bc ? (
+    <NameTagContext.Provider value={tag}>
+      <BoxStage boxes={scene!.boxes!} byBox={bc.byBox} people={people} media={scene!.media?.url ? scene!.media : null} bg={bg} logo={logo} logoCorner={String((meta as { logoCorner?: string }).logoCorner ?? "")} muted={muted} caption={caption} />
+    </NameTagContext.Provider>
+  ) : card ? (
     <RoomCard slot={card.slot as RoomCardSlot} text={card.slot === "countdown" ? countdownText(card, now) : ""} name={name || (raw as RoomMeta).studioName || ""} bg={bg} logo={logo} color={style?.brandColor} font={style?.font} />
   ) : media && !drawn.length ? (
     <SceneMedia url={media.url} image={(media.mime ?? "").startsWith("image")} muted={muted} />
@@ -134,7 +143,7 @@ export function RoomPicture({
       {full ? (
         <>
           {full}
-          <HiddenVoices tiles={people} muted={muted} />
+          <HiddenVoices tiles={bc ? people.filter((t) => !bc.drawn.includes(t.identity)) : people} muted={muted} />
         </>
       ) : (
         <NameTagContext.Provider value={tag}>
@@ -226,6 +235,76 @@ function RoomCard({ slot, text, name, bg, logo, color, font }: { slot: RoomCardS
         {slot === "countdown" && !done && <p className="font-bold tabular-nums leading-none" style={{ fontSize: "13cqw" }} data-testid="room-countdown">{text}</p>}
         <div className="h-[0.5cqw] w-[12cqw] rounded-full" style={{ background: accent }} aria-hidden="true" />
       </div>
+    </div>
+  );
+}
+
+/**
+ * A scene's own layout: each box where the editor put it, as fractions of the frame, later boxes on
+ * top. A box with nobody (or no media) for it isn't drawn. Same tiles, name tags and talking ring
+ * as every other layout, so the recording and the stream look like the rest of the show.
+ */
+function BoxStage({ boxes, byBox, people, media, bg, logo, logoCorner, muted, caption }: {
+  boxes: RoomBox[]; byBox: Record<string, string[]>; people: StageTile[]; media: { url: string; mime?: string } | null;
+  bg: string; logo: string; logoCorner: string; muted: boolean; caption?: { speaker: string; text: string } | null;
+}) {
+  const tileOf = (id: string) => people.find((t) => t.identity === id);
+  return (
+    <div className="absolute inset-0 overflow-hidden" data-testid="room-box-stage">
+      <Backdrop bg={bg} />
+      {boxes.map((b, i) => {
+        const ids = byBox[b.id] ?? [];
+        if (b.kind === "media" ? !media : !ids.length) return null;
+        const style = { left: `${b.x * 100}%`, top: `${b.y * 100}%`, width: `${b.w * 100}%`, height: `${b.h * 100}%`, zIndex: i + 1 };
+        return (
+          <div key={b.id} className="absolute [container-type:size]" style={style} data-testid={`room-box-${b.kind}`}>
+            {b.kind === "media" && media ? (
+              <Shaped shape={b.shape}>
+                {(media.mime ?? "").startsWith("image")
+                  ? <img src={media.url} alt="" className={`h-full w-full ${b.fit === "cover" ? "object-cover" : "object-contain"}`} />
+                  : <video key={media.url} src={media.url} autoPlay playsInline loop muted={muted} className={`h-full w-full ${b.fit === "cover" ? "object-cover" : "object-contain"}`} />}
+              </Shaped>
+            ) : b.kind === "camera" ? (
+              <Shaped shape={b.shape}>{tileOf(ids[0]) && <Tile tile={tileOf(ids[0])!} muted={muted} fit="full" flat contain={b.fit === "contain"} />}</Shaped>
+            ) : (
+              <BoxGrid ids={ids} box={b} tileOf={tileOf} muted={muted} />
+            )}
+          </div>
+        );
+      })}
+      {logo && <div className="absolute inset-0 z-[60]"><LogoOverlay url={logo} corner={logoCorner} size={150} /></div>}
+      <div className="absolute inset-0 z-[61]"><Captions caption={caption} /></div>
+    </div>
+  );
+}
+
+/** A box's shape. A circle is the biggest one that fits, centred. */
+function Shaped({ shape, children }: { shape?: RoomBoxShape; children: ReactNode }) {
+  if (shape === "circle") {
+    return (
+      <div className="flex h-full w-full items-center justify-center">
+        <div className="grid overflow-hidden rounded-full" style={{ width: "min(100cqw, 100cqh)", height: "min(100cqw, 100cqh)" }}>{children}</div>
+      </div>
+    );
+  }
+  return <div className={`grid h-full w-full overflow-hidden ${shape === "square" ? "" : "rounded-[1.4cqmin]"}`}>{children}</div>;
+}
+
+/** A camera grid: everyone it holds, each as big as the box allows. */
+function BoxGrid({ ids, box, tileOf, muted }: { ids: string[]; box: RoomBox; tileOf: (id: string) => StageTile | undefined; muted: boolean }) {
+  // The box's own shape in pixels: the frame is 16:9, so w/h × 16/9.
+  const cols = gridColumns(ids.length, (box.w / box.h) * (16 / 9));
+  const rows = Math.ceil(ids.length / cols);
+  return (
+    <div className="grid h-full w-full gap-[1.5cqmin]" style={{ gridTemplateColumns: `repeat(${cols}, minmax(0, 1fr))`, gridTemplateRows: `repeat(${rows}, minmax(0, 1fr))` }}>
+      {ids.map((id) => {
+        const t = tileOf(id);
+        return t ? (
+          <div key={id} className="relative min-h-0 min-w-0 [container-type:size]">
+            <Shaped shape={box.shape}><Tile tile={t} muted={muted} fit="full" flat contain={box.fit === "contain"} /></Shaped>
+          </div>
+        ) : null;
+      })}
     </div>
   );
 }

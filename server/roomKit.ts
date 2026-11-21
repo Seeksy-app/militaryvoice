@@ -19,6 +19,7 @@ import { getSessionEmail } from "./session.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
 import { libraryAsset, libraryReady, registerStudioLibrary, type LibraryItem, type LibrarySource } from "./studioLibrary.js";
 import { personalStudios, recordings, roomAssets, roomLooks, roomMarks, type PersonalStudioRow, type RoomAssetRow } from "../shared/schema.js";
+import { BOX_LIMIT, BOX_MIN, type RoomBox, type RoomBoxKind } from "../shared/roomLook.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 const SECRET = process.env.SESSION_SECRET || "dev-only-insecure-secret-change-me";
@@ -51,10 +52,32 @@ export type Scene = {
   people: number;
   /** look.background is always set in v3 (every scene has its own background). */
   look?: SceneLook;
-  /** A media scene's picture or video (a background, photo, logo or video upload). */
+  /** A media scene's picture or video (a background, photo, logo or video upload); also what a layout's media box shows. */
   media?: Asset | null;
   profile?: Profile;
+  /** The scene's own layout (the layout editor, 21 Nov); shape in shared/roomLook.ts RoomBox. Absent = the type's layout. */
+  boxes?: RoomBox[];
 };
+
+/** A layout's boxes as the client sent them: known kinds only, inside the frame, at most 9. */
+function cleanBoxes(raw: unknown): RoomBox[] {
+  const out: RoomBox[] = [];
+  const num = (v: unknown, lo: number, hi: number) => { const n = Number(v); return Math.round(Math.max(lo, Math.min(hi, Number.isFinite(n) ? n : lo)) * 10000) / 10000; };
+  for (const b of (Array.isArray(raw) ? raw : []).slice(0, BOX_LIMIT) as any[]) {
+    const kind = (["camera", "media", "grid"] as RoomBoxKind[]).includes(b?.kind) ? (b.kind as RoomBoxKind) : null;
+    if (!kind) continue;
+    const w = num(b.w, BOX_MIN, 1), h = num(b.h, BOX_MIN, 1);
+    const id = /^[\w-]{1,24}$/.test(String(b?.id ?? "")) && !out.some((x) => x.id === b.id) ? String(b.id) : crypto.randomBytes(4).toString("hex");
+    const who = kind === "camera" ? (b.who === "host" || b.who === "next" ? b.who : String(b.who ?? "").trim().slice(0, 80) || "next") : undefined;
+    out.push({
+      id, kind, x: num(b.x, 0, 1 - w), y: num(b.y, 0, 1 - h), w, h,
+      ...(who ? { who } : {}),
+      shape: b.shape === "square" || b.shape === "circle" ? b.shape : "rounded",
+      fit: b.fit === "contain" || b.fit === "cover" ? b.fit : kind === "media" ? "contain" : "cover",
+    });
+  }
+  return out;
+}
 
 /** v3 style: one set for the whole studio. Fonts are a short hosted list, OFL only. */
 export const FONTS = ["Inter", "Montserrat", "Oswald", "Bebas Neue", "Source Sans 3", "Merriweather", "Playfair Display", "Zilla Slab"] as const;
@@ -244,13 +267,15 @@ export function clean(raw: any, assets: Map<string, Asset>): Look | string {
       name: str(p.name, 60), title: str(p.title, 80), line: str(p.line, 140),
       links: (Array.isArray(p.links) ? p.links : []).map((u: unknown) => str(u, 200)).filter((u: string) => /^https:\/\/[^\s]+\.[^\s]+$/.test(u)).slice(0, 3),
     } : undefined;
+    const boxes = cleanBoxes(s?.boxes);
     scenes.push({
       id, n: scenes.length + 1, name: str(s?.name, 30) || `Scene ${scenes.length + 1}`,
       layout,
       stage: (Array.isArray(s?.stage) ? s.stage : []).map((x: unknown) => str(x, 80)).filter(Boolean).slice(0, 12),
       type, people,
       look,
-      ...(type === "media" ? { media: ((a) => (a && ["background", "photo", "logo", "video"].includes(a.kind) ? a : null))(asset(s?.media)) } : {}),
+      ...(boxes.length ? { boxes } : {}),
+      ...(type === "media" || boxes.some((b) => b.kind === "media") ? { media: ((a) => (a && ["background", "photo", "logo", "video"].includes(a.kind) ? a : null))(asset(s?.media)) } : {}),
       ...(profile ? { profile } : {}),
     });
   }

@@ -42,11 +42,40 @@ export interface RoomProfile {
   photo?: RoomAsset | null;
 }
 
+/**
+ * A box in a scene's own layout (the layout editor, Andrew 21 Nov: "Yes" to the StreamYard-style
+ * mockup). x, y, w, h are fractions of the 16:9 frame, so the same layout draws at any size. In a
+ * 16:9 frame a 16:9 box has w === h. Later boxes sit on top.
+ * - camera: one person. who = "host", "next" (whoever is on stage and not in another box), or a
+ *   participant identity.
+ * - media: the scene's picture, clip or current slide (scene.media). Empty = not drawn.
+ * - grid: everyone on stage not already in a box, in order. Nobody is left off by accident.
+ */
+export type RoomBoxKind = "camera" | "media" | "grid";
+export type RoomBoxShape = "rounded" | "square" | "circle";
+export interface RoomBox {
+  id: string;
+  kind: RoomBoxKind;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  who?: string;
+  shape?: RoomBoxShape;
+  /** cover = fill the box (cameras' default); contain = show all (media's default). */
+  fit?: "cover" | "contain";
+}
+export const BOX_LIMIT = 9;
+/** The smallest a box can be, as a share of the frame. */
+export const BOX_MIN = 0.06;
+
 export interface RoomScene {
   id: string;
   n?: number;
   name: string;
   layout: RoomLayoutKey;
+  /** v3: the scene's own layout. Present and non-empty = it replaces the type's layout. */
+  boxes?: RoomBox[];
   /** Guest identities shown in this scene; [] means everyone. The host is always shown. */
   stage?: string[];
   /** Overrides for this scene only. */
@@ -225,6 +254,76 @@ export function castOf(people: { identity: string; host: boolean; who?: string }
     default: return { drawn: ordered };
   }
 }
+
+type CastPerson = { identity: string; host: boolean; who?: string };
+
+/**
+ * Who fills each box of a scene's own layout. Pinned boxes first (the host, a named person), then
+ * each "next" box takes the next person in the scene's order who isn't in a box yet, then the
+ * first grid takes everyone left (up to 9). A box with nobody for it stays empty and isn't drawn;
+ * anyone in no box is still heard.
+ */
+export function boxCast(people: CastPerson[], scene: RoomScene | undefined): { byBox: Record<string, string[]>; drawn: string[] } {
+  const boxes = scene?.boxes ?? [];
+  const list = scene?.stage ?? [];
+  const rank = (p: CastPerson) => (p.host ? -1 : (() => { const i = list.indexOf(p.who ?? p.identity); return i < 0 ? 1e6 : i; })());
+  const ordered = [...people].sort((a, b) => rank(a) - rank(b) || a.identity.localeCompare(b.identity));
+  const used = new Set<string>();
+  const byBox: Record<string, string[]> = {};
+  for (const b of boxes) {
+    if (b.kind !== "camera" || !b.who || b.who === "next") continue;
+    const p = b.who === "host" ? ordered.find((x) => x.host && !used.has(x.identity)) : ordered.find((x) => (x.who ?? x.identity) === b.who || x.identity === b.who);
+    if (p && !used.has(p.identity)) { byBox[b.id] = [p.identity]; used.add(p.identity); }
+  }
+  for (const b of boxes) {
+    if (b.kind !== "camera" || (b.who && b.who !== "next")) continue;
+    const p = ordered.find((x) => !used.has(x.identity));
+    if (p) { byBox[b.id] = [p.identity]; used.add(p.identity); }
+  }
+  const grid = boxes.find((b) => b.kind === "grid");
+  if (grid) {
+    const rest = ordered.filter((x) => !used.has(x.identity)).slice(0, 9).map((x) => x.identity);
+    if (rest.length) { byBox[grid.id] = rest; rest.forEach((x) => used.add(x)); }
+  }
+  return { byBox, drawn: ordered.filter((x) => used.has(x.identity)).map((x) => x.identity) };
+}
+
+/**
+ * Columns for n 16:9 pictures in a box `aspect` (its width / height, in pixels) times as wide as
+ * tall: the count that makes each picture biggest.
+ */
+export function gridColumns(n: number, aspect: number): number {
+  let best = 1, size = 0;
+  for (let c = 1; c <= Math.max(1, n); c++) {
+    const r = Math.ceil(n / c);
+    const s = Math.min(aspect / c, (1 / r) * (16 / 9));
+    if (s > size + 1e-9) { size = s; best = c; }
+  }
+  return best;
+}
+
+/** "Start from a layout": ready-made boxes the editor drops in. */
+export const BOX_PRESETS: { id: string; label: string; boxes: Omit<RoomBox, "id">[] }[] = [
+  { id: "solo", label: "Solo", boxes: [{ kind: "camera", who: "next", x: 0.03, y: 0.05, w: 0.94, h: 0.9, shape: "rounded" }] },
+  { id: "side", label: "Side by side", boxes: [
+    { kind: "camera", who: "host", x: 0.03, y: 0.27, w: 0.46, h: 0.46, shape: "rounded" },
+    { kind: "camera", who: "next", x: 0.51, y: 0.27, w: 0.46, h: 0.46, shape: "rounded" },
+  ] },
+  { id: "grid", label: "Grid", boxes: [{ kind: "grid", x: 0.03, y: 0.05, w: 0.94, h: 0.9, shape: "rounded" }] },
+  { id: "pip", label: "Corner camera", boxes: [
+    { kind: "camera", who: "next", x: 0.03, y: 0.05, w: 0.94, h: 0.9, shape: "rounded" },
+    { kind: "camera", who: "host", x: 0.71, y: 0.64, w: 0.24, h: 0.24, shape: "rounded" },
+  ] },
+  { id: "media2", label: "Media + 2", boxes: [
+    { kind: "media", x: 0.03, y: 0.06, w: 0.64, h: 0.88, shape: "rounded", fit: "contain" },
+    { kind: "camera", who: "host", x: 0.69, y: 0.06, w: 0.28, h: 0.43, shape: "rounded" },
+    { kind: "camera", who: "next", x: 0.69, y: 0.51, w: 0.28, h: 0.43, shape: "rounded" },
+  ] },
+  { id: "mediagrid", label: "Media + grid", boxes: [
+    { kind: "media", x: 0.03, y: 0.04, w: 0.94, h: 0.68, shape: "rounded", fit: "contain" },
+    { kind: "grid", x: 0.03, y: 0.75, w: 0.94, h: 0.21, shape: "rounded" },
+  ] },
+];
 
 /** The Countdown card's text: m:ss, then "We're starting" at zero. It never switches anything. */
 export function countdownText(playing: RoomLive["playing"], now = Date.now()): string {

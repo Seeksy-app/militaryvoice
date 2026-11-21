@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Clapperboard, Copy, Loader2, Lock, MoreHorizontal, Pencil, Play, Plus, Square, Trash2, Users, X } from "lucide-react";
+import { Clapperboard, Copy, LayoutDashboard, Loader2, Lock, MoreHorizontal, Pencil, Play, Plus, Square, Trash2, Users, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
+import type { RoomBoxKind, RoomBoxShape } from "@shared/roomLook";
 import { LIMITS, PEOPLE_DEFAULT, bgCss, newId, type Layout, type RoomKit, type Scene, type SceneType, type Slot } from "./look";
 
 /** Scroll the rail (only the rail, never the page) so a just-opened editor or picker is in view. */
@@ -55,7 +56,19 @@ export function LayoutPicker({ value, onPick, size = "md" }: { value: Layout; on
   );
 }
 
-export function ScenesPanel({ kit, v3 = false, sheet = false }: { kit: RoomKit; v3?: boolean; sheet?: boolean }) {
+/** A small drawing of a layout (the ready-made buttons, and a scene card with its own layout). */
+export function BoxThumb({ boxes, className = "" }: { boxes: { kind: RoomBoxKind; x: number; y: number; w: number; h: number; shape?: RoomBoxShape }[]; className?: string }) {
+  return (
+    <svg viewBox="0 0 160 90" className={`block w-full rounded-md bg-[#0a3a8f] ${className}`} aria-hidden>
+      {boxes.map((b, i) => (
+        <rect key={i} x={b.x * 160 + 1} y={b.y * 90 + 1} width={Math.max(2, b.w * 160 - 2)} height={Math.max(2, b.h * 90 - 2)} rx={b.shape === "circle" ? Math.min(b.w * 160, b.h * 90) / 2 : b.shape === "square" ? 0 : 4}
+          fill={b.kind === "media" ? "#ffffff" : "#8ea4cf"} fillOpacity={b.kind === "grid" ? 0.55 : 0.95} stroke={b.kind === "grid" ? "#ffffff" : "none"} strokeDasharray={b.kind === "grid" ? "4 3" : undefined} />
+      ))}
+    </svg>
+  );
+}
+
+export function ScenesPanel({ kit, v3 = false, sheet = false, onEditLayout }: { kit: RoomKit; v3?: boolean; sheet?: boolean; onEditLayout?: (sceneId: string) => void }) {
   const look = kit.look!;
   const [editing, setEditing] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
@@ -120,7 +133,7 @@ export function ScenesPanel({ kit, v3 = false, sheet = false }: { kit: RoomKit; 
         <div key={s.id}>
           <SceneCard s={s} kit={kit} v3={v3} on={onAir === s.id} next={kit.live.playing?.slot === "countdown" && kit.live.playing.next === s.id} onPick={() => kit.toScene(s.id)}
             full={look.scenes.length >= LIMITS.scenes}
-            onRename={() => setEditing(editing === s.id ? null : s.id)} onDuplicate={() => duplicate(s)} onAddBelow={() => addBelow(s)} onDelete={look.scenes.length > 1 ? () => remove(s) : undefined} />
+            onRename={() => setEditing(editing === s.id ? null : s.id)} onEditLayout={onEditLayout ? () => { setEditing(null); onEditLayout(s.id); } : undefined} onDuplicate={() => duplicate(s)} onAddBelow={() => addBelow(s)} onDelete={look.scenes.length > 1 ? () => remove(s) : undefined} />
           {editing === s.id && <SceneEditor s={s} kit={kit} v3={v3} onDelete={look.scenes.length > 1 ? () => remove(s) : undefined} onClose={() => setEditing(null)} />}
           {picking && below === s.n && <div className="mt-3"><TypePicker onPick={add} onClose={() => { setPicking(false); setBelow(null); }} /></div>}
         </div>
@@ -160,7 +173,7 @@ function TypePicker({ onPick, onClose }: { onPick: (t: SceneType, people?: numbe
   );
 }
 
-function SceneCard({ s, kit, v3, on, next, full, onPick, onRename, onDuplicate, onAddBelow, onDelete }: { s: Scene; kit: RoomKit; v3: boolean; on: boolean; next: boolean; full: boolean; onPick: () => void; onRename: () => void; onDuplicate: () => void; onAddBelow: () => void; onDelete?: () => void }) {
+function SceneCard({ s, kit, v3, on, next, full, onPick, onRename, onEditLayout, onDuplicate, onAddBelow, onDelete }: { s: Scene; kit: RoomKit; v3: boolean; on: boolean; next: boolean; full: boolean; onPick: () => void; onRename: () => void; onEditLayout?: () => void; onDuplicate: () => void; onAddBelow: () => void; onDelete?: () => void }) {
   const look = kit.look!;
   const [menu, setMenu] = useState(false);
   const item = "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-semibold text-[#101828] hover:bg-[#f2f4f7] disabled:opacity-40 disabled:hover:bg-transparent";
@@ -172,13 +185,13 @@ function SceneCard({ s, kit, v3, on, next, full, onPick, onRename, onDuplicate, 
       {/* The clip is on the button, not the card, so the ⋯ menu isn't cut off. */}
       <button type="button" onClick={onPick} className="block w-full overflow-hidden rounded-[12px] text-left" aria-label={`Put ${s.name} on air (key ${s.n})`} aria-pressed={on}>
         <div className="relative flex h-[88px] items-center justify-center" style={{ background: bgCss(s.look?.background ?? look.background) }}>
-          <svg width="88" height="64" viewBox="0 0 22 16" fill="rgba(28,44,82,0.92)" aria-hidden>{icon}</svg>
+          {v3 && s.boxes?.length ? <BoxThumb boxes={s.boxes} className="!w-[104px] !bg-transparent" /> : <svg width="88" height="64" viewBox="0 0 22 16" fill="rgba(28,44,82,0.92)" aria-hidden>{icon}</svg>}
           {logo && <img src={logo.asset.url} alt="" className={`absolute top-1 h-4 w-auto rounded-sm ${logo.corner === "tl" ? "left-1.5" : "right-1.5"}`} />}
           {on && <span className="absolute left-2 top-2 rounded-full bg-[#12b76a] px-[7px] py-0.5 text-[10px] font-bold tracking-[0.02em] text-white">ON STAGE</span>}
           {!on && next && <span className="absolute left-2 top-2 rounded-full bg-[#F0A71F] px-[7px] py-0.5 text-[10px] font-bold tracking-[0.02em] text-[#101828]">TAKE ME NEXT</span>}
         </div>
         <div className="flex items-center justify-between gap-2 bg-white px-3 py-2">
-          <span className="min-w-0"><span className="block truncate text-[13px] font-bold">{s.name}</span>{v3 && <span className="flex items-center gap-1 text-[11px] text-[#667085]">{typeLabel(typeOf(s))} · <Users className="h-3 w-3" aria-label="People on stage" />{peopleOf(s)}</span>}</span>
+          <span className="min-w-0"><span className="block truncate text-[13px] font-bold">{s.name}</span>{v3 && (s.boxes?.length ? <span className="block text-[11px] text-[#667085]">Your own layout</span> : <span className="flex items-center gap-1 text-[11px] text-[#667085]">{typeLabel(typeOf(s))} · <Users className="h-3 w-3" aria-label="People on stage" />{peopleOf(s)}</span>)}</span>
           <span className="rounded-md bg-[#f2f4f7] px-[7px] py-px text-xs font-semibold text-[#667085]">{s.n}</span>
         </div>
       </button>
@@ -189,6 +202,7 @@ function SceneCard({ s, kit, v3, on, next, full, onPick, onRename, onDuplicate, 
           {/* Scene ⋯ (StreamYard's own set, Andrew 21 Nov). Nothing here puts a scene on air. */}
           <div className="absolute inset-x-1.5 top-10 z-20 rounded-xl border border-[#e4e7ec] bg-white p-1 shadow-[0_12px_32px_rgba(16,24,40,0.18)]" data-testid={`scene-menu-list-${s.n}`}>
             <button type="button" onClick={pick(onRename)} className={item} data-testid="scene-rename"><Pencil className="h-4 w-4" /> {v3 ? "Rename and edit" : "Rename"}</button>
+            {onEditLayout && <button type="button" onClick={pick(onEditLayout)} className={item} data-testid="scene-edit-layout"><LayoutDashboard className="h-4 w-4" /> Edit layout</button>}
             <button type="button" onClick={pick(onDuplicate)} disabled={full} title={full ? "9 scenes is the most" : undefined} className={item} data-testid="scene-duplicate"><Copy className="h-4 w-4" /> Duplicate</button>
             <button type="button" onClick={pick(onAddBelow)} disabled={full} title={full ? "9 scenes is the most" : undefined} className={item} data-testid="scene-add-below"><Plus className="h-4 w-4" /> Add scene below</button>
             {onDelete && <><div className="my-1 h-px bg-[#eaecf0]" /><button type="button" onClick={pick(onDelete)} className={`${item} text-[#b42318]`} data-testid="scene-delete"><Trash2 className="h-4 w-4" /> Delete scene</button></>}
@@ -216,13 +230,14 @@ function SceneEditor({ s, kit, v3, onDelete, onClose }: { s: Scene; kit: RoomKit
           <select id={`type-${s.id}`} value={type} onChange={(e) => { const t = TYPES.find((x) => x.id === e.target.value)!; set({ type: t.id, layout: t.layout, people: PEOPLE_DEFAULT[t.id], ...(t.id === "profile" && !s.profile ? { profile: { photo: null, name: "", title: "", line: "", links: [] } } : {}) }); }} className="mt-1.5 h-9 w-full rounded-lg border border-[#d0d5dd] bg-white px-2 text-sm" data-testid="scene-type">
             {TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
           </select>
+          {s.boxes?.length ? <p className="mt-3 rounded-lg bg-[#eef3fb] px-2.5 py-2 text-[11px] leading-snug text-[#344054]" data-testid="scene-own-layout">This scene has its own layout. Use ⋯ → Edit layout to change who shows and where.</p> : <>
           <p className="mt-3 text-xs font-semibold text-[#475467]">People on stage</p>
           <div className="mt-1.5 flex items-center gap-2" data-testid="scene-people">
             <button type="button" onClick={() => set({ people: Math.max(min, people - 1) })} disabled={people <= min} aria-label="Fewer people" className="h-8 w-8 rounded-lg border border-[#d0d5dd] bg-white text-base font-bold disabled:opacity-40">−</button>
             <span className="w-6 text-center text-sm font-bold tabular-nums">{people}</span>
             <button type="button" onClick={() => set({ people: Math.min(9, people + 1) })} disabled={people >= 9} aria-label="More people" className="h-8 w-8 rounded-lg border border-[#d0d5dd] bg-white text-base font-bold disabled:opacity-40">+</button>
             <span className="text-[11px] leading-snug text-[#667085]">{type === "media" ? (people === 0 ? "The media fills the scene" : people === 1 ? "One person in a corner" : "People in a strip") : ""}</span>
-          </div>
+          </div></>}
           {type === "media" && <MediaPick s={s} kit={kit} set={set} />}
           {type === "profile" && <ProfileFields s={s} kit={kit} set={set} />}
         </>

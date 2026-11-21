@@ -11,7 +11,7 @@ import { StylePanel } from "./StylePanel";
  */
 type Sheet = "scenes" | "media" | "style";
 
-export function PhoneStudio({ kit }: { kit: RoomKit }) {
+export function PhoneStudio({ kit, onEditLayout }: { kit: RoomKit; onEditLayout?: (sceneId: string) => void }) {
   const look = kit.look!;
   const [open, setOpen] = useState<Sheet | null>(null);
   const scenes = [...look.scenes].sort((a, b) => a.n - b.n);
@@ -45,7 +45,7 @@ export function PhoneStudio({ kit }: { kit: RoomKit }) {
               <button type="button" onClick={() => setOpen(null)} aria-label="Close" className="ml-auto flex h-9 w-9 items-center justify-center rounded-lg text-[#667085]"><X className="h-5 w-5" /></button>
             </div>
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
-              {open === "scenes" && <ScenesPanel kit={kit} v3 sheet />}
+              {open === "scenes" && <ScenesPanel kit={kit} v3 sheet onEditLayout={onEditLayout ? (id) => { setOpen(null); onEditLayout(id); } : undefined} />}
               {open === "media" && <MediaPanel kit={kit} />}
               {open === "style" && <StylePanel kit={kit} />}
             </div>

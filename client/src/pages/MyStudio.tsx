@@ -18,6 +18,7 @@ import { LookPanel } from "@/components/room/LookPanel";
 import { MediaPanel } from "@/components/room/MediaPanel";
 import { StylePanel } from "@/components/room/StylePanel";
 import { PhoneStudio } from "@/components/room/PhoneStudio";
+import { LayoutEditor } from "@/components/room/LayoutEditor";
 import { MarkClip } from "@/components/room/MarkClip";
 import { RoomStage } from "@/components/RoomStage";
 import { PrompterNews, PrompterOverlay, PrompterSwitch, useStudioNotes, type NotesSync } from "@/components/room/Teleprompter";
@@ -303,6 +304,9 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
   // Studio phase 3 (scene types, Media and Style) only when the server says STUDIO_V3 is on.
   const v3 = editing && studio?.v3 === true;
   const scene = sceneLive(look, kit.live);
+  // The layout editor (21 Nov): a scene's ⋯ → Edit layout. It takes the stage column and the right panel until Done or Cancel.
+  const [layoutFor, setLayoutFor] = useState<string | null>(null);
+  const layoutScene = v3 && layoutFor ? look?.scenes.find((s) => s.id === layoutFor) : undefined;
   const tab: Tab = picked && (v3 ? picked !== "look" : picked !== "media" && picked !== "style") ? picked : editing ? (v3 ? "media" : "look") : "people";
 
   // Once connected, put the scene on air again so the room carries it (Engineering: call /scene after joining).
@@ -421,7 +425,8 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
       </header>
 
       <div className="flex min-h-0 flex-1">
-        {editing && <ScenesPanel kit={kit} v3={v3} />}
+        {editing && <ScenesPanel kit={kit} v3={v3} onEditLayout={v3 ? setLayoutFor : undefined} />}
+        {layoutScene ? <LayoutEditor kit={kit} sceneId={layoutScene.id} onClose={() => setLayoutFor(null)} /> : <>
         {/* Stage column */}
         <div className="flex min-w-0 flex-1 flex-col items-center px-4 pt-5 lg:px-6">
           {owner ? (
@@ -440,7 +445,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
               <LayoutPicker value={scene.layout} onPick={(layout) => kit.change((l) => ({ ...l, scenes: l.scenes.map((s) => (s.id === scene.id ? { ...s, layout } : s)) }))} />
             </div>
           )}
-          {v3 && <PhoneStudio kit={kit} />}
+          {v3 && <PhoneStudio kit={kit} onEditLayout={setLayoutFor} />}
           <Backstage kit={kit} />
           {owner && <PrompterNews onOpen={() => setTab("notes")} />}
           <PeopleStrip kit={kit} owner={owner} sharing={isScreenShareEnabled} onShare={() => void share()} onInvite={copyInvite} />
@@ -479,6 +484,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
             <RailButton on={tab === "chat"} onClick={() => setTab("chat")} icon={<MessageSquare className="h-[22px] w-[22px]" />} label="Chat" />
           </nav>
         </aside>
+        </>}
       </div>
 
       {sheet && owner && studio && <GoLiveSheet studio={studio} onClose={() => setSheet(false)} />}

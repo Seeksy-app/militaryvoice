@@ -325,7 +325,7 @@ function StyledNameTag({ tile, tag }: { tile: StageTile; tag: NameTagStyle }) {
   );
 }
 
-function Tile({ tile, muted, namePos = "bottom", fit, contain = false, flat = false, cover = false, bare = false }: { tile: StageTile; muted: boolean; namePos?: "bottom" | "top" | "none"; fit?: string; contain?: boolean; flat?: boolean; cover?: boolean; bare?: boolean }) {
+export function Tile({ tile, muted, namePos = "bottom", fit, contain = false, flat = false, cover = false, bare = false }: { tile: StageTile; muted: boolean; namePos?: "bottom" | "top" | "none"; fit?: string; contain?: boolean; flat?: boolean; cover?: boolean; bare?: boolean }) {
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const nameTag = useContext(NameTagContext);
@@ -898,7 +898,7 @@ const CORNER_CLASS: Record<string, string> = {
  * at whatever width the watch page happens to be, and a 96px logo that looks
  * right in the console would be a postage stamp on the stream.
  */
-function LogoOverlay({ url, corner, size }: { url: string; corner?: string; size?: number }) {
+export function LogoOverlay({ url, corner, size }: { url: string; corner?: string; size?: number }) {
   if (!url) return null;
   // 96px against a 1280-wide reference frame — the number the console shows.
   const pct = Math.min(40, Math.max(4, ((size ?? 96) / 1280) * 100));
@@ -1556,7 +1556,7 @@ export function StageGrid({
 }
 
 /** Burned into the frame, so they reach the recording and every destination. */
-function Captions({ caption, lifted }: { caption?: { speaker: string; text: string } | null; lifted?: boolean }) {
+export function Captions({ caption, lifted }: { caption?: { speaker: string; text: string } | null; lifted?: boolean }) {
   if (!caption?.text) return null;
   return (
     <div className={`pointer-events-none absolute inset-x-0 bottom-0 flex justify-center px-6 ${lifted ? "pb-[7%]" : "pb-6"}`}>

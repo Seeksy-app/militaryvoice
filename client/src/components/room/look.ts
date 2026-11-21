@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { durationOf, uploadToStorage } from "@/lib/upload";
 import { useToast } from "@/hooks/use-toast";
+import type { RoomBox } from "@shared/roomLook";
 
 /**
  * Room phase 2 (20 Nov 2026), the client side of the contract in room-phase2-contract.md:
@@ -23,9 +24,13 @@ export type Logo = { asset: Asset; corner: Corner } | null;
 export type SceneType = "single" | "two" | "group" | "media" | "profile";
 export const PEOPLE_DEFAULT: Record<SceneType, number> = { single: 1, two: 2, group: 3, media: 0, profile: 1 };
 export type Profile = { who?: string; photo: Asset | null; name: string; title: string; line: string; links: string[] };
+/** A box in a scene's own layout (the layout editor); the shape and rules are in shared/roomLook.ts. */
+export type Box = RoomBox;
 export type Scene = {
   id: string; n: number; name: string; layout: Layout; stage?: string[];
   type?: SceneType; people?: number; profile?: Profile; media?: Asset | null;
+  /** v3: the scene's own layout; absent or empty = the type's layout. */
+  boxes?: Box[];
   look?: { background?: Background; logo?: Logo; banner?: string };
 };
 export const FONTS = ["Inter", "Montserrat", "Oswald", "Bebas Neue", "Source Sans 3", "Merriweather", "Playfair Display", "Zilla Slab"] as const;
