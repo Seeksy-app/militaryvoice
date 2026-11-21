@@ -58,6 +58,15 @@ function placeFor(r: DOMRect, h = 160): Place {
   return vertical();
 }
 
+/** Is another control within ~12px of the target on that side? Then the ring shrinks to stay on the target. */
+function crowded(el: HTMLElement | null, r: DOMRect, place: Place): boolean {
+  const x = place === "right" ? r.right + 12 : place === "left" ? r.left - 12 : r.left + r.width / 2;
+  const y = place === "bottom" ? r.bottom + 12 : place === "top" ? r.top - 12 : r.top + r.height / 2;
+  if (x < 0 || y < 0 || x > window.innerWidth || y > window.innerHeight) return false;
+  const hit = document.elementFromPoint(x, y)?.closest<HTMLElement>('button, a, input, select, textarea, [role="button"], [role="tab"]');
+  return !!hit && !!el && hit !== el && !hit.contains(el) && !el.contains(hit);
+}
+
 export function GuideLayer() {
   const [run, setRun] = useState<Run | null>(null);
   const [spot, setSpot] = useState<Spot | null>(null);
@@ -147,7 +156,9 @@ export function GuideLayer() {
   // The ring sits on the control's edge facing the callout, so it never hides the label.
   // A small control (an icon) gets a hollow ring round it instead, so the dot never hides it.
   const small = r.width < 64 && r.height < 64;
-  const OUT = 6; // the dot sits a little outside the edge, clear of the label
+  // The dot sits a little outside the edge, clear of the label; with a neighbour that close it shrinks onto the edge.
+  const tight = !small && crowded(target.current, r, place);
+  const OUT = tight ? -2 : 6;
   const ring = small ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : {
     x: place === "right" ? r.right + OUT : place === "left" ? r.left - OUT : r.left + Math.min(r.width / 2, Math.max(24, r.width - 40)),
     y: place === "bottom" ? r.bottom + OUT : place === "top" ? r.top - OUT : r.top + r.height / 2,
@@ -180,9 +191,9 @@ export function GuideLayer() {
         </span>
       ) : (
       <span className="absolute -translate-x-1/2 -translate-y-1/2" style={{ left: ring.x, top: ring.y }}>
-        <span className="absolute left-1/2 top-1/2 h-14 w-14 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#053877]/15 motion-safe:animate-ping" />
-        <span className="absolute left-1/2 top-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#053877]/10 ring-1 ring-[#053877]/20" />
-        <span className="relative block h-7 w-7 rounded-full border-[5px] border-[#053877] bg-white/70 shadow-[0_0_0_4px_rgba(255,255,255,0.6)]" />
+        <span className={`absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#053877]/15 motion-safe:animate-ping ${tight ? "h-7 w-7" : "h-14 w-14"}`} />
+        {!tight && <span className="absolute left-1/2 top-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#053877]/10 ring-1 ring-[#053877]/20" />}
+        <span className={`relative block rounded-full border-[#053877] bg-white/70 ${tight ? "h-4 w-4 border-[3px] shadow-[0_0_0_2px_rgba(255,255,255,0.7)]" : "h-7 w-7 border-[5px] shadow-[0_0_0_4px_rgba(255,255,255,0.6)]"}`} />
       </span>
       )}
       <div

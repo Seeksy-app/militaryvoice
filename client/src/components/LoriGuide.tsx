@@ -274,7 +274,11 @@ export function LoriGuide({ g, compact = false }: { g: Extract<GuideMe, { enable
 function TeamForm({ sent, transcript, page, onSent }: { sent: boolean; transcript: Msg[]; page: string; onSent: () => void }) {
   const siteKey = useTurnstileSiteKey();
   const last = [...transcript].reverse().find((m) => m.role === "user")?.content ?? "";
-  const [email, setEmail] = useState("");
+  // She only shows for signed-in accounts: reply to the account's own address (the dashboard already has it),
+  // shown as a line he can change. Off the dashboard with nothing loaded yet, the field shows instead.
+  const acct = useQueryClient().getQueryData<{ email?: string }>(["/api/host/dashboard"])?.email?.trim() ?? "";
+  const [email, setEmail] = useState(acct);
+  const [editEmail, setEditEmail] = useState(!acct);
   const [question, setQuestion] = useState(last);
   const [human, setHuman] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -291,7 +295,9 @@ function TeamForm({ sent, transcript, page, onSent }: { sent: boolean; transcrip
   return (
     <form onSubmit={(e) => { e.preventDefault(); void submit(); }} className="space-y-2 rounded-2xl bg-white p-3 shadow-sm" data-testid="lori-team-form">
       <p className="text-[13px] font-semibold">Leave a note</p>
-      <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="h-9 w-full rounded-lg border border-[#d0d5dd] px-3 text-[14px]" aria-label="Your email" />
+      {editEmail
+        ? <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="h-9 w-full rounded-lg border border-[#d0d5dd] px-3 text-[14px]" aria-label="Your email" autoFocus={!!acct} />
+        : <p className="flex min-w-0 items-center gap-1 text-[13px] text-[#475467]" data-testid="lori-reply-to"><span className="truncate">We'll reply to <span className="font-semibold text-[#101828]">{email}</span></span><button type="button" onClick={() => setEditEmail(true)} className="shrink-0 font-semibold text-[#053877] hover:underline">Change</button></p>}
       <textarea required value={question} onChange={(e) => setQuestion(e.target.value)} rows={3} className="w-full rounded-lg border border-[#d0d5dd] px-3 py-2 text-[14px]" aria-label="Your question" />
       {siteKey && <Turnstile siteKey={siteKey} onToken={setHuman} resetSignal={0} />}
       {err && <p className="text-xs text-[#b42318]">{err}</p>}
