@@ -203,6 +203,13 @@ c To take one off, press the ✕ on it.
 We remember them for your next episode. The player shows the episode only; the intro and outro are in the copy you save.
 8 Your clips
 Pōstify picks the best moments and makes each clip in vertical, square and wide. To make your own, choose Make a clip, press Start here and End here, name it, pick its shapes, and press Make clip.
+What makes a great clip
+Before you post, watch each clip four times, looking at one thing each time:
+Audio: no clipped words or pops, and the sound stays at one level.
+Captions: they match what's said, in sync.
+Picture: steady framing, with no black or frozen frames.
+Story: it makes sense to someone who has never seen the episode, and the first seconds hook them.
+If one is off, trim the clip or fix its captions (below), or delete it and make your own.
 Press ⋯ on any clip (in Pōstify or your Library's Clips tab):
 Trim this clip
 Play it. Press Start here and End here at the right moments, or use the sliders. It has to be at least 5 seconds. Press Play the new version to check, then Trim the clip. Every shape is remade in about a minute.
