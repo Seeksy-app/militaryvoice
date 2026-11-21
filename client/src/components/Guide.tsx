@@ -242,7 +242,8 @@ export function GuideLayer() {
 
 /** The first visit to the dashboard home: what the things on it are. Once per browser. */
 export const homeTour = (name = "Alex"): GuideStep[] => [
-  { title: `Ask ${name}`, at: [{ sel: '[data-testid="dashboard-ask"]', text: `Ask ${name} anything: how to do something, or to do it for you.` }] },
+  // A guide (Lori) opens pages and points; the person makes every click, so she never offers to do it for them.
+  { title: `Ask ${name}`, at: [{ sel: '[data-testid="dashboard-ask"]', text: name === "Alex" ? "Ask Alex anything: how to do something, or to do it for you." : `Ask ${name} anything: how to do something, or where to find it.` }] },
   { title: "Start here", at: [
     { sel: '[data-testid="todo-strip"] button[data-testid^="todo-"]', text: "Your next step, outlined. Click it and we'll take you there and show you exactly where to click." },
     { sel: '[data-testid="todo-strip"]', text: "The things you'll do most, one click each." },
