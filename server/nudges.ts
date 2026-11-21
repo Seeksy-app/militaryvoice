@@ -3,9 +3,10 @@
 //
 // A nudge is armed by an admin with the exact text Andrew approved. It goes out once, on whichever comes
 // first for that address: their next inbound email (it then replaces the auto-acknowledgement, so they get one
-// email, not two), their next sign-in with a code, or their next visit to a signed-in page on their own session.
-// An admin "view as" never fires it. Plain text, from hello@, through the normal send hook (so it's in mail_log).
-import type { Express, Request, RequestHandler } from "express";
+// email, not two) or their next sign-in with an emailed code. Not a page visit (PM, 21 Nov): an admin's view-as sets
+// the same host session as theirs, so our own browser can look exactly like them. Plain text, from hello@, through
+// the normal send hook (so it's in mail_log).
+import type { Express, RequestHandler } from "express";
 import { sql } from "drizzle-orm";
 import { db, storage } from "./storage.js";
 import { sendOneOffEmail } from "./email.js";
@@ -21,7 +22,7 @@ async function armed(): Promise<Nudge[]> {
 }
 
 /** Sends any nudge waiting for this address. True when one went out. Safe to call often: each ref sends once. */
-export async function fireNudgeFor(email: string, why: "email" | "sign-in" | "visit"): Promise<boolean> {
+export async function fireNudgeFor(email: string, why: "email" | "sign-in"): Promise<boolean> {
   const who = norm(email);
   const list = (await armed()).filter((n) => norm(n.to) === who);
   let sent = false;
@@ -42,12 +43,6 @@ export async function fireNudgeFor(email: string, why: "email" | "sign-in" | "vi
     sent = true;
   }
   return sent;
-}
-
-/** For a signed-in page load: fires only on the person's own session, never an admin viewing as them. */
-export function fireNudgeOnVisit(req: Request, email: string): Promise<boolean> {
-  if (getAdminEmail(req)) return Promise.resolve(false);
-  return fireNudgeFor(email, "visit").catch(() => false);
 }
 
 export function registerNudges(app: Express, requireAdmin: RequestHandler): void {

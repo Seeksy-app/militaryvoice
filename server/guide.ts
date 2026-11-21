@@ -19,8 +19,6 @@ import { storage } from "./storage.js";
 import { getSessionEmail } from "./session.js";
 import { KNOWLEDGE, CHECKING, GET_BACK } from "./help.js";
 import { learnedForAlex } from "./helpDesk.js";
-import { fireNudgeOnVisit } from "./nudges.js";
-import { waitUntil } from "@vercel/functions";
 
 const NOT_SURE = "I'm not sure about that one. Leave a note and someone will get back to you as soon as possible.";
 import { runTool } from "./teamDesk.js";
@@ -105,8 +103,8 @@ export function registerGuide(app: Express, requireHostSession: RequestHandler, 
   app.get("/api/guide/me", requireHostSession, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     const g = await guideFor(me(req));
-    // A signed-in page load on their own session: a waiting one-time nudge goes out (never on an admin's view-as).
-    try { waitUntil(fireNudgeOnVisit(req, me(req))); } catch { /* not on Vercel */ }
+    // No nudge on a page load (PM, 21 Nov): a view-as cookie is the same host session as theirs, and once the admin
+    // cookie lapses our own browser looks exactly like them. Nudges fire on their inbound email or a code sign-in only.
     if (!g.enabled) return res.json({ enabled: false });
     res.json({ enabled: true, name: g.name, avatarUrl: g.avatarUrl, voice: !!eleven(), targets: GUIDE_TARGETS });
   });
