@@ -70,7 +70,7 @@ async function searchesThisMonth(email: string): Promise<number> {
   const rows = await db.select({ id: discoverySearches.id }).from(discoverySearches).where(and(eq(discoverySearches.who, email), eq(discoverySearches.kind, "creators"), gte(discoverySearches.createdAt, start.toISOString())));
   return rows.length;
 }
-/** Verified creators: the house, Discovery Pro (it includes them), or the $10 add-on. */
+/** Verified creators: the house, Discovery Pro (it includes them), the Pro plan, or the $10 add-on. */
 export async function verifiedOpenTo(email: string): Promise<boolean> {
   const e = email.trim().toLowerCase();
   if (!e) return false;
@@ -79,7 +79,12 @@ export async function verifiedOpenTo(email: string): Promise<boolean> {
     const a = await storage.getAddon(e, key);
     if (a && ["active", "trialing", "comped"].includes(a.status)) return true;
   }
-  return false;
+  return verifiedWithPlan(e);
+}
+/** Pro includes Verified creators (Andrew, 21 Nov 2026: "Yes, include it"). Comped Pro counts too. */
+export async function verifiedWithPlan(email: string): Promise<boolean> {
+  const subs = await db.select({ plan: postifySubscriptions.plan, status: postifySubscriptions.status }).from(postifySubscriptions).where(eq(postifySubscriptions.email, email.trim().toLowerCase()));
+  return subs.some((x) => x.plan === "pro" && ["active", "trialing", "past_due"].includes(x.status));
 }
 /**
  * May this person use Discovery (7 Oct)? It's a paid tool for creators: brands,
@@ -779,8 +784,9 @@ export function registerDiscoveryRoutes(app: Express): void {
         credits: member ? await storage.tokenBalance(email) : 0,
         discoveryPro: member ? (await allowanceFor(email)).pro : false,
         searches: member && member.role !== "admin" ? { used: await searchesThisMonth(email), allowance: Number.isFinite((await allowanceFor(email)).searches) ? (await allowanceFor(email)).searches : null } : null,
-        // Verified creators: the house, Discovery Pro, or its own $10 add-on.
+        // Verified creators: the house, Discovery Pro, the Pro plan, or its own $10 add-on.
         verifiedLocked: getSessionEmail(req) ? !(await verifiedOpenTo(String(getSessionEmail(req)))) : false,
+        verifiedWithPlan: getSessionEmail(req) ? await verifiedWithPlan(String(getSessionEmail(req))) : false,
         lookups: member && member.role !== "admin" ? { used: await lookupsThisMonth(email), allowance: (await allowanceFor(email)).lookups } : null,
         // Signed in to the admin too: they can spend credits on filling a page.
         isAdmin: !!adminEmail,

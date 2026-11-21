@@ -83,7 +83,7 @@ export const ADDONS = {
   verified: {
     key: "verified", name: "Verified creators", cents: 1000,
     blurb: "The creators MilitaryVoices knows: everyone who has been on our events, with their real reach.",
-    features: ["Every creator on our lineup, with pictures and real numbers", "Their shows, branches and audiences", "Included with Discovery Pro"],
+    features: ["Every creator on our lineup, with pictures and real numbers", "Their shows, branches and audiences", "Included with Pro and Discovery Pro"],
   },
   // Post-production for a show (17 Nov 2026): a Pro add-on of its own, $195 a month paid every three months ($585),
   // a separate subscription so it can stop while Pro carries on.

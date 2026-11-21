@@ -47,6 +47,7 @@ const PLAN_FEATURES: Record<string, Feature[]> = {
     { t: "Extra credits 50¢ each, up to a limit you set", tip: "Run out, and Pōstify keeps going. Extras go on your next bill, never past the limit you set." },
     { t: "Book a guest", tip: "Search people who have been guests on podcasts, the most-booked first. Invite them onto your show, find their email, or save them for later." },
     { t: "Be a guest", tip: "Find shows that take guests in your field, and have SI help write your pitch." },
+    { t: "Verified creators", tip: "Everyone MilitaryVoices knows, with their pictures and real numbers, ready to invite as guests or collaborators. $10 a month on its own." },
     { t: "Live Studio hours (soon)", tip: "When the MilitaryVoices Studio opens to every show, Pro includes live studio hours for yours." },
   ],
 };
@@ -241,7 +242,7 @@ export default function Pricing() {
           <div className="flex flex-col gap-4 rounded-3xl border border-[#F0A71F]/50 bg-[#F0A71F]/[0.06] p-6 sm:flex-row sm:items-center" data-testid="addon-discovery">
             <div className="min-w-0 flex-1">
               <p className="flex items-center gap-2 text-lg font-bold text-foreground" style={HEADLINE_FONT}><Compass className="h-5 w-5 text-[#b36b00]" /> {disc.name} <span className="text-base font-semibold text-muted-foreground">· {cents(disc.cents)}/month</span></p>
-              <p className="mt-1 text-sm text-muted-foreground">{disc.blurb} Add it with Scale or Pro above in one payment, or here. Verified creators on its own is {cents(ADDONS.verified.cents)}/month.</p>
+              <p className="mt-1 text-sm text-muted-foreground">{disc.blurb} Add it with Scale or Pro above in one payment, or here. Verified creators comes with Pro, or is {cents(ADDONS.verified.cents)}/month on its own.</p>
               <ul className="mt-2 space-y-1 text-sm text-foreground/85">
                 {disc.features.map((f) => <li key={f} className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#b36b00]" /> {f}</li>)}
               </ul>

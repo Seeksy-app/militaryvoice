@@ -13,7 +13,7 @@ type Features = {
   /** comp: a gift from us (no Stripe behind it, so no billing page to manage). */
   plan: { key: string; name: string; comp?: boolean; interval: "month" | "year"; credits: number; periodEnd: string; status: string } | null;
 };
-type DiscoverMe = { member: object | null; discoveryPro?: boolean; verifiedLocked?: boolean; reveals: { used: number; allowance: number } | null; searches?: { used: number; allowance: number | null } | null; lookups?: { used: number; allowance: number } | null };
+type DiscoverMe = { member: object | null; discoveryPro?: boolean; verifiedLocked?: boolean; verifiedWithPlan?: boolean; reveals: { used: number; allowance: number } | null; searches?: { used: number; allowance: number | null } | null; lookups?: { used: number; allowance: number } | null };
 
 const day = (iso: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" }) : "");
 
@@ -120,17 +120,17 @@ export function PlanBilling() {
         )}
       </section>
 
-      {/* Verified creators: $10 on its own, included with Discovery Pro. */}
+      {/* Verified creators: $10 on its own, included with Pro and Discovery Pro. */}
       {!pro && (
         <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-card p-5 shadow-sm" data-testid="billing-verified">
           <div className="flex min-w-0 items-center gap-3">
             <IconTile icon={BadgeCheck} />
             <div className="min-w-0">
-              <p className="font-semibold">{ADDONS.verified.name}{me.data?.verifiedLocked === false ? " · on" : ""}</p>
-              <p className="text-sm text-muted-foreground">{ADDONS.verified.blurb} {cents(ADDONS.verified.cents)}/month, or included with {ADDONS.discovery.name}.</p>
+              <p className="font-semibold">{ADDONS.verified.name}{me.data?.verifiedWithPlan ? ` · included with ${PLANS.pro.name}` : me.data?.verifiedLocked === false ? " · on" : ""}</p>
+              <p className="text-sm text-muted-foreground">{ADDONS.verified.blurb} {me.data?.verifiedWithPlan ? "" : `${cents(ADDONS.verified.cents)}/month, or included with ${PLANS.pro.name} and ${ADDONS.discovery.name}.`}</p>
             </div>
           </div>
-          {me.data?.verifiedLocked === false ? (
+          {me.data?.verifiedWithPlan ? null : me.data?.verifiedLocked === false ? (
             <Button variant="outline" onClick={() => void go("portal-v", openBillingPortal)} disabled={busy !== null} className="gap-2 rounded-full">{spin("portal-v")} Manage</Button>
           ) : (
             <Button onClick={() => void go("verified", () => startAddonCheckout("verified"))} disabled={busy !== null} className="gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="billing-add-verified">{spin("verified")} Add {ADDONS.verified.name}</Button>
