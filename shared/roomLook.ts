@@ -59,8 +59,8 @@ export interface RoomScene {
   profile?: RoomProfile | null;
 }
 
-/** A sound pad or a music track (v3). */
-export interface RoomAudioItem { id: string; name?: string; asset?: RoomAsset | null; url?: string; source?: unknown }
+/** A sound pad or a music track (v3). source.credit is set for CC BY items (the line we must show). */
+export interface RoomAudioItem { id: string; name?: string; asset?: RoomAsset | null; url?: string; source?: { licence?: string; credit?: string; [k: string]: unknown } | null }
 
 export interface RoomStyle {
   preset?: string;
@@ -118,6 +118,18 @@ export function clipOf(look: RoomLook | null, slot: "intro" | "outro"): RoomAsse
 /** A sound or music item's playable address. */
 export function audioUrlOf(item: RoomAudioItem | undefined, origin = ""): string {
   return abs(item?.asset?.url ?? item?.url, origin);
+}
+
+/**
+ * The credit line owed while a music track plays (CC BY: "Music: HoliznaCC0"), or "" for none.
+ * Drawn on the filmed page, so recordings and live video carry it.
+ */
+export function musicCreditOf(look: RoomLook | null, live: RoomLive): string {
+  const id = live.music?.id;
+  if (!id || !look) return "";
+  const credit = String((look.music ?? []).find((m) => m.id === id)?.source?.credit ?? "").replace(/\s+/g, " ").trim().slice(0, 120);
+  if (!credit) return "";
+  return /^music\b/i.test(credit) ? credit : `Music: ${credit}`;
 }
 
 /** The participant the player bot joins as; never a tile, always heard. */

@@ -11,6 +11,7 @@ import type { Express, RequestHandler } from "express";
 import crypto from "node:crypto";
 import { AccessToken, TrackSource } from "livekit-server-sdk";
 import { bearer } from "./ingestEngine.js";
+import { noteMusicPlayed } from "./roomKit.js";
 import { eq } from "drizzle-orm";
 import { db, schemaIsReady } from "./storage.js";
 import { getSessionEmail } from "./session.js";
@@ -65,6 +66,16 @@ export async function mergeRoomMeta(room: string, patch: Partial<RoomLive>): Pro
     console.error("Room metadata failed:", (err as Error).message);
     return false;
   }
+}
+
+/** The music on air when a recording starts gets its credit noted too (it may have started first). */
+export async function noteMusicOnAir(studioId: number): Promise<void> {
+  if (!STUDIO_V3 || !isLiveKitConfigured()) return;
+  try {
+    const [r] = await rooms().listRooms([`my-${studioId}`]);
+    const id = (JSON.parse(r?.metadata || "{}") as RoomLive).music?.id;
+    if (id) await noteMusicPlayed(studioId, id);
+  } catch { /* nothing on air */ }
 }
 
 /** Podcasting's onLookSaved calls this, so the filmed page and the room fetch the look again. */
@@ -204,6 +215,8 @@ export function registerRoomStage(app: Express, requireHostSession: RequestHandl
     const music = { id, at: Date.now() };
     const ok = await mergeRoomMeta(roomOf(got.row), { music });
     if (!ok) return res.status(409).json({ message: "Join your studio first." });
+    // A CC BY track's credit is kept against the recording, for its episode and clip descriptions (Podcasting's).
+    void noteMusicPlayed(got.row.id, id).catch(() => {});
     res.json({ ok, music });
   });
 

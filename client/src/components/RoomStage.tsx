@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { HiddenVoices, NameTagContext, StageGrid, useStageRoom, type NameTagStyle, type RoomMeta, type StageTile } from "@/components/StageView";
 import { apiRequest } from "@/lib/queryClient";
 import {
-  CARD_TITLE, castOf, countdownText, isPlayer, roomStageMeta, sceneOf, shownOnStage, studioIdFromRoom,
+  CARD_TITLE, castOf, countdownText, isPlayer, musicCreditOf, roomStageMeta, sceneOf, shownOnStage, studioIdFromRoom,
   type RoomCardSlot, type RoomLive, type RoomLook, type RoomProfile,
 } from "@shared/roomLook";
 
@@ -107,6 +107,7 @@ export function RoomPicture({
     : scene?.type && cast.layout ? { ...meta, stageLayout: cast.layout, stageOrder: cast.drawn.join(",") } : meta;
   const card = v3 && live.playing && live.playing.slot !== "intro" && live.playing.slot !== "outro" ? live.playing : null;
   const style = v3 ? look?.style : undefined;
+  const credit = v3 ? musicCreditOf(look, live) : "";
   useRoomFont(style?.font);
   const tag: NameTagStyle | null = style ? { style: style.nameTag, show: style.showNames, size: style.textSize, font: style.font, color: style.brandColor } : null;
   const bg = String((meta as { backgroundUrl?: string }).backgroundUrl ?? "");
@@ -141,6 +142,12 @@ export function RoomPicture({
           <HiddenVoices tiles={heard} muted={muted} />
         </NameTagContext.Provider>
       )}
+      {credit && (
+        // CC BY music: the credit is on the picture while the track plays, opposite the logo's corner.
+        <div className="pointer-events-none absolute z-40" style={{ bottom: "2.2%", ...(String((stageMeta as { logoCorner?: string }).logoCorner ?? "").endsWith("right") && String((stageMeta as { logoCorner?: string }).logoCorner).startsWith("bottom") ? { left: "2.2%" } : { right: "2.2%" }) }} data-testid="room-music-credit">
+          <p className="rounded-[0.6cqw] text-white/90" style={{ ...fontOf(style?.font), background: "rgba(4,16,43,0.55)", padding: "0.35cqw 0.9cqw", fontSize: "1.25cqw", fontWeight: 500, lineHeight: 1.2, borderLeft: `0.3cqw solid ${style?.brandColor || "#F0A71F"}` }}>{credit}</p>
+        </div>
+      )}
       {banner && (
         <div className="pointer-events-none absolute z-30" style={{ left: "4%", right: "4%", bottom: "9%" }} data-testid="room-banner">
           <div className="text-white shadow-lg" style={{ background: "rgba(5,56,119,0.96)", borderLeft: "0.7cqw solid #F0A71F", borderRadius: "1cqw", padding: "1.1cqw 2cqw", fontSize: "2.6cqw", fontWeight: 600, lineHeight: 1.25 }}>
@@ -164,16 +171,25 @@ function PlayerAudio({ tile, muted }: { tile: StageTile; muted: boolean }) {
   return <audio ref={ref} autoPlay muted={muted} data-testid="room-player-audio" />;
 }
 
-/** The eight self-hosted OFL fonts the look may name; loaded from /fonts/<slug>.woff2 when used. Anything else is Inter. */
-const ROOM_FONTS = ["Inter", "Montserrat", "Oswald", "Bebas Neue", "Source Sans 3", "Merriweather", "Playfair Display", "Roboto Slab"];
+/**
+ * The Style fonts, self-hosted from client/public/fonts (OFL only, licences in its README; no font
+ * CDN on the filmed page). Loaded from /fonts/<slug>.woff2 when the look names one, and Inter, the
+ * fallback, always. Anything else is Inter. Roboto Slab is Apache 2.0, so it isn't hosted (Inter).
+ */
+const ROOM_FONTS = ["Inter", "Montserrat", "Oswald", "Bebas Neue", "Source Sans 3", "Merriweather", "Playfair Display"];
+function loadRoomFont(font: string) {
+  if (typeof FontFace === "undefined" || !ROOM_FONTS.includes(font)) return;
+  if (Array.from(document.fonts as unknown as Iterable<FontFace>).some((f) => f.family.replace(/["']/g, "") === font)) return;
+  const slug = font.toLowerCase().replace(/\s+/g, "-");
+  // Bebas Neue comes in one weight; the rest are variable.
+  const face = new FontFace(font, `url(/fonts/${slug}.woff2) format("woff2")`, { weight: font === "Bebas Neue" ? "400" : "100 900", display: "swap" });
+  document.fonts.add(face);
+  void face.load().catch(() => { document.fonts.delete(face); });
+}
 function useRoomFont(font?: string) {
   useEffect(() => {
-    if (!font || font === "Inter" || !ROOM_FONTS.includes(font) || typeof FontFace === "undefined") return;
-    if (document.fonts.check(`16px "${font}"`) && Array.from(document.fonts as unknown as Iterable<FontFace>).some((f) => f.family.replace(/["']/g, "") === font)) return;
-    const slug = font.toLowerCase().replace(/\s+/g, "-");
-    const face = new FontFace(font, `url(/fonts/${slug}.woff2) format("woff2")`, { weight: "100 900" });
-    document.fonts.add(face);
-    void face.load().catch(() => { document.fonts.delete(face); });
+    loadRoomFont("Inter");
+    if (font) loadRoomFont(font);
   }, [font]);
 }
 

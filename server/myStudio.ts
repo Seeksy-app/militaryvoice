@@ -12,7 +12,7 @@ import { isLiveKitConfigured, isRecordingConfigured, publicLiveKitUrl, startBroa
 import { ensureRecordingsBucket } from "./recordingStorage.js";
 import { createBroadcast } from "./youtube.js";
 import { onLookSaved, roomLookKey } from "./roomKit.js";
-import { bumpLookRev, registerRoomStage, roomTemplateUrl, STUDIO_V3, useRoomKit } from "./roomStage.js";
+import { bumpLookRev, noteMusicOnAir, registerRoomStage, roomTemplateUrl, STUDIO_V3, useRoomKit } from "./roomStage.js";
 import { personalStudios, type PersonalStudioRow } from "../shared/schema.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
@@ -167,6 +167,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
         // A Library recording like an upload's: no event, no studio row, theirs by email.
         await storage.createRecording({ eventId: 0, studioId: 0, signupId: null, email, title, egressId, filepath });
         [s] = await db.update(personalStudios).set({ recordingEgressId: egressId, recordingSince: now() }).where(eq(personalStudios.id, s.id)).returning();
+        void noteMusicOnAir(s.id);
       } else if (!on && s.recordingEgressId) {
         await stopEgressById(s.recordingEgressId).catch(() => {});
         [s] = await db.update(personalStudios).set({ recordingEgressId: "", recordingSince: "" }).where(eq(personalStudios.id, s.id)).returning();
