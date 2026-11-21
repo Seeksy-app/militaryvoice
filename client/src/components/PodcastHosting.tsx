@@ -188,7 +188,7 @@ export function PodcastHosting() {
         <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3" data-testid="hosting-shows">
           {shows.map((x) => {
             const live = x.episodes.filter((e) => e.live).length;
-            const listed = Object.values(parseDirs(x.show.directories)).filter((d) => d.state === "live").length;
+            const listed = Object.values(parseDirs(x.show.directories)).filter((d) => d.state === "live" && d.url).length;
             return (
               <button key={x.show.id} type="button" onClick={() => setOpenId(x.show.id)} className="group overflow-hidden rounded-2xl border border-border bg-card text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#053877]/40 hover:shadow-md" data-testid={`hosting-show-${x.show.id}`}>
                 <div className="aspect-square w-full bg-muted">{x.show.artworkUrl ? <img src={x.show.artworkUrl} alt="" className="h-full w-full object-cover" /> : <span className="flex h-full items-center justify-center text-muted-foreground"><Podcast className="h-10 w-10" /></span>}</div>
@@ -455,7 +455,8 @@ function Directories({ h, ready, onSaved, youtube }: { h: Hosted; ready: boolean
   // fetching the feed but haven't confirmed the page. Confirm = paste the page's link, which makes it Live.
   // Live without a link isn't a confirmed page (UI/UX, 21 Nov): when the app reads the feed it shows as Reading + Confirm.
   const followsOf = (key: string) => moved && !(dirs[key]?.state === "live" && dirs[key]?.url) && !!READS_AS[key] && !!h.reading?.includes(READS_AS[key]);
-  const listed = DIRS.filter((d) => dirs[d.key]?.state === "live" && !followsOf(d.key)).length;
+  // Live only with its show link (PM, 21 Nov): that's what the key line promises.
+  const listed = DIRS.filter((d) => dirs[d.key]?.state === "live" && !!dirs[d.key]?.url).length;
   const reading = DIRS.filter((d) => followsOf(d.key)).length;
   const renderRow = (d: (typeof DIRS)[number]) => {
           const st = dirs[d.key];
@@ -464,7 +465,7 @@ function Directories({ h, ready, onSaved, youtube }: { h: Hosted; ready: boolean
           // "Spotify" under Spotify says nothing: the reach line only when it adds something (UI/UX, a1ee1d0d).
           const reach = d.reach === d.name ? "" : d.reach;
           const badge = follows ? "bg-emerald-500/10 text-emerald-700 ring-1 ring-inset ring-emerald-500/40 dark:text-emerald-400"
-            : st?.state === "live" ? "bg-emerald-600 text-white dark:bg-emerald-500"
+            : st?.state === "live" && st.url ? "bg-emerald-600 text-white dark:bg-emerald-500"
             : st?.state === "submitted" ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : "bg-muted text-muted-foreground";
           return (
             <li key={d.key} className="py-3" data-testid={`hosting-dir-${d.key}`}>
@@ -478,7 +479,7 @@ function Directories({ h, ready, onSaved, youtube }: { h: Hosted; ready: boolean
                 </button>
                 {/* State and action: beside the name on a computer; on a phone their own line under the name, so neither squeezes it. */}
                 <span className="flex basis-full items-center justify-between gap-2 pl-12 empty:hidden sm:basis-auto sm:justify-end sm:pl-0">
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${badge}`} title={follows ? `${d.name} already gets your episodes from us. Confirm its page to make it Live.` : undefined} data-testid={`hosting-dir-state-${d.key}`}>{follows ? "Reading your new feed" : st?.state === "live" ? (moved && !s.redirectOk ? "Live, by your old feed" : "Live") : st?.state === "submitted" ? "Submitted" : d.auto && s.aiVoice ? "Not listed" : d.auto ? "Automatic" : moved ? (s.redirectOk ? "Follows your forward" : "Waits for your old feed to forward") : "Not listed"}</span>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${badge}`} title={follows ? `${d.name} already gets your episodes from us. Confirm its page to make it Live.` : undefined} data-testid={`hosting-dir-state-${d.key}`}>{follows ? "Reading your new feed" : st?.state === "live" && st.url ? (moved && !s.redirectOk ? "Live, by your old feed" : "Live") : st?.state === "live" ? (moved ? (s.redirectOk ? "Follows your forward" : "Waits for your old feed to forward") : "Link needed") : st?.state === "submitted" ? "Submitted" : d.auto && s.aiVoice ? "Not listed" : d.auto ? "Automatic" : moved ? (s.redirectOk ? "Follows your forward" : "Waits for your old feed to forward") : "Not listed"}</span>
                 {follows ? (
                   // The app already has the show: confirm its page (find it, paste the link) to make it Live.
                   <Button size="sm" variant="outline" onClick={() => setOpen(isOpen ? `-${d.key}` : d.key)} className="h-8 rounded-full" data-testid={`hosting-dir-confirm-${d.key}`}>Confirm</Button>
@@ -491,7 +492,7 @@ function Directories({ h, ready, onSaved, youtube }: { h: Hosted; ready: boolean
                   </span>
                 ) : st?.state === "live" ? (st.url
                   ? <Button asChild size="sm" variant="outline" className="h-8 gap-1 rounded-full"><a href={st.url} target="_blank" rel="noreferrer">Open <ExternalLink className="h-3 w-3" /></a></Button>
-                  : <Button size="sm" variant="outline" onClick={() => setOpen(d.key)} className="h-8 rounded-full">Add its link</Button>
+                  : <Button size="sm" variant="outline" onClick={() => setOpen(isOpen ? `-${d.key}` : d.key)} className="h-8 rounded-full" data-testid={`hosting-dir-confirm-${d.key}`}>Confirm</Button>
                 ) : (
                   <Button size="sm" variant={moved ? "outline" : "default"} onClick={() => void listIt(d)} disabled={!ready} title={ready ? undefined : "Finish what the apps need first (above)"} className={`h-8 gap-1 rounded-full ${moved ? "" : "bg-[#053877] text-white hover:bg-[#0a4a99]"}`} data-testid={`hosting-dir-list-${d.key}`}>{st?.state === "submitted" ? "Open again" : moved ? "Not there? List it" : "List it"} <ExternalLink className="h-3 w-3" /></Button>
                 )}
@@ -509,14 +510,14 @@ function Directories({ h, ready, onSaved, youtube }: { h: Hosted; ready: boolean
                     e.preventDefault();
                     const u = (links[d.key] ?? st?.url ?? "").trim();
                     // Their own feed isn't the app's page for the show.
-                    if (/militaryvoices\.ai/i.test(u)) return toast({ title: "That's your feed", description: `Paste your show's page on ${d.name} (like ${d.link}), or leave the box empty.` });
+                    if (/militaryvoices\.ai/i.test(u)) return toast({ title: "That's your feed", description: `Paste your show's page on ${d.name} (like ${d.link}).` });
                     if (u && !/^https:\/\//.test(u)) return toast({ title: "Paste the whole link", description: `It starts with https:// (like ${d.link}).` });
-                    // Confirming is the link: without it the row stays "Reading your new feed".
-                    if (follows && !u) return toast({ title: "Paste your show's link", description: `Find your show on ${d.name} and paste its address (like ${d.link}).` });
+                    // Live means a confirmed page, so saving needs the link (PM, 21 Nov).
+                    if (!u) return toast({ title: "Paste your show's link", description: `Find your show on ${d.name} and paste its address (like ${d.link}).` });
                     put(d.key, { state: "live", url: u, at: new Date().toISOString() });
                     setOpen(null);
                     setLinks((x) => { const n = { ...x }; delete n[d.key]; return n; });
-                    toast({ title: `${d.name}: live`, description: u ? "Its button is on your show page now." : "Add its link any time." });
+                    toast({ title: `${d.name}: live`, description: "Its button is on your show page now." });
                   }} className="flex flex-wrap gap-2">
                     <Input value={links[d.key] ?? st?.url ?? ""} onChange={(e) => setLinks((x) => ({ ...x, [d.key]: e.target.value }))} placeholder={`Your show on ${d.name}: ${d.link}`} className="h-9 min-w-0 flex-1 text-xs" data-testid={`hosting-dir-link-${d.key}`} />
                     <Button type="submit" size="sm" variant="outline" className="h-9 rounded-lg" data-testid={`hosting-dir-live-${d.key}`}>Save link</Button>
