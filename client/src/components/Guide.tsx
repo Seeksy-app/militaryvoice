@@ -12,6 +12,8 @@ export interface GuideStep {
   /** Where to point, best first: the first selector found on the page wins, with its own words. */
   at: { sel: string; text: string }[];
   title?: string;
+  /** Only when it's already on screen (e.g. "Pick your show first" when the show list is up): otherwise skipped at once, not after 6 s. */
+  optional?: boolean;
 }
 
 /** Who is showing them (an account's AI guide, e.g. Lori): her face and name on the callout, with Back / Stop / Next. */
@@ -107,7 +109,7 @@ export function GuideLayer() {
         const hit = findTarget(step);
         if (!hit) {
           // Never appeared: move on rather than point at nothing.
-          if (Date.now() - started > 6000) { if (!gone) { gone = true; next(); } return; }
+          if (Date.now() - started > (step.optional ? 700 : 6000)) { if (!gone) { gone = true; next(); } return; }
           raf = requestAnimationFrame(tick);
           return;
         }
