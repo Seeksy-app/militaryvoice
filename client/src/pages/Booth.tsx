@@ -288,7 +288,7 @@ function AutoWatch({ onJoin }: { onJoin: (c: LocalUserChoices) => void }) {
  */
 const PreJoinBox = memo(function PreJoinBox({ username, onJoin, onError }: { username: string; onJoin: (c: LocalUserChoices) => void; onError: (e: Error) => void }) {
   const defaults = useMemo(() => ({ username }), [username]);
-  return <PreJoin defaults={defaults} persistUserChoices={false} joinLabel="Enter my booth" userLabel="Your name" onSubmit={onJoin} onError={onError} />;
+  return <PreJoin defaults={defaults} persistUserChoices={false} joinLabel="Enter Radio" userLabel="Your name" onSubmit={onJoin} onError={onError} />;
 });
 
 export default function Booth({ id }: { id: string }) {
@@ -323,7 +323,7 @@ export default function Booth({ id }: { id: string }) {
   if (!info.data) {
     return (
       <div className={shell}>
-        <p className="text-2xl font-bold">Your MilitaryVoices Radio booth</p>
+        <p className="text-2xl font-bold">Your MilitaryVoices Radio show</p>
         <p className="max-w-md text-center text-white/75">{say(info.error)}</p>
         {!g && <a href="/host/dashboard" className="rounded-full bg-white px-5 py-2.5 font-semibold text-[#000741]">Sign in</a>}
       </div>
@@ -343,7 +343,7 @@ export default function Booth({ id }: { id: string }) {
   if (left) {
     return (
       <div className={shell}>
-        <p className="text-2xl font-bold">You've left the booth</p>
+        <p className="text-2xl font-bold">You've left your Radio show</p>
         {now < Date.parse(d.closesAtUtc) && <button type="button" onClick={() => { setLeft(false); setConn(null); }} className="rounded-full bg-white px-5 py-2.5 font-semibold text-[#000741]">Go back in</button>}
       </div>
     );
@@ -352,7 +352,7 @@ export default function Booth({ id }: { id: string }) {
     <div className="text-center">
       <p className="text-sm font-bold uppercase tracking-[0.14em] text-[#F0A71F]">MilitaryVoices Radio</p>
       <h1 className="mt-1 text-2xl font-bold [text-wrap:balance]">{d.show}</h1>
-      <p className="mt-1 text-sm text-white/70">{d.day.replace(/^MilitaryVoices Radio · /, "")} · {hm(d.startAtUtc)}–{hm(d.endAtUtc)} ET · live {hm(d.onAirAtUtc)}–{hm(d.offAirAtUtc)}</p>
+      <p className="mt-1 text-sm text-white/70">{d.day.replace(/^MilitaryVoices Radio · /, "")} · <span className="whitespace-nowrap">{hm(d.startAtUtc)}–{hm(d.endAtUtc)} ET</span> · <span className="whitespace-nowrap">live {hm(d.onAirAtUtc)}–{hm(d.offAirAtUtc)}</span></p>
     </div>
   );
 
@@ -364,7 +364,7 @@ export default function Booth({ id }: { id: string }) {
         {header}
         {early ? (
           <div className="rounded-2xl bg-white/10 p-5 text-center">
-            <p className="text-lg font-semibold">Your booth opens at {hm(d.opensAtUtc)} ET</p>
+            <p className="text-lg font-semibold">Your Radio show opens at {hm(d.opensAtUtc)} ET</p>
             <p className="mt-1 text-sm text-white/70">An hour before your time. Come back then to check your camera and mic.</p>
             {d.role === "host" && <div className="mt-4"><p className="mb-2 text-xs text-white/60">Bringing a guest? Send them this link:</p><GuestLink link={d.guestLink} /></div>}
           </div>
@@ -394,7 +394,7 @@ export default function Booth({ id }: { id: string }) {
       style={ROOM_STYLE}
     >
       <div className="flex flex-wrap items-center justify-between gap-2 px-5 py-2 text-white">
-        <p className="text-sm font-semibold">{d.show} <span className="font-normal text-white/60">· {watching ? "Watching only: this is what the host sees. You can't be seen or heard." : "you see and hear only your own booth"}</span></p>
+        <p className="text-sm font-semibold">{d.show} <span className="font-normal text-white/60">· {watching ? "Watching only: this is what the host sees. You can't be seen or heard." : "you see and hear only your own show"}</span></p>
         <div className="flex flex-wrap items-center gap-3">{!watching && (d.role === "host" || d.role === "admin") && <ClipBar id={id} g={g} clip={d.clip} onChange={() => void info.refetch()} />}{d.role === "host" && <GuestLink link={d.guestLink} />}</div>
       </div>
       <div className="flex min-h-0 flex-1 flex-col lg:flex-row-reverse">

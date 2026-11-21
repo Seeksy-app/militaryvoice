@@ -53,24 +53,24 @@ Open my studio
 
 === MILITARYVOICES.AI PLATFORM · www.militaryvoices.ai/help/booth ===
 All help Help · MilitaryVoices Radio
-Your Radio booth: how to go on air
-Your booth is your small studio on MilitaryVoices Radio. Check your sound, watch the countdown, and talk. The station brings you on and off, so there is nothing to press to go live. It's radio, so your voice is what matters. Your camera is optional.
-1 Find your booth
-Your booth opens an hour before your time. Before then, it tells you when it opens.
-a Open your reminder email and press Enter your booth. Or sign in to your dashboard with the email you booked with.
-b In the menu on the left, press Booth.
-Booth is in the menu on the left, under Events. Your time is also on your dashboard, under Coming up, with buttons to add it to your calendar.
+Your Radio show: how to go on air
+Your Radio show has its own small studio on MilitaryVoices Radio. Check your sound, watch the countdown, and talk. The station brings you on and off, so there is nothing to press to go live. It's radio, so your voice is what matters. Your camera is optional.
+1 Find your Radio show
+Your Radio show opens an hour before your time. Before then, it tells you when it opens.
+a Open your reminder email and press Enter Radio. Or sign in to your dashboard with the email you booked with.
+b In the menu on the left, press Radio. It's there once you've booked a time, under Events.
+Your time is also on your dashboard, under Coming up, with buttons to add it to your calendar.
 2 Check your sound
 Be here 10 minutes before your time. The first screen is your check-in.
 a Press Microphone and pick the one you'll use. Headphones with a mic are best.
 b Your camera is optional. Leave it on or turn it off.
-c Check Your name, then press Enter my booth.
+c Check Your name, then press Enter Radio.
 No sound? Your browser needs your OK. Press the lock or camera icon in the address bar, allow the microphone for this site, then reload the page.
-3 Inside your booth
+3 Inside your Radio show
 The bar across the top is your clock. It counts down, then turns red when you're on air.
-Your show name is under it. You see and hear only your own booth, never the next show warming up.
+Your show name is under it. You see and hear only your own show, never the next show warming up.
 Microphone and Camera at the bottom turn them on or off.
-Leave (the red button at the bottom) takes you out of the booth. You don't press it to go on air.
+Leave (the red button at the bottom) takes you out. You don't press it to go on air.
 4 What the top bar says
 You don't have to do anything. The station runs on the clock, and the bar tells you where you are. In a 30-minute slot, the station's intro plays for the first 3 minutes, you're live for the next 24, and a short thank-you plays for the last 3. A 60-minute slot works the same way, with 54 minutes live.
 Intro playing You're on air Thank-you playing
@@ -83,9 +83,9 @@ You're off air (blue). The station plays a short thank-you. Stay as long as you 
 That's a wrap. You can close the tab. Thank you!
 The station takes you off on the clock, so plan to finish before your time is up.
 5 Bring a guest
-A guest, or a co-host from your show, joins with a link, with no account. In your booth, press Copy guest link, next to your show name. You'll find the same button before your booth opens.
+A guest, or a co-host from your show, joins with a link, with no account. In your Radio show, press Copy guest link, next to your show name. You'll find the same button before it opens.
 a Send the link to your guest by text or email.
-b They open it, check their sound, and press Enter my booth.
+b They open it, check their sound, and press Enter Radio.
 Ask them to be there 10 minutes early too.
 6 Tips
 Use headphones with a mic. They stop echo and make you sound closer.
@@ -93,16 +93,16 @@ A wired connection or strong Wi-Fi is best. Close other apps that use your micro
 Pick a quiet room and silence your phone.
 Use an up-to-date Chrome or Safari.
 7 If something goes wrong
-The booth says it isn't open yet
+It says your Radio show isn't open yet
 It opens an hour before your time. The page tells you the exact time. Come back then.
 You got disconnected
-You'll see You've left the booth. Press Go back in. It's there until 10 minutes after your time ends.
+You'll see You've left your Radio show. Press Go back in. It's there until 10 minutes after your time ends.
 It says to sign in
 Sign in with the same email you booked with. A guest uses the guest link they were sent instead.
 8 Help and contact
 Email us: hello@militaryvoices.ai. A person reads every message and writes back.
 Search the help, or ask Alex: militaryvoices.ai/help.
-Your booth and your times are on your dashboard.
+Your Radio show and your times are on your dashboard.
 Open my dashboard
 
 === MILITARYVOICES.AI PLATFORM · www.militaryvoices.ai/help/library ===
@@ -590,7 +590,7 @@ Want it gone now? Press Delete now. That can't be undone.
 Deleting a podcast episode takes it out of your feed, and the apps drop it on their next check. It doesn't take it off YouTube: if you posted it there, remove it in YouTube Studio.
 7 Co-hosts and your team
 Your co-hosts don't need an account. They join your show on a link, the same way a guest does.
-Radio booth: in your booth, press Copy guest link, next to your show name, and send it to them. The same button is there before your booth opens.
+Your Radio show: in your Radio show, press Copy guest link, next to your show name, and send it to them. The same button is there before it opens.
 Your studio: in your studio, press Invite guests at the top to copy your link, and send it. They open it, type their name, and come in.
 Zoom: they join your Zoom meeting as usual. The recording comes into your Library from your own Zoom account.
 Can my team share one account?

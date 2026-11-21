@@ -83,7 +83,7 @@ export default function HelpAccount() {
         <HelpSection n={7} id="team" title="Co-hosts and your team">
           <p>Your co-hosts don't need an account. They join your show on a link, the same way a guest does.</p>
           <ul className="mt-3 list-disc space-y-2 pl-5">
-            <li><strong>Radio booth:</strong> in your booth, press <strong>Copy guest link</strong>, next to your show name, and send it to them. The same button is there before your booth opens.</li>
+            <li><strong>Your Radio show:</strong> in your Radio show, press <strong>Copy guest link</strong>, next to your show name, and send it to them. The same button is there before it opens.</li>
             <li><strong>Your studio:</strong> in your studio, press <strong>Invite guests</strong> at the top to copy your link, and send it. They open it, type their name, and come in.</li>
             <li><strong>Zoom:</strong> they join your Zoom meeting as usual. The recording comes into your Library from your own Zoom account.</li>
           </ul>

@@ -146,7 +146,7 @@ export function GuestInvites({ prefill }: { prefill?: { name: string; email: str
           <div className="space-y-1.5 sm:col-span-2" data-testid="invite-where">
             <Label>Where will you talk?</Label>
             <div className="flex flex-wrap gap-2">
-              {([["zoom", "On Zoom"], ["studio", "In my studio"], ...(coming.length > 0 ? [["booth", "In my Radio booth"]] : [])] as [("zoom" | "studio" | "booth"), string][]).map(([v, label]) => (
+              {([["zoom", "On Zoom"], ["studio", "In my studio"], ...(coming.length > 0 ? [["booth", "On my Radio show"]] : [])] as [("zoom" | "studio" | "booth"), string][]).map(([v, label]) => (
                 <button key={v} type="button" onClick={() => setWhere(v)} aria-pressed={where === v} className={`rounded-full border px-4 py-1.5 text-sm font-semibold ${where === v ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:bg-muted"}`} data-testid={`invite-where-${v}`}>{label}</button>
               ))}
             </div>
@@ -157,7 +157,7 @@ export function GuestInvites({ prefill }: { prefill?: { name: string; email: str
               <select id="gi-f-booking" value={pickedBooking ?? ""} onChange={(e) => setBookingId(Number(e.target.value))} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
                 {coming.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
               </select>
-              <p className="text-xs text-muted-foreground">Your guest gets a private link into your booth, with the time filled in. They open it on the day, allow their camera and microphone, and they're in. No account needed.</p>
+              <p className="text-xs text-muted-foreground">Your guest gets a private link into your Radio show, with the time filled in. They open it on the day, allow their camera and microphone, and they're in. No account needed.</p>
             </div>
           ) : (
             <>

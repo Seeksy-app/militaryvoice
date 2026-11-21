@@ -31,10 +31,10 @@ export const HELP_CATEGORIES: { key: HelpCategory; title: string; blurb: string 
 
 export const HELP_INDEX: HelpEntry[] = [
   {
-    title: "Your Radio booth: how to go on air",
-    summary: "Where your booth is, how to check your sound, and what the countdown bar says from the station's intro to your goodbye.",
+    title: "Your Radio show: how to go on air",
+    summary: "Where your Radio show is, how to check your sound, and what the countdown bar says from the station's intro to your goodbye.",
     href: "/help/booth",
-    keywords: "radio booth militaryvoices radio go on air live countdown timer on air red bar intro outro microphone camera check guest link enter my booth opens hour before leave 10 minutes early audio",
+    keywords: "radio booth militaryvoices radio go on air live countdown timer on air red bar intro outro microphone camera check guest link enter radio enter my booth opens hour before leave 10 minutes early audio",
     audience: "podcasters",
     category: "showday",
   },

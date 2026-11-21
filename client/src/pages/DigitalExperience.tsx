@@ -168,7 +168,7 @@ function BookDialog({ day, slot, onClose, onBooked }: { day: Day; slot: Slot; on
               <summary className="cursor-pointer font-semibold">Add it to your calendar</summary>
               <div className="mt-2"><CalendarButtons cal={done.calendar} /></div>
             </details>
-            <p className="text-sm text-muted-foreground">It's saved in your account: on <a href="/host/dashboard" className="font-semibold text-[#053877] underline dark:text-[#F0A71F]">your dashboard</a> and at the top of this page. Your booth, where you go on air, appears in your dashboard menu.</p>
+            <p className="text-sm text-muted-foreground">It's saved in your account: on <a href="/host/dashboard" className="font-semibold text-[#053877] underline dark:text-[#F0A71F]">your dashboard</a> and at the top of this page. Your Radio show, where you go on air, appears as Radio in your dashboard menu.</p>
             <Button variant="outline" className="w-full" onClick={onClose}>Done</Button>
           </div>
         )}
