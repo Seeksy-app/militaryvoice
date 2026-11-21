@@ -8,7 +8,7 @@ import * as L from "lucide-react";
  * Where they don't: nav, small controls under 20px (check, x, arrows, chevrons), brand logos (stay official and flat).
  */
 export const ICONS_3D = [
-  "mic", "headphone", "video", "camera", "tv", "people", "person", "radio", "antenna", "megaphone", "coin", "moneybag",
+  "mic", "headphone", "video", "camera", "tv", "wave", "radio", "antenna", "megaphone", "coin", "moneybag",
   "check", "shield", "link", "gear", "building", "sparkles", "wand", "inbox", "outbox", "search", "chat", "handshake",
   "clapper", "film", "calendar", "mail", "send", "scissors", "card", "globe", "chart", "trend", "rocket", "bulb", "books",
   "lock", "key", "music", "robot", "compass", "folder", "page", "target", "heart", "picture", "stopwatch", "bolt", "house",
@@ -25,7 +25,7 @@ type AnyIcon = unknown;
 const FROM_LINE = new Map<AnyIcon, Icon3D>([
   [L.Mic, "mic"], [L.Mic2, "mic"], [L.Podcast, "headphone"], [L.Headphones, "headphone"],
   [L.Video, "video"], [L.Camera, "camera"], [L.MonitorPlay, "tv"], [L.Tv, "tv"],
-  [L.Users, "people"], [L.UserPlus, "person"], [L.UserRound, "person"], [L.User, "person"], [L.Contact, "cardindex"], [L.UserSearch, "search"],
+  [L.Users, "handshake"], [L.UserPlus, "wave"], [L.UserRound, "wave"], [L.User, "wave"], [L.Contact, "cardindex"], [L.UserSearch, "search"],
   [L.Radio, "radio"], [L.Wifi, "antenna"], [L.Signal, "antenna"], [L.SignalHigh, "antenna"],
   [L.Megaphone, "megaphone"], [L.Coins, "coin"], [L.DollarSign, "moneybag"], [L.Wallet, "moneybag"],
   [L.BadgeCheck, "check"], [L.CheckCircle2, "check"], [L.ShieldCheck, "shield"], [L.Shield, "shield"],
