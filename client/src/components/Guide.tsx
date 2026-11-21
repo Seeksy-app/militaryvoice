@@ -46,12 +46,16 @@ function findTarget(step: GuideStep): { el: HTMLElement; text: string } | null {
 /** A dialog on screen (Alex's questions, say) owns the moment: the pointer waits behind it. */
 const dialogOpen = () => !!document.querySelector('[role="dialog"][data-state="open"], [role="alertdialog"][data-state="open"], [data-guide-wait]');
 
-function placeFor(r: DOMRect): Place {
+/** The side with the most room, never on top of the control: beside it on a computer, above or below on a phone. */
+const CLEAR = 40; // control edge to callout: the ring's halo plus a gap
+function placeFor(r: DOMRect, h = 160): Place {
   const vw = window.innerWidth, vh = window.innerHeight;
-  if (vw < 640) return r.bottom + 180 < vh ? "bottom" : "top";
-  if (r.right + GAP + W + 16 < vw) return "right";
-  if (r.left - GAP - W - 16 > 0) return "left";
-  return r.bottom + 180 < vh ? "bottom" : "top";
+  const below = vh - r.bottom, above = r.top;
+  const vertical = (): Place => (below >= h + CLEAR + 16 || below >= above ? "bottom" : "top");
+  if (vw < 640) return vertical();
+  const right = vw - r.right, left = r.left, need = W + CLEAR + 16;
+  if (right >= need || left >= need) return right >= left ? "right" : "left";
+  return vertical();
 }
 
 export function GuideLayer() {
@@ -60,6 +64,7 @@ export function GuideLayer() {
   const target = useRef<HTMLElement | null>(null);
   const box = useRef<HTMLDivElement>(null);
   const [boxH, setBoxH] = useState(120);
+  const boxRef = useRef(160); // the callout's height, for choosing a side before it's drawn
 
   useEffect(() => {
     const on = (e: Event) => setRun((e as CustomEvent<Run | null>).detail);
@@ -108,7 +113,7 @@ export function GuideLayer() {
         if (r0.top < 80 || r0.bottom > window.innerHeight - 40) el.scrollIntoView({ behavior: "smooth", block: "center" });
       }
       const r = el.getBoundingClientRect();
-      setSpot((s) => (s && s.r.x === r.x && s.r.y === r.y && s.r.width === r.width && s.r.height === r.height ? s : { r, text: el._guideText ?? "", place: placeFor(r) }));
+      setSpot((s) => (s && s.r.x === r.x && s.r.y === r.y && s.r.width === r.width && s.r.height === r.height ? s : { r, text: el._guideText ?? "", place: placeFor(r, boxRef.current) }));
       raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
@@ -134,24 +139,26 @@ export function GuideLayer() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [run]);
 
-  useLayoutEffect(() => { if (box.current) setBoxH(box.current.offsetHeight); }, [spot?.text, run?.i]);
+  useLayoutEffect(() => { if (box.current) { setBoxH(box.current.offsetHeight); boxRef.current = box.current.offsetHeight; } }, [spot?.text, run?.i]);
 
   if (!run || !spot) return null;
   const { r, place } = spot;
   const vw = window.innerWidth;
-  const small = r.width < 140;
-  // The ring sits on the control, toward the callout (on a wide row, near its end).
-  const inset = Math.min(30, r.width / 2);
-  const ring = {
-    x: small || place === "bottom" || place === "top" ? r.left + r.width / 2 : place === "right" ? r.right - inset : r.left + inset,
-    y: small || place === "right" || place === "left" ? r.top + r.height / 2 : place === "bottom" ? r.bottom - Math.min(18, r.height / 2) : r.top + Math.min(18, r.height / 2),
+  // The ring sits on the control's edge facing the callout, so it never hides the label.
+  // A small control (an icon) gets a hollow ring round it instead, so the dot never hides it.
+  const small = r.width < 64 && r.height < 64;
+  const OUT = 6; // the dot sits a little outside the edge, clear of the label
+  const ring = small ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : {
+    x: place === "right" ? r.right + OUT : place === "left" ? r.left - OUT : r.left + Math.min(r.width / 2, Math.max(24, r.width - 40)),
+    y: place === "bottom" ? r.bottom + OUT : place === "top" ? r.top - OUT : r.top + r.height / 2,
   };
+  const hollow = Math.max(r.width, r.height) + 16;
   const width = Math.min(W, vw - 32);
   let left: number, top: number;
-  if (place === "right") { left = ring.x + GAP + 14; top = ring.y - boxH / 2; }
-  else if (place === "left") { left = ring.x - GAP - 14 - width; top = ring.y - boxH / 2; }
-  else if (place === "bottom") { left = ring.x - width / 2; top = ring.y + GAP + 14; }
-  else { left = ring.x - width / 2; top = ring.y - GAP - 14 - boxH; }
+  if (place === "right") { left = r.right + CLEAR; top = ring.y - boxH / 2; }
+  else if (place === "left") { left = r.left - CLEAR - width; top = ring.y - boxH / 2; }
+  else if (place === "bottom") { left = ring.x - width / 2; top = r.bottom + CLEAR; }
+  else { left = ring.x - width / 2; top = r.top - CLEAR - boxH; }
   left = Math.max(16, Math.min(left, vw - width - 16));
   top = Math.max(16, Math.min(top, window.innerHeight - boxH - 16));
   // The arrow on the callout's edge, lined up with the ring.
@@ -166,11 +173,18 @@ export function GuideLayer() {
     <div className="pointer-events-none fixed inset-0 z-[60]" aria-live="polite" data-testid="guide">
       {/* A soft outline round the control, so it's clear what the ring is on. */}
       <div className="absolute rounded-xl ring-2 ring-[#053877]/35 transition-all duration-200" style={{ left: r.left - 4, top: r.top - 4, width: r.width + 8, height: r.height + 8 }} />
+      {small ? (
+        <span className="absolute -translate-x-1/2 -translate-y-1/2" style={{ left: ring.x, top: ring.y }}>
+          <span className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 rounded-full ring-4 ring-[#053877]/25 motion-safe:animate-ping" style={{ width: hollow + 8, height: hollow + 8 }} />
+          <span className="relative block rounded-full border-[4px] border-[#053877] shadow-[0_0_0_3px_rgba(255,255,255,0.7)]" style={{ width: hollow, height: hollow }} />
+        </span>
+      ) : (
       <span className="absolute -translate-x-1/2 -translate-y-1/2" style={{ left: ring.x, top: ring.y }}>
         <span className="absolute left-1/2 top-1/2 h-14 w-14 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#053877]/15 motion-safe:animate-ping" />
         <span className="absolute left-1/2 top-1/2 h-12 w-12 -translate-x-1/2 -translate-y-1/2 rounded-full bg-[#053877]/10 ring-1 ring-[#053877]/20" />
         <span className="relative block h-7 w-7 rounded-full border-[5px] border-[#053877] bg-white/70 shadow-[0_0_0_4px_rgba(255,255,255,0.6)]" />
       </span>
+      )}
       <div
         ref={box}
         role="dialog"

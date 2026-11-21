@@ -16,6 +16,8 @@ import type { GuideTarget } from "@shared/guideTargets";
 export type GuideMe = { enabled: false } | { enabled: true; name: string; avatarUrl: string; voice: boolean; targets: GuideTarget[] };
 const KEY = ["/api/guide/me"];
 const SPEAK = "mv-guide-speak";
+/** When she doesn't know (Alex's rule): never promise a person, never say someone is looking. */
+const NOT_SURE = "I'm not sure about that one. Leave a note and someone will get back to you as soon as possible.";
 
 export function useGuide(): GuideMe | undefined {
   return useQuery<GuideMe>({
@@ -60,6 +62,8 @@ export function LoriGuide({ g, compact = false }: { g: Extract<GuideMe, { enable
   const [showing, setShowing] = useState(false);
   const opener: Msg = { role: "assistant", content: `Hi, I'm ${g.name}, your AI guide. Ask me how to do anything here and I'll show you where to click.` };
   const [msgs, setMsgs] = useState<Msg[]>([opener]);
+  const msgsRef = useRef(msgs);
+  msgsRef.current = msgs;
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [waiting, setWaiting] = useState<{ token: string; until: number } | null>(null);
@@ -86,8 +90,8 @@ export function LoriGuide({ g, compact = false }: { g: Extract<GuideMe, { enable
 
   const send = async (said?: string) => {
     const text = (said ?? draft).trim();
-    if (!text || busy || waiting) return;
-    const history = [...msgs, { role: "user" as const, content: text }];
+    if (!text || busy) return;
+    const history = [...msgsRef.current, { role: "user" as const, content: text }];
     setMsgs(history); setDraft(""); setBusy(true);
     try {
       const r = await fetch("/api/guide/chat", {
@@ -97,19 +101,23 @@ export function LoriGuide({ g, compact = false }: { g: Extract<GuideMe, { enable
       const j = (await r.json().catch(() => ({}))) as Reply & { message?: string };
       if (!r.ok) throw new Error(j.message || "I couldn't answer that just now. Try again in a moment.");
       if (j.name) qc.setQueryData<GuideMe>(KEY, (o) => (o && o.enabled ? { ...o, name: j.name! } : o));
-      add({ role: "assistant", content: j.text, offer: j.offer });
-      if (j.waiting) setWaiting({ token: j.waiting, until: Date.now() + ((j.waitSec ?? 300) + 30) * 1000 });
-      else if (j.handoff) setForm("open");
+      if (j.waiting || j.handoff) {
+        // She doesn't know: no "checking with the team", no person looking. A note, and the form (Alex's rule).
+        add({ role: "assistant", content: NOT_SURE });
+        setForm("open");
+        // If the question did go to the team and an answer comes back while the panel is open, it shows here.
+        if (j.waiting) setWaiting({ token: j.waiting, until: Date.now() + ((j.waitSec ?? 300) + 30) * 1000 });
+      } else add({ role: "assistant", content: j.text, offer: j.offer });
     } catch (e) {
       add({ role: "assistant", content: (e as Error).message || "I couldn't answer that just now. Try again in a moment." });
     } finally { setBusy(false); }
   };
 
-  // Checking with the team: ask every 3 seconds; no answer in time and the form comes up.
+  // A question that went to the team: look for an answer every 3 seconds, quietly (the form is already up).
   useEffect(() => {
     if (!waiting) return;
     let stop = false;
-    const giveUp = () => { setWaiting(null); add({ role: "assistant", content: "Want to leave it with the team? Someone will get back to you as soon as possible." }); setForm("open"); };
+    const giveUp = () => setWaiting(null);
     const t = window.setInterval(async () => {
       if (stop) return;
       if (Date.now() > waiting.until) return giveUp();
@@ -117,7 +125,7 @@ export function LoriGuide({ g, compact = false }: { g: Extract<GuideMe, { enable
         const r = await fetch(`/api/help/question/${encodeURIComponent(waiting.token)}`, { cache: "no-store" });
         if (!r.ok || stop) return;
         const q = (await r.json()) as { status: string; answer: string };
-        if (q.status === "answered" && q.answer) { setWaiting(null); add({ role: "assistant", content: `Here's what the team says: ${q.answer}` }); }
+        if (q.status === "answered" && q.answer) { setWaiting(null); add({ role: "assistant", content: `Here's the answer: ${q.answer}` }); }
         else if (q.status === "timed_out") giveUp();
       } catch { /* next tick */ }
     }, 3000);
@@ -161,7 +169,27 @@ export function LoriGuide({ g, compact = false }: { g: Extract<GuideMe, { enable
       recorder.current = mr;
       mr.start();
       setRec("listening");
-      window.setTimeout(() => { if (mr.state === "recording") mr.stop(); }, 30_000);
+      const done = () => { if (mr.state === "recording") mr.stop(); };
+      window.setTimeout(done, 30_000);
+      // Pause detection: once he has spoken, ~1.5 s of quiet ends it.
+      try {
+        const ctx = new AudioContext();
+        const an = ctx.createAnalyser();
+        an.fftSize = 1024;
+        ctx.createMediaStreamSource(stream).connect(an);
+        const buf = new Float32Array(an.fftSize);
+        let spoke = 0, quietSince = 0;
+        const t = window.setInterval(() => {
+          if (mr.state !== "recording") { window.clearInterval(t); void ctx.close(); return; }
+          an.getFloatTimeDomainData(buf);
+          let sum = 0;
+          for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+          const loud = Math.sqrt(sum / buf.length) > 0.015;
+          const now = Date.now();
+          if (loud) { spoke += 100; quietSince = 0; }
+          else if (spoke >= 300) { if (!quietSince) quietSince = now; else if (now - quietSince >= 1500) done(); }
+        }, 100);
+      } catch { /* no Web Audio: the red mic and the 30 s cap still end it */ }
     } catch {
       add({ role: "assistant", content: "I can't hear you yet. Allow the microphone for this site, or type your question." });
     }
@@ -188,7 +216,7 @@ export function LoriGuide({ g, compact = false }: { g: Extract<GuideMe, { enable
           <div className="flex items-center justify-between bg-[#053877] px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] text-white">
             <div className="flex min-w-0 items-center gap-3">
               <Face g={g} size={`h-10 w-10 text-base ${speaking ? "ring-4 ring-[#F0A71F]/60" : ""}`} />
-              <div className="min-w-0"><p className="text-sm font-semibold">{g.name} · AI guide</p><p className="truncate text-[11px] text-white/80">{rec === "listening" ? "Listening… tap the red mic when you're done" : rec === "hearing" ? "Getting that…" : speaking ? "Speaking" : busy ? "Thinking…" : "Shows you where to click. You make every click."}</p></div>
+              <div className="min-w-0"><p className="text-sm font-semibold">{g.name} · AI guide</p><p className="truncate text-[11px] text-white/80">{rec === "listening" ? "Listening… stops when you pause" : rec === "hearing" ? "Getting that…" : speaking ? "Speaking" : busy ? "Thinking…" : "Shows you where to click. You make every click."}</p></div>
             </div>
             <button type="button" onClick={() => { hush(); setOpen(false); }} className="rounded-full p-1.5 hover:bg-white/10" aria-label="Close"><X className="h-4 w-4" /></button>
           </div>
@@ -211,8 +239,8 @@ export function LoriGuide({ g, compact = false }: { g: Extract<GuideMe, { enable
                 )}
               </div>
             ))}
-            {(busy || waiting) && (
-              <div className="flex items-center gap-2"><Face g={g} size="h-6 w-6 text-[11px]" /><span className="flex items-center gap-1.5 rounded-2xl bg-[#f2f4f7] px-3.5 py-2.5 text-[13px] font-semibold text-[#475467]"><Loader2 className="h-3.5 w-3.5 animate-spin" />{waiting ? "Checking with the team…" : "Thinking…"}</span></div>
+            {busy && (
+              <div className="flex items-center gap-2"><Face g={g} size="h-6 w-6 text-[11px]" /><span className="flex items-center gap-1.5 rounded-2xl bg-[#f2f4f7] px-3.5 py-2.5 text-[13px] font-semibold text-[#475467]"><Loader2 className="h-3.5 w-3.5 animate-spin" />Thinking…</span></div>
             )}
             {form && <TeamForm sent={form === "sent"} transcript={msgs} page={location} onSent={() => setForm("sent")} />}
           </div>
@@ -228,7 +256,7 @@ export function LoriGuide({ g, compact = false }: { g: Extract<GuideMe, { enable
                 </button>
               )}
               <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={`Ask ${g.name} how to do something…`} className="h-10 min-w-0 flex-1 rounded-xl border border-[#d0d5dd] bg-white px-3 text-sm outline-none focus:border-[#053877]" aria-label={`Ask ${g.name}`} data-testid="lori-input" />
-              <button type="submit" disabled={!draft.trim() || busy || !!waiting} aria-label="Send" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#053877] text-white disabled:opacity-40" data-testid="lori-send"><Send className="h-4 w-4" /></button>
+              <button type="submit" disabled={!draft.trim() || busy} aria-label="Send" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#053877] text-white disabled:opacity-40" data-testid="lori-send"><Send className="h-4 w-4" /></button>
             </div>
             <p className="mt-2 text-[11px] text-[#98a2b3]">{g.name} is AI.{g.voice ? " Tap the mic to talk out loud." : ""}</p>
           </form>
@@ -241,7 +269,7 @@ export function LoriGuide({ g, compact = false }: { g: Extract<GuideMe, { enable
   );
 }
 
-/** When she can't answer: leave it with the team, by email. */
+/** When she can't answer: leave a note, and someone replies by email. */
 function TeamForm({ sent, transcript, page, onSent }: { sent: boolean; transcript: Msg[]; page: string; onSent: () => void }) {
   const siteKey = useTurnstileSiteKey();
   const last = [...transcript].reverse().find((m) => m.role === "user")?.content ?? "";
@@ -261,7 +289,7 @@ function TeamForm({ sent, transcript, page, onSent }: { sent: boolean; transcrip
   };
   return (
     <form onSubmit={(e) => { e.preventDefault(); void submit(); }} className="space-y-2 rounded-2xl bg-white p-3 shadow-sm" data-testid="lori-team-form">
-      <p className="text-[13px] font-semibold">Leave it with the team</p>
+      <p className="text-[13px] font-semibold">Leave a note</p>
       <input type="email" required value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@example.com" className="h-9 w-full rounded-lg border border-[#d0d5dd] px-3 text-[14px]" aria-label="Your email" />
       <textarea required value={question} onChange={(e) => setQuestion(e.target.value)} rows={3} className="w-full rounded-lg border border-[#d0d5dd] px-3 py-2 text-[14px]" aria-label="Your question" />
       {siteKey && <Turnstile siteKey={siteKey} onToken={setHuman} resetSignal={0} />}
