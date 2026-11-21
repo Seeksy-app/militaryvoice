@@ -40,6 +40,23 @@ export function ConnectedAccountsStrip({
     return () => ro.disconnect();
   }, [accounts.length, extraCount]);
   const showGhosts = accounts.length === 0 && !!ghosts?.length;
+  // All five networks in view: with their names when the row has room, just their logos when it doesn't
+  // (the dashboard's column at 1180, a phone). Measured, so a wider screen gets the names back.
+  const [tight, setTight] = useState(false);
+  const [rowW, setRowW] = useState(0);
+  useLayoutEffect(() => {
+    const el = row.current;
+    if (!el || !showGhosts) return;
+    const ro = new ResizeObserver(() => setRowW((w) => (Math.abs(w - el.clientWidth) > 2 ? el.clientWidth : w)));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [showGhosts]);
+  useLayoutEffect(() => { setTight(false); }, [rowW]);
+  useLayoutEffect(() => {
+    const el = row.current;
+    if (!el || !showGhosts || tight) return;
+    if (el.scrollHeight > el.clientHeight + 4 || el.scrollWidth > el.clientWidth + 4) setTight(true);
+  });
   if (accounts.length + extraCount === 0 && !showGhosts) return null;
 
   return (
@@ -49,7 +66,7 @@ export function ConnectedAccountsStrip({
           {showGhosts ? "Connect your accounts" : <>Connected accounts <span className="font-normal text-muted-foreground">({accounts.length + extraCount})</span></>}
         </p>
         <span className="flex items-center gap-3">
-        {(more || open) && (
+        {(more || open) && !showGhosts && (
           <button type="button" onClick={() => setOpen((v) => !v)} className="hidden text-xs font-semibold text-muted-foreground hover:text-foreground sm:inline" data-testid="button-accounts-more">
             {open ? "Show fewer" : showGhosts ? "Show all" : `Show all ${accounts.length + extraCount}`}
           </button>
@@ -101,7 +118,7 @@ export function ConnectedAccountsStrip({
                 {a.displayName || a.username}
               </span>
               <span className="block truncate text-xs font-semibold leading-tight text-foreground sm:font-normal sm:text-muted-foreground">
-                {a.followers != null ? <>{formatFollowers(a.followers)}<span className="hidden sm:inline"> followers</span></> : a.username ? `@${a.username.replace(/^@/, "")}` : "Connected"}
+                {a.followers != null ? <>{formatFollowers(a.followers)} followers</> : a.username ? `@${a.username.replace(/^@/, "")}` : "Connected"}
               </span>
             </span>
 
@@ -118,17 +135,15 @@ export function ConnectedAccountsStrip({
             type="button"
             onClick={onManage}
             title={`Connect ${platformLabel(p)}. It shows as a follow button on your card, and we post your promo cards there for you.`}
-            className="group flex shrink-0 items-center gap-2 rounded-xl border border-dashed border-border bg-card/60 px-2.5 py-1.5 text-left transition-colors hover:border-solid hover:border-primary/40 hover:bg-card hover:shadow-sm sm:gap-2.5 sm:px-3 sm:py-2"
+            aria-label={`Connect ${platformLabel(p)}`}
+            className={`group flex shrink-0 items-center gap-2 rounded-xl border border-dashed border-border bg-card/60 py-1.5 text-left ${tight ? "px-2" : "pl-2 pr-3"} transition-colors hover:border-solid hover:border-primary/40 hover:bg-card hover:shadow-sm sm:py-2`}
             data-testid={`chip-ghost-${p}`}
           >
             {/* Greyed out until hovered: the network's own colour is the hint that it's one click away. */}
             <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground opacity-70 grayscale transition group-hover:opacity-100 group-hover:grayscale-0 group-hover:text-white" style={{ ["--ghost-bg" as string]: platformBackground(p) }}>
               <span className="flex h-8 w-8 items-center justify-center rounded-full group-hover:[background:var(--ghost-bg)]"><PlatformIcon platform={p} className="h-4 w-4" /></span>
             </span>
-            <span className="min-w-0">
-              <span className="block text-sm font-medium leading-tight text-muted-foreground group-hover:text-foreground">{platformLabel(p)}</span>
-              <span className="block text-xs leading-tight text-muted-foreground/80">Connect</span>
-            </span>
+            {!tight && <span className="whitespace-nowrap text-sm font-medium text-muted-foreground group-hover:text-foreground">{platformLabel(p)}</span>}
           </button>
         ))}
         {!showGhosts && extra}
