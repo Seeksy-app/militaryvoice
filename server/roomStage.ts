@@ -252,4 +252,39 @@ export function registerRoomStage(app: Express, requireHostSession: RequestHandl
     }
     res.json({ identity, onStage: on });
   });
+
+  /**
+   * A guest's ⋯ menu (StreamYard's person tile, 21 Nov): mute their mic, or remove them from the
+   * studio. Guests only. Mute is one way: they unmute themselves when they're ready. A removed guest
+   * can come back on the invite link (a new link keeps them out).
+   */
+  const guestIn = async (row: PersonalStudioRow, identity: string) =>
+    (await rooms().listParticipants(roomOf(row))).find((p) => p.identity === identity);
+  app.post("/api/host/my-studio/mute", requireHostSession, async (req, res) => {
+    const got = await studioOf(req);
+    if (!got) return res.status(404).json({ message: "Open your studio first." });
+    const identity = String(req.body?.identity ?? "");
+    if (!/^guest-[a-z0-9]+$/i.test(identity)) return res.status(400).json({ message: "Only guests can be muted from here." });
+    try {
+      const p = await guestIn(got.row, identity);
+      if (!p) return res.status(404).json({ message: "They've left the studio." });
+      const mic = p.tracks.find((t) => t.source === TrackSource.MICROPHONE && !t.muted);
+      if (mic) await rooms().mutePublishedTrack(roomOf(got.row), identity, mic.sid, true);
+    } catch {
+      return res.status(502).json({ message: "The studio didn't answer. Try again in a moment." });
+    }
+    res.json({ identity, muted: true });
+  });
+  app.post("/api/host/my-studio/remove", requireHostSession, async (req, res) => {
+    const got = await studioOf(req);
+    if (!got) return res.status(404).json({ message: "Open your studio first." });
+    const identity = String(req.body?.identity ?? "");
+    if (!/^guest-[a-z0-9]+$/i.test(identity)) return res.status(400).json({ message: "Only guests can be removed." });
+    try {
+      if (await guestIn(got.row, identity)) await rooms().removeParticipant(roomOf(got.row), identity);
+    } catch {
+      return res.status(502).json({ message: "The studio didn't answer. Try again in a moment." });
+    }
+    res.json({ identity, removed: true });
+  });
 }

@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  LiveKitRoom, RoomAudioRenderer, VideoTrack, isTrackReference, useChat, useConnectionState, useIsSpeaking,
+  LiveKitRoom, RoomAudioRenderer, VideoTrack, isTrackReference, useChat, useConnectionState, useIsMuted, useIsSpeaking,
   useLocalParticipant, useMediaDeviceSelect, useParticipantAttribute, useParticipants, useRoomContext, useRoomInfo, useSpeakingParticipants, useTracks,
   type TrackReferenceOrPlaceholder,
 } from "@livekit/components-react";
-import { ConnectionState, Track, type Participant } from "livekit-client";
+import { ConnectionState, DisconnectReason, Track, type Participant } from "livekit-client";
 import {
-  ArrowLeft, Check, Circle, Clapperboard, Copy, ExternalLink, Image as ImageIcon, Loader2, LogOut, MessageSquare, Mic, MicOff, MonitorUp, NotebookPen,
+  ArrowLeft, Check, Circle, Clapperboard, Copy, ExternalLink, Image as ImageIcon, Loader2, LogOut, MessageSquare, Mic, MicOff, MonitorUp, MoreHorizontal, NotebookPen,
   Palette, Plus, Settings, Square, UserPlus, Users, Video, VideoOff, X, Youtube,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
@@ -72,6 +72,7 @@ export default function MyStudio({ invite }: { invite?: string }) {
   const [conn, setConn] = useState<Conn | null>(null);
   const [setup, setSetup] = useState<Setup | null>(null);
   const [left, setLeft] = useState(false);
+  const [removed, setRemoved] = useState(false);
   const guestInfo = useQuery<{ name: string }>({ queryKey: ["/api/my-studio/invite", invite], enabled: !owner, queryFn: async () => (await apiRequest("GET", `/api/my-studio/invite/${invite}`)).json(), retry: false });
   const studio = useQuery<Studio>({ queryKey: ["/api/host/my-studio"], enabled: owner, queryFn: async () => (await apiRequest("GET", "/api/host/my-studio")).json(), retry: false, refetchInterval: conn ? 8000 : false });
   const roomName = (owner ? studio.data?.name : guestInfo.data?.name) || "";
@@ -80,7 +81,7 @@ export default function MyStudio({ invite }: { invite?: string }) {
     return (
       <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-[#f3f4f7] p-6 text-center text-[#101828]">
         <Logo className="h-12" />
-        <p className="mt-4 text-2xl font-bold">{owner ? "You've left your studio" : "Thanks for joining"}</p>
+        <p className="mt-4 text-2xl font-bold">{owner ? "You've left your studio" : removed ? "The host removed you from the studio" : "Thanks for joining"}</p>
         {owner ? (
           <>
             <p className="max-w-md text-[#475467]">Anything you recorded is on its way to your Library, ready for clips.</p>
@@ -92,9 +93,9 @@ export default function MyStudio({ invite }: { invite?: string }) {
           </>
         ) : (
           <>
-            <p className="max-w-md text-[#475467]">You've left the studio. You can close this tab.</p>
+            <p className="max-w-md text-[#475467]">{removed ? "You're no longer in the studio or the show. If that was a mistake, ask the host." : "You've left the studio. You can close this tab."}</p>
             <div className="flex flex-wrap justify-center gap-3">
-              <button type="button" onClick={() => { setLeft(false); setConn(null); }} className="h-11 rounded-xl border border-[#d0d5dd] bg-white px-5 font-semibold" data-testid="left-rejoin">Join again</button>
+              {!removed && <button type="button" onClick={() => { setLeft(false); setConn(null); }} className="h-11 rounded-xl border border-[#d0d5dd] bg-white px-5 font-semibold" data-testid="left-rejoin">Join again</button>}
               <a href="/" className="flex h-11 items-center rounded-xl px-5 font-semibold text-white" style={{ background: NAVY }}>Go to MilitaryVoices.ai</a>
             </div>
           </>
@@ -129,7 +130,7 @@ export default function MyStudio({ invite }: { invite?: string }) {
       connect
       video={setup.cam ? (setup.camId ? { deviceId: setup.camId } : true) : false}
       audio={setup.mic ? (setup.micId ? { deviceId: setup.micId } : true) : false}
-      onDisconnected={() => setLeft(true)}
+      onDisconnected={(why) => { setRemoved(why === DisconnectReason.PARTICIPANT_REMOVED); setLeft(true); }}
       style={{ height: "100dvh" }}
     >
       <RoomAudioRenderer />
@@ -635,28 +636,84 @@ function PeopleStrip({ kit, owner, sharing, onShare, onInvite }: { kit: RoomKit;
     // its menu never showed (Andrew, 21 Nov: "This doesn't work").
     <div className="mt-3 flex w-full max-w-[768px] shrink-0 gap-3">
     <div className="flex min-w-0 flex-1 gap-3 overflow-x-auto pb-1" data-testid="my-studio-strip">
-      {cams.map((t) => {
-        const p = t.participant;
-        const name = p.name || p.identity;
-        const on = kit.isOnStage(p.identity, p.attributes?.stage);
-        const guest = p.identity.startsWith("guest-");
-        return (
-          <div key={key(t)} className={`relative h-24 w-40 shrink-0 overflow-hidden rounded-xl border border-[#e4e7ec] bg-white ${on ? "" : "opacity-70"}`} data-testid="strip-person">
-            <div className="absolute inset-x-0 top-0 bottom-6"><MiniFace t={t} /></div>
-            <div className="absolute inset-x-2.5 bottom-1 truncate text-left text-xs font-semibold">{name}{p.isLocal ? " (you)" : ""}</div>
-            {(scenes || !on) && (on
-              ? <div className="absolute left-2 top-2 rounded-full bg-[#d1fadf] px-2 py-0.5 text-[10px] font-bold text-[#067647]">ON STAGE</div>
-              : <div className="absolute left-2 top-2 rounded-full bg-[#f2f4f7] px-2 py-0.5 text-[10px] font-bold text-[#475467]">BACKSTAGE</div>)}
-            {owner && scenes && guest && (
-              <button type="button" onClick={() => void kit.backstage(p.identity, !on)} className={`absolute right-1.5 top-1.5 rounded-lg px-2 py-1 text-[11px] font-bold shadow-sm ${on ? "bg-white text-[#344054] ring-1 ring-[#d0d5dd] hover:bg-[#f9fafb]" : "bg-[#053877] text-white hover:bg-[#0a4a99]"}`} data-testid="strip-stage-toggle">
-                {on ? "Send backstage" : "Bring on stage"}
-              </button>
-            )}
-          </div>
-        );
-      })}
+      {cams.map((t) => <PersonTile key={key(t)} t={t} kit={kit} owner={owner} scenes={scenes} />)}
     </div>
       <PresentButton kit={kit} owner={owner} sharing={sharing} canPresent={scenes && owner} onShare={onShare} onInvite={onInvite} />
+    </div>
+  );
+}
+
+/**
+ * One person in the row (StreamYard's person tile, 21 Nov): their picture, a mic light (red when
+ * muted, a green ring while they talk), and for the owner on a guest, a ⋯ menu: on stage or
+ * backstage, mute their mic, remove them from the studio.
+ */
+function PersonTile({ t, kit, owner, scenes }: { t: TrackReferenceOrPlaceholder; kit: RoomKit; owner: boolean; scenes: boolean }) {
+  const { toast } = useToast();
+  const p = t.participant;
+  const name = p.name || p.identity;
+  const on = kit.isOnStage(p.identity, p.attributes?.stage);
+  const guest = p.identity.startsWith("guest-");
+  const micPub = p.getTrackPublication(Track.Source.Microphone);
+  const muted = useIsMuted(micPub ? { participant: p, source: Track.Source.Microphone, publication: micPub } : { participant: p, source: Track.Source.Microphone });
+  const speaking = useIsSpeaking(p);
+  const [menu, setMenu] = useState<null | { x: number; y: number; confirm?: boolean }>(null);
+  const [busy, setBusy] = useState(false);
+  const first = name.split(/\s+/)[0] || "them";
+  const act = async (url: string, fail: string) => {
+    setBusy(true);
+    try { await apiRequest("POST", url, { identity: p.identity }); setMenu(null); }
+    catch (e) { toast({ title: fail, description: say(e), variant: "destructive" }); }
+    finally { setBusy(false); }
+  };
+  const open = (e: React.MouseEvent<HTMLButtonElement>) => {
+    // Fixed to the screen: the row scrolls sideways, and a scrolling row clips anything that pops out of it.
+    const r = e.currentTarget.getBoundingClientRect();
+    setMenu(menu ? null : { x: Math.max(8, Math.min(window.innerWidth - 248, r.right - 240)), y: r.top - 8 });
+  };
+  const item = "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[14px] font-medium text-[#101828] hover:bg-[#f2f4f7] disabled:cursor-default disabled:text-[#98a2b3] disabled:hover:bg-transparent";
+  return (
+    <div className={`relative h-24 w-40 shrink-0 overflow-hidden rounded-xl border bg-white ${speaking && !muted ? "border-[#12b76a] ring-2 ring-[#12b76a]/40" : "border-[#e4e7ec]"} ${on ? "" : "opacity-70"}`} data-testid="strip-person">
+      <div className="absolute inset-x-0 top-0 bottom-6"><MiniFace t={t} /></div>
+      <div className="absolute inset-x-2 bottom-1 flex items-center gap-1 text-left text-xs font-semibold">
+        <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${muted ? "bg-[#fee4e2] text-[#b42318]" : speaking ? "bg-[#d1fadf] text-[#067647]" : "text-[#667085]"}`} data-testid="strip-mic" aria-label={muted ? "Mic off" : "Mic on"}>
+          {muted ? <MicOff className="h-3 w-3" /> : <Mic className="h-3 w-3" />}
+        </span>
+        <span className="min-w-0 flex-1 truncate">{name}{p.isLocal ? " (you)" : ""}</span>
+        {owner && guest && (
+          <button type="button" onClick={open} aria-label={`More for ${name}`} aria-expanded={!!menu} className="-mr-1 flex h-5 w-6 shrink-0 items-center justify-center rounded-md text-[#475467] hover:bg-[#f2f4f7]" data-testid="strip-more"><MoreHorizontal className="h-4 w-4" /></button>
+        )}
+      </div>
+      {(scenes || !on) && (on
+        ? <div className="absolute left-2 top-2 rounded-full bg-[#d1fadf] px-2 py-0.5 text-[10px] font-bold text-[#067647]">ON STAGE</div>
+        : <div className="absolute left-2 top-2 rounded-full bg-[#f2f4f7] px-2 py-0.5 text-[10px] font-bold text-[#475467]">BACKSTAGE</div>)}
+      {owner && scenes && guest && (
+        <button type="button" onClick={() => void kit.backstage(p.identity, !on)} className={`absolute right-1.5 top-1.5 rounded-lg px-2 py-1 text-[11px] font-bold shadow-sm ${on ? "bg-white text-[#344054] ring-1 ring-[#d0d5dd] hover:bg-[#f9fafb]" : "bg-[#053877] text-white hover:bg-[#0a4a99]"}`} data-testid="strip-stage-toggle">
+          {on ? "Send backstage" : "Bring on stage"}
+        </button>
+      )}
+      {menu && (
+        <>
+          <button type="button" aria-label="Close" className="fixed inset-0 z-30 cursor-default" onClick={() => setMenu(null)} />
+          <div className="fixed z-40 w-60 -translate-y-full rounded-xl border border-[#e4e7ec] bg-white p-1.5 shadow-[0_12px_32px_rgba(16,24,40,0.18)]" style={{ left: menu.x, top: menu.y }} data-testid="strip-person-menu">
+            {menu.confirm ? (
+              <div className="p-2.5">
+                <p className="text-sm font-semibold">Remove {name} from the studio?</p>
+                <p className="mt-1 text-[13px] text-[#667085]">They leave the studio and the show. They can come back on your invite link.</p>
+                <div className="mt-3 flex gap-2">
+                  <button type="button" disabled={busy} onClick={() => void act("/api/host/my-studio/remove", `Couldn't remove ${first}`)} className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg bg-[#d92d20] text-[13px] font-bold text-white disabled:opacity-60" data-testid="strip-remove-yes">{busy && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Remove</button>
+                  <button type="button" onClick={() => setMenu(null)} className="h-9 flex-1 rounded-lg bg-white text-[13px] font-semibold text-[#344054] ring-1 ring-[#d0d5dd]">Cancel</button>
+                </div>
+              </div>
+            ) : <>
+              {scenes && <button type="button" onClick={() => { setMenu(null); void kit.backstage(p.identity, !on); }} className={item}><Users className="h-[18px] w-[18px]" /> {on ? "Send backstage" : "Bring on stage"}</button>}
+              <button type="button" disabled={muted || busy} onClick={() => void act("/api/host/my-studio/mute", `Couldn't mute ${first}`)} className={item} data-testid="strip-mute"><MicOff className="h-[18px] w-[18px]" /> {muted ? "Their mic is off" : `Mute ${first}'s mic`}</button>
+              <div className="my-1 h-px bg-[#eaecf0]" />
+              <button type="button" onClick={() => setMenu({ ...menu, confirm: true })} className={`${item} text-[#b42318]`} data-testid="strip-remove"><LogOut className="h-[18px] w-[18px]" /> Remove from studio</button>
+            </>}
+          </div>
+        </>
+      )}
     </div>
   );
 }
