@@ -554,7 +554,8 @@ export function PodcastListens({ onConnect, bare = false }: { onConnect: () => v
           ))}
         </div>
       )}
-        <div className="ml-auto"><RangePicker sel={range} onChange={setRange} /></div>
+        {/* Custom's two date boxes take a row of their own, so the tabs keep theirs. */}
+        <div className={range.r === "custom" ? "flex w-full justify-end" : "ml-auto"}><RangePicker sel={range} onChange={setRange} /></div>
       </div>
       {!bare && <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground"><Headphones className="h-4 w-4" /> Podcast listens</h3>}
       {(q.data?.benchmark ?? []).map((b) => (
@@ -604,7 +605,7 @@ export function PodcastListens({ onConnect, bare = false }: { onConnect: () => v
         const stats: [string, string, string?][] = [
           [span.all && s.source === "podbean" ? `${d.unit}, last 2 years` : `${d.unit}, ${span.label}`, compact(v.sum)],
           [span.all ? "average per episode" : v.byDate ? "average per episode played" : "average per episode, all time", compact(v.avg)],
-          ...(change !== null ? [[`vs ${span.before}`, `${change > 0 ? "+" : ""}${change}%`, change > 0 ? "text-emerald-700 dark:text-emerald-400" : change < 0 ? "text-red-700 dark:text-red-400" : ""] as [string, string, string]] : []),
+          ...(change !== null ? [[`vs ${span.before}`, change >= 900 ? `${Math.round(v.sum / v.prevSum!)}×` : `${change > 0 ? "+" : ""}${change}%`, change > 0 ? "text-emerald-700 dark:text-emerald-400" : change < 0 ? "text-red-700 dark:text-red-400" : ""] as [string, string, string]] : []),
           ...(d.followers ? [["followers", compact(d.followers)] as [string, string]] : []),
         ];
         // What this source can't do for these dates, said once, quietly.
