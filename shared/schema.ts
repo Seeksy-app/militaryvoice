@@ -2612,9 +2612,12 @@ export interface PodcastStatsData {
   total: number;
   /** "downloads" or "streams": the word the source uses. */
   unit: "downloads" | "streams";
-  episodes: { title: string; published: string; count: number }[];
+  /** `days`: the episode's count on each day it had any (hosted, Transistor), so a date range can rank episodes. */
+  episodes: { title: string; published: string; count: number; days?: Record<string, number> }[];
   /** Per day or per month, oldest first. */
   series?: { date: string; count: number }[];
+  /** Hosted shows: each app's count on each day it had any, for Apple Podcasts and "Where they listen" in a date range. */
+  appDays?: Record<string, Record<string, number>>;
   followers?: number;
   audience?: { age?: Record<string, number>; gender?: Record<string, number>; countries?: Record<string, number>; apps?: Record<string, number> };
   /** The span the numbers cover, for "as of". */

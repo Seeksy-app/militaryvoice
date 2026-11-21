@@ -36,7 +36,7 @@ async function bz<T>(token: string, path: string): Promise<T> {
   return r.json() as Promise<T>;
 }
 
-async function buzzsprout(creds: { token: string; podcastId?: string }): Promise<{ showName: string; podcastId: string; data: PodcastStatsData }> {
+async function buzzsprout(creds: { token: string; podcastId?: string }, prev?: PodcastStatsData | null): Promise<{ showName: string; podcastId: string; data: PodcastStatsData }> {
   const shows = await bz<{ id: number; title: string; artwork_url?: string }[]>(creds.token, "podcasts.json");
   const show = creds.podcastId ? shows.find((s) => String(s.id) === String(creds.podcastId)) : shows[0];
   if (!show) throw new StatsError(shows.length ? "That podcast ID isn't on this Buzzsprout account." : "No podcasts on this Buzzsprout account.");
@@ -45,21 +45,33 @@ async function buzzsprout(creds: { token: string; podcastId?: string }): Promise
     .filter((e) => !e.private)
     .map((e) => ({ title: e.title, published: (e.published_at || "").slice(0, 10), count: Math.max(0, Number(e.total_downloads ?? e.total_plays) || 0) }))
     .sort((a, b) => b.published.localeCompare(a.published));
-  // The last 30 days, a day per call (the API has no range), five at a time
-  // to stay well under 60 a minute.
-  const days = Array.from({ length: 30 }, (_, i) => day(new Date(Date.now() - (30 - i) * 86400000)));
-  const series: { date: string; count: number }[] = [];
-  for (let i = 0; i < days.length; i += 5) {
-    const batch = await Promise.all(days.slice(i, i + 5).map(async (d) => {
+  // A day per call (the API has no range), five at a time to stay well under 60 a minute.
+  // The last 30 days every time (the newest still settle); then, so date ranges reach back
+  // (21 Nov), each refresh adds up to 30 older days to what we kept, back to the first
+  // episode or a year, whichever is nearer.
+  const recent = Array.from({ length: 30 }, (_, i) => day(new Date(Date.now() - (30 - i) * 86400000)));
+  const kept = new Map((prev?.series ?? []).filter((x) => /^\d{4}-\d{2}-\d{2}$/.test(x.date)).map((x) => [x.date, x.count]));
+  const firstEp = episodes.map((e) => e.published).filter(Boolean).sort()[0] ?? recent[0];
+  const floor = [firstEp, day(new Date(Date.now() - 365 * 86400000))].sort().slice(-1)[0];
+  const oldest = [recent[0], ...Array.from(kept.keys())].sort()[0];
+  const older: string[] = [];
+  for (let t = Date.parse(oldest) - 86400000; older.length < 30 && day(new Date(t)) >= floor; t -= 86400000) older.push(day(new Date(t)));
+  // Days missed while nobody opened the page (between what we kept and the last 30), up to 30 a time.
+  const gaps: string[] = [];
+  for (let t = Date.parse(oldest); gaps.length < 30 && day(new Date(t)) < recent[0]; t += 86400000) if (!kept.has(day(new Date(t)))) gaps.push(day(new Date(t)));
+  const want = [...recent, ...gaps, ...older].slice(0, 55); // under Buzzsprout's 60 a minute
+  for (let i = 0; i < want.length; i += 5) {
+    const batch = await Promise.all(want.slice(i, i + 5).map(async (d) => {
       const rows = await bz<{ total: number }[]>(creds.token, `${show.id}/downloads.json?date=${d}`).catch(() => null);
       return rows ? { date: d, count: rows.reduce((a, r) => a + (Number(r.total) || 0), 0) } : null;
     }));
-    for (const b of batch) if (b) series.push(b);
+    for (const b of batch) if (b) kept.set(b.date, b.count);
   }
+  const series = Array.from(kept, ([date, count]) => ({ date, count })).sort((a, b) => a.date.localeCompare(b.date)).slice(-730);
   return {
     showName: show.title,
     podcastId: String(show.id),
-    data: { total: episodes.reduce((a, e) => a + e.count, 0), unit: "downloads", episodes, series, from: days[0], to: days[days.length - 1], artwork: /^https:\/\//.test(show.artwork_url ?? "") ? show.artwork_url : undefined },
+    data: { total: episodes.reduce((a, e) => a + e.count, 0), unit: "downloads", episodes, series, from: series[0]?.date, to: series[series.length - 1]?.date, artwork: /^https:\/\//.test(show.artwork_url ?? "") ? show.artwork_url : undefined },
   };
 }
 
@@ -93,9 +105,14 @@ async function transistor(creds: { key: string; show?: string }): Promise<{ show
   const eps = await tr<{ data: { attributes: { episodes: { title: string; published_at?: string; downloads: Day[] }[] } } }>(creds.key, `analytics/${show.id}/episodes?${range}`).catch(() => null);
   const days = (all.data?.attributes?.downloads ?? []).map((d) => ({ date: fromT(d.date), count: Math.max(0, Number(d.downloads) || 0) })).sort((a, b) => a.date.localeCompare(b.date));
   const episodes = (eps?.data?.attributes?.episodes ?? [])
-    .map((e) => ({ title: e.title, published: (e.published_at ?? "").slice(0, 10), count: (e.downloads ?? []).reduce((a, d) => a + (Number(d.downloads) || 0), 0) }))
+    .map((e) => {
+      const byDay: Record<string, number> = {};
+      for (const d of e.downloads ?? []) if (Number(d.downloads) > 0) byDay[fromT(d.date)] = Number(d.downloads);
+      return { title: e.title, published: (e.published_at ?? "").slice(0, 10), count: Object.values(byDay).reduce((a, n) => a + n, 0), days: byDay };
+    })
     .sort((a, b) => b.published.localeCompare(a.published));
-  const series = days.slice(-30);
+  // Every day, so the date ranges on Podcast analytics reach back (21 Nov).
+  const series = days;
   return {
     showName: show.attributes.title,
     show: show.id,
@@ -285,7 +302,7 @@ async function refresh(row: PodcastStatsRow): Promise<PodcastStatsRow> {
   const creds = JSON.parse(unseal(row.creds) || "{}");
   try {
     if (row.source === "buzzsprout") {
-      const r = await buzzsprout(creds);
+      const r = await buzzsprout(creds, parse(row.data));
       return storage.upsertPodcastStats(row.email, "buzzsprout", { showName: r.showName, data: JSON.stringify(r.data), status: "ok", error: "", fetchedAt: new Date().toISOString() });
     }
     if (row.source === "transistor") {

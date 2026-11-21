@@ -406,6 +406,38 @@ export async function showStats(showId: number, days = 30) {
   return { total: tot?.n ?? 0, series, episodes: new Map(byEp.map((r) => [r.id, r.n])), apps: Object.fromEntries(byApp.map((r) => [r.app || "Other", r.n])) };
 }
 
+/**
+ * Every day a show has been counted, for the date ranges on Podcast analytics (Andrew, 21 Nov:
+ * "Add dates to the analytics"): the whole series from its first download, and each
+ * episode's and each app's days (only days with downloads), so any range adds up.
+ */
+async function showHistory(showId: number) {
+  const rows = await db.select({ day: hostedDownloads.day, ep: hostedDownloads.episodeId, app: hostedDownloads.app, n: sql<number>`count(*)::int` }).from(hostedDownloads)
+    .where(and(eq(hostedDownloads.showId, showId), listens())).groupBy(hostedDownloads.day, hostedDownloads.episodeId, hostedDownloads.app);
+  const byDay = new Map<string, number>();
+  const epDays = new Map<number, Record<string, number>>();
+  const appDays: Record<string, Record<string, number>> = {};
+  for (const r of rows) {
+    byDay.set(r.day, (byDay.get(r.day) ?? 0) + r.n);
+    const e = epDays.get(r.ep) ?? {};
+    e[r.day] = (e[r.day] ?? 0) + r.n;
+    epDays.set(r.ep, e);
+    const a = (appDays[r.app || "Other"] ??= {});
+    a[r.day] = (a[r.day] ?? 0) + r.n;
+  }
+  const today = new Date().toISOString().slice(0, 10);
+  const first = Array.from(byDay.keys()).sort()[0];
+  // From the first download (at most three years back), or the last 30 days when there are none yet.
+  const start = first && first < today ? Math.max(Date.parse(first), Date.now() - 1095 * 86400000) : Date.now() - 29 * 86400000;
+  const series: { date: string; count: number }[] = [];
+  for (let t = Date.parse(new Date(start).toISOString().slice(0, 10)); ; t += 86400000) {
+    const d = new Date(t).toISOString().slice(0, 10);
+    series.push({ date: d, count: byDay.get(d) ?? 0 });
+    if (d >= today) break;
+  }
+  return { series, epDays, appDays };
+}
+
 /** The hosted show in the same shape as Buzzsprout's and the rest, for the Dashboard and Your analytics. */
 export async function hostedAsStats(email: string): Promise<{ source: "militaryvoices"; showName: string; status: string; error: string; fetchedAt: string; data: PodcastStatsData }[]> {
   await schemaIsReady();
@@ -415,6 +447,7 @@ export async function hostedAsStats(email: string): Promise<{ source: "militaryv
     const eps = (await episodesOf(s.id)).filter(live);
     if (!eps.length) continue;
     const st = await showStats(s.id, 30);
+    const h = await showHistory(s.id);
     out.push({
       source: "militaryvoices" as const,
       showName: s.title,
@@ -424,9 +457,12 @@ export async function hostedAsStats(email: string): Promise<{ source: "militaryv
       data: {
         total: st.total,
         unit: "downloads" as const,
-        episodes: eps.map((e) => ({ title: e.title, published: e.publishedAt.slice(0, 10), count: st.episodes.get(e.id) ?? 0 })),
-        series: st.series,
+        episodes: eps.map((e) => ({ title: e.title, published: e.publishedAt.slice(0, 10), count: st.episodes.get(e.id) ?? 0, days: h.epDays.get(e.id) ?? {} })),
+        series: h.series,
         audience: Object.keys(st.apps).length ? { apps: st.apps } : undefined,
+        appDays: h.appDays,
+        from: h.series[0]?.date,
+        to: h.series[h.series.length - 1]?.date,
         artwork: s.artworkUrl || undefined,
       },
     });
