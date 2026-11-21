@@ -568,6 +568,7 @@ Credits pay for clips, clean episodes, and contact emails past your monthly ones
 An episode in Pōstify: 8 credits (12 on Pro) for every clip in all three shapes with animated captions, and the clean episode. Classic captions: 5 (7 on Pro).
 Music and text edits are included.
 A contact email in Discovery, past your monthly ones: 1 credit. Once paid for, it's free to see again.
+Everything that uses a credit, and how many: What uses credits.
 To top up, press Buy 50 credits · $35 in Plan & billing. On a monthly plan, if you run out, extra credits go on your next bill, up to a limit you set in Pōstify.
 4 Discovery Pro
 Discovery comes with Scale and Pro (and is free for brands and event planners), with a taste each month: 10 searches, 5 full creator profiles and 10 contact emails. Discovery Pro raises that to 100 searches, 25 full profiles and 50 contact emails a month, and includes Verified creators, for $50 a month. You don't need a Pōstify plan for it. Verified creators on its own (everyone MilitaryVoices knows, with real numbers) is $10 a month.
@@ -599,6 +600,59 @@ Not with their own logins yet. An account belongs to one email address, and each
 Email us: hello@militaryvoices.ai. A person reads every message and writes back.
 Search the help, or ask Alex: militaryvoices.ai/help.
 Your plan, credits and Discovery Pro are in one place.
+Open Plan & billing
+
+=== MILITARYVOICES.AI PLATFORM · www.militaryvoices.ai/help/credits ===
+All help Help · Your account
+What uses credits
+Credits pay for the work Pōstify and Discovery do for you. Your SmartLink, podcast hosting and Ask my show are free, always.
+1 What a credit is
+A credit is how we count work that costs us to make, like cutting and captioning clips. Your plan gives you credits, and you can buy more. Credits come off only when you start something, never for looking around.
+2 Everything that uses credits
+Pōstify an episode
+One price covers every clip in all three shapes (tall, square and wide) and the clean episode.
+Animated captions: 2 credits a clip. That's 8 credits on Scale (4 clips) and 12 on Pro (6 clips).
+Classic captions: 1 credit a clip, plus 1 for the clean episode. That's 5 on Scale and 7 on Pro.
+A short video (2 minutes or less) is one clip: 2 credits with either caption style.
+Credits come off when you press Start. If something goes wrong and you press Try again, that costs nothing more.
+More clips from an episode
+Another set of clips from an episode that's done, none overlapping the ones you have: 2 credits a clip with animated captions, 1 with Classic. The clean episode isn't charged again.
+A clip you mark yourself
+Pick the start and end in the Viewer and make it a clip: 1 credit for each shape you choose, so 1 to 3.
+Cleaning an episode again
+1 credit.
+Discovery: full profiles and contact emails
+Each month you get some free. After that, each full creator profile or contact email is 1 credit. Once you've paid for one, it's free to open again, and a contact email is only charged when we find one to show you.
+With Scale or Pro: 10 searches, 5 full profiles and 10 contact emails a month.
+With Discovery Pro ($50 a month): 100 searches, 25 full profiles and 50 contact emails a month.
+Searches never use credits. When this month's run out, they're back on the 1st.
+3 What's free
+Your first Pōstify episode, up to 90 minutes.
+Editing your clips: changing the text and the music.
+Your SmartLink, podcast hosting and Ask my show.
+Asking Alex, or your own AI guide, how to do something.
+4 When you get credits back
+If an episode has no talking in it (music only, or a silent screen share), there's nothing for Pōstify to clip. Your credits for it come back on their own, once.
+5 Credits each month
+Scale, $19.95 a month: 30 credits a month. Paying yearly ($199), the year's 360 credits come the day you pay.
+Pro, $49 a month, paid every three months ($147): 90 credits a month, so 270 arrive with each payment.
+Unused credits carry over while you're on a plan.
+6 Getting more
+Credit packs
+Buy them once, no plan needed. Credits you buy don't run out.
+20 credits for $15
+50 credits for $35
+120 credits for $78
+Extra credits on your plan
+If you run out on Scale paid monthly or on Pro, Pōstify carries on and the extra credits go on your next bill: $0.60 each on Scale, $0.50 on Pro.
+You set a limit, so a bill never surprises you. It starts at $20 a month, and you can pick off, $10, $20, $50, $100. Change it in Pōstify, under Plan. When you reach it, Pōstify waits for next month's credits or a pack.
+Yearly plans and free trials don't add extras: top up with a pack instead.
+7 Seeing your balance
+Your credits left show at the top of Pōstify and in Plan & billing (press your photo, top right). For plans and billing, see Your plan, credits, and what you deleted.
+8 Help and contact
+Email us: hello@militaryvoices.ai. A person reads every message and writes back.
+Search the help, or ask Alex: militaryvoices.ai/help.
+Your credits, plan and packs are in one place.
 Open Plan & billing
 
 === THE PODCAST MARATHON (yearly event) · www.militaryvoices.ai/faq ===
