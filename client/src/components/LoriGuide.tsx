@@ -6,7 +6,7 @@ import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 import { GuideLayer, showGuide, hideGuide } from "@/components/Guide";
 import type { GuideTarget } from "@shared/guideTargets";
-import { DEFAULT_GUIDE, GUIDES, guideById, type GuideId } from "@shared/guides";
+import { DEFAULT_AGE, DEFAULT_GUIDE, GUIDES, guideById, isAge, type GuideAge, type GuideId } from "@shared/guides";
 import { GuidePicker, guidePickable, useSaveGuide } from "@/components/GuidePicker";
 
 /**
@@ -18,7 +18,7 @@ import { GuidePicker, guidePickable, useSaveGuide } from "@/components/GuidePick
 export type GuideMe =
   /** offer: show the one-time "Pick your guide" step; canPick: Settings → Your guide can switch one on. */
   | { enabled: false; offer?: boolean; canPick?: boolean }
-  | { enabled: true; guideId?: string | null; name: string; avatarUrl: string; voice: boolean; targets: GuideTarget[] };
+  | { enabled: true; guideId?: string | null; age?: string | null; name: string; avatarUrl: string; voice: boolean; targets: GuideTarget[] };
 const KEY = ["/api/guide/me"];
 const SPEAK = "mv-guide-speak";
 /** When she doesn't know (Alex's rule): never promise a person, never say someone is looking. */
@@ -362,12 +362,14 @@ export function GuideSettingsRoot() {
   const [msg, setMsg] = useState("");
   const { save, busy: saving, err } = useSaveGuide();
   const current: GuideId = g?.enabled ? ((guideById(g.guideId ?? "")?.id) ?? GUIDES.find((x) => x.name === g.name)?.id ?? DEFAULT_GUIDE) : DEFAULT_GUIDE;
+  const currentAge: GuideAge = g?.enabled && isAge(g.age) ? g.age : DEFAULT_AGE;
   const [pick, setPick] = useState<GuideId>(current);
+  const [age, setAge] = useState<GuideAge>(currentAge);
   useEffect(() => {
-    const on = () => { setName(g?.enabled ? g.name : ""); setPick(current); setMsg(""); setOpen(true); };
+    const on = () => { setName(g?.enabled ? g.name : ""); setPick(current); setAge(currentAge); setMsg(""); setOpen(true); };
     window.addEventListener(SETTINGS, on);
     return () => window.removeEventListener(SETTINGS, on);
-  }, [g, current]);
+  }, [g, current, currentAge]);
   if (!open || !guidePickable(g)) return null;
   const on = !!g?.enabled;
   const rename = async () => {
@@ -381,7 +383,7 @@ export function GuideSettingsRoot() {
     } catch (e) { setMsg((e as Error).message); } finally { setBusy(false); }
   };
   // A pick saves at once (and switches it on); its name is the new guide's.
-  const choose = async (id: GuideId) => { setPick(id); if (await save({ guideId: id })) { setName(guideById(id)!.name); setMsg(""); } };
+  const choose = async (id: GuideId, a: GuideAge = age) => { setPick(id); setAge(a); if (await save({ guideId: id, age: a })) { setName(guideById(id)!.name); setMsg(""); } };
   const toggleSpeak = () => { const v = !speak; setSpeak(v); try { localStorage.setItem(SPEAK, v ? "1" : "0"); } catch { /* private window */ } };
   const who = on && g?.enabled ? g.name : guideById(pick)!.name;
   // The faces show once the server knows picks (it sends guideId); before that, Settings is name and voice as it was.
@@ -395,11 +397,11 @@ export function GuideSettingsRoot() {
             <p className="mt-0.5 text-[13px] text-[#667085]">Shows you around and points to the right place. It never pays, posts, sends or deletes for you.</p>
           </div>
           <div className="flex shrink-0 items-center gap-2">
-            {picking && <button type="button" role="switch" aria-checked={on} aria-label="Guide on" disabled={saving} onClick={() => void save(on ? { enabled: false } : { guideId: pick })} className={`relative h-6 w-11 rounded-full transition-colors ${on ? "bg-[#053877]" : "bg-[#d0d5dd]"}`} data-testid="guide-switch"><span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-[left] ${on ? "left-[22px]" : "left-0.5"}`} /></button>}
+            {picking && <button type="button" role="switch" aria-checked={on} aria-label="Guide on" disabled={saving} onClick={() => void save(on ? { enabled: false } : { guideId: pick, age })} className={`relative h-6 w-11 rounded-full transition-colors ${on ? "bg-[#053877]" : "bg-[#d0d5dd]"}`} data-testid="guide-switch"><span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-[left] ${on ? "left-[22px]" : "left-0.5"}`} /></button>}
             <button type="button" onClick={() => setOpen(false)} aria-label="Close" className="rounded-full p-1 text-[#667085] hover:bg-[#f2f4f7]"><X className="h-4 w-4" /></button>
           </div>
         </div>
-        {picking && <><div className={`mt-4 ${on ? "" : "opacity-60"}`}><GuidePicker small value={pick} onChange={(id) => void choose(id)} /></div>
+        {picking && <><div className={`mt-4 ${on ? "" : "opacity-60"}`}><GuidePicker small value={pick} onChange={(id) => void choose(id)} age={age} onAge={(a) => { if (on) void choose(pick, a); else setAge(a); }} /></div>
         <p className="mt-2 text-[13px] text-[#667085]">{saving ? "Saving…" : err ? <span className="text-[#b42318]">{err}</span> : on ? `Saved as soon as you pick.` : "Pick one to switch your guide on. While it's off, the site's own Ask Alex answers."}</p></>}
         {on && g?.enabled && (
           <>
