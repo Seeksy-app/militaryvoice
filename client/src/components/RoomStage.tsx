@@ -106,7 +106,7 @@ export function RoomPicture({
     ? { ...meta, stageMediaPlaying: true, stageMediaUrl: media.url, stageMediaKind: (media.mime ?? "").startsWith("image") ? "image" : "video", stageMediaPeople: true, stageMediaLabel: "Scene (loop)", stageOrder: cast.drawn.join(",") }
     : scene?.type && cast.layout ? { ...meta, stageLayout: cast.layout, stageOrder: cast.drawn.join(",") } : meta;
   const card = v3 && live.playing && live.playing.slot !== "intro" && live.playing.slot !== "outro" ? live.playing : null;
-  const style = v3 ? look?.style : undefined;
+  const style = v3 && look?.style ? { ...look.style, font: roomFontName(look.style.font) } : undefined;
   const credit = v3 ? musicCreditOf(look, live) : "";
   useRoomFont(style?.font);
   const tag: NameTagStyle | null = style ? { style: style.nameTag, show: style.showNames, size: style.textSize, font: style.font, color: style.brandColor } : null;
@@ -174,17 +174,24 @@ function PlayerAudio({ tile, muted }: { tile: StageTile; muted: boolean }) {
 /**
  * The Style fonts, self-hosted from client/public/fonts (OFL only, licences in its README; no font
  * CDN on the filmed page). Loaded from /fonts/<slug>.woff2 when the look names one, and Inter, the
- * fallback, always. Anything else is Inter. Roboto Slab is Apache 2.0, so it isn't hosted (Inter).
+ * fallback, always. Anything else is Inter. Zilla Slab replaced Roboto Slab (Apache 2.0) on 21 Nov;
+ * an old look that still names Roboto Slab gets Zilla Slab.
  */
-const ROOM_FONTS = ["Inter", "Montserrat", "Oswald", "Bebas Neue", "Source Sans 3", "Merriweather", "Playfair Display"];
+const ROOM_FONTS = ["Inter", "Montserrat", "Oswald", "Bebas Neue", "Source Sans 3", "Merriweather", "Playfair Display", "Zilla Slab"];
+/** Fonts that come in fixed weights, one file each; the rest are variable (100-900) in one file. */
+const FIXED_WEIGHTS: Record<string, string[]> = { "Bebas Neue": ["400"], "Zilla Slab": ["400", "600", "700"] };
+export const roomFontName = (font?: string) => (font === "Roboto Slab" ? "Zilla Slab" : font);
 function loadRoomFont(font: string) {
   if (typeof FontFace === "undefined" || !ROOM_FONTS.includes(font)) return;
   if (Array.from(document.fonts as unknown as Iterable<FontFace>).some((f) => f.family.replace(/["']/g, "") === font)) return;
   const slug = font.toLowerCase().replace(/\s+/g, "-");
-  // Bebas Neue comes in one weight; the rest are variable.
-  const face = new FontFace(font, `url(/fonts/${slug}.woff2) format("woff2")`, { weight: font === "Bebas Neue" ? "400" : "100 900", display: "swap" });
-  document.fonts.add(face);
-  void face.load().catch(() => { document.fonts.delete(face); });
+  const weights = FIXED_WEIGHTS[font];
+  const files = !weights ? [{ url: `/fonts/${slug}.woff2`, weight: "100 900" }] : weights.length === 1 ? [{ url: `/fonts/${slug}.woff2`, weight: weights[0] }] : weights.map((w) => ({ url: `/fonts/${slug}-${w}.woff2`, weight: w }));
+  for (const f of files) {
+    const face = new FontFace(font, `url(${f.url}) format("woff2")`, { weight: f.weight, display: "swap" });
+    document.fonts.add(face);
+    void face.load().catch(() => { document.fonts.delete(face); });
+  }
 }
 function useRoomFont(font?: string) {
   useEffect(() => {
