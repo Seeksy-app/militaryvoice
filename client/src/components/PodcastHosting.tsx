@@ -453,8 +453,9 @@ function Directories({ h, ready, onSaved, youtube }: { h: Hosted; ready: boolean
   // Two states, plainly different (Andrew via PM, 21 Nov: "we need to show Live vs the other one"):
   // "Live" (solid green) = we've confirmed the show's page there; "Reading your new feed" (light green) = we see the app
   // fetching the feed but haven't confirmed the page. Confirm = paste the page's link, which makes it Live.
-  const followsOf = (key: string) => moved && dirs[key]?.state !== "live" && !!READS_AS[key] && !!h.reading?.includes(READS_AS[key]);
-  const listed = DIRS.filter((d) => dirs[d.key]?.state === "live").length;
+  // Live without a link isn't a confirmed page (UI/UX, 21 Nov): when the app reads the feed it shows as Reading + Confirm.
+  const followsOf = (key: string) => moved && !(dirs[key]?.state === "live" && dirs[key]?.url) && !!READS_AS[key] && !!h.reading?.includes(READS_AS[key]);
+  const listed = DIRS.filter((d) => dirs[d.key]?.state === "live" && !followsOf(d.key)).length;
   const reading = DIRS.filter((d) => followsOf(d.key)).length;
   const renderRow = (d: (typeof DIRS)[number]) => {
           const st = dirs[d.key];
@@ -462,8 +463,8 @@ function Directories({ h, ready, onSaved, youtube }: { h: Hosted; ready: boolean
           const isOpen = open === d.key;
           // "Spotify" under Spotify says nothing: the reach line only when it adds something (UI/UX, a1ee1d0d).
           const reach = d.reach === d.name ? "" : d.reach;
-          const badge = st?.state === "live" ? "bg-emerald-600 text-white dark:bg-emerald-500"
-            : follows ? "bg-emerald-500/10 text-emerald-700 ring-1 ring-inset ring-emerald-500/40 dark:text-emerald-400"
+          const badge = follows ? "bg-emerald-500/10 text-emerald-700 ring-1 ring-inset ring-emerald-500/40 dark:text-emerald-400"
+            : st?.state === "live" ? "bg-emerald-600 text-white dark:bg-emerald-500"
             : st?.state === "submitted" ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : "bg-muted text-muted-foreground";
           return (
             <li key={d.key} className="py-3" data-testid={`hosting-dir-${d.key}`}>
@@ -532,8 +533,10 @@ function Directories({ h, ready, onSaved, youtube }: { h: Hosted; ready: boolean
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-sm font-semibold">Where your show is listed</h2>
-          <p className="text-xs text-muted-foreground">{moved ? (s.redirectOk ? "Your old feed forwards here, so each app moves over on its own. List it only where it isn't yet." : "Your show is in these already, by your old feed: forwarding it (above) moves each one here. List it only where it isn't yet.") :"List it once in each; new episodes reach them on their own."} {reading ? `Live on ${listed} · Reading your new feed on ${reading} · ${DIRS.length} apps.` : listed ? `Live on ${listed} of ${DIRS.length}.` : ""}</p>
-          {reading > 0 && <p className="mt-1 text-xs text-muted-foreground" data-testid="hosting-dir-key"><span className="font-semibold text-emerald-700 dark:text-emerald-400">Live</span> = we've confirmed your show page. <span className="font-semibold text-emerald-700 dark:text-emerald-400">Reading your new feed</span> = the app already gets your episodes from us.</p>}
+          <p className="text-xs text-muted-foreground">{moved ? (s.redirectOk ? "Your old feed forwards here, so each app moves over on its own. List it only where it isn't yet." : "Your show is in these already, by your old feed: forwarding it (above) moves each one here. List it only where it isn't yet.") :"List it once in each; new episodes reach them on their own."}{!reading && listed ? ` Live on ${listed} of ${DIRS.length}.` : ""}</p>
+          {/* The count on its own line, so it doesn't wrap mid-phrase (UI/UX, 21 Nov). */}
+          {reading > 0 && <p className="mt-1 text-xs font-medium text-foreground" data-testid="hosting-dir-count">Live on {listed} · Reading your new feed on {reading} · {DIRS.length} apps</p>}
+          {reading > 0 && <p className="mt-0.5 text-xs text-muted-foreground" data-testid="hosting-dir-key"><span className="font-semibold text-emerald-700 dark:text-emerald-400">Live</span> = we've confirmed your show page. <span className="font-semibold text-emerald-700 dark:text-emerald-400">Reading your new feed</span> = the app already gets your episodes from us.</p>}
         </div>
         <FeedLink url={h.feedUrl} />
       </div>
