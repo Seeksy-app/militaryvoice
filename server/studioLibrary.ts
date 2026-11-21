@@ -40,6 +40,19 @@ export const LIBRARY: LibraryItem[] = [
   { slug: "beginning-1", kind: "music", name: "Beginning 1", key: "studio-library/holiznacc0-beginning-1.mp3", sec: 270,
     source: { site: "Bandcamp", title: "Beginning 1", artist: "HoliznaCC0", page: "https://holiznacc0.bandcamp.com/track/beginning-1",
       licence: "CC BY 4.0", checked: "2026-11-21", credit: "Music: Beginning 1 by HoliznaCC0 (CC BY 4.0)" } },
+  // Sound pads: CC0 on each sound's own Freesound page, read at import (21 Nov 2026). From the HQ previews, levelled to about -16 LUFS (peaks -1.5 dB) so no pad jumps out.
+  { slug: "applause", kind: "sound", name: "Applause", key: "studio-library/applause.mp3", sec: 6.3,
+    source: { site: "Freesound", title: "Applause 2.WAV", artist: "Sandermotions", page: "https://freesound.org/people/Sandermotions/sounds/277021/", licence: "CC0 1.0 Universal", checked: "2026-11-21" } },
+  { slug: "drum-roll", kind: "sound", name: "Drum roll", key: "studio-library/drum-roll.mp3", sec: 6,
+    source: { site: "Freesound", title: "drumroll.wav", artist: "adriann", page: "https://freesound.org/people/adriann/sounds/191718/", licence: "CC0 1.0 Universal", checked: "2026-11-21" } },
+  { slug: "gong", kind: "sound", name: "Gong", key: "studio-library/gong.mp3", sec: 6,
+    source: { site: "Freesound", title: "gong.WAV", artist: "BOSS MUSIC", page: "https://freesound.org/people/BOSS%20MUSIC/sounds/121800/", licence: "CC0 1.0 Universal", checked: "2026-11-21" } },
+  { slug: "cheer", kind: "sound", name: "Cheer", key: "studio-library/cheer.mp3", sec: 4.1,
+    source: { site: "Freesound", title: "Cheer 2.wav", artist: "jayfrosting", page: "https://freesound.org/people/jayfrosting/sounds/333404/", licence: "CC0 1.0 Universal", checked: "2026-11-21" } },
+  { slug: "laugh", kind: "sound", name: "Laugh", key: "studio-library/laugh.mp3", sec: 5.8,
+    source: { site: "Freesound", title: "Sitcom Laughter with Applause, Small Audience", artist: "Kinoton", page: "https://freesound.org/people/Kinoton/sounds/371562/", licence: "CC0 1.0 Universal", checked: "2026-11-21" } },
+  { slug: "ta-da", kind: "sound", name: "Ta-da", key: "studio-library/ta-da.mp3", sec: 5.9,
+    source: { site: "Freesound", title: "TaDa!.wav", artist: "jimhancock", page: "https://freesound.org/people/jimhancock/sounds/376318/", licence: "CC0 1.0 Universal", checked: "2026-11-21" } },
 ];
 
 const LICENCES = /^(CC0 1\.0( Universal)?|Public Domain Mark 1\.0|Public Domain|CC BY 4\.0)$/;
