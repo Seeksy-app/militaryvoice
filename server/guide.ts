@@ -23,8 +23,7 @@ import { learnedForAlex } from "./helpDesk.js";
 const NOT_SURE = "I'm not sure about that one. Leave a note and someone will get back to you as soon as possible.";
 import { runTool } from "./teamDesk.js";
 import { GUIDE_TARGETS, guideTarget } from "../shared/guideTargets.js";
-import { GUIDES, guideByKey, guideOf, sampleKey } from "../shared/guides.js";
-import { signedRecordingUrl } from "./recordingStorage.js";
+import { guideById, guideFace, guideOfSettings } from "../shared/guides.js";
 
 export const ERYN = "DXFkLCBUTmvXpp2QwZjA";
 const OPEN = /\[\[OPEN:([a-z-]+)\]\]/;
@@ -32,14 +31,36 @@ const NAME = /\[\[NAME:([^\]]{1,24})\]\]/;
 const HANDOFF = "[[HUMAN]]";
 const PRIVATE = "[[PRIVATE]]";
 
-export type GuideSettings = { enabled: boolean; name: string; voiceId: string; avatarUrl: string };
+/** guideId: which of shared/guides.ts they picked. answered: they picked or said no, so the one-time step never returns. */
+export type GuideSettings = { enabled: boolean; name: string; voiceId: string; avatarUrl: string; guideId?: string; answered?: boolean };
 const key = (email: string) => `guide:${email.trim().toLowerCase()}`;
 export async function guideFor(email: string): Promise<GuideSettings> {
   let v: Partial<GuideSettings> = {};
   try { v = JSON.parse((await storage.getSetting(key(email))) ?? "{}"); } catch { v = {}; }
-  return { enabled: v.enabled === true, name: (v.name || "Alex").slice(0, 24), voiceId: v.voiceId || ERYN, avatarUrl: v.avatarUrl || "" };
+  return { enabled: v.enabled === true, name: (v.name || "Alex").slice(0, 24), voiceId: v.voiceId || ERYN, avatarUrl: v.avatarUrl || "", ...(v.guideId ? { guideId: v.guideId } : {}), ...(v.answered ? { answered: true } : {}) };
 }
 const saveGuide = (email: string, g: GuideSettings) => storage.setSetting(key(email), JSON.stringify(g));
+
+/**
+ * Who gets offered a guide (setting guide:rollout). Both off until Andrew answers "on for every new account?" (21 Nov):
+ * offer = the one-time "Pick your guide" step for accounts that signed up on or after `since` and never answered;
+ * canPick = Settings → Your guide for any account, so one with it off can turn it on.
+ */
+type Rollout = { offer: boolean; canPick: boolean; since: string };
+const ROLLOUT = "guide:rollout";
+async function rollout(): Promise<Rollout> {
+  try { const v = JSON.parse((await storage.getSetting(ROLLOUT)) ?? "{}"); return { offer: v.offer === true, canPick: v.canPick === true, since: String(v.since ?? "") }; }
+  catch { return { offer: false, canPick: false, since: "" }; }
+}
+async function pickerFor(email: string, g: GuideSettings): Promise<{ offer: boolean; canPick: boolean }> {
+  const r = await rollout();
+  let offer = false;
+  if (r.offer && !g.answered && !g.enabled) {
+    const p = await storage.getProfileByEmail(email).catch(() => undefined);
+    offer = !!p?.createdAt && (!r.since || p.createdAt >= r.since);
+  }
+  return { offer, canPick: r.canPick || offer };
+}
 const cleanName = (s: unknown) => String(s ?? "").replace(new RegExp("[^\\p{L}\\p{N} '.-]", "gu"), "").replace(/\s+/g, " ").trim().slice(0, 24);
 
 /** Spoken spellings (written text keeps the real ones). */
@@ -102,18 +123,41 @@ const me = (req: Request) => (getSessionEmail(req) ?? "").trim().toLowerCase();
 
 export function registerGuide(app: Express, requireHostSession: RequestHandler, requireAdmin: RequestHandler): void {
   /** Is there a guide on this account? The panel shows only when enabled. */
+  /** What the panel shows when the guide is on (also what a pick returns). */
+  const onShape = (g: GuideSettings) => ({ enabled: true, guideId: guideOfSettings(g), name: g.name, avatarUrl: g.avatarUrl, voice: !!eleven(), targets: GUIDE_TARGETS });
+
+  /** Is there a guide on this account? When off: whether to show the one-time "Pick your guide" step (offer) and Settings → Your guide (canPick). */
   app.get("/api/guide/me", requireHostSession, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
-    const g = await guideFor(me(req));
+    const email = me(req), g = await guideFor(email);
     // No nudge on a page load (PM, 21 Nov): a view-as cookie is the same host session as theirs, and once the admin
-    // cookie lapses our own browser looks exactly like them. Nudges fire on their inbound email or a code sign-in only.
-    if (!g.enabled) return res.json({ enabled: false });
-    res.json({ enabled: true, key: guideOf(g)?.key ?? null, name: g.name, avatarUrl: g.avatarUrl, voice: !!eleven(), targets: GUIDE_TARGETS });
+    // cookie lapses our own browser looks exactly like them. Nudges fire on their inbound email only.
+    if (g.enabled) return res.json(onShape(g));
+    res.json({ enabled: false, ...(await pickerFor(email, g)) });
   });
 
-  /** Settings → Your guide: rename her. */
+  /**
+   * Settings → Your guide and the onboarding step:
+   * {guideId} picks one and switches it on; {enabled:false} switches it off and remembers they answered;
+   * {name} renames. Picking needs the guide already on, or the picker offered to this account.
+   */
   app.put("/api/guide/me", requireHostSession, async (req, res) => {
     const email = me(req), g = await guideFor(email);
+    if (req.body?.enabled === false) {
+      await saveGuide(email, { ...g, enabled: false, answered: true });
+      return res.json({ enabled: false, ...(await pickerFor(email, { ...g, enabled: false, answered: true })) });
+    }
+    if (req.body?.guideId !== undefined) {
+      const pick = guideById(String(req.body.guideId));
+      if (!pick) return res.status(400).json({ message: "Pick one of the guides." });
+      const p = await pickerFor(email, g);
+      if (!g.enabled && !p.offer && !p.canPick) return res.status(404).json({ message: "Not found." });
+      // Keep a name they chose themselves (not just another guide's name) when they change faces.
+      const own = !!g.name && !!guideOfSettings(g) && g.name !== guideById(guideOfSettings(g)!)?.name && g.enabled;
+      const next: GuideSettings = { enabled: true, answered: true, guideId: pick.id, name: cleanName(req.body?.name) || (own ? g.name : pick.name), voiceId: pick.voiceId, avatarUrl: guideFace(pick.id) };
+      await saveGuide(email, next);
+      return res.json(onShape(next));
+    }
     if (!g.enabled) return res.status(404).json({ message: "Not found." });
     const name = cleanName(req.body?.name);
     if (!name) return res.status(400).json({ message: "Give your guide a name." });
@@ -188,40 +232,19 @@ export function registerGuide(app: Express, requireHostSession: RequestHandler, 
     res.json({ text: String(j.text ?? "").replace(/\s*\([^)]*\)\s*/g, " ").trim() });
   });
 
-  // ---- choosing a guide (onboarding "Meet your guide" and Settings, 21 Nov) ----
-  /** The six to choose from, and which one this account has (when signed in). Each card's "Hear me" plays a pre-made clip. */
-  app.get("/api/guides", async (req, res) => {
-    res.setHeader("Cache-Control", "no-store");
-    const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
-    const g = email ? await guideFor(email) : null;
-    res.json({
-      guides: GUIDES.map(({ key: k, name, blurb, avatarUrl }) => ({ key: k, name, blurb, avatarUrl, sampleUrl: `/api/guides/${k}/sample` })),
-      current: g ? { key: guideOf(g)?.key ?? null, name: g.name, enabled: g.enabled } : null,
-    });
-  });
-  /** "Hear me": the pre-made clip in R2 (no text-to-speech spent here). */
-  app.get("/api/guides/:key/sample", async (req, res) => {
-    const opt = guideByKey(String(req.params.key));
-    if (!opt) return res.status(404).json({ message: "No such guide." });
-    try {
-      res.setHeader("Cache-Control", "public, max-age=3000");
-      res.redirect(302, await signedRecordingUrl(sampleKey(opt.key), 3600));
-    } catch {
-      res.status(404).json({ message: "No sample yet." });
-    }
-  });
-  /** Pick a guide: their face, voice and name. Whether the guide is switched on stays as it was. */
-  app.put("/api/guide/me/choice", requireHostSession, async (req, res) => {
-    const email = me(req);
-    const opt = guideByKey(String(req.body?.key ?? ""));
-    if (!opt) return res.status(400).json({ message: "Pick one of the guides." });
-    const g = await guideFor(email);
-    const next: GuideSettings = { enabled: g.enabled, name: cleanName(req.body?.name) || opt.name, voiceId: opt.voiceId, avatarUrl: opt.avatarUrl };
-    await saveGuide(email, next);
-    res.json({ key: opt.key, name: next.name, avatarUrl: next.avatarUrl, enabled: next.enabled });
-  });
-
   // ---- the switch (admin) ----
+  /** Who sees the picker: held off (both false) until Andrew says (21 Nov). offer goes to accounts that signed up on or after since. */
+  app.get("/api/admin/guide-rollout", requireAdmin, async (_req, res) => res.json(await rollout()));
+  app.put("/api/admin/guide-rollout", requireAdmin, async (req, res) => {
+    const r = await rollout();
+    const next: Rollout = {
+      offer: typeof req.body?.offer === "boolean" ? req.body.offer : r.offer,
+      canPick: typeof req.body?.canPick === "boolean" ? req.body.canPick : r.canPick,
+      since: /^\d{4}-\d{2}-\d{2}/.test(String(req.body?.since ?? "")) ? String(req.body.since) : r.since || new Date().toISOString(),
+    };
+    await storage.setSetting(ROLLOUT, JSON.stringify(next));
+    res.json(next);
+  });
   app.get("/api/admin/guide/:email", requireAdmin, async (req, res) => {
     const email = String(req.params.email).toLowerCase();
     let log: unknown = [];
@@ -245,6 +268,7 @@ export function registerGuide(app: Express, requireHostSession: RequestHandler, 
     if (!email.includes("@")) return res.status(400).json({ message: "Give an email address." });
     const g = await guideFor(email);
     const next: GuideSettings = {
+      ...g,
       enabled: typeof req.body?.enabled === "boolean" ? req.body.enabled : g.enabled,
       name: cleanName(req.body?.name) || g.name,
       voiceId: /^[A-Za-z0-9]{20}$/.test(String(req.body?.voiceId ?? "")) ? String(req.body.voiceId) : g.voiceId,
