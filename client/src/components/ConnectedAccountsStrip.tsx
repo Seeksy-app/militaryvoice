@@ -1,5 +1,5 @@
-import type { SocialAccount } from "@shared/schema";
-import { PlatformIcon, platformBackground, formatFollowers } from "@/components/SocialIcons";
+import type { SocialAccount, SocialPlatform } from "@shared/schema";
+import { PlatformIcon, platformBackground, formatFollowers, platformLabel } from "@/components/SocialIcons";
 import { ExternalLink } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 
@@ -13,6 +13,7 @@ export function ConnectedAccountsStrip({
   className = "",
   extra,
   extraCount = 0,
+  ghosts,
 }: {
   accounts: SocialAccount[];
   onManage?: () => void;
@@ -20,6 +21,9 @@ export function ConnectedAccountsStrip({
   /** More connections after the social accounts: the podcast host's downloads. */
   extra?: React.ReactNode;
   extraCount?: number;
+  /** Nothing connected yet: these networks, greyed out, each one a door to connecting it.
+      The first connection replaces them all with what's really connected (Andrew, 21 Nov). */
+  ghosts?: SocialPlatform[];
 }) {
   // One row on a computer (8 Oct: ten accounts took three rows and pushed the
   // SmartLink and Next steps below the fold); "Show all" opens the rest.
@@ -35,18 +39,19 @@ export function ConnectedAccountsStrip({
     ro.observe(el);
     return () => ro.disconnect();
   }, [accounts.length, extraCount]);
-  if (accounts.length + extraCount === 0) return null;
+  const showGhosts = accounts.length === 0 && !!ghosts?.length;
+  if (accounts.length + extraCount === 0 && !showGhosts) return null;
 
   return (
     <div className={className}>
       <div className="mb-2 flex items-center justify-between gap-3">
         <p className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">
-          Connected accounts <span className="font-normal text-muted-foreground">({accounts.length + extraCount})</span>
+          {showGhosts ? "Connect your accounts" : <>Connected accounts <span className="font-normal text-muted-foreground">({accounts.length + extraCount})</span></>}
         </p>
         <span className="flex items-center gap-3">
         {(more || open) && (
           <button type="button" onClick={() => setOpen((v) => !v)} className="hidden text-xs font-semibold text-muted-foreground hover:text-foreground sm:inline" data-testid="button-accounts-more">
-            {open ? "Show fewer" : `Show all ${accounts.length + extraCount}`}
+            {open ? "Show fewer" : showGhosts ? "Show all" : `Show all ${accounts.length + extraCount}`}
           </button>
         )}
         {onManage && (
@@ -56,7 +61,7 @@ export function ConnectedAccountsStrip({
             className="text-xs font-semibold text-primary hover:underline"
             data-testid="button-manage-integrations"
           >
-            Manage
+            {showGhosts ? "Connect" : "Manage"}
           </button>
         )}
         </span>
@@ -105,7 +110,28 @@ export function ConnectedAccountsStrip({
             )}
           </a>
         ))}
-        {extra}
+        {/* What's really there (the podcast) first, then the networks still to connect. */}
+        {showGhosts && extra}
+        {showGhosts && ghosts!.map((p) => (
+          <button
+            key={p}
+            type="button"
+            onClick={onManage}
+            title={`Connect ${platformLabel(p)}. It shows as a follow button on your card, and we post your promo cards there for you.`}
+            className="group flex shrink-0 items-center gap-2 rounded-xl border border-dashed border-border bg-card/60 px-2.5 py-1.5 text-left transition-colors hover:border-solid hover:border-primary/40 hover:bg-card hover:shadow-sm sm:gap-2.5 sm:px-3 sm:py-2"
+            data-testid={`chip-ghost-${p}`}
+          >
+            {/* Greyed out until hovered: the network's own colour is the hint that it's one click away. */}
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground opacity-70 grayscale transition group-hover:opacity-100 group-hover:grayscale-0 group-hover:text-white" style={{ ["--ghost-bg" as string]: platformBackground(p) }}>
+              <span className="flex h-8 w-8 items-center justify-center rounded-full group-hover:[background:var(--ghost-bg)]"><PlatformIcon platform={p} className="h-4 w-4" /></span>
+            </span>
+            <span className="min-w-0">
+              <span className="block text-sm font-medium leading-tight text-muted-foreground group-hover:text-foreground">{platformLabel(p)}</span>
+              <span className="block text-xs leading-tight text-muted-foreground/80">Connect</span>
+            </span>
+          </button>
+        ))}
+        {!showGhosts && extra}
       </div>
     </div>
   );

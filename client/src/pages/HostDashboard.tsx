@@ -1659,14 +1659,16 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                     }
                   />
                   <div className="mt-5">
-                    {social?.configured && (social.accounts?.length ?? 0) > 0 ? (
-                      <ConnectedAccountsStrip accounts={social.accounts} onManage={() => goTo("integrations")} extra={<><PodcastChips onOpen={() => goTo("podcaststats")} hostName={profile?.hostName} /><ListingChips /></>} extraCount={podcastSources.length + listings.length} />
-                    ) : (
-                      <button type="button" onClick={() => goTo("integrations")} className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-left text-sm text-muted-foreground hover:text-foreground" data-testid="button-connect-accounts">
-                        <Link2 className="h-4 w-4 text-[#053877]" /> Connect the accounts you post from — they show as follow buttons on your card, and we post your promo cards for you.
-                        <ArrowRight className="ml-auto h-4 w-4" />
-                      </button>
-                    )}
+                    {/* Nothing connected yet: the networks greyed out in the same row, each one a door to connecting it;
+                        the first connection replaces them with what's really connected (Andrew, 21 Nov). The podcast
+                        chip opens the podcast itself, not its downloads. */}
+                    <ConnectedAccountsStrip
+                      accounts={social?.configured ? social.accounts ?? [] : []}
+                      ghosts={social ? ["instagram", "facebook", "youtube", "tiktok", "linkedin"] : undefined}
+                      onManage={() => goTo("integrations")}
+                      extra={<><PodcastChips onOpen={() => goTo("podcast")} hostName={profile?.hostName} /><ListingChips /></>}
+                      extraCount={podcastSources.length + listings.length}
+                    />
                   </div>
                   {/* Someone added them to a brand's, agency's or organizer's team. */}
                   <OrgInvites compact />

@@ -209,7 +209,7 @@ export function PodcastChips({ onOpen, hostName }: { onOpen: () => void; /** The
   return (
     <>
       {sources.map((s) => (
-        <button key={s.source} type="button" onClick={onOpen} title={`${NAME[s.source]}: ${s.showName}. See your listens`} className="group flex shrink-0 items-center gap-2 rounded-xl border border-border bg-card px-2.5 py-1.5 text-left transition-colors hover:border-primary/40 hover:shadow-sm sm:gap-2.5 sm:px-3 sm:py-2" data-testid={`chip-podcast-${s.source}`}>
+        <button key={s.source} type="button" onClick={onOpen} title={`${s.showName || NAME[s.source]}. Open your podcast`} className="group flex shrink-0 items-center gap-2 rounded-xl border border-border bg-card px-2.5 py-1.5 text-left transition-colors hover:border-primary/40 hover:shadow-sm sm:gap-2.5 sm:px-3 sm:py-2" data-testid={`chip-podcast-${s.source}`}>
           {/* The show's cover, with the host's mark riding it, as the social accounts have theirs. */}
           <span className="relative shrink-0">
             {s.data!.artwork ? (
