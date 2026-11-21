@@ -12,6 +12,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { NotificationsMenuItem } from "@/components/Notifications";
 import { Link } from "wouter";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
+import { GuideMenuItem } from "@/components/LoriGuide";
 
 export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "greenroom" | "recordings" | "contacts" | "pro" | "cohost" | "analytics" | "postify" | "social" | "discovery" | "verified" | "podcast" | "page" | "billing" | "trash" | "studio" | "fans" | "myevents" | "organization" | "requests" | "opportunities" | "calendar" | "podcaststats";
 
@@ -469,6 +470,7 @@ export function AccountMenuContent({ account, onGo, side = "top", align }: { acc
       <DropdownMenuItem onSelect={() => onGo("integrations")} className="gap-2" data-testid="account-integrations"><Link2 className="h-4 w-4" /> Integrations</DropdownMenuItem>
       <DropdownMenuItem onSelect={() => onGo("billing")} className="gap-2" data-testid="account-billing"><CreditCard className="h-4 w-4" /> Plan &amp; billing</DropdownMenuItem>
       <DropdownMenuItem onSelect={() => onGo("trash")} className="gap-2" data-testid="account-trash"><Trash2 className="h-4 w-4" /> Recently deleted</DropdownMenuItem>
+      <GuideMenuItem />
       <NotificationsMenuItem />
       <DropdownMenuSeparator />
       <Appearance />

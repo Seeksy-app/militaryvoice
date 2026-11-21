@@ -14,12 +14,14 @@ export interface GuideStep {
   title?: string;
 }
 
-interface Run { steps: GuideStep[]; i: number; onDone?: () => void }
+/** Who is showing them (an account's AI guide, e.g. Lori): her face and name on the callout, with Back / Stop / Next. */
+export interface GuideWho { name: string; avatarUrl?: string }
+interface Run { steps: GuideStep[]; i: number; onDone?: () => void; who?: GuideWho }
 
 const EVT = "mv-guide";
 /** Point at things, one after another. A step whose control never shows up is skipped. */
-export function showGuide(steps: GuideStep[], onDone?: () => void) {
-  window.dispatchEvent(new CustomEvent<Run>(EVT, { detail: { steps, i: 0, onDone } }));
+export function showGuide(steps: GuideStep[], onDone?: () => void, who?: GuideWho) {
+  window.dispatchEvent(new CustomEvent<Run>(EVT, { detail: { steps, i: 0, onDone, who } }));
 }
 export function hideGuide() {
   window.dispatchEvent(new CustomEvent<Run | null>(EVT, { detail: null }));
@@ -66,6 +68,11 @@ export function GuideLayer() {
   }, []);
 
   const finish = () => { const done = run?.onDone; setRun(null); setSpot(null); target.current = null; done?.(); };
+  const back = () => {
+    if (!run || run.i === 0) return;
+    setSpot(null); target.current = null;
+    setRun({ ...run, i: run.i - 1 });
+  };
   const next = () => {
     if (!run) return;
     if (run.i + 1 >= run.steps.length) return finish();
@@ -153,6 +160,7 @@ export function GuideLayer() {
     : { left: Math.max(14, Math.min(width - 14, ring.x - left)) - 7, [place === "bottom" ? "top" : "bottom"]: -7 };
   const many = run.steps.length > 1;
   const step = run.steps[run.i];
+  const who = run.who;
 
   return (
     <div className="pointer-events-none fixed inset-0 z-[60]" aria-live="polite" data-testid="guide">
@@ -169,9 +177,25 @@ export function GuideLayer() {
         aria-label={step.title ?? "Here's how"}
         className="pointer-events-auto absolute rounded-2xl bg-[#053877] p-4 text-white shadow-2xl shadow-[#053877]/30"
         style={{ left, top, width }}
-        data-testid="guide-callout"
+        data-testid={who ? "lori-callout" : "guide-callout"}
       >
         <span className="absolute h-3.5 w-3.5 rotate-45 bg-[#053877]" style={arrow} />
+        {who ? (
+          <>
+            <div className="flex items-center gap-2">
+              {who.avatarUrl ? <img src={who.avatarUrl} alt="" className="h-7 w-7 rounded-full object-cover ring-2 ring-white/30" /> : <span className="flex h-7 w-7 items-center justify-center rounded-full bg-gradient-to-br from-[#0b2a5e] to-[#053877] text-xs font-extrabold text-[#F0A71F] shadow-[0_0_0_2px_rgba(255,255,255,.35)]">{who.name[0]}</span>}
+              <p className="text-xs font-bold uppercase tracking-[0.14em] text-[#F0A71F]">{who.name}{many ? ` · Step ${run.i + 1} of ${run.steps.length}` : ""}</p>
+            </div>
+            {step.title && <p className="mt-2 text-[13px] font-semibold text-white/75">{step.title}</p>}
+            <p className={`text-[15px] font-semibold leading-snug ${step.title ? "mt-0.5" : "mt-2"}`}>{spot.text}</p>
+            <div className="mt-3 flex items-center gap-2">
+              {many && run.i > 0 && <button type="button" onClick={back} className="rounded-full px-3 py-1.5 text-sm text-white/80 hover:bg-white/10 hover:text-white" data-testid="lori-back">Back</button>}
+              <span className="flex-1" />
+              <button type="button" onClick={finish} className="rounded-full px-3 py-1.5 text-sm text-white/80 hover:bg-white/10 hover:text-white" data-testid="lori-stop">Stop</button>
+              <button type="button" onClick={next} className="rounded-full bg-[#F0A71F] px-4 py-1.5 text-sm font-semibold text-[#1a1200] hover:bg-[#f5b944]" data-testid="lori-next">{many && run.i + 1 < run.steps.length ? "Next" : "Done"}</button>
+            </div>
+          </>
+        ) : (<>
         <button type="button" onClick={finish} className="absolute right-2 top-2 rounded-full p-1 text-white/60 hover:bg-white/10 hover:text-white" aria-label="Close" data-testid="guide-close"><X className="h-4 w-4" /></button>
         {step.title && <p className="pr-6 text-xs font-bold uppercase tracking-[0.14em] text-[#F0A71F]">{step.title}</p>}
         <p className={`pr-6 text-[15px] font-semibold leading-snug ${step.title ? "mt-1" : ""}`}>{spot.text}</p>
@@ -183,6 +207,7 @@ export function GuideLayer() {
             {many && run.i + 1 < run.steps.length ? "Next" : "Got it"}
           </button>
         </div>
+        </>)}
       </div>
     </div>
   );
