@@ -9,6 +9,7 @@ import { sql } from "drizzle-orm";
 import { requireHuman, turnstileSiteKey } from "./turnstile.js";
 import { answerHelp, isHelpAgentConfigured, CHECKING, GET_BACK, type HelpTurn } from "./help.js";
 import { registerHelpDesk, openQuestion, askerEmail, learnedForAlex, WAIT_MS } from "./helpDesk.js";
+import { registerGuide } from "./guide.js";
 import { KINDS, effectiveSchedule, cardInput, caption as campaignCaption, isKind, type CampaignContext } from "./campaign.js";
 import { uploadPhoto, uploadShowAsset, signedAssetUpload, listShowAssets } from "./photoStorage.js";
 import {
@@ -6989,6 +6990,7 @@ export function registerRoutes(app: Express): void {
   registerSurvey(app, requireAdmin);
   registerSms(app, requireAdmin);
   registerHelpDesk(app, requireAdmin);
+  registerGuide(app, requireHostSession, requireAdmin);
   registerSceneLog(app, requireAdmin);
   registerPeople(app, requireAdmin);
   registerOrganizer(app, requireHostSession, requireAdmin);
