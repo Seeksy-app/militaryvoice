@@ -231,7 +231,7 @@ export function PodcastHosting() {
   );
 
   return (
-    <section className="mt-2 space-y-4" data-testid="podcast-hosting">
+    <section className="mt-2 space-y-4 pb-24" data-testid="podcast-hosting">
       {shows.length > 1 && <button type="button" onClick={() => setOpenId(null)} className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground" data-testid="hosting-all-shows"><ChevronLeft className="h-4 w-4" /> All shows</button>}
       {/* The show: its art, its name, its feed. */}
       <div className="flex flex-wrap items-start gap-5">
@@ -450,14 +450,21 @@ function Directories({ h, ready, onSaved, youtube }: { h: Hosted; ready: boolean
   };
   // The name each app reads the feed under (server appOf): seen in the last 14 days = it follows the new feed.
   const READS_AS: Record<string, string> = { apple: "Apple Podcasts", spotify: "Spotify", amazon: "Amazon Music", iheart: "iHeartRadio", pocketcasts: "Pocket Casts", castbox: "Castbox", youtube: "Google / YouTube" };
-  // An app already reading the new feed is live there: same green "Live", counted in the header (Andrew via PM, 21 Nov:
-  // "What is the difference between Live and On your new feed?"). The subline says how we know.
+  // Two states, plainly different (Andrew via PM, 21 Nov: "we need to show Live vs the other one"):
+  // "Live" (solid green) = we've confirmed the show's page there; "Reading your new feed" (light green) = we see the app
+  // fetching the feed but haven't confirmed the page. Confirm = paste the page's link, which makes it Live.
   const followsOf = (key: string) => moved && dirs[key]?.state !== "live" && !!READS_AS[key] && !!h.reading?.includes(READS_AS[key]);
-  const listed = DIRS.filter((d) => dirs[d.key]?.state === "live" || followsOf(d.key)).length;
+  const listed = DIRS.filter((d) => dirs[d.key]?.state === "live").length;
+  const reading = DIRS.filter((d) => followsOf(d.key)).length;
   const renderRow = (d: (typeof DIRS)[number]) => {
           const st = dirs[d.key];
           const follows = followsOf(d.key);
           const isOpen = open === d.key;
+          // "Spotify" under Spotify says nothing: the reach line only when it adds something (UI/UX, a1ee1d0d).
+          const reach = d.reach === d.name ? "" : d.reach;
+          const badge = st?.state === "live" ? "bg-emerald-600 text-white dark:bg-emerald-500"
+            : follows ? "bg-emerald-500/10 text-emerald-700 ring-1 ring-inset ring-emerald-500/40 dark:text-emerald-400"
+            : st?.state === "submitted" ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : "bg-muted text-muted-foreground";
           return (
             <li key={d.key} className="py-3" data-testid={`hosting-dir-${d.key}`}>
               <div className="flex flex-wrap items-center gap-3">
@@ -465,12 +472,15 @@ function Directories({ h, ready, onSaved, youtube }: { h: Hosted; ready: boolean
                   : <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#053877]/10 text-sm font-bold text-[#053877] dark:bg-white/10 dark:text-[#8fb5e8]">{d.name[0]}</span>}
                 <button type="button" onClick={() => setOpen(isOpen || st?.state === "submitted" ? `-${d.key}` : d.key)} className="min-w-0 flex-1 text-left">
                   <span className="block text-sm font-semibold">{d.name}{d.auto && <span className="ml-2 align-middle text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Powered by Listen Notes</span>}</span>
-                  <span className="block truncate text-xs text-muted-foreground">{follows ? <><span className="font-medium text-emerald-700 dark:text-emerald-400">Reading your new feed</span> · {d.reach}</> : d.reach}</span>
+                  {/* Wraps on a phone (it was cut to "Amazon Mu…" at 390, 21 Nov); one line on a computer. */}
+                  {reach && <span className="block text-xs text-muted-foreground sm:truncate">{reach}</span>}
                 </button>
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${st?.state === "live" || follows ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : st?.state === "submitted" ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : "bg-muted text-muted-foreground"}`} title={follows ? `${d.name} is reading your new feed` : undefined} data-testid={`hosting-dir-state-${d.key}`}>{follows ? "Live" : st?.state === "live" ? (moved && !s.redirectOk ? "Live, by your old feed" : "Live") : st?.state === "submitted" ? "Submitted" : d.auto && s.aiVoice ? "Not listed" : d.auto ? "Automatic" : moved ? (s.redirectOk ? "Follows your forward" : "Waits for your old feed to forward") : "Not listed"}</span>
+                {/* State and action: beside the name on a computer; on a phone their own line under the name, so neither squeezes it. */}
+                <span className="flex basis-full items-center justify-between gap-2 pl-12 empty:hidden sm:basis-auto sm:justify-end sm:pl-0">
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${badge}`} title={follows ? `${d.name} already gets your episodes from us. Confirm its page to make it Live.` : undefined} data-testid={`hosting-dir-state-${d.key}`}>{follows ? "Reading your new feed" : st?.state === "live" ? (moved && !s.redirectOk ? "Live, by your old feed" : "Live") : st?.state === "submitted" ? "Submitted" : d.auto && s.aiVoice ? "Not listed" : d.auto ? "Automatic" : moved ? (s.redirectOk ? "Follows your forward" : "Waits for your old feed to forward") : "Not listed"}</span>
                 {follows ? (
-                  // The app already has the show: open it when we know its page, otherwise nothing to press.
-                  st?.url ? <Button asChild size="sm" variant="outline" className="h-8 gap-1 rounded-full"><a href={st.url} target="_blank" rel="noreferrer">Open <ExternalLink className="h-3 w-3" /></a></Button> : null
+                  // The app already has the show: confirm its page (find it, paste the link) to make it Live.
+                  <Button size="sm" variant="outline" onClick={() => setOpen(isOpen ? `-${d.key}` : d.key)} className="h-8 rounded-full" data-testid={`hosting-dir-confirm-${d.key}`}>Confirm</Button>
                 ) : d.auto && s.aiVoice && !(st?.state === "live" && st.url) ? (
                   <span className="shrink-0 text-xs text-muted-foreground" data-testid={`hosting-dir-ai-${d.key}`}>Doesn't take AI-voiced shows</span>
                 ) : d.auto && !(st?.state === "live" && st.url) ? (
@@ -484,17 +494,24 @@ function Directories({ h, ready, onSaved, youtube }: { h: Hosted; ready: boolean
                 ) : (
                   <Button size="sm" variant={moved ? "outline" : "default"} onClick={() => void listIt(d)} disabled={!ready} title={ready ? undefined : "Finish what the apps need first (above)"} className={`h-8 gap-1 rounded-full ${moved ? "" : "bg-[#053877] text-white hover:bg-[#0a4a99]"}`} data-testid={`hosting-dir-list-${d.key}`}>{st?.state === "submitted" ? "Open again" : moved ? "Not there? List it" : "List it"} <ExternalLink className="h-3 w-3" /></Button>
                 )}
+                </span>
               </div>
               {(isOpen || (st?.state === "submitted" && !follows && open !== `-${d.key}`)) && (
                 <div className="ml-12 mt-2 space-y-2 text-sm">
+                  {follows ? (
+                    <p className="text-xs text-muted-foreground">{d.name} already gets your episodes from us. <a href={FIND[d.key]?.(s.title) ?? d.url} target="_blank" rel="noreferrer" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Find your show on {d.name}</a>, then paste its address here to confirm it. It turns Live, and a {d.name} button goes on your show page.</p>
+                  ) : <>
                   <ol className="list-decimal space-y-1 pl-5 text-muted-foreground">{d.steps.map((x) => <li key={x}>{x}</li>)}</ol>
                   <p className="text-xs text-muted-foreground">That's all: it goes live on its own once {d.name} approves it, usually within a few days. <span className="text-muted-foreground/80">Optional: <a href={FIND[d.key]?.(s.title) ?? d.url} target="_blank" rel="noreferrer" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">find your show on {d.name}</a> and paste its address below to put a {d.name} button on your show page.</span></p>
+                  </>}
                   <form onSubmit={(e) => {
                     e.preventDefault();
                     const u = (links[d.key] ?? st?.url ?? "").trim();
                     // Their own feed isn't the app's page for the show.
                     if (/militaryvoices\.ai/i.test(u)) return toast({ title: "That's your feed", description: `Paste your show's page on ${d.name} (like ${d.link}), or leave the box empty.` });
                     if (u && !/^https:\/\//.test(u)) return toast({ title: "Paste the whole link", description: `It starts with https:// (like ${d.link}).` });
+                    // Confirming is the link: without it the row stays "Reading your new feed".
+                    if (follows && !u) return toast({ title: "Paste your show's link", description: `Find your show on ${d.name} and paste its address (like ${d.link}).` });
                     put(d.key, { state: "live", url: u, at: new Date().toISOString() });
                     setOpen(null);
                     setLinks((x) => { const n = { ...x }; delete n[d.key]; return n; });
@@ -515,7 +532,8 @@ function Directories({ h, ready, onSaved, youtube }: { h: Hosted; ready: boolean
       <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
         <div>
           <h2 className="text-sm font-semibold">Where your show is listed</h2>
-          <p className="text-xs text-muted-foreground">{moved ? (s.redirectOk ? "Your old feed forwards here, so each app moves over on its own. List it only where it isn't yet." : "Your show is in these already, by your old feed: forwarding it (above) moves each one here. List it only where it isn't yet.") :"List it once in each; new episodes reach them on their own."} {listed ? `Live on ${listed} of ${DIRS.length}.` : ""}</p>
+          <p className="text-xs text-muted-foreground">{moved ? (s.redirectOk ? "Your old feed forwards here, so each app moves over on its own. List it only where it isn't yet." : "Your show is in these already, by your old feed: forwarding it (above) moves each one here. List it only where it isn't yet.") :"List it once in each; new episodes reach them on their own."} {reading ? `Live on ${listed} · Reading your new feed on ${reading} · ${DIRS.length} apps.` : listed ? `Live on ${listed} of ${DIRS.length}.` : ""}</p>
+          {reading > 0 && <p className="mt-1 text-xs text-muted-foreground" data-testid="hosting-dir-key"><span className="font-semibold text-emerald-700 dark:text-emerald-400">Live</span> = we've confirmed your show page. <span className="font-semibold text-emerald-700 dark:text-emerald-400">Reading your new feed</span> = the app already gets your episodes from us.</p>}
         </div>
         <FeedLink url={h.feedUrl} />
       </div>
