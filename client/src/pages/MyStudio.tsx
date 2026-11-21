@@ -16,6 +16,7 @@ import { BACKGROUNDS, bgCss, sceneLive, useRoomKit, type RoomKit, type Scene } f
 import { LayoutPicker, ScenesPanel } from "@/components/room/ScenesPanel";
 import { LookPanel } from "@/components/room/LookPanel";
 import { MarkClip } from "@/components/room/MarkClip";
+import { RoomStage } from "@/components/RoomStage";
 
 /** The room is light in both themes, so always the light logo file. */
 const Logo = ({ className }: { className: string }) => <img src="/logo-lockup.png?v=4" alt="MilitaryVoices.ai" className={`w-auto ${className}`} />;
@@ -381,7 +382,14 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
         {editing && <ScenesPanel kit={kit} />}
         {/* Stage column */}
         <div className="flex min-w-0 flex-1 flex-col items-center px-4 pt-5 lg:px-6">
-          <Stage kit={kit} scene={scene} fallbackLogo={look ? undefined : logo} />
+          {owner ? (
+            // The host sees exactly what's recorded and streamed (Engineering's RoomStage); guests keep the plain grid.
+            <div className="shrink-0 rounded-2xl shadow-[0_12px_32px_rgba(16,24,40,0.22)]" style={{ width: "min(768px, 100%, calc((100dvh - 336px) * 16 / 9))" }}>
+              <RoomStage muted onMediaEnded={() => kit.play(null)} />
+            </div>
+          ) : (
+            <Stage kit={kit} scene={scene} fallbackLogo={look ? undefined : logo} />
+          )}
           {editing && scene && (
             <div className="mt-3 shrink-0" title={`Layout for ${scene.name}`}>
               <LayoutPicker value={scene.layout} onPick={(layout) => kit.change((l) => ({ ...l, scenes: l.scenes.map((s) => (s.id === scene.id ? { ...s, layout } : s)) }))} />
@@ -453,7 +461,7 @@ function useStageTracks() {
 /**
  * The stage as the room sees it: the scene on air (its layout), who's on stage (guests sent
  * backstage aren't), the background, the logo in its corner, any banner and a playing intro or
- * outro. Engineering's RoomStage replaces this once it's on main, so the host sees exactly what's recorded.
+ * outro. Guests see this one (with no look it's the plain grid); the host sees Engineering's RoomStage.
  */
 function Stage({ kit, scene, fallbackLogo }: { kit: RoomKit; scene?: Scene; fallbackLogo?: string }) {
   const look = kit.look;
