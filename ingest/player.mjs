@@ -75,7 +75,7 @@ export function createMixer() {
   };
   return {
     state,
-    setMusic(pcm, gain) { state.music = pcm ? { pcm, pos: 0, gain } : null; },
+    setMusic(pcm, gain, loop = true) { state.music = pcm ? { pcm, pos: 0, gain, loop } : null; },
     setMusicGain(gain) { if (state.music) state.music.gain = gain; },
     addSound(pcm, gain) { state.sounds.push({ pcm, pos: 0, gain }); },
     voice(now = Date.now()) { state.voiceUntil = now + 250; },
@@ -90,13 +90,14 @@ export function createMixer() {
       for (let i = 0; i < FRAME; i++) {
         state.duck += (target - state.duck) * k;
         let s = 0;
-        if (m) { s += (m.pcm[m.pos] / 32768) * m.gain * state.duck; m.pos = (m.pos + 1) % m.pcm.length; }
+        if (m && m.pos < m.pcm.length) { s += (m.pcm[m.pos] / 32768) * m.gain * state.duck; m.pos += 1; if (m.loop && m.pos >= m.pcm.length) m.pos = 0; }
         for (const x of state.sounds) if (x.pos < x.pcm.length) s += (x.pcm[x.pos++] / 32768) * x.gain;
         // Soft limit so a loud pad over music never clips.
         s = Math.tanh(s * 1.2) / Math.tanh(1.2);
         out[i] = Math.max(-32768, Math.min(32767, Math.round(s * 32767)));
       }
       state.sounds = state.sounds.filter((x) => x.pos < x.pcm.length);
+      if (m && m.pos >= m.pcm.length) state.music = null; // a bed with Loop off ends on its own
       return out;
     },
   };
@@ -184,8 +185,10 @@ class Studio {
     const rev = Number(live.lookRev ?? 0);
     if (!this.look || rev !== this.lookRev) { this.look = (await this.readLook()) ?? this.look; this.lookRev = rev; }
     const look = this.look ?? {};
+    // Contract v3: one volume for all pads and one for music, 0..1, and musicLoop.
     const soundGain = vol(look.soundVolume, 0.8);
-    const musicGain = vol(look.musicVolume, 0.3);
+    const musicGain = vol(look.musicVolume, 0.25);
+    const musicLoop = look.musicLoop !== false;
 
     // A pad press plays once; an old press (before we joined, or replayed metadata) never does.
     const s = live.sound;
@@ -195,7 +198,7 @@ class Studio {
       const item = (look.sounds ?? []).find((x) => x.id === s.id);
       const url = urlOf(item);
       if (fresh && url) {
-        decode(url).then((pcm) => this.mixer.addSound(pcm, vol(item.volume, 1) * soundGain)).catch((e) => log(`${this.info.room} sound:`, e.message));
+        decode(url).then((pcm) => this.mixer.addSound(pcm, soundGain)).catch((e) => log(`${this.info.room} sound:`, e.message));
       }
     }
 
@@ -206,10 +209,9 @@ class Studio {
       const item = m?.id ? (look.music ?? []).find((x) => x.id === m.id) : null;
       const url = urlOf(item);
       if (!url) this.mixer.setMusic(null, 0);
-      else decode(url).then((pcm) => { if (this.musicKey === key) this.mixer.setMusic(pcm, vol(item.volume, 1) * musicGain); }).catch((e) => log(`${this.info.room} music:`, e.message));
+      else decode(url).then((pcm) => { if (this.musicKey === key) this.mixer.setMusic(pcm, musicGain, musicLoop); }).catch((e) => log(`${this.info.room} music:`, e.message));
     } else if (m?.id) {
-      const item = (look.music ?? []).find((x) => x.id === m.id);
-      this.mixer.setMusicGain(vol(item?.volume, 1) * musicGain);
+      this.mixer.setMusicGain(musicGain); // the slider moved while it plays
     }
   }
 

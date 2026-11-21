@@ -12,7 +12,7 @@ import { isLiveKitConfigured, isRecordingConfigured, publicLiveKitUrl, startBroa
 import { ensureRecordingsBucket } from "./recordingStorage.js";
 import { createBroadcast } from "./youtube.js";
 import { onLookSaved, roomLookKey } from "./roomKit.js";
-import { bumpLookRev, registerRoomStage, roomTemplateUrl, useRoomKit } from "./roomStage.js";
+import { bumpLookRev, registerRoomStage, roomTemplateUrl, STUDIO_V3, useRoomKit } from "./roomStage.js";
 import { personalStudios, type PersonalStudioRow } from "../shared/schema.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
@@ -82,6 +82,8 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     streams: streamsOf(s).map(({ key, ...x }) => ({ ...x, key: key ? `••••${key.slice(-4)}` : "" })),
     ready: isLiveKitConfigured(),
     canRecord: isRecordingConfigured(),
+    // Studio v3 (scene types, cards, sounds and music): the UI switches to it only when this is true.
+    v3: STUDIO_V3,
   });
 
   app.get("/api/host/my-studio", requireHostSession, async (req, res) => {
@@ -125,7 +127,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     const name = String(req.body?.name ?? "").trim().slice(0, 60) || profile?.hostName || email.split("@")[0];
     const identity = `owner-${s.id}-${crypto.randomBytes(3).toString("hex")}`;
     const token = await studioToken({ room: room(s), identity, name, canPublish: true, admin: true, attributes: { role: "host", stage: "on", who: identity, ...titleOf(req) } });
-    res.json({ url: publicLiveKitUrl(), token, name: s.name });
+    res.json({ url: publicLiveKitUrl(), token, name: s.name, v3: STUDIO_V3 });
   });
 
   /** A guest on the invite link: no account, just a name. */
@@ -133,7 +135,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     await schemaIsReady();
     const [s] = await db.select().from(personalStudios).where(eq(personalStudios.inviteToken, String(req.params.token))).limit(1);
     if (!s) return res.status(404).json({ message: "This invite link has expired. Ask the host for a new one." });
-    res.json({ name: s.name });
+    res.json({ name: s.name, v3: STUDIO_V3 });
   });
   app.post("/api/my-studio/invite/:token/token", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
@@ -145,7 +147,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     if (!name) return res.status(400).json({ message: "Your name, please." });
     const identity = `guest-${crypto.randomBytes(5).toString("hex")}`;
     const token = await studioToken({ room: room(s), identity, name, canPublish: true, attributes: { role: "guest", stage: GUEST_STAGE, who: identity, ...titleOf(req) } });
-    res.json({ url: publicLiveKitUrl(), token, name: s.name });
+    res.json({ url: publicLiveKitUrl(), token, name: s.name, v3: STUDIO_V3 });
   });
 
   /** Record: the whole room, to an MP4 in their Library. */

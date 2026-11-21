@@ -52,15 +52,15 @@ export interface RoomScene {
   /** Overrides for this scene only. */
   look?: RoomLookStyle;
   type?: RoomSceneType;
-  /** Group: how many people at most (3 to 6). */
-  onStage?: number;
+  /** v3: people on stage in this scene, 1 to 9 (media 0 to 9: 0 = the media fills the scene). */
+  people?: number;
   /** Media scene: the picture or clip that fills the frame. */
   media?: RoomAsset | null;
   profile?: RoomProfile | null;
 }
 
 /** A sound pad or a music track (v3). */
-export interface RoomAudioItem { id: string; name?: string; asset?: RoomAsset | null; url?: string; volume?: number }
+export interface RoomAudioItem { id: string; name?: string; asset?: RoomAsset | null; url?: string; source?: unknown }
 
 export interface RoomStyle {
   preset?: string;
@@ -77,12 +77,15 @@ export interface RoomLook extends RoomLookStyle {
   banners?: { id: string; text: string; seconds: number }[];
   intro?: RoomAsset | null;
   outro?: RoomAsset | null;
-  /** v3: the video shelf; intro and outro are found here when the slots aren't set. */
-  videos?: (RoomAsset & { slot?: string })[] | { intro?: RoomAsset | null; outro?: RoomAsset | null; [k: string]: unknown };
+  /** v3: the video shelf; intro and outro are also tagged here (look.intro/outro stay equal to them). */
+  videos?: { asset: RoomAsset; role?: string; loop?: boolean }[];
   sounds?: RoomAudioItem[];
   music?: RoomAudioItem[];
+  /** 0 to 1; defaults 0.8 and 0.25. */
   soundVolume?: number;
   musicVolume?: number;
+  /** The music bed repeats (default true). */
+  musicLoop?: boolean;
   style?: RoomStyle;
   rev?: number;
 }
@@ -106,9 +109,7 @@ export interface RoomLive {
 export function clipOf(look: RoomLook | null, slot: "intro" | "outro"): RoomAsset | null {
   if (!look) return null;
   if (look[slot]?.url) return look[slot] ?? null;
-  const v = look.videos;
-  if (Array.isArray(v)) return v.find((x) => x.slot === slot || x.kind === slot) ?? null;
-  const got = v?.[slot] as RoomAsset | null | undefined;
+  const got = (look.videos ?? []).find((x) => x.role === slot)?.asset;
   return got?.url ? got : null;
 }
 
@@ -199,11 +200,13 @@ export function castOf(people: { identity: string; host: boolean; who?: string }
   const list = scene?.stage ?? [];
   const rank = (p: { identity: string; host: boolean; who?: string }) => (p.host ? -1 : (() => { const i = list.indexOf(p.who ?? p.identity); return i < 0 ? 1e6 : i; })());
   const ordered = [...people].sort((a, b) => rank(a) - rank(b) || a.identity.localeCompare(b.identity)).map((p) => p.identity);
+  const n = (d: number, lo = 1) => Math.max(lo, Math.min(9, Math.round(Number.isFinite(Number(scene?.people)) ? Number(scene?.people) : d)));
   switch (scene?.type) {
-    case "single": return { drawn: ordered.slice(0, 1), layout: "contain" };
-    case "two": return { drawn: ordered.slice(0, 2), layout: "contain" };
-    case "group": return { drawn: ordered.slice(0, Math.max(3, Math.min(6, Math.round(Number(scene.onStage) || 4)))), layout: "cover" };
-    case "media":
+    case "single": return { drawn: ordered.slice(0, n(1)), layout: "contain" };
+    case "two": return { drawn: ordered.slice(0, n(2)), layout: "contain" };
+    case "group": return { drawn: ordered.slice(0, n(3)), layout: "cover" };
+    // Media: 0 people = the media fills the frame; 1 or more = their tiles beside it.
+    case "media": return { drawn: ordered.slice(0, n(0, 0)) };
     case "profile": return { drawn: [] };
     default: return { drawn: ordered };
   }

@@ -98,9 +98,14 @@ export function RoomPicture({
   const cast = castOf(people.map((t) => ({ identity: t.identity, host: /^owner-/.test(t.identity), who: t.identity })), scene);
   const drawn = scene?.type ? cast.drawn.map((id) => people.find((t) => t.identity === id)!).filter(Boolean) : people;
   const heard = scene?.type ? people.filter((t) => !cast.drawn.includes(t.identity)) : [];
-  const stageMeta = scene?.type && cast.layout ? { ...meta, stageLayout: cast.layout, stageOrder: cast.drawn.join(",") } : meta;
+  const media = !live.playing && scene?.type === "media" && scene.media?.url ? scene.media : null;
+  const stageMeta = media && drawn.length
+    // Media with people: the clip or picture big, the people stacked beside it (looping).
+    ? { ...meta, stageMediaPlaying: true, stageMediaUrl: media.url, stageMediaKind: (media.mime ?? "").startsWith("image") ? "image" : "video", stageMediaPeople: true, stageMediaLabel: "Scene (loop)", stageOrder: cast.drawn.join(",") }
+    : scene?.type && cast.layout ? { ...meta, stageLayout: cast.layout, stageOrder: cast.drawn.join(",") } : meta;
   const card = live.playing && live.playing.slot !== "intro" && live.playing.slot !== "outro" ? live.playing : null;
   const style = look?.style;
+  useRoomFont(style?.font);
   const tag: NameTagStyle | null = style ? { style: style.nameTag, show: style.showNames, size: style.textSize, font: style.font, color: style.brandColor } : null;
   const bg = String((meta as { backgroundUrl?: string }).backgroundUrl ?? "");
   const logo = String((meta as { logoUrl?: string }).logoUrl ?? "");
@@ -114,8 +119,8 @@ export function RoomPicture({
 
   const full = card ? (
     <RoomCard slot={card.slot as RoomCardSlot} text={card.slot === "countdown" ? countdownText(card, now) : ""} name={name || (raw as RoomMeta).studioName || ""} bg={bg} logo={logo} color={style?.brandColor} font={style?.font} />
-  ) : !live.playing && scene?.type === "media" && scene.media?.url ? (
-    <SceneMedia url={scene.media.url} image={(scene.media.mime ?? "").startsWith("image")} muted={muted} />
+  ) : media && !drawn.length ? (
+    <SceneMedia url={media.url} image={(media.mime ?? "").startsWith("image")} muted={muted} />
   ) : !live.playing && scene?.type === "profile" ? (
     <ProfileCard p={scene.profile ?? {}} people={people} bg={bg} logo={logo} color={style?.brandColor} font={style?.font} />
   ) : null;
@@ -155,6 +160,19 @@ function PlayerAudio({ tile, muted }: { tile: StageTile; muted: boolean }) {
     return () => { tile.audio?.detach(el); };
   }, [tile.audio]);
   return <audio ref={ref} autoPlay muted={muted} data-testid="room-player-audio" />;
+}
+
+/** The eight self-hosted OFL fonts the look may name; loaded from /fonts/<slug>.woff2 when used. Anything else is Inter. */
+const ROOM_FONTS = ["Inter", "Montserrat", "Oswald", "Bebas Neue", "Source Sans 3", "Merriweather", "Playfair Display", "Roboto Slab"];
+function useRoomFont(font?: string) {
+  useEffect(() => {
+    if (!font || font === "Inter" || !ROOM_FONTS.includes(font) || typeof FontFace === "undefined") return;
+    if (document.fonts.check(`16px "${font}"`) && Array.from(document.fonts as unknown as Iterable<FontFace>).some((f) => f.family.replace(/["']/g, "") === font)) return;
+    const slug = font.toLowerCase().replace(/\s+/g, "-");
+    const face = new FontFace(font, `url(/fonts/${slug}.woff2) format("woff2")`, { weight: "100 900" });
+    document.fonts.add(face);
+    void face.load().catch(() => { document.fonts.delete(face); });
+  }, [font]);
 }
 
 const fontOf = (font?: string) => ({ fontFamily: font ? `'${font}', 'Inter', sans-serif` : "'General Sans', 'Inter', sans-serif" });
