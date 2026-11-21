@@ -50,6 +50,7 @@ export default function HelpAccount() {
             <li><strong>Music and text edits</strong> are included.</li>
             <li><strong>A contact email</strong> in Discovery, past your monthly ones: 1 credit. Once paid for, it's free to see again.</li>
           </ul>
+          <p className="mt-3">Everything that uses a credit, and how many: <Link href="/help/credits" className="font-medium text-primary hover:underline">What uses credits</Link>.</p>
           <p className="mt-3">To top up, press <strong>Buy {pack.tokens} credits · ${pack.price}</strong> in Plan &amp; billing. On a monthly plan, if you run out, extra credits go on your next bill, up to a limit you set in Pōstify.</p>
         </HelpSection>
 

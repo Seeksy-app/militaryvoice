@@ -11,7 +11,7 @@ const CHROME = process.env.CHROME || "/Applications/Google Chrome.app/Contents/M
 const PAGES = [
   ["/help/studio", "platform"], ["/help/booth", "platform"], ["/help/library", "platform"], ["/help/postify", "platform"], ["/help/podcast", "platform"],
   ["/help/youtube", "platform"], ["/help/zoom", "platform"], ["/help/zoom-story", "platform"], ["/help/smartlink", "platform"], ["/help/guests", "platform"],
-  ["/help/account", "platform"], ["/faq?all", "marathon"], ["/prepare", "marathon"],
+  ["/help/account", "platform"], ["/help/credits", "platform"], ["/faq?all", "marathon"], ["/prepare", "marathon"],
 ];
 
 const text = (html) => {

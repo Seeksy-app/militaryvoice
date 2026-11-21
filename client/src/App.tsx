@@ -36,6 +36,7 @@ import HelpBooth from "@/pages/HelpBooth";
 import HelpLibrary from "@/pages/HelpLibrary";
 import HelpPostify from "@/pages/HelpPostify";
 import HelpAccount from "@/pages/HelpAccount";
+import HelpCredits from "@/pages/HelpCredits";
 import HelpSmartlink from "@/pages/HelpSmartlink";
 import HelpGuests from "@/pages/HelpGuests";
 import Discover from "@/pages/Discover";
@@ -141,6 +142,7 @@ function AppRouter() {
       <Route path="/help/library">{() => <HelpLibrary />}</Route>
       <Route path="/help/postify">{() => <HelpPostify />}</Route>
       <Route path="/help/account">{() => <HelpAccount />}</Route>
+      <Route path="/help/credits">{() => <HelpCredits />}</Route>
       <Route path="/help/smartlink">{() => <HelpSmartlink />}</Route>
       <Route path="/help/guests">{() => <HelpGuests />}</Route>
       {/* Registered on the Google OAuth consent screen — these URLs are
