@@ -102,8 +102,9 @@ export function LoriGuide({ g, compact = false }: { g: Extract<GuideMe, { enable
       if (!r.ok) throw new Error(j.message || "I couldn't answer that just now. Try again in a moment.");
       if (j.name) qc.setQueryData<GuideMe>(KEY, (o) => (o && o.enabled ? { ...o, name: j.name! } : o));
       if (j.waiting || j.handoff) {
-        // She doesn't know: no "checking with the team", no person looking. A note, and the form (Alex's rule).
-        add({ role: "assistant", content: NOT_SURE });
+        // She doesn't know (or it's money, legal, press, a complaint): the server's line, and the note form.
+        // Never "checking with the team"; NOT_SURE only stands in if an old reply has no line of its own.
+        add({ role: "assistant", content: j.handoff && j.text ? j.text : NOT_SURE });
         setForm("open");
         // If the question did go to the team and an answer comes back while the panel is open, it shows here.
         if (j.waiting) setWaiting({ token: j.waiting, until: Date.now() + ((j.waitSec ?? 300) + 30) * 1000 });
