@@ -85,6 +85,15 @@ export default function HelpPostify() {
 
         <HelpSection n={8} id="clips" title="Your clips">
           <p>Pōstify picks the best moments and makes each clip in vertical, square and wide. To make your own, choose <strong>Make a clip</strong>, press <strong>Start here</strong> and <strong>End here</strong>, name it, pick its shapes, and press <strong>Make clip</strong>.</p>
+          <HelpSub>What makes a great clip</HelpSub>
+          <p className="mt-2">Before you post, watch each clip four times, looking at one thing each time:</p>
+          <ul className="mt-2 list-disc space-y-1.5 pl-5">
+            <li><strong>Audio:</strong> no clipped words or pops, and the sound stays at one level.</li>
+            <li><strong>Captions:</strong> they match what's said, in sync.</li>
+            <li><strong>Picture:</strong> steady framing, with no black or frozen frames.</li>
+            <li><strong>Story:</strong> it makes sense to someone who has never seen the episode, and the first seconds hook them.</li>
+          </ul>
+          <p className="mt-2">If one is off, trim the clip or fix its captions (below), or delete it and make your own.</p>
           <p className="mt-3">Press <strong>⋯</strong> on any clip (in Pōstify or your Library's Clips tab):</p>
           <HelpSub>Trim this clip</HelpSub>
           <p className="mt-2">Play it. Press <strong>Start here</strong> and <strong>End here</strong> at the right moments, or use the sliders. It has to be at least 5 seconds. Press <strong>Play the new version</strong> to check, then <strong>Trim the clip</strong>. Every shape is remade in about a minute.</p>
