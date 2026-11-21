@@ -194,6 +194,7 @@ import { registerTrash, toTrash } from "./trash.js";
 import { registerMyStudio } from "./myStudio.js";
 import { registerRoomKit, marksFor, withCredits } from "./roomKit.js";
 import { registerFreesoundImport } from "./studioLibrary.js";
+import { registerNudges, fireNudgeFor } from "./nudges.js";
 import { registerCreatorCampaigns } from "./creatorCampaigns.js";
 import { registerContactProfile } from "./contactProfile.js";
 import { registerAskShow, claimTranscript } from "./askShow.js";
@@ -6977,6 +6978,7 @@ export function registerRoutes(app: Express): void {
   registerMyStudio(app, requireHostSession, { youtubeToken });
   registerRoomKit(app, requireHostSession);
   registerFreesoundImport(app, requireAdmin);
+  registerNudges(app, requireAdmin);
   registerCreatorCampaigns(app, requireHostSession);
   registerMagazine(app, requireAdmin, requireAgent);
   registerBioPrefill(app, requireAdmin);
@@ -9235,6 +9237,13 @@ export function registerRoutes(app: Express): void {
         if (looksAutomatic(row)) { alex = "skip"; return; }
         const known = await isKnownSender(row.fromEmail, row.subject);
         if (draft ? !draft.respond : !known) { alex = "skip"; return; }
+        // A nudge waiting for this person (Frank's "meet Lori", 21 Nov) goes out instead of the acknowledgement,
+        // so they get one email, not two. Their email still needs a person's reply, so it stays on Needs a reply.
+        if (await fireNudgeFor(row.fromEmail, "email").catch(() => false)) {
+          await storage.updateInbound(row.id, { ackAt: new Date().toISOString(), ackText: "(A one-time note went out instead of the acknowledgement.)" });
+          alex = "person";
+          return;
+        }
         // The first mail in a conversation always hears back. After that Alex
         // follows up only when he has the answer, only until a person on the
         // team has replied in the thread, and at most four times a day (so two
@@ -10591,6 +10600,8 @@ export function registerRoutes(app: Express): void {
     }
     await storage.markLoginTokenUsed(row.id);
     setSessionCookie(res, email, req.body?.remember === true);
+    // Their own sign-in: anything waiting for it (a one-time nudge) goes out now.
+    try { waitUntil(fireNudgeFor(email, "sign-in").catch(() => false)); } catch { /* not on Vercel */ }
     res.json({ ok: true, email });
   });
 

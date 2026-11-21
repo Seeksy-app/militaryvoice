@@ -266,7 +266,8 @@ async function sendRawEmailNow(opts: { to: string; subject: string; html: string
         from: opts.from ?? FROM_ADDRESS,
         to: [opts.to],
         subject: opts.subject,
-        html: opts.html,
+        // Plain text only when html is empty (a nudge, say): Resend then sends text/plain.
+        ...(opts.html ? { html: opts.html } : {}),
         text: opts.text,
         ...(opts.replyTo ? { reply_to: opts.replyTo } : {}),
         ...(opts.bcc?.length ? { bcc: opts.bcc } : {}),
