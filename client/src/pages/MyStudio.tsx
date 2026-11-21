@@ -22,6 +22,7 @@ import { MarkClip } from "@/components/room/MarkClip";
 import { RoomStage } from "@/components/RoomStage";
 
 /** The room is light in both themes, so always the light logo file. */
+const DASHBOARD = "/host/dashboard";
 const Logo = ({ className }: { className: string }) => <img src="/logo-lockup.png?v=4" alt="MilitaryVoices.ai" className={`w-auto ${className}`} />;
 
 /**
@@ -82,12 +83,21 @@ export default function MyStudio({ invite }: { invite?: string }) {
         {owner ? (
           <>
             <p className="max-w-md text-[#475467]">Anything you recorded is on its way to your Library, ready for clips.</p>
+            <a href={DASHBOARD} className="mt-2 flex h-14 w-full max-w-xs items-center justify-center gap-2 rounded-xl text-[17px] font-bold text-white shadow-[0_4px_12px_rgba(5,56,119,0.28)]" style={{ background: NAVY }} data-testid="left-dashboard"><ArrowLeft className="h-5 w-5" /> Back to your dashboard</a>
             <div className="flex flex-wrap justify-center gap-3">
-              <button type="button" onClick={() => { setLeft(false); setConn(null); }} className="h-11 rounded-xl px-5 font-semibold text-white" style={{ background: NAVY }}>Go back in</button>
+              <button type="button" onClick={() => { setLeft(false); setConn(null); }} className="h-11 rounded-xl border border-[#d0d5dd] bg-white px-5 font-semibold">Go back in</button>
               <a href="/host/dashboard/library" className="flex h-11 items-center rounded-xl border border-[#d0d5dd] bg-white px-5 font-semibold">Open your Library</a>
             </div>
           </>
-        ) : <p className="text-[#475467]">You can close this tab.</p>}
+        ) : (
+          <>
+            <p className="max-w-md text-[#475467]">You've left the studio. You can close this tab.</p>
+            <div className="flex flex-wrap justify-center gap-3">
+              <button type="button" onClick={() => { setLeft(false); setConn(null); }} className="h-11 rounded-xl border border-[#d0d5dd] bg-white px-5 font-semibold" data-testid="left-rejoin">Join again</button>
+              <a href="/" className="flex h-11 items-center rounded-xl px-5 font-semibold text-white" style={{ background: NAVY }}>Go to MilitaryVoices.ai</a>
+            </div>
+          </>
+        )}
       </div>
     );
   }
@@ -197,7 +207,7 @@ function SetupScreen({ owner, roomName, blocked, defaultName, onEnter }: { owner
   return (
     <div className="min-h-screen bg-[#f3f4f7] text-[#101828]" data-testid="my-studio-setup" style={{ fontFamily: INTER }}>
       <header className="flex h-16 items-center gap-4 border-b border-[#e4e7ec] bg-white px-5">
-        <Logo className="h-10" />
+        {owner ? <a href={DASHBOARD} aria-label="MilitaryVoices.ai, back to your dashboard"><Logo className="h-10" /></a> : <Logo className="h-10" />}
         {owner && <a href="/host/dashboard/studio" className="ml-auto flex items-center gap-1.5 text-sm font-semibold text-[#475467] hover:text-[#101828]"><ArrowLeft className="h-4 w-4" /> Back to your dashboard</a>}
       </header>
       {blocked ? (
@@ -336,24 +346,37 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
   // Andrew, 21 Nov: Leave never ends a live show on its own. Guests just leave; the owner, while live or
   // recording, chooses to end it and leave, or leave and keep it going (guests carry on).
   const [leaving, setLeaving] = useState(false);
-  const leave = () => {
+  // Andrew, 21 Nov: "we need an EXIT from studio". The header's exit (and the logo) go to the
+  // dashboard; Leave ends on "You've left your studio" with a big Back to your dashboard. Both ask
+  // first while live or recording, by the same rules.
+  const exitTo = useRef<string | null>(null);
+  const go = async () => {
+    await room.disconnect();
+    if (exitTo.current) window.location.assign(exitTo.current);
+  };
+  const leave = (to?: string) => {
+    exitTo.current = to ?? null;
     if (owner && (rec || live)) { setLeaving(true); return; }
-    void room.disconnect();
+    void go();
   };
   const endAndLeave = async () => {
     setLeaving(false);
     if (live) await apiRequest("POST", "/api/host/my-studio/live", { on: false }).catch(() => {});
     if (rec) await apiRequest("POST", "/api/host/my-studio/record", { on: false }).catch(() => {});
     void qc.invalidateQueries({ queryKey: ["/api/host/my-studio"] });
-    void room.disconnect();
+    void go();
   };
+  const exit = () => leave(owner ? DASHBOARD : undefined);
 
   return (
     <div className="flex h-[100dvh] flex-col bg-[#f3f4f7] text-[#101828]" data-testid="my-studio" style={{ fontFamily: INTER }}>
       {/* Top bar */}
       <header className="flex h-16 shrink-0 items-center gap-3 border-b border-[#e4e7ec] bg-white px-4 lg:gap-3.5 lg:px-5" data-testid="my-studio-bar">
-        <Logo className="hidden h-[38px] sm:block" />
+        <button type="button" onClick={exit} className="hidden shrink-0 sm:block" aria-label={owner ? "MilitaryVoices.ai, back to your dashboard" : "MilitaryVoices.ai, exit the studio"}><Logo className="h-[38px]" /></button>
         <div className="hidden h-7 w-px bg-[#e4e7ec] sm:block" />
+        <button type="button" onClick={exit} className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[#d0d5dd] bg-white px-2.5 text-[13px] font-semibold text-[#344054] hover:bg-[#f9fafb]" data-testid="my-studio-exit">
+          <ArrowLeft className="h-4 w-4" /><span className="hidden sm:inline">{owner ? "Dashboard" : "Exit studio"}</span>
+        </button>
         <div className="min-w-0">
           <p className="truncate text-[15px] font-bold tracking-tight">{roomName}</p>
           <p className="text-xs text-[#667085]">{today()} · {owner ? "Your studio" : "You're a guest"}</p>
@@ -420,7 +443,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
             <BarButton label="Notes" wide active={tab === "notes"} onClick={() => setTab("notes")}><NotebookPen className="h-[22px] w-[22px]" /></BarButton>
             <BarButton label="Settings" onClick={() => setSettings(true)}><Settings className="h-[22px] w-[22px]" /></BarButton>
             <div className="mx-1 h-9 w-px bg-[#e4e7ec]" />
-            <button type="button" onClick={leave} className="flex h-[58px] w-[54px] flex-col items-center justify-center gap-1 rounded-xl bg-[#fef3f2] text-[11px] font-bold text-[#b42318] hover:bg-[#fee4e2] sm:w-[76px] sm:text-xs" data-testid="my-studio-leave"><LogOut className="h-[22px] w-[22px]" />Leave</button>
+            <button type="button" onClick={() => leave()} className="flex h-[58px] w-[54px] flex-col items-center justify-center gap-1 rounded-xl bg-[#fef3f2] text-[11px] font-bold text-[#b42318] hover:bg-[#fee4e2] sm:w-[76px] sm:text-xs" data-testid="my-studio-leave"><LogOut className="h-[22px] w-[22px]" />Leave</button>
           </div>
         </div>
 
@@ -449,7 +472,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
 
       {sheet && owner && studio && <GoLiveSheet studio={studio} onClose={() => setSheet(false)} />}
       {settings && <SettingsSheet onClose={() => setSettings(false)} />}
-      {leaving && <LeaveDialog live={!!live} onEnd={() => void endAndLeave()} onKeep={() => { setLeaving(false); void room.disconnect(); }} onCancel={() => setLeaving(false)} />}
+      {leaving && <LeaveDialog live={!!live} onEnd={() => void endAndLeave()} onKeep={() => { setLeaving(false); void go(); }} onCancel={() => { exitTo.current = null; setLeaving(false); }} />}
     </div>
   );
 }
