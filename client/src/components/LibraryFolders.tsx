@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Folder, FolderInput, FolderOpen, FolderPlus, Library, Pencil, Trash2, X } from "lucide-react";
+import { Check, Folder, FolderInput, FolderOpen, FolderPlus, GraduationCap, Library, Pencil, Trash2, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { DropdownMenuItem, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger } from "@/components/ui/dropdown-menu";
@@ -16,6 +16,13 @@ import type { LibraryFolderRow } from "@shared/schema";
  * has the same Move to folder; an open folder shows all it holds.
  */
 export type Fileable = { kind: "recording" | "episode" | "clip"; id: number };
+
+/**
+ * Our tutorials' own folder (Andrew, 21 Nov: "make a folder up there called Tutorials"). Not a real
+ * folder row: it's worked out from the titles (lib/howTo.ts), so nothing is written to their account,
+ * it can't be renamed, deleted or dropped onto, and it only shows when they have a tutorial.
+ */
+export const TUTORIALS = -1;
 
 const DRAG = "text/x-mv-library";
 const URL_OF: Record<Fileable["kind"], string> = { recording: "recordings", episode: "podcast-episodes", clip: "clips" };
@@ -45,7 +52,7 @@ export function LibraryFoldersProvider({ children }: { children: ReactNode }) {
   const q = useQuery<LibraryFolderRow[]>({ queryKey: ["/api/host/folders"], queryFn: async () => (await apiRequest("GET", "/api/host/folders")).json() });
   const folders = q.data ?? [];
   // A folder deleted elsewhere just stops being open.
-  const open = openId != null && folders.some((f) => f.id === openId) ? openId : null;
+  const open = openId === TUTORIALS || (openId != null && folders.some((f) => f.id === openId)) ? openId : null;
 
   async function file(item: Fileable, folderId: number) {
     try {
@@ -75,7 +82,7 @@ export function dragToFolder(lib: Ctx | null, item: Fileable) {
 }
 
 /** The bar: All, each folder (click to open, drop to file), New folder; Rename and Delete for the open one. */
-export function FolderBar({ counts }: { counts: Map<number, number> }) {
+export function FolderBar({ counts, tutorials = 0 }: { counts: Map<number, number>; tutorials?: number }) {
   const lib = useLibraryFolders();
   const bar = useContext(BarCtx);
   const qc = useQueryClient();
@@ -113,6 +120,7 @@ export function FolderBar({ counts }: { counts: Map<number, number> }) {
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2" data-testid="library-folders">
       <Chip active={open == null} onClick={() => setOpen(null)} icon={<Library className="h-3.5 w-3.5" />} label="All" testId="folder-all" />
+      {tutorials > 0 && <Chip active={open === TUTORIALS} onClick={() => setOpen(TUTORIALS)} icon={<GraduationCap className="h-3.5 w-3.5" />} label="Tutorials" n={tutorials} testId="folder-tutorials" />}
       {folders.map((f) =>
         naming?.id === f.id ? (
           <NameInput key={f.id} value={naming.name} onChange={(name) => setNaming({ ...naming, name })} onSave={save} onCancel={() => setNaming(null)} />
@@ -139,7 +147,7 @@ export function FolderBar({ counts }: { counts: Map<number, number> }) {
           <FolderPlus className="h-3.5 w-3.5" /> New folder
         </button>
       )}
-      {open != null && naming?.id !== open && (
+      {open != null && open !== TUTORIALS && naming?.id !== open && (
         <span className="ml-auto flex items-center gap-1">
           <Button size="sm" variant="ghost" className="h-7 gap-1 rounded-full px-2.5 text-xs" onClick={() => setNaming({ id: open, name: folders.find((f) => f.id === open)?.name ?? "" })} data-testid="button-rename-folder">
             <Pencil className="h-3 w-3" /> Rename

@@ -4,7 +4,8 @@ import { UploadRecording } from "@/components/UploadRecording";
 import { MyRecordings } from "@/components/MyRecordings";
 import { ClipsLibrary } from "@/components/ClipsLibrary";
 import { PodcastEpisodeGrid, usePodcastEpisodes } from "@/components/PodcastEpisodes";
-import { FolderBar, LibraryFoldersProvider, useLibraryFolders } from "@/components/LibraryFolders";
+import { FolderBar, LibraryFoldersProvider, TUTORIALS, useLibraryFolders } from "@/components/LibraryFolders";
+import { isHowTo } from "@/lib/howTo";
 import { apiRequest } from "@/lib/queryClient";
 import type { PublicEvent, RecordingRow, ClipRow, HostPostRow, CleanResult } from "@shared/schema";
 import { Clock3, Film, Library, Scissors, Send, Timer } from "lucide-react";
@@ -56,9 +57,11 @@ function Library_({ socialAccounts }: { socialAccounts?: string | null }) {
   const { data: podEps } = usePodcastEpisodes();
   const published = (podEps ?? []).filter((e) => e.status === "published");
   const podOnly = published.filter((e) => !e.recordingId).length;
-  const originals = (recordings ?? []).filter((r) => r.status === "Ready" && !r.egressId.startsWith("CLEAN_"));
+  // Our tutorials sit in their own Tutorials folder and aren't counted as their episodes.
+  const tutorials = (recordings ?? []).filter((r) => isHowTo(r.title));
+  const originals = (recordings ?? []).filter((r) => r.status === "Ready" && !r.egressId.startsWith("CLEAN_") && !isHowTo(r.title));
   // What each folder holds: episodes (their clean and edited copies go with them), podcast episodes and clips.
-  const mains = (recordings ?? []).filter((r) => !r.egressId.startsWith("CLEAN_"));
+  const mains = (recordings ?? []).filter((r) => !r.egressId.startsWith("CLEAN_") && !isHowTo(r.title));
   const folderCounts = new Map<number, number>();
   for (const x of [...mains, ...published, ...(clips ?? [])]) if (x.folderId) folderCounts.set(x.folderId, (folderCounts.get(x.folderId) ?? 0) + 1);
   // Podcast episodes get a tab of their own once there are recordings too (with none, they are the Episodes tab).
@@ -120,9 +123,11 @@ function Library_({ socialAccounts }: { socialAccounts?: string | null }) {
       </div>
 
       {/* The folders, for everything below: drag any card onto one, or open one to see all it holds. */}
-      <FolderBar counts={folderCounts} />
+      <FolderBar counts={folderCounts} tutorials={tutorials.length} />
 
-      {open != null ? (
+      {open === TUTORIALS ? (
+        <MyRecordings tutorials />
+      ) : open != null ? (
         <FolderContents folder={open} socialAccounts={socialAccounts} clipCounts={clipCounts} onShowClips={showClips} recordings={recordings ?? []} clips={clips ?? []} posts={posts ?? []} counts={{ recs: mains.filter((r) => r.folderId === open).length, pods: published.filter((e) => e.folderId === open).length }} />
       ) : (<>
       {/* Views of one Library: the episodes, the podcast's episodes, and every clip made from them. */}
@@ -169,11 +174,13 @@ function Library_({ socialAccounts }: { socialAccounts?: string | null }) {
       </>)}
       </>)}
 
-      {/* Clips and clean episodes live in Pōstify; this page is the recordings. */}
-      <p className="mt-6 text-sm text-muted-foreground">
-        Clips and clean episodes are made in{" "}
-        <a href="/host/dashboard/postify" className="font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">Pōstify →</a>
-      </p>
+      {/* Clips and clean episodes live in Pōstify; this page is the recordings. Not in Tutorials: no Pōstify there. */}
+      {open !== TUTORIALS && (
+        <p className="mt-6 text-sm text-muted-foreground">
+          Clips and clean episodes are made in{" "}
+          <a href="/host/dashboard/postify" className="font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">Pōstify →</a>
+        </p>
+      )}
     </section>
   );
 }
