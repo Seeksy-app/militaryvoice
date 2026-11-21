@@ -35,7 +35,12 @@ export interface LibraryItem {
 }
 
 /** Filled in as each item is checked and uploaded (see exports/cc0-music-candidates.md for the shortlist). */
-export const LIBRARY: LibraryItem[] = [];
+export const LIBRARY: LibraryItem[] = [
+  // Bought on Bandcamp 21 Nov 2026 ($1.50; receipt in Andrew's email). The artist's page marks it CC BY 4.0.
+  { slug: "beginning-1", kind: "music", name: "Beginning 1", key: "studio-library/holiznacc0-beginning-1.mp3", sec: 270,
+    source: { site: "Bandcamp", title: "Beginning 1", artist: "HoliznaCC0", page: "https://holiznacc0.bandcamp.com/track/beginning-1",
+      licence: "CC BY 4.0", checked: "2026-11-21", credit: "Music: Beginning 1 by HoliznaCC0 (CC BY 4.0)" } },
+];
 
 const LICENCES = /^(CC0 1\.0( Universal)?|Public Domain Mark 1\.0|Public Domain|CC BY 4\.0)$/;
 /** CC BY needs its credit line on file; without it the item stays hidden. */
