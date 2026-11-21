@@ -147,6 +147,7 @@ import { registerWorldLabs } from "./worldlabs.js";
 import { registerSite } from "./site.js";
 import { registerGtm } from "./gtm.js";
 import { registerPromo, noteFoundingTrial } from "./promo.js";
+import { socialTrial, socialBlocked } from "./socialTrial.js";
 import { registerShareLogin } from "./shareLogin.js";
 import { orgMemberEmails, registerOrgs } from "./orgs.js";
 import { registerProspects } from "./prospects.js";
@@ -955,6 +956,7 @@ export function registerRoutes(app: Express): void {
       res.status(400).json({ message: "Connect an account first, on the Integrations tab." });
       return;
     }
+    if (await socialBlocked(email, res)) return;
 
     // YouTube takes videos, not stills — offering it here would only produce a
     // failure at the far end.
@@ -1888,6 +1890,7 @@ export function registerRoutes(app: Express): void {
         res.status(400).json({ message: "Connect a social account on the Integrations tab first." });
         return;
       }
+      if (await socialBlocked(signup.email, res)) return;
       if (platforms.length === 0) {
         res.status(400).json({ message: "Pick at least one account to post from." });
         return;
@@ -3601,6 +3604,7 @@ export function registerRoutes(app: Express): void {
     if (!/^show-assets\/[\w.-]+$/.test(key)) return res.status(400).json({ message: "Upload the picture first." });
     const profile = await storage.getProfileByEmail(email);
     if (!profile?.uploadPostUsername) return res.status(400).json({ message: "Connect your social accounts first." });
+    if (await socialBlocked(email, res)) return;
     const platforms = (Array.isArray(req.body?.platforms) ? req.body.platforms : []).map((p: unknown) => String(p).toLowerCase().trim()).filter((p: string) => p && p !== "youtube");
     if (platforms.length === 0) return res.status(400).json({ message: "Pick at least one account to post to." });
     const when = scheduleFrom(req.body);
@@ -3641,6 +3645,7 @@ export function registerRoutes(app: Express): void {
     if (!videoUrl) return res.status(409).json({ message: "That shape isn't ready." });
     const profile = await storage.getProfileByEmail(email);
     if (!profile?.uploadPostUsername) return res.status(400).json({ message: "Connect your social accounts first." });
+    if (await socialBlocked(email, res)) return;
     const platforms = (Array.isArray(req.body?.platforms) ? req.body.platforms : []).map((p: unknown) => String(p).toLowerCase().trim()).filter(Boolean);
     if (platforms.length === 0) return res.status(400).json({ message: "Pick at least one account to post to." });
     const when = scheduleFrom(req.body);
@@ -3868,6 +3873,7 @@ export function registerRoutes(app: Express): void {
   app.post("/api/host/social/queue", requireHostSession, async (req, res) => {
     const profile = await storage.getProfileByEmail((getSessionEmail(req) ?? "").toLowerCase().trim());
     if (!profile?.uploadPostUsername) return res.status(400).json({ message: "Connect your social accounts first." });
+    if (await socialBlocked(profile.email, res)) return;
     const b = req.body ?? {};
     const slots = (Array.isArray(b.slots) ? b.slots : []).map((x: any) => ({ hour: Math.max(0, Math.min(23, Math.round(Number(x?.hour)))), minute: Math.max(0, Math.min(59, Math.round(Number(x?.minute) || 0))) })).filter((x: any) => Number.isFinite(x.hour)).slice(0, 24);
     const days = (Array.isArray(b.days) ? b.days : []).map(Number).filter((d: number) => Number.isInteger(d) && d >= 0 && d <= 6);
@@ -3898,6 +3904,7 @@ export function registerRoutes(app: Express): void {
       res.status(400).json({ message: "Connect your social accounts first." });
       return;
     }
+    if (await socialBlocked(email, res)) return;
     // A whole episode goes to YouTube only; the other apps get its clips.
     const platforms = (Array.isArray(req.body?.platforms) ? req.body.platforms : [])
       .map((p: unknown) => String(p).toLowerCase().trim())
@@ -11408,6 +11415,8 @@ The Podcast Marathon team`;
       configured: isUploadPostConfigured(),
       accounts: parseSocialAccounts(profile?.socialAccounts),
       lastSyncedAt: profile?.updatedAt ?? null,
+      // Free Growth accounts: social is 30 days from their first Connect. free=false means it isn't counted (a plan, comp, tester).
+      trial: await socialTrial(email),
     });
   });
 
@@ -11421,6 +11430,8 @@ The Podcast Marathon team`;
       return;
     }
     const email = (req as any).hostEmail as string;
+    // Free Growth: the 30 days start here; after them, Connect is an upgrade.
+    if (await socialBlocked(email, res, { start: true })) return;
     // First-time podcasters can connect socials from the setup form before
     // saving; a stub profile row (email only) gives us a stable id to key the
     // Upload-Post profile on. It stays hidden from public lists until finished.
