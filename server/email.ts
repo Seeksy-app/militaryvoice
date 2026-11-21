@@ -332,14 +332,14 @@ export async function sendOneOffEmail(o: {
 }
 
 /**
- * The leave-live safety net (server/myStudio.ts): a creator's live show ended by itself because
- * nobody was left in the studio for 2 minutes. Sent once, to the studio's owner.
+ * The leave-live safety net (server/myStudio.ts): a creator's live show, or a recording left
+ * running on its own, ended by itself because nobody was left in the studio for 2 minutes. Sent once, to the studio's owner.
  */
-export async function sendStudioLeftLiveEmail(v: { to: string; studioName: string; recorded: boolean }): Promise<boolean> {
+export async function sendStudioLeftLiveEmail(v: { to: string; studioName: string; live: boolean; recorded: boolean }): Promise<boolean> {
   const libraryUrl = `${SITE}/host/dashboard/library`;
-  const subject = "Your live show has ended";
-  const lead = "Your live show ended because everyone left.";
-  const more = v.recorded ? "The recording is in your Library." : "";
+  const subject = v.live ? "Your live show has ended" : "Your recording has stopped";
+  const lead = v.live ? "Your live show ended because everyone left." : "Your recording stopped because everyone left.";
+  const more = v.recorded ? (v.live ? "The recording is in your Library." : "It's in your Library.") : "";
   return sendEmail({ kind: "sendStudioLeftLiveEmail",
     to: v.to,
     subject,
@@ -351,9 +351,9 @@ export async function sendStudioLeftLiveEmail(v: { to: string; studioName: strin
       body: `<p style="margin:0 0 14px;">${lead}${more ? ` ${more}` : ""}</p>`,
       ...(v.recorded ? { cta: { href: libraryUrl, label: "Open your Library" } } : {}),
       secondary: `<p style="margin:18px 0 0;color:#374151;font-size:16px;">The MilitaryVoices.ai team</p>`,
-      footerNote: "You're getting this because you went live from your MilitaryVoices studio.",
+      footerNote: `You're getting this because you ${v.live ? "went live" : "recorded"} from your MilitaryVoices studio.`,
     }),
-    text: `${subject}\n\n${lead}${more ? ` ${more}` : ""}\n${v.recorded ? `\nOpen your Library: ${libraryUrl}\n` : ""}\nThe MilitaryVoices.ai team\n\nYou're getting this because you went live from your MilitaryVoices studio.\n`,
+    text: `${subject}\n\n${lead}${more ? ` ${more}` : ""}\n${v.recorded ? `\nOpen your Library: ${libraryUrl}\n` : ""}\nThe MilitaryVoices.ai team\n\nYou're getting this because you ${v.live ? "went live" : "recorded"} from your MilitaryVoices studio.\n`,
   });
 }
 
