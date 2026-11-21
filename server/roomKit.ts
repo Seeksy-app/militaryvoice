@@ -178,13 +178,13 @@ export function registerRoomKit(app: Express, requireHostSession: RequestHandler
   app.get("/api/host/room/look", requireHostSession, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     const s = await studioOf(me(req));
-    if (!s) return res.status(404).json({ message: "Open your room first." });
+    if (!s) return res.status(404).json({ message: "Open your studio first." });
     res.json({ look: await getLook(s.id) });
   });
 
   app.put("/api/host/room/look", requireHostSession, async (req, res) => {
     const s = await studioOf(me(req));
-    if (!s) return res.status(404).json({ message: "Open your room first." });
+    if (!s) return res.status(404).json({ message: "Open your studio first." });
     const cur = await getLook(s.id);
     const rev = Number(req.body?.rev);
     if (rev !== cur.rev) return res.status(409).json({ message: "Your look changed in another window. Here's the latest.", look: cur });
@@ -207,7 +207,7 @@ export function registerRoomKit(app: Express, requireHostSession: RequestHandler
   // ---- files ----
   app.post("/api/host/room/assets", requireHostSession, async (req, res) => {
     const s = await studioOf(me(req));
-    if (!s) return res.status(404).json({ message: "Open your room first." });
+    if (!s) return res.status(404).json({ message: "Open your studio first." });
     const key = String(req.body?.storageKey ?? "");
     const kind = String(req.body?.kind ?? "") as AssetKind;
     if (!/^show-assets\/[\w.-]+$/.test(key) || !KINDS.includes(kind)) return res.status(400).json({ message: "That file didn't come through." });
@@ -236,7 +236,7 @@ export function registerRoomKit(app: Express, requireHostSession: RequestHandler
 
   app.delete("/api/host/room/assets/:assetId", requireHostSession, async (req, res) => {
     const s = await studioOf(me(req));
-    if (!s) return res.status(404).json({ message: "Open your room first." });
+    if (!s) return res.status(404).json({ message: "Open your studio first." });
     const [gone] = await db.delete(roomAssets).where(and(eq(roomAssets.studioId, s.id), eq(roomAssets.id, String(req.params.assetId)))).returning();
     if (!gone) return res.status(404).json({ message: "No such file." });
     // Out of the look wherever it was used.
