@@ -59,13 +59,16 @@ app.use((req, res, next) => {
   res.on("finish", () => {
     const duration = Date.now() - start;
     if (path.startsWith("/api")) {
-      let logLine = `${req.method} ${path} ${res.statusCode} in ${duration}ms`;
+      // A long link segment after /invite/, /join/, /share-login/, /pay/ or /go/ is a credential: log it as :token.
+      const shownPath = path.replace(/(\/(?:invite|join|share-login|pay|go)\/)[A-Za-z0-9_.~-]{16,}/gi, "$1:token");
+      let logLine = `${req.method} ${shownPath} ${res.statusCode} in ${duration}ms`;
       if (capturedJsonResponse) {
         const body = JSON.stringify(capturedJsonResponse);
         // A response that hands out a token, key, code, secret or invite link is logged as its
         // status and size only (the status is already on this line), so no credential sits in the logs.
         const secret = /token|key|secret|password|passcode|code|link|invite|rtmp/i;
-        const hidden = secret.test(path) || /"[^"]*(token|key|secret|password|passcode|code|link|invite|rtmp)[^"]*"\s*:/i.test(body);
+        // Every admin route (mail threads, sign-in codes, people) is hidden whatever it holds.
+        const hidden = path.startsWith("/api/admin/") || secret.test(path) || /"[^"]*(token|key|secret|password|passcode|code|link|invite|rtmp)[^"]*"\s*:/i.test(body);
         logLine += hidden ? ` :: [response hidden, ${body.length} bytes]` : ` :: ${body}`;
       }
 
