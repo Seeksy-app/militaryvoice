@@ -189,10 +189,10 @@ export function SocialScreen({ view = "social" }: { view?: "social" | "calendar"
             <DropdownMenuItem onSelect={() => create("episodes")} className="gap-3 rounded-lg px-3 py-2.5 text-sm" data-testid="social-create-episode"><Film className="h-5 w-5" /> Choose an episode</DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
-        <div className="mb-1.5 ml-auto flex items-center gap-2">
+        <div className="mb-1.5 ml-auto flex shrink-0 items-center gap-2">
           {view !== "analytics" && fillN > 0 && (
             <Button onClick={() => (locked ? upgrade.open() : fill.mutate())} disabled={fill.isPending || noAccounts} className="h-9 gap-1.5 rounded-full bg-[#F0A71F] font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="social-fill-week">
-              {fill.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Fill my week with {fillN} clip{fillN === 1 ? "" : "s"}
+              {fill.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Sparkles className="h-4 w-4" />} Fill my week<span className="hidden sm:inline">&nbsp;with {fillN} clip{fillN === 1 ? "" : "s"}</span>
             </Button>
           )}
           {view !== "analytics" && <Tip text="Your posting plan: your weekly goal, and the days and times posts go out">
