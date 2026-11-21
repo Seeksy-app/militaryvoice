@@ -188,7 +188,8 @@ export function PodcastHosting() {
         <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3" data-testid="hosting-shows">
           {shows.map((x) => {
             const live = x.episodes.filter((e) => e.live).length;
-            const listed = Object.values(parseDirs(x.show.directories)).filter((d) => d.state === "live" && d.url).length;
+            const xd = parseDirs(x.show.directories);
+            const listed = DIRS.filter((d) => liveOn(x, xd, d.key)).length;
             return (
               <button key={x.show.id} type="button" onClick={() => setOpenId(x.show.id)} className="group overflow-hidden rounded-2xl border border-border bg-card text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#053877]/40 hover:shadow-md" data-testid={`hosting-show-${x.show.id}`}>
                 <div className="aspect-square w-full bg-muted">{x.show.artworkUrl ? <img src={x.show.artworkUrl} alt="" className="h-full w-full object-cover" /> : <span className="flex h-full items-center justify-center text-muted-foreground"><Podcast className="h-10 w-10" /></span>}</div>
@@ -402,6 +403,14 @@ const ListenNotesMark: IconType = (props) => (
   <svg viewBox="0 0 24 24" fill="currentColor" {...props}><path d="M12 3a9 9 0 0 0-9 9v5a3 3 0 0 0 3 3h1v-7H5v-1a7 7 0 0 1 14 0v1h-2v7h1a3 3 0 0 0 3-3v-5a9 9 0 0 0-9-9Z" /></svg>
 );
 /** Each app's own mark, so it's recognisable at a glance (7 Oct). */
+// The names each app reads the feed under (server appOf): seen in the last 14 days = it follows the new feed.
+// Podverse, Fountain and TrueFans read through Podcast Index, so one of them fetching proves the Index has the show.
+const READS_AS: Record<string, string[]> = { apple: ["Apple Podcasts"], spotify: ["Spotify"], amazon: ["Amazon Music"], iheart: ["iHeartRadio"], pocketcasts: ["Pocket Casts"], castbox: ["Castbox"], youtube: ["Google / YouTube"], playerfm: ["Player.Fm"], podcastindex: ["Podverse", "Fountain", "Truefans"] };
+/** Live on an app: we have the show's page there, or (a moved show) the app read the new feed in the last 14 days. */
+function liveOn(h: Hosted, dirs: Record<string, DirState>, key: string): boolean {
+  if (dirs[key]?.state === "live" && dirs[key]?.url) return true;
+  return !!h.show.importedFrom && !!READS_AS[key]?.some((a) => h.reading?.includes(a));
+}
 const DIR_ICON: Record<string, { icon: IconType; color: string }> = {
   apple: { icon: SiApplepodcasts, color: "#9933CC" },
   spotify: { icon: SiSpotify, color: "#1DB954" },
@@ -448,24 +457,18 @@ function Directories({ h, ready, onSaved, youtube }: { h: Hosted; ready: boolean
     if (!dirs[d.key]?.state) put(d.key, { state: "submitted", url: "", at: new Date().toISOString() });
     toast({ title: "Your feed is copied", description: `Paste it into ${d.name}.` });
   };
-  // The name each app reads the feed under (server appOf): seen in the last 14 days = it follows the new feed.
-  const READS_AS: Record<string, string> = { apple: "Apple Podcasts", spotify: "Spotify", amazon: "Amazon Music", iheart: "iHeartRadio", pocketcasts: "Pocket Casts", castbox: "Castbox", youtube: "Google / YouTube" };
-  // Two states, plainly different (Andrew via PM, 21 Nov: "we need to show Live vs the other one"):
-  // "Live" (solid green) = we've confirmed the show's page there; "Reading your new feed" (light green) = we see the app
-  // fetching the feed but haven't confirmed the page. Confirm = paste the page's link, which makes it Live.
-  // Live without a link isn't a confirmed page (UI/UX, 21 Nov): when the app reads the feed it shows as Reading + Confirm.
-  const followsOf = (key: string) => moved && !(dirs[key]?.state === "live" && dirs[key]?.url) && !!READS_AS[key] && !!h.reading?.includes(READS_AS[key]);
-  // Live only with its show link (PM, 21 Nov): that's what the key line promises.
-  const listed = DIRS.filter((d) => dirs[d.key]?.state === "live" && !!dirs[d.key]?.url).length;
-  const reading = DIRS.filter((d) => followsOf(d.key)).length;
+  // One "Live" (Andrew via PM, 21 Nov: "if it's live, why do we have to confirm it? ... Just say it's live"): live when we
+  // have the show's page there, or when the app read the new feed in the last 14 days. Open when we have the page's link.
+  const isLive = (key: string) => liveOn(h, dirs, key);
+  const confirmed = (key: string) => dirs[key]?.state === "live" && !!dirs[key]?.url;
+  const listed = DIRS.filter((d) => isLive(d.key)).length;
   const renderRow = (d: (typeof DIRS)[number]) => {
           const st = dirs[d.key];
-          const follows = followsOf(d.key);
+          const live = isLive(d.key);
           const isOpen = open === d.key;
           // "Spotify" under Spotify says nothing: the reach line only when it adds something (UI/UX, a1ee1d0d).
           const reach = d.reach === d.name ? "" : d.reach;
-          const badge = follows ? "bg-emerald-500/10 text-emerald-700 ring-1 ring-inset ring-emerald-500/40 dark:text-emerald-400"
-            : st?.state === "live" && st.url ? "bg-emerald-600 text-white dark:bg-emerald-500"
+          const badge = live ? "bg-emerald-600 text-white dark:bg-emerald-500"
             : st?.state === "submitted" ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : "bg-muted text-muted-foreground";
           return (
             <li key={d.key} className="py-3" data-testid={`hosting-dir-${d.key}`}>
@@ -479,10 +482,10 @@ function Directories({ h, ready, onSaved, youtube }: { h: Hosted; ready: boolean
                 </button>
                 {/* State and action: beside the name on a computer; on a phone their own line under the name, so neither squeezes it. */}
                 <span className="flex basis-full items-center justify-between gap-2 pl-12 empty:hidden sm:basis-auto sm:justify-end sm:pl-0">
-                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${badge}`} title={follows ? `${d.name} already gets your episodes from us. Confirm its page to make it Live.` : undefined} data-testid={`hosting-dir-state-${d.key}`}>{follows ? "Reading your new feed" : st?.state === "live" && st.url ? (moved && !s.redirectOk ? "Live, by your old feed" : "Live") : st?.state === "live" ? (moved ? (s.redirectOk ? "Follows your forward" : "Waits for your old feed to forward") : "Link needed") : st?.state === "submitted" ? "Submitted" : d.auto && s.aiVoice ? "Not listed" : d.auto ? "Automatic" : moved ? (s.redirectOk ? "Follows your forward" : "Waits for your old feed to forward") : "Not listed"}</span>
-                {follows ? (
-                  // The app already has the show: confirm its page (find it, paste the link) to make it Live.
-                  <Button size="sm" variant="outline" onClick={() => setOpen(isOpen ? `-${d.key}` : d.key)} className="h-8 rounded-full" data-testid={`hosting-dir-confirm-${d.key}`}>Confirm</Button>
+                <span className={`shrink-0 rounded-full px-2 py-0.5 text-[11px] font-semibold ${badge}`} title={live && !confirmed(d.key) ? `${d.name} gets your episodes from your new feed.` : undefined} data-testid={`hosting-dir-state-${d.key}`}>{live && !confirmed(d.key) ? "Live" : confirmed(d.key) ? (moved && !s.redirectOk ? "Live, by your old feed" : "Live") : st?.state === "live" ? (moved ? (s.redirectOk ? "Follows your forward" : "Waits for your old feed to forward") : "Link needed") : st?.state === "submitted" ? "Submitted" : d.auto && s.aiVoice ? "Not listed" : d.auto ? "Automatic" : moved ? (s.redirectOk ? "Follows your forward" : "Waits for your old feed to forward") : "Not listed"}</span>
+                {live ? (
+                  // Live: Open when we have the show's page, otherwise nothing to press.
+                  st?.url ? <Button asChild size="sm" variant="outline" className="h-8 gap-1 rounded-full"><a href={st.url} target="_blank" rel="noreferrer">Open <ExternalLink className="h-3 w-3" /></a></Button> : null
                 ) : d.auto && s.aiVoice && !(st?.state === "live" && st.url) ? (
                   <span className="shrink-0 text-xs text-muted-foreground" data-testid={`hosting-dir-ai-${d.key}`}>Doesn't take AI-voiced shows</span>
                 ) : d.auto && !(st?.state === "live" && st.url) ? (
@@ -498,10 +501,10 @@ function Directories({ h, ready, onSaved, youtube }: { h: Hosted; ready: boolean
                 )}
                 </span>
               </div>
-              {(isOpen || (st?.state === "submitted" && !follows && open !== `-${d.key}`)) && (
+              {(isOpen || (st?.state === "submitted" && !live && open !== `-${d.key}`)) && (
                 <div className="ml-12 mt-2 space-y-2 text-sm">
-                  {follows ? (
-                    <p className="text-xs text-muted-foreground">{d.name} already gets your episodes from us. <a href={FIND[d.key]?.(s.title) ?? d.url} target="_blank" rel="noreferrer" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Find your show on {d.name}</a>, then paste its address here to confirm it. It turns Live, and a {d.name} button goes on your show page.</p>
+                  {live ? (
+                    <p className="text-xs text-muted-foreground">{d.name} gets your episodes from your new feed. Optional: <a href={FIND[d.key]?.(s.title) ?? d.url} target="_blank" rel="noreferrer" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">find your show on {d.name}</a> and paste its address below to put a {d.name} button on your show page.</p>
                   ) : <>
                   <ol className="list-decimal space-y-1 pl-5 text-muted-foreground">{d.steps.map((x) => <li key={x}>{x}</li>)}</ol>
                   <p className="text-xs text-muted-foreground">That's all: it goes live on its own once {d.name} approves it, usually within a few days. <span className="text-muted-foreground/80">Optional: <a href={FIND[d.key]?.(s.title) ?? d.url} target="_blank" rel="noreferrer" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">find your show on {d.name}</a> and paste its address below to put a {d.name} button on your show page.</span></p>
@@ -531,13 +534,13 @@ function Directories({ h, ready, onSaved, youtube }: { h: Hosted; ready: boolean
   return (
     <>
     <div className="rounded-2xl border border-border bg-card p-4 shadow-sm" data-testid="hosting-directories">
-      <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+      {/* A clear line under the header, so the first app doesn't read as part of it (Andrew, 21 Nov). */}
+      <div className="mb-1 flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
         <div>
           <h2 className="text-sm font-semibold">Where your show is listed</h2>
-          <p className="text-xs text-muted-foreground">{moved ? (s.redirectOk ? "Your old feed forwards here, so each app moves over on its own. List it only where it isn't yet." : "Your show is in these already, by your old feed: forwarding it (above) moves each one here. List it only where it isn't yet.") :"List it once in each; new episodes reach them on their own."}{!reading && listed ? ` Live on ${listed} of ${DIRS.length}.` : ""}</p>
+          <p className="text-xs text-muted-foreground">{moved ? (s.redirectOk ? "Your old feed forwards here, so each app moves over on its own. List it only where it isn't yet." : "Your show is in these already, by your old feed: forwarding it (above) moves each one here. List it only where it isn't yet.") :"List it once in each; new episodes reach them on their own."}</p>
           {/* The count on its own line, so it doesn't wrap mid-phrase (UI/UX, 21 Nov). */}
-          {reading > 0 && <p className="mt-1 text-xs font-medium text-foreground" data-testid="hosting-dir-count">Live on {listed} · Reading your new feed on {reading} · {DIRS.length} apps</p>}
-          {reading > 0 && <p className="mt-0.5 text-xs text-muted-foreground" data-testid="hosting-dir-key"><span className="font-semibold text-emerald-700 dark:text-emerald-400">Live</span> = we've confirmed your show page. <span className="font-semibold text-emerald-700 dark:text-emerald-400">Reading your new feed</span> = the app already gets your episodes from us.</p>}
+          {listed > 0 && <p className="mt-1 text-xs font-medium text-foreground" data-testid="hosting-dir-count">Live on {listed} · {DIRS.length} apps</p>}
         </div>
         <FeedLink url={h.feedUrl} />
       </div>
