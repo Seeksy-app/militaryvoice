@@ -28,7 +28,7 @@ import { IconTile } from "@/components/ui/icon-tile";
  */
 
 type Delivery = { apps: { app: string; got: boolean; checked: string }[] };
-type Ep = HostedEpisodeRow & { downloads: number; live: boolean; hasVideo?: boolean; ytLibrary?: string; delivery?: Delivery | null };
+type Ep = HostedEpisodeRow & { downloads: number; live: boolean; hasVideo?: boolean; ytLibrary?: string; delivery?: Delivery | null; announcedAt?: string };
 type Hosted = { show: HostedShowRow; feedUrl: string; missing: string[]; ownerConfirmed: boolean; production?: boolean; episodes: Ep[]; stats: { total: number; last30: number; series: { date: string; count: number }[]; apps: Record<string, number> }; reading?: string[] };
 type Resp = { shows: Hosted[]; categories: Record<string, string[]>; youtubeReady?: boolean };
 
@@ -1115,6 +1115,7 @@ function EpisodePage({ ep, show, youtubeReady, production, onDirectories, onBack
                   <div className="space-y-2 rounded-xl bg-muted/50 px-3 py-2.5" data-testid="episode-delivery">
                     <p className="flex items-center gap-1.5 text-xs font-semibold text-foreground"><Check className="h-3.5 w-3.5 text-emerald-600" /> It's in your feed</p>
                     <p className="text-xs text-muted-foreground">{waiting(d) ? "Apple, Spotify and the other apps pick it up on their own, usually within an hour. There's nothing you need to do, and you can leave this page: it keeps going without you." : "Every app that reads your feed has it."}</p>
+                    {ep.announcedAt && <p className="flex items-center gap-1.5 text-xs text-muted-foreground" data-testid="episode-announced"><Check className="h-3 w-3 text-emerald-600" /> Announced to the apps {new Date(ep.announcedAt).toLocaleString([], { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</p>}
                     {big.map((a) => (
                       <div key={a.app} className="text-xs">
                         <p className="flex items-center justify-between gap-2"><span className="font-medium">{a.app}</span>

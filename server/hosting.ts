@@ -365,6 +365,7 @@ export function feedXml(s: HostedShowRow, eps: HostedEpisodeRow[], spots: Hosted
     <title>${esc(s.title)}</title>
     <link>${esc(link)}</link>
     <atom:link href="${esc(self)}" rel="self" type="application/rss+xml"/>
+    <atom:link href="${WEBSUB_HUB}" rel="hub"/>
     <language>${esc(s.language)}</language>
     <description>${cdata(plainDesc(s.description))}</description>
     <itunes:summary>${cdata(plainDesc(s.description))}</itunes:summary>
@@ -706,6 +707,55 @@ function deliveryOf(e: HostedEpisodeRow, hits: { app: string; lastAt: string; se
   return { apps: recent.sort((a, b) => order(a.app) - order(b.app) || a.app.localeCompare(b.app)).map((h) => ({ app: h.app, got: !!h.seenUntil && h.seenUntil >= e.publishedAt, checked: h.lastAt })) };
 }
 
+// ---- Telling the apps a new episode is out ----------------------------------------------
+// Andrew, 21 Nov: "We should be pushing." Apps still read the feed (that's RSS, for every host), but the moment an
+// episode goes live we tell them to look now instead of on their own schedule:
+// - WebSub (Google's public hub; the feed names it in <atom:link rel="hub">), for the apps that subscribe to it;
+// - Podcast Index's pubnotify (no key), which re-reads the feed for Podverse, Fountain, TrueFans and the rest of the Index;
+// - Podping, when PODPING_TOKEN is set (a free token from podping.cloud).
+// Apple and Spotify take no notice from a host: they re-read active feeds often (Apple came 500 times in a day).
+const WEBSUB_HUB = "https://pubsubhubbub.appspot.com/";
+type Announced = { ids: number[]; at: string; sent: string[]; failed: string[]; episodes: Record<string, string> };
+const announcedKey = (showId: number) => `feed-announced:${showId}`;
+async function announcedOf(showId: number): Promise<Announced | null> {
+  try { return JSON.parse((await storage.getSetting(announcedKey(showId))) ?? "null"); } catch { return null; }
+}
+/** Tells the apps when the feed has an episode it didn't have last time. Safe to call often. */
+export async function announceShow(showId: number): Promise<Announced | null> {
+  const [s] = await db.select().from(hostedShows).where(eq(hostedShows.id, showId)).limit(1);
+  if (!s || s.newFeedUrl) return null;
+  const ids = (await episodesOf(s.id)).filter(live).map((e) => e.id).sort((a, b) => a - b);
+  const prev = await announcedOf(s.id);
+  const fresh = ids.filter((id) => !prev?.ids.includes(id));
+  if (!fresh.length) return null;
+  const url = feedUrl(s.slug);
+  const ua = { "User-Agent": "MilitaryVoices.ai/1.0 (+https://www.militaryvoices.ai)" };
+  const tell = async (name: string, go: () => Promise<Response>): Promise<[string, boolean]> => {
+    try { const r = await go(); return [name, r.ok]; } catch { return [name, false]; }
+  };
+  const token = (process.env.PODPING_TOKEN ?? "").trim();
+  const results = await Promise.all([
+    tell("WebSub", () => fetch(WEBSUB_HUB, { method: "POST", headers: { ...ua, "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams({ "hub.mode": "publish", "hub.url": url }), signal: AbortSignal.timeout(10_000) })),
+    tell("Podcast Index", () => fetch(`https://api.podcastindex.org/api/1.0/hub/pubnotify?url=${encodeURIComponent(url)}`, { headers: ua, signal: AbortSignal.timeout(10_000) })),
+    ...(token ? [tell("Podping", () => fetch(`https://podping.cloud/?url=${encodeURIComponent(url)}`, { headers: { ...ua, Authorization: token }, signal: AbortSignal.timeout(10_000) }))] : []),
+  ]);
+  const at = now();
+  // The first time a show is seen, only its newest episode is marked: the older ones went out before this existed.
+  const marked = prev ? fresh : fresh.slice(-1);
+  const out: Announced = {
+    ids, at,
+    sent: results.filter(([, ok]) => ok).map(([n]) => n),
+    failed: results.filter(([, ok]) => !ok).map(([n]) => n),
+    episodes: { ...(prev?.episodes ?? {}), ...Object.fromEntries(marked.map((id) => [String(id), at])) },
+  };
+  // Keep the record small: the last 200 episodes marked.
+  out.episodes = Object.fromEntries(Object.entries(out.episodes).sort((a, b) => Number(b[0]) - Number(a[0])).slice(0, 200));
+  await storage.setSetting(announcedKey(s.id), JSON.stringify(out));
+  console.log(`Feed ${s.slug}: told the apps about ${fresh.join(", ")} (sent ${out.sent.join(", ") || "none"}${out.failed.length ? `; failed ${out.failed.join(", ")}` : ""})`);
+  return out;
+}
+const announceSoon = (showId: number) => { const job = announceShow(showId).catch((err) => { console.warn("Announce failed:", (err as Error).message); return null; }); try { waitUntil(job); } catch { /* not on Vercel */ } };
+
 export function registerHosting(app: Express, requireAgent: import("express").RequestHandler) {
   app.post("/api/agent/episode-still/:id/done", requireAgent, async (req, res) => {
     const id = Number(req.params.id);
@@ -759,6 +809,9 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
     if (!/^clean\/[\w.-]+$/.test(key)) return res.status(400).json({ message: "No audio." });
     const copied = req.body?.copy === true;
     await db.update(hostedEpisodes).set({ audioKey: key, ...(copied ? {} : { mime: "audio/mpeg" }), ...(num(req.body?.sizeBytes) ? { sizeBytes: num(req.body?.sizeBytes)! } : {}), ...(num(req.body?.durationSec) ? { durationSec: num(req.body?.durationSec)! } : {}), audioJob: "", audioError: "" }).where(eq(hostedEpisodes.id, Number(req.params.id)));
+    // A published episode waiting for its audio goes live now: tell the apps.
+    const [done] = await db.select({ showId: hostedEpisodes.showId }).from(hostedEpisodes).where(eq(hostedEpisodes.id, Number(req.params.id))).limit(1);
+    if (done) announceSoon(done.showId);
     res.json({ ok: true });
   });
   app.post("/api/agent/episode-bookends/:id/done", requireAgent, async (req, res) => {
@@ -866,6 +919,7 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
       const listedApps = [dirs.apple?.state, ].some((x) => x === "live" || x === "submitted") ? ["Apple Podcasts"] : [];
       if (dirs.spotify?.state === "live" || dirs.spotify?.state === "submitted") listedApps.push("Spotify");
       // The chips are a nicety: if the table isn't there yet (the first minute after a deploy), the list still loads.
+      const ann = await announcedOf(s.id);
       const hitRows = await db.select().from(hostedFeedHits).where(eq(hostedFeedHits.showId, s.id)).catch(() => [] as { app: string; lastAt: string; seenUntil: string }[]);
       out.push({
         show: s,
@@ -874,7 +928,8 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
         ownerConfirmed: feedOwnerEmail(s) === s.ownerEmail.trim(),
         // The Production plan (we make their episodes): only then does "Send back to post-production" make sense.
         production: await hasProduction(s.email),
-        episodes: await Promise.all(eps.map(async (e) => ({ ...e, delivery: deliveryOf(e, hitRows, listedApps), downloads: st.episodes.get(e.id) ?? 0, live: live(e), hasVideo: hasVideo(e), ytLibrary: await libraryYouTubeAt(e.recordingId), bookend: { wanted: planOf(s, e, spotRows).any, state: !planOf(s, e, spotRows).any ? "" : served(s, e, spotRows) ? "ready" : e.bookendJob === "failed" ? "failed" : "working" } }))),
+        // announcedAt: when we told the apps about it (WebSub, Podcast Index, Podping), "" if not yet.
+        episodes: await Promise.all(eps.map(async (e) => ({ ...e, announcedAt: ann?.episodes[String(e.id)] ?? "", delivery: deliveryOf(e, hitRows, listedApps), downloads: st.episodes.get(e.id) ?? 0, live: live(e), hasVideo: hasVideo(e), ytLibrary: await libraryYouTubeAt(e.recordingId), bookend: { wanted: planOf(s, e, spotRows).any, state: !planOf(s, e, spotRows).any ? "" : served(s, e, spotRows) ? "ready" : e.bookendJob === "failed" ? "failed" : "working" } }))),
         stats: { total: st.total, last30: st.series.reduce((a, d) => a + d.count, 0), series: st.series, apps: st.apps },
         // Apps that read this feed in the last 14 days: after a move, the proof each one followed.
         reading: Array.from(new Set(hitRows.filter((r) => Date.now() - Date.parse(r.lastAt) < 14 * 86400000).map((r) => r.app))),
@@ -1428,6 +1483,8 @@ Return JSON only: {"titles":["","",""],"description":""}`,
     }).where(eq(hostedEpisodes.id, e.id)).returning();
     // First episode out: the show goes to Listen Notes by itself.
     if (out.status === "published") { const job = listOnListenNotes(out.showId); try { waitUntil(job); } catch { /* not on Vercel */ } }
+    // Out now: tell the apps (a scheduled one is told by the 15-minute cron when its time comes).
+    if (out.status === "published") announceSoon(out.showId);
     // Out now and asked for YouTube: post it straight away (a scheduled one goes with the cron).
     if (out.youtubeWanted && out.status === "published" && Date.parse(out.publishedAt) <= Date.now()) {
       const show = await ownShow(emailOf(req), out.showId);
@@ -1490,7 +1547,12 @@ Return JSON only: {"titles":["","",""],"description":""}`,
       try { await postEpisodeToYouTube(e, show, show.youtubePrivacy); sent++; }
       catch (err) { await db.update(hostedEpisodes).set({ youtube: JSON.stringify({ state: "failed", at: now(), error: (err as Error).message }) }).where(eq(hostedEpisodes.id, e.id)); }
     }
-    res.json({ sent });
+    // Every show with an episode that went live since we last told the apps (a scheduled one whose time came,
+    // or one we missed): tell them now. Only shows with something new make any request.
+    const showIds = (await db.selectDistinct({ id: hostedEpisodes.showId }).from(hostedEpisodes).where(eq(hostedEpisodes.status, "published"))).map((r) => r.id);
+    let announced = 0;
+    for (const id of showIds) if (await announceShow(id).catch(() => null)) announced++;
+    res.json({ sent, announced });
   });
 
   // Confirm the owner email with a code, before it goes in the feed.
