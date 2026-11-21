@@ -23,7 +23,7 @@ import { learnedForAlex } from "./helpDesk.js";
 const NOT_SURE = "I'm not sure about that one. Leave a note and someone will get back to you as soon as possible.";
 import { runTool } from "./teamDesk.js";
 import { GUIDE_TARGETS, guideTarget } from "../shared/guideTargets.js";
-import { guideById, guideFace, guideOfSettings } from "../shared/guides.js";
+import { guideById, guideFace, guideOfSettings, isAge, type GuideAge } from "../shared/guides.js";
 
 export const ERYN = "DXFkLCBUTmvXpp2QwZjA";
 const OPEN = /\[\[OPEN:([a-z-]+)\]\]/;
@@ -32,12 +32,12 @@ const HANDOFF = "[[HUMAN]]";
 const PRIVATE = "[[PRIVATE]]";
 
 /** guideId: which of shared/guides.ts they picked. answered: they picked or said no, so the one-time step never returns. */
-export type GuideSettings = { enabled: boolean; name: string; voiceId: string; avatarUrl: string; guideId?: string; answered?: boolean };
+export type GuideSettings = { enabled: boolean; name: string; voiceId: string; avatarUrl: string; guideId?: string; guideAge?: string; answered?: boolean };
 const key = (email: string) => `guide:${email.trim().toLowerCase()}`;
 export async function guideFor(email: string): Promise<GuideSettings> {
   let v: Partial<GuideSettings> = {};
   try { v = JSON.parse((await storage.getSetting(key(email))) ?? "{}"); } catch { v = {}; }
-  return { enabled: v.enabled === true, name: (v.name || "Alex").slice(0, 24), voiceId: v.voiceId || ERYN, avatarUrl: v.avatarUrl || "", ...(v.guideId ? { guideId: v.guideId } : {}), ...(v.answered ? { answered: true } : {}) };
+  return { enabled: v.enabled === true, name: (v.name || "Alex").slice(0, 24), voiceId: v.voiceId || ERYN, avatarUrl: v.avatarUrl || "", ...(v.guideId ? { guideId: v.guideId } : {}), ...(v.guideAge ? { guideAge: v.guideAge } : {}), ...(v.answered ? { answered: true } : {}) };
 }
 const saveGuide = (email: string, g: GuideSettings) => storage.setSetting(key(email), JSON.stringify(g));
 
@@ -124,7 +124,7 @@ const me = (req: Request) => (getSessionEmail(req) ?? "").trim().toLowerCase();
 export function registerGuide(app: Express, requireHostSession: RequestHandler, requireAdmin: RequestHandler): void {
   /** Is there a guide on this account? The panel shows only when enabled. */
   /** What the panel shows when the guide is on (also what a pick returns). */
-  const onShape = (g: GuideSettings) => ({ enabled: true, guideId: guideOfSettings(g), name: g.name, avatarUrl: g.avatarUrl, voice: !!eleven(), targets: GUIDE_TARGETS });
+  const onShape = (g: GuideSettings) => ({ enabled: true, guideId: guideOfSettings(g)?.id ?? null, age: guideOfSettings(g)?.age ?? null, name: g.name, avatarUrl: g.avatarUrl, voice: !!eleven(), targets: GUIDE_TARGETS });
 
   /** Is there a guide on this account? When off: whether to show the one-time "Pick your guide" step (offer) and Settings → Your guide (canPick). */
   app.get("/api/guide/me", requireHostSession, async (req, res) => {
@@ -138,7 +138,7 @@ export function registerGuide(app: Express, requireHostSession: RequestHandler, 
 
   /**
    * Settings → Your guide and the onboarding step:
-   * {guideId} picks one and switches it on; {enabled:false} switches it off and remembers they answered;
+   * {guideId, age?} picks one (Younger or Older; the guide's default when left out) and switches it on; {enabled:false} switches it off and remembers they answered;
    * {name} renames. Picking needs the guide already on, or the picker offered to this account.
    */
   app.put("/api/guide/me", requireHostSession, async (req, res) => {
@@ -153,8 +153,10 @@ export function registerGuide(app: Express, requireHostSession: RequestHandler, 
       const p = await pickerFor(email, g);
       if (!g.enabled && !p.offer && !p.canPick) return res.status(404).json({ message: "Not found." });
       // Keep a name they chose themselves (not just another guide's name) when they change faces.
-      const own = !!g.name && !!guideOfSettings(g) && g.name !== guideById(guideOfSettings(g)!)?.name && g.enabled;
-      const next: GuideSettings = { enabled: true, answered: true, guideId: pick.id, name: cleanName(req.body?.name) || (own ? g.name : pick.name), voiceId: pick.voiceId, avatarUrl: guideFace(pick.id) };
+      const was = guideOfSettings(g);
+      const own = !!g.name && !!was && g.name !== guideById(was.id)?.name && g.enabled;
+      const age: GuideAge = isAge(req.body?.age) ? req.body.age : pick.defaultAge;
+      const next: GuideSettings = { enabled: true, answered: true, guideId: pick.id, guideAge: age, name: cleanName(req.body?.name) || (own ? g.name : pick.name), voiceId: pick.ages[age].voiceId, avatarUrl: guideFace(pick.id, age) };
       await saveGuide(email, next);
       return res.json(onShape(next));
     }
