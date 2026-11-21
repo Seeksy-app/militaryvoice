@@ -21,3 +21,10 @@ Rules:
 | Zilla Slab | `zilla-slab-400/600/700.woff2` (three fixed weights) | OFL 1.1 | `@fontsource/zilla-slab@5.3.0` | The Mozilla Foundation |
 
 **Not hosted:** Roboto Slab is licensed Apache 2.0, not OFL. Zilla Slab replaced it on 21 Nov, and an older look that still names Roboto Slab gets Zilla Slab.
+
+## Site fonts: `fontshare/` (not OFL)
+
+General Sans (400, 500, 600, 700) and Cabinet Grotesk (700, 800) are the site's own typefaces. They're used in `client/src/index.css` through `@font-face`. They come from Indian Type Foundry's Fontshare and are licensed under the **ITF Free Font License 2.0** (`fontshare/ITF-FFL.txt`), not the OFL. They are the official web files from the Fontshare download kits (`Fonts/WEB/fonts`), unchanged.
+
+- **Allowed (§01):** "You may self-host the Font Software on your own servers or infrastructure for use on your own websites and applications, including through standard webfont technologies such as CSS @font-face."
+- **Not allowed (§02, §05):** modifying, subsetting or converting the files, and offering them to third parties. That includes making them "a selectable font for third-party users to create, edit, customize or generate their own content". **They must never be added to the Studio Style picker or `ROOM_FONTS`.** Creators only get the OFL fonts above.
