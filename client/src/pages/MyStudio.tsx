@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   LiveKitRoom, RoomAudioRenderer, VideoTrack, isTrackReference, useChat, useConnectionState, useIsMuted, useIsSpeaking,
@@ -8,7 +8,7 @@ import {
 import { ConnectionState, DisconnectReason, Track, type Participant } from "livekit-client";
 import {
   ArrowLeft, Check, Circle, Clapperboard, Copy, ExternalLink, Image as ImageIcon, Loader2, LogOut, MessageSquare, Mic, MicOff, MonitorUp, MoreHorizontal, NotebookPen, Presentation,
-  ChevronLeft, ChevronRight, Palette, Plus, Settings, Square, UserPlus, Users, Video, VideoOff, X, Youtube,
+  ChevronLeft, ChevronRight, Palette, Plus, Settings, Square, UserPlus, UserRound, Users, Video, VideoOff, X, Youtube,
 } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
@@ -426,7 +426,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
         <div className="flex min-w-0 flex-1 flex-col items-center px-4 pt-5 lg:px-6">
           {owner ? (
             // The host sees exactly what's recorded and streamed (Engineering's RoomStage); guests keep the plain grid.
-            <div className="relative shrink-0 rounded-2xl shadow-[0_12px_32px_rgba(16,24,40,0.22)]" style={{ width: "min(768px, 100%, calc((100dvh - 336px) * 16 / 9))" }}>
+            <div className="relative shrink-0 rounded-2xl shadow-[0_12px_32px_rgba(16,24,40,0.22)]" style={{ width: "min(768px, 100%, calc((100dvh - 375px) * 16 / 9))" }}>
               <RoomStage muted onMediaEnded={() => kit.play(null)} />
               {/* The teleprompter: on this screen only, over the preview; the program is drawn elsewhere. */}
               <PrompterOverlay roomKey={noteKey} text={notes} />
@@ -577,7 +577,7 @@ function Stage({ kit, scene, fallbackLogo }: { kit: RoomKit; scene?: Scene; fall
   if (!cams.length && !screens.length) body = <div className="flex h-full items-center justify-center text-center text-[15px] font-semibold text-white/80">No one is on the stage in this scene</div>;
 
   return (
-    <div className="relative shrink-0 overflow-hidden rounded-2xl shadow-[0_12px_32px_rgba(16,24,40,0.22)]" style={{ width: "min(768px, 100%, calc((100dvh - 336px) * 16 / 9))", aspectRatio: "16 / 9", background }} data-testid="my-studio-stage">
+    <div className="relative shrink-0 overflow-hidden rounded-2xl shadow-[0_12px_32px_rgba(16,24,40,0.22)]" style={{ width: "min(768px, 100%, calc((100dvh - 375px) * 16 / 9))", aspectRatio: "16 / 9", background }} data-testid="my-studio-stage">
       <div className={`absolute inset-x-[4.5%] top-[12.5%] transition-[bottom] duration-300 ${banner ? "bottom-[17%]" : "bottom-[8%]"}`}>{body}</div>
       {logo && <img src={logo} alt="Your show's logo" className={`absolute top-2 h-[11%] max-h-[50px] w-auto rounded-md object-contain ${corner === "tl" ? "left-4" : "right-4"}`} />}
       {banner && <div className="absolute bottom-[3%] left-[4.5%] max-w-[80%] truncate rounded-lg bg-[#053877] px-4 py-2 text-[15px] font-bold text-white shadow-[0_6px_18px_rgba(0,0,0,0.3)]" data-testid="stage-banner">{banner.text}</div>}
@@ -635,12 +635,39 @@ function Tile({ t, big, small }: { t: TrackReferenceOrPlaceholder; big?: boolean
 function PeopleStrip({ kit, owner, sharing, onShare, onInvite }: { kit: RoomKit; owner: boolean; sharing: boolean; onShare: () => void; onInvite: () => void }) {
   const { cams } = useStageTracks();
   const scenes = !!kit.look;
+  // The bigger tiles (21 Nov) mean only two fit beside the + on a laptop, so a third person sat
+  // hidden in the scroll. Arrows show only when there is more to see that way.
+  const row = useRef<HTMLDivElement>(null);
+  const [more, setMore] = useState({ left: false, right: false });
+  const measure = useCallback(() => {
+    const el = row.current;
+    if (!el) return;
+    const left = el.scrollLeft > 2, right = el.scrollLeft + el.clientWidth < el.scrollWidth - 2;
+    setMore((m) => (m.left === left && m.right === right ? m : { left, right }));
+  }, []);
+  useEffect(() => {
+    const el = row.current;
+    if (!el) return;
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [measure]);
+  useEffect(measure, [cams.length, measure]);
+  const nudge = (dir: 1 | -1) => {
+    row.current?.scrollBy({ left: dir * 188, behavior: "smooth" });
+    window.setTimeout(measure, 450); // a smooth scroll doesn't always send its last scroll event
+  };
   return (
     // The + sits outside the scrolling row: a scrolling row clips anything that pops out of it, so
     // its menu never showed (Andrew, 21 Nov: "This doesn't work").
     <div className="mt-3 flex w-full max-w-[768px] shrink-0 gap-3">
-    <div className="flex min-w-0 flex-1 gap-3 overflow-x-auto pb-1" data-testid="my-studio-strip">
+    <div className="relative flex min-w-0 flex-1">
+    <div ref={row} onScroll={measure} className="flex min-w-0 flex-1 gap-3 overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" data-testid="my-studio-strip">
       {cams.map((t) => <PersonTile key={key(t)} t={t} kit={kit} owner={owner} scenes={scenes} />)}
+    </div>
+      {more.left && <button type="button" onClick={() => nudge(-1)} aria-label="Show earlier people" className="absolute left-0 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[#d0d5dd] bg-white text-[#344054] shadow-[0_1px_3px_rgba(16,24,40,0.18)] hover:bg-[#f9fafb]" data-testid="strip-scroll-left"><ChevronLeft className="h-4 w-4" /></button>}
+      {more.right && <button type="button" onClick={() => nudge(1)} aria-label="Show more people" className="absolute right-0 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[#d0d5dd] bg-white text-[#344054] shadow-[0_1px_3px_rgba(16,24,40,0.18)] hover:bg-[#f9fafb]" data-testid="strip-scroll-right"><ChevronRight className="h-4 w-4" /></button>}
     </div>
       <PresentButton kit={kit} owner={owner} sharing={sharing} canPresent={scenes && owner} onShare={onShare} onInvite={onInvite} />
     </div>
@@ -676,27 +703,34 @@ function PersonTile({ t, kit, owner, scenes }: { t: TrackReferenceOrPlaceholder;
     const r = e.currentTarget.getBoundingClientRect();
     setMenu(menu ? null : { x: Math.max(8, Math.min(window.innerWidth - 248, r.right - 240)), y: r.top - 8 });
   };
+  // It's pinned to where the ⋯ was, so a resize (a phone turning) or Escape closes it.
+  const isOpen = !!menu;
+  useEffect(() => {
+    if (!isOpen) return;
+    const close = () => setMenu(null);
+    const key = (e: KeyboardEvent) => { if (e.key === "Escape") close(); };
+    window.addEventListener("resize", close);
+    window.addEventListener("keydown", key);
+    return () => { window.removeEventListener("resize", close); window.removeEventListener("keydown", key); };
+  }, [isOpen]);
   const item = "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[14px] font-medium text-[#101828] hover:bg-[#f2f4f7] disabled:cursor-default disabled:text-[#98a2b3] disabled:hover:bg-transparent";
   return (
-    <div className={`relative h-24 w-40 shrink-0 overflow-hidden rounded-xl border bg-white ${speaking && !muted ? "border-[#12b76a] ring-2 ring-[#12b76a]/40" : "border-[#e4e7ec]"} ${on ? "" : "opacity-70"}`} data-testid="strip-person">
-      <div className="absolute inset-x-0 top-0 bottom-6"><MiniFace t={t} /></div>
-      <div className="absolute inset-x-2 bottom-1 flex items-center gap-1 text-left text-xs font-semibold">
-        {cam ? <Video className="h-3.5 w-3.5 shrink-0 text-[#667085]" aria-label="Extra camera" /> : <span className={`flex h-4 w-4 shrink-0 items-center justify-center rounded-full ${muted ? "bg-[#fee4e2] text-[#b42318]" : speaking ? "bg-[#d1fadf] text-[#067647]" : "text-[#667085]"}`} data-testid="strip-mic" aria-label={muted ? "Mic off" : "Mic on"}>
-          {muted ? <MicOff className="h-3 w-3" /> : <Mic className="h-3 w-3" />}
-        </span>}
-        <span className="min-w-0 flex-1 truncate">{name}{p.isLocal ? " (you)" : ""}</span>
+    // StreamYard's tile (Andrew, 21 Nov: "should look like 2nd image"): the picture on top, mic and ⋯
+    // in one pill over it, the name underneath. On stage shows as a gold edge, talking as a green ring.
+    <div className={`relative w-44 shrink-0 overflow-hidden rounded-xl border-2 bg-white ${scenes && on ? "border-[#F0A71F]" : "border-[#e4e7ec]"} ${speaking && !muted ? "ring-2 ring-[#12b76a] ring-offset-1" : ""} ${on ? "" : "opacity-70"}`} data-testid="strip-person" data-on-stage={on ? "yes" : "no"}>
+      <div className="relative aspect-video w-full bg-[#e4e7ec]"><MiniFace t={t} /></div>
+      <div className="absolute right-1.5 top-1.5 flex h-7 items-center gap-0.5 rounded-full bg-white px-1 shadow-[0_1px_3px_rgba(16,24,40,0.25)]">
+        {cam ? <span className="flex h-6 w-6 items-center justify-center text-[#475467]" aria-label="Extra camera"><Video className="h-4 w-4" /></span>
+          : <span className={`flex h-6 w-6 items-center justify-center rounded-full ${muted ? "text-[#d92d20]" : speaking ? "text-[#067647]" : "text-[#475467]"}`} data-testid="strip-mic" aria-label={muted ? "Mic off" : "Mic on"}>{muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}</span>}
         {owner && (guest || cam) && (
-          <button type="button" onClick={open} aria-label={`More for ${name}`} aria-expanded={!!menu} className="-mr-1 flex h-5 w-6 shrink-0 items-center justify-center rounded-md text-[#475467] hover:bg-[#f2f4f7]" data-testid="strip-more"><MoreHorizontal className="h-4 w-4" /></button>
+          <button type="button" onClick={open} aria-label={`More for ${name}`} aria-expanded={!!menu} className="flex h-6 w-6 items-center justify-center rounded-full text-[#344054] hover:bg-[#f2f4f7]" data-testid="strip-more"><MoreHorizontal className="h-4 w-4" /></button>
         )}
       </div>
-      {(scenes || !on) && (on
-        ? <div className="absolute left-2 top-2 rounded-full bg-[#d1fadf] px-2 py-0.5 text-[10px] font-bold text-[#067647]">ON STAGE</div>
-        : <div className="absolute left-2 top-2 rounded-full bg-[#f2f4f7] px-2 py-0.5 text-[10px] font-bold text-[#475467]">BACKSTAGE</div>)}
-      {owner && scenes && (guest || cam) && (
-        <button type="button" onClick={() => void kit.backstage(p.identity, !on)} className={`absolute right-1.5 top-1.5 rounded-lg px-2 py-1 text-[11px] font-bold shadow-sm ${on ? "bg-white text-[#344054] ring-1 ring-[#d0d5dd] hover:bg-[#f9fafb]" : "bg-[#053877] text-white hover:bg-[#0a4a99]"}`} data-testid="strip-stage-toggle">
-          {on ? "Send backstage" : "Bring on stage"}
-        </button>
-      )}
+      <div className="flex h-8 items-center gap-1.5 px-2 text-left text-xs font-semibold">
+        {cam ? <Video className="h-3.5 w-3.5 shrink-0 text-[#667085]" /> : <UserRound className="h-3.5 w-3.5 shrink-0 text-[#667085]" />}
+        <span className="min-w-0 flex-1 truncate">{name}{p.isLocal ? " (you)" : ""}</span>
+        {scenes && !on && <span className="shrink-0 text-[11px] font-semibold text-[#667085]" data-testid="strip-backstage">Backstage</span>}
+      </div>
       {menu && (
         <>
           <button type="button" aria-label="Close" className="fixed inset-0 z-30 cursor-default" onClick={() => setMenu(null)} />
@@ -854,10 +888,10 @@ function PresentButton({ kit, owner, sharing, canPresent, onShare, onInvite }: {
   const item = "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#101828] hover:bg-[#f2f4f7]";
   const pick = (fn: () => void) => () => { setMenu(""); fn(); };
   return (
-    <div className="relative shrink-0 pb-1">
-      <button type="button" onClick={() => setMenu(menu ? "" : "menu")} disabled={busy !== null} aria-expanded={!!menu} className={`flex h-24 w-40 flex-col items-center justify-center gap-1.5 rounded-xl border bg-white text-[13px] font-semibold text-[#344054] hover:bg-[#f9fafb] disabled:opacity-80 ${menu ? "border-[#84adff] ring-2 ring-[#d1e0ff]" : "border-[#d0d5dd]"}`} data-testid="strip-add">
+    <div className="relative shrink-0 py-1">
+      <button type="button" onClick={() => setMenu(menu ? "" : "menu")} disabled={busy !== null} aria-expanded={!!menu} className={`flex h-[135px] w-32 flex-col sm:w-44 items-center justify-center gap-2.5 rounded-xl border-2 bg-white text-[13px] font-semibold text-[#344054] hover:bg-[#f9fafb] disabled:opacity-80 ${menu ? "border-[#84adff] ring-2 ring-[#d1e0ff]" : "border-[#e4e7ec]"}`} data-testid="strip-add">
         {busy !== null ? <><Loader2 className="h-5 w-5 animate-spin" /> {busy}</> : <>
-          <span className="flex items-center gap-2 rounded-full border border-[#e4e7ec] px-3.5 py-1.5"><MonitorUp className="h-5 w-5" />{owner && <UserPlus className="h-5 w-5" />}</span>
+          <span className="flex items-center gap-3 rounded-full border border-[#d0d5dd] bg-white px-4 py-2 shadow-[0_1px_2px_rgba(16,24,40,0.06)]"><MonitorUp className="h-5 w-5" />{owner && <UserPlus className="h-5 w-5" />}</span>
           {owner ? "Present or invite" : "Share your screen"}
         </>}
       </button>
@@ -914,8 +948,8 @@ function MiniFace({ t }: { t: TrackReferenceOrPlaceholder }) {
   const name = t.participant.name || t.participant.identity;
   const shows = isTrackReference(t) && !t.publication.isMuted && !!t.publication.track;
   return shows && isTrackReference(t)
-    ? <VideoTrack trackRef={t} className={`h-full w-full object-cover ${t.participant.isLocal ? "-scale-x-100" : ""}`} />
-    : <div className="flex h-full items-center justify-center"><div className="flex h-11 w-11 items-center justify-center rounded-full bg-[#3a4f80] text-sm font-bold text-white">{initials(name)}</div></div>;
+    ? <VideoTrack trackRef={t} className={`absolute inset-0 h-full w-full object-cover ${t.participant.isLocal ? "-scale-x-100" : ""}`} />
+    : <div className="absolute inset-0 flex items-center justify-center"><div className="flex h-12 w-12 items-center justify-center rounded-full bg-[#98a2b3] text-sm font-bold text-white">{initials(name)}</div></div>;
 }
 
 /* ── Right panel ── */
