@@ -175,11 +175,8 @@ function useLibrary() {
 }
 const LIMIT = 12;
 
-/** "Title · Artist · CC0 1.0 · source", with source opening the item's own page. */
-function SourceLine({ s, name }: { s?: LibrarySource; name: string }) {
-  if (!s) return <>Your upload</>;
-  return <>{s.title && s.title !== name ? `${s.title} · ` : ""}{s.artist} · {s.licence} · <a href={s.page} target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-[#053877]">source</a></>;
-}
+/** The credit on a music bed, on its row and while it plays (CC BY needs it): "Music: HoliznaCC0 · CC BY 4.0". */
+const musicCredit = (s: LibrarySource) => s.credit?.trim() || `Music: ${s.artist} · ${s.licence}`;
 
 /** Add one of our library items that isn't in the studio yet. */
 function AddFromLibrary({ items, onAdd, what }: { items: LibraryItem[]; onAdd: (x: LibraryItem) => void; what: string }) {
@@ -191,7 +188,7 @@ function AddFromLibrary({ items, onAdd, what }: { items: LibraryItem[]; onAdd: (
       {items.map((x) => (
         <button key={x.id} type="button" onClick={() => { onAdd(x); if (items.length === 1) setOpen(false); }} className="flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-left hover:bg-white">
           <Plus className="h-3.5 w-3.5 shrink-0 text-[#053877]" />
-          <span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-semibold">{x.name}</span><span className="block truncate text-[11px] text-[#667085]">{x.source.artist} · {x.source.licence}</span></span>
+          <span className="min-w-0 flex-1"><span className="block truncate text-[13px] font-semibold">{x.name}</span><span className="block truncate text-[11px] text-[#667085]">{x.kind === "music" ? musicCredit(x.source) : `${x.source.artist} · ${x.source.licence}`}</span></span>
         </button>
       ))}
       <button type="button" onClick={() => setOpen(false)} className="mt-1 h-8 w-full text-[12px] font-semibold text-[#475467]">Done</button>
@@ -250,7 +247,7 @@ function MusicList({ kit }: { kit: RoomKit }) {
         return (
           <div key={x.id} className={`group flex items-center gap-2 rounded-xl border px-2 py-2 ${on ? "border-[#053877] bg-[#f5f8fd]" : "border-[#e4e7ec]"}`} data-testid="music-row">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] bg-[#eef3fb] text-[#053877]"><Music2 className="h-3.5 w-3.5" /></div>
-            <div className="min-w-0 flex-1"><p className="truncate text-[13px] font-semibold">{x.name || "Track"}</p><p className="truncate text-[11px] text-[#667085]">{on ? "Playing now" : <SourceLine s={x.source} name={x.name} />}</p></div>
+            <div className="min-w-0 flex-1"><p className="truncate text-[13px] font-semibold">{x.name || "Track"}</p><p className="truncate text-[11px] text-[#667085]">{on && "Playing now · "}{x.source ? musicCredit(x.source) : on ? "" : "Your upload"}</p></div>
             {!on && <button type="button" onClick={() => drop(x)} aria-label="Remove track" className="hidden shrink-0 text-[#98a2b3] hover:text-[#b42318] group-focus-within:block group-hover:block"><Trash2 className="h-4 w-4" /></button>}
             <PlayButton on={on} label={x.name || "this track"} onClick={() => kit.playMusic(on ? null : x.id)} />
           </div>

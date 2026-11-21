@@ -33,7 +33,7 @@ export type Style = { preset: string; brandColor: string; nameTag: "bar" | "pill
 export const STYLE_DEFAULT: Style = { preset: "classic", brandColor: "#F0A71F", nameTag: "bar", showNames: true, textSize: "m", font: "Inter" };
 export type VideoClip = { asset: Asset; role: "" | "intro" | "outro"; loop: boolean };
 /** Where a library item comes from; it's only listed when every part is on file (CC0 / public domain only). */
-export type LibrarySource = { site: string; title: string; artist: string; page: string; licence: string; checked: string };
+export type LibrarySource = { site: string; title: string; artist: string; page: string; licence: string; checked: string; credit?: string };
 /** A pad (played once) or a music bed. id is "lib-<slug>" for our library, the asset id for their own upload. */
 export type SoundItem = { id: string; name: string; asset: Asset; source?: LibrarySource };
 export type MusicItem = SoundItem;
