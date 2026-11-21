@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Art3D } from "@/components/ui/icon-tile";
 import { useQuery } from "@tanstack/react-query";
 import { Clapperboard, Film, Globe, Headphones, Send } from "lucide-react";
 import type { ClipRow, HostPostRow, RecordingRow } from "@shared/schema";
@@ -77,7 +78,7 @@ export function HomeFiles({ goTo, handle }: { goTo: (s: Screen) => void; handle:
   return (
     <section className="mt-8" data-testid="dashboard-files">
       <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="text-lg font-semibold tracking-tight text-foreground">Your files</h2>
+        <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight text-foreground"><Art3D name="folder" size={28} />Your files</h2>
         <div className="inline-flex rounded-xl border border-border bg-card p-1" role="tablist">
           {tabs.map((t) => (
             <button key={t.key} type="button" role="tab" aria-selected={t.key === cur.key} onClick={() => setTab(t.key)} className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${t.key === cur.key ? "bg-[#053877]/[0.08] font-semibold text-foreground" : "text-muted-foreground hover:text-foreground"}`} data-testid={`files-tab-${t.key}`}>

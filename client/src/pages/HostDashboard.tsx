@@ -72,6 +72,8 @@ import { StudioHome } from "@/components/StudioHome";
 import { FanEmails } from "@/components/FanEmails";
 import { RecordingsScreen } from "@/components/RecordingsScreen";
 import { PostStudio, NavCredits } from "@/components/PostStudio";
+import { Art3D } from "@/components/ui/icon-tile";
+import type { Icon3D } from "@/lib/icons3d";
 import { SocialTrialLine, isSocialLocked402, socialLocked, useSocialUpgrade, type SocialTrial as SocialTrialT } from "@/components/SocialTrial";
 import { FloatingChecklist } from "@/components/FloatingChecklist";
 import { MyEvents } from "@/components/MyEvents";
@@ -1685,15 +1687,15 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                   {(() => {
                     const step = buildSteps(checklistState, checklistNav).filter((x) => !x.done)[0];
                     const hosted = podcastSources.some((p) => p.source === "militaryvoices");
-                    const doors: { key: string; icon: typeof Plus; title: string; hint: string; go: () => void; tag?: string; next?: boolean }[] = [
+                    const doors: { key: string; icon: typeof Plus; art: Icon3D; title: string; hint: string; go: () => void; tag?: string; next?: boolean }[] = [
                       path === "planner"
-                        ? { key: "myevents", icon: CalendarDays, title: "My events", hint: "Create and run yours", go: () => goTo("myevents") }
-                        : { key: "episode", icon: Mic2, title: hosted ? "New episode" : "Your podcast", hint: hosted ? "Publish to every app" : "Host it free", go: () => goTo("podcast") },
-                      { key: "clips", icon: Wand2, title: "Make clips", hint: "Pōstify a video", go: () => goTo("postify") },
-                      { key: "live", icon: Video, title: "Go live", hint: "Studio, StreamYard or OBS", go: () => setLiveOpen((v) => !v) },
+                        ? { key: "myevents", icon: CalendarDays, art: "calendar", title: "My events", hint: "Create and run yours", go: () => goTo("myevents") }
+                        : { key: "episode", icon: Mic2, art: "mic", title: hosted ? "New episode" : "Your podcast", hint: hosted ? "Publish to every app" : "Host it free", go: () => goTo("podcast") },
+                      { key: "clips", icon: Wand2, art: "scissors", title: "Make clips", hint: "Pōstify a video", go: () => goTo("postify") },
+                      { key: "live", icon: Video, art: "video", title: "Go live", hint: "Studio, StreamYard or OBS", go: () => setLiveOpen((v) => !v) },
                       step
-                        ? { key: `todo-${step.key}`, icon: Sparkles, title: step.label, tag: step.tag, hint: `Next step: ${step.cta.toLowerCase()}`, go: () => goToStep(step), next: true }
-                        : { key: "page", icon: Globe, title: "Your SmartLink", hint: "Edit your page", go: () => goTo("page") },
+                        ? { key: `todo-${step.key}`, icon: Sparkles, art: "sparkles", title: step.label, tag: step.tag, hint: `Next step: ${step.cta.toLowerCase()}`, go: () => goToStep(step), next: true }
+                        : { key: "page", icon: Globe, art: "globe", title: "Your SmartLink", hint: "Edit your page", go: () => goTo("page") },
                     ];
                     return (
                       <>
@@ -1702,8 +1704,9 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                           const on = d.key === "live" && liveOpen;
                           return (
                             <button key={d.key} type="button" onClick={d.go} aria-expanded={d.key === "live" ? liveOpen : undefined} className={`rounded-2xl bg-card p-4 text-left shadow-sm transition-colors hover:bg-muted/40 ${d.next || on ? "border-2 border-[#053877] dark:border-[#8ab4f8]" : "border border-border"} ${on ? "shadow-[0_6px_18px_rgba(5,56,119,0.14)]" : ""}`} data-testid={d.next ? d.key : `door-${d.key}`}>
-                              <d.icon className="h-5 w-5 text-[#053877] dark:text-[#8ab4f8]" />
-                              <span className="mt-2 flex items-center gap-2 text-sm font-semibold text-foreground">{d.title}{d.tag && <span className="rounded-full bg-[#F0A71F]/20 px-1.5 py-px text-[10px] font-semibold leading-4 text-[#8a5a00] dark:text-[#F0A71F]">{d.tag}</span>}</span>
+                              {/* 3D, Clay-style (Andrew, 21 Nov: "update the 3-d icon everywhere"). */}
+                              <Art3D name={d.art} size={40} className="-ml-0.5 -mt-0.5" />
+                              <span className="mt-1.5 flex items-center gap-2 text-sm font-semibold text-foreground">{d.title}{d.tag && <span className="rounded-full bg-[#F0A71F]/20 px-1.5 py-px text-[10px] font-semibold leading-4 text-[#8a5a00] dark:text-[#F0A71F]">{d.tag}</span>}</span>
                               <span className="mt-0.5 block text-xs text-muted-foreground">{d.hint}</span>
                             </button>
                           );

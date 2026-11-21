@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Art3D } from "@/components/ui/icon-tile";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useToast } from "@/hooks/use-toast";
 import { Button } from "@/components/ui/button";
@@ -80,12 +81,12 @@ export function DxTimes({ extra }: { extra?: React.ReactNode } = {}) {
   const toggle = (id: number, what: "share" | "cal") => setOpen((o) => (o?.id === id && o.what === what ? null : { id, what }));
   return (
     <section className="mt-8" data-testid="dashboard-dx-times">
-      <h2 className="text-lg font-semibold tracking-tight text-foreground">Coming up</h2>
+      <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight text-foreground"><Art3D name="calendar" size={28} />Coming up</h2>
       <ul className="mt-3 overflow-hidden rounded-2xl border border-border bg-card">
         {bookings.map((b) => (
           <li key={b.id} className="border-b border-border px-4 py-3 last:border-b-0">
             <div className="flex flex-wrap items-center gap-3">
-              <Radio className="h-4 w-4 shrink-0 text-[#b36b00]" />
+              <Art3D name="radio" size={24} />
               <span className="min-w-0 flex-1 text-sm"><span className="font-medium text-foreground">MilitaryVoices Radio</span> <span className="text-muted-foreground">· {day(b.startAtUtc)} · {time(b.startAtUtc)}–{time(b.endAtUtc)} ET</span></span>
               <span className="flex gap-2">
                 <button type="button" onClick={() => toggle(b.id, "share")} className={pill}><Share2 className="h-3.5 w-3.5" /> Share</button>

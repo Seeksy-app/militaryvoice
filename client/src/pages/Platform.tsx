@@ -3,7 +3,7 @@ import { motion } from "framer-motion";
 import { NavBar } from "@/components/NavBar";
 import { HeroBackdrop, HeroCard } from "@/components/platform/LiveEventMock";
 import { FoundingHero, foundingHeroOn } from "@/components/platform/FoundingHero";
-import { PillarArt } from "@/components/platform/PillarArt";
+import { PillarCards } from "@/components/platform/PillarCards";
 import { StudioConsoleMock } from "@/components/platform/StudioConsoleMock";
 import { RealTimePostMock } from "@/components/platform/RealTimePostMock";
 import { ReadyToJoinMock, WaitingRoomMock } from "@/components/platform/GreenRoomMock";
@@ -48,37 +48,6 @@ import { IconTile } from "@/components/ui/icon-tile";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
-/** What the platform is, in the order someone planning an event meets it. */
-const PILLARS = [
-  {
-    icon: Radio,
-    kicker: "Events",
-    title: "Live, pre-recorded, in the room or online",
-    body: "Stream a virtual event, broadcast an in-person one, or run both at once. Speakers claim their own slots in their own time zone, the public page and lineup build themselves, and the show goes out live on YouTube, with more destinations on the way.",
-    points: ["Scheduling in every time zone", "Event pages that promote themselves", "One broadcast, every destination*"],
-  },
-  {
-    icon: Wand2,
-    kicker: "Run by SI",
-    title: "The agenda and the show, handled",
-    body: "Alex, our SI producer, turns your lineup into an agenda and a minute-by-minute run of show, writes the host lines and the reminders, keeps every file cued, and after the last segment cuts the clips for each speaker. Your team steers; the busywork is done.",
-    points: ["Agenda and run of show from your lineup", "Host lines, reminders and follow-ups written for you", "Clips for every speaker, after the show"],
-  },
-  {
-    icon: Compass,
-    kicker: "Discovery",
-    title: "Find the right voices for it",
-    body: "Search over 300 million creator profiles for veterans, service members and military spouses. Every profile shows the audience behind the follower count: how much of it is real, where it lives, what it cares about, and which brands have already worked with them.",
-    points: ["Over 300 million creator profiles", "Audience quality, real reach and growth", "Brand collaborations: who paid them, when, and the posts", "Email and phone where creators publish them"],
-  },
-  {
-    icon: BadgeCheck,
-    kicker: "Verified",
-    title: "Every speaker becomes a verified voice",
-    body: "The people who take part are checked by our team: that they are who they say they are, and that they served or serve alongside. They carry the Verified on MilitaryVoices badge in Discovery, so the brands and shows looking for them can find them, and reach them through us.",
-    points: ["Identity and service checked by our team", "A badge that travels with them", "Introductions made through us, with their say-so"],
-  },
-];
 
 /** What Discovery does, capability by capability. */
 const DISCOVERY_FEATURES = [
@@ -372,7 +341,7 @@ export default function Platform({ pitch = false }: { pitch?: boolean } = {}) {
             <ul className="mt-10 grid gap-x-8 gap-y-7 sm:grid-cols-2 lg:grid-cols-3">
               {STUDIO_FEATURES.map(({ icon: Icon, title, body }) => (
                 <li key={title} className="flex gap-3.5">
-                  <IconTile icon={Icon} />
+                  <IconTile icon={Icon} onDark />
                   <span>
                     <span className="block font-semibold text-white">{title}</span>
                     <span className="mt-1 block text-sm leading-relaxed text-white/70">{body}</span>
@@ -394,34 +363,7 @@ export default function Platform({ pitch = false }: { pitch?: boolean } = {}) {
               Most shows and events are held together by a spreadsheet, a group chat and somebody's memory. Here the show, the event, the clips and the people in it live in one place, and the work that used to eat the week is done for you.
             </p>
           </div>
-          <div className="mt-12 grid gap-5 md:grid-cols-2">
-            {PILLARS.map(({ icon: Icon, kicker, title, body, points }, i) => (
-              <motion.div
-                key={kicker}
-                initial={{ opacity: 0, y: 16 }}
-                whileInView={{ opacity: 1, y: 0 }}
-                viewport={{ once: true, margin: "-60px" }}
-                transition={{ duration: 0.45, delay: i * 0.07 }}
-                className="group relative flex flex-col overflow-hidden rounded-3xl border border-border bg-card p-7 shadow-sm transition-shadow hover:shadow-lg"
-              >
-                <PillarArt kicker={kicker} />
-                <div className="flex items-center gap-3">
-                  <IconTile icon={Icon} />
-                  <span className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">{String(i + 1).padStart(2, "0")} · {kicker}</span>
-                </div>
-                <h3 className="mt-5 text-xl font-semibold tracking-tight">{title}</h3>
-                <p className="mt-3 flex-1 text-[15px] leading-relaxed text-muted-foreground">{body}</p>
-                <ul className="mt-5 flex flex-col gap-2 border-t border-border pt-4">
-                  {points.map((pt) => (
-                    <li key={pt} className="flex items-start gap-2 text-sm">
-                      <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#F0A71F]" />
-                      <span className="flex flex-wrap items-center gap-x-2 gap-y-1">{pt.replace(/\*$/, "")}{pt.endsWith("*") && <SoonPill tone="light" />}</span>
-                    </li>
-                  ))}
-                </ul>
-              </motion.div>
-            ))}
-          </div>
+          <PillarCards />
         </div>
       </section>
 
