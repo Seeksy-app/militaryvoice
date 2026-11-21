@@ -7,7 +7,7 @@ import { storage } from "./storage.js";
 // - Starts on their first Connect (setting social-trial:<email> = {"start": ISO}).
 // - Accounts that already had an Upload-Post profile when this shipped get 30 days from SHIPPED_AT, not their old date.
 // - Not counted at all: any plan subscription that's on (Scale, Pro, comp plans, Founding trials, past_due), the test
-//   accounts (POST_TESTERS), admins, and production-package customers (package:<email> on).
+//   accounts (POST_TESTERS), the owner's own accounts (OWNER_ACCOUNTS), admins, and production-package customers.
 // - After day 30: connect, post and schedule answer 402 with OVER_MESSAGE. Nothing already scheduled is touched here,
 //   and no Upload-Post profile is deleted.
 
@@ -20,9 +20,12 @@ const NOT_FREE: SocialTrial = { free: false, startedAt: null, endsAt: null, days
 
 const key = (email: string) => `social-trial:${email}`;
 const testers = () => new Set((process.env.POST_TESTERS || "marineocsblog@gmail.com").split(",").map((e) => e.trim().toLowerCase()).filter(Boolean));
+/** The owner's own accounts (PM, 21 Nov 2026). SOCIAL_TRIAL_EXEMPT (comma-separated) adds more without a deploy. */
+const OWNER_ACCOUNTS = ["andrew@smartloads.io", "andrew@workready360.com"];
+const owners = () => new Set([...OWNER_ACCOUNTS, ...(process.env.SOCIAL_TRIAL_EXEMPT || "").split(",")].map((e) => e.trim().toLowerCase()).filter(Boolean));
 
 async function exempt(email: string): Promise<boolean> {
-  if (testers().has(email)) return true;
+  if (testers().has(email) || owners().has(email)) return true;
   const sub = await storage.getSubscription(email);
   if (sub && ["active", "trialing", "past_due"].includes(sub.status)) return true;
   if ((await storage.listAdmins()).some((a) => a.email.trim().toLowerCase() === email)) return true;
