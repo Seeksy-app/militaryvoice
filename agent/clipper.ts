@@ -2419,8 +2419,11 @@ async function handleTranscript(job: Job): Promise<void> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), `tr-${id}-`));
   try {
     console.log(`${tag} ${job.title}`);
-    const file = path.join(dir, "episode");
-    await run("curl", ["-s", "-f", "-L", "--retry", "3", "--max-time", "1800", "-A", "MilitaryVoices.ai", "-o", file, job.downloadUrl]);
+    // Sound only, read straight from the link: never the whole file on disk. A 7GB video episode (Oscar Mike 514,
+    // 21 Nov) downloaded whole filled Render's 2GB /tmp, and Render replaced the instance every hour as it retried.
+    // Mono 16kHz MP3 is ~30MB an hour, plenty for speech-to-text.
+    const file = path.join(dir, "episode.mp3");
+    await ffmpeg(["-reconnect", "1", "-reconnect_streamed", "1", "-reconnect_delay_max", "10", "-i", job.downloadUrl, "-vn", "-ac", "1", "-ar", "16000", "-c:a", "libmp3lame", "-b:a", "64k", file]);
     const lines = await transcribeWithScribe(file, dir).catch(async (err) => {
       console.warn(`${tag} Scribe failed: ${err.message} — falling back`);
       if (process.env.DEEPGRAM_API_KEY) return transcribeWithDeepgram(file, dir);
