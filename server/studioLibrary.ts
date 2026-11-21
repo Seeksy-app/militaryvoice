@@ -1,5 +1,6 @@
-// The Studio's built-in sounds and music (Studio phase 3, 21 Nov 2026). v1 is CC0 or public domain only
-// (Freesound CC0, Free Music Archive CC0, Musopen public domain). Never ElevenLabs music, never Pixabay.
+// The Studio's built-in sounds and music (Studio phase 3, 21 Nov 2026). CC0 or public domain, or CC BY 4.0
+// with its credit shown (Andrew, 21 Nov: "credit is fine", for HoliznaCC0's "Beginning 1", which his own
+// Bandcamp marks CC BY 4.0). Never ElevenLabs music, never Pixabay, no military music (Andrew).
 //
 // The licence table: an item shows in the Studio only when EVERY field is filled in. That means the file is
 // in our bucket, and its source page, the licence as the page states it, and the date we checked it are on
@@ -20,6 +21,8 @@ export interface LibrarySource {
   licence: string;
   /** YYYY-MM-DD, when we read it there. */
   checked: string;
+  /** Required for CC BY: the line shown wherever it plays (the Studio, and the recording's and live show's credits). */
+  credit?: string;
 }
 export interface LibraryItem {
   slug: string;
@@ -34,10 +37,12 @@ export interface LibraryItem {
 /** Filled in as each item is checked and uploaded (see exports/cc0-music-candidates.md for the shortlist). */
 export const LIBRARY: LibraryItem[] = [];
 
-const LICENCES = /^(CC0 1\.0( Universal)?|Public Domain Mark 1\.0|Public Domain)$/;
+const LICENCES = /^(CC0 1\.0( Universal)?|Public Domain Mark 1\.0|Public Domain|CC BY 4\.0)$/;
+/** CC BY needs its credit line on file; without it the item stays hidden. */
+const credited = (x: LibraryItem) => x.source?.licence !== "CC BY 4.0" || !!x.source.credit?.trim();
 const complete = (x: LibraryItem) =>
   !!(x.slug && x.name && /^studio-library\/[\w.-]+$/.test(x.key) && x.source?.site && x.source.title && x.source.artist &&
-    /^https:\/\//.test(x.source.page) && LICENCES.test(x.source.licence) && /^\d{4}-\d{2}-\d{2}$/.test(x.source.checked));
+    /^https:\/\//.test(x.source.page) && LICENCES.test(x.source.licence) && credited(x) && /^\d{4}-\d{2}-\d{2}$/.test(x.source.checked));
 
 /** What the Studio may offer: complete items only. */
 export const libraryReady = (): LibraryItem[] => LIBRARY.filter(complete);
