@@ -42,24 +42,32 @@ export async function guideFor(email: string): Promise<GuideSettings> {
 const saveGuide = (email: string, g: GuideSettings) => storage.setSetting(key(email), JSON.stringify(g));
 
 /**
- * Who gets offered a guide (setting guide:rollout). Both off until Andrew answers "on for every new account?" (21 Nov):
- * offer = the one-time "Pick your guide" step for accounts that signed up on or after `since` and never answered;
- * canPick = Settings → Your guide for any account, so one with it off can turn it on.
+ * Who gets offered a guide (setting guide:rollout). Andrew, 21 Nov: "Only paid", then "actually all": on for every new account.
+ * offer = the one-time "Pick your guide" step for accounts that signed up on or after `since` (empty = any) and never answered;
+ * canPick = Settings → Your guide, so one with it off can turn it on;
+ * paidOnly = both only for a paid plan (Scale or Pro, including trials and comps); off since "actually all". A guide someone already has stays on.
  */
-type Rollout = { offer: boolean; canPick: boolean; since: string };
+type Rollout = { offer: boolean; canPick: boolean; since: string; paidOnly: boolean };
 const ROLLOUT = "guide:rollout";
 async function rollout(): Promise<Rollout> {
-  try { const v = JSON.parse((await storage.getSetting(ROLLOUT)) ?? "{}"); return { offer: v.offer === true, canPick: v.canPick === true, since: String(v.since ?? "") }; }
-  catch { return { offer: false, canPick: false, since: "" }; }
+  try { const v = JSON.parse((await storage.getSetting(ROLLOUT)) ?? "{}"); return { offer: v.offer === true, canPick: v.canPick === true, since: String(v.since ?? ""), paidOnly: v.paidOnly === true }; }
+  catch { return { offer: false, canPick: false, since: "", paidOnly: false }; }
 }
 async function pickerFor(email: string, g: GuideSettings): Promise<{ offer: boolean; canPick: boolean }> {
   const r = await rollout();
+  if (!r.offer && !r.canPick) return { offer: false, canPick: false };
+  if (r.paidOnly && !(await onPaidPlan(email))) return { offer: false, canPick: false };
   let offer = false;
   if (r.offer && !g.answered && !g.enabled) {
     const p = await storage.getProfileByEmail(email).catch(() => undefined);
     offer = !!p?.createdAt && (!r.since || p.createdAt >= r.since);
   }
   return { offer, canPick: r.canPick || offer };
+}
+/** Scale or Pro, paying, trialing (Founding Members) or comped. */
+async function onPaidPlan(email: string): Promise<boolean> {
+  const sub = await storage.getSubscription(email).catch(() => undefined);
+  return !!sub && ["creator", "pro"].includes(sub.plan) && ["active", "trialing", "past_due"].includes(sub.status);
 }
 const cleanName = (s: unknown) => String(s ?? "").replace(new RegExp("[^\\p{L}\\p{N} '.-]", "gu"), "").replace(/\s+/g, " ").trim().slice(0, 24);
 
@@ -235,14 +243,15 @@ export function registerGuide(app: Express, requireHostSession: RequestHandler, 
   });
 
   // ---- the switch (admin) ----
-  /** Who sees the picker: held off (both false) until Andrew says (21 Nov). offer goes to accounts that signed up on or after since. */
+  /** Who sees the picker. offer goes to accounts that signed up on or after since ("" = any); paidOnly limits both to paid plans. */
   app.get("/api/admin/guide-rollout", requireAdmin, async (_req, res) => res.json(await rollout()));
   app.put("/api/admin/guide-rollout", requireAdmin, async (req, res) => {
     const r = await rollout();
     const next: Rollout = {
       offer: typeof req.body?.offer === "boolean" ? req.body.offer : r.offer,
       canPick: typeof req.body?.canPick === "boolean" ? req.body.canPick : r.canPick,
-      since: /^\d{4}-\d{2}-\d{2}/.test(String(req.body?.since ?? "")) ? String(req.body.since) : r.since || new Date().toISOString(),
+      since: req.body?.since === "" ? "" : /^\d{4}-\d{2}-\d{2}/.test(String(req.body?.since ?? "")) ? String(req.body.since) : r.since,
+      paidOnly: typeof req.body?.paidOnly === "boolean" ? req.body.paidOnly : r.paidOnly,
     };
     await storage.setSetting(ROLLOUT, JSON.stringify(next));
     res.json(next);
