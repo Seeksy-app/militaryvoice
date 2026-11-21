@@ -705,6 +705,19 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const adminAddr = getAdminEmail(req);
   const fromMemberStudio = /^https?:\/\/[^/]+\/studio\/control(\/|\?|#|$)/i.test(String(req.get("referer") ?? ""));
   const leftoverAdmin = fromMemberStudio && !!memberAddr && !!adminAddr && memberAddr !== adminAddr.trim().toLowerCase();
+  // The always-on Claude sessions on the Alex VPS (Andrew, 21 Nov: "Yes, set it up"): ADMIN_READ_KEY in
+  // x-admin-read-key opens admin READS only. Never a write, and never shared logins, the people export or
+  // finances. The key is made and kept on the VPS (mode 600) and in Vercel; no session ever prints it.
+  const readKey = process.env.ADMIN_READ_KEY ?? "";
+  const givenKey = String(req.get("x-admin-read-key") ?? "");
+  if (givenKey && readKey.length >= 32) {
+    const ok = givenKey.length === readKey.length && crypto.timingSafeEqual(Buffer.from(givenKey), Buffer.from(readKey));
+    const read = req.method === "GET" || req.method === "HEAD";
+    const kept = /^\/api\/admin\/(share-logins?|export\.csv|finance-[\w-]+|production-costs)(\/|$)/.test(req.path);
+    if (ok && read && !kept) { (req as any).adminEmail = "claude-vps@militaryvoices.ai"; next(); return; }
+    res.status(403).json({ message: ok ? "The read key only opens admin reads." : "Admins only." });
+    return;
+  }
   // Preferred: a signed admin session from the email-code sign-in.
   const sessionEmail = leftoverAdmin ? null : adminAddr;
   if (sessionEmail && (await storage.isAdminEmail(sessionEmail))) {
