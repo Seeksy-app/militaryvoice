@@ -661,9 +661,12 @@ function PeopleStrip({ kit, owner, sharing, onShare, onInvite }: { kit: RoomKit;
   return (
     // The + sits outside the scrolling row: a scrolling row clips anything that pops out of it, so
     // its menu never showed (Andrew, 21 Nov: "This doesn't work").
-    <div className="mt-3 flex w-full max-w-[768px] shrink-0 gap-3">
-    <div className="relative flex min-w-0 flex-1">
-    <div ref={row} onScroll={measure} className="flex min-w-0 flex-1 gap-3 overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" data-testid="my-studio-strip">
+    // Present or invite sits straight after the last person, not pushed to the far right (Andrew,
+    // 21 Nov: "should be to the right next to the first card"): the row takes only the room its tiles
+    // need and shrinks (then scrolls) when they don't fit. gap-2 plus the row's p-1 = the gap-3 between tiles.
+    <div className="mt-3 flex w-full max-w-[768px] shrink-0 gap-2">
+    <div className="relative flex min-w-0">
+    <div ref={row} onScroll={measure} className="flex min-w-0 gap-3 overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" data-testid="my-studio-strip">
       {cams.map((t) => <PersonTile key={key(t)} t={t} kit={kit} owner={owner} scenes={scenes} />)}
     </div>
       {more.left && <button type="button" onClick={() => nudge(-1)} aria-label="Show earlier people" className="absolute left-0 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[#d0d5dd] bg-white text-[#344054] shadow-[0_1px_3px_rgba(16,24,40,0.18)] hover:bg-[#f9fafb]" data-testid="strip-scroll-left"><ChevronLeft className="h-4 w-4" /></button>}
