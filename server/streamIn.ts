@@ -3,7 +3,9 @@ import { and, desc, eq, gte } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { requireHostSession, getSessionEmail } from "./session.js";
 import crypto from "node:crypto";
-import { createRtmpIngress, deleteIngress, listIngressForRoom, isLiveKitConfigured, isRecordingConfigured, runningEgressIds, startRoomRecording, stopEgressById } from "./livekit.js";
+import { createRtmpIngress, deleteIngress, listIngressForRoom, isLiveKitConfigured, isRecordingConfigured, runningEgressIds, startBroadcast, startRoomRecording, stopEgressById } from "./livekit.js";
+import { streamInOutOn } from "./livePage.js";
+import { liveTargetsOf } from "./myStudio.js";
 import { sendImportReadyEmail } from "./email.js";
 import { cleanupRadioFeeds } from "./radioStreamIn.js";
 import { lastBeat } from "./health.js";
@@ -163,7 +165,34 @@ async function startClaimed(c: StreamKeyRow, continued?: string): Promise<Stream
   return out;
 }
 
+/**
+ * Going live, not only recording (22 Nov 2026): a stream sent in from StreamYard or OBS also goes to their YouTube and
+ * other keys (the same places their studio's Go live sends to), unless they untick it in Integrations → Live. Their
+ * MilitaryVoices page reads the room itself. The sender's id is kept in streamin:fwd:<keyId>.
+ */
+const fwdKey = (id: number) => `streamin:fwd:${id}`;
+async function startForward(c: StreamKeyRow): Promise<void> {
+  if (c.engine !== "livekit" || !c.room || (await storage.getSetting(fwdKey(c.id)))) return;
+  if (!(await streamInOutOn(c.ownerEmail))) return;
+  const targets = await liveTargetsOf(c.ownerEmail);
+  if (!targets.length) return;
+  try {
+    const egressId = await startBroadcast(c.room, targets.map((url) => ({ url })) as never);
+    await storage.setSetting(fwdKey(c.id), egressId);
+  } catch (err) {
+    console.error("Stream-in send-on didn't start:", (err as Error).message);
+    void slackNote(`Stream in: a podcaster's stream is recording but didn't go on to their YouTube or other keys (${(err as Error).message}).`).catch(() => {});
+  }
+}
+async function stopForward(c: StreamKeyRow): Promise<void> {
+  const id = await storage.getSetting(fwdKey(c.id)).catch(() => null);
+  if (!id) return;
+  await stopEgressById(id).catch(() => {});
+  await storage.setSetting(fwdKey(c.id), "");
+}
+
 async function stopRecording(c: StreamKeyRow): Promise<StreamKeyRow> {
+  await stopForward(c);
   if (c.egressId) await stopEgressById(c.egressId).catch(() => {});
   await closeSession(c);
   const [out] = await db.update(streamKeys).set({ egressId: "", liveSince: "", lostAt: "", status: c.status === "paused" ? "paused" : "idle" }).where(eq(streamKeys.id, c.id)).returning();
@@ -195,7 +224,8 @@ export async function onStreamInWebhook(event: { event?: string; ingressInfo?: {
     return;
   }
   try {
-    await startRecording(c);
+    const out = await startRecording(c);
+    if (out.egressId && out.egressId !== "pending") await startForward(out);
   } catch (err) {
     console.error("Stream-in recording didn't start:", (err as Error).message);
     await db.update(streamKeys).set({ problem: plain(err) }).where(eq(streamKeys.id, c.id));
@@ -287,6 +317,7 @@ export async function runStreamInPass(): Promise<{ stopped: number; rolled: numb
     }
     if (!running.has(c.egressId)) {
       // The recorder is gone (a failure, or a hand stop): close the books; the reconcile pass settles the file.
+      await stopForward(c);
       await closeSession(c);
       await db.update(streamKeys).set({ egressId: "", liveSince: "", lostAt: "", status: c.status === "paused" ? "paused" : "idle" }).where(eq(streamKeys.id, c.id));
       out.stopped++;

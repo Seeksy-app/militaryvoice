@@ -42,7 +42,7 @@ const Logo = ({ className }: { className: string }) => <img src="/logo-lockup.pn
  * API); until then the room stays phase 1, a plain grid like the recording, with no layout picker
  * (Andrew: "go, hide layouts").
  */
-type Studio = { you?: string; id: number; name: string; inviteLink: string; recording: { since: string } | null; live: { since: string; watchUrl: string } | null; youtube: boolean; youtubeOn: boolean; youtubeKey?: string; youtubeLegacy?: boolean; streams: { id: string; name: string; on: boolean }[]; ready: boolean; canRecord: boolean; v3?: boolean };
+type Studio = { you?: string; id: number; name: string; inviteLink: string; recording: { since: string } | null; live: { since: string; watchUrl: string } | null; youtube: boolean; youtubeOn: boolean; youtubeKey?: string; youtubeLegacy?: boolean; livePage?: { on: boolean; url: string }; streams: { id: string; name: string; on: boolean }[]; ready: boolean; canRecord: boolean; v3?: boolean };
 type Conn = { url: string; token: string; name: string };
 type Setup = { name: string; title: string; mic: boolean; cam: boolean; micId?: string; camId?: string };
 type Tab = "look" | "media" | "style" | "people" | "notes" | "recording" | "chat";
@@ -1170,7 +1170,17 @@ function GoLiveSheet({ studio, onClose }: { studio: Studio; onClose: () => void 
     finally { setBusy(""); }
   };
   const ytOn = studio.youtube && studio.youtubeOn;
-  const anyOn = ytOn || studio.streams.some((s) => s.on);
+  const pageOn = !!studio.livePage?.on;
+  const anyOn = pageOn || ytOn || studio.streams.some((s) => s.on);
+  /** Their MilitaryVoices live page on or off: the same switch as Integrations → Live. */
+  const togglePage = async () => {
+    setBusy("patch"); setError("");
+    try {
+      await apiRequest("PUT", "/api/host/live-page", { on: !pageOn });
+      set((await (await apiRequest("GET", "/api/host/my-studio")).json()) as Studio);
+      void qc.invalidateQueries({ queryKey: ["/api/host/live-page"] });
+    } catch (e) { setError(say(e)); } finally { setBusy(""); }
+  };
   const start = async () => {
     setBusy("go"); setError("");
     try {
@@ -1187,6 +1197,14 @@ function GoLiveSheet({ studio, onClose }: { studio: Studio; onClose: () => void 
       <h2 className="text-[22px] font-bold tracking-tight">Go live</h2>
       <p className="mt-1 text-[15px] text-[#475467]">Pick where the show goes.</p>
       <div className="mt-5 space-y-2.5">
+        {/* Their MilitaryVoices live page (22 Nov: the one-place Live mockup): on by default once their SmartLink is published. */}
+        {studio.livePage?.url && (
+          <div className={`flex items-center gap-4 rounded-2xl border p-4 ${pageOn ? "border-2 border-[#053877] bg-[#f5f8fd] p-[15px]" : "border-[#e4e7ec]"}`} data-testid="golive-page-row">
+            <div className={`${icon} text-[13px] font-extrabold tracking-tight text-white`} style={{ background: NAVY }}>MV</div>
+            <div className="min-w-0 flex-1"><p className="font-semibold">Your MilitaryVoices page</p><p className="truncate text-[13px] text-[#475467]">{studio.livePage.url.replace(/^https?:\/\/(www\.)?/, "")}</p></div>
+            <button type="button" onClick={() => void togglePage()} disabled={busy !== ""} aria-pressed={pageOn} className={`h-9 rounded-xl px-4 text-sm font-bold disabled:opacity-60 ${pageOn ? "text-white" : "border border-[#d0d5dd] bg-white text-[#344054]"}`} style={pageOn ? { background: NAVY } : undefined} data-testid="golive-page-toggle">{pageOn ? "Selected" : "Select"}</button>
+          </div>
+        )}
         {/* YouTube by their own stream key (Andrew, 22 Nov: "Yes, one connection"); the old Google sign-in still works until they save one. */}
         <div className={`rounded-2xl border p-4 ${ytOn ? "border-2 border-[#053877] bg-[#f5f8fd] p-[15px]" : "border-[#e4e7ec]"}`} data-testid="golive-youtube-row">
           <div className="flex items-center gap-4">
@@ -1236,7 +1254,7 @@ function GoLiveSheet({ studio, onClose }: { studio: Studio; onClose: () => void 
       {ytOn && studio.youtubeKey && <p className="mt-1.5 text-[13px] text-[#667085]" data-testid="golive-yt-title-note">On YouTube it goes live under your channel's default title, set in YouTube Studio.</p>}
       {error && <p className="mt-3 text-sm font-medium text-[#b42318]">{error}</p>}
       <div className="mt-6 flex items-center justify-end gap-3">
-        {!anyOn && <p className="mr-auto text-[13px] text-[#667085]">Pick YouTube or add a key to go live.</p>}
+        {!anyOn && <p className="mr-auto text-[13px] text-[#667085]">Pick your page, YouTube or a key to go live.</p>}
         <button type="button" onClick={onClose} className="h-12 rounded-xl px-5 text-[15px] font-semibold text-[#344054] hover:bg-[#f2f4f7]">Not yet</button>
         <button type="button" onClick={() => void start()} disabled={!anyOn || busy !== ""} className="flex h-12 items-center gap-2 rounded-xl bg-[#d92d20] px-6 text-[15px] font-bold text-white shadow-[0_4px_12px_rgba(217,45,32,0.28)] disabled:opacity-50 disabled:shadow-none" data-testid="golive-start">
           {busy === "go" && <Loader2 className="h-4 w-4 animate-spin" />}{recordToo && !studio.recording ? "Go live and record" : "Go live"}

@@ -1,7 +1,7 @@
 import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { ZoomConnect, ImportLink } from "@/components/ZoomConnect";
-import { ConnectYoutube } from "@/components/ConnectYoutube";
+import { LiveSettings } from "@/components/LiveSettings";
 import { PodcastStatsRows, useHostedHere } from "@/components/PodcastStats";
 import { platformLabel, formatFollowers, ALL_PLATFORMS } from "@/components/SocialIcons";
 import { BrandMark, BrandGroup } from "@/components/BrandMark";
@@ -107,14 +107,14 @@ export function IntegrationsScreen({
       )}
 
       {/* Right under social media: going live on YouTube is the same kind of thing, their own channel. */}
-      <Group
-        id="section-going-out-live"
-        icon={<Radio className="h-4 w-4" />}
-        title="Live streaming"
-        line="Optional. Your Radio slot and your studio shows air on MilitaryVoices.ai either way; your stream key sends them to your own YouTube too."
-      >
-        <ConnectYoutube row />
-      </Group>
+      {/* Live, all in one place (Andrew, 22 Nov: the one-place Live mockup, "Yes, build it"): where it goes, and stream in. */}
+      <div id="section-going-out-live" className="mb-8 scroll-mt-24" data-testid="section-going-out-live">
+        <div className="mb-3">
+          <h3 className="flex items-center gap-2 text-base font-bold text-foreground"><Radio className="h-4 w-4" /> Live</h3>
+          <p className="mt-0.5 max-w-2xl text-sm text-muted-foreground">Where your live shows go, and how to send one in from StreamYard or OBS. All in one place.</p>
+        </div>
+        <LiveSettings />
+      </div>
 
       <Group
         id="section-content"
@@ -123,14 +123,6 @@ export function IntegrationsScreen({
         line="Where your episodes come from. Everything lands in your Library, ready for Pōstify."
       >
         <ZoomConnect row />
-        {/* Their own stream key (20 Nov 2026): Andrew looked for it here. Same /stream-in as the Podcast screen's link. */}
-        <Row
-          testId="row-stream-in"
-          icon={<BrandGroup brands={["streamyard", "restream", "obs"]} />}
-          name="StreamYard, Restream or OBS"
-          line="Stream in live, and the recording lands in your Library."
-          right={<Button asChild variant="outline" size="sm" className="h-8 rounded-full px-3.5 text-xs"><a href="/stream-in" data-testid="button-stream-in-key">Get my stream key</a></Button>}
-        />
         <div id="import-link" className="scroll-mt-24">
           <Row
             testId="row-import-link"

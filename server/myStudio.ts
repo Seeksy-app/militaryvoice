@@ -14,6 +14,7 @@ import { ensureRecordingsBucket } from "./recordingStorage.js";
 import { createBroadcast } from "./youtube.js";
 import { getYoutubeKey, youtubeKeyHint, youtubePushUrl, YOUTUBE_OAUTH } from "./youtubeKey.js";
 import { onLookSaved, roomLookKey } from "./roomKit.js";
+import { liveHandleOf, livePageOn, liveUrlOf } from "./livePage.js";
 import { bumpLookRev, noteMusicOnAir, registerRoomStage, roomTemplateUrl, STUDIO_V3, useRoomKit } from "./roomStage.js";
 import { personalStudios, type PersonalStudioRow } from "../shared/schema.js";
 
@@ -26,6 +27,17 @@ type Stream = { id: string; name: string; url: string; key: string; on: boolean 
 const streamsOf = (s: PersonalStudioRow): Stream[] => { try { return JSON.parse(s.streams || "[]") as Stream[]; } catch { return []; } };
 /** The address and key as one push URL, however they were pasted. */
 const pushUrl = (x: Stream) => (x.key ? `${x.url.replace(/\/+$/, "")}/${x.key}` : x.url);
+/**
+ * Where their live shows go besides their MilitaryVoices page: YouTube (their stream key, when YouTube is on) and every
+ * other key that's switched on. Stream in uses this too, so a show sent from StreamYard goes to the same places (22 Nov).
+ */
+export async function liveTargetsOf(email: string): Promise<string[]> {
+  const [s] = await db.select().from(personalStudios).where(eq(personalStudios.ownerEmail, email.trim().toLowerCase())).limit(1);
+  const out = s ? streamsOf(s).filter((x) => x.on).map(pushUrl) : [];
+  const key = !s || s.youtubeOn ? await getYoutubeKey(email).catch(() => "") : "";
+  if (key) out.push(youtubePushUrl(key));
+  return out;
+}
 
 async function mine(email: string): Promise<PersonalStudioRow> {
   await schemaIsReady();
@@ -39,6 +51,8 @@ async function mine(email: string): Promise<PersonalStudioRow> {
   return again;
 }
 const room = (s: PersonalStudioRow) => `my-${s.id}`;
+/** liveEgressId when the show is live on their MilitaryVoices page only (no YouTube or other key on). */
+const PAGE_ONLY = "page";
 // Guests wait backstage (stage = "off") until the host brings them on, once the room UI has the
 // button for it (ROOM_BACKSTAGE=1). Until then they go straight on stage (stage = "on"), as
 // before, so nobody is ever left out of a recording by a control that isn't there yet.
@@ -56,7 +70,8 @@ async function settle(s: PersonalStudioRow): Promise<PersonalStudioRow> {
   if (!running) return s;
   const patch: Partial<PersonalStudioRow> = {};
   if (s.recordingEgressId && !running.has(s.recordingEgressId)) Object.assign(patch, { recordingEgressId: "", recordingSince: "" });
-  if (s.liveEgressId && !running.has(s.liveEgressId)) Object.assign(patch, { liveEgressId: "", liveSince: "", liveWatchUrl: "" });
+  // "page": live on their MilitaryVoices page only, with no recorder or stream to check (22 Nov).
+  if (s.liveEgressId && s.liveEgressId !== PAGE_ONLY && !running.has(s.liveEgressId)) Object.assign(patch, { liveEgressId: "", liveSince: "", liveWatchUrl: "" });
   if (!Object.keys(patch).length) return s;
   const [out] = await db.update(personalStudios).set(patch).where(eq(personalStudios.id, s.id)).returning();
   return out;
@@ -117,15 +132,18 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
   const yt = async (email: string) => {
     const key = await getYoutubeKey(email).catch(() => "");
     const legacy = !key && YOUTUBE_OAUTH && !!(await storage.getYoutubeAccount(email).catch(() => undefined));
-    return { youtube: !!key || legacy, youtubeKey: youtubeKeyHint(key), youtubeLegacy: legacy };
+    const url = liveUrlOf(await liveHandleOf(email).catch(() => ""));
+    return { youtube: !!key || legacy, youtubeKey: youtubeKeyHint(key), youtubeLegacy: legacy, page: { on: !!url && (await livePageOn(email)), url } };
   };
-  const view = (s: PersonalStudioRow, youtube: { youtube: boolean; youtubeKey: string; youtubeLegacy: boolean }) => ({
+  const view = (s: PersonalStudioRow, youtube: { youtube: boolean; youtubeKey: string; youtubeLegacy: boolean; page: { on: boolean; url: string } }) => ({
     id: s.id,
     name: s.name,
     inviteLink: `${ORIGIN}/my-studio/join/${s.inviteToken}`,
     recording: s.recordingEgressId ? { since: s.recordingSince } : null,
-    live: s.liveEgressId ? { since: s.liveSince, watchUrl: s.liveWatchUrl } : null,
-    ...youtube,
+    live: s.liveEgressId ? { since: s.liveSince, watchUrl: s.liveWatchUrl || (youtube.page.on ? youtube.page.url : "") } : null,
+    // Their MilitaryVoices live page: in Go live as a place it goes, switched in Integrations → Live.
+    livePage: youtube.page,
+    youtube: youtube.youtube, youtubeKey: youtube.youtubeKey, youtubeLegacy: youtube.youtubeLegacy,
     youtubeOn: s.youtubeOn,
     streams: streamsOf(s).map(({ key, ...x }) => ({ ...x, key: key ? `••••${key.slice(-4)}` : "" })),
     ready: isLiveKitConfigured(),
@@ -313,11 +331,13 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
             watchUrl = b.watchUrl;
           }
         }
-        if (!targets.length) return res.status(400).json({ message: "Add your YouTube stream key or another streaming key first." });
-        const egressId = await startBroadcast(room(s), targets as never, await roomTemplateUrl(s.id));
+        const page = await livePageOn(email) && !!(await liveHandleOf(email));
+        if (!targets.length && !page) return res.status(400).json({ message: "Add your YouTube stream key or another streaming key first." });
+        // Only their MilitaryVoices page: viewers watch the room itself, so there's nothing to start.
+        const egressId = targets.length ? await startBroadcast(room(s), targets as never, await roomTemplateUrl(s.id)) : PAGE_ONLY;
         [s] = await db.update(personalStudios).set({ liveEgressId: egressId, liveSince: now(), liveWatchUrl: watchUrl }).where(eq(personalStudios.id, s.id)).returning();
       } else if (!on && s.liveEgressId) {
-        await stopEgressById(s.liveEgressId).catch(() => {});
+        if (s.liveEgressId !== PAGE_ONLY) await stopEgressById(s.liveEgressId).catch(() => {});
         [s] = await db.update(personalStudios).set({ liveEgressId: "", liveSince: "", liveWatchUrl: "" }).where(eq(personalStudios.id, s.id)).returning();
       }
       res.json(view(s, await yt(email)));

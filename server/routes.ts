@@ -195,6 +195,7 @@ import { registerAutomations } from "./automations.js";
 import { registerTrash, toTrash } from "./trash.js";
 import { registerMyStudio } from "./myStudio.js";
 import { getYoutubeKey, registerYoutubeKey, YOUTUBE_OAUTH, YOUTUBE_RTMP } from "./youtubeKey.js";
+import { registerLivePage } from "./livePage.js";
 import { registerRoomKit, marksFor, withCredits } from "./roomKit.js";
 import { registerFreesoundImport } from "./studioLibrary.js";
 import { registerNudges, fireNudgeFor } from "./nudges.js";
@@ -7046,6 +7047,7 @@ export function registerRoutes(app: Express): void {
   registerTrash(app, requireHostSession);
   registerMyStudio(app, requireHostSession, { youtubeToken });
   registerYoutubeKey(app, requireHostSession);
+  registerLivePage(app, requireHostSession);
   registerRoomKit(app, requireHostSession);
   registerFreesoundImport(app, requireAdmin);
   registerNudges(app, requireAdmin);
