@@ -8,7 +8,7 @@ import { NavBar } from "@/components/NavBar";
 // also the only reason to write them.
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
-const UPDATED = "25 September 2026";
+const UPDATED = "22 November 2026";
 const CONTACT = "hello@militaryvoices.ai";
 
 function Shell({ title, children }: { title: string; children: React.ReactNode }) {
@@ -102,13 +102,15 @@ export function PrivacyPolicy() {
 
       <Section heading="If you connect your YouTube channel">
         <p>
-          Connecting is optional and exists for one purpose: so your segment can go out to your own channel as well as
-          ours. When you connect, we store a Google refresh token, your channel ID and your channel name. Nothing else.
+          Connecting is optional and exists for one purpose: so your live shows go out on your own channel, when you
+          press Go live in your studio and when your booked Radio or event slot comes up. When you connect, we store a
+          Google refresh token, your channel ID and your channel name. Nothing else.
         </p>
         <p>
-          We use that access solely to create one scheduled live broadcast on your channel at your booked time and to
-          obtain the stream endpoint we push to. We do not read, edit, publish or delete your existing videos,
-          comments, captions, ratings or subscribers, and we never look at your analytics.
+          We use that access solely to show you which channel is connected, to create a live broadcast on your channel
+          each time you go live (or at your booked time), and to obtain the stream endpoint we send your show to. We do
+          not read, edit, publish or delete your existing videos, comments, captions, ratings or subscribers, and we
+          never look at your analytics.
         </p>
         <p>
           Disconnecting from your dashboard deletes the token, the channel ID and the channel name immediately. You can
@@ -136,6 +138,11 @@ export function PrivacyPolicy() {
           <a className="text-primary hover:underline" href="https://security.google.com/settings/security/permissions" target="_blank" rel="noreferrer">Google security settings</a>
           . We keep the refresh token only while your channel is connected; we do not store any other YouTube data, and
           we never share it with anyone.
+        </p>
+        <p>
+          We don't use YouTube data for advertising, we don't sell it, and nobody at MilitaryVoices.ai reads it, unless
+          you ask us to help with a problem, it's needed for security, or the law requires it. We set one sign-in
+          cookie in your browser so you stay signed in; we don't use cookies to track you for YouTube or for ads.
         </p>
       </Section>
 
@@ -343,7 +350,7 @@ export function TermsOfService() {
       <Section heading="Your own channels">
         <p>
           If you connect YouTube or paste a stream key, you are asking us to broadcast to that account on your behalf
-          during your slot. Their rules apply to you there as well as ours here, and a strike on your channel is
+          when you go live or your slot comes up. Their rules apply to you there as well as ours here, and a strike on your channel is
           between you and them.
         </p>
       </Section>

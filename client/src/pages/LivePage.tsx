@@ -78,7 +78,7 @@ export default function LivePage({ handle }: { handle: string }) {
             <div className="flex h-full w-full flex-col items-center justify-center gap-2 px-6 text-center" data-testid="live-page-offline">
               <p className="text-balance text-xl font-bold sm:text-2xl">{d.name} isn't live right now</p>
               <p className="text-balance text-sm text-white/70">This page goes live by itself when they do. Keep it open, or come back later.</p>
-              <a href={`/${d.handle}`} className="mt-3 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-[#053877] hover:bg-white/90">See {d.name}'s page</a>
+              <a href={`/${d.handle}`} className="mt-3 rounded-full bg-white px-5 py-2.5 text-sm font-bold text-[#053877] hover:bg-white/90">Go to their page</a>
             </div>
           )}
         </div>
