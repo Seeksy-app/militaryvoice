@@ -940,6 +940,9 @@ async function broadcastBannerTitle(eventId?: number | null): Promise<string> {
   }
 }
 
+/** The internal rehearsal account (studio 13): a standing View-as seat for the admin. Never a customer. */
+const STUDIO_TEST_SEAT = "hello+studiotest@militaryvoices.ai";
+
 export function registerRoutes(app: Express): void {
   // militarycreatoreconomy.com: its own page, robots and sitemap, before anything else.
   registerMce(app);
@@ -12698,6 +12701,9 @@ Watch at militaryvoices.ai/agenda
       const name = prof?.podcastName.trim() || prof?.hostName.trim() || e;
       out.set(e, { email: e, label: `${name} · ${postTesters().has(e) ? "Pōstify tester" : "Pōstify, paying"}`, kind: "crew" });
     }
+    // Our own rehearsal account (studio 13, no profile, no SmartLink): always a seat, so testing the studio never needs
+    // the crew list edited by hand (Andrew, 22 Nov: "Yes, use studio 13" … "can you take over").
+    if (!out.has(STUDIO_TEST_SEAT)) out.set(STUDIO_TEST_SEAT, { email: STUDIO_TEST_SEAT, label: "Studio Test (internal) · Rehearsals", kind: "crew" });
     // Customers the owner has chosen to be able to step into, to help them (setting viewas:extra, comma separated; Frank Zaccari, 17 Nov 2026,
     // for his onboarding). Each step in is written to viewas:log.
     for (const e of ((await storage.getSetting("viewas:extra")) ?? "").split(/[,\s]+/).map((x) => x.trim().toLowerCase()).filter((x) => x.includes("@"))) {
