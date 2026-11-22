@@ -24,7 +24,10 @@ rm -f "$IN"
 ok() { local code; code=$(curl -s -o /dev/null -w '%{http_code}' "$@"); [ "$code" = 200 ] && echo yes || echo "no (HTTP $code)"; }
 echo "AGENT_TOKEN works: $(ok -X POST -H "x-agent-token: ${V[AGENT_TOKEN]:-}" https://www.militaryvoices.ai/api/agent/clip-jobs/0/heartbeat)"
 echo "ANTHROPIC_API_KEY works: $(ok https://api.anthropic.com/v1/models -H "x-api-key: ${V[ANTHROPIC_API_KEY]:-}" -H 'anthropic-version: 2023-06-01')"
-echo "ELEVENLABS_API_KEY works: $(ok https://api.elevenlabs.io/v1/models -H "xi-api-key: ${V[ELEVENLABS_API_KEY]:-}")"
+# Render's ElevenLabs key is a restricted one: it may do speech-to-text (all the worker calls) but not read
+# models or the account, so ask speech-to-text with no file: a good key gets 400 ("provide a file"), a bad one 401.
+el=$(curl -s -o /dev/null -w '%{http_code}' -X POST https://api.elevenlabs.io/v1/speech-to-text -H "xi-api-key: ${V[ELEVENLABS_API_KEY]:-}" -F model_id=scribe_v1)
+echo "ELEVENLABS_API_KEY works: $([ "$el" = 400 ] && echo yes || echo "no (HTTP $el)")"
 [ "$(ok -X POST -H "x-agent-token: ${V[AGENT_TOKEN]:-}" https://www.militaryvoices.ai/api/agent/clip-jobs/0/heartbeat)" = yes ] \
   || { echo "Stopping: without a working AGENT_TOKEN the worker can't take jobs."; exit 1; }
 
