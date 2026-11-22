@@ -2231,13 +2231,13 @@ export function PostStudio() {
       <section className="mt-6" data-testid="post-studio">
         {paidBanner}
         <div className="mb-4 flex items-center justify-between gap-3">
-          <h2 className="text-lg font-bold text-foreground">Pick an episode</h2>
+          <h2 className="text-lg font-bold text-foreground">Pick a recording</h2>
           {betaBadge}
         </div>
         {/* Episodes as the Library shows them: the picture, how long, when, and what's been done. */}
         <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4" data-testid="post-episode-grid">
           <li className="min-h-[14rem]" data-testid="post-viewer-empty">
-            <UploadRecording tall title="Add an episode" note="Drop a video here, or click to browse. MP4, MOV or WebM, up to 2GB." onDone={(id) => setSelected(id)} />
+            <UploadRecording tall title="Add a recording" note="Drop a video here, or click to browse. MP4, MOV or WebM, up to 2GB." onDone={(id) => setSelected(id)} />
           </li>
           {list.map((r) => {
             const clipped = r.clipStatus === "done";
@@ -2245,7 +2245,7 @@ export function PostStudio() {
             const chip = clipped ? { t: "Clips ready", c: "bg-[#F0A71F] text-[#1a1200]" } : busyR ? { t: "Working", c: "bg-[#053877] text-white" } : r.clipStatus === "failed" ? { t: "Stopped", c: "bg-red-600 text-white" } : { t: "Not clipped yet", c: "bg-white/90 text-[#000741]" };
             return (
               <li key={r.id} className="group flex min-w-0 flex-col overflow-hidden rounded-2xl border border-border bg-card shadow-sm" data-testid={`post-episode-${r.id}`}>
-                <button type="button" onClick={() => open(r.id)} className="relative aspect-video bg-[#050d26]" aria-label={`Open ${r.title || "episode"}`}>
+                <button type="button" onClick={() => open(r.id)} className="relative aspect-video bg-[#050d26]" aria-label={`Open ${r.title || "recording"}`}>
                   <video src={`/api/host/recordings/${r.id}/video#t=8`} preload="metadata" muted playsInline className="h-full w-full object-cover" />
                   <span className={`absolute left-2 top-2 rounded-full px-2 py-0.5 text-[10px] font-bold ${chip.c}`}>{chip.t}</span>
                   {r.durationSec > 0 && <span className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white">{stamp(r.durationSec)}</span>}

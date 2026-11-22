@@ -28,7 +28,7 @@ export function ClipsLibrary({ clips, posts, recordings, episode, onEpisode, bar
     const waiting = p.status === "scheduled" && Date.parse(p.scheduledAt) > Date.now();
     standing.set(p.refId, standing.get(p.refId) === "Posted" || !waiting ? "Posted" : "Scheduled");
   }
-  const titleOf = new Map(recordings.map((r) => [r.id, r.title.replace(/ \((clean|edited)\)$/i, "") || "Episode"]));
+  const titleOf = new Map(recordings.map((r) => [r.id, r.title.replace(/ \((clean|edited)\)$/i, "") || "Recording"]));
   const withClips = Array.from(new Set(clips.map((c) => c.recordingId))).filter((id) => titleOf.has(id));
   const shown = clips.filter((c) => episode == null || c.recordingId === episode).sort((a, b) => b.id - a.id);
 
@@ -38,7 +38,7 @@ export function ClipsLibrary({ clips, posts, recordings, episode, onEpisode, bar
         <Select value={episode == null ? "all" : String(episode)} onValueChange={(v) => onEpisode(v === "all" ? null : Number(v))}>
           <SelectTrigger className="h-9 w-72 max-w-full" data-testid="clips-filter"><SelectValue /></SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All episodes ({clips.length})</SelectItem>
+            <SelectItem value="all">All recordings ({clips.length})</SelectItem>
             {withClips.map((id) => <SelectItem key={id} value={String(id)}>{titleOf.get(id)} ({clips.filter((c) => c.recordingId === id).length})</SelectItem>)}
           </SelectContent>
         </Select>
@@ -47,7 +47,7 @@ export function ClipsLibrary({ clips, posts, recordings, episode, onEpisode, bar
       {shown.length === 0 ? (bare ? null :
         <div className="flex flex-col items-center gap-2 rounded-2xl border border-dashed border-border p-12 text-center text-sm text-muted-foreground">
           <Clapperboard className="h-6 w-6" />
-          No clips yet. Open an episode in <a href="/host/dashboard/postify" className="font-semibold text-[#053877] hover:underline dark:text-white">Pōstify</a> and it makes them for you.
+          No clips yet. Open a recording in <a href="/host/dashboard/postify" className="font-semibold text-[#053877] hover:underline dark:text-white">Pōstify</a> and it makes them for you.
         </div>
       ) : (
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5">

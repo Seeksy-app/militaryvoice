@@ -70,9 +70,13 @@ function Library_({ socialAccounts }: { socialAccounts?: string | null }) {
   const saved = (recordings ?? []).reduce((n, r) => {
     try { return n + (r.clean ? ((JSON.parse(r.clean) as CleanResult).removedSec ?? 0) : 0); } catch { return n; }
   }, 0);
-  // The counts that lead somewhere are buttons: episodes, clips, and the posts on the Social calendar.
+  // What they record or upload is a Recording (Andrew, 22 Nov: "instead of Episodes, we name recorded videos something else");
+  // "Podcast episodes" are their show's. An audio-only show with no recordings yet: that tab is its podcast episodes.
+  const audioOnly = originals.length === 0 && podOnly > 0;
+  const mainLabel = audioOnly ? "Podcast episodes" : "Recordings";
+  // The counts that lead somewhere are buttons: recordings, clips, and the posts on the Social calendar.
   const stats: { icon: typeof Film; n: string; label: string; go?: () => void }[] = [
-    { icon: Film, n: String(originals.length + podOnly), label: originals.length + podOnly === 1 ? "Episode" : "Episodes", go: () => { lib?.setOpen(null); setTab("episodes"); } },
+    { icon: Film, n: String(audioOnly ? podOnly : originals.length), label: audioOnly ? (podOnly === 1 ? "Podcast episode" : "Podcast episodes") : originals.length === 1 ? "Recording" : "Recordings", go: () => { lib?.setOpen(null); setTab("episodes"); } },
     { icon: Clock3, n: hours >= 1 ? hours.toFixed(1) : `${Math.round(hours * 60)}m`, label: hours >= 1 ? "Hours recorded" : "Recorded" },
     { icon: Scissors, n: String(clips?.length ?? 0), label: "Clips made", go: () => showClips(null) },
     { icon: Send, n: String(posts?.filter((p) => p.status !== "failed").length ?? 0), label: "Posts sent", go: () => { window.location.href = "/host/dashboard/social"; } },
@@ -94,7 +98,7 @@ function Library_({ socialAccounts }: { socialAccounts?: string | null }) {
         <Library className="h-4 w-4" /> Library
       </h2>
       <p className="mb-4 max-w-2xl text-sm text-muted-foreground">
-        Your episodes: every session the studio recorded, every video you've uploaded, and the clean episodes Pōstify makes.
+        Your recordings: every session the studio recorded, every video you've uploaded, and the clean episodes Pōstify makes.
         {/* The Zoom question, answered in the one line that has room for it. */}
         {" "}Record on Zoom?{" "}
         <a href="/host/dashboard/integrations#section-content" className="font-medium text-[#053877] underline-offset-2 hover:underline dark:text-[#8fb5e8]" data-testid="zoom-hint">Connect Zoom</a> and your recordings come in by themselves.
@@ -103,7 +107,7 @@ function Library_({ socialAccounts }: { socialAccounts?: string | null }) {
         <div className="col-span-2 sm:col-span-3 lg:col-span-2">
           <UploadRecording autoOpen />
         </div>
-        {/* On a phone the counts are one swipeable row, so the episodes start on the first screen (8 Oct). */}
+        {/* On a phone the counts are one swipeable row, so the recordings start on the first screen (8 Oct). */}
         <div className="col-span-2 -mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] sm:contents [&::-webkit-scrollbar]:hidden">
         {stats.map((s) => {
           const inner = (
@@ -130,9 +134,9 @@ function Library_({ socialAccounts }: { socialAccounts?: string | null }) {
       ) : open != null ? (
         <FolderContents folder={open} socialAccounts={socialAccounts} clipCounts={clipCounts} onShowClips={showClips} recordings={recordings ?? []} clips={clips ?? []} posts={posts ?? []} counts={{ recs: mains.filter((r) => r.folderId === open).length, pods: published.filter((e) => e.folderId === open).length }} />
       ) : (<>
-      {/* Views of one Library: the episodes, the podcast's episodes, and every clip made from them. */}
+      {/* Views of one Library: the recordings, the podcast's episodes, and every clip made from them. */}
       <div className="mb-4 inline-flex rounded-full border border-border bg-card p-1" role="tablist">
-        {([["episodes", "Episodes", podTab ? originals.length : originals.length + podOnly], ...(podTab ? [["podcast", "Podcast episodes", published.length] as const] : []), ["clips", "Clips", clips?.length ?? 0]] as const).map(([k, label, n]) => (
+        {([["episodes", mainLabel, podTab ? originals.length : originals.length + podOnly], ...(podTab ? [["podcast", "Podcast episodes", published.length] as const] : []), ["clips", "Clips", clips?.length ?? 0]] as const).map(([k, label, n]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => (k === "clips" ? showClips(clipEp) : setTab(k))} className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${tab === k ? "bg-[#053877] text-white" : "text-muted-foreground hover:text-foreground"}`} data-testid={`library-tab-${k}`}>
             {label} <span className={tab === k ? "text-white/70" : ""}>{n}</span>
           </button>
@@ -185,7 +189,7 @@ function Library_({ socialAccounts }: { socialAccounts?: string | null }) {
   );
 }
 
-/** An open folder: everything filed in it, episodes first, then podcast episodes, then clips. */
+/** An open folder: everything filed in it, recordings first, then podcast episodes, then clips. */
 function FolderContents({ folder, socialAccounts, clipCounts, onShowClips, recordings, clips, posts, counts }: {
   folder: number;
   socialAccounts?: string | null;
@@ -200,7 +204,7 @@ function FolderContents({ folder, socialAccounts, clipCounts, onShowClips, recor
   if (!counts.recs && !counts.pods && !filedClips.length) {
     return (
       <p className="rounded-2xl border border-dashed border-border bg-card p-8 text-center text-sm text-muted-foreground" data-testid="folder-empty">
-        Nothing in this folder yet. Drag an episode or a clip onto it, or use its ⋯ menu → Move to folder.
+        Nothing in this folder yet. Drag a recording or a clip onto it, or use its ⋯ menu → Move to folder.
       </p>
     );
   }
@@ -209,7 +213,7 @@ function FolderContents({ folder, socialAccounts, clipCounts, onShowClips, recor
     <div className="space-y-8" data-testid="folder-contents">
       {counts.recs > 0 && (
         <div>
-          <Head>{`Episodes (${counts.recs})`}</Head>
+          <Head>{`Recordings (${counts.recs})`}</Head>
           <MyRecordings socialAccounts={socialAccounts} folder={folder} clipCounts={clipCounts} onShowClips={onShowClips} />
         </div>
       )}

@@ -69,7 +69,7 @@ export function HomeFiles({ goTo, handle }: { goTo: (s: Screen) => void; handle:
 
   const tabs: { key: Tab; label: string; rows: Row[]; all?: Screen }[] = [
     { key: "shows" as const, label: "Shows", rows: shows },
-    { key: "episodes" as const, label: "Episodes", rows: episodes, all: "recordings" as const },
+    { key: "episodes" as const, label: "Recordings", rows: episodes, all: "recordings" as const },
     { key: "clips" as const, label: "Clips", rows: clipRows, all: "postify" as const },
     { key: "posts" as const, label: "Posts", rows: postRows, all: "social" as const },
   ].filter((t) => t.key === "shows" || t.rows.length > 0);

@@ -321,7 +321,7 @@ export function MyRecordings({
                       onKeyDown={(e) => e.key === "Escape" && setRenaming(null)}
                       onFocus={(e) => e.currentTarget.select()}
                       className="h-8 min-w-0 flex-1 text-sm"
-                      aria-label="Episode name"
+                      aria-label="Recording name"
                       data-testid={`input-rename-${main.id}`}
                     />
                     <Button type="submit" size="sm" className="h-8 rounded-full px-3 text-xs" data-testid={`button-save-rename-${main.id}`}>Save</Button>
@@ -453,7 +453,7 @@ export function MyRecordings({
         open={!!deleting}
         onOpenChange={(v) => !v && setDeleting(null)}
         title={`Delete "${deleting?.title || "this recording"}"?`}
-        description={deleting?.egressId.startsWith("CLEAN_") ? "This version leaves your Library. The original episode and its clips aren't touched." : "The video, its clean copy and any clips made from it move to Recently deleted. You can put them back for 15 days."}
+        description={deleting?.egressId.startsWith("CLEAN_") ? "This version leaves your Library. The original recording and its clips aren't touched." : "The video, its clean copy and any clips made from it move to Recently deleted. You can put them back for 15 days."}
         url={`/api/host/recordings/${deleting?.id}`}
         restorable
       />

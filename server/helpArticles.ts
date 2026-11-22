@@ -107,36 +107,38 @@ Open my dashboard
 
 === MILITARYVOICES.AI PLATFORM · www.militaryvoices.ai/help/library ===
 All help Help · Your Library
-Your Library: every episode and every clip
-Everything you record or upload lands in your Library: your studio's recordings, your Marathon slot, videos you upload, Zoom calls, and the clean and edited episodes Pōstify makes. Your clips live here too.
+Your Library: every recording and every clip
+Everything you record or upload lands in your Library: your studio's recordings, your Marathon slot, videos you upload, Zoom calls, and the clean and edited episodes Pōstify makes. Your podcast's episodes and your clips live here too.
 1 The counts at the top
 Press Library in the menu. Across the top you'll see your Library at a glance. The ones with an arrow are buttons:
-Episodes → shows your episodes.
+Recordings → shows your recordings.
 Clips made → shows every clip.
 Posts sent → opens your calendar on the Social screen.
 Hours recorded and Time saved (what Pōstify took out of your clean episodes) are just to know.
 To add a video, drop it on the upload box beside them. Record on Zoom? Connect Zoom and your recordings come in by themselves. See Zoom recordings.
-2 Episodes and Clips
-Two tabs show the same Library two ways: Episodes and Clips, each with how many.
-Episodes: each episode as a card. A badge says Clips ready or Clean episode when Pōstify has made them.
-Under an episode's name, 4 clips → (or however many) opens the Clips tab with just that episode's clips.
-Clips: every clip, newest first, with the episode it came from. Use the box at the top to see All episodes or one.
+2 Recordings, Podcast episodes, Clips
+The tabs show your Library a few ways, each with how many:
+Recordings: every video you recorded or uploaded, as a card. A badge says Clips ready or Clean episode when Pōstify has made them.
+Under a recording's name, 4 clips → (or however many) opens the Clips tab with just that recording's clips.
+Podcast episodes: the episodes of your podcast. It shows once you have a podcast and recordings too.
+Clips: every clip, newest first, with the recording it came from. Use the box at the top to see All recordings or one.
+To keep things in folders, press ⋯ on any card, then Move to folder, or drag the card onto a folder above the tabs.
 3 Clean, Edited, Original
-Once Pōstify has worked on an episode, its card has a switch with each version:
+Once Pōstify has worked on a recording, its card has a switch with each version:
 Clean: ums, false starts and dead air taken out.
 Edited: your latest edit from Pōstify, with your trims, cuts, music, intro and outro. It shows first when there is one.
-Original: the episode as it was recorded. Nothing ever changes it.
+Original: the video as it was recorded. Nothing ever changes it.
 Made more than one edit? The ones before your latest wait under Earlier edits, each by when you made it. Pick one to play it or download it.
-4 What you can do with an episode
-Press ⋯ on an episode's card. What you do applies to the version showing.
+4 What you can do with a recording
+Press ⋯ on a recording's card. What you do applies to the version showing.
 Download the version you're looking at.
 Pōstify it makes clips and a clean episode. Once made, it reads Clips in Pōstify. See Pōstify help.
 Rename it.
 Add to my podcast makes it an episode of your show. Nothing goes to your podcast until you do this. No show yet? It reads Start my podcast.
-Post it sends the whole episode to YouTube. Other apps get its clips (see below).
+Post it sends the whole video to YouTube. Other apps get its clips (see below).
 Move to folder, or make a New folder….
 Delete, for uploads, Zoom imports and Pōstify's copies.
-A whole episode goes to YouTube only. For Instagram, TikTok, Facebook and LinkedIn, post its clips: short videos do better there, and Instagram only takes videos up to 15 minutes.
+A whole recording goes to YouTube only. For Instagram, TikTok, Facebook and LinkedIn, post its clips: short videos do better there, and Instagram only takes videos up to 15 minutes.
 5 Scheduled or Posted
 On the Clips tab, each clip shows where it stands:
 Scheduled (navy): waiting in your queue to go out.
@@ -145,13 +147,13 @@ No badge: ready, not posted yet.
 Each clip card works just like in Pōstify. Press Post to send it, or ⋯ to download it, copy its caption, trim it, edit its title, or delete it.
 6 Deleting
 a Press ⋯, then Delete. It's there for videos you uploaded or brought in from Zoom, and for Pōstify's copies.
-b Deleting an episode takes its clean copy and its clips with it. They move to Recently deleted.
+b Deleting a recording takes its clean copy and its clips with it. They move to Recently deleted.
 c Changed your mind? You have 15 days to put it back. See Recently deleted.
 Deleting one version (a clean or edited copy) leaves the original and its clips alone.
 7 Help and contact
 Email us: hello@militaryvoices.ai. A person reads every message and writes back.
 Search the help, or ask Alex: militaryvoices.ai/help.
-Your episodes, clips and versions are all in your Library.
+Your recordings, clips and versions are all in your Library.
 Open my Library
 
 === MILITARYVOICES.AI PLATFORM · www.militaryvoices.ai/help/postify ===
