@@ -649,6 +649,9 @@ export function PodcastListens({ onConnect, bare = false }: { onConnect: () => v
     if (!hostedData) return null;
     const days: Record<string, number> = {};
     for (const [a, m] of Object.entries(hostedData.appDays ?? {})) if (re.test(a)) for (const [day, n] of Object.entries(m)) days[day] = (days[day] ?? 0) + n;
+    // The app's days run as long as the feed's do: a quiet week is zeros, not "its numbers stop".
+    const feed = normSeries((hosted?.data ?? hostedData).series).filter((x) => x.date.length === 10);
+    if (feed.length) { days[feed[0].date] ??= 0; days[feed[feed.length - 1].date] ??= 0; }
     const allTime = Object.entries(hostedData.audience?.apps ?? {}).filter(([k]) => re.test(k)).reduce((a, [, n]) => a + n, 0);
     return { total: allTime || Object.values(days).reduce((a, n) => a + n, 0), unit: "downloads", episodes: [], series: Object.entries(days).map(([date, count]) => ({ date, count })).sort((a, b) => a.date.localeCompare(b.date)) };
   };
@@ -675,7 +678,7 @@ export function PodcastListens({ onConnect, bare = false }: { onConnect: () => v
     const share = appTotal ? `${Math.round((appSum(/apple/i) / appTotal) * 100)}%` : "–";
     models.push({
       key: "app:apple", label: "Apple Podcasts", logo: TAB_MARK["app:apple"], title: "Apple Podcasts", sub: "Counted from your MilitaryVoices feed, each time Apple asks for an episode", mark: markImg(TAB_MARK["app:apple"]),
-      data: apple, who: "Apple Podcasts", extra: [{ icon: <Headphones className="h-4 w-4" />, label: `of all your downloads${span.all ? "" : ", these dates"}`, n: share }],
+      data: apple, who: "Apple Podcasts", extra: [{ icon: <Headphones className="h-4 w-4" />, label: `of your MilitaryVoices downloads${span.all ? "" : ", these dates"}`, n: share }],
       empty: apple && apple.total === 0 ? (reads.has("Apple Podcasts") ? "Apple Podcasts reads your MilitaryVoices feed. Each time a listener plays or downloads an episode it shows here, so most arrive the day a new one is out." : "Nothing yet. Once your show's address in Apple Podcasts points at your MilitaryVoices feed, each listen shows here.") : undefined,
     });
     if (!spotifySrc) models.push({
@@ -687,17 +690,23 @@ export function PodcastListens({ onConnect, bare = false }: { onConnect: () => v
   }
   if (yt) models.push({
     key: "yt", label: "YouTube", logo: TAB_MARK.yt, title: <>YouTube{yt.username ? <span className="font-normal text-muted-foreground"> · @{yt.username.replace(/^@/, "")}</span> : null}</>, sub: "Your connected channel", mark: markImg("/brands/youtube.svg"),
-    data: null, who: "YouTube", main: { n: compact(yt.followers ?? 0), label: "subscribers today" },
+    data: null, who: "YouTube", main: { n: compact(yt.followers ?? 0), label: `${per(yt.followers ?? 0, "subscribers")} today` },
     empty: "Views and how each post did are under Social → Analytics.",
   });
   const pick = models.some((m) => m.key === tab) ? tab : models[0].key;
   const cur = models.find((m) => m.key === pick)!;
   // The Overview's list of where the numbers come from: one row each, a tap opens its tab.
-  const rowsFor = models.filter((m) => m.key !== "all").map((m) => {
-    const n = m.data ? inRange(m.data, span).sum : m.key === "yt" ? yt?.followers ?? 0 : null;
-    return { m, n, unit: m.key === "yt" ? "subscribers" : m.data?.unit ?? "" };
+  // Downloads and plays only, for the same dates (YouTube's subscribers are a different number, so they sit apart).
+  // Apple is counted from our feed, so it sits under MilitaryVoices as "of which": nobody adds it on top.
+  const rowsFor = models.filter((m) => m.key !== "all" && m.key !== "yt").map((m) => {
+    const n = m.data ? inRange(m.data, span).sum : null;
+    return { m, n, unit: m.data?.unit ?? "", child: m.key.startsWith("app:") && !!m.data };
   });
-  const maxRow = Math.max(1, ...rowsFor.map((r) => (r.unit === "subscribers" ? 0 : r.n ?? 0)));
+  // Each "of which" row right under MilitaryVoices.
+  const kids = rowsFor.filter((r) => r.child);
+  rowsFor.splice(0, rowsFor.length, ...rowsFor.filter((r) => !r.child).flatMap((r) => (r.m.key === "militaryvoices" ? [r, ...kids] : [r])));
+  const maxRow = Math.max(1, ...rowsFor.map((r) => r.n ?? 0));
+  const ytModel = models.find((m) => m.key === "yt");
   return (
     <section className={`${bare ? "" : "mb-6 "}space-y-4`} data-testid="podcast-listens">
       {movedFromBuzzsprout && !sources.some((x) => x.source === "buzzsprout") && (
@@ -744,18 +753,26 @@ export function PodcastListens({ onConnect, bare = false }: { onConnect: () => v
               <div className="mt-4 rounded-2xl border border-border p-4 sm:p-5" data-testid="podcast-sources">
                 <p className="mb-2 text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">Where your numbers come from{span.all ? "" : `, ${span.label}`}</p>
                 <ul className="divide-y divide-border">
-                  {rowsFor.map(({ m, n, unit }) => (
-                    <li key={m.key}>
-                      <button type="button" onClick={() => setTab(m.key)} className="group flex w-full items-center gap-3 py-2.5 text-left" data-testid={`podcast-source-${m.key}`}>
-                        <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">{m.logo ? <img src={m.logo} alt="" className="h-5 w-5 object-contain" /> : m.mark}</span>
-                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground sm:w-44 sm:flex-none">{m.label}{m.key === "militaryvoices" && <span className="hidden font-normal text-muted-foreground sm:inline"> · all apps</span>}</span>
-                        <span className="hidden h-2 flex-1 overflow-hidden rounded-full bg-muted sm:block">{n !== null && unit !== "subscribers" && <span className="block h-full rounded-full bg-gradient-to-r from-[#053877] to-[#3b82f6] dark:from-[#8ab4f8] dark:to-[#c3d7fb]" style={{ width: `${(n / maxRow) * 100}%` }} />}</span>
-                        <span className="shrink-0 text-sm tabular-nums text-foreground sm:w-36 sm:text-right">{n === null ? <span className="font-semibold text-[#b36b00] dark:text-[#F0A71F]">Add your numbers</span> : <><span className="font-bold">{compact(n)}</span> <span className="text-muted-foreground">{unit}</span></>}</span>
+                  {rowsFor.map(({ m, n, unit, child }) => (
+                    <li key={m.key} className={child ? "!border-t-0" : ""}>
+                      <button type="button" onClick={() => setTab(m.key)} className={`group flex w-full items-center gap-3 text-left ${child ? "pb-2.5 pl-3 pt-0.5" : "py-2.5"}`} data-testid={`podcast-source-${m.key}`}>
+                        <span className={`flex shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted ${child ? "h-6 w-6" : "h-7 w-7"}`}>{m.logo ? <img src={m.logo} alt="" className={child ? "h-4 w-4 object-contain" : "h-5 w-5 object-contain"} /> : m.mark}</span>
+                        <span className={`min-w-0 flex-1 truncate text-sm text-foreground sm:flex-none ${child ? "sm:w-[12.5rem]" : "font-medium sm:w-52"}`}>{child && <span className="hidden text-xs text-muted-foreground sm:inline">of which </span>}{m.label}{m.key === "militaryvoices" && <span className="hidden font-normal text-muted-foreground sm:inline"> · all apps</span>}</span>
+                        <span className="hidden h-2 flex-1 overflow-hidden rounded-full bg-muted sm:block">{n !== null && <span className={`block h-full rounded-full ${child ? "bg-[#053877]/40 dark:bg-[#8ab4f8]/50" : "bg-gradient-to-r from-[#053877] to-[#3b82f6] dark:from-[#8ab4f8] dark:to-[#c3d7fb]"}`} style={{ width: `${(n / maxRow) * 100}%` }} />}</span>
+                        <span className="shrink-0 whitespace-nowrap text-sm tabular-nums text-foreground sm:min-w-[9rem] sm:text-right">{n === null ? <span className="font-semibold text-[#b36b00] dark:text-[#F0A71F]">Add your numbers</span> : <><span className={child ? "font-semibold" : "font-bold"}>{compact(n)}</span> <span className="text-muted-foreground">{per(n, unit)}</span></>}</span>
                         <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
                       </button>
                     </li>
                   ))}
                 </ul>
+                {ytModel && yt && (
+                  <button type="button" onClick={() => setTab("yt")} className="group mt-2 flex w-full items-center gap-3 rounded-xl bg-muted/40 px-3 py-2 text-left" data-testid="podcast-source-yt">
+                    <img src="/brands/youtube.svg" alt="" className="h-5 w-5 shrink-0 object-contain" />
+                    <span className="min-w-0 flex-1 truncate text-sm text-foreground">YouTube<span className="hidden text-muted-foreground sm:inline"> · a different number: subscribers today</span></span>
+                    <span className="shrink-0 whitespace-nowrap text-sm tabular-nums"><span className="font-bold text-foreground">{compact(yt.followers ?? 0)}</span> <span className="text-muted-foreground">{per(yt.followers ?? 0, "subscribers")}</span></span>
+                    <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                  </button>
+                )}
               </div>
             )}
           </>
@@ -780,6 +797,8 @@ type Model = {
   /** A tab without download numbers still leads with the big tile: YouTube's subscribers, or "–" before a Spotify upload. */
   main?: { n: string; label: string };
 };
+/** "1 download", "2 downloads": the unit agrees with the number. */
+const per = (n: number, unit: string) => (Math.round(n) === 1 ? unit.replace(/s$/, "") : unit);
 const poss = (w: string) => (w.endsWith("s") ? `${w}'` : `${w}'s`);
 const who = (s: SourceView) => (s.source === "militaryvoices" ? "MilitaryVoices" : NAME[s.source]);
 
@@ -792,20 +811,20 @@ function Panel({ m, art, span, children }: { m: Model; art: string; span: Span; 
   if (d && v) {
     const isAll = m.key === "all" && !m.source;
     if (v.monthly && !span.all) notes.push(`${m.who} counts by the month, so this shows whole months.`);
-    if (v.startsLate) notes.push(m.source === "militaryvoices" ? `Hosted here from ${fmtDay(v.first)}, so this starts there.` : m.source === "buzzsprout" ? d.history?.complete ? `Buzzsprout's day-by-day numbers start ${fmtDay(v.first)}.` : `Buzzsprout's day-by-day numbers start ${fmtDay(v.first)} here; each refresh adds a month further back.` : `${isAll ? m.who : `${poss(m.who)} numbers`} start ${fmtDay(v.first)}, so this starts there.`);
+    if (v.startsLate) notes.push(m.source === "militaryvoices" || m.key.startsWith("app:") ? `Hosted here from ${fmtDay(v.first)}, so this starts there.` : m.source === "buzzsprout" ? d.history?.complete ? `Buzzsprout's day-by-day numbers start ${fmtDay(v.first)}.` : `Buzzsprout's day-by-day numbers start ${fmtDay(v.first)} here; each refresh adds a month further back.` : `${isAll ? m.who : `${poss(m.who)} numbers`} start ${fmtDay(v.first)}, so this starts there.`);
     if (v.endsEarly) notes.push(m.source === "spotify" ? `Spotify's numbers run to ${fmtDay(v.last)}, from your last upload.` : `${isAll ? m.who : `${poss(m.who)} numbers`} run to ${fmtDay(v.last)}.`);
     if (!span.all && !v.byDate && d.episodes.length) notes.push(`${isAll ? "Buzzsprout gives" : `${m.who} gives`} each episode's total, not by date, so Top episodes is all time.`);
   }
   const tiles: Tile[] = d && v ? [
     ...(d.episodes.length ? [{ icon: <Headphones className="h-4 w-4" />, label: span.all ? "average per episode" : v.byDate ? "average per episode played" : "average per episode, all time", n: v.avg > 0 && v.avg < 10 ? v.avg.toFixed(1).replace(/\.0$/, "") : compact(v.avg) }] : []),
-    { icon: <InfinityIcon className="h-4 w-4" />, label: `${d.unit} all time`, n: compact(d.total) },
+    { icon: <InfinityIcon className="h-4 w-4" />, label: `${per(d.total, d.unit)} all time`, n: compact(d.total) },
     ...(d.episodes.length ? [{ icon: <ListMusic className="h-4 w-4" />, label: d.episodes.length === 1 ? "episode" : "episodes", n: String(d.episodes.length) }] : []),
-    ...(d.followers ? [{ icon: <Users className="h-4 w-4" />, label: "followers", n: compact(d.followers) }] : []),
+    ...(d.followers ? [{ icon: <Users className="h-4 w-4" />, label: per(d.followers, "followers"), n: compact(d.followers) }] : []),
     ...(m.extra ?? []),
   ].slice(0, 3) : (m.extra ?? []);
   const apps = v?.apps && Object.keys(v.apps).length > 0 ? v.apps : null;
   const audience = !!(apps || d?.audience?.age || d?.audience?.gender || (d?.audience?.countries && Object.keys(d.audience.countries).length));
-  const mainLabel = d ? (span.all && m.source === "podbean" ? `${d.unit}, last 2 years` : `${d.unit}, ${span.label}`) : "";
+  const mainLabel = d && v ? (span.all && m.source === "podbean" ? `${per(v.sum, d.unit)}, last 2 years` : `${per(v.sum, d.unit)}, ${span.label}`) : "";
   const changeText = change === null ? "" : change >= 900 ? `${Math.round(v!.sum / v!.prevSum!)}×` : `${change > 0 ? "+" : ""}${change}%`;
   return (
     <div className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6" data-testid={`listens-${m.key}`}>
