@@ -44,7 +44,7 @@
 import "dotenv/config";
 import { AsyncLocalStorage } from "node:async_hooks";
 import { spawn } from "node:child_process";
-import { createWriteStream, readFileSync } from "node:fs";
+import { createWriteStream, readFileSync, writeFileSync } from "node:fs";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -225,7 +225,7 @@ const FFMPEG_SLOTS = Math.max(1, Number(process.env.FFMPEG_SLOTS || Math.min(Mat
 const TMP_BUDGET = Number(process.env.TMP_BUDGET_BYTES || 1.3e9);
 let tmpHeld = 0;
 async function reserveTmp(bytes: number, tag: string): Promise<() => void> {
-  if (bytes > TMP_BUDGET) throw new Error(`the recording is ${(bytes / 1e9).toFixed(1)}GB, more than this worker's 2GB temporary disk can hold`);
+  if (bytes > TMP_BUDGET) throw new Error(`the recording is ${(bytes / 1e9).toFixed(1)}GB, more than this worker's ${(TMP_BUDGET / 1e9).toFixed(1)}GB of temporary disk can hold`);
   let told = false;
   while (tmpHeld + bytes > TMP_BUDGET) {
     if (!told) { console.log(`${tag}: waiting for temporary disk (${(tmpHeld / 1e6).toFixed(0)}MB in use)`); told = true; }
@@ -2825,6 +2825,19 @@ const holding = new Set<number>();
 /** Episode edits in hand: a redeploy mid-edit hands those back too. */
 const editing = new Set<number>();
 
+/** Which machine this is, in its notes: "vps" on the Alex VPS (WORKER_NAME), "render" on Render. */
+const WORKER = (process.env.WORKER_NAME || (process.env.RENDER ? "render" : os.hostname())).slice(0, 40);
+
+/**
+ * Jobs in hand right now, in a file beside the temporary work (/tmp/worker-busy). The VPS updater reads it from
+ * outside the container and waits for 0 before it swaps in a new build (agent/vps/update.sh).
+ */
+let inHand = 0;
+function markBusy(delta: number): void {
+  inHand = Math.max(0, inHand + delta);
+  try { writeFileSync(path.join(os.tmpdir(), "worker-busy"), `${inHand}\n`); } catch { /* nothing reads it on Render */ }
+}
+
 /** What the container's memory looked like, for the note left on the way out (cgroup v2). */
 function memoryNote(): string {
   const gb = (n: number) => `${(n / 1e9).toFixed(1)}GB`;
@@ -2837,7 +2850,7 @@ function memoryNote(): string {
 
 async function release(why = "stopping"): Promise<void> {
   // Say why on the way out (8 Oct: restarts every five minutes, and no way to tell a redeploy from memory).
-  await api("POST", "/api/agent/worker-note", { text: `${why} · holding ${[...holding].join(", ") || "nothing"} · ${memoryNote()}` }).catch(() => {});
+  await api("POST", "/api/agent/worker-note", { text: `${WORKER}: ${why} · holding ${[...holding].join(", ") || "nothing"} · ${memoryNote()}` }).catch(() => {});
   const ids = [...holding];
   const edits = [...editing];
   holding.clear();
@@ -2873,6 +2886,15 @@ async function tick(quick = false): Promise<boolean> {
     ? { can: ["edit", "music"], quickOnly: true }
     : { can: ["edit", "episode-edit", "segment-cut", "episode-audio", "episode-bookends", "episode-stitch", "episode-segments", "radio-cut", "episode-copy", "episode-still", "episode-video", "living-squeeze", "transcript", "import", "music", "suggest", "layout"] });
   if (!job) return false;
+  markBusy(1);
+  try {
+    return await work(job);
+  } finally {
+    markBusy(-1);
+  }
+}
+
+async function work(job: Job): Promise<boolean> {
   // An edit is one clip, not the recording: a shutdown mid-edit leaves it to
   // the 15-minute reclaim rather than requeuing the whole episode.
   const clipJob = !(job.clipEdit || job.episodeEdit || job.segmentCut || job.episodeAudio || job.radioCut || job.episodeBookends || job.episodeStitch || job.episodeStill || job.episodeVideo || job.transcriptJob || job.importFrom || job.musicMix || job.suggestEdits || job.layoutProbe);
@@ -2919,7 +2941,11 @@ async function main(): Promise<void> {
   if (!process.env.ANTHROPIC_API_KEY) {
     console.warn("No ANTHROPIC_API_KEY — falling back to speech density, which picks worse moments.");
   }
-  console.log(`${LANES} jobs at a time, ${FFMPEG_SLOTS} ffmpeg at a time (${cpuLimit()} CPU, ${(memoryLimit() / 1e9).toFixed(1)}GB)`);
+  const shape = `${LANES} jobs at a time, ${FFMPEG_SLOTS} ffmpeg at a time (${cpuLimit()} CPU, ${(memoryLimit() / 1e9).toFixed(1)}GB, ${(TMP_BUDGET / 1e9).toFixed(1)}GB temporary disk)`;
+  console.log(`${shape} on ${WORKER}`);
+  markBusy(0);
+  // Say where it started, so worker_notes shows which machine is taking the jobs.
+  await api("POST", "/api/agent/worker-note", { text: `${WORKER}: started · ${shape}` }).catch(() => {});
   // Each lane claims its own jobs (claims are atomic on the server), so a long
   // episode in one lane doesn't hold up a short one behind it.
   const lane = async (n: number) => {
