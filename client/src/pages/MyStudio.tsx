@@ -21,7 +21,7 @@ import { PhoneStudio } from "@/components/room/PhoneStudio";
 import { LayoutEditor } from "@/components/room/LayoutEditor";
 import { MarkClip } from "@/components/room/MarkClip";
 import { RoomStage } from "@/components/RoomStage";
-import { PrompterNews, PrompterOverlay, PrompterSwitch, ScriptsBar, useStudioNotes, type NotesSync } from "@/components/room/Teleprompter";
+import { PrompterNews, PrompterOverlay, PrompterSwitch, ScriptsBar, usePrompter, useStudioNotes, type NotesSync } from "@/components/room/Teleprompter";
 import { pdfToPictures, useDeck } from "@/components/room/slides";
 import { EXTRA_CAMS, addExtraCamera, freeCameras, isExtraCam, stopAllExtraCameras, stopExtraCamera, useExtraCams } from "@/components/room/extraCamera";
 
@@ -289,6 +289,11 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
   const [picked, setTab] = useState<Tab | null>(null);
   const noteKey = owner ? String(studio?.id ?? "mine") : roomName;
   const [notes, setNotes, notesSync] = useStudioNotes(noteKey, owner && !!studio?.id);
+  // One name for it (Andrew, 22 Nov: "just put teleprompter on there on the sidebar, and if it's turned on,
+  // then maybe turn it green"). Guests have no prompter, so theirs stays Notes.
+  const [prompterPrefs] = usePrompter(noteKey);
+  const prompterOn = owner && prompterPrefs.on;
+  const notesLabel = owner ? "Teleprompter" : "Notes";
   const [sheet, setSheet] = useState(false);
   const [settings, setSettings] = useState(false);
   const [busy, setBusy] = useState<"" | "rec" | "live">("");
@@ -456,7 +461,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
             <BarButton label={isScreenShareEnabled ? "Stop share" : "Share"} active={isScreenShareEnabled} onClick={() => void share()}><MonitorUp className="h-[22px] w-[22px]" /></BarButton>
             {owner && <BarButton label="Invite" onClick={copyInvite}><UserPlus className="h-[22px] w-[22px]" /></BarButton>}
             {/* Notes opens a side panel, which only shows at lg and up. */}
-            <BarButton label="Notes" wide active={tab === "notes"} onClick={() => setTab("notes")}><NotebookPen className="h-[22px] w-[22px]" /></BarButton>
+            <BarButton label={notesLabel} wide={owner ? "w-[92px]" : true} active={tab === "notes"} green={prompterOn} onClick={() => setTab("notes")}><NotebookPen className="h-[22px] w-[22px]" /></BarButton>
             <BarButton label="Settings" onClick={() => setSettings(true)}><Settings className="h-[22px] w-[22px]" /></BarButton>
             <div className="mx-1 h-9 w-px bg-[#e4e7ec]" />
             <button type="button" onClick={() => leave()} className="flex h-[58px] w-[54px] flex-col items-center justify-center gap-1 rounded-xl bg-[#fef3f2] text-[11px] font-bold text-[#b42318] hover:bg-[#fee4e2] sm:w-[76px] sm:text-xs" data-testid="my-studio-leave"><LogOut className="h-[22px] w-[22px]" />Leave</button>
@@ -464,7 +469,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
         </div>
 
         {/* Right panel */}
-        <aside className={`hidden shrink-0 border-l border-[#e4e7ec] bg-white lg:flex ${editing ? "w-[360px] 2xl:w-[392px]" : "w-[360px]"}`}>
+        <aside className={`hidden shrink-0 border-l border-[#e4e7ec] bg-white lg:flex ${editing ? "w-[372px] 2xl:w-[404px]" : "w-[372px]"}`}>
           <div className="flex min-w-0 flex-1 flex-col">
             {tab === "look" && editing && <LookPanel kit={kit} />}
             {tab === "media" && v3 && <MediaPanel kit={kit} />}
@@ -474,12 +479,12 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
             {tab === "recording" && owner && <RecordingPanel studio={studio} now={now} busy={busy} onRecord={(on) => void record(on)} onGoLive={() => setSheet(true)} onEndLive={() => void endLive()} />}
             {tab === "chat" && <ChatPanel />}
           </div>
-          <nav className="flex w-[72px] shrink-0 flex-col items-center gap-1 border-l border-[#eef0f4] pt-3" aria-label="Panels">
+          <nav className="flex w-[84px] shrink-0 flex-col items-center gap-1 border-l border-[#eef0f4] pt-3" aria-label="Panels">
             {editing && !v3 && <RailButton on={tab === "look"} onClick={() => setTab("look")} icon={<Palette className="h-[22px] w-[22px]" />} label="Look" />}
             {v3 && <RailButton on={tab === "media"} onClick={() => setTab("media")} icon={<Clapperboard className="h-[22px] w-[22px]" />} label="Media" />}
             {v3 && <RailButton on={tab === "style"} onClick={() => setTab("style")} icon={<Palette className="h-[22px] w-[22px]" />} label="Style" />}
             <RailButton on={tab === "people"} onClick={() => setTab("people")} icon={<Users className="h-[22px] w-[22px]" />} label="People" />
-            <RailButton on={tab === "notes"} onClick={() => setTab("notes")} icon={<NotebookPen className="h-[22px] w-[22px]" />} label="Notes" />
+            <RailButton on={tab === "notes"} green={prompterOn} onClick={() => setTab("notes")} icon={<NotebookPen className="h-[22px] w-[22px]" />} label={notesLabel} testId="rail-notes" />
             {owner && <RailButton on={tab === "recording"} onClick={() => setTab("recording")} icon={<Circle className={`h-[22px] w-[22px] ${rec ? "fill-[#d92d20] text-[#d92d20]" : ""}`} />} label="Recording" />}
             <RailButton on={tab === "chat"} onClick={() => setTab("chat")} icon={<MessageSquare className="h-[22px] w-[22px]" />} label="Chat" />
           </nav>
@@ -512,17 +517,23 @@ export function LeaveDialog({ live, onEnd, onKeep, onCancel }: { live: boolean; 
   );
 }
 
-function BarButton({ label, onClick, off, active, wide, children }: { label: string; onClick: () => void; off?: boolean; active?: boolean; wide?: boolean; children: ReactNode }) {
+/** `wide`: only at lg and up (a side panel opens), at the given width if a string. `green`: something it controls is on. */
+function BarButton({ label, onClick, off, active, wide, green, children }: { label: string; onClick: () => void; off?: boolean; active?: boolean; wide?: boolean | string; green?: boolean; children: ReactNode }) {
   return (
-    <button type="button" onClick={onClick} aria-pressed={active || off ? true : undefined} className={`${wide ? "hidden lg:flex" : "flex"} h-[58px] w-[54px] flex-col items-center justify-center gap-1 rounded-xl text-center text-[11px] font-semibold leading-tight sm:w-[76px] sm:text-xs ${off ? "bg-[#fef3f2] text-[#b42318]" : active ? "bg-[#eef3fb] text-[#053877]" : "text-[#344054] hover:bg-[#f2f4f7]"}`}>
-      {children}{label}
+    <button type="button" onClick={onClick} aria-pressed={active || off ? true : undefined} className={`${wide ? "hidden lg:flex" : "flex"} relative h-[58px] flex-col items-center justify-center gap-1 rounded-xl text-center text-[11px] font-semibold leading-tight sm:text-xs ${typeof wide === "string" ? wide : "w-[54px] sm:w-[76px]"} ${off ? "bg-[#fef3f2] text-[#b42318]" : green ? "bg-[#ecfdf3] text-[#067647] hover:bg-[#dcfae6]" : active ? "bg-[#eef3fb] text-[#053877]" : "text-[#344054] hover:bg-[#f2f4f7]"}`} data-testid={green ? "bar-prompter-on" : undefined}>
+      {green && <span className="absolute right-2 top-2 h-2 w-2 rounded-full bg-[#17b26a]" aria-hidden="true" />}
+      {children}{label}{green && <span className="sr-only"> (on)</span>}
     </button>
   );
 }
 
-function RailButton({ on, onClick, icon, label }: { on: boolean; onClick: () => void; icon: ReactNode; label: string }) {
+/** `green`: what it opens is on (the teleprompter), with a dot, whether or not its panel is open. */
+function RailButton({ on, onClick, icon, label, green, testId }: { on: boolean; onClick: () => void; icon: ReactNode; label: string; green?: boolean; testId?: string }) {
   return (
-    <button type="button" onClick={onClick} aria-current={on ? "page" : undefined} className={`flex w-[62px] flex-col items-center gap-1 rounded-xl pb-[7px] pt-[9px] text-[11px] ${on ? "bg-[#eef3fb] font-bold text-[#053877]" : "font-semibold text-[#667085] hover:bg-[#f9fafb]"}`}>{icon}{label}</button>
+    <button type="button" onClick={onClick} aria-current={on ? "page" : undefined} className={`relative flex w-[78px] flex-col items-center gap-1 rounded-xl pb-[7px] pt-[9px] text-[11px] ${green ? `bg-[#ecfdf3] text-[#067647] ${on ? "font-bold ring-1 ring-inset ring-[#abefc6]" : "font-semibold hover:bg-[#dcfae6]"}` : on ? "bg-[#eef3fb] font-bold text-[#053877]" : "font-semibold text-[#667085] hover:bg-[#f9fafb]"}`} data-testid={testId} data-on={green ? "yes" : undefined}>
+      {green && <span className="absolute right-3 top-2 h-2 w-2 rounded-full bg-[#17b26a]" aria-hidden="true" />}
+      {icon}{label}{green && <span className="sr-only"> (on)</span>}
+    </button>
   );
 }
 
@@ -999,7 +1010,7 @@ function PeoplePanel({ owner, studio, onCopy }: { owner: boolean; studio?: Studi
 function NotesPanel({ roomKey, text, setText, prompter, sync }: { roomKey: string; text: string; setText: (t: string) => void; prompter: boolean; sync?: NotesSync }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col">
-      <PanelHead title="Notes" line={sync === undefined ? "Only you see these. They stay on this computer." : "Only you see these. They're saved to your studio, so they're here on any computer."} />
+      <PanelHead title={prompter ? "Teleprompter" : "Notes"} line={sync === undefined ? "Only you see these. They stay on this computer." : "Only you see these. They're saved to your studio, so they're here on any computer."} />
       {sync !== undefined && sync !== "" && (
         <p className={`mx-4 mt-2 text-[12px] ${sync === "error" ? "text-[#b42318]" : "text-[#667085]"}`} data-testid="notes-sync">
           {sync === "saving" ? "Saving…" : sync === "saved" ? "Saved to your studio" : "Couldn't save just now. It's kept on this computer, and we'll try again when you type."}
