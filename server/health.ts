@@ -3,7 +3,7 @@
 // Each check asks its service something free (who am I, list one thing,
 // account status), never anything that spends credits or sends anything.
 // A service with no free question is checked for its key only, and says so.
-// Two things can't be asked, only watched: the clip worker on Render and
+// Two things can't be asked, only watched: the clip worker (on the Alex VPS since 22 Nov 2026) and
 // Vercel's scheduled jobs. Both leave a heartbeat (beat()) as they work.
 //
 // /api/admin/health runs the checks for Admin → System health.
@@ -110,7 +110,7 @@ const DEFS: Def[] = [
     },
   },
   {
-    key: "worker", db: true, name: "Clip worker (Render)", group: "The platform", powers: "Clips, MP3s, imports, transcripts, magazine segments",
+    key: "worker", db: true, name: "Clip worker (VPS)", group: "The platform", powers: "Clips, MP3s, imports, transcripts, magazine segments",
     run: async () => {
       const t = await lastBeat("worker");
       if (!t) return { state: "down", detail: "Hasn't checked in yet" };
@@ -125,7 +125,7 @@ const DEFS: Def[] = [
     },
   },
   {
-    key: "queue", db: true, name: "Worker queue (Render)", group: "The platform", powers: "How much work is waiting for the clip worker, and whether any of it is stuck",
+    key: "queue", db: true, name: "Worker queue (VPS)", group: "The platform", powers: "How much work is waiting for the clip worker, and whether any of it is stuck",
     // Every queue the worker takes from, counted where it lives. Red when work piles up or a job
     // has been "running" for over half an hour (the worker died holding it and hasn't handed it on).
     run: async () => {

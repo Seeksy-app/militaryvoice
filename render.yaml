@@ -1,21 +1,24 @@
-# Render Blueprint: the clipper as an always-on background worker.
-# New → Blueprint in the Render dashboard, pick this repo, and it creates the
-# service. Paste the three secrets when it asks (they are never in this file).
+# RETIRED 22 Nov 2026. The clipper runs on the Alex VPS now (agent/vps/README.md): Render's
+# included 25GB of bandwidth ran out ($0.15/GB after) and its 2GB /tmp couldn't hold full-day
+# Radio recordings.
+#
+# On Render (done 22 Nov): militaryvoices-clipper is SUSPENDED, its Auto-Deploy is Off, and this
+# Blueprint's Auto Sync is No, so pushes to this file change nothing there. Don't press Manual
+# sync or Resume: two workers would share the queue (claims are atomic, but the Render one still
+# has the 2GB disk). gov-affairs-app is a separate Blueprint (Gov Affairs V2); leave it alone.
+#
+# Kept as the record of how the Render worker was set up, in case it's ever needed again.
 services:
   - type: worker
     name: militaryvoices-clipper
     runtime: docker
     dockerfilePath: ./agent/Dockerfile
     dockerContext: .
-    # Starter's 512MB ran out on a full episode (24 Sep 2026), and Standard's
-    # 2GB on two caption renders at once (27 Sep). Clips render here since
-    # then, and encoding is CPU-bound: more CPUs is what makes them faster.
-    # 4c-8g ($175/mo) sat mostly idle after the Marathon, so 2c-4g since
-    # 6 Nov 2026; move it up in the dashboard for big event weeks.
-    # Keep this in step with the dashboard, or a sync puts it back.
-    plan: 2c-4g
+    # Last size on Render: 4c-8g (dashboard), raised from 2c-4g for the Radio week.
+    plan: 4c-8g
     branch: main
-    autoDeploy: true
+    # Off, so even a manual sync never deploys it on a push.
+    autoDeploy: false
     buildFilter:
       paths:
         - agent/**
