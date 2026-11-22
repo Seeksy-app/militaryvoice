@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { BrandMark, BrandGroup } from "@/components/BrandMark";
 import { ConnectYoutube } from "@/components/ConnectYoutube";
+import { InfoTip } from "@/components/InfoTip";
 
 /**
  * Integrations → Live, all of it in one place (Andrew, 22 Nov 2026: the one-place Live mockup, "Yes, build it").
@@ -132,6 +133,14 @@ function KeysRows() {
   );
 }
 
+// Andrew, 22 Nov: hover-overs on the StreamYard icons saying we take their episodes in for clips, reels and their page ("we do the RTMP").
+const STREAM_IN_TIP = (
+  <>
+    <p className="font-semibold">Make your show in StreamYard, Restream or OBS?</p>
+    <p className="mt-1 text-muted-foreground">Send it here too. Each episode lands in your Library for clips and reels, and plays on your MilitaryVoices page. We handle the RTMP.</p>
+  </>
+);
+
 /** 2. Stream in: their StreamYard, Restream or OBS sends to us. */
 function StreamInBlock() {
   const qc = useQueryClient();
@@ -149,7 +158,7 @@ function StreamInBlock() {
   if (!data) return null;
   const k = data.key;
   const head = (
-    <LiveRow testId="row-stream-in" icon={<BrandGroup brands={["streamyard", "restream", "obs"]} />} name="StreamYard, Restream or OBS"
+    <LiveRow testId="row-stream-in" icon={<InfoTip label="About streaming in from StreamYard, Restream or OBS" tip={STREAM_IN_TIP} testId="tip-stream-in"><BrandGroup brands={["streamyard", "restream", "obs"]} /></InfoTip>} name="StreamYard, Restream or OBS"
       line={!data.configured ? "Streaming in isn't switched on yet." : k ? (k.arriving ? "Your stream is coming in now." : "Make your show there the way you always do. Add a custom RTMP destination with these two lines.") : "Make your show there the way you always do, and send it to us too."}
       right={data.configured && !k ? <button type="button" onClick={() => make.mutate()} disabled={make.isPending} className="flex h-8 items-center gap-1.5 rounded-full px-4 text-xs font-bold text-white disabled:opacity-60" style={{ background: NAVY }} data-testid="button-stream-in-key">{make.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Get my stream key</button> : undefined} />
   );
