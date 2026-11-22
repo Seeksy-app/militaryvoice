@@ -188,7 +188,7 @@ import { registerBioPage, registerBioAgent, claimLivingSqueeze, subscribersFor, 
 import { registerGuests, guestByToken, markGuestJoined, publicGuestsFor } from "./guests.js";
 import { registerGuestInvites, takeAnsweredInvite } from "./guestInvites.js";
 import { registerCaptures, onCaptureWebhook } from "./captures.js";
-import { registerStreamIn, onStreamInWebhook } from "./streamIn.js";
+import { registerStreamIn, onStreamInWebhook, streamInSkipsClips } from "./streamIn.js";
 import { registerIngest } from "./ingestEngine.js";
 import { registerRadioStreamIn, onRadioFeedWebhook } from "./radioStreamIn.js";
 import { registerMail } from "./mail.js";
@@ -9676,7 +9676,8 @@ export function registerRoutes(app: Express): void {
       // A finished segment is a clip job. Queued rather than done here: the
       // work needs ffmpeg and minutes, neither of which a serverless function
       // has, so the worker picks it up.
-      if (ok && finished?.id && agentToken()) {
+      // A stream-in test, or one under two minutes, is kept in the Library but makes no clips.
+      if (ok && finished?.id && agentToken() && !(await streamInSkipsClips({ id: finished.id, durationSec: finished.durationSec ?? 0 }).catch(() => false))) {
         await storage.setClipStatus(finished.id, "queued", "");
       }
     } catch (err) {

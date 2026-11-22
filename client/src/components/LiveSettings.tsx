@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Copy, ExternalLink, Loader2, Trash2 } from "lucide-react";
 import { Switch } from "@/components/ui/switch";
@@ -20,7 +20,8 @@ type LivePage = { on: boolean; url: string; handle: string; streamInOut: boolean
 const LIVE_PAGE = ["/api/host/live-page"];
 type StudioKeys = { streams: { id: string; name: string; on: boolean; key?: string }[] };
 const MY_STUDIO = ["/api/host/my-studio"];
-type StreamIn = { configured: boolean; key: { url: string; streamKey: string; status: "idle" | "live" | "paused"; arriving: boolean; pausedWhy: string; problem: string } | null; usage: { usedMin: number; capMin: number } };
+type StreamInState = "unused" | "receiving" | "working" | "problem";
+type StreamIn = { configured: boolean; key: { url: string; streamKey: string; status: "idle" | "live" | "paused"; arriving: boolean; pausedWhy: string; problem: string; state: StreamInState; lastAt: string; lastWasTest: boolean; testUntil: string } | null; usage: { usedMin: number; capMin: number } };
 const STREAM_IN = ["/api/host/stream-in"];
 
 const FACEBOOK_RTMP = "rtmps://live-api-s.facebook.com:443/rtmp/";
@@ -141,11 +142,44 @@ const STREAM_IN_TIP = (
   </>
 );
 
+/**
+ * Whether stream in works (Andrew, 22 Nov: "Is there any way for us to say 'connected'?"). StreamYard never tells us a
+ * destination was saved, so the pill shows what we know from real streams: not used yet, receiving now, working (with
+ * when the last one came in), or a problem in plain words.
+ */
+function StreamInPill({ state }: { state: StreamInState }) {
+  const base = "inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-[12px] font-semibold";
+  if (state === "receiving") return <span className={`${base} bg-[#ecfdf3] text-[#067647]`} data-testid="stream-in-pill"><span className="relative flex h-2 w-2"><span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-[#17b26a] opacity-60" /><span className="relative inline-flex h-2 w-2 rounded-full bg-[#17b26a]" /></span>Receiving now</span>;
+  if (state === "working") return <span className={`${base} bg-[#ecfdf3] text-[#067647]`} data-testid="stream-in-pill"><Check className="h-3.5 w-3.5" />Working</span>;
+  if (state === "problem") return <span className={`${base} bg-[#fef3f2] text-[#b42318]`} data-testid="stream-in-pill">Needs a look</span>;
+  return <span className={`${base} bg-[#f2f4f7] text-[#475467] dark:bg-white/10 dark:text-muted-foreground`} data-testid="stream-in-pill">Not used yet</span>;
+}
+
+/** "Sun, Nov 22, 5:31 PM EST", in their own time zone. */
+const whenLocal = (iso: string) => new Date(iso).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
+
 /** 2. Stream in: their StreamYard, Restream or OBS sends to us. */
 function StreamInBlock() {
   const qc = useQueryClient();
   const { toast } = useToast();
-  const { data } = useQuery<StreamIn>({ queryKey: STREAM_IN, queryFn: async () => (await apiRequest("GET", "/api/host/stream-in")).json(), refetchInterval: 30_000 });
+  // Every 3 seconds while a test waits or a stream is coming in, so the pill flips within seconds; else every 30.
+  const { data } = useQuery<StreamIn>({
+    queryKey: STREAM_IN,
+    queryFn: async () => (await apiRequest("GET", "/api/host/stream-in")).json(),
+    refetchInterval: (q) => { const kk = (q.state.data as StreamIn | undefined)?.key; return kk && (kk.testUntil || kk.state === "receiving") ? 3_000 : 30_000; },
+  });
+  const test = useMutation({
+    mutationFn: async (on: boolean) => (await (await apiRequest(on ? "POST" : "DELETE", "/api/host/stream-in/test")).json()) as StreamIn,
+    onSuccess: (d) => qc.setQueryData(STREAM_IN, d),
+    onError: (e: Error) => toast({ title: "Couldn't start the test", description: e.message, variant: "destructive" }),
+  });
+  // A test (or any stream) that just came through and ended: say so once.
+  const prev = useRef<StreamInState | undefined>(undefined);
+  const st = data?.key?.state;
+  useEffect(() => {
+    if (prev.current === "receiving" && st === "working") toast({ title: "It works", description: "Your stream came through to MilitaryVoices." });
+    prev.current = st;
+  }, [st, toast]);
   const page = useLivePage();
   const set = useSetLivePage();
   const [show, setShow] = useState(false);
@@ -157,10 +191,21 @@ function StreamInBlock() {
   const copy = async (v: string, what: string) => { try { await navigator.clipboard.writeText(v); toast({ title: `${what} copied` }); } catch { toast({ title: "Couldn't copy", description: "Select it and copy it by hand.", variant: "destructive" }); } };
   if (!data) return null;
   const k = data.key;
+  const testing = !!k?.testUntil && k.state !== "receiving";
+  const keyLine = !k ? "" : k.state === "receiving"
+    ? (k.lastWasTest ? "Your test is coming in. End it in StreamYard whenever you like." : "Your stream is coming in now.")
+    : testing ? <>In StreamYard, go live for 30 seconds to your MilitaryVoices destination, then end it. <button type="button" onClick={() => test.mutate(false)} className="font-semibold text-[#053877] hover:underline dark:text-white" data-testid="button-stream-in-test-stop">Stop testing</button></>
+    : k.lastAt && k.state !== "unused" ? <>Last stream in: <span className="whitespace-nowrap">{whenLocal(k.lastAt)}</span>{k.lastWasTest ? " (a test, in your Library as Test stream)." : "."}</>
+    : "Make your show there the way you always do. Add a custom RTMP destination with these two lines.";
   const head = (
-    <LiveRow testId="row-stream-in" icon={<InfoTip label="About streaming in from StreamYard, Restream or OBS" tip={STREAM_IN_TIP} testId="tip-stream-in"><BrandGroup brands={["streamyard", "restream", "obs"]} /></InfoTip>} name="StreamYard, Restream or OBS"
-      line={!data.configured ? "Streaming in isn't switched on yet." : k ? (k.arriving ? "Your stream is coming in now." : "Make your show there the way you always do. Add a custom RTMP destination with these two lines.") : "Make your show there the way you always do, and send it to us too."}
-      right={data.configured && !k ? <button type="button" onClick={() => make.mutate()} disabled={make.isPending} className="flex h-8 items-center gap-1.5 rounded-full px-4 text-xs font-bold text-white disabled:opacity-60" style={{ background: NAVY }} data-testid="button-stream-in-key">{make.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Get my stream key</button> : undefined} />
+    <LiveRow testId="row-stream-in" icon={<InfoTip label="About streaming in from StreamYard, Restream or OBS" tip={STREAM_IN_TIP} testId="tip-stream-in"><BrandGroup brands={["streamyard", "restream", "obs"]} /></InfoTip>}
+      name={k ? <span className="inline-flex flex-wrap items-center gap-x-2 gap-y-1">StreamYard, Restream or OBS <StreamInPill state={k.state} /></span> : "StreamYard, Restream or OBS"}
+      line={!data.configured ? "Streaming in isn't switched on yet." : k ? keyLine : "Make your show there the way you always do, and send it to us too."}
+      right={data.configured && !k
+        ? <button type="button" onClick={() => make.mutate()} disabled={make.isPending} className="flex h-8 items-center gap-1.5 rounded-full px-4 text-xs font-bold text-white disabled:opacity-60" style={{ background: NAVY }} data-testid="button-stream-in-key">{make.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Get my stream key</button>
+        : k && !testing && k.state !== "receiving" && k.status !== "paused"
+          ? <button type="button" onClick={() => test.mutate(true)} disabled={test.isPending} className={`${ghost} flex items-center gap-1.5`} data-testid="button-stream-in-test">{test.isPending && <Loader2 className="h-3.5 w-3.5 animate-spin" />} Test it</button>
+          : testing ? <span className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground" data-testid="stream-in-waiting"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Waiting for it</span> : undefined} />
   );
   if (!k) return head;
   const line = (label: string, value: string, shown: string, testId: string) => (

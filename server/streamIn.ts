@@ -142,13 +142,18 @@ async function startClaimed(c: StreamKeyRow, continued?: string): Promise<Stream
   const filepath = `streams/${c.id}-${stamp}.mp4`;
   const when = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" }).format(new Date());
   const name = await showName(c.ownerEmail);
-  const title = continued ? `${continued.replace(/ \(continued\)$/, "")} (continued)` : `${name || "Live stream"} · ${when}`;
+  const test = !continued && (await testArmed(c));
+  const title = continued ? `${continued.replace(/ \(continued\)$/, "")} (continued)` : test ? `Test stream · ${when}` : `${name || "Live stream"} · ${when}`;
   const egressId = await startRoomRecording(c.room, filepath);
   // A Library recording like any other; the event and studio are only bookkeeping.
   const event = await storage.getFeaturedEvent();
   const studio = await storage.getOrCreateStudio(event.id);
   const rec = await storage.createRecording({ eventId: event.id, studioId: studio.id, signupId: null, email: c.ownerEmail, title, egressId, filepath });
   await db.insert(streamSessions).values({ keyId: c.id, ownerEmail: c.ownerEmail, recordingId: rec.id, egressId, startedAt: now() });
+  if (test) {
+    await storage.setSetting(testRecKey(rec.id), now());
+    await storage.setSetting(testArmKey(c.id), ""); // one test per press
+  }
   // A fresh start only lands if the claim is still ours: a stop or a new key in the meantime released it, and then this recording must not run on.
   const [out] = await db
     .update(streamKeys)
@@ -174,6 +179,7 @@ const fwdKey = (id: number) => `streamin:fwd:${id}`;
 async function startForward(c: StreamKeyRow): Promise<void> {
   if (c.engine !== "livekit" || !c.room || (await storage.getSetting(fwdKey(c.id)))) return;
   if (!(await streamInOutOn(c.ownerEmail))) return;
+  if (c.recordingId && (await storage.getSetting(testRecKey(c.recordingId)).catch(() => null))) return; // a test stays here
   const targets = await liveTargetsOf(c.ownerEmail);
   if (!targets.length) return;
   try {
@@ -189,6 +195,31 @@ async function stopForward(c: StreamKeyRow): Promise<void> {
   if (!id) return;
   await stopEgressById(id).catch(() => {});
   await storage.setSetting(fwdKey(c.id), "");
+}
+
+/**
+ * Test it (Andrew, 22 Nov 2026: "Is there any way for us to say 'connected'?"). StreamYard never tells us a destination
+ * was saved, so the only proof is a real stream. Test it arms the key for 15 minutes: the next stream in is labelled
+ * "Test stream · <date>" in the Library, isn't sent on to YouTube or the other keys, and makes no clips. A real stream
+ * under two minutes makes no clips either (a mis-start), though it still goes out live, since we can't know its length
+ * when it starts.
+ */
+const TEST_WINDOW_MS = 15 * 60_000;
+const SHORT_SEC = 120;
+const testArmKey = (id: number) => `streamin:test:${id}`;
+const testRecKey = (recId: number) => `streamin:testrec:${recId}`;
+async function testArmed(c: StreamKeyRow): Promise<boolean> {
+  const at = await storage.getSetting(testArmKey(c.id)).catch(() => null);
+  return !!at && Date.now() - Date.parse(at) < TEST_WINDOW_MS;
+}
+/** Whether a finished Library recording came from a test or a too-short stream in, so it gets no clips. */
+export async function streamInSkipsClips(rec: { id: number; durationSec: number }): Promise<boolean> {
+  const [s] = await db.select().from(streamSessions).where(eq(streamSessions.recordingId, rec.id)).limit(1);
+  if (!s) return false;
+  if (await storage.getSetting(testRecKey(rec.id)).catch(() => null)) return true;
+  // LiveKit sometimes reports no duration: then the session's own seconds, and if neither is known it's a real show.
+  const secs = rec.durationSec || s.seconds;
+  return secs > 0 && secs < SHORT_SEC;
 }
 
 async function stopRecording(c: StreamKeyRow): Promise<StreamKeyRow> {
@@ -261,6 +292,13 @@ async function view(c: StreamKeyRow | undefined) {
   }
   const cap = email ? await capSeconds(email) : 0;
   const used = email ? await usedSeconds(email) : 0;
+  // Whether it works, from the only proof there is: a real stream (StreamYard never says a destination was saved).
+  const [last] = c ? await db.select().from(streamSessions).where(eq(streamSessions.keyId, c.id)).orderBy(desc(streamSessions.id)).limit(1) : [];
+  const [lastRec] = last?.recordingId ? await db.select().from(recordings).where(eq(recordings.id, last.recordingId)).limit(1) : [];
+  const receiving = !!c && (live || (c.engine === "own" ? c.status === "live" : !!c.egressId && !c.lostAt));
+  const failed = lastRec?.status === "Failed";
+  const problem = c ? c.problem || (linkError ? "Your stream is reaching us but something is wrong with it. Check your software is sending video and sound, then stop and start it again." : "") || (failed && !receiving ? "Your last stream reached us but didn't save. Try going live again, and tell us if it happens twice." : "") : "";
+  const state: "unused" | "receiving" | "working" | "problem" = !c ? "unused" : receiving ? "receiving" : problem ? "problem" : last ? "working" : "unused";
   return {
     key: c
       ? {
@@ -270,7 +308,13 @@ async function view(c: StreamKeyRow | undefined) {
           arriving: live || (c.engine === "own" && c.status === "live"), // the encoder is connected, whether or not it is recording yet
           liveSince: c.liveSince,
           pausedWhy: c.pausedWhy,
-          problem: c.problem || (linkError ? "Your stream is reaching us but something is wrong with it. Check your software is sending video and sound, then stop and start it again." : ""),
+          problem,
+          state,
+          /** When the last stream in ended (or started, while it runs). */
+          lastAt: last ? last.endedAt || last.startedAt : "",
+          lastWasTest: !!(lastRec && (await storage.getSetting(testRecKey(lastRec.id)).catch(() => null))),
+          /** While Test it is armed: when it runs out. */
+          testUntil: (await testArmed(c)) ? new Date(Date.parse((await storage.getSetting(testArmKey(c.id))) ?? "") + TEST_WINDOW_MS).toISOString() : "",
         }
       : null,
     usage: { usedMin: Math.round(used / 60), capMin: Math.round(cap / 60) },
@@ -360,7 +404,7 @@ export async function runStreamInPass(): Promise<{ stopped: number; rolled: numb
     await storage.setSetting(`streamin:mailed:${s.recordingId}`, now());
     if (rec.status === "Ready") {
       // A test of a few seconds isn't worth an email; it is in the Library all the same.
-      if (rec.durationSec >= 60) {
+      if (rec.durationSec >= 60 && !(await storage.getSetting(testRecKey(rec.id)).catch(() => null))) {
         await sendImportReadyEmail({ to: rec.email, recordingId: rec.id, title: rec.title, startedAt: rec.startedAt, durationSec: rec.durationSec, provider: "stream" }).then(() => { out.mailed++; }).catch((err) => console.error("Stream-in email failed:", (err as Error).message));
       }
     } else {
@@ -443,6 +487,23 @@ export function registerStreamIn(app: Express): void {
       console.error("Couldn't renew a stream-in key:", (err as Error).message);
       res.status(502).json({ message: "Couldn't make a new key right now. Your old one is still working. Try again in a moment." });
     }
+  });
+
+  /** Test it: the next stream in (within 15 minutes) is a labelled test that stays here. DELETE stops waiting. */
+  app.post("/api/host/stream-in/test", requireHostSession, async (req, res) => {
+    noStore(res);
+    await schemaIsReady();
+    const row = await keyFor(normEmail(getSessionEmail(req) ?? ""));
+    if (!row) return res.status(404).json({ message: "Get your stream key first." });
+    await storage.setSetting(testArmKey(row.id), now());
+    res.json({ configured: true, ...(await view(row)) });
+  });
+  app.delete("/api/host/stream-in/test", requireHostSession, async (req, res) => {
+    noStore(res);
+    await schemaIsReady();
+    const row = await keyFor(normEmail(getSessionEmail(req) ?? ""));
+    if (row) await storage.setSetting(testArmKey(row.id), "");
+    res.json({ configured: true, ...(await view(row)) });
   });
 
   /** Turn it off: the key stops working. Recordings stay in the Library. */
