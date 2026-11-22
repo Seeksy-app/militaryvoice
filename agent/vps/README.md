@@ -10,11 +10,11 @@ Since 22 Nov 2026 the clip worker (`agent/clipper.ts`, built from `agent/Dockerf
 | Settings and secrets | `/etc/mv-clipper.env` (root, 600). Never print it. |
 | Temporary disk | `/var/lib/mv-clipper/tmp` (the container's /tmp). TMP_BUDGET_BYTES is 60GB. |
 | Deployed commit | `/var/lib/mv-clipper/deployed` |
-| Source for builds | `/opt/mv-clipper/src`, fetched from mv's checkout `/home/mv/militaryvoice` (kept current by `mv-pull` every 10 min) |
+| Source for builds | `/opt/mv-clipper/src`, root's own clone, fetched from GitHub (the repo is public, so no key). Never from mv's checkout: mv must not be able to choose what root installs and runs. |
 | Updates | `mv-clipper-update.timer`, every 5 min → `/usr/local/sbin/mv-clipper-update` (this folder's `update.sh`) |
 
 **Deploys.** Push to main. When agent/**, server/textPath.ts, server/assets/** or tsconfig.json change, the VPS has the new build
-running within ~15 minutes (mv-pull up to 10, the timer up to 5, then a build of about a minute). It builds while the
+running within ~5–10 minutes (the timer every 5, then a build of a minute or two). It builds while the
 old worker works, then waits for the worker's job count (`/var/lib/mv-clipper/tmp/worker-busy`) to reach 0,
 for at most 3 hours. A job stopped anyway is handed back on SIGTERM, and clip jobs resume.
 
@@ -43,7 +43,9 @@ a single secret later, run it again and press Return at the ones that stay the s
   read -rs "C?ELEVENLABS_API_KEY: " </dev/tty; echo
   { [ -n "$A" ] && printf 'AGENT_TOKEN=%s\n' "$A"; [ -n "$B" ] && printf 'ANTHROPIC_API_KEY=%s\n' "$B"; [ -n "$C" ] && printf 'ELEVENLABS_API_KEY=%s\n' "$C"; true; } \
     | tr -d ' \r' | ssh vps 'umask 077; cat > /root/.mv-clipper-secrets'
-  ssh vps 'sudo -u mv git -C /home/mv/militaryvoice pull -q --ff-only; bash /home/mv/militaryvoice/agent/vps/install.sh'
+  ssh vps 'set -e; S=/opt/mv-clipper/src; mkdir -p /opt/mv-clipper; [ -d $S/.git ] || git init -q $S
+    git -C $S fetch -q --depth 200 https://github.com/Seeksy-app/militaryvoice.git +refs/heads/main:refs/remotes/live/main
+    git -C $S checkout -q --detach refs/remotes/live/main; bash $S/agent/vps/install.sh'
 )
 ```
 

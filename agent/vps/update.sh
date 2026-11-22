@@ -2,7 +2,8 @@
 # The clipper on the Alex VPS: build and (re)start it when the worker's code on main changed.
 #
 # Runs as root every 5 minutes (mv-clipper-update.timer), and once by install.sh. It:
-#   1. fetches main from mv's checkout (/home/mv/militaryvoice, kept current by mv-pull every 10 min),
+#   1. fetches main straight from GitHub (the repo is public: no key) into its own root-owned clone.
+#      Never from mv's checkout: mv could point that at any commit, and root installs and runs what it fetches.
 #   2. does nothing unless agent/**, server/textPath.ts, server/assets/** or tsconfig.json changed
 #      since the build that's running (the same paths Render's buildFilter watches),
 #   3. builds agent/Dockerfile from just those paths (git archive), while the old worker keeps working,
@@ -13,7 +14,7 @@
 # Logs: journalctl -u mv-clipper-update   ·   the worker itself: docker logs -f mv-clipper
 set -euo pipefail
 
-MV_REPO=/home/mv/militaryvoice
+REPO_URL=https://github.com/Seeksy-app/militaryvoice.git
 BASE=/opt/mv-clipper
 SRC=$BASE/src
 STATE=/var/lib/mv-clipper
@@ -29,9 +30,11 @@ flock -n 9 || { echo "another update is running"; exit 0; }
 mkdir -p "$BASE" "$STATE/tmp"
 [ -f "$ENV_FILE" ] || { echo "no $ENV_FILE: run agent/vps/install.sh first"; exit 1; }
 
-git_() { git -c safe.directory='*' "$@"; }
+git_() { GIT_TERMINAL_PROMPT=0 git "$@"; }
 [ -d "$SRC/.git" ] || git_ init -q "$SRC"
-git_ -C "$SRC" fetch -q "$MV_REPO" +refs/remotes/origin/main:refs/remotes/live/main
+# Shallow: only the recent history the path check needs. If the running build's commit isn't in it, the diff
+# below fails and that counts as changed (one extra build, never a missed one).
+git_ -C "$SRC" fetch -q --depth 200 "$REPO_URL" +refs/heads/main:refs/remotes/live/main
 NEW=$(git_ -C "$SRC" rev-parse refs/remotes/live/main)
 CUR=$(cat "$STATE/deployed" 2>/dev/null || true)
 RUNNING=$(docker ps -q -f "name=^${NAME}$")
