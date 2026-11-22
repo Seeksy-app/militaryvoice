@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowDownRight, ArrowUpRight, CalendarDays, Check, ChevronDown, Download, Headphones, Infinity as InfinityIcon, Link2, ListMusic, Loader2, RefreshCw, Sparkles, Trophy, Upload, Users, X } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, BarChart3, CalendarDays, Check, ChevronDown, ChevronRight, Headphones, Infinity as InfinityIcon, Link2, ListMusic, Loader2, RefreshCw, Sparkles, Trophy, Upload, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -403,8 +403,9 @@ function inRange(d: PodcastStatsData, span: Span) {
 
 /*
  * The look (Andrew, 22 Nov: "can you make the analtyics page more engaging. I wan it to look very very cool"):
- * a navy hero with the number counting up and a glowing line, a ring to the next milestone, medals on the top
- * episodes and a ring of the apps people listen in. Same numbers as before; only how they're shown changed.
+ * then (same day: "I want each one of those to look the same… the dark blue takes way too much room"): one layout for every
+ * tab, an Overview of everything first, the number counting up in one small navy tile, a small trend line, a milestone pill,
+ * medals on the top episodes and a ring of the apps people listen in.
  */
 const reduced = () => typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
 /** A number that counts up to `to` when it appears or changes. */
@@ -430,76 +431,62 @@ function CountUp({ n }: { n: number }) {
 }
 
 const MILESTONES = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2500000, 5000000, 10000000];
-/** The ring to the next milestone, from all-time downloads. */
+/** A small ring to the next milestone, from all-time downloads. */
 function Milestone({ total, unit }: { total: number; unit: string }) {
   const next = MILESTONES.find((m) => m > total) ?? total;
-  const passed = [...MILESTONES].reverse().find((m) => m <= total);
   const share = next ? Math.min(1, total / next) : 1;
   const [shown, setShown] = useState(reduced() ? share : 0);
   useEffect(() => { const t = setTimeout(() => setShown(share), 60); return () => clearTimeout(t); }, [share]);
-  const R = 30, C = 2 * Math.PI * R;
+  const R = 15, C = 2 * Math.PI * R;
   return (
-    <div className="flex items-center gap-3" data-testid="podcast-milestone">
-      <svg viewBox="0 0 72 72" className="h-[72px] w-[72px] shrink-0 -rotate-90" aria-hidden>
-        <circle cx="36" cy="36" r={R} fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth="7" />
-        <circle cx="36" cy="36" r={R} fill="none" stroke="url(#mv-ring)" strokeWidth="7" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - shown)} style={{ transition: "stroke-dashoffset 1.1s cubic-bezier(.2,.8,.2,1)" }} />
-        <defs><linearGradient id="mv-ring" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#FFD37A" /><stop offset="1" stopColor="#F0A71F" /></linearGradient></defs>
+    <div className="flex items-center gap-2.5 rounded-full border border-border bg-background py-1 pl-1 pr-3.5" data-testid="podcast-milestone">
+      <svg viewBox="0 0 40 40" className="h-9 w-9 shrink-0 -rotate-90" aria-hidden>
+        <circle cx="20" cy="20" r={R} fill="none" stroke="hsl(var(--muted))" strokeWidth="5" />
+        <circle cx="20" cy="20" r={R} fill="none" stroke="#F0A71F" strokeWidth="5" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - shown)} style={{ transition: "stroke-dashoffset 1.1s cubic-bezier(.2,.8,.2,1)" }} />
       </svg>
-      <div className="min-w-0">
-        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/60">Next milestone</p>
-        <p className="text-lg font-bold leading-tight text-white">{compact(next)} {unit}</p>
-        <p className="text-xs text-white/70">{compact(Math.max(0, next - total))} to go{passed ? <> · <span className="text-[#FFD37A]">passed {compact(passed)}</span></> : null}</p>
+      <div className="leading-tight">
+        <p className="text-xs font-bold text-foreground">Next: {compact(next)} {unit}</p>
+        <p className="text-[11px] text-muted-foreground">{compact(Math.max(0, next - total))} to go</p>
       </div>
     </div>
   );
 }
 
-/** The line over the dates: a soft glow under it, a dot and the number on hover (or tap). */
-function GlowChart({ bars, ticks, unit }: { bars: Bar[]; ticks: number[]; unit: string }) {
+/** A small trend line over the dates: a dot and the number on hover (or tap). */
+function TrendChart({ bars, ticks, unit }: { bars: Bar[]; ticks: number[]; unit: string }) {
   const [hi, setHi] = useState<number | null>(null);
   const [drawn, setDrawn] = useState(reduced());
   useEffect(() => { const t = setTimeout(() => setDrawn(true), 30); return () => clearTimeout(t); }, []);
-  const W = 1000, H = 160, pad = 10;
+  const id = useId().replace(/:/g, "");
+  const W = 1000, H = 120, pad = 8;
   const max = Math.max(1, ...bars.map((b) => b.count));
   const x = (i: number) => (bars.length === 1 ? W / 2 : (i / (bars.length - 1)) * W);
   const y = (n: number) => H - pad - (n / max) * (H - pad * 2);
-  // A smooth curve through the points.
   const pts = bars.map((b, i) => [x(i), y(b.count)] as const);
   let line = pts.length ? `M${pts[0][0]},${pts[0][1]}` : "";
-  for (let i = 1; i < pts.length; i++) {
-    const [x0, y0] = pts[i - 1], [x1, y1] = pts[i], cx = (x0 + x1) / 2;
-    line += ` C${cx},${y0} ${cx},${y1} ${x1},${y1}`;
-  }
+  for (let i = 1; i < pts.length; i++) { const [x0, y0] = pts[i - 1], [x1, y1] = pts[i], cx = (x0 + x1) / 2; line += ` C${cx},${y0} ${cx},${y1} ${x1},${y1}`; }
   const area = `${line} L${W},${H} L0,${H} Z`;
   const pct = (i: number) => (bars.length === 1 ? 50 : (i / (bars.length - 1)) * 100);
   const tipAt = (i: number) => { const l = pct(i); return { left: `${l}%`, transform: l < 12 ? "translateX(-8%)" : l > 88 ? "translateX(-92%)" : "translateX(-50%)" }; };
-  const pick = (e: React.PointerEvent<HTMLDivElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    setHi(Math.max(0, Math.min(bars.length - 1, Math.round(((e.clientX - r.left) / r.width) * (bars.length - 1)))));
-  };
+  const pick = (e: React.PointerEvent<HTMLDivElement>) => { const r = e.currentTarget.getBoundingClientRect(); setHi(Math.max(0, Math.min(bars.length - 1, Math.round(((e.clientX - r.left) / r.width) * (bars.length - 1))))); };
   return (
-    <div className="mt-5" data-testid="podcast-chart">
-      <div className="relative h-36 sm:h-40" onPointerMove={pick} onPointerDown={pick} onPointerLeave={() => setHi(null)} aria-label={`${unit} over time`}>
+    <div className="mt-4 rounded-2xl border border-border px-4 pb-3 pt-4" data-testid="podcast-chart">
+      <div className="relative h-24 text-[#053877] sm:h-28 dark:text-[#8ab4f8]" onPointerMove={pick} onPointerDown={pick} onPointerLeave={() => setHi(null)} aria-label={`${unit} over time`}>
         {hi !== null && bars[hi] && (
-          <div role="tooltip" className="pointer-events-none absolute -top-9 z-10 whitespace-nowrap rounded-lg bg-white px-2.5 py-1 text-xs font-semibold text-[#000741] shadow-lg" style={tipAt(hi)} data-testid="chart-tooltip">
+          <div role="tooltip" className="pointer-events-none absolute -top-8 z-10 whitespace-nowrap rounded-lg bg-[#000741] px-2.5 py-1 text-xs font-semibold text-white shadow-lg" style={tipAt(hi)} data-testid="chart-tooltip">
             {bars[hi].tip}: {bars[hi].count.toLocaleString()} {bars[hi].count === 1 ? unit.replace(/s$/, "") : unit}
           </div>
         )}
         <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 h-full w-full overflow-visible">
-          <defs>
-            <linearGradient id="mv-area" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#FFD37A" stopOpacity="0.32" /><stop offset="0.55" stopColor="#3b82f6" stopOpacity="0.10" /><stop offset="1" stopColor="#3b82f6" stopOpacity="0" /></linearGradient>
-            <linearGradient id="mv-line" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#8fb5e8" /><stop offset="1" stopColor="#FFD37A" /></linearGradient>
-            <filter id="mv-glow" x="-5%" y="-30%" width="110%" height="160%"><feGaussianBlur stdDeviation="6" /></filter>
-          </defs>
-          {[0.25, 0.5, 0.75].map((g) => <line key={g} x1="0" x2={W} y1={H * g} y2={H * g} stroke="rgba(255,255,255,0.07)" strokeWidth="1" vectorEffect="non-scaling-stroke" />)}
-          <path d={area} fill="url(#mv-area)" style={{ opacity: drawn ? 1 : 0, transition: "opacity .9s ease .3s" }} />
-          <path d={line} fill="none" stroke="#F0A71F" strokeWidth="8" opacity="0.35" filter="url(#mv-glow)" vectorEffect="non-scaling-stroke" />
-          <path d={line} fill="none" stroke="url(#mv-line)" strokeWidth="3" strokeLinecap="round" vectorEffect="non-scaling-stroke" pathLength={1} strokeDasharray="1" strokeDashoffset={drawn ? 0 : 1} style={{ transition: "stroke-dashoffset 1.2s cubic-bezier(.2,.8,.2,1)" }} />
-          {hi !== null && pts[hi] && <line x1={pts[hi][0]} x2={pts[hi][0]} y1="0" y2={H} stroke="rgba(255,255,255,0.35)" strokeWidth="1" strokeDasharray="3 4" vectorEffect="non-scaling-stroke" />}
+          <defs><linearGradient id={`a${id}`} x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="currentColor" stopOpacity="0.22" /><stop offset="1" stopColor="currentColor" stopOpacity="0" /></linearGradient></defs>
+          {[0.33, 0.66].map((g) => <line key={g} x1="0" x2={W} y1={H * g} y2={H * g} stroke="hsl(var(--border))" strokeWidth="1" vectorEffect="non-scaling-stroke" />)}
+          <path d={area} fill={`url(#a${id})`} style={{ opacity: drawn ? 1 : 0, transition: "opacity .8s ease .3s" }} />
+          <path d={line} fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" vectorEffect="non-scaling-stroke" pathLength={1} strokeDasharray="1" strokeDashoffset={drawn ? 0 : 1} style={{ transition: "stroke-dashoffset 1.1s cubic-bezier(.2,.8,.2,1)" }} />
+          {hi !== null && pts[hi] && <line x1={pts[hi][0]} x2={pts[hi][0]} y1="0" y2={H} stroke="currentColor" strokeOpacity="0.3" strokeWidth="1" strokeDasharray="3 4" vectorEffect="non-scaling-stroke" />}
         </svg>
-        {hi !== null && pts[hi] && <span className="pointer-events-none absolute h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[#F0A71F] shadow-[0_0_0_6px_rgba(240,167,31,0.25)]" style={{ left: `${pct(hi)}%`, top: `${(pts[hi][1] / H) * 100}%` }} />}
+        {hi !== null && pts[hi] && <span className="pointer-events-none absolute h-3 w-3 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[#F0A71F] shadow-[0_0_0_5px_rgba(240,167,31,0.25)]" style={{ left: `${pct(hi)}%`, top: `${(pts[hi][1] / H) * 100}%` }} />}
       </div>
-      <div className="relative mt-2 h-4 text-[11px] text-white/55">
+      <div className="relative mt-2 h-4 text-[11px] text-muted-foreground">
         {ticks.map((i) => <span key={i} className="absolute whitespace-nowrap" style={tipAt(i)}>{bars[i].tick}</span>)}
       </div>
     </div>
@@ -573,41 +560,6 @@ function Donut({ items }: { items: [string, number][] }) {
   );
 }
 
-/** The chart: bars for the dates, a few dates underneath, and the number on hover (or tap). */
-function RangeChart({ bars, ticks, unit }: { bars: Bar[]; ticks: number[]; unit: string }) {
-  const [hi, setHi] = useState<number | null>(null);
-  const max = Math.max(1, ...bars.map((b) => b.count));
-  const at = (i: number) => {
-    const left = ((i + 0.5) / bars.length) * 100;
-    return { left: `${left}%`, transform: left < 10 ? "translateX(-10%)" : left > 90 ? "translateX(-90%)" : "translateX(-50%)" };
-  };
-  return (
-    <div className="mt-4" data-testid="podcast-chart">
-      <div className="relative">
-        {hi !== null && bars[hi] && (
-          <div role="tooltip" className="pointer-events-none absolute -top-8 z-10 whitespace-nowrap rounded-lg bg-foreground px-2.5 py-1 text-xs font-semibold text-background shadow-md" style={at(hi)} data-testid="chart-tooltip">
-            {bars[hi].tip}: {bars[hi].count.toLocaleString()} {bars[hi].count === 1 ? unit.replace(/s$/, "") : unit}
-          </div>
-        )}
-        <div className="flex h-24 items-end gap-px" onMouseLeave={() => setHi(null)} aria-label={`${unit} over time`}>
-          {bars.map((b, i) => (
-            <div key={b.key} className="flex h-full min-w-0 flex-1 cursor-default items-end" onMouseEnter={() => setHi(i)} onClick={() => setHi(i)} title={`${b.tip}: ${b.count}`}>
-              <div className={`w-full rounded-t transition-colors ${hi === i ? "bg-[#F0A71F]" : "bg-[#053877]/80 dark:bg-[#8ab4f8]/80"}`} style={{ height: `${Math.max(2, (b.count / max) * 100)}%` }} />
-            </div>
-          ))}
-        </div>
-      </div>
-      <div className="relative mt-1 h-4 text-[10px] text-muted-foreground">
-        {ticks.map((i) => <span key={i} className="absolute whitespace-nowrap" style={at(i)}>{bars[i].tick}</span>)}
-      </div>
-    </div>
-  );
-}
-
-/**
- * Your analytics → Podcast listens: downloads and streams from wherever the
- * show is connected, and where it fits among MilitaryVoices shows.
- */
 export function PodcastListens({ onConnect, bare = false }: { onConnect: () => void; /** Inside Your analytics' Podcast section: no title of its own. */ bare?: boolean }) {
   const q = usePodcastStats();
   const { hosted: hostedHere } = useHostedHere();
@@ -684,21 +636,68 @@ export function PodcastListens({ onConnect, bare = false }: { onConnect: () => v
   const appSum = (re: RegExp) => Object.entries(apps).filter(([k]) => re.test(k)).reduce((a, [, n]) => a + n, 0);
   const appTotal = Object.values(apps).reduce((a, n) => a + n, 0);
   const yt = (social.data?.accounts ?? []).find((x) => x.platform === "youtube");
-  const tabs: { key: string; label: string }[] = [
-    ...(merged ? [{ key: "all", label: "All sources" }] : []),
-    ...sources.map((x) => ({ key: x.source, label: x.source === "militaryvoices" ? "MilitaryVoices" : NAME[x.source] })),
-    ...(hosted ? [{ key: "app:apple", label: "Apple Podcasts" }, ...(sources.some((x) => x.source === "spotify") ? [] : [{ key: "app:spotify", label: "Spotify" }])] : []),
-    ...(yt ? [{ key: "yt", label: "YouTube" }] : []),
-  ];
-  const pick = tabs.some((t) => t.key === tab) ? tab : tabs[0].key;
-  const shown = pick === "all" && merged ? [merged] : sources.filter((x) => x.source === pick);
-  const appView = pick.startsWith("app:") ? (pick === "app:apple" ? { name: "Apple Podcasts", n: appSum(/apple/i) } : { name: "Spotify", n: appSum(/spotify/i) }) : null;
-  // The show's artwork for every card's header, and which apps read the feed (to say the zeros honestly).
+  const spotifySrc = sources.find((x) => x.source === "spotify");
+  // The show's artwork for every panel, and which apps read the feed (to say the zeros honestly).
   const art = sources.find((x) => x.data?.artwork)?.data!.artwork || (hostingQ.data?.shows ?? []).find((x) => x.show.artworkUrl)?.show.artworkUrl || "";
   const reads = new Set((hostingQ.data?.shows ?? []).flatMap((x) => x.reading ?? []));
   // "Bring in your Buzzsprout history" only for a show that moved here from Buzzsprout and isn't connected yet
   // (Andrew via PM, 22 Nov: "that banner only needs to show if it pertains to a podcaster who redirected his podcast over"). Everyone else never sees it.
   const movedFromBuzzsprout = (hostingQ.data?.shows ?? []).some((x) => /buzzsprout/i.test(x.show.importedFrom ?? ""));
+  const showName = sources.find((x) => x.showName)?.showName || (hostingQ.data?.shows ?? [])[0]?.show.title || "Your show";
+  // One app's downloads from our own feed (Apple Podcasts), shaped like any other source so its tab looks the same.
+  const appData = (re: RegExp): PodcastStatsData | null => {
+    if (!hostedData) return null;
+    const days: Record<string, number> = {};
+    for (const [a, m] of Object.entries(hostedData.appDays ?? {})) if (re.test(a)) for (const [day, n] of Object.entries(m)) days[day] = (days[day] ?? 0) + n;
+    const allTime = Object.entries(hostedData.audience?.apps ?? {}).filter(([k]) => re.test(k)).reduce((a, [, n]) => a + n, 0);
+    return { total: allTime || Object.values(days).reduce((a, n) => a + n, 0), unit: "downloads", episodes: [], series: Object.entries(days).map(([date, count]) => ({ date, count })).sort((a, b) => a.date.localeCompare(b.date)) };
+  };
+
+  // Every tab is one Panel, so they all look the same (Andrew, 22 Nov: "I want each one of those to look the same").
+  const srcSub = (s: SourceView) => <>{s.source === "militaryvoices" ? "Hosted on MilitaryVoices" : s.source === "spotify" ? "From Spotify for Creators" : `From ${NAME[s.source]}`}{" · "}<span className="whitespace-nowrap">{s.source === "spotify" ? `Uploaded ${when(s.fetchedAt)}` : `Updated ${when(s.fetchedAt)}`}</span>{s.status === "failed" && <span className="text-destructive"> · {s.error}</span>}</>;
+  const models: Model[] = [];
+  const overviewData = merged?.data ?? hosted?.data ?? sources[0].data!;
+  models.push({ key: "all", label: "Overview", icon: <BarChart3 className="h-4 w-4" />, title: showName, sub: merged ? `Everything together: ${sources.map((x) => (x.source === "militaryvoices" ? "MilitaryVoices" : NAME[x.source])).join(", ")}` : "All your podcast numbers in one place", mark: ALL_MARK, data: overviewData, who: merged ? "Your numbers" : who(hosted ?? sources[0]), source: merged ? undefined : (hosted ?? sources[0]).source, milestone: true });
+  for (const s of sources) {
+    const sp = s.source === "spotify";
+    models.push({
+      key: s.source, label: s.source === "militaryvoices" ? "MilitaryVoices" : NAME[s.source], logo: TAB_MARK[s.source],
+      title: s.showName || NAME[s.source], sub: srcSub(s), mark: MARK[s.source] ? markImg(MARK[s.source]!) : <span className="text-[10px] font-bold text-foreground">{NAME[s.source][0]}</span>,
+      data: s.data, who: who(s), source: s.source, milestone: true,
+      action: sp ? <SpotifyUpload has stale={Date.now() - Date.parse(s.fetchedAt) > MONTH} /> : s.source !== "militaryvoices" ? (
+        <Button variant="outline" size="sm" className="h-8 gap-1 rounded-full px-3.5 text-xs" onClick={() => void refresh(s.source)} disabled={refreshing === s.source}><RefreshCw className={`h-3.5 w-3.5 ${refreshing === s.source ? "animate-spin" : ""}`} /> Refresh</Button>
+      ) : undefined,
+      warn: sp && Date.now() - Date.parse(s.fetchedAt) > MONTH ? "These are a month old: upload this month's from Spotify for Creators." : undefined,
+    });
+  }
+  if (hosted) {
+    const apple = appData(/apple/i);
+    const share = appTotal ? `${Math.round((appSum(/apple/i) / appTotal) * 100)}%` : "–";
+    models.push({
+      key: "app:apple", label: "Apple Podcasts", logo: TAB_MARK["app:apple"], title: "Apple Podcasts", sub: "Counted from your MilitaryVoices feed, each time Apple asks for an episode", mark: markImg(TAB_MARK["app:apple"]),
+      data: apple, who: "Apple Podcasts", extra: [{ icon: <Headphones className="h-4 w-4" />, label: `of all your downloads${span.all ? "" : ", these dates"}`, n: share }],
+      empty: apple && apple.total === 0 ? (reads.has("Apple Podcasts") ? "Apple Podcasts reads your MilitaryVoices feed. Each time a listener plays or downloads an episode it shows here, so most arrive the day a new one is out." : "Nothing yet. Once your show's address in Apple Podcasts points at your MilitaryVoices feed, each listen shows here.") : undefined,
+    });
+    if (!spotifySrc) models.push({
+      key: "app:spotify", label: "Spotify", logo: TAB_MARK["app:spotify"], title: "Spotify", sub: reads.has("Spotify") ? <span className="inline-flex items-center gap-1"><Check className="h-3.5 w-3.5 text-emerald-600" /> Spotify reads your MilitaryVoices feed</span> : "Not reading your MilitaryVoices feed yet", mark: markImg(TAB_MARK["app:spotify"]),
+      data: null, who: "Spotify",
+      empty: <><span className="font-semibold text-foreground">Spotify doesn't share plays with any podcast host</span>, us included: it keeps its own copy of each episode. To see your Spotify plays here, export them from Spotify for Creators (Analytics → Export) and upload the files.</>,
+      emptyAction: <SpotifyUpload has={false} />, main: { n: "–", label: "Spotify plays: add your numbers" },
+    });
+  }
+  if (yt) models.push({
+    key: "yt", label: "YouTube", logo: TAB_MARK.yt, title: <>YouTube{yt.username ? <span className="font-normal text-muted-foreground"> · @{yt.username.replace(/^@/, "")}</span> : null}</>, sub: "Your connected channel", mark: markImg("/brands/youtube.svg"),
+    data: null, who: "YouTube", main: { n: compact(yt.followers ?? 0), label: "subscribers today" },
+    empty: "Views and how each post did are under Social → Analytics.",
+  });
+  const pick = models.some((m) => m.key === tab) ? tab : models[0].key;
+  const cur = models.find((m) => m.key === pick)!;
+  // The Overview's list of where the numbers come from: one row each, a tap opens its tab.
+  const rowsFor = models.filter((m) => m.key !== "all").map((m) => {
+    const n = m.data ? inRange(m.data, span).sum : m.key === "yt" ? yt?.followers ?? 0 : null;
+    return { m, n, unit: m.key === "yt" ? "subscribers" : m.data?.unit ?? "" };
+  });
+  const maxRow = Math.max(1, ...rowsFor.map((r) => (r.unit === "subscribers" ? 0 : r.n ?? 0)));
   return (
     <section className={`${bare ? "" : "mb-6 "}space-y-4`} data-testid="podcast-listens">
       {movedFromBuzzsprout && !sources.some((x) => x.source === "buzzsprout") && (
@@ -719,172 +718,169 @@ export function PodcastListens({ onConnect, bare = false }: { onConnect: () => v
         </div>
       )}
       <div className="flex flex-wrap items-center gap-2">
-      {tabs.length > 1 && (
-        <div role="tablist" className="flex min-w-0 max-w-full flex-1 gap-1 overflow-x-auto rounded-full bg-muted/60 p-1" data-testid="podcast-tabs">
-          {tabs.map((t) => (
+        <div role="tablist" className="flex w-full min-w-0 max-w-full gap-1 overflow-x-auto rounded-full bg-muted/60 p-1 sm:w-auto sm:flex-1" data-testid="podcast-tabs">
+          {models.map((t) => (
             <button key={t.key} role="tab" aria-selected={pick === t.key} type="button" onClick={() => setTab(t.key)} data-testid={`podcast-tab-${t.key}`}
               className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${pick === t.key ? "bg-background text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`}>
-              {TAB_MARK[t.key] && <img src={TAB_MARK[t.key]} alt="" className="h-4 w-4 rounded-sm object-contain" />}{t.label}
+              {t.icon ?? (t.logo && <img src={t.logo} alt="" className="h-4 w-4 rounded-sm object-contain" />)}{t.label}
             </button>
           ))}
         </div>
-      )}
         {/* Custom's two date boxes take a row of their own, so the tabs keep theirs. */}
         <div className={range.r === "custom" ? "flex w-full justify-end" : "ml-auto"}><RangePicker sel={range} onChange={setRange} /></div>
       </div>
       {!bare && <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground"><Headphones className="h-4 w-4" /> Podcast listens</h3>}
-      {(q.data?.benchmark ?? []).map((b) => (
-        <div key={b.unit} className="flex items-center gap-3 rounded-2xl bg-[#053877] p-4 text-white" data-testid={`benchmark-${b.unit}`}>
-          <Trophy className="h-6 w-6 shrink-0 text-[#F0A71F]" />
-          <p className="text-sm">
-            Your episodes average <span className="font-bold">{compact(b.avg)} {b.unit}</span>.{" "}
-            {b.percentile >= 0
-              ? <>That's more than <span className="font-bold text-[#F0A71F]">{b.percentile}%</span> of the {b.peers} MilitaryVoices shows that share theirs.</>
-              : <span className="text-white/75">Once five shows share their {b.unit}, you'll see where you fit among them.</span>}
-          </p>
-        </div>
-      ))}
-      {appView && (
-        <div className="rounded-2xl border border-border bg-card p-5" data-testid={`listens-${pick}`}>
-          <CardHead art={art} mark={markImg(TAB_MARK[pick])} title={appView.name} sub={pick === "app:spotify" ? "Your MilitaryVoices feed, as Spotify reads it." : "Counted from your MilitaryVoices feed, by the app that asked for each episode."} />
-          {/* Spotify copies each episode once and plays its own copy, so no host ever sees Spotify's plays: no 0 to show. */}
-          {pick !== "app:spotify" && (
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              <div className="rounded-xl bg-muted/50 px-3 py-2.5"><p className="text-xl font-bold tabular-nums text-foreground">{compact(appView.n)}</p><p className="text-xs text-muted-foreground">downloads through {appView.name}, {span.label}</p></div>
-              <div className="rounded-xl bg-muted/50 px-3 py-2.5"><p className="text-xl font-bold tabular-nums text-foreground">{appTotal ? `${Math.round((appView.n / appTotal) * 100)}%` : "–"}</p><p className="text-xs text-muted-foreground">of all your downloads{span.all ? "" : " in these dates"}</p></div>
-            </div>
-          )}
-          {pick === "app:spotify" ? (
-            <p className="text-sm text-muted-foreground" data-testid="spotify-note">{reads.has("Spotify") ? "Spotify reads your MilitaryVoices feed now. It keeps its own copy of each episode and plays that copy to listeners, so Spotify's plays don't come through any podcast host, us included. Spotify counts them in Spotify for Creators: add those details below to see them here." : "Once your show's address in Spotify points at your MilitaryVoices feed, Spotify takes each new episode from us. It plays its own copy, so its plays show in Spotify for Creators: add those details below to see them here."}</p>
-          ) : appView.n === 0 && (
-            <p className="mt-4 text-sm text-muted-foreground" data-testid="apple-note">{reads.has("Apple Podcasts") ? "Apple Podcasts reads your MilitaryVoices feed now. A download through Apple shows here each time a listener plays or downloads an episode, so most arrive the day a new one is out. Earlier history is in your Buzzsprout tab." : "Nothing yet. Once your show's address in Apple Podcasts points at your MilitaryVoices feed, each listen shows here. Earlier history is in your Buzzsprout tab."}</p>
-          )}
-        </div>
-      )}
-      {pick === "yt" && yt && (
-        <div className="rounded-2xl border border-border bg-card p-5" data-testid="listens-yt">
-          <CardHead art={art} mark={markImg("/brands/youtube.svg")} title={<>YouTube{yt.username ? <span className="font-normal text-muted-foreground"> · @{yt.username.replace(/^@/, "")}</span> : null}</>} sub="Your connected channel. Views and how each post did are under Social → Analytics." />
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-            <div className="rounded-xl bg-muted/50 px-3 py-2.5"><p className="text-xl font-bold tabular-nums text-foreground">{compact(yt.followers ?? 0)}</p><p className="text-xs text-muted-foreground">subscribers</p></div>
-          </div>
-          {!span.all && <p className="mt-3 text-xs text-muted-foreground" data-testid="range-note">Subscribers are today's count, so the dates don't change it.</p>}
-        </div>
-      )}
-      {shown.map((s) => {
-        const d = s.data!;
-        const isAll = (s.source as string) === "all";
-        const v = inRange(d, span);
-        const who = isAll ? "Your numbers" : s.source === "militaryvoices" ? "MilitaryVoices" : NAME[s.source];
-        const stale = s.source === "spotify" && Date.now() - Date.parse(s.fetchedAt) > MONTH;
-        const change = v.prevSum && v.prevSum > 0 && span.before ? Math.round(((v.sum - v.prevSum) / v.prevSum) * 100) : null;
-        const stats: [string, string, string?][] = [
-          [span.all && s.source === "podbean" ? `${d.unit}, last 2 years` : `${d.unit}, ${span.label}`, compact(v.sum)],
-          [span.all ? "average per episode" : v.byDate ? "average per episode played" : "average per episode, all time", compact(v.avg)],
-          ...(change !== null ? [[`vs ${span.before}`, change >= 900 ? `${Math.round(v.sum / v.prevSum!)}×` : `${change > 0 ? "+" : ""}${change}%`, change > 0 ? "text-emerald-700 dark:text-emerald-400" : change < 0 ? "text-red-700 dark:text-red-400" : ""] as [string, string, string]] : []),
-          ...(d.followers ? [["followers", compact(d.followers)] as [string, string]] : []),
-        ];
-        // What this source can't do for these dates, said once, quietly.
-        const notes: string[] = [];
-        if (v.monthly && !span.all) notes.push(`${who} counts by the month, so this shows whole months.`);
-        if (v.startsLate) notes.push(s.source === "militaryvoices" ? `Hosted here from ${fmtDay(v.first)}, so this starts there.` : s.source === "buzzsprout" ? d.history?.complete ? `Buzzsprout's day-by-day numbers start ${fmtDay(v.first)}.` : `Buzzsprout's day-by-day numbers start ${fmtDay(v.first)} here; each refresh adds a month further back.` : `${isAll ? who : `${who}'s numbers`} start ${fmtDay(v.first)}, so this starts there.`);
-        if (v.endsEarly) notes.push(s.source === "spotify" ? `Spotify's numbers run to ${fmtDay(v.last)}, from your last upload.` : `${isAll ? who : `${who}'s numbers`} run to ${fmtDay(v.last)}.`);
-        if (!span.all && !v.byDate && d.episodes.length) notes.push(`${isAll ? "Buzzsprout gives" : `${who} gives`} each episode's total, not by date, so Top episodes is all time.`);
-        const tiles: { icon: ReactNode; label: string; n: string }[] = [
-          { icon: <Headphones className="h-4 w-4" />, label: stats[1][0], n: stats[1][1] },
-          { icon: <InfinityIcon className="h-4 w-4" />, label: `${d.unit} all time`, n: compact(d.total) },
-          ...(d.episodes.length ? [{ icon: <ListMusic className="h-4 w-4" />, label: d.episodes.length === 1 ? "episode" : "episodes", n: String(d.episodes.length) }] : []),
-          ...(d.followers ? [{ icon: <Users className="h-4 w-4" />, label: "followers", n: compact(d.followers) }] : []),
-        ];
-        const audience = !!(d.audience?.age || d.audience?.countries || (v.apps && Object.keys(v.apps).length > 0) || d.audience?.gender);
-        return (
-          <div key={s.source} className="overflow-hidden rounded-3xl border border-border bg-card shadow-[0_10px_40px_rgba(0,7,65,0.08)]" data-testid={`listens-${isAll ? "all" : s.source}`}>
-            {/* The hero: the number, how it's moving, the next milestone and the line, on navy. */}
-            <div className="relative overflow-hidden bg-[#000741] px-5 pb-4 pt-5 text-white sm:px-7 sm:pt-6" data-testid="podcast-hero">
-              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_90%_at_100%_0%,rgba(59,130,246,0.35),transparent_55%),radial-gradient(80%_70%_at_0%_100%,rgba(240,167,31,0.18),transparent_60%)]" aria-hidden />
-              <div className="relative flex flex-wrap items-start gap-x-6 gap-y-4">
-                <div className="flex w-full min-w-0 items-center gap-3.5 sm:w-auto sm:flex-1">
-                  <span className="relative shrink-0">
-                    {d.artwork || art ? <img src={d.artwork || art} alt="" className="h-14 w-14 rounded-2xl object-cover shadow-[0_8px_24px_rgba(0,0,0,0.35)] ring-2 ring-white/20" /> : <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 ring-2 ring-white/20"><Headphones className="h-7 w-7" /></span>}
-                    <span className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center overflow-hidden rounded-full bg-white ring-2 ring-[#000741]">{isAll ? ALL_MARK : MARK[s.source] ? markImg(MARK[s.source]!) : <span className="text-[10px] font-bold text-[#000741]">{NAME[s.source][0]}</span>}</span>
-                  </span>
-                  <div className="min-w-0">
-                    <p className="truncate text-lg font-bold leading-tight">{s.showName || (isAll ? "Your show" : NAME[s.source])}</p>
-                    <p className="text-xs text-white/65">
-                      {isAll ? `All your sources: ${sources.map((x) => NAME[x.source]).join(", ")}` : s.source === "militaryvoices" ? "Hosted on MilitaryVoices" : s.source === "spotify" ? "From Spotify for Creators" : `From ${NAME[s.source]}`}
-                      {" · "}<span className="whitespace-nowrap">{s.source === "spotify" ? `Uploaded ${when(s.fetchedAt)}` : `Updated ${when(s.fetchedAt)}`}</span>
-                      {stale && <span className="font-semibold text-[#FFD37A]"> · a month old: upload this month's {hostedHere ? "below" : "in Integrations"}</span>}
-                      {s.status === "failed" && <span className="text-red-300"> · {s.error}</span>}
-                    </p>
-                  </div>
-                  {!isAll && s.source !== "spotify" && s.source !== "militaryvoices" && (
-                    <button type="button" onClick={() => void refresh(s.source)} disabled={refreshing === s.source} className="ml-auto inline-flex h-8 shrink-0 items-center gap-1 rounded-full bg-white/10 px-3 text-xs font-semibold hover:bg-white/20 disabled:opacity-60">
-                      <RefreshCw className={`h-3.5 w-3.5 ${refreshing === s.source ? "animate-spin" : ""}`} /> Refresh
-                    </button>
-                  )}
-                </div>
-                <Milestone total={d.total} unit={d.unit} />
+      <Panel m={cur} art={art} span={span} key={cur.key}>
+        {pick === "all" && (
+          <>
+            {(q.data?.benchmark ?? []).map((b) => (
+              <p key={b.unit} className="mt-4 flex items-center gap-2 rounded-xl bg-[#F0A71F]/10 px-3 py-2 text-sm text-foreground" data-testid={`benchmark-${b.unit}`}>
+                <Trophy className="h-4 w-4 shrink-0 text-[#b36b00] dark:text-[#F0A71F]" />
+                <span>Your episodes average <span className="font-bold">{compact(b.avg)} {b.unit}</span>.{" "}
+                  {b.percentile >= 0 ? <>More than <span className="font-bold">{b.percentile}%</span> of the {b.peers} MilitaryVoices shows that share theirs.</> : <span className="text-muted-foreground">Once five shows share their {b.unit}, you'll see where you fit.</span>}</span>
+              </p>
+            ))}
+            {rowsFor.length > 0 && (
+              <div className="mt-4 rounded-2xl border border-border p-4 sm:p-5" data-testid="podcast-sources">
+                <p className="mb-2 text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">Where your numbers come from{span.all ? "" : `, ${span.label}`}</p>
+                <ul className="divide-y divide-border">
+                  {rowsFor.map(({ m, n, unit }) => (
+                    <li key={m.key}>
+                      <button type="button" onClick={() => setTab(m.key)} className="group flex w-full items-center gap-3 py-2.5 text-left" data-testid={`podcast-source-${m.key}`}>
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-muted">{m.logo ? <img src={m.logo} alt="" className="h-5 w-5 object-contain" /> : m.mark}</span>
+                        <span className="min-w-0 flex-1 truncate text-sm font-medium text-foreground sm:w-44 sm:flex-none">{m.label}{m.key === "militaryvoices" && <span className="hidden font-normal text-muted-foreground sm:inline"> · all apps</span>}</span>
+                        <span className="hidden h-2 flex-1 overflow-hidden rounded-full bg-muted sm:block">{n !== null && unit !== "subscribers" && <span className="block h-full rounded-full bg-gradient-to-r from-[#053877] to-[#3b82f6] dark:from-[#8ab4f8] dark:to-[#c3d7fb]" style={{ width: `${(n / maxRow) * 100}%` }} />}</span>
+                        <span className="shrink-0 text-sm tabular-nums text-foreground sm:w-36 sm:text-right">{n === null ? <span className="font-semibold text-[#b36b00] dark:text-[#F0A71F]">Add your numbers</span> : <><span className="font-bold">{compact(n)}</span> <span className="text-muted-foreground">{unit}</span></>}</span>
+                        <ChevronRight className="h-4 w-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
+                      </button>
+                    </li>
+                  ))}
+                </ul>
               </div>
-              <div className="relative mt-5 flex flex-wrap items-end gap-x-4 gap-y-2">
-                <div>
-                  <p className="text-[56px] font-black leading-none tracking-tight tabular-nums sm:text-[72px]" data-testid="podcast-hero-number"><CountUp n={v.sum} /></p>
-                  <p className="mt-1.5 flex items-center gap-1.5 text-sm text-white/75"><Download className="h-4 w-4 text-[#FFD37A]" /> {stats[0][0]}</p>
-                </div>
-                {change !== null && (
-                  <span className={`mb-2 inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-bold ${change >= 0 ? "bg-emerald-400/15 text-emerald-300" : "bg-red-400/15 text-red-300"}`} data-testid="podcast-change">
-                    {change >= 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}{stats.find((x) => x[0].startsWith("vs "))?.[1]} <span className="font-medium opacity-80">{stats.find((x) => x[0].startsWith("vs "))?.[0]}</span>
-                  </span>
-                )}
-              </div>
-              {v.bars.length > 1 ? <GlowChart bars={v.bars} ticks={v.ticks} unit={d.unit} /> : <div className="h-4" />}
-            </div>
-
-            <div className="p-5 sm:p-7">
-              <div className={`grid gap-2.5 sm:gap-3 ${tiles.length >= 4 ? "grid-cols-2 lg:grid-cols-4" : tiles.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
-                {tiles.map((t) => (
-                  <div key={t.label} className="min-w-0 rounded-2xl border border-border bg-background px-3 py-3 transition-shadow hover:shadow-md sm:px-4 sm:py-3.5" data-testid="podcast-tile">
-                    <span className="mb-2 flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-[#053877] to-[#3b82f6] text-white shadow-[0_4px_12px_rgba(5,56,119,0.25)]">{t.icon}</span>
-                    <p className="text-xl font-black tabular-nums text-foreground sm:text-2xl">{t.n}</p>
-                    <p className="text-xs leading-snug text-muted-foreground">{t.label}</p>
-                  </div>
-                ))}
-              </div>
-              {notes.length > 0 && <p className="mt-3 flex items-start gap-1.5 text-xs text-muted-foreground" data-testid="range-note"><Sparkles className="mt-px h-3.5 w-3.5 shrink-0 text-[#b36b00] dark:text-[#F0A71F]" />{notes.join(" ")}</p>}
-              <div className="mt-6 grid gap-6 md:grid-cols-2">
-                {d.episodes.length > 0 && (
-                  <div className="min-w-0 rounded-2xl border border-border p-4 sm:p-5">
-                    <p className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground"><Trophy className="h-4 w-4 text-[#b36b00] dark:text-[#F0A71F]" /> Top episodes{!span.all && v.byDate ? `, ${span.label}` : ""}</p>
-                    {v.top.length ? <RankList items={v.top.map((e) => [e.title, e.n])} /> : <p className="text-sm text-muted-foreground">No {d.unit} in these dates.</p>}
-                  </div>
-                )}
-                {audience && (
-                  <div className="min-w-0 space-y-5 rounded-2xl border border-border p-4 sm:p-5">
-                    {v.apps && Object.keys(v.apps).length > 0 && <div><p className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground"><Headphones className="h-4 w-4 text-[#053877] dark:text-[#8ab4f8]" /> Where they listen{d.appDays && !span.all ? `, ${span.label}` : ""}</p><Donut items={top(v.apps)} /></div>}
-                    {d.audience?.age && <div><p className="mb-2 text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">Age</p><Bars items={top(d.audience.age, 6)} /></div>}
-                    {d.audience?.gender && <div><p className="mb-2 text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">Gender</p><Bars items={top(d.audience.gender)} /></div>}
-                    {d.audience?.countries && Object.keys(d.audience.countries).length > 0 && <div><p className="mb-2 text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">Countries</p><Bars items={top(d.audience.countries)} /></div>}
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        );
-      })}
-      {/* Hosted with us: Integrations no longer shows Podcast stats, so Spotify's audience upload lives here. */}
-      {hostedHere && (() => {
-        const sp = sources.find((x) => x.source === "spotify");
-        const spStale = !!sp && Date.now() - Date.parse(sp.fetchedAt) > MONTH;
-        return (
-          <div className="flex flex-wrap items-center gap-3 rounded-2xl border border-dashed border-border px-4 py-3" data-testid="add-spotify-details">
-            <img src="/brands/spotify.svg" alt="" className="h-5 w-5 shrink-0 object-contain" />
-            <p className="min-w-0 flex-1 text-sm">
-              <span className="font-semibold text-foreground">{sp ? "Spotify details" : "Add Spotify details (optional)"}</span>{" "}
-              <span className="text-muted-foreground">{sp ? `Uploaded ${when(sp.fetchedAt)}.` : "Adds listener age, gender and location from Spotify. Export them at creators.spotify.com → Analytics."}</span>
-            </p>
-            <SpotifyUpload has={!!sp} stale={spStale} />
-          </div>
-        );
-      })()}
+            )}
+          </>
+        )}
+      </Panel>
     </section>
+  );
+}
+
+/** The big number takes the whole first row on a phone, then sits first in the row on a wide screen. */
+const GRID: Record<number, string> = { 0: "grid-cols-1", 1: "grid-cols-2", 2: "grid-cols-2 lg:grid-cols-3", 3: "grid-cols-3 lg:grid-cols-4" };
+const MAIN_SPAN: Record<number, string> = { 2: "col-span-2 lg:col-span-1", 3: "col-span-3 lg:col-span-1" };
+type Tile = { icon: ReactNode; label: string; n: string };
+type Model = {
+  key: string; label: string; icon?: ReactNode; logo?: string;
+  title: ReactNode; sub: ReactNode; mark: ReactNode;
+  /** null: nothing to count here (Spotify before an upload, YouTube): the panel says why instead. */
+  data: PodcastStatsData | null;
+  who: string; source?: Source; milestone?: boolean;
+  extra?: Tile[]; action?: ReactNode; warn?: string;
+  empty?: ReactNode; emptyAction?: ReactNode;
+  /** A tab without download numbers still leads with the big tile: YouTube's subscribers, or "–" before a Spotify upload. */
+  main?: { n: string; label: string };
+};
+const poss = (w: string) => (w.endsWith("s") ? `${w}'` : `${w}'s`);
+const who = (s: SourceView) => (s.source === "militaryvoices" ? "MilitaryVoices" : NAME[s.source]);
+
+/** One tab's page: header, four numbers, a small trend line, top episodes and apps. The same for every tab. */
+function Panel({ m, art, span, children }: { m: Model; art: string; span: Span; children?: ReactNode }) {
+  const d = m.data;
+  const v = d ? inRange(d, span) : null;
+  const change = v && v.prevSum && v.prevSum > 0 && span.before ? Math.round(((v.sum - v.prevSum) / v.prevSum) * 100) : null;
+  const notes: string[] = [];
+  if (d && v) {
+    const isAll = m.key === "all" && !m.source;
+    if (v.monthly && !span.all) notes.push(`${m.who} counts by the month, so this shows whole months.`);
+    if (v.startsLate) notes.push(m.source === "militaryvoices" ? `Hosted here from ${fmtDay(v.first)}, so this starts there.` : m.source === "buzzsprout" ? d.history?.complete ? `Buzzsprout's day-by-day numbers start ${fmtDay(v.first)}.` : `Buzzsprout's day-by-day numbers start ${fmtDay(v.first)} here; each refresh adds a month further back.` : `${isAll ? m.who : `${poss(m.who)} numbers`} start ${fmtDay(v.first)}, so this starts there.`);
+    if (v.endsEarly) notes.push(m.source === "spotify" ? `Spotify's numbers run to ${fmtDay(v.last)}, from your last upload.` : `${isAll ? m.who : `${poss(m.who)} numbers`} run to ${fmtDay(v.last)}.`);
+    if (!span.all && !v.byDate && d.episodes.length) notes.push(`${isAll ? "Buzzsprout gives" : `${m.who} gives`} each episode's total, not by date, so Top episodes is all time.`);
+  }
+  const tiles: Tile[] = d && v ? [
+    ...(d.episodes.length ? [{ icon: <Headphones className="h-4 w-4" />, label: span.all ? "average per episode" : v.byDate ? "average per episode played" : "average per episode, all time", n: v.avg > 0 && v.avg < 10 ? v.avg.toFixed(1).replace(/\.0$/, "") : compact(v.avg) }] : []),
+    { icon: <InfinityIcon className="h-4 w-4" />, label: `${d.unit} all time`, n: compact(d.total) },
+    ...(d.episodes.length ? [{ icon: <ListMusic className="h-4 w-4" />, label: d.episodes.length === 1 ? "episode" : "episodes", n: String(d.episodes.length) }] : []),
+    ...(d.followers ? [{ icon: <Users className="h-4 w-4" />, label: "followers", n: compact(d.followers) }] : []),
+    ...(m.extra ?? []),
+  ].slice(0, 3) : (m.extra ?? []);
+  const apps = v?.apps && Object.keys(v.apps).length > 0 ? v.apps : null;
+  const audience = !!(apps || d?.audience?.age || d?.audience?.gender || (d?.audience?.countries && Object.keys(d.audience.countries).length));
+  const mainLabel = d ? (span.all && m.source === "podbean" ? `${d.unit}, last 2 years` : `${d.unit}, ${span.label}`) : "";
+  const changeText = change === null ? "" : change >= 900 ? `${Math.round(v!.sum / v!.prevSum!)}×` : `${change > 0 ? "+" : ""}${change}%`;
+  return (
+    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-6" data-testid={`listens-${m.key}`}>
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-3">
+        <span className="relative shrink-0">
+          {art ? <img src={art} alt="" className="h-11 w-11 rounded-xl object-cover ring-1 ring-border" /> : <span className="flex h-11 w-11 items-center justify-center rounded-xl bg-muted"><Headphones className="h-5 w-5 text-muted-foreground" /></span>}
+          <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center overflow-hidden rounded-full bg-background ring-2 ring-background">{m.mark}</span>
+        </span>
+        <div className="min-w-0 flex-1 basis-44">
+          <p className="truncate font-bold leading-tight text-foreground">{m.title}</p>
+          <p className="text-xs text-muted-foreground">{m.sub}</p>
+        </div>
+        {m.milestone && d && <Milestone total={d.total} unit={d.unit} />}
+        {m.action}
+      </div>
+      {m.warn && <p className="mt-3 rounded-lg bg-amber-500/10 px-3 py-2 text-xs font-semibold text-amber-800 dark:text-amber-300">{m.warn}</p>}
+
+      {!d && m.main && (
+        <div className="mt-4 grid grid-cols-2 gap-2.5 sm:gap-3 lg:grid-cols-4">
+          <div className="relative overflow-hidden rounded-2xl bg-[#000741] px-4 py-3 text-white" data-testid="podcast-main">
+            <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_120%_at_100%_0%,rgba(59,130,246,0.45),transparent_60%)]" aria-hidden />
+            <p className={`relative text-3xl font-black leading-none tabular-nums ${m.main.n === "–" ? "text-white/50" : ""}`}>{m.main.n}</p>
+            <p className="relative mt-1.5 text-xs text-white/70">{m.main.label}</p>
+          </div>
+        </div>
+      )}
+      {(d && v) || tiles.length ? (
+        <div className={`mt-4 grid gap-2.5 sm:gap-3 ${!(d && v) ? "grid-cols-2 lg:grid-cols-4" : GRID[tiles.length] ?? GRID[3]}`}>
+          {d && v && (
+            <div className={`relative overflow-hidden rounded-2xl bg-[#000741] px-4 py-3 text-white ${MAIN_SPAN[tiles.length] ?? ""}`} data-testid="podcast-main">
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_120%_at_100%_0%,rgba(59,130,246,0.45),transparent_60%)]" aria-hidden />
+              <div className="relative flex items-end gap-3 lg:block">
+                <p className="text-3xl font-black leading-none tabular-nums" data-testid="podcast-hero-number"><CountUp n={v.sum} /></p>
+                {change !== null && <span className={`mb-0.5 inline-flex items-center gap-0.5 rounded-full px-2 py-0.5 text-xs font-bold lg:mt-2 ${change >= 0 ? "bg-emerald-400/15 text-emerald-300" : "bg-red-400/15 text-red-300"}`} data-testid="podcast-change">{change >= 0 ? <ArrowUpRight className="h-3.5 w-3.5" /> : <ArrowDownRight className="h-3.5 w-3.5" />}{changeText} <span className="font-medium opacity-80">vs {span.before}</span></span>}
+              </div>
+              <p className="relative mt-1.5 text-xs text-white/70">{mainLabel}</p>
+            </div>
+          )}
+          {tiles.map((t) => (
+            <div key={t.label} className="min-w-0 rounded-2xl border border-border bg-background px-3 py-3 sm:px-4" data-testid="podcast-tile">
+              <div className="flex items-center gap-2"><span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-lg bg-[#053877]/10 text-[#053877] dark:bg-[#8ab4f8]/15 dark:text-[#8ab4f8]">{t.icon}</span><p className="text-2xl font-black leading-none tabular-nums text-foreground">{t.n}</p></div>
+              <p className="mt-1.5 text-xs leading-snug text-muted-foreground">{t.label}</p>
+            </div>
+          ))}
+        </div>
+      ) : null}
+
+      {v && v.bars.length > 1 && v.sum + (v.prevSum ?? 0) > 0 && <TrendChart bars={v.bars} ticks={v.ticks} unit={d!.unit} />}
+      {notes.length > 0 && <p className="mt-3 flex items-start gap-1.5 text-xs text-muted-foreground" data-testid="range-note"><Sparkles className="mt-px h-3.5 w-3.5 shrink-0 text-[#b36b00] dark:text-[#F0A71F]" />{notes.join(" ")}</p>}
+      {m.empty && (
+        <div className="mt-4 flex flex-wrap items-center gap-3 rounded-2xl border border-dashed border-border bg-muted/30 px-4 py-4" data-testid={`podcast-empty-${m.key}`}>
+          <p className="min-w-0 flex-1 text-sm text-muted-foreground">{m.empty}</p>
+          {m.emptyAction}
+        </div>
+      )}
+      {children}
+      {d && v && (d.episodes.length > 0 || audience) && (
+        <div className="mt-4 grid gap-4 md:grid-cols-2">
+          {d.episodes.length > 0 && (
+            <div className="min-w-0 rounded-2xl border border-border p-4 sm:p-5">
+              <p className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground"><Trophy className="h-4 w-4 text-[#b36b00] dark:text-[#F0A71F]" /> Top episodes{!span.all && v.byDate ? `, ${span.label}` : ""}</p>
+              {v.top.length ? <RankList items={v.top.map((e) => [e.title, e.n])} /> : <p className="text-sm text-muted-foreground">No {d.unit} in these dates.</p>}
+            </div>
+          )}
+          {audience && (
+            <div className="min-w-0 space-y-5 rounded-2xl border border-border p-4 sm:p-5">
+              {apps && <div><p className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground"><Headphones className="h-4 w-4 text-[#053877] dark:text-[#8ab4f8]" /> Listening apps{d.appDays && !span.all ? `, ${span.label}` : ""}</p><Donut items={top(apps)} /></div>}
+              {d.audience?.age && <div><p className="mb-2 text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">Age</p><Bars items={top(d.audience.age, 6)} /></div>}
+              {d.audience?.gender && <div><p className="mb-2 text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">Gender</p><Bars items={top(d.audience.gender)} /></div>}
+              {d.audience?.countries && Object.keys(d.audience.countries).length > 0 && <div><p className="mb-2 text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">Countries</p><Bars items={top(d.audience.countries)} /></div>}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }
 
