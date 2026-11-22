@@ -208,6 +208,15 @@ export function roomStageMeta(look: RoomLook | null, live: RoomLive, name: strin
     meta.stageMediaUrl = abs(clip.url, origin);
     meta.stageMediaKind = (clip.mime ?? "").startsWith("image") ? "image" : "video";
     meta.stageMediaLabel = playing.slot === "intro" ? "Intro" : "Outro";
+  } else if (!playing && live.v3 !== true && scene?.type === "media" && scene.media?.url) {
+    // The v2 stage draws a media scene too (Present or invite's picture, video or slide; Andrew, 22 Nov: "I uploaded an
+    // image. It created … scene 4, but I'm not seeing the image"). v3 draws it in RoomStage instead.
+    meta.stageMediaPlaying = true;
+    meta.stageMediaUrl = abs(scene.media.url, origin);
+    meta.stageMediaKind = (scene.media.mime ?? "").startsWith("image") ? "image" : "video";
+    // "(loop)": a presented video loops until the host stops presenting, as in v3.
+    meta.stageMediaLabel = `${scene.name || "Presenting"} (loop)`;
+    if (Number(scene.people) > 0) meta.stageMediaPeople = true;
   }
   const show = live.showing;
   const banner = show && show.until > now ? (l.banners ?? []).find((b) => b.id === show.bannerId)?.text ?? "" : "";
