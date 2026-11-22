@@ -9,7 +9,7 @@
 import type { Express, RequestHandler } from "express";
 import { storage } from "./storage.js";
 import { seal, unseal } from "./secretBox.js";
-import { getSessionEmail } from "./session.js";
+import { getAdminEmail, getSessionEmail } from "./session.js";
 import { isYoutubeConfigured } from "./youtube.js";
 
 /** YouTube's ingest for a persistent stream key. */
@@ -42,15 +42,17 @@ export function cleanYoutubeKey(raw: unknown): string | null {
 }
 
 /** Whether this person sees Connect YouTube: everyone once Google approves (YOUTUBE_CONNECT=1), admins until then. */
-export async function canConnectYoutube(email: string): Promise<boolean> {
+export async function canConnectYoutube(email: string, adminEmail?: string | null): Promise<boolean> {
   if (!YOUTUBE_OAUTH || !isYoutubeConfigured() || !email) return false;
   if (process.env.YOUTUBE_CONNECT === "1") return true;
-  return storage.isAdminEmail(email).catch(() => false);
+  // An admin signed in to a house account (OCS Blog) or viewing as someone counts too: Andrew, 22 Nov.
+  for (const e of [email, adminEmail ?? ""]) if (e && (await storage.isAdminEmail(e).catch(() => false))) return true;
+  return false;
 }
 
 export function registerYoutubeKey(app: Express, requireHostSession: RequestHandler): void {
   const me = (req: Parameters<RequestHandler>[0]) => (getSessionEmail(req) ?? "").toLowerCase().trim();
-  const status = async (email: string) => {
+  const status = async (email: string, req?: Parameters<RequestHandler>[0]) => {
     const key = await getYoutubeKey(email);
     const acct = await storage.getYoutubeAccount(email).catch(() => undefined);
     return {
@@ -60,23 +62,23 @@ export function registerYoutubeKey(app: Express, requireHostSession: RequestHand
       legacy: !key && acct?.channelId ? { channelTitle: acct.channelTitle || "", scope: acct.scope === "show" ? "show" : "segment" } : null,
       // Connect YouTube (one click with Google) as the main way in (Andrew, 22 Nov: "get it approved"): admins only
       // while Google verifies the app (an unverified app warns people and caps at 100 users); YOUTUBE_CONNECT=1 opens it.
-      canConnect: await canConnectYoutube(email),
+      canConnect: await canConnectYoutube(email, req ? getAdminEmail(req) : null),
     };
   };
   app.get("/api/host/youtube-key", requireHostSession, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
-    res.json(await status(me(req)));
+    res.json(await status(me(req), req));
   });
   app.put("/api/host/youtube-key", requireHostSession, async (req, res) => {
     const email = me(req);
     const key = cleanYoutubeKey(req.body?.key);
     if (!key) return res.status(400).json({ message: "That doesn't look like a YouTube stream key. Copy it from YouTube Studio → Create → Go live → Stream." });
     await setYoutubeKey(email, key);
-    res.json(await status(email));
+    res.json(await status(email, req));
   });
   app.delete("/api/host/youtube-key", requireHostSession, async (req, res) => {
     const email = me(req);
     await setYoutubeKey(email, "");
-    res.json(await status(email));
+    res.json(await status(email, req));
   });
 }

@@ -113,7 +113,7 @@ export function ConnectYoutube({ row = false }: { row?: boolean } = {}) {
   const line = data.saved
     ? `Stream key saved ${data.hint}`
     : data.legacy
-      ? connect ? `Connected as ${channel}. Each show goes live on your channel under its own title.` : `Connected as ${channel}`
+      ? `Connected as ${channel}. Each show goes live on your channel under its own title.`
       : connect ? "One click with your Google account. Your shows go live on your channel, titled after the show." : "Your Radio segment and your studio's Go live also go out on your channel.";
   // With Connect offered, the key box is the small backup: it opens from "or paste a stream key".
   const showForm = connect ? changing : (!data.saved && !data.legacy) || changing;
@@ -135,7 +135,7 @@ export function ConnectYoutube({ row = false }: { row?: boolean } = {}) {
         {data.legacy && !changing && (
           <div className="flex items-center gap-1.5">
             <span className={pill}><Check className="h-3.5 w-3.5" /> Connected</span>
-            {connect && <button type="button" onClick={() => disconnect.mutate()} disabled={disconnect.isPending} className={ghost} data-testid="youtube-disconnect">Disconnect</button>}
+            <button type="button" onClick={() => disconnect.mutate()} disabled={disconnect.isPending} className={ghost} data-testid="youtube-disconnect">Disconnect</button>
           </div>
         )}
         {connect && !data.saved && !data.legacy && !changing && (
@@ -153,10 +153,7 @@ export function ConnectYoutube({ row = false }: { row?: boolean } = {}) {
           </p>
         )}
         {data.legacy && !changing && !connect && (
-          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-[#f9fafb] px-3.5 py-2.5" data-testid="youtube-switch-note">
-            <p className="min-w-0 flex-1 text-[13px] text-[#475467]">This still works. We're moving YouTube to a stream key: one less sign-in.</p>
-            <button type="button" onClick={() => setChanging(true)} className="shrink-0 text-[13px] font-bold text-[#053877] hover:underline" data-testid="youtube-switch-to-key">Switch to a stream key</button>
-          </div>
+          <button type="button" onClick={() => setChanging(true)} className="mt-1.5 text-[13px] font-semibold text-[#053877] underline decoration-[#98a2b3] underline-offset-2" data-testid="youtube-switch-to-key">or use a stream key instead</button>
         )}
         {showForm && (
           <div className="mt-3">
