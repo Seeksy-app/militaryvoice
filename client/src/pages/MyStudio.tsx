@@ -279,6 +279,50 @@ function PreviewToggle({ on, onClick, label, children }: { on: boolean; onClick:
 
 /* ───────────────────────── In the studio ───────────────────────── */
 
+/**
+ * The stage as big as the room allows (Andrew, 22 Nov: "make the viewer a little bit larger"): the column's
+ * width, or the height left once the bar, the people row and the controls are counted. It was capped at 768px.
+ */
+const STAGE_W = "min(100%, calc((100dvh - 375px) * 16 / 9))";
+
+/** The right panel's width, dragged from its left edge (Andrew, 22 Nov: "can we make that expandable"); kept per computer. */
+const RAIL = { min: 340, max: 600, def: 372, key: "mv-studio-rail" };
+function useRailWidth() {
+  const [w, setW] = useState(() => { try { const n = Number(localStorage.getItem(RAIL.key)); return n >= RAIL.min && n <= RAIL.max ? n : RAIL.def; } catch { return RAIL.def; } });
+  // Never so wide that the stage column gets squeezed: leave it at least 480px beside the Scenes column.
+  const [vw, setVw] = useState(() => window.innerWidth);
+  useEffect(() => { const r = () => setVw(window.innerWidth); window.addEventListener("resize", r); return () => window.removeEventListener("resize", r); }, []);
+  const cap = Math.max(RAIL.min, Math.min(RAIL.max, vw - 232 - 480));
+  const save = useCallback((n: number) => { const v = Math.round(Math.max(RAIL.min, Math.min(RAIL.max, n))); setW(v); try { localStorage.setItem(RAIL.key, String(v)); } catch { /* private window */ } }, []);
+  return { width: Math.min(w, cap), cap, save };
+}
+
+function RailHandle({ width, cap, save }: { width: number; cap: number; save: (n: number) => void }) {
+  const [dragging, setDragging] = useState(false);
+  const down = (e: React.PointerEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    const x0 = e.clientX, w0 = width;
+    setDragging(true);
+    const move = (ev: PointerEvent) => save(Math.min(cap, w0 + (x0 - ev.clientX)));
+    const up = () => { setDragging(false); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); document.body.style.cursor = ""; document.body.style.userSelect = ""; };
+    document.body.style.cursor = "col-resize"; document.body.style.userSelect = "none";
+    window.addEventListener("pointermove", move);
+    window.addEventListener("pointerup", up);
+  };
+  const key = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (e.key === "ArrowLeft") { e.preventDefault(); save(Math.min(cap, width + 24)); }
+    if (e.key === "ArrowRight") { e.preventDefault(); save(width - 24); }
+  };
+  return (
+    <div role="separator" aria-orientation="vertical" aria-label="Resize the side panel" aria-valuemin={RAIL.min} aria-valuemax={cap} aria-valuenow={width} tabIndex={0}
+      onPointerDown={down} onKeyDown={key} onDoubleClick={() => save(RAIL.def)} title="Drag to resize · double-click to reset"
+      className="group absolute -left-[6px] top-0 z-20 flex h-full w-3 cursor-col-resize touch-none items-center justify-center outline-none" data-testid="rail-resize">
+      <span className={`h-full w-px transition-colors ${dragging ? "bg-[#84adff]" : "bg-transparent group-hover:bg-[#b2ccff] group-focus-visible:bg-[#84adff]"}`} />
+      <span className={`absolute h-14 w-[6px] rounded-full ring-4 ring-[#f3f4f7] transition-colors ${dragging ? "bg-[#528bff]" : "bg-[#d0d5dd] group-hover:bg-[#84adff] group-focus-visible:bg-[#528bff]"}`} />
+    </div>
+  );
+}
+
 function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomName: string; studio?: Studio; title: string }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -296,6 +340,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
   const notesLabel = owner ? "Teleprompter" : "Notes";
   const [sheet, setSheet] = useState(false);
   const [settings, setSettings] = useState(false);
+  const rail = useRailWidth();
   const [busy, setBusy] = useState<"" | "rec" | "live">("");
   const hosting = useQuery<{ shows: { show: { artworkUrl?: string } }[] }>({ queryKey: ["/api/host/hosting"], enabled: owner, queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json(), staleTime: 60_000, retry: false });
   const logo = hosting.data?.shows?.find((s) => s.show.artworkUrl)?.show.artworkUrl;
@@ -398,32 +443,39 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
           <p className="text-xs text-[#667085]">{today()} · {owner ? "Your studio" : "You're a guest"}</p>
         </div>
         {owner && studio && (
-          <div className="ml-2 hidden items-center gap-2 md:flex">
-            {rec ? (
-              <button type="button" onClick={() => setTab("recording")} className="flex items-center gap-2 rounded-full bg-[#fef3f2] px-3.5 py-[7px] text-[13px] font-semibold tabular-nums text-[#b42318]" data-testid="badge-recording">
-                <span className="h-2 w-2 animate-pulse rounded-full bg-[#d92d20]" /> Recording · {clock(rec.since, now)}
-              </button>
-            ) : studio.canRecord ? (
-              <button type="button" onClick={() => void record(true)} disabled={busy !== ""} className="flex items-center gap-2 rounded-full border border-[#fda29b] bg-white px-3.5 py-[6px] text-[13px] font-semibold text-[#b42318] hover:bg-[#fef3f2] disabled:opacity-60" data-testid="my-studio-record">
-                {busy === "rec" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Circle className="h-2.5 w-2.5 fill-current" />} Record to your Library
-              </button>
-            ) : null}
-            {live ? (
-              <span className="flex items-center gap-2 rounded-full bg-[#d92d20] px-3.5 py-[7px] text-[13px] font-bold tabular-nums text-white" data-testid="badge-live">LIVE · {clock(live.since, now)}</span>
-            ) : <span className="rounded-full bg-[#f2f4f7] px-3.5 py-[7px] text-[13px] font-semibold text-[#475467]">Not live yet</span>}
-          </div>
-        )}
-        {owner && studio && (
+          // Two starts, one way per job (Andrew, 22 Nov: "you want to go live, or you want just to record, record and go
+          // live"): Record, and Go live (its sheet ticks "Also record to my Library"). Each turns into its own state with its
+          // own Stop or End; the old "Record to your Library" pill and "Not live yet" chip are gone.
           <div className="ml-auto flex shrink-0 items-center gap-2.5 whitespace-nowrap">
             {MARK_CLIP && <MarkClip recording={!!rec} />}
             {live?.watchUrl && <a href={live.watchUrl} target="_blank" rel="noreferrer" className="hidden items-center gap-1 text-[13px] font-semibold text-[#053877] underline-offset-2 hover:underline lg:flex">Watch <ExternalLink className="h-3.5 w-3.5" /></a>}
-            <button type="button" onClick={copyInvite} className="hidden h-[42px] items-center gap-2 rounded-xl border border-[#d0d5dd] bg-white px-4 text-sm font-semibold hover:bg-[#f9fafb] sm:flex" data-testid="my-studio-invite"><UserPlus className="h-[18px] w-[18px]" /> Invite guests</button>
-            {live ? (
-              <button type="button" onClick={() => void endLive()} disabled={busy !== ""} className="flex h-[42px] items-center gap-2 rounded-xl border border-[#fda29b] bg-white px-5 text-sm font-bold text-[#b42318] hover:bg-[#fef3f2] disabled:opacity-60" data-testid="my-studio-end-live">
-                {busy === "live" ? <Loader2 className="h-4 w-4 animate-spin" /> : <Square className="h-3.5 w-3.5 fill-current" />} End live
+            <button type="button" onClick={copyInvite} className="hidden h-[42px] items-center gap-2 rounded-xl border border-[#d0d5dd] bg-white px-4 text-sm font-semibold hover:bg-[#f9fafb] lg:flex" data-testid="my-studio-invite"><UserPlus className="h-[18px] w-[18px]" /> Invite guests</button>
+            {rec ? (
+              <div className="flex h-[42px] items-center overflow-hidden rounded-xl bg-[#fef3f2] ring-1 ring-inset ring-[#fecdca]" data-testid="badge-recording">
+                <button type="button" onClick={() => setTab("recording")} className="flex h-full items-center gap-2 pl-3.5 pr-3 text-sm font-bold tabular-nums text-[#b42318]" aria-label={`Recording, ${clock(rec.since, now)}. Open the recording panel`}>
+                  <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-[#d92d20]" /><span className="hidden sm:inline">Recording</span> {clock(rec.since, now)}
+                </button>
+                {/* While live, the recording is part of the show: End live first, or stop it from the Recording panel. */}
+                {!live && (
+                  <button type="button" onClick={() => { if (window.confirm("Stop recording? It goes to your Library, ready for clips.")) void record(false); }} disabled={busy !== ""} className="flex h-full items-center gap-1.5 border-l border-[#fecdca] px-3.5 text-sm font-bold text-[#b42318] hover:bg-[#fee4e2] disabled:opacity-60" data-testid="my-studio-stop-record">
+                    {busy === "rec" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Square className="h-3 w-3 fill-current" />} Stop
+                  </button>
+                )}
+              </div>
+            ) : studio.canRecord ? (
+              <button type="button" onClick={() => void record(true)} disabled={busy !== ""} className="flex h-[42px] items-center gap-2 rounded-xl border border-[#fda29b] bg-white px-4 text-sm font-bold text-[#b42318] hover:bg-[#fef3f2] disabled:opacity-60" data-testid="my-studio-record">
+                {busy === "rec" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Circle className="h-2.5 w-2.5 fill-current" />} Record
               </button>
+            ) : null}
+            {live ? (
+              <div className="flex h-[42px] items-center overflow-hidden rounded-xl bg-[#d92d20] text-white" data-testid="badge-live">
+                <span className="flex items-center pl-4 pr-3 text-sm font-extrabold tabular-nums">LIVE {clock(live.since, now)}</span>
+                <button type="button" onClick={() => void endLive()} disabled={busy !== ""} className="flex h-full items-center gap-1.5 border-l border-white/30 px-3.5 text-sm font-bold hover:bg-[#b42318] disabled:opacity-60" data-testid="my-studio-end-live">
+                  {busy === "live" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Square className="h-3 w-3 fill-current" />} End live
+                </button>
+              </div>
             ) : (
-              <button type="button" onClick={() => setSheet(true)} className="h-[42px] rounded-xl px-6 text-sm font-bold text-white shadow-[0_4px_12px_rgba(5,56,119,0.28)]" style={{ background: NAVY }} data-testid="my-studio-live">Go live</button>
+              <button type="button" onClick={() => setSheet(true)} className="h-[42px] rounded-xl px-5 text-sm font-bold text-white shadow-[0_4px_12px_rgba(5,56,119,0.28)] sm:px-6" style={{ background: NAVY }} data-testid="my-studio-live">Go live</button>
             )}
           </div>
         )}
@@ -436,7 +488,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
         <div className="flex min-w-0 flex-1 flex-col items-center px-4 pt-5 lg:px-6">
           {owner ? (
             // The host sees exactly what's recorded and streamed (Engineering's RoomStage); guests keep the plain grid.
-            <div className="relative shrink-0 rounded-2xl shadow-[0_12px_32px_rgba(16,24,40,0.22)]" style={{ width: "min(768px, 100%, calc((100dvh - 375px) * 16 / 9))" }}>
+            <div className="relative shrink-0 rounded-2xl shadow-[0_12px_32px_rgba(16,24,40,0.22)]" style={{ width: STAGE_W }}>
               <RoomStage muted onMediaEnded={() => kit.play(null)} />
               {/* The teleprompter: on this screen only, over the preview; the program is drawn elsewhere. */}
               <PrompterOverlay roomKey={noteKey} text={notes} />
@@ -469,7 +521,8 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
         </div>
 
         {/* Right panel */}
-        <aside className={`hidden shrink-0 border-l border-[#e4e7ec] bg-white lg:flex ${editing ? "w-[372px] 2xl:w-[404px]" : "w-[372px]"}`}>
+        <aside className="relative hidden shrink-0 border-l border-[#e4e7ec] bg-white lg:flex" style={{ width: rail.width }} data-testid="my-studio-rail">
+          <RailHandle width={rail.width} cap={rail.cap} save={rail.save} />
           <div className="flex min-w-0 flex-1 flex-col">
             {tab === "look" && editing && <LookPanel kit={kit} />}
             {tab === "media" && v3 && <MediaPanel kit={kit} />}
@@ -594,7 +647,7 @@ function Stage({ kit, scene, fallbackLogo }: { kit: RoomKit; scene?: Scene; fall
   if (!cams.length && !screens.length) body = <div className="flex h-full items-center justify-center text-center text-[15px] font-semibold text-white/80">No one is on the stage in this scene</div>;
 
   return (
-    <div className="relative shrink-0 overflow-hidden rounded-2xl shadow-[0_12px_32px_rgba(16,24,40,0.22)]" style={{ width: "min(768px, 100%, calc((100dvh - 375px) * 16 / 9))", aspectRatio: "16 / 9", background }} data-testid="my-studio-stage">
+    <div className="relative shrink-0 overflow-hidden rounded-2xl shadow-[0_12px_32px_rgba(16,24,40,0.22)]" style={{ width: STAGE_W, aspectRatio: "16 / 9", background }} data-testid="my-studio-stage">
       <div className={`absolute inset-x-[4.5%] top-[12.5%] transition-[bottom] duration-300 ${banner ? "bottom-[17%]" : "bottom-[8%]"}`}>{body}</div>
       {logo && <img src={logo} alt="Your show's logo" className={`absolute top-2 h-[11%] max-h-[50px] w-auto rounded-md object-contain ${corner === "tl" ? "left-4" : "right-4"}`} />}
       {banner && <div className="absolute bottom-[3%] left-[4.5%] max-w-[80%] truncate rounded-lg bg-[#053877] px-4 py-2 text-[15px] font-bold text-white shadow-[0_6px_18px_rgba(0,0,0,0.3)]" data-testid="stage-banner">{banner.text}</div>}
@@ -681,7 +734,7 @@ function PeopleStrip({ kit, owner, sharing, onShare, onInvite }: { kit: RoomKit;
     // Present or invite sits straight after the last person, not pushed to the far right (Andrew,
     // 21 Nov: "should be to the right next to the first card"): the row takes only the room its tiles
     // need and shrinks (then scrolls) when they don't fit. gap-2 plus the row's p-1 = the gap-3 between tiles.
-    <div className="mt-3 flex w-full max-w-[768px] shrink-0 gap-2">
+    <div className="mt-3 flex w-full shrink-0 gap-2" style={{ maxWidth: STAGE_W }}>
     <div className="relative flex min-w-0">
     <div ref={row} onScroll={measure} className="flex min-w-0 gap-3 overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" data-testid="my-studio-strip">
       {cams.map((t) => <PersonTile key={key(t)} t={t} kit={kit} owner={owner} scenes={scenes} />)}
@@ -961,7 +1014,7 @@ function Backstage({ kit }: { kit: RoomKit }) {
   // useLocalParticipant doesn't re-render on attribute changes; this does, so the notice shows the moment the host sends you backstage.
   const stage = useParticipantAttribute("stage", { participant: localParticipant });
   if (kit.isOnStage(localParticipant.identity, stage)) return null;
-  return <p className="mt-3 w-full max-w-[768px] shrink-0 rounded-xl bg-[#fff8e6] px-4 py-2.5 text-sm font-semibold text-[#7a4e00]" data-testid="you-backstage">You're backstage. You're not in the recording or the live show until the host brings you on.</p>;
+  return <p style={{ maxWidth: STAGE_W }} className="mt-3 w-full shrink-0 rounded-xl bg-[#fff8e6] px-4 py-2.5 text-sm font-semibold text-[#7a4e00]" data-testid="you-backstage">You're backstage. You're not in the recording or the live show until the host brings you on.</p>;
 }
 
 function MiniFace({ t }: { t: TrackReferenceOrPlaceholder }) {
@@ -1104,6 +1157,10 @@ function GoLiveSheet({ studio, onClose }: { studio: Studio; onClose: () => void 
   const [add, setAdd] = useState({ name: "", url: "", key: "" });
   const [busy, setBusy] = useState<"" | "patch" | "go">("");
   const [error, setError] = useState("");
+  // "Also record to my Library" (Andrew, 22 Nov: "They may not want to go live. They just may want to record it"):
+  // on by default, untick to stream only. Already recording: it stays on and can't be unticked here.
+  const [alsoRecord, setAlsoRecord] = useState(true);
+  const recordToo = !!studio.recording || (alsoRecord && studio.canRecord);
   const set = (s: Studio) => qc.setQueryData(["/api/host/my-studio"], s);
   const patch = async (body: Record<string, unknown>) => {
     setBusy("patch"); setError("");
@@ -1116,10 +1173,9 @@ function GoLiveSheet({ studio, onClose }: { studio: Studio; onClose: () => void 
   const start = async () => {
     setBusy("go"); setError("");
     try {
-      // Your Library is always on: going live records too.
-      if (!studio.recording && studio.canRecord) set((await (await apiRequest("POST", "/api/host/my-studio/record", { on: true })).json()) as Studio);
+      if (recordToo && !studio.recording) set((await (await apiRequest("POST", "/api/host/my-studio/record", { on: true })).json()) as Studio);
       set((await (await apiRequest("POST", "/api/host/my-studio/live", { on: true, title: title.trim() || studio.name })).json()) as Studio);
-      toast({ title: "You're live", description: "It's recording to your Library too." });
+      toast(recordToo ? { title: "You're live", description: "It's recording to your Library too." } : { title: "You're live", description: "Not recording. Press Record at the top any time." });
       onClose();
     } catch (e) { setError(say(e)); setBusy(""); }
   };
@@ -1128,13 +1184,8 @@ function GoLiveSheet({ studio, onClose }: { studio: Studio; onClose: () => void 
   return (
     <Sheet onClose={onClose} testId="go-live-sheet">
       <h2 className="text-[22px] font-bold tracking-tight">Go live</h2>
-      <p className="mt-1 text-[15px] text-[#475467]">Pick where the show goes. It's recorded to your Library either way, ready for clips.</p>
+      <p className="mt-1 text-[15px] text-[#475467]">Pick where the show goes.</p>
       <div className="mt-5 space-y-2.5">
-        <div className={`${row} border-[#abefc6] bg-[#f6fef9]`}>
-          <div className={`${icon} bg-[#d1fadf] text-[#067647]`}><Check className="h-5 w-5" /></div>
-          <div className="min-w-0 flex-1"><p className="font-semibold">Your Library</p><p className="text-[13px] text-[#475467]">Always on. Your episode and clips start from here.</p></div>
-          <span className="rounded-full bg-[#d1fadf] px-3 py-1 text-[13px] font-bold text-[#067647]">On</span>
-        </div>
         <div className={`${row} ${ytOn ? "border-2 border-[#053877] bg-[#f5f8fd] p-[15px]" : "border-[#e4e7ec]"}`}>
           <div className={`${icon} bg-[#fee4e2] text-[#d92d20]`}><Youtube className="h-6 w-6" /></div>
           <div className="min-w-0 flex-1"><p className="font-semibold">YouTube</p><p className="truncate text-[13px] text-[#475467]">{studio.youtube ? "Your channel · connected" : "Connect your channel once, then it's one press."}</p></div>
@@ -1168,6 +1219,15 @@ function GoLiveSheet({ studio, onClose }: { studio: Studio; onClose: () => void 
           )}
         </div>
       </div>
+      {studio.canRecord && (
+        <label className={`mt-4 flex items-start gap-3 rounded-2xl border p-4 ${recordToo ? "border-[#abefc6] bg-[#f6fef9]" : "border-[#e4e7ec]"} ${studio.recording ? "" : "cursor-pointer"}`} data-testid="golive-record-row">
+          <input type="checkbox" checked={recordToo} disabled={!!studio.recording || busy !== ""} onChange={(e) => setAlsoRecord(e.target.checked)} className="mt-0.5 h-5 w-5 shrink-0 accent-[#067647]" data-testid="golive-also-record" />
+          <span className="min-w-0">
+            <span className="block font-semibold">Also record to my Library</span>
+            <span className="block text-[13px] text-[#475467]">{studio.recording ? "You're already recording. It keeps going." : recordToo ? "Your episode and clips start from the recording. Untick to stream only." : "Streaming only. You can press Record at the top any time."}</span>
+          </span>
+        </label>
+      )}
       <label className="mt-5 block text-sm font-semibold" htmlFor="live-title">Title of your show</label>
       <input id="live-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={100} className="mt-1.5 h-12 w-full rounded-xl border border-[#d0d5dd] px-4 text-[15px] outline-none focus:border-[#053877] focus:ring-2 focus:ring-[#053877]/15" />
       {error && <p className="mt-3 text-sm font-medium text-[#b42318]">{error}</p>}
@@ -1175,7 +1235,7 @@ function GoLiveSheet({ studio, onClose }: { studio: Studio; onClose: () => void 
         {!anyOn && <p className="mr-auto text-[13px] text-[#667085]">Pick YouTube or add a key to go live.</p>}
         <button type="button" onClick={onClose} className="h-12 rounded-xl px-5 text-[15px] font-semibold text-[#344054] hover:bg-[#f2f4f7]">Not yet</button>
         <button type="button" onClick={() => void start()} disabled={!anyOn || busy !== ""} className="flex h-12 items-center gap-2 rounded-xl bg-[#d92d20] px-6 text-[15px] font-bold text-white shadow-[0_4px_12px_rgba(217,45,32,0.28)] disabled:opacity-50 disabled:shadow-none" data-testid="golive-start">
-          {busy === "go" && <Loader2 className="h-4 w-4 animate-spin" />}Start the live show
+          {busy === "go" && <Loader2 className="h-4 w-4 animate-spin" />}{recordToo && !studio.recording ? "Go live and record" : "Go live"}
         </button>
       </div>
     </Sheet>
