@@ -707,6 +707,23 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
   const adminAddr = getAdminEmail(req);
   const fromMemberStudio = /^https?:\/\/[^/]+\/studio\/control(\/|\?|#|$)/i.test(String(req.get("referer") ?? ""));
   const leftoverAdmin = fromMemberStudio && !!memberAddr && !!adminAddr && memberAddr !== adminAddr.trim().toLowerCase();
+  // Sending an approved reply with no browser (Andrew, 22 Nov: "let's do it where everything's automatic. It still needs
+  // to be approved, but otherwise, you guys can send it without any browser"): ADMIN_SEND_KEY in x-admin-send-key opens
+  // exactly one thing, POST /api/admin/inbound/:id/reply, as the team from hello@. Nothing else, not even a read.
+  // The route adds the rest: Andrew's go quoted, one send per message, 20 a day, and a Slack line for each.
+  const sendKey = process.env.ADMIN_SEND_KEY ?? "";
+  const givenSend = String(req.get("x-admin-send-key") ?? "");
+  if (givenSend && sendKey.length >= 32) {
+    const ok = givenSend.length === sendKey.length && crypto.timingSafeEqual(Buffer.from(givenSend), Buffer.from(sendKey));
+    if (ok && req.method === "POST" && /^\/api\/admin\/inbound\/\d+\/reply$/.test(req.path)) {
+      (req as any).adminEmail = "claude-send@militaryvoices.ai";
+      (req as any).viaSendKey = true;
+      next();
+      return;
+    }
+    res.status(403).json({ message: ok ? "The send key only sends an approved reply to an inbound message." : "Admins only." });
+    return;
+  }
   // The always-on Claude sessions on the Alex VPS (Andrew, 21 Nov: "Yes, set it up"): ADMIN_READ_KEY in
   // x-admin-read-key opens admin READS only. Never a write, and never shared logins, the people export or
   // finances. The key is made and kept on the VPS (mode 600) and in Vercel; no session ever prints it.
@@ -9555,7 +9572,16 @@ export function registerRoutes(app: Express): void {
     const row = await storage.getInbound(Number(req.params.id));
     if (!row) return res.status(404).json({ message: "No such reply." });
     const text = String(req.body?.text ?? "").trim();
-    const from = req.body?.from === "riccoh" ? "riccoh" : "team";
+    // A session with the send key: always the team from hello@, never Riccoh.
+    const viaKey = (req as any).viaSendKey === true;
+    const from = !viaKey && req.body?.from === "riccoh" ? "riccoh" : "team";
+    const approval = String(req.body?.approval ?? "").trim().slice(0, 500);
+    const dayKey = `send-key:day:${new Date().toISOString().slice(0, 10)}`;
+    if (viaKey) {
+      if (approval.length < 2) return res.status(400).json({ message: "Quote Andrew's go on this exact text in approval." });
+      if (row.status === "sent" || row.repliedAt) return res.status(409).json({ message: "This one has already had a reply." });
+      if ((Number(await storage.getSetting(dayKey).catch(() => "0")) || 0) >= 20) return res.status(429).json({ message: "20 sends today with the key: that's the limit. Use the admin screen." });
+    }
     const subject = String(req.body?.subject ?? row.draftSubject ?? "").trim() || (row.subject.startsWith("Re:") ? row.subject : `Re: ${row.subject}`);
     if (!text) return res.status(400).json({ message: "Nothing to send." });
     // Web addresses in the reply become links (a full stop or bracket after one stays outside it).
@@ -9576,6 +9602,11 @@ export function registerRoutes(app: Express): void {
       await storage.recordOneOffSend({ eventId: featured?.id ?? null, subject, bodyText: text, sender: from === "riccoh" ? "member:1" : "team", banner: "podcasters", email: row.fromEmail, resendId: id });
     } catch (err) {
       console.error("Reply sent but not logged:", err);
+    }
+    if (viaKey) {
+      await storage.setSetting(dayKey, String((Number(await storage.getSetting(dayKey).catch(() => "0")) || 0) + 1)).catch(() => {});
+      const first = text.replace(/\s+/g, " ").slice(0, 280);
+      void slackNote(`:outbox_tray: A Claude session sent a reply with the send key, from hello@ to ${row.fromEmail}: "${subject}"\n> ${first}${text.length > 280 ? "…" : ""}\nAndrew's go: "${approval}"`).catch(() => {});
     }
     res.json(await storage.getInbound(row.id));
   });

@@ -51,3 +51,24 @@ a single secret later, run it again and press Return at the ones that stay the s
 
 (`read -rs "A?…"` is zsh, the Mac's Terminal shell.) It prints "works: yes" three times, "running mv-clipper:…" and the
 worker's first lines.
+
+## Claude sessions: sending an approved reply (no browser)
+
+Andrew, 22 Nov 2026: "you guys can send it without any browser". The send key only does one thing: it sends a reply to one inbound message, as the team from hello@. The key is in `~/.mv-send-key` (mode 600) on the VPS and on the Mac, and in Vercel as `ADMIN_SEND_KEY`. Never print it.
+
+Use it only after Andrew has said yes to the exact text, and quote his go in `approval`:
+
+```bash
+jq -n --arg text "$(cat reply.txt)" --arg approval "Andrew, 22 Nov: \"Yes, send it\"" '{text:$text, approval:$approval}' \
+  | curl -sS -X POST -H "x-admin-send-key: $(cat ~/.mv-send-key)" -H "content-type: application/json" \
+    --data @- https://www.militaryvoices.ai/api/admin/inbound/<id>/reply
+```
+
+What it enforces:
+- It always sends as the team from hello@, never as Riccoh.
+- The recipient is whoever wrote that inbound message, and only one reply per message.
+- 20 sends a day.
+- `approval` is required.
+- Every send is logged in Mail/CRM like any reply, and posts a line to #mv-inbox with the recipient, subject, first lines and Andrew's go.
+
+Find the message id with the read key: `GET /api/admin/inbound`. To revoke the send key, delete `ADMIN_SEND_KEY` in Vercel and redeploy.
