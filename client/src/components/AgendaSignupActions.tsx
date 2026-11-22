@@ -1,4 +1,5 @@
 import { SmsConsent } from "@/components/SmsConsent";
+import { BrandMark } from "@/components/BrandMark";
 import { useState } from "react";
 import { useMutation } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
@@ -8,7 +9,7 @@ import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { detectLocalTimeZone } from "@/lib/schedule";
-import { Share2, BellRing, Check, CalendarPlus, Youtube } from "lucide-react";
+import { Share2, BellRing, Check, CalendarPlus } from "lucide-react";
 import type { PublicSignup } from "@shared/schema";
 import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 
@@ -178,7 +179,7 @@ export function AgendaSignupActions({ signup, shareText }: Props) {
       {signup.youtubeUrl && (
         <Button type="button" variant="ghost" size="sm" className="h-8 gap-1 px-2 text-xs" asChild data-testid={`link-youtube-${signup.id}`}>
           <a href={signup.youtubeUrl} target="_blank" rel="noopener noreferrer">
-            <Youtube className="h-3.5 w-3.5 text-[#FF0000]" /> YouTube
+            <BrandMark brand="youtube" className="h-3.5 w-3.5" /> YouTube
           </a>
         </Button>
       )}

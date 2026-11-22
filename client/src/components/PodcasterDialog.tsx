@@ -1,4 +1,5 @@
 import { useQuery } from "@tanstack/react-query";
+import { BrandMark } from "@/components/BrandMark";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,7 @@ import { AgendaSignupActions } from "@/components/AgendaSignupActions";
 import { resolveUploadUrl, apiRequest } from "@/lib/queryClient";
 import type { PublicSignup } from "@shared/schema";
 import { formatDateInZone, formatTimeInZone, zoneLabel } from "@/lib/schedule";
-import { Mic2, Globe, Youtube, Radio, PlayCircle, CalendarClock } from "lucide-react";
+import { Mic2, Globe, Radio, PlayCircle, CalendarClock } from "lucide-react";
 
 interface LatestEpisode {
   title: string;
@@ -169,7 +170,7 @@ export function PodcasterDialog({ signup, onAirStart, onAirEnd, zone, shareText,
                     rel="noopener noreferrer"
                     className="inline-flex items-center gap-1.5 rounded-full border border-border px-3 py-1.5 text-xs font-medium hover-elevate"
                   >
-                    <Youtube className="h-3.5 w-3.5 text-[#FF0000]" /> YouTube
+                    <BrandMark brand="youtube" className="h-3.5 w-3.5" /> YouTube
                   </a>
                 )}
               </div>

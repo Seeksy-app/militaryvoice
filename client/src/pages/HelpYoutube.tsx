@@ -1,9 +1,10 @@
 import { Link } from "wouter";
+import { BrandMark } from "@/components/BrandMark";
 import { NavBar } from "@/components/NavBar";
 import { HelpArticle } from "@/components/HelpArticle";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Button } from "@/components/ui/button";
-import { ArrowRight, Youtube } from "lucide-react";
+import { ArrowRight } from "lucide-react";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
@@ -73,7 +74,7 @@ export default function HelpYoutube() {
         </Section>
 
         <div className="mt-12 flex flex-wrap items-center gap-3 rounded-2xl border border-border bg-card p-5">
-          <Youtube className="h-6 w-6 text-[#FF0000]" />
+          <BrandMark brand="youtube" className="h-6 w-6" />
           <p className="min-w-0 flex-1 text-sm text-muted-foreground">Ready? It takes about two minutes.</p>
           <Button asChild className="gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]">
             <Link href="/host/dashboard/integrations">Add my stream key <ArrowRight className="h-4 w-4" /></Link>

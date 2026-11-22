@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { BrandMark } from "@/components/BrandMark";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, Loader2, Plus, Radio, RefreshCw, Trash2, Video, Youtube } from "lucide-react";
+import { Check, Copy, Loader2, Plus, Radio, RefreshCw, Trash2, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
@@ -65,7 +66,7 @@ export function StudioHome() {
         <p className="mt-0.5 text-sm text-muted-foreground">Go live streams your studio to everywhere switched on here, all at once.</p>
         <div className="mt-3 divide-y divide-border rounded-xl border border-border">
           <div className="flex items-center gap-3 px-3 py-2.5">
-            <Youtube className="h-5 w-5 shrink-0 text-red-600" />
+            <BrandMark brand="youtube" className="h-5 w-5" />
             <span className="min-w-0 flex-1 text-sm"><span className="font-medium">YouTube</span><span className="block text-xs text-muted-foreground">{s.youtube ? "Goes live on your channel each time" : "Add your stream key once"}</span></span>
             {s.youtube ? <Switch checked={s.youtubeOn} onCheckedChange={(v) => void patch({ youtubeOn: v })} disabled={busy} data-testid="studio-youtube-on" /> : <a href="/host/dashboard/integrations" className="text-sm font-semibold text-[#053877] hover:underline dark:text-white">Add your key</a>}
           </div>

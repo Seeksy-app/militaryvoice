@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from "react";
+import { BrandMark } from "@/components/BrandMark";
 import { OutsideCapture } from "@/components/OutsideCapture";
 import { GuestsEditor } from "@/components/GuestsEditor";
 import { useMutation, useQueries, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -66,7 +67,7 @@ import { CampaignBuilder } from "@/components/CampaignBuilder";
 import { AutomationsPanel } from "@/components/AdminAutomations";
 import { AudienceFigures } from "@/components/AudienceFigures";
 import { TimeZoneSelect } from "@/components/TimeZoneSelect";
-import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, DollarSign, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound, PlayCircle, Copy, Mail, Search, Upload, ChevronRight, ArrowLeft, Send, RefreshCw, Youtube, Zap } from "lucide-react";
+import { Download, LogOut, Lock, HeadphonesIcon, Ban, Trash2, Star, Plus, Pencil, DollarSign, ArrowUp, ArrowDown, Eye, EyeOff, ImagePlus, Handshake, Users, KeyRound, PlayCircle, Copy, Mail, Search, Upload, ChevronRight, ArrowLeft, Send, RefreshCw, Zap } from "lucide-react";
 import { CADENCE, CADENCE_STEPS, cadenceSource } from "@shared/schema";
 import { GreenRoomButton } from "@/components/GreenRoomButton";
 import type { EventRow, PublicEvent, SignupRow, UpdateEvent, InsertEvent, SponsorRow, SponsorPackageWithSold, AdminUserRow, SponsorInquiryRow, PublicSettings, ShowAssetRow, InboundEmailRow } from "@shared/schema";
@@ -946,18 +947,14 @@ function SignupsCard({ eventId }: { eventId: number }) {
                         <div className="min-w-0">
                           <div className="flex items-center gap-1.5">
                             <span className="truncate text-sm font-medium text-card-foreground">{s.podcastName}</span>
-                            <Youtube
-                              className={`h-3.5 w-3.5 shrink-0 ${
-                                (s as { youtubeConnected?: boolean }).youtubeConnected
-                                  ? "text-[#FF0000]"
-                                  : "text-muted-foreground/25"
-                              }`}
+                            <span
+                              className={(s as { youtubeConnected?: boolean }).youtubeConnected ? "inline-flex" : "inline-flex opacity-25 grayscale"}
                               aria-label={
                                 (s as { youtubeConnected?: boolean }).youtubeConnected
                                   ? `Streaming to ${(s as { youtubeChannelTitle?: string }).youtubeChannelTitle || "their channel"}`
                                   : "No YouTube channel connected"
                               }
-                            />
+                            ><BrandMark brand="youtube" className="h-3.5 w-3.5" /></span>
                           </div>
                           <div className="truncate text-xs text-muted-foreground">{s.hostName}</div>
                         </div>

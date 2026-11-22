@@ -2,7 +2,7 @@ import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Cable, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { IconTile } from "@/components/ui/icon-tile";
+import { BrandMark, BrandStack, type Brand } from "@/components/BrandMark";
 import { CopyField } from "@/components/OwnEncoder";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
@@ -21,10 +21,10 @@ type Payload = {
 const hours = (min: number) => (min >= 60 ? `${Math.round((min / 60) * 10) / 10} hours` : `${min} minutes`);
 const say = (e: unknown) => ((e as Error).message ?? "").replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, "") || "Try again in a moment.";
 
-const TOOLS: { name: string; steps: string[] }[] = [
-  { name: "StreamYard", steps: ["In StreamYard, open your broadcast and choose Destinations, then Add a destination, then Custom RTMP.", "Paste the Server URL and the Stream key from this page, and save.", "Turn MilitaryVoices on, and go live as you always do."] },
-  { name: "Restream", steps: ["In Restream, open Channels and choose Add Channel, then Custom RTMP.", "Paste the Server URL and the Stream key from this page, and save.", "Switch the channel on, and go live as you always do."] },
-  { name: "OBS or another encoder", steps: ["In OBS, open Settings, then Stream, and set Service to Custom.", "Paste the Server URL and the Stream key from this page.", "Press Start Streaming. 1920×1080 at 30 frames a second is right."] },
+const TOOLS: { name: string; brand: Brand; steps: string[] }[] = [
+  { name: "StreamYard", brand: "streamyard", steps: ["In StreamYard, open your broadcast and choose Destinations, then Add a destination, then Custom RTMP.", "Paste the Server URL and the Stream key from this page, and save.", "Turn MilitaryVoices on, and go live as you always do."] },
+  { name: "Restream", brand: "restream", steps: ["In Restream, open Channels and choose Add Channel, then Custom RTMP.", "Paste the Server URL and the Stream key from this page, and save.", "Switch the channel on, and go live as you always do."] },
+  { name: "OBS or another encoder", brand: "obs", steps: ["In OBS, open Settings, then Stream, and set Service to Custom.", "Paste the Server URL and the Stream key from this page.", "Press Start Streaming. 1920×1080 at 30 frames a second is right."] },
 ];
 
 export default function StreamIn() {
@@ -57,7 +57,7 @@ export default function StreamIn() {
         <a href="/host/dashboard" className="mb-6 inline-flex items-center gap-1.5 text-sm text-muted-foreground hover:text-foreground"><ArrowLeft className="h-4 w-4" /> Your dashboard</a>
 
         <div className="flex items-start gap-4">
-          <IconTile icon={Cable} />
+          <BrandStack brands={["streamyard", "restream", "obs"]} className="h-6 w-6" tileClassName="h-12 w-12 rounded-2xl" />
           <div>
             <h1 className="text-2xl font-bold text-foreground">Stream in</h1>
             <p className="mt-1 text-muted-foreground">Make your show in StreamYard, Restream or OBS the way you always do. Send it here too, and it lands in your Library, ready for clips.</p>
@@ -116,7 +116,7 @@ export default function StreamIn() {
               <h2 className="text-base font-semibold text-card-foreground">Add it to your software</h2>
               <div className="mt-3 flex flex-wrap gap-2" role="tablist">
                 {TOOLS.map((t, i) => (
-                  <button key={t.name} type="button" role="tab" aria-selected={i === tool} onClick={() => setTool(i)} className={`rounded-full border px-4 py-1.5 text-sm font-medium ${i === tool ? "border-primary bg-primary text-primary-foreground" : "border-border text-muted-foreground hover:text-foreground"}`}>{t.name}</button>
+                  <button key={t.name} type="button" role="tab" aria-selected={i === tool} onClick={() => setTool(i)} className={`inline-flex items-center gap-2 rounded-full border px-4 py-1.5 text-sm font-medium ${i === tool ? "border-[#053877] bg-[#053877]/5 text-foreground ring-1 ring-[#053877] dark:border-[#8ab4f8] dark:bg-[#8ab4f8]/10 dark:ring-[#8ab4f8]" : "border-border text-muted-foreground hover:text-foreground"}`} data-testid={`stream-in-tool-${t.brand}`}><BrandMark brand={t.brand} className="h-4 w-4" />{t.name}</button>
                 ))}
               </div>
               <ol className="mt-4 flex list-decimal flex-col gap-2 pl-5 text-sm text-muted-foreground">

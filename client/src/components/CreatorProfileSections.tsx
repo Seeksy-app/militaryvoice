@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { ExternalLink, Heart, MessageCircle, Eye, Star, ShieldCheck, Film, Image as ImageIcon, Youtube, Info } from "lucide-react";
+import { BrandMark } from "@/components/BrandMark";
+import { ExternalLink, Heart, MessageCircle, Eye, Star, ShieldCheck, Film, Image as ImageIcon, Info } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 
 // The body of a creator's profile: nine numbered sections down the page and a
@@ -483,7 +484,7 @@ function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onO
             {profile.posts.map((p) => (
               <a key={p.url || p.date} href={p.url} target="_blank" rel="noreferrer" className="group flex flex-col overflow-hidden rounded-2xl border border-border hover:border-[#053877]/40">
                 <div className="relative aspect-video bg-muted">
-                  <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/40">{yt ? <Youtube className="h-8 w-8" /> : p.kind === "reel" ? <Film className="h-8 w-8" /> : <ImageIcon className="h-8 w-8" />}</div>
+                  <div className="absolute inset-0 flex items-center justify-center text-muted-foreground/40">{yt ? <BrandMark brand="youtube" className="h-8 w-8" /> : p.kind === "reel" ? <Film className="h-8 w-8" /> : <ImageIcon className="h-8 w-8" />}</div>
                   {p.thumb ? <Img src={p.thumb} className="absolute inset-0 h-full w-full object-cover" /> : p.video ? <Frame src={p.video} /> : null}
                   <span className="absolute left-2 top-2 rounded-full bg-black/60 px-2 py-0.5 text-[11px] font-semibold capitalize text-white">{p.kind}</span>
                 </div>

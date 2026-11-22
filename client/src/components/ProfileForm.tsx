@@ -1,4 +1,5 @@
 import { ShowFinder } from "@/components/ShowFinder";
+import { BrandMark } from "@/components/BrandMark";
 import { SmsConsent } from "@/components/SmsConsent";
 import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
@@ -25,7 +26,6 @@ import {
   X,
   Crop,
   Rss,
-  Youtube,
   Mic2,
   User,
   Globe,
@@ -874,7 +874,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
                   render={({ field }) => (
                     <FormItem>
                       <FormLabel className="flex items-center gap-1.5">
-                        <Youtube className="h-4 w-4 text-primary" /> YouTube channel
+                        <BrandMark brand="youtube" className="h-4 w-4" /> YouTube channel
                       </FormLabel>
                       <FormControl>
                         <Input placeholder="youtube.com/@yourshow" inputMode="url" {...field} data-testid="input-youtube-url" />

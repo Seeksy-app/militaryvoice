@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
+import { BrandMark } from "@/components/BrandMark";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Building2, Check, ExternalLink, Linkedin, Loader2, Mail, Search, Sparkles, UserSearch, X } from "lucide-react";
+import { Building2, Check, ExternalLink, Loader2, Mail, Search, Sparkles, UserSearch, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
@@ -261,7 +262,7 @@ function CompanyCard({ c, sources, contact, added, onAdd, adding, onFindContact 
           <>
             <p className="font-medium">{person.name}{person.title ? <span className="font-normal text-muted-foreground"> · {person.title}</span> : null}</p>
             <div className="mt-1 flex flex-wrap gap-3">
-              {person.linkedin && <a href={href(person.linkedin)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[#053877] hover:underline dark:text-blue-300"><Linkedin className="h-3 w-3" /> LinkedIn</a>}
+              {person.linkedin && <a href={href(person.linkedin)} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[#053877] hover:underline dark:text-blue-300"><BrandMark brand="linkedin" className="h-3 w-3" /> LinkedIn</a>}
               {person.email && <a href={`mailto:${person.email}`} className="inline-flex min-w-0 items-center gap-1 text-[#053877] hover:underline dark:text-blue-300"><Mail className="h-3 w-3 shrink-0" /> <span className="truncate">{person.email}</span></a>}
             </div>
           </>

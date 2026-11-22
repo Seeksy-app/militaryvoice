@@ -3,7 +3,8 @@ import { Button } from "@/components/ui/button";
 import { ZoomConnect, ImportLink } from "@/components/ZoomConnect";
 import { ConnectYoutube } from "@/components/ConnectYoutube";
 import { PodcastStatsRows, useHostedHere } from "@/components/PodcastStats";
-import { PlatformIcon, platformLabel, platformBackground, formatFollowers, ALL_PLATFORMS } from "@/components/SocialIcons";
+import { platformLabel, formatFollowers, ALL_PLATFORMS } from "@/components/SocialIcons";
+import { BrandMark, BrandGroup } from "@/components/BrandMark";
 import type { ProfileRow, SocialAccount } from "@shared/schema";
 import { Check, ChevronDown, ExternalLink, Headphones, Link2, Radio, RefreshCw, Share2, Upload, Video, Webhook } from "lucide-react";
 import { IconTile } from "@/components/ui/icon-tile";
@@ -73,17 +74,14 @@ export function IntegrationsScreen({
                 key={platform}
                 testId={`row-social-${platform}`}
                 icon={
+                  // Each network's own mark in its own colours (Andrew, 22 Nov: "use all the right icon branding").
                   a?.image ? (
                     <span className="relative">
                       <img src={a.image} alt="" referrerPolicy="no-referrer" className="h-10 w-10 rounded-full object-cover ring-1 ring-border" />
-                      <span className="absolute -bottom-1 -right-1 flex h-5 w-5 items-center justify-center rounded-full text-white ring-2 ring-card" style={{ background: platformBackground(platform) }}>
-                        <PlatformIcon platform={platform} className="h-3 w-3" />
-                      </span>
+                      <span className="absolute -bottom-1 -right-1"><BrandMark brand={platform} tile className="h-3 w-3" tileClassName="h-5 w-5 rounded-full ring-2 ring-card" /></span>
                     </span>
                   ) : (
-                    <span className={`flex h-10 w-10 items-center justify-center rounded-full text-white ${a ? "" : "opacity-50"}`} style={{ background: platformBackground(platform) }}>
-                      <PlatformIcon platform={platform} className="h-4.5 w-4.5" />
-                    </span>
+                    <BrandMark brand={platform} tile className="h-5 w-5" tileClassName="h-10 w-10 rounded-xl" />
                   )
                 }
                 name={platformLabel(platform)}
@@ -128,7 +126,7 @@ export function IntegrationsScreen({
         {/* Their own stream key (20 Nov 2026): Andrew looked for it here. Same /stream-in as the Podcast screen's link. */}
         <Row
           testId="row-stream-in"
-          icon={<span className="flex h-10 w-10 items-center justify-center rounded-xl bg-white ring-1 ring-border"><img src="/brands/streamyard.svg" alt="" className="h-7 w-7 object-contain" /></span>}
+          icon={<BrandGroup brands={["streamyard", "restream", "obs"]} />}
           name="StreamYard, Restream or OBS"
           line="Stream in live, and the recording lands in your Library."
           right={<Button asChild variant="outline" size="sm" className="h-8 rounded-full px-3.5 text-xs"><a href="/stream-in" data-testid="button-stream-in-key">Get my stream key</a></Button>}

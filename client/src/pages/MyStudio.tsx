@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { BrandMark } from "@/components/BrandMark";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   LiveKitRoom, RoomAudioRenderer, VideoTrack, isTrackReference, useChat, useConnectionState, useIsMuted, useIsSpeaking,
@@ -8,8 +9,7 @@ import {
 import { ConnectionState, DisconnectReason, Track, type Participant } from "livekit-client";
 import {
   ArrowLeft, Check, Circle, Clapperboard, Copy, ExternalLink, Image as ImageIcon, Loader2, LogOut, MessageSquare, Mic, MicOff, MonitorUp, MoreHorizontal, NotebookPen, Presentation,
-  ChevronLeft, ChevronRight, Palette, Plus, Settings, Square, UserPlus, UserRound, Users, Video, VideoOff, X, Youtube,
-} from "lucide-react";
+  ChevronLeft, ChevronRight, Palette, Plus, Settings, Square, UserPlus, UserRound, Users, Video, VideoOff, X, } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { BACKGROUNDS, LIMITS, bgCss, newId, sceneLive, useRoomKit, type Asset, type Playing, type RoomKit, type Scene } from "@/components/room/look";
@@ -1190,7 +1190,7 @@ function GoLiveSheet({ studio, onClose }: { studio: Studio; onClose: () => void 
         {/* YouTube by their own stream key (Andrew, 22 Nov: "Yes, one connection"); the old Google sign-in still works until they save one. */}
         <div className={`rounded-2xl border p-4 ${ytOn ? "border-2 border-[#053877] bg-[#f5f8fd] p-[15px]" : "border-[#e4e7ec]"}`} data-testid="golive-youtube-row">
           <div className="flex items-center gap-4">
-            <div className={`${icon} bg-[#fee4e2] text-[#d92d20]`}><Youtube className="h-6 w-6" /></div>
+            <div className={`${icon} bg-white ring-1 ring-black/10`}><BrandMark brand="youtube" className="h-6 w-6" /></div>
             <div className="min-w-0 flex-1"><p className="font-semibold">YouTube</p><p className="truncate text-[13px] text-[#475467]">{studio.youtubeKey ? `Your stream key ${studio.youtubeKey}` : studio.youtube ? "Your channel · connected" : "Paste your stream key once, then it's one press."}</p></div>
             {studio.youtube && <button type="button" onClick={() => void patch({ youtubeOn: !studio.youtubeOn })} disabled={busy !== ""} aria-pressed={ytOn} className={`h-9 rounded-xl px-4 text-sm font-bold disabled:opacity-60 ${ytOn ? "text-white" : "border border-[#d0d5dd] bg-white"}`} style={ytOn ? { background: NAVY } : undefined} data-testid="golive-youtube">{ytOn ? "Selected" : "Select"}</button>}
           </div>

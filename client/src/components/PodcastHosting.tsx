@@ -3,6 +3,7 @@ import { GuestInvites } from "@/components/GuestInvites";
 import type { IconType } from "react-icons";
 import { SiApplepodcasts, SiCastbox, SiDeezer, SiIheartradio, SiPlayerfm, SiPocketcasts, SiPodcastindex, SiSpotify, SiYoutubemusic } from "react-icons/si";
 import { FaAmazon } from "react-icons/fa";
+import { BrandMark } from "@/components/BrandMark";
 import { PodcastSetup, type SetupNext } from "@/components/PodcastSetup";
 import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -17,7 +18,7 @@ import { durationOf, uploadToStorage } from "@/lib/upload";
 import { GuestFinder, ShowFinder, INVITE_KEY } from "@/components/DiscoverPodcasts";
 import type { HostedEpisodeRow, HostedShowRow, HostedSpotRow, RecordingRow } from "@shared/schema";
 import { fillFooter, FOOTER_TOKENS } from "@shared/footer";
-import { AlertCircle, BarChart3, Cable, Check, ChevronLeft, Copy, ExternalLink, Film, ImagePlus, Loader2, Mic2, Pencil, Plus, Podcast, Radio, Send, Sparkles, Trash2, Upload } from "lucide-react";
+import { AlertCircle, BarChart3, Check, ChevronLeft, Copy, ExternalLink, Film, ImagePlus, Loader2, Mic2, Pencil, Plus, Podcast, Radio, Send, Sparkles, Trash2, Upload } from "lucide-react";
 import { IconTile } from "@/components/ui/icon-tile";
 
 /**
@@ -283,7 +284,7 @@ export function PodcastHosting() {
               <div className="flex flex-wrap items-center gap-2">
                 {/* Recording somewhere else: their own stream key, and each live show lands in the Library (/stream-in). */}
                 <Button asChild variant="outline" className="h-9 gap-1.5 rounded-lg" data-testid="hosting-stream-in">
-                  <a href="/stream-in"><Cable className="h-4 w-4" /> Stream in from StreamYard, Restream or OBS</a>
+                  <a href="/stream-in"><span className="inline-flex items-center gap-1"><BrandMark brand="streamyard" className="h-4 w-4" /><BrandMark brand="restream" className="h-4 w-4" /><BrandMark brand="obs" className="h-4 w-4" /></span> Stream in from StreamYard, Restream or OBS</a>
                 </Button>
                 <Button onClick={() => setAdding(true)} className="h-9 gap-1.5 rounded-lg bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-new-episode"><Plus className="h-4 w-4" /> New episode</Button>
               </div>

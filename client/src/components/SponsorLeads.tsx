@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
+import { BrandMark } from "@/components/BrandMark";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Linkedin, Mail, Phone, Trash2, ClipboardPaste, ExternalLink } from "lucide-react";
+import { Mail, Phone, Trash2, ClipboardPaste, ExternalLink } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Input } from "@/components/ui/input";
@@ -180,7 +181,7 @@ export function SponsorLeads({ eventId }: { eventId: number }) {
                     </select>
                   </div>
                   <div className="mt-2 flex flex-wrap items-center gap-3 text-xs">
-                    {l.linkedin && <a href={l.linkedin} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[#053877] hover:underline"><Linkedin className="h-3.5 w-3.5" /> LinkedIn <ExternalLink className="h-3 w-3 opacity-60" /></a>}
+                    {l.linkedin && <a href={l.linkedin} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1 text-[#053877] hover:underline"><BrandMark brand="linkedin" className="h-3.5 w-3.5" /> LinkedIn <ExternalLink className="h-3 w-3 opacity-60" /></a>}
                     {l.email && <a href={`mailto:${l.email}`} className="inline-flex items-center gap-1 text-[#053877] hover:underline"><Mail className="h-3.5 w-3.5" /> {l.email}</a>}
                     {l.phone && <span className="inline-flex items-center gap-1 text-muted-foreground"><Phone className="h-3.5 w-3.5" /> {l.phone}</span>}
                   </div>

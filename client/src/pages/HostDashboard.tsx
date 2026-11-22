@@ -1,4 +1,5 @@
 import { DxTimes } from "@/components/DxTimes";
+import { BrandGroup } from "@/components/BrandMark";
 import { useEffect, useMemo, useState } from "react";
 import { GuestsEditor } from "@/components/GuestsEditor";
 import { useSearch, useLocation, Link } from "wouter";
@@ -37,8 +38,7 @@ import {
   Menu,
   CircleHelp,
   Check,
-  Cable,
-} from "lucide-react";
+  } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PlatformIcon, formatFollowers } from "@/components/SocialIcons";
@@ -1734,7 +1734,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                             </div>
                             <div className="flex flex-col gap-2.5 rounded-2xl border border-border p-[18px]">
                               <div className="flex items-center gap-3">
-                                <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-[#fdf1d8] dark:bg-[#F0A71F]/15"><Cable className="h-[22px] w-[22px] text-[#7a4e00] dark:text-[#F0A71F]" /></span>
+                                <BrandGroup brands={["streamyard", "restream", "obs"]} tileClassName="h-11 w-11 rounded-xl" />
                                 <h4 className="text-[17px] font-bold text-foreground">From StreamYard, Restream or OBS</h4>
                               </div>
                               <p className="text-sm leading-relaxed text-muted-foreground">Keep producing the way you do. Paste our address and your key into your software, then go live there.</p>
