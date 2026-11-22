@@ -194,6 +194,7 @@ import { registerMail } from "./mail.js";
 import { registerAutomations } from "./automations.js";
 import { registerTrash, toTrash } from "./trash.js";
 import { registerMyStudio } from "./myStudio.js";
+import { getYoutubeKey, registerYoutubeKey, YOUTUBE_OAUTH, YOUTUBE_RTMP } from "./youtubeKey.js";
 import { registerRoomKit, marksFor, withCredits } from "./roomKit.js";
 import { registerFreesoundImport } from "./studioLibrary.js";
 import { registerNudges, fireNudgeFor } from "./nudges.js";
@@ -3063,6 +3064,7 @@ export function registerRoutes(app: Express): void {
 
   /** A live access token, refreshed if the cached one has aged out. */
   async function youtubeToken(email: string): Promise<string | null> {
+    if (!YOUTUBE_OAUTH) return null;
     const acct = await storage.getYoutubeAccount(email);
     if (!acct) return null;
     const stillGood = acct.accessToken && acct.expiresAt && new Date(acct.expiresAt).getTime() > Date.now() + 60_000;
@@ -3085,9 +3087,12 @@ export function registerRoutes(app: Express): void {
     noStore(res);
     const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
     const acct = await storage.getYoutubeAccount(email);
+    // A saved stream key counts as connected: that's the way in now (22 Nov 2026).
+    const key = await getYoutubeKey(email);
     res.json({
-      configured: isYoutubeConfigured(),
-      connected: Boolean(acct),
+      configured: isYoutubeConfigured() && YOUTUBE_OAUTH,
+      connected: Boolean(acct) || !!key,
+      streamKey: !!key,
       channelTitle: acct?.channelTitle ?? "",
       scope: acct?.scope ?? "segment",
     });
@@ -3141,7 +3146,7 @@ export function registerRoutes(app: Express): void {
   });
 
   app.get("/api/host/youtube/start", requireHostSession, async (req, res) => {
-    if (!isYoutubeConfigured()) {
+    if (!isYoutubeConfigured() || !YOUTUBE_OAUTH) {
       res.status(503).json({ message: "YouTube connecting isn't switched on yet." });
       return;
     }
@@ -3159,7 +3164,7 @@ export function registerRoutes(app: Express): void {
    * under the podcaster's email as if they had done it.
    */
   app.get("/api/admin/youtube/start", requireAdmin, async (req, res) => {
-    if (!isYoutubeConfigured()) return res.status(503).json({ message: "YouTube connecting isn't switched on yet." });
+    if (!isYoutubeConfigured() || !YOUTUBE_OAUTH) return res.status(503).json({ message: "YouTube connecting isn't switched on yet." });
     const email = String(req.query.email ?? "").toLowerCase().trim();
     if (!email.includes("@")) return res.status(400).json({ message: "Which podcaster?" });
     res.redirect(consentUrl(youtubeRedirect(req), Buffer.from(`admin:${email}`).toString("base64url")));
@@ -3172,7 +3177,7 @@ export function registerRoutes(app: Express): void {
    * admin connected are offered: never a podcaster's.
    */
   app.get("/api/admin/youtube/connect-studio", requireAdmin, async (req, res) => {
-    if (!isYoutubeConfigured()) return res.status(503).json({ message: "YouTube connecting isn't switched on yet." });
+    if (!isYoutubeConfigured() || !YOUTUBE_OAUTH) return res.status(503).json({ message: "YouTube connecting isn't switched on yet." });
     const email = (getAdminEmail(req) ?? "").toLowerCase().trim();
     if (!email) return res.status(401).json({ message: "Sign in again." });
     res.redirect(consentUrl(youtubeRedirect(req), Buffer.from(`admin:${email}`).toString("base64url")));
@@ -3187,6 +3192,7 @@ export function registerRoutes(app: Express): void {
     key: "youtube-live", db: true, name: "YouTube live (studio channels)", group: "Social and podcasts", powers: "The Marathon going out on YouTube",
     run: async () => {
       if (!isYoutubeConfigured()) return { state: "off", detail: "Not set up (GOOGLE_CLIENT_ID)" };
+      if (!YOUTUBE_OAUTH) return { state: "off", detail: "Google sign-in turned off (YOUTUBE_OAUTH=0); channels go live on stream keys" };
       const ev = await storage.getFeaturedEvent();
       const house = new Set((await storage.listDestinations(ev.id)).filter((d) => !d.signupId && d.platform === "youtube" && d.ownerEmail).map((d) => d.ownerEmail.trim().toLowerCase()));
       const all = await storage.listYoutubeAccounts();
@@ -3214,6 +3220,7 @@ export function registerRoutes(app: Express): void {
     // A sign-in refresh only: no YouTube quota spent.
     run: async () => {
       if (!isYoutubeConfigured()) return { state: "off", detail: "Not set up (GOOGLE_CLIENT_ID)" };
+      if (!YOUTUBE_OAUTH) return { state: "off", detail: "Google sign-in turned off (YOUTUBE_OAUTH=0); channels go live on stream keys" };
       const ev = await storage.getFeaturedEvent();
       const lineup = new Map((await storage.listSignups(ev.id)).filter((x) => x.status !== "cancelled").map((x) => [x.email.trim().toLowerCase(), x.podcastName]));
       const accts = (await storage.listYoutubeAccounts()).filter((a) => a.channelId && lineup.has(a.email.trim().toLowerCase()));
@@ -3331,7 +3338,7 @@ export function registerRoutes(app: Express): void {
    * for their slot. The producer presses this when their segment comes up.
    */
   app.post("/api/admin/youtube/broadcast", requireAdmin, async (req, res) => {
-    if (!isYoutubeConfigured()) {
+    if (!isYoutubeConfigured() || !YOUTUBE_OAUTH) {
       res.status(503).json({ message: "YouTube connecting isn't switched on yet." });
       return;
     }
@@ -6143,6 +6150,8 @@ export function registerRoutes(app: Express): void {
    * destinations only, never their audience. House rows have no owner.
    */
   const CHANNEL_EARLY_MS = 15 * 60_000;
+  /** A stream-key channel's id in the producer's list: this plus the booking id (accounts' ids are far below it). */
+  const KEY_CHANNEL = 10_000_000;
   /**
    * A destination that runs only between two times: a LinkedIn Live event
    * lasts four hours at most, so the day goes out as four of them, each its
@@ -6381,28 +6390,44 @@ export function registerRoutes(app: Express): void {
     const onAirSignup: number | null | undefined = row ? row.signupId ?? null : undefined;
     const dests = await storage.listDestinations(ev.id);
     let egressId = studio.broadcastEgressId;
-    for (const a of await storage.listYoutubeAccounts()) {
-      if (a.scope !== "segment" || !a.channelId) continue;
-      const email = a.email.trim().toLowerCase();
-      const sg = signups.find((x) => x.email.trim().toLowerCase() === email);
-      if (!sg) continue;
+    // Who goes out on their own YouTube: everyone in the line-up with a saved stream key (22 Nov), and, until they
+    // save one, those connected the old way (Google sign-in, their segment only).
+    const accounts = new Map((await storage.listYoutubeAccounts()).map((a) => [a.email.trim().toLowerCase(), a]));
+    const people: { email: string; sg: (typeof signups)[number]; key: string; a?: Awaited<ReturnType<typeof storage.listYoutubeAccounts>>[number] }[] = [];
+    for (const sg of signups) {
+      const email = sg.email.trim().toLowerCase();
+      if (!email || people.some((p) => p.email === email)) continue;
+      const key = await getYoutubeKey(email).catch(() => "");
+      const a = accounts.get(email);
+      if (key || (YOUTUBE_OAUTH && a && a.scope === "segment" && a.channelId)) people.push({ email, sg, key, a });
+    }
+    for (const { email, sg, key, a } of people) {
+      const enabled = key ? (await storage.getSetting(`yt-key-off:${email}`).catch(() => null)) !== "1" : a?.enabled !== false;
       const slot = start + sg.slotIndex * ev.slotMinutes * 60_000;
       // Never before 15 minutes ahead of their slot, however early their scene comes up.
       const opened = now >= slot - CHANNEL_EARLY_MS;
       const byClock = now >= slot - SEGMENT_LEAD_MS && now < slot + ev.slotMinutes * 60_000;
       const theirs = onAirSignup === undefined ? byClock : onAirSignup === sg.id;
-      const want = opened && theirs && a.enabled !== false;
+      const want = opened && theirs && enabled;
       let d = dests.find((x) => x.signupId === sg.id && x.platform === "youtube");
       try {
+        if (key) {
+          // A stream key: nothing to open on YouTube (their channel's Auto-start begins the broadcast when we push,
+          // Auto-stop ends it when we stop). From 15 minutes ahead the destination exists; their scene adds the pipe.
+          if (d && !d.live && (d.rtmpUrl !== YOUTUBE_RTMP || d.streamKey !== key)) { await storage.deleteDestination(d.id); d = undefined; }
+          if (!d && opened && enabled && now < slot + ev.slotMinutes * 60_000) {
+            d = await storage.createDestination(ev.id, sg.email, { platform: "youtube", label: `${sg.podcastName} · YouTube`, rtmpUrl: YOUTUBE_RTMP, streamKey: key, enabled: true, signupId: sg.id });
+          }
+        }
         // A broadcast opened for an earlier test has ended on YouTube (auto-stop);
         // its key won't go live again, so their real slot gets a fresh one.
-        if (opened && d && !d.live && Date.parse(d.createdAt) < slot - 30 * 60_000) {
+        if (!key && opened && d && !d.live && Date.parse(d.createdAt) < slot - 30 * 60_000) {
           await storage.deleteDestination(d.id);
           d = undefined;
         }
         // Opened on YouTube ahead (from 15 minutes before), so taking their
         // scene only has to add a pipe, not wait on three YouTube calls.
-        if (!d && opened && a.enabled !== false && now < slot + ev.slotMinutes * 60_000) {
+        if (!key && !d && opened && enabled && now < slot + ev.slotMinutes * 60_000) {
           const token = await youtubeToken(email);
           if (!token) {
             if (want && !segmentWarned.has(sg.id)) { segmentWarned.add(sg.id); void slackNote(`:warning: ${sg.podcastName.trim() || sg.hostName} is on now but their YouTube won't sign in, so their segment is on our watch page only.`); }
@@ -6526,8 +6551,22 @@ export function registerRoutes(app: Express): void {
     const signups = (await storage.listSignups(eventId)).filter((s) => s.status !== "cancelled");
     const at = (slot: number) => ev ? new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit", timeZone: "America/New_York" }).format(new Date(Date.parse(ev.startAtUtc) + slot * ev.slotMinutes * 60_000)) + " ET" : "";
     const channels: PublicDestination[] = [];
-    for (const a of await storage.listYoutubeAccounts()) {
-      if (a.scope !== "segment" || !a.channelId) continue;
+    // A saved stream key first (22 Nov); their id is KEY_CHANNEL + the booking, so the switch below can tell them apart.
+    const keyed = new Set<string>();
+    for (const sg of signups) {
+      const email = sg.email.trim().toLowerCase();
+      if (!email || keyed.has(email) || !(await getYoutubeKey(email).catch(() => ""))) continue;
+      keyed.add(email);
+      channels.push({
+        id: -(KEY_CHANNEL + sg.id), signupId: sg.id, kind: "channel", platform: "youtube",
+        label: `${sg.podcastName || email} · their YouTube (stream key) · their segment`, rtmpUrl: "", keyHint: "",
+        enabled: (await storage.getSetting(`yt-key-off:${email}`).catch(() => null)) !== "1", live: false, ownerEmail: sg.email,
+        hostName: sg.hostName, podcastName: sg.podcastName, slotLabel: at(sg.slotIndex),
+        ...(ev ? { opensLabel: `Opens ${etLabel(new Date(Date.parse(ev.startAtUtc) + sg.slotIndex * ev.slotMinutes * 60_000 - 15 * 60_000).toISOString())}` } : {}),
+      });
+    }
+    for (const a of YOUTUBE_OAUTH ? await storage.listYoutubeAccounts() : []) {
+      if (a.scope !== "segment" || !a.channelId || keyed.has(a.email.trim().toLowerCase())) continue;
       const sg = signups.find((s) => s.email.trim().toLowerCase() === a.email.trim().toLowerCase());
       if (!sg) continue;
       channels.push({
@@ -6545,6 +6584,12 @@ export function registerRoutes(app: Express): void {
   app.patch("/api/admin/youtube-accounts/:id", requireAdmin, async (req, res) => {
     const id = Number(req.params.id);
     if (!Number.isInteger(id) || id <= 0) return res.status(400).json({ message: "Which channel?" });
+    if (id > KEY_CHANNEL) {
+      const sg = await storage.getSignupById(id - KEY_CHANNEL);
+      if (!sg) return res.status(404).json({ message: "No such booking." });
+      await storage.setSetting(`yt-key-off:${sg.email.trim().toLowerCase()}`, req.body?.enabled === false ? "1" : "");
+      return res.json({ ok: true });
+    }
     await storage.setYoutubeAccountEnabled(id, req.body?.enabled !== false);
     res.json({ ok: true });
   });
@@ -6997,6 +7042,7 @@ export function registerRoutes(app: Express): void {
   registerContactProfile(app, requireAdmin);
   registerTrash(app, requireHostSession);
   registerMyStudio(app, requireHostSession, { youtubeToken });
+  registerYoutubeKey(app, requireHostSession);
   registerRoomKit(app, requireHostSession);
   registerFreesoundImport(app, requireAdmin);
   registerNudges(app, requireAdmin);
@@ -9321,6 +9367,7 @@ export function registerRoutes(app: Express): void {
       (await storage.listSignups(eventId)).filter((x) => x.status !== "cancelled" && x.slotIndex < dayLength).map((x) => x.email.trim().toLowerCase()),
     );
     const youtube = new Set((await storage.listYoutubeAccounts()).map((a) => a.email.trim().toLowerCase()));
+    for (const e of Array.from(lineup)) if (await getYoutubeKey(e).catch(() => "")) youtube.add(e);
     const social = new Set(
       (await storage.listAllProfiles())
         .filter((p) => p.socialAccounts && p.socialAccounts.trim() !== "" && p.socialAccounts.trim() !== "[]")
@@ -10299,10 +10346,13 @@ export function registerRoutes(app: Express): void {
     const channels = new Map(
       (await storage.listYoutubeAccounts()).map((a) => [a.email.trim().toLowerCase(), a]),
     );
+    const keys = new Set<string>();
+    for (const r of rows) { const e = r.email.trim().toLowerCase(); if (e && !keys.has(e) && (await getYoutubeKey(e).catch(() => ""))) keys.add(e); }
     res.json(
       rows.map((r) => {
         const yt = channels.get(r.email.trim().toLowerCase());
-        return { ...r, youtubeConnected: !!yt, youtubeChannelTitle: yt?.channelTitle ?? "" };
+        const key = keys.has(r.email.trim().toLowerCase());
+        return { ...r, youtubeConnected: key || !!yt, youtubeChannelTitle: key ? "stream key" : yt?.channelTitle ?? "" };
       }),
     );
   });

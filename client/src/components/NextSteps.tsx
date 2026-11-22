@@ -115,7 +115,7 @@ export const STEP_GUIDE: Partial<Record<keyof typeof STEP_ANCHOR, GuideStep>> = 
     { sel: '[data-testid^="button-choose-event-"]', text: "Pick the event first." },
   ] },
   materials: { title: "Your media", at: [t("button-media-yes", "Have an intro, outro or slides? Click here to add them. All optional."), t("input-asset-file", "Pick a file to send us.")] },
-  youtube: { title: "YouTube", at: [t("button-youtube-connect", "Click here to connect your channel. We open the broadcast on it when your slot starts.")] },
+  youtube: { title: "YouTube", at: [t("youtube-key-input", "Paste your YouTube stream key here, then press Save key. Your slot goes out on your channel too.")] },
   share: { title: "Share your slot", at: [t("input-share-link-copy", "Copy your link and post it anywhere. It shows your artwork and your time.")] },
 };
 
@@ -207,7 +207,7 @@ export function buildSteps(state: StepState, nav: StepNav): Step[] {
           ? ([{ key: "slot", label: "Claim your time slot", detail: "Pick when you want to be on air. You can move it later.", done: state.hasSlot, cta: "Choose a time", go: nav.onGoEvents }] as Step[])
           : []),
         { key: "materials", label: "Send us your media", detail: "Intro, outro, slides — anything you want us to roll. All optional.", done: state.hasMaterials, cta: "Upload your media", go: nav.onGoEvents },
-        { key: "youtube", label: "Connect your YouTube to stream to", detail: "We open a broadcast on your own channel when your slot starts. Optional — it airs here either way.", done: state.hasYouTube, cta: "Connect YouTube", go: nav.onGoIntegrations },
+        { key: "youtube", label: "Add your YouTube stream key", detail: "Your slot goes out on your own channel too. Optional — it airs here either way.", done: state.hasYouTube, cta: "Add your key", go: nav.onGoIntegrations },
         ...(state.hasSlot ? ([{ key: "share", label: "Share your slot", detail: "Your link shows your artwork and your time wherever you post it.", done: false, cta: "Get your link", go: nav.onGoPromotion }] as Step[]) : []),
       ]
     : [];

@@ -12,6 +12,7 @@ import { isLiveKitConfigured, isRecordingConfigured, publicLiveKitUrl, startBroa
 import { sendStudioLeftLiveEmail } from "./email.js";
 import { ensureRecordingsBucket } from "./recordingStorage.js";
 import { createBroadcast } from "./youtube.js";
+import { getYoutubeKey, youtubeKeyHint, youtubePushUrl, YOUTUBE_OAUTH } from "./youtubeKey.js";
 import { onLookSaved, roomLookKey } from "./roomKit.js";
 import { bumpLookRev, noteMusicOnAir, registerRoomStage, roomTemplateUrl, STUDIO_V3, useRoomKit } from "./roomStage.js";
 import { personalStudios, type PersonalStudioRow } from "../shared/schema.js";
@@ -112,13 +113,19 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
   // Podcasting's saved look is read through its key, and a save refreshes any room that is live.
   useRoomKit({ roomLookKey });
   onLookSaved((studioId, look) => bumpLookRev(studioId, look.rev));
-  const view = (s: PersonalStudioRow, youtube: boolean) => ({
+  /** YouTube for Go live: their saved stream key, or (until they save one) the old Google connection. */
+  const yt = async (email: string) => {
+    const key = await getYoutubeKey(email).catch(() => "");
+    const legacy = !key && YOUTUBE_OAUTH && !!(await storage.getYoutubeAccount(email).catch(() => undefined));
+    return { youtube: !!key || legacy, youtubeKey: youtubeKeyHint(key), youtubeLegacy: legacy };
+  };
+  const view = (s: PersonalStudioRow, youtube: { youtube: boolean; youtubeKey: string; youtubeLegacy: boolean }) => ({
     id: s.id,
     name: s.name,
     inviteLink: `${ORIGIN}/my-studio/join/${s.inviteToken}`,
     recording: s.recordingEgressId ? { since: s.recordingSince } : null,
     live: s.liveEgressId ? { since: s.liveSince, watchUrl: s.liveWatchUrl } : null,
-    youtube,
+    ...youtube,
     youtubeOn: s.youtubeOn,
     streams: streamsOf(s).map(({ key, ...x }) => ({ ...x, key: key ? `••••${key.slice(-4)}` : "" })),
     ready: isLiveKitConfigured(),
@@ -142,7 +149,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     const s = await settle(await mine(email));
     const profile = await storage.getProfileByEmail(email).catch(() => undefined);
     // Their own name, for the camera check's name box.
-    res.json({ ...view(s, !!(await storage.getYoutubeAccount(email).catch(() => undefined))), you: profile?.hostName?.trim() || "" });
+    res.json({ ...view(s, await yt(email)), you: profile?.hostName?.trim() || "" });
   });
 
   app.patch("/api/host/my-studio", requireHostSession, async (req, res) => {
@@ -164,7 +171,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     patch.streams = JSON.stringify(streams);
     if (b.newInvite === true) patch.inviteToken = newToken();
     const [out] = await db.update(personalStudios).set(patch).where(eq(personalStudios.id, s.id)).returning();
-    res.json(view(out, !!(await storage.getYoutubeAccount(email).catch(() => undefined))));
+    res.json(view(out, await yt(email)));
   });
 
   /**
@@ -277,7 +284,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
         await stopEgressById(s.recordingEgressId).catch(() => {});
         [s] = await db.update(personalStudios).set({ recordingEgressId: "", recordingSince: "" }).where(eq(personalStudios.id, s.id)).returning();
       }
-      res.json(view(s, !!(await storage.getYoutubeAccount(email).catch(() => undefined))));
+      res.json(view(s, await yt(email)));
     } catch (err) {
       console.error("My studio record failed:", err);
       res.status(502).json({ message: "The recorder didn't start. Make sure someone's camera is on, then try again." });
@@ -293,7 +300,11 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
       if (on && !s.liveEgressId) {
         const targets: { url: string }[] = streamsOf(s).filter((x) => x.on).map((x) => ({ url: pushUrl(x) }));
         let watchUrl = "";
-        if (s.youtubeOn) {
+        const ytKey = s.youtubeOn ? await getYoutubeKey(email) : "";
+        if (ytKey) {
+          // Their own stream key: it goes live under the channel's default title (YouTube Studio).
+          targets.push({ url: youtubePushUrl(ytKey) });
+        } else if (s.youtubeOn && YOUTUBE_OAUTH) {
           const token = await deps.youtubeToken(email);
           if (token) {
             const title = String(req.body?.title ?? "").trim().slice(0, 100) || s.name;
@@ -302,14 +313,14 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
             watchUrl = b.watchUrl;
           }
         }
-        if (!targets.length) return res.status(400).json({ message: "Connect YouTube or add a streaming key first." });
+        if (!targets.length) return res.status(400).json({ message: "Add your YouTube stream key or another streaming key first." });
         const egressId = await startBroadcast(room(s), targets as never, await roomTemplateUrl(s.id));
         [s] = await db.update(personalStudios).set({ liveEgressId: egressId, liveSince: now(), liveWatchUrl: watchUrl }).where(eq(personalStudios.id, s.id)).returning();
       } else if (!on && s.liveEgressId) {
         await stopEgressById(s.liveEgressId).catch(() => {});
         [s] = await db.update(personalStudios).set({ liveEgressId: "", liveSince: "", liveWatchUrl: "" }).where(eq(personalStudios.id, s.id)).returning();
       }
-      res.json(view(s, !!(await storage.getYoutubeAccount(email).catch(() => undefined))));
+      res.json(view(s, await yt(email)));
     } catch (err) {
       console.error("My studio live failed:", err);
       const msg = (err as Error).message ?? "";

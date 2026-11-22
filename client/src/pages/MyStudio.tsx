@@ -21,6 +21,7 @@ import { PhoneStudio } from "@/components/room/PhoneStudio";
 import { LayoutEditor } from "@/components/room/LayoutEditor";
 import { MarkClip } from "@/components/room/MarkClip";
 import { RoomStage } from "@/components/RoomStage";
+import { YoutubeKeyForm } from "@/components/ConnectYoutube";
 import { PrompterNews, PrompterOverlay, PrompterSwitch, ScriptsBar, usePrompter, useStudioNotes, type NotesSync } from "@/components/room/Teleprompter";
 import { pdfToPictures, useDeck } from "@/components/room/slides";
 import { EXTRA_CAMS, addExtraCamera, freeCameras, isExtraCam, stopAllExtraCameras, stopExtraCamera, useExtraCams } from "@/components/room/extraCamera";
@@ -41,7 +42,7 @@ const Logo = ({ className }: { className: string }) => <img src="/logo-lockup.pn
  * API); until then the room stays phase 1, a plain grid like the recording, with no layout picker
  * (Andrew: "go, hide layouts").
  */
-type Studio = { you?: string; id: number; name: string; inviteLink: string; recording: { since: string } | null; live: { since: string; watchUrl: string } | null; youtube: boolean; youtubeOn: boolean; streams: { id: string; name: string; on: boolean }[]; ready: boolean; canRecord: boolean; v3?: boolean };
+type Studio = { you?: string; id: number; name: string; inviteLink: string; recording: { since: string } | null; live: { since: string; watchUrl: string } | null; youtube: boolean; youtubeOn: boolean; youtubeKey?: string; youtubeLegacy?: boolean; streams: { id: string; name: string; on: boolean }[]; ready: boolean; canRecord: boolean; v3?: boolean };
 type Conn = { url: string; token: string; name: string };
 type Setup = { name: string; title: string; mic: boolean; cam: boolean; micId?: string; camId?: string };
 type Tab = "look" | "media" | "style" | "people" | "notes" | "recording" | "chat";
@@ -1186,12 +1187,14 @@ function GoLiveSheet({ studio, onClose }: { studio: Studio; onClose: () => void 
       <h2 className="text-[22px] font-bold tracking-tight">Go live</h2>
       <p className="mt-1 text-[15px] text-[#475467]">Pick where the show goes.</p>
       <div className="mt-5 space-y-2.5">
-        <div className={`${row} ${ytOn ? "border-2 border-[#053877] bg-[#f5f8fd] p-[15px]" : "border-[#e4e7ec]"}`}>
-          <div className={`${icon} bg-[#fee4e2] text-[#d92d20]`}><Youtube className="h-6 w-6" /></div>
-          <div className="min-w-0 flex-1"><p className="font-semibold">YouTube</p><p className="truncate text-[13px] text-[#475467]">{studio.youtube ? "Your channel · connected" : "Connect your channel once, then it's one press."}</p></div>
-          {studio.youtube
-            ? <button type="button" onClick={() => void patch({ youtubeOn: !studio.youtubeOn })} disabled={busy !== ""} aria-pressed={ytOn} className={`h-9 rounded-xl px-4 text-sm font-bold disabled:opacity-60 ${ytOn ? "text-white" : "border border-[#d0d5dd] bg-white"}`} style={ytOn ? { background: NAVY } : undefined} data-testid="golive-youtube">{ytOn ? "Selected" : "Select"}</button>
-            : <a href="/host/dashboard/integrations" target="_blank" rel="noreferrer" className="flex h-9 items-center rounded-xl border border-[#d0d5dd] bg-white px-4 text-sm font-semibold">Connect YouTube</a>}
+        {/* YouTube by their own stream key (Andrew, 22 Nov: "Yes, one connection"); the old Google sign-in still works until they save one. */}
+        <div className={`rounded-2xl border p-4 ${ytOn ? "border-2 border-[#053877] bg-[#f5f8fd] p-[15px]" : "border-[#e4e7ec]"}`} data-testid="golive-youtube-row">
+          <div className="flex items-center gap-4">
+            <div className={`${icon} bg-[#fee4e2] text-[#d92d20]`}><Youtube className="h-6 w-6" /></div>
+            <div className="min-w-0 flex-1"><p className="font-semibold">YouTube</p><p className="truncate text-[13px] text-[#475467]">{studio.youtubeKey ? `Your stream key ${studio.youtubeKey}` : studio.youtube ? "Your channel · connected" : "Paste your stream key once, then it's one press."}</p></div>
+            {studio.youtube && <button type="button" onClick={() => void patch({ youtubeOn: !studio.youtubeOn })} disabled={busy !== ""} aria-pressed={ytOn} className={`h-9 rounded-xl px-4 text-sm font-bold disabled:opacity-60 ${ytOn ? "text-white" : "border border-[#d0d5dd] bg-white"}`} style={ytOn ? { background: NAVY } : undefined} data-testid="golive-youtube">{ytOn ? "Selected" : "Select"}</button>}
+          </div>
+          {!studio.youtube && <div className="mt-3 pl-[60px]"><YoutubeKeyForm compact onSaved={() => { if (!studio.youtubeOn) void patch({ youtubeOn: true }); }} /></div>}
         </div>
         <div className={`rounded-2xl border p-4 ${studio.streams.some((s) => s.on) ? "border-2 border-[#053877] bg-[#f5f8fd] p-[15px]" : "border-[#e4e7ec]"}`}>
           <div className="flex items-center gap-4">
@@ -1230,6 +1233,7 @@ function GoLiveSheet({ studio, onClose }: { studio: Studio; onClose: () => void 
       )}
       <label className="mt-5 block text-sm font-semibold" htmlFor="live-title">Title of your show</label>
       <input id="live-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={100} className="mt-1.5 h-12 w-full rounded-xl border border-[#d0d5dd] px-4 text-[15px] outline-none focus:border-[#053877] focus:ring-2 focus:ring-[#053877]/15" />
+      {ytOn && studio.youtubeKey && <p className="mt-1.5 text-[13px] text-[#667085]" data-testid="golive-yt-title-note">On YouTube it goes live under your channel's default title, set in YouTube Studio.</p>}
       {error && <p className="mt-3 text-sm font-medium text-[#b42318]">{error}</p>}
       <div className="mt-6 flex items-center justify-end gap-3">
         {!anyOn && <p className="mr-auto text-[13px] text-[#667085]">Pick YouTube or add a key to go live.</p>}

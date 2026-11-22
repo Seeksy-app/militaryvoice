@@ -60,7 +60,7 @@ export default function HelpRooms() {
         </HelpSection>
 
         <HelpSection n={6} id="live" title="Go live">
-          <HelpStep k="a">In your studio, press <strong>Go live</strong> at the top. Pick <strong>YouTube</strong> or add a streaming key, check the title of your show, and go. Not connected to YouTube yet? Press <strong>Connect YouTube</strong>.</HelpStep>
+          <HelpStep k="a">In your studio, press <strong>Go live</strong> at the top. Pick <strong>YouTube</strong> or add a streaming key, check the title of your show, and go. No YouTube key yet? Paste your stream key right there, once.</HelpStep>
           <HelpStep k="b">A red <strong>LIVE</strong> timer shows you're on. Press <strong>Watch</strong> to see what your audience sees.</HelpStep>
           <HelpStep k="c">Press <strong>End live</strong> to stop. You can record and be live at the same time.</HelpStep>
           <HelpSub>Turn on live streaming first</HelpSub>

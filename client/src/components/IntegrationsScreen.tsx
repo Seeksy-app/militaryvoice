@@ -113,7 +113,7 @@ export function IntegrationsScreen({
         id="section-going-out-live"
         icon={<Radio className="h-4 w-4" />}
         title="Live streaming"
-        line="Optional. Your slot airs on MilitaryVoices.ai either way; this sends it to your own channel too. YouTube is the only one we can send to directly."
+        line="Optional. Your Radio slot and your studio shows air on MilitaryVoices.ai either way; your stream key sends them to your own YouTube too."
       >
         <ConnectYoutube row />
       </Group>

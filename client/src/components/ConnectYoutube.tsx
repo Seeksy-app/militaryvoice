@@ -1,211 +1,114 @@
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Button } from "@/components/ui/button";
+import { Check, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { PlatformIcon } from "@/components/SocialIcons";
-import { Check, LogOut, HelpCircle, PlayCircle, Plug } from "lucide-react";
-import { Dialog, DialogContent, DialogTitle } from "@/components/ui/dialog";
-import { HoverCard, HoverCardContent, HoverCardTrigger } from "@/components/ui/hover-card";
-import { Link } from "wouter";
 
-// Connecting a podcaster's own channel, so their slot goes out to their
-// audience as well as ours. One button instead of them digging a stream key
-// out of YouTube Studio and emailing us a credential.
+// YouTube Live by the podcaster's own stream key (Andrew, 22 Nov 2026: "Yes, one connection"). Clips and episode
+// videos go to YouTube through Upload-Post; this is only for going live: the studio's Go live and their Radio segment.
+// It used to be our own Google sign-in; those connections keep working until the person saves a key here.
 
-interface Status {
-  configured: boolean;
-  connected: boolean;
-  channelTitle: string;
-  scope: "segment" | "show";
+export interface YoutubeKeyStatus {
+  saved: boolean;
+  hint: string;
+  legacy: { channelTitle: string; scope: "segment" | "show" } | null;
+}
+export const YOUTUBE_KEY_QUERY = ["/api/host/youtube-key"];
+
+/** Where the key is, in one line: the same words here and in the studio's Go live. */
+export function YoutubeKeyHowTo({ className = "" }: { className?: string }) {
+  return (
+    <p className={`text-[13px] leading-relaxed text-[#475467] ${className}`}>
+      Where it is: <b>YouTube Studio → Create → Go live → Stream</b>. Copy the <b>stream key</b> (the default one) and turn on <b>Auto-start</b>.
+    </p>
+  );
 }
 
-export function ConnectYoutube({ locked = false, lockedReason = "", row = false }: { locked?: boolean; lockedReason?: string; row?: boolean } = {}) {
+/** The paste box and Save. `onSaved` runs once the key is stored. */
+export function YoutubeKeyForm({ onSaved, compact = false, autoFocus = false }: { onSaved?: () => void; compact?: boolean; autoFocus?: boolean }) {
   const { toast } = useToast();
-  const [howTo, setHowTo] = useState(false);
-  const queryClient = useQueryClient();
-
-  const { data } = useQuery<Status>({
-    queryKey: ["/api/host/youtube"],
-    queryFn: async () => (await apiRequest("GET", "/api/host/youtube")).json(),
-  });
-
-  // Google sends them back here with the outcome on the URL.
-  useEffect(() => {
-    const result = new URLSearchParams(window.location.search).get("youtube");
-    if (!result) return;
-    if (result === "connected") toast({ title: "YouTube connected" });
-    if (result === "failed") {
-      toast({ title: "That didn't connect", description: "Try again, and make sure you allow the permissions.", variant: "destructive" });
-    }
-    if (result === "noChannel") {
-      toast({
-        title: "That Google account has no YouTube channel",
-        description: "Connect again and, when Google asks which account, pick the one that owns your channel — often a second choice under your name, called a brand account.",
-        variant: "destructive",
-        duration: 15000,
-      });
-    }
-    if (result === "noRefresh") {
-      toast({
-        title: "Nearly — try once more",
-        description: "Google didn't hand back a lasting permission. Disconnect it in your Google account settings, then connect again.",
-        variant: "destructive",
-      });
-    }
-    queryClient.invalidateQueries({ queryKey: ["/api/host/youtube"] });
-    window.history.replaceState({}, "", window.location.pathname);
-  }, [queryClient, toast]);
-
-  const disconnect = useMutation({
-    mutationFn: async () => apiRequest("DELETE", "/api/host/youtube"),
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: ["/api/host/youtube"] }),
-  });
-
-  // The one question, asked the moment they connect: their slot, or the day.
-  const setScope = useMutation({
-    mutationFn: async (scope: "segment" | "show") => {
-      const r = await apiRequest("PATCH", "/api/host/youtube", { scope });
-      return (await r.json()) as { scope: string };
+  const qc = useQueryClient();
+  const [key, setKey] = useState("");
+  const save = useMutation({
+    mutationFn: async () => (await (await apiRequest("PUT", "/api/host/youtube-key", { key })).json()) as YoutubeKeyStatus,
+    onSuccess: (s) => {
+      qc.setQueryData(YOUTUBE_KEY_QUERY, s);
+      void qc.invalidateQueries({ queryKey: ["/api/host/my-studio"] });
+      setKey("");
+      toast({ title: "YouTube stream key saved" });
+      onSaved?.();
     },
-    onSuccess: (_d, scope) => {
-      queryClient.invalidateQueries({ queryKey: ["/api/host/youtube"] });
-      toast({
-        title: scope === "show" ? "The whole show goes to your channel" : "Just your segment",
-        description: scope === "show"
-          ? "A broadcast is scheduled on your YouTube for 5 October. It starts when we do."
-          : "We open a broadcast on your channel when your slot comes up.",
-      });
-    },
-    onError: (e: Error) => toast({ title: "Couldn't set that", description: e.message, variant: "destructive" }),
+    onError: (e: Error) => toast({ title: "Couldn't save that key", description: e.message, variant: "destructive" }),
   });
-
-  if (!data?.configured) return null;
-
   return (
-    <section className={row ? "px-5 py-4" : "rounded-2xl border border-border bg-card p-6"}>
+    <form onSubmit={(e) => { e.preventDefault(); if (key.trim()) save.mutate(); }} data-testid="youtube-key-form">
+      <div className="flex gap-2">
+        <input value={key} onChange={(e) => setKey(e.target.value)} type="password" autoComplete="off" spellCheck={false} autoFocus={autoFocus}
+          placeholder={compact ? "YouTube stream key" : "Paste your YouTube stream key"} aria-label="YouTube stream key"
+          className="h-10 min-w-0 flex-1 rounded-lg border border-[#d0d5dd] bg-white px-3 text-sm outline-none focus:border-[#053877] focus:ring-2 focus:ring-[#053877]/15" data-testid="youtube-key-input" />
+        <button type="submit" disabled={!key.trim() || save.isPending} className="flex h-10 shrink-0 items-center gap-1.5 rounded-lg bg-[#053877] px-4 text-sm font-bold text-white disabled:opacity-50" data-testid="youtube-key-save">
+          {save.isPending && <Loader2 className="h-4 w-4 animate-spin" />}{compact ? "Save" : "Save key"}
+        </button>
+      </div>
+      <YoutubeKeyHowTo className="mt-2" />
+    </form>
+  );
+}
+
+export function useYoutubeKey() {
+  return useQuery<YoutubeKeyStatus>({ queryKey: YOUTUBE_KEY_QUERY, queryFn: async () => (await apiRequest("GET", "/api/host/youtube-key")).json() });
+}
+
+/** Integrations → Live streaming. */
+export function ConnectYoutube({ row = false }: { row?: boolean } = {}) {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  const { data } = useYoutubeKey();
+  const [changing, setChanging] = useState(false);
+  const remove = useMutation({
+    mutationFn: async () => (await (await apiRequest("DELETE", "/api/host/youtube-key")).json()) as YoutubeKeyStatus,
+    onSuccess: (s) => { qc.setQueryData(YOUTUBE_KEY_QUERY, s); void qc.invalidateQueries({ queryKey: ["/api/host/my-studio"] }); toast({ title: "Stream key removed" }); },
+    onError: (e: Error) => toast({ title: "Couldn't remove it", description: e.message, variant: "destructive" }),
+  });
+  if (!data) return null;
+  const pill = "flex items-center gap-1.5 rounded-full bg-[#d1fadf] px-3 py-1 text-[13px] font-bold text-[#067647]";
+  const line = data.saved ? `Stream key saved ${data.hint}` : data.legacy ? `Connected as ${data.legacy.channelTitle || "your channel"}` : "Your Radio segment and your studio's Go live also go out on your channel.";
+  const showForm = (!data.saved && !data.legacy) || changing;
+  return (
+    <section className={row ? "px-5 py-4" : "rounded-2xl border border-border bg-card p-6"} data-testid="youtube-live-row">
       <div className="flex flex-wrap items-center gap-3">
-        <div
-          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white"
-          style={{ background: "#FF0000" }}
-        >
+        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white" style={{ background: "#FF0000" }}>
           <PlatformIcon platform="youtube" className="h-5 w-5" />
         </div>
         <div className="min-w-0 flex-1">
-          <div className="text-base font-semibold text-card-foreground">
-            {data.connected ? `YouTube Live — ${data.channelTitle}` : row ? "YouTube Live" : "Send your slot to your own YouTube"}
+          <div className="text-base font-semibold text-card-foreground">YouTube Live</div>
+          <p className="text-[13px] text-muted-foreground">{line}</p>
+        </div>
+        {data.saved && !changing && (
+          <div className="flex items-center gap-1.5">
+            <span className={pill}><Check className="h-3.5 w-3.5" /> Ready</span>
+            <button type="button" onClick={() => setChanging(true)} className="h-8 rounded-full border border-[#d0d5dd] px-3.5 text-xs font-semibold hover:bg-[#f9fafb]" data-testid="youtube-key-change">Change</button>
+            <button type="button" onClick={() => remove.mutate()} disabled={remove.isPending} className="h-8 px-2 text-xs font-semibold text-[#667085] hover:text-[#b42318]" data-testid="youtube-key-remove">Remove</button>
           </div>
-          <p className="text-xs text-muted-foreground">
-            {data.connected
-              ? data.scope === "show"
-                ? "The whole day goes out on your channel as well as ours. It starts when we do."
-                : "We'll open a broadcast on your channel when your slot starts. Your audience watches you there."
-              : "Connect once and your segment — or the whole show — goes out to your channel as well as ours. No stream key to find."}
-          </p>
-          {/* Say why there is only one button here. Without this it reads as a
-              half-finished list and people go looking for the others. */}
-          {!row && <p className="mt-1.5 text-xs text-muted-foreground">
-            YouTube is the only channel we can send to directly. Facebook, LinkedIn and X don't allow it without a
-            third-party tool — ask us and we'll set one up with you.
-          </p>}
-          {/* What Google will show them, before they press the button and
-              meet it cold. The full walkthrough is a page; this is the
-              three presses, where they are about to need them. */}
-          {!data.connected && (
-            <HoverCard openDelay={120}>
-              <HoverCardTrigger asChild>
-                <button type="button" className="mt-2 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline" data-testid="youtube-what-youll-see">
-                  <HelpCircle className="h-3.5 w-3.5" /> What you'll see when you connect
-                </button>
-              </HoverCardTrigger>
-              <HoverCardContent align="start" className="w-96 text-sm">
-                <p className="font-semibold">Google will say it hasn't verified this app.</p>
-                <p className="mt-1 text-xs text-muted-foreground">
-                  That's us — our verification with Google is in review. The permission only lets us open a live broadcast on
-                  your channel at your booked time.
-                </p>
-                <ol className="mt-3 space-y-2 text-xs">
-                  {[
-                    ["Press Advanced.", "/email/google-1.png"],
-                    ["Press Go to Military Voice (unsafe) — it isn't; that's Google's default wording until the review is done.", "/email/google-2.png"],
-                    ["Press Continue.", "/email/google-3.png"],
-                  ].map(([t, src], i) => (
-                    <li key={src} className="flex items-start gap-2">
-                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-[#F0A71F] text-[10px] font-bold text-[#1a1200]">{i + 1}</span>
-                      <span className="min-w-0 flex-1">{t}</span>
-                      <img src={src} alt="" className="h-12 w-20 shrink-0 rounded border border-border object-cover object-left-top" />
-                    </li>
-                  ))}
-                </ol>
-                <Link href="/help/youtube" className="mt-3 inline-block text-xs font-medium text-primary hover:underline">
-                  Full walkthrough with pictures →
-                </Link>
-              </HoverCardContent>
-            </HoverCard>
-          )}
-        </div>
-        <div className="flex items-center gap-2">
-          {!data.connected && (
-            <button
-              type="button"
-              onClick={() => setHowTo(true)}
-              title="Watch how to connect, 45 seconds"
-              className="inline-flex items-center gap-1.5 rounded-full border border-border px-2.5 py-1.5 text-xs font-medium text-muted-foreground hover:border-primary/40 hover:text-primary"
-              data-testid="button-youtube-howto"
-            >
-              <PlayCircle className="h-4 w-4" /> How to
-            </button>
-          )}
-          {data.connected ? (
-            <Button
-              size="sm"
-              variant="ghost"
-              className="gap-1.5 text-muted-foreground"
-              disabled={disconnect.isPending}
-              onClick={() => disconnect.mutate()}
-              data-testid="button-youtube-disconnect"
-            >
-              <LogOut className="h-3.5 w-3.5" /> Disconnect
-            </Button>
-          ) : (
-            <Button
-              size="sm"
-              disabled={locked}
-              title={locked ? lockedReason : undefined}
-              className="gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]"
-              onClick={() => {
-                window.location.href = "/api/host/youtube/start";
-              }}
-              data-testid="button-youtube-connect"
-            >
-              <Plug className="h-3.5 w-3.5" /> Connect YouTube
-            </Button>
-          )}
-        </div>
+        )}
+        {data.legacy && !changing && <span className={pill}><Check className="h-3.5 w-3.5" /> Connected</span>}
       </div>
-      {/* The how-to, right here: forty-five seconds of the connection being
-          made, so nobody has to leave the card to see what happens next. */}
-      <Dialog open={howTo} onOpenChange={setHowTo}>
-        <DialogContent className="max-w-3xl overflow-hidden p-0">
-          <DialogTitle className="px-5 pt-4 text-base">How to connect your YouTube</DialogTitle>
-          <video controls autoPlay playsInline preload="metadata" poster="/help-youtube-poster.jpg?v=2" src="/api/studio/media/18" className="aspect-video w-full bg-black" data-testid="video-youtube-howto" />
-          <p className="px-5 pb-4 text-xs text-muted-foreground">
-            Then press Connect YouTube. If Google says the app isn't verified, press Advanced, then Go to Military Voice, then Continue.{" "}
-            <Link href="/help/youtube" className="font-medium text-primary hover:underline">The full article →</Link>
-          </p>
-        </DialogContent>
-      </Dialog>
-      {/* YouTube's API terms ask for these two links wherever the connection
-          is made, not only in the policy. */}
-      <p className="mt-2 text-[11px] text-muted-foreground">
-        Connecting uses YouTube API Services. By connecting you agree to the{" "}
-        <a href="https://www.youtube.com/t/terms" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">YouTube Terms of Service</a>
-        {" "}and acknowledge the{" "}
-        <a href="https://policies.google.com/privacy" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">Google Privacy Policy</a>.
-        You can revoke our access any time from your{" "}
-        <a href="https://security.google.com/settings/security/permissions" target="_blank" rel="noreferrer" className="underline underline-offset-2 hover:text-foreground">Google security settings</a>.
-      </p>
-
+      <div className="pl-[56px]">
+        {data.saved && !changing && <p className="mt-2 text-[13px] text-muted-foreground">It goes live under your channel's default title, set in YouTube Studio.</p>}
+        {data.legacy && !changing && (
+          <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-[#f9fafb] px-3.5 py-2.5" data-testid="youtube-switch-note">
+            <p className="min-w-0 flex-1 text-[13px] text-[#475467]">This still works. We're moving YouTube to a stream key: one less sign-in.</p>
+            <button type="button" onClick={() => setChanging(true)} className="shrink-0 text-[13px] font-bold text-[#053877] hover:underline" data-testid="youtube-switch-to-key">Switch to a stream key</button>
+          </div>
+        )}
+        {showForm && (
+          <div className="mt-3">
+            <YoutubeKeyForm onSaved={() => setChanging(false)} autoFocus={changing} />
+            {changing && <button type="button" onClick={() => setChanging(false)} className="mt-1 text-[13px] font-semibold text-[#667085] hover:text-[#344054]">Cancel</button>}
+          </div>
+        )}
+      </div>
     </section>
   );
 }

@@ -66,8 +66,8 @@ export function StudioHome() {
         <div className="mt-3 divide-y divide-border rounded-xl border border-border">
           <div className="flex items-center gap-3 px-3 py-2.5">
             <Youtube className="h-5 w-5 shrink-0 text-red-600" />
-            <span className="min-w-0 flex-1 text-sm"><span className="font-medium">YouTube</span><span className="block text-xs text-muted-foreground">{s.youtube ? "A new live video on your channel each time" : "Not connected yet"}</span></span>
-            {s.youtube ? <Switch checked={s.youtubeOn} onCheckedChange={(v) => void patch({ youtubeOn: v })} disabled={busy} data-testid="studio-youtube-on" /> : <a href="/host/dashboard/integrations" className="text-sm font-semibold text-[#053877] hover:underline dark:text-white">Connect YouTube</a>}
+            <span className="min-w-0 flex-1 text-sm"><span className="font-medium">YouTube</span><span className="block text-xs text-muted-foreground">{s.youtube ? "Goes live on your channel each time" : "Add your stream key once"}</span></span>
+            {s.youtube ? <Switch checked={s.youtubeOn} onCheckedChange={(v) => void patch({ youtubeOn: v })} disabled={busy} data-testid="studio-youtube-on" /> : <a href="/host/dashboard/integrations" className="text-sm font-semibold text-[#053877] hover:underline dark:text-white">Add your key</a>}
           </div>
           {s.streams.map((x) => (
             <div key={x.id} className="flex items-center gap-3 px-3 py-2.5">
