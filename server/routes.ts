@@ -3054,12 +3054,10 @@ export function registerRoutes(app: Express): void {
   //      Connect once, and at their slot we open a broadcast on their channel
   //      rather than asking them to find a stream key.
   //
-  //      Google has the old militaryvoice.ai callback on file, and adding the new
-  //      domain to the consent screen mid-review would restart verification. So
-  //      on either of our domains the callback Google sees stays the old one,
-  //      and that callback hands straight on to the site's own domain, where
-  //      the podcaster's session cookie lives and is checked as before.
-  const YOUTUBE_CALLBACK = `${(process.env.YOUTUBE_CALLBACK_ORIGIN || "https://www.militaryvoice.ai").replace(/\/+$/, "")}/api/youtube/callback`;
+  //      The callback is on militaryvoices.ai since 22 Nov 2026 (Andrew added it to the Google client for the
+  //      verification submission). The old militaryvoice.ai one still works, and still hands on to the site's own
+  //      domain, where the podcaster's session cookie lives. YOUTUBE_CALLBACK_ORIGIN overrides it.
+  const YOUTUBE_CALLBACK = `${(process.env.YOUTUBE_CALLBACK_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "")}/api/youtube/callback`;
   function youtubeRedirect(req: Request): string {
     const host = req.get("host") ?? "";
     // Local and preview runs keep their own callback.
