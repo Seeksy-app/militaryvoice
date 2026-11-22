@@ -9579,7 +9579,10 @@ export function registerRoutes(app: Express): void {
     const dayKey = `send-key:day:${new Date().toISOString().slice(0, 10)}`;
     if (viaKey) {
       if (approval.length < 2) return res.status(400).json({ message: "Quote Andrew's go on this exact text in approval." });
-      if (row.status === "sent" || row.repliedAt) return res.status(409).json({ message: "This one has already had a reply." });
+      // Alex's auto-acknowledgement marks most messages replied, and a follow-up Andrew approved is fine (Frank's "email
+      // you right away"), so the only block is the same words to the same message twice: a retry, not a new reply.
+      const last = await storage.getSetting(`send-key:last:${row.id}`).catch(() => null);
+      if (last && last === crypto.createHash("sha256").update(text).digest("hex")) return res.status(409).json({ message: "That exact reply has already gone to them." });
       if ((Number(await storage.getSetting(dayKey).catch(() => "0")) || 0) >= 20) return res.status(429).json({ message: "20 sends today with the key: that's the limit. Use the admin screen." });
     }
     const subject = String(req.body?.subject ?? row.draftSubject ?? "").trim() || (row.subject.startsWith("Re:") ? row.subject : `Re: ${row.subject}`);
@@ -9605,6 +9608,7 @@ export function registerRoutes(app: Express): void {
     }
     if (viaKey) {
       await storage.setSetting(dayKey, String((Number(await storage.getSetting(dayKey).catch(() => "0")) || 0) + 1)).catch(() => {});
+      await storage.setSetting(`send-key:last:${row.id}`, crypto.createHash("sha256").update(text).digest("hex")).catch(() => {});
       const first = text.replace(/\s+/g, " ").slice(0, 280);
       void slackNote(`:outbox_tray: A Claude session sent a reply with the send key, from hello@ to ${row.fromEmail}: "${subject}"\n> ${first}${text.length > 280 ? "…" : ""}\nAndrew's go: "${approval}"`).catch(() => {});
     }

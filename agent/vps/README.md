@@ -66,7 +66,7 @@ jq -n --arg text "$(cat reply.txt)" --arg approval "Andrew, 22 Nov: \"Yes, send 
 
 What it enforces:
 - It always sends as the team from hello@, never as Riccoh.
-- The recipient is whoever wrote that inbound message, and only one reply per message.
+- The recipient is whoever wrote that inbound message, threaded on it. A follow-up Andrew approves is fine. Alex's auto-acknowledgement doesn't block it, and the same text twice to the same message is refused as a retry.
 - 20 sends a day.
 - `approval` is required.
 - Every send is logged in Mail/CRM like any reply, and posts a line to #mv-inbox with the recipient, subject, first lines and Andrew's go.
