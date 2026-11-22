@@ -696,9 +696,12 @@ export function PodcastListens({ onConnect, bare = false }: { onConnect: () => v
   // The show's artwork for every card's header, and which apps read the feed (to say the zeros honestly).
   const art = sources.find((x) => x.data?.artwork)?.data!.artwork || (hostingQ.data?.shows ?? []).find((x) => x.show.artworkUrl)?.show.artworkUrl || "";
   const reads = new Set((hostingQ.data?.shows ?? []).flatMap((x) => x.reading ?? []));
+  // "Bring in your Buzzsprout history" only for a show that moved here from Buzzsprout and isn't connected yet
+  // (Andrew via PM, 22 Nov: "that banner only needs to show if it pertains to a podcaster who redirected his podcast over"). Everyone else never sees it.
+  const movedFromBuzzsprout = (hostingQ.data?.shows ?? []).some((x) => /buzzsprout/i.test(x.show.importedFrom ?? ""));
   return (
     <section className={`${bare ? "" : "mb-6 "}space-y-4`} data-testid="podcast-listens">
-      {!sources.some((x) => x.source === "buzzsprout") && (
+      {movedFromBuzzsprout && !sources.some((x) => x.source === "buzzsprout") && (
         <div className="rounded-2xl border border-dashed border-border p-4" data-testid="add-buzzsprout">
           <div className="flex flex-wrap items-center gap-3">
             <Link2 className="h-5 w-5 shrink-0 text-[#053877] dark:text-[#8ab4f8]" />
