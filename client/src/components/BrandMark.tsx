@@ -29,14 +29,15 @@ export const BRANDS: Record<Brand, Look> = {
   threads: { name: "Threads", icon: SiThreads, color: "#000000", mono: true },
   buzzsprout: { name: "Buzzsprout", file: "/brands/buzzsprout.svg" },
   zoom: { name: "Zoom", file: "/brands/zoom.svg" },
-  // Restream isn't in Simple Icons; its press-kit file goes in /brands/restream.svg. Until then it shows no mark (never letters).
+  // Restream isn't in Simple Icons: its sign (circle, black) from Restream's own media kit, restre.am/media-kit (22 Nov 2026), unaltered.
   restream: { name: "Restream", file: "/brands/restream.svg" },
   obs: { name: "OBS Studio", icon: SiObsstudio, color: "#302E31", mono: true },
   streamyard: { name: "StreamYard", file: "/brands/streamyard.svg" },
   twitch: { name: "Twitch", icon: SiTwitch, color: "#9146FF" },
 };
 /** Brands whose file isn't in /brands/ yet: BrandMark renders nothing for them. */
-const MISSING = new Set<Brand>(["restream"]);
+// A brand listed here shows no mark at all (never letters or a stand-in) until its official file is added.
+const MISSING = new Set<Brand>([]);
 export const hasBrandMark = (b: Brand) => !MISSING.has(b);
 
 function Mark({ brand, className, onDark }: { brand: Brand; className: string; onDark?: boolean }) {
