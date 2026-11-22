@@ -10,6 +10,7 @@ import type { Express, RequestHandler } from "express";
 import { storage } from "./storage.js";
 import { seal, unseal } from "./secretBox.js";
 import { getSessionEmail } from "./session.js";
+import { isYoutubeConfigured } from "./youtube.js";
 
 /** YouTube's ingest for a persistent stream key. */
 export const YOUTUBE_RTMP = "rtmp://a.rtmp.youtube.com/live2";
@@ -40,6 +41,13 @@ export function cleanYoutubeKey(raw: unknown): string | null {
   return /^[A-Za-z0-9_-]{12,80}$/.test(v) ? v : null;
 }
 
+/** Whether this person sees Connect YouTube: everyone once Google approves (YOUTUBE_CONNECT=1), admins until then. */
+export async function canConnectYoutube(email: string): Promise<boolean> {
+  if (!YOUTUBE_OAUTH || !isYoutubeConfigured() || !email) return false;
+  if (process.env.YOUTUBE_CONNECT === "1") return true;
+  return storage.isAdminEmail(email).catch(() => false);
+}
+
 export function registerYoutubeKey(app: Express, requireHostSession: RequestHandler): void {
   const me = (req: Parameters<RequestHandler>[0]) => (getSessionEmail(req) ?? "").toLowerCase().trim();
   const status = async (email: string) => {
@@ -50,6 +58,9 @@ export function registerYoutubeKey(app: Express, requireHostSession: RequestHand
       hint: youtubeKeyHint(key),
       // The old Google connection, shown with "Switch to a stream key" until they do.
       legacy: !key && acct?.channelId ? { channelTitle: acct.channelTitle || "", scope: acct.scope === "show" ? "show" : "segment" } : null,
+      // Connect YouTube (one click with Google) as the main way in (Andrew, 22 Nov: "get it approved"): admins only
+      // while Google verifies the app (an unverified app warns people and caps at 100 users); YOUTUBE_CONNECT=1 opens it.
+      canConnect: await canConnectYoutube(email),
     };
   };
   app.get("/api/host/youtube-key", requireHostSession, async (req, res) => {

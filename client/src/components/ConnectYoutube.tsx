@@ -1,9 +1,9 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Loader2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { PlatformIcon } from "@/components/SocialIcons";
+import { BrandMark } from "@/components/BrandMark";
 
 // YouTube Live by the podcaster's own stream key (Andrew, 22 Nov 2026: "Yes, one connection"). Clips and episode
 // videos go to YouTube through Upload-Post; this is only for going live: the studio's Go live and their Radio segment.
@@ -13,7 +13,30 @@ export interface YoutubeKeyStatus {
   saved: boolean;
   hint: string;
   legacy: { channelTitle: string; scope: "segment" | "show" } | null;
+  /** Connect YouTube (Google) is offered: admins while Google verifies the app, everyone once it's approved. */
+  canConnect?: boolean;
 }
+
+/** Google's answer after Connect YouTube, as a toast, once (the callback adds ?youtube=…). */
+export function useYoutubeConnectResult() {
+  const { toast } = useToast();
+  const qc = useQueryClient();
+  useEffect(() => {
+    const q = new URLSearchParams(window.location.search);
+    const r = q.get("youtube");
+    if (!r) return;
+    q.delete("youtube");
+    window.history.replaceState(null, "", `${window.location.pathname}${q.size ? `?${q}` : ""}${window.location.hash}`);
+    void qc.invalidateQueries({ queryKey: YOUTUBE_KEY_QUERY });
+    void qc.invalidateQueries({ queryKey: ["/api/host/my-studio"] });
+    if (r === "connected") toast({ title: "YouTube connected", description: "Your shows go live on your channel." });
+    else if (r === "noChannel") toast({ title: "That Google account has no YouTube channel", description: "Try again and pick the account that owns your channel.", variant: "destructive" });
+    else toast({ title: "YouTube didn't connect", description: "Try again, or paste a stream key instead.", variant: "destructive" });
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
+/** The one-click way in: Google's sign-in, then back to where they started. */
+export const youtubeConnectHref = (then: "integrations" | "studio" = "integrations") => `/api/host/youtube/start?then=${then}`;
 export const YOUTUBE_KEY_QUERY = ["/api/host/youtube-key"];
 
 /** Where the key is, in one line: the same words here and in the studio's Go live. */
@@ -60,43 +83,76 @@ export function useYoutubeKey() {
   return useQuery<YoutubeKeyStatus>({ queryKey: YOUTUBE_KEY_QUERY, queryFn: async () => (await apiRequest("GET", "/api/host/youtube-key")).json() });
 }
 
-/** Integrations → Live streaming. */
+/** Integrations → Live: YouTube. */
 export function ConnectYoutube({ row = false }: { row?: boolean } = {}) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const { data } = useYoutubeKey();
   const [changing, setChanging] = useState(false);
+  useYoutubeConnectResult();
+  const refresh = (s?: YoutubeKeyStatus) => {
+    if (s) qc.setQueryData(YOUTUBE_KEY_QUERY, s); else void qc.invalidateQueries({ queryKey: YOUTUBE_KEY_QUERY });
+    void qc.invalidateQueries({ queryKey: ["/api/host/my-studio"] });
+    void qc.invalidateQueries({ queryKey: ["/api/host/youtube"] });
+  };
   const remove = useMutation({
     mutationFn: async () => (await (await apiRequest("DELETE", "/api/host/youtube-key")).json()) as YoutubeKeyStatus,
-    onSuccess: (s) => { qc.setQueryData(YOUTUBE_KEY_QUERY, s); void qc.invalidateQueries({ queryKey: ["/api/host/my-studio"] }); toast({ title: "Stream key removed" }); },
+    onSuccess: (s) => { refresh(s); toast({ title: "Stream key removed" }); },
     onError: (e: Error) => toast({ title: "Couldn't remove it", description: e.message, variant: "destructive" }),
   });
+  const disconnect = useMutation({
+    mutationFn: async () => { await apiRequest("DELETE", "/api/host/youtube"); },
+    onSuccess: () => { refresh(); toast({ title: "YouTube disconnected" }); },
+    onError: (e: Error) => toast({ title: "Couldn't disconnect", description: e.message, variant: "destructive" }),
+  });
   if (!data) return null;
+  const connect = !!data.canConnect;
   const pill = "flex items-center gap-1.5 rounded-full bg-[#d1fadf] px-3 py-1 text-[13px] font-bold text-[#067647]";
-  const line = data.saved ? `Stream key saved ${data.hint}` : data.legacy ? `Connected as ${data.legacy.channelTitle || "your channel"}` : "Your Radio segment and your studio's Go live also go out on your channel.";
-  const showForm = (!data.saved && !data.legacy) || changing;
+  const ghost = "h-8 rounded-full border border-[#d0d5dd] bg-white px-3.5 text-xs font-semibold hover:bg-[#f9fafb]";
+  const channel = data.legacy?.channelTitle || "your channel";
+  const line = data.saved
+    ? `Stream key saved ${data.hint}`
+    : data.legacy
+      ? connect ? `Connected as ${channel}. Each show goes live on your channel under its own title.` : `Connected as ${channel}`
+      : connect ? "One click with your Google account. Your shows go live on your channel, titled after the show." : "Your Radio segment and your studio's Go live also go out on your channel.";
+  // With Connect offered, the key box is the small backup: it opens from "or paste a stream key".
+  const showForm = connect ? changing : (!data.saved && !data.legacy) || changing;
   return (
     <section className={row ? "px-5 py-4" : "rounded-2xl border border-border bg-card p-6"} data-testid="youtube-live-row">
       <div className="flex flex-wrap items-center gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl text-white" style={{ background: "#FF0000" }}>
-          <PlatformIcon platform="youtube" className="h-5 w-5" />
-        </div>
-        <div className="min-w-0 flex-1">
+        <BrandMark brand="youtube" tile />
+        <div className="min-w-0 flex-1 basis-[180px]">
           <div className="text-base font-semibold text-card-foreground">YouTube Live</div>
           <p className="text-[13px] text-muted-foreground">{line}</p>
         </div>
         {data.saved && !changing && (
           <div className="flex items-center gap-1.5">
             <span className={pill}><Check className="h-3.5 w-3.5" /> Ready</span>
-            <button type="button" onClick={() => setChanging(true)} className="h-8 rounded-full border border-[#d0d5dd] px-3.5 text-xs font-semibold hover:bg-[#f9fafb]" data-testid="youtube-key-change">Change</button>
+            <button type="button" onClick={() => setChanging(true)} className={ghost} data-testid="youtube-key-change">Change</button>
             <button type="button" onClick={() => remove.mutate()} disabled={remove.isPending} className="h-8 px-2 text-xs font-semibold text-[#667085] hover:text-[#b42318]" data-testid="youtube-key-remove">Remove</button>
           </div>
         )}
-        {data.legacy && !changing && <span className={pill}><Check className="h-3.5 w-3.5" /> Connected</span>}
+        {data.legacy && !changing && (
+          <div className="flex items-center gap-1.5">
+            <span className={pill}><Check className="h-3.5 w-3.5" /> Connected</span>
+            {connect && <button type="button" onClick={() => disconnect.mutate()} disabled={disconnect.isPending} className={ghost} data-testid="youtube-disconnect">Disconnect</button>}
+          </div>
+        )}
+        {connect && !data.saved && !data.legacy && !changing && (
+          <div className="flex flex-col items-end gap-1">
+            <a href={youtubeConnectHref("integrations")} className="flex h-9 items-center rounded-full bg-[#053877] px-5 text-[13px] font-bold text-white shadow-sm hover:bg-[#042c5e]" data-testid="youtube-connect">Connect YouTube</a>
+            <button type="button" onClick={() => setChanging(true)} className="text-[13px] font-semibold text-[#053877] underline decoration-[#98a2b3] underline-offset-2" data-testid="youtube-paste-key">or paste a stream key</button>
+          </div>
+        )}
       </div>
       <div className="pl-[56px]">
-        {data.saved && !changing && <p className="mt-2 text-[13px] text-muted-foreground">It goes live under your channel's default title, set in YouTube Studio.</p>}
-        {data.legacy && !changing && (
+        {data.saved && !changing && (
+          <p className="mt-2 text-[13px] text-muted-foreground">
+            It goes live under your channel's default title, set in YouTube Studio.
+            {connect && <> <a href={youtubeConnectHref("integrations")} className="font-semibold text-[#053877] hover:underline" data-testid="youtube-connect-instead">Connect YouTube instead</a>, so each show gets its own title.</>}
+          </p>
+        )}
+        {data.legacy && !changing && !connect && (
           <div className="mt-3 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-xl bg-[#f9fafb] px-3.5 py-2.5" data-testid="youtube-switch-note">
             <p className="min-w-0 flex-1 text-[13px] text-[#475467]">This still works. We're moving YouTube to a stream key: one less sign-in.</p>
             <button type="button" onClick={() => setChanging(true)} className="shrink-0 text-[13px] font-bold text-[#053877] hover:underline" data-testid="youtube-switch-to-key">Switch to a stream key</button>

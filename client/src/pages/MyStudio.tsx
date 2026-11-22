@@ -21,7 +21,7 @@ import { PhoneStudio } from "@/components/room/PhoneStudio";
 import { LayoutEditor } from "@/components/room/LayoutEditor";
 import { MarkClip } from "@/components/room/MarkClip";
 import { RoomStage } from "@/components/RoomStage";
-import { YoutubeKeyForm } from "@/components/ConnectYoutube";
+import { YoutubeKeyForm, useYoutubeKey, useYoutubeConnectResult, youtubeConnectHref } from "@/components/ConnectYoutube";
 import { PrompterNews, PrompterOverlay, PrompterSwitch, ScriptsBar, usePrompter, useStudioNotes, type NotesSync } from "@/components/room/Teleprompter";
 import { pdfToPictures, useDeck } from "@/components/room/slides";
 import { EXTRA_CAMS, addExtraCamera, freeCameras, isExtraCam, stopAllExtraCameras, stopExtraCamera, useExtraCams } from "@/components/room/extraCamera";
@@ -73,6 +73,7 @@ const useNow = () => { const [now, setNow] = useState(Date.now()); useEffect(() 
 export default function MyStudio({ invite }: { invite?: string }) {
   const owner = !invite;
   useInter();
+  useYoutubeConnectResult();
   const [conn, setConn] = useState<Conn | null>(null);
   const [setup, setSetup] = useState<Setup | null>(null);
   const [left, setLeft] = useState(false);
@@ -1158,6 +1159,9 @@ function GoLiveSheet({ studio, onClose }: { studio: Studio; onClose: () => void 
   const [add, setAdd] = useState({ name: "", url: "", key: "" });
   const [busy, setBusy] = useState<"" | "patch" | "go">("");
   const [error, setError] = useState("");
+  // Connect YouTube as the main way in (Andrew, 22 Nov: "Yes, build it"): admins while Google verifies the app.
+  const canConnect = !!useYoutubeKey().data?.canConnect;
+  const [pasting, setPasting] = useState(false);
   // "Also record to my Library" (Andrew, 22 Nov: "They may not want to go live. They just may want to record it"):
   // on by default, untick to stream only. Already recording: it stays on and can't be unticked here.
   const [alsoRecord, setAlsoRecord] = useState(true);
@@ -1209,10 +1213,16 @@ function GoLiveSheet({ studio, onClose }: { studio: Studio; onClose: () => void 
         <div className={`rounded-2xl border p-4 ${ytOn ? "border-2 border-[#053877] bg-[#f5f8fd] p-[15px]" : "border-[#e4e7ec]"}`} data-testid="golive-youtube-row">
           <div className="flex items-center gap-4">
             <div className={`${icon} bg-white ring-1 ring-black/10`}><BrandMark brand="youtube" className="h-6 w-6" /></div>
-            <div className="min-w-0 flex-1"><p className="font-semibold">YouTube</p><p className="truncate text-[13px] text-[#475467]">{studio.youtubeKey ? `Your stream key ${studio.youtubeKey}` : studio.youtube ? "Your channel · connected" : "Paste your stream key once, then it's one press."}</p></div>
+            <div className="min-w-0 flex-1"><p className="font-semibold">YouTube</p><p className="truncate text-[13px] text-[#475467]">{studio.youtubeKey ? `Your stream key ${studio.youtubeKey}` : studio.youtube ? "Your channel · connected" : canConnect ? "Not connected yet" : "Paste your stream key once, then it's one press."}</p></div>
+            {!studio.youtube && canConnect && !pasting && (
+              <div className="flex shrink-0 flex-col items-end gap-1">
+                <a href={youtubeConnectHref("studio")} className="flex h-9 items-center rounded-xl px-4 text-sm font-bold text-white" style={{ background: NAVY }} data-testid="golive-youtube-connect">Connect YouTube</a>
+                <button type="button" onClick={() => setPasting(true)} className="text-[13px] font-semibold text-[#053877] underline decoration-[#98a2b3] underline-offset-2" data-testid="golive-youtube-paste">or paste a stream key</button>
+              </div>
+            )}
             {studio.youtube && <button type="button" onClick={() => void patch({ youtubeOn: !studio.youtubeOn })} disabled={busy !== ""} aria-pressed={ytOn} className={`h-9 rounded-xl px-4 text-sm font-bold disabled:opacity-60 ${ytOn ? "text-white" : "border border-[#d0d5dd] bg-white"}`} style={ytOn ? { background: NAVY } : undefined} data-testid="golive-youtube">{ytOn ? "Selected" : "Select"}</button>}
           </div>
-          {!studio.youtube && <div className="mt-3 pl-[60px]"><YoutubeKeyForm compact onSaved={() => { if (!studio.youtubeOn) void patch({ youtubeOn: true }); }} /></div>}
+          {!studio.youtube && (!canConnect || pasting) && <div className="mt-3 pl-[60px]"><YoutubeKeyForm compact onSaved={() => { if (!studio.youtubeOn) void patch({ youtubeOn: true }); }} /></div>}
         </div>
         <div className={`rounded-2xl border p-4 ${studio.streams.some((s) => s.on) ? "border-2 border-[#053877] bg-[#f5f8fd] p-[15px]" : "border-[#e4e7ec]"}`}>
           <div className="flex items-center gap-4">

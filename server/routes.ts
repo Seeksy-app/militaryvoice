@@ -194,7 +194,7 @@ import { registerMail } from "./mail.js";
 import { registerAutomations } from "./automations.js";
 import { registerTrash, toTrash } from "./trash.js";
 import { registerMyStudio } from "./myStudio.js";
-import { getYoutubeKey, registerYoutubeKey, YOUTUBE_OAUTH, YOUTUBE_RTMP } from "./youtubeKey.js";
+import { getYoutubeKey, registerYoutubeKey, setYoutubeKey, YOUTUBE_OAUTH, YOUTUBE_RTMP } from "./youtubeKey.js";
 import { registerLivePage } from "./livePage.js";
 import { registerRoomKit, marksFor, withCredits } from "./roomKit.js";
 import { registerFreesoundImport } from "./studioLibrary.js";
@@ -3157,7 +3157,9 @@ export function registerRoutes(app: Express): void {
     const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
     // The session cookie won't survive Google's redirect chain reliably, so the
     // address rides along in state and is checked against the session on return.
-    res.redirect(consentUrl(youtubeRedirect(req), Buffer.from(email).toString("base64url")));
+    // Where they come back to: Integrations (default) or the studio's Go live.
+    const then = req.query.then === "studio" ? "studio" : "integrations";
+    res.redirect(consentUrl(youtubeRedirect(req), Buffer.from(`${email}\n${then}`).toString("base64url")));
   });
 
   /**
@@ -3286,7 +3288,8 @@ export function registerRoutes(app: Express): void {
     }
     const code = typeof req.query.code === "string" ? req.query.code : "";
     const state = typeof req.query.state === "string" ? req.query.state : "";
-    const decoded = state ? Buffer.from(state, "base64url").toString("utf8").toLowerCase().trim() : "";
+    const [decodedRaw, then = ""] = (state ? Buffer.from(state, "base64url").toString("utf8") : "").split("\n");
+    const decoded = decodedRaw.toLowerCase().trim();
     const onBehalf = decoded.startsWith("admin:");
     const email = onBehalf ? decoded.slice("admin:".length) : decoded;
     const sessionEmail = (getSessionEmail(req) ?? "").toLowerCase().trim();
@@ -3295,7 +3298,7 @@ export function registerRoutes(app: Express): void {
     // Where to land: the podcaster's dashboard, or the admin's podcasters list.
     // An admin connecting their own channel is setting up the studio: back to it.
     const forStudio = onBehalf && !!adminEmail && email === adminEmail.toLowerCase().trim();
-    const back = (result: string) => (forStudio ? `/admin/studio?youtube=${result}` : onBehalf ? `/admin/podcasters?youtube=${result}&for=${encodeURIComponent(email)}` : `/host/dashboard?youtube=${result}`);
+    const back = (result: string) => (forStudio ? `/admin/studio?youtube=${result}` : onBehalf ? `/admin/podcasters?youtube=${result}&for=${encodeURIComponent(email)}` : then === "studio" ? `/my-studio?youtube=${result}` : then ? `/host/dashboard/integrations?youtube=${result}#section-going-out-live` : `/host/dashboard?youtube=${result}`);
 
     if (!code || !email || (onBehalf ? !adminOk : email !== sessionEmail)) {
       res.redirect(back("failed"));
@@ -3325,6 +3328,8 @@ export function registerRoutes(app: Express): void {
         channelId: channel.id,
         channelTitle: channel.title,
       });
+      // They chose Connect over a pasted key: drop the key, since a saved key always wins (22 Nov).
+      if (!onBehalf) await setYoutubeKey(email, "").catch(() => {});
       res.redirect(back("connected"));
     } catch (err) {
       console.error("YouTube connect failed:", err);
