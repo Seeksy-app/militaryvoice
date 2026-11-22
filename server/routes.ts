@@ -131,6 +131,7 @@ import {
 import { renderBroadcastEmail, renderConfirmationEmail, renderNudge } from "./email.js";
 import { emailShell, EMAIL_BANNERS } from "./email.js";
 import { slackInbound, slackNote } from "./slack.js";
+import { mailGuard } from "./mailGuard.js";
 import { registerMagazine, planSegments, claimSegmentCut } from "./magazine.js";
 import { registerSurvey } from "./survey.js";
 import { registerSms } from "./sms.js";
@@ -9416,23 +9417,34 @@ export function registerRoutes(app: Express): void {
           const personReplied = thread.some((r) => r.repliedAt && r.replyFrom && r.replyFrom !== "alex");
           if (!draft?.ack || personReplied || alexToday >= 4) return;
         }
-        const { subject, text, html: body } = composeAck(row, draft?.ack ?? "", await firstNameFor(row), followUp);
+        const first = await firstNameFor(row);
+        let { subject, text, html: body } = composeAck(row, draft?.ack ?? "", first, followUp);
+        // Andrew's rule (22 Nov): Alex never names him to a customer. If the drafted answer does, send the plain
+        // acknowledgement instead and leave the answer to a person; if even that would, send nothing.
+        let heldAnswer = false;
+        if (mailGuard({ to: row.fromEmail, subject, text, html: body, recipientName: row.fromName })) {
+          if (followUp || !draft?.ack) { console.warn(`Alex's reply to ${row.fromEmail} named Andrew: not sent.`); alex = "person"; return; }
+          ({ subject, text, html: body } = composeAck(row, "", first, false));
+          heldAnswer = true;
+          if (mailGuard({ to: row.fromEmail, subject, text, html: body, recipientName: row.fromName })) { alex = "person"; return; }
+          void slackNote(`:no_entry: Alex's drafted answer to ${row.fromEmail} named Andrew, so only the plain acknowledgement went. A person needs to answer: "${row.subject.slice(0, 120)}"`).catch(() => {});
+        }
         // The Marathon's frame for the yearly event; the platform's for everything else.
         const marathon = draft ? draft.topic === "marathon" : known;
         const html = emailShell({
           banner: marathon ? EMAIL_BANNERS.podcasters : EMAIL_BANNERS.studio,
           eyebrow: marathon ? "The Podcast Marathon · 5 October" : "MilitaryVoices.ai",
-          heading: followUp ? subject.replace(/^(re:\s*)+/i, "") : draft?.ack ? "Here's your answer" : "We got your email",
+          heading: followUp ? subject.replace(/^(re:\s*)+/i, "") : draft?.ack && !heldAnswer ? "Here's your answer" : "We got your email",
           body,
         });
         const headers: Record<string, string> = {};
         if (row.messageId) { headers["In-Reply-To"] = row.messageId; headers["References"] = row.messageId; }
-        const id = await sendOneOffEmail({ kind: "ack", to: row.fromEmail, subject, html, text, headers });
+        const id = await sendOneOffEmail({ kind: "ack", to: row.fromEmail, subject, html, text, headers, recipientName: row.fromName });
         if (!id) return;
         const now = new Date().toISOString();
         // Alex replied: read and replied, off Needs a reply, shown as "Alex replied" (Andrew, 20 Nov). When he
         // said a person will follow up, Slack still hears it (tellSlack below).
-        const settled = draft && draft.ack && !draft.needsPerson;
+        const settled = draft && draft.ack && !draft.needsPerson && !heldAnswer;
         alex = followUp ? "followup" : settled ? "answered" : "person";
         await storage.updateInbound(row.id, { ackAt: now, ackResendId: id, ackText: text, status: "sent", readAt: now, repliedAt: now, replyResendId: id, replyFrom: "alex", replyText: text });
         const featured = await storage.getFeaturedEvent();
@@ -9597,7 +9609,11 @@ export function registerRoutes(app: Express): void {
     const html = emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "The Podcast Marathon · 5 October", heading: subject.replace(/^re:\s*/i, ""), body: paragraphs });
     const headers: Record<string, string> = {};
     if (row.messageId) { headers["In-Reply-To"] = row.messageId; headers["References"] = row.messageId; }
-    const id = await sendOneOffEmail({ kind: "reply", to: row.fromEmail, subject, html, text, headers, bcc: bccFor(from, row.fromEmail) });
+    // Andrew's rule (22 Nov): a plain no, before anything is sent, when it names him, comes from him or copies him.
+    const bcc = bccFor(from, row.fromEmail);
+    const refused = mailGuard({ to: row.fromEmail, subject, text, html, bcc, kind: "reply", recipientName: row.fromName });
+    if (refused) return res.status(400).json({ message: refused });
+    const id = await sendOneOffEmail({ kind: "reply", to: row.fromEmail, subject, html, text, headers, bcc, recipientName: row.fromName });
     if (!id) return res.status(502).json({ message: "The mail provider didn't accept it." });
     const now = new Date().toISOString();
     await storage.updateInbound(row.id, { status: "sent", repliedAt: now, replyResendId: id, replyFrom: from, replyText: text });

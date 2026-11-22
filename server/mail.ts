@@ -6,7 +6,8 @@
 import type { Express, RequestHandler, Response } from "express";
 import { and, desc, eq, ilike, inArray, notInArray, or, sql } from "drizzle-orm";
 import { db, schemaIsReady } from "./storage.js";
-import { setMailLogger } from "./email.js";
+import { setMailGuardAlarm, setMailLogger } from "./email.js";
+import { slackNote } from "./slack.js";
 import { broadcastEvents, broadcasts, contacts, inboundEmails, mailLog, type MailLogRow } from "../shared/schema.js";
 
 /** Emails whose words stay out of the log (a code is a key). */
@@ -21,6 +22,15 @@ const snippet = (t: string, n = 160) => { const s = (t || "").replace(/\s+/g, " 
 const said = (t: string) => (t || "").split(/\n(?:On .{5,200}wrote:|-{2,} ?Original Message|From: .+\nSent: )/)[0].replace(/\n>.*$/gm, "").trim();
 
 export function installMailLog() {
+  // Andrew's rule (22 Nov): a customer's email that named him, came from him or copied him was held back. Say so.
+  // One line per subject every 10 minutes, so a held broadcast doesn't post once per person.
+  const lastAlarm = new Map<string, number>();
+  setMailGuardAlarm(async (m) => {
+    const k = `${m.kind}|${m.subject}`;
+    if (Date.now() - (lastAlarm.get(k) ?? 0) < 10 * 60_000) return;
+    lastAlarm.set(k, Date.now());
+    await slackNote(`:no_entry: Held back an email to ${m.to} ("${m.subject.slice(0, 120)}", ${m.kind}): ${m.why}`);
+  });
   setMailLogger(async (m) => {
     await schemaIsReady();
     await db.insert(mailLog).values({

@@ -1,3 +1,4 @@
+import { mailGuard } from "./mailGuard.js";
 // Confirmation emails via Resend. Works two ways:
 //  - Vercel/production: set RESEND_API_KEY to a real Resend API key. Requests hit
 //    api.resend.com directly with the standard `Authorization: Bearer` header.
@@ -231,10 +232,18 @@ function buildText(input: ConfirmationEmailInput): string {
  *  returns false on failure so a flaky email provider never blocks a user flow. */
 /** A file sent with the email: Resend fetches it from the address. */
 export type MailAttachment = { filename: string; path?: string; /** Base64 file body, instead of an address to fetch. */ content?: string };
-async function sendRawEmail(opts: { to: string; subject: string; html: string; text: string; replyTo?: string; from?: string; headers?: Record<string, string>; bcc?: string[]; cc?: string[]; kind?: string; attachments?: MailAttachment[] }): Promise<string | null> {
+async function sendRawEmail(opts: { to: string; subject: string; html: string; text: string; replyTo?: string; from?: string; headers?: Record<string, string>; bcc?: string[]; cc?: string[]; kind?: string; attachments?: MailAttachment[]; recipientName?: string }): Promise<string | null> {
   let id: string | null = null;
   let error = "";
   try {
+    // Andrew's rule (22 Nov): never his name, his address, or a copy to him on a customer's mail. Refused, not changed.
+    const refused = mailGuard({ ...opts, from: opts.from ?? FROM_ADDRESS });
+    if (refused) {
+      error = `Held back: ${refused}`;
+      console.error(`Mail guard held back "${opts.subject}" to ${opts.to}: ${refused}`);
+      if (guardAlarm) await guardAlarm({ to: opts.to, subject: opts.subject, why: refused, kind: opts.kind ?? "other" }).catch(() => {});
+      return null;
+    }
     // The mail log keeps the service's own reason (a bad address, a blocked domain), not just "it failed".
     id = await sendRawEmailNow(opts, (why) => { error = why; });
     if (!id) error = `The email service didn't take it${error ? `: ${error}` : "."}`;
@@ -244,6 +253,10 @@ async function sendRawEmail(opts: { to: string; subject: string; html: string; t
     if (mailLogger) await mailLogger({ to: opts.to, from: opts.from ?? FROM_ADDRESS, subject: opts.subject, text: opts.text, kind: opts.kind ?? "other", resendId: id ?? "", ok: !!id, error, replyTo: opts.replyTo ?? "" }).catch((err) => console.warn("Mail log failed:", (err as Error).message));
   }
 }
+
+/** Told when the mail guard holds an email back (the server posts it to #mv-inbox). */
+let guardAlarm: ((m: { to: string; subject: string; why: string; kind: string }) => Promise<void>) | null = null;
+export function setMailGuardAlarm(fn: (m: { to: string; subject: string; why: string; kind: string }) => Promise<void>) { guardAlarm = fn; }
 
 /** What the mail log keeps of one sent email. */
 export type SentMail = { to: string; from: string; subject: string; text: string; kind: string; resendId: string; ok: boolean; error: string; replyTo: string };
@@ -328,6 +341,8 @@ export async function sendOneOffEmail(o: {
   kind?: string;
   /** Files to send with it (a video to post, a flyer). */
   attachments?: MailAttachment[];
+  /** Their own name, so a customer called Andrew can be greeted by name (the mail guard). */
+  recipientName?: string;
 }): Promise<string | null> {
   return sendRawEmail({ ...o, kind: o.kind ?? "one-off" });
 }
