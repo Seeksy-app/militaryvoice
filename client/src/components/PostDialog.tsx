@@ -109,7 +109,7 @@ function YouTubeFields({ target, yt, onChange }: { target: PostTarget; yt: YouTu
 
 /** What's being posted: a whole recording from the Library, or one clip in one shape. */
 export type PostTarget =
-  /** A whole episode: YouTube only. clipsFrom: the episode its clips hang off (an edited copy's original). */
+  /** A whole episode: YouTube, and LinkedIn when it fits. clipsFrom: the episode its clips hang off (an edited copy's original). */
   | { kind: "recording"; id: number; title: string; clipsFrom?: number }
   | { kind: "clip"; id: number; title: string; caption?: string; shapes: ("vertical" | "square" | "wide")[] }
   /** A picture uploaded just for this post (not kept in the Library). */
@@ -140,9 +140,21 @@ export function PostDialog({ target, onClose, at, schedule = false }: { target: 
   });
   // YouTube takes video only: a picture goes everywhere else.
   const connected = Array.from(new Set((social.data?.accounts ?? []).map((a) => a.platform)));
-  // A whole episode goes to YouTube only; the other apps get the clips the creator picks.
+  // A whole episode goes to YouTube, and to LinkedIn when it fits (Andrew, 22 Nov: "it should also have LinkedIn there
+  // as well"; LinkedIn takes up to 30 minutes); the other apps get the clips the creator picks.
   const episode = target?.kind === "recording";
-  const platforms = connected.filter((p) => (episode ? p === ("youtube" as SocialPlatform) : target?.kind !== "photo" || p !== ("youtube" as SocialPlatform)));
+  const info = useQuery<{ seconds: number; linkedin: { ok: boolean; why: string } }>({
+    queryKey: ["/api/host/recordings", target?.id, "post-info"],
+    queryFn: async () => (await apiRequest("GET", `/api/host/recordings/${target?.id}/post-info`)).json(),
+    enabled: episode,
+  });
+  const linkedinOk = info.data?.linkedin.ok ?? false;
+  const linkedinWhy = episode && connected.includes("linkedin" as SocialPlatform) ? info.data?.linkedin.why ?? "" : "";
+  const platforms = connected.filter((p) =>
+    episode
+      ? p === ("youtube" as SocialPlatform) || (p === ("linkedin" as SocialPlatform) && linkedinOk)
+      : target?.kind !== "photo" || p !== ("youtube" as SocialPlatform),
+  );
 
   const [shape, setShape] = useState<"vertical" | "square" | "wide">("vertical");
   const [title, setTitle] = useState("");
@@ -219,7 +231,7 @@ export function PostDialog({ target, onClose, at, schedule = false }: { target: 
           <DialogDescription>To the accounts you tick, under your own name. Nothing goes out until you press the button.</DialogDescription>
         </DialogHeader>
 
-        {social.isLoading ? (
+        {social.isLoading || (episode && info.isLoading) ? (
           <div className="flex justify-center py-8"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
         ) : platforms.length === 0 ? (
           <div className="rounded-xl border border-dashed border-border p-4 text-sm text-muted-foreground">
@@ -271,8 +283,8 @@ export function PostDialog({ target, onClose, at, schedule = false }: { target: 
               </div>
               {episode && (
                 <div className="mt-2 rounded-xl bg-muted/60 p-3 text-xs text-muted-foreground" data-testid="episode-youtube-only">
-                  {platforms.length ? "The whole episode goes to YouTube." : <>The whole episode goes to YouTube. <a href="/host/dashboard/social" className="font-semibold text-[#053877] underline dark:text-white">Connect YouTube</a> first.</>}{" "}
-                  For Instagram, TikTok, Facebook and LinkedIn, choose which of its clips to post.
+                  {linkedinWhy && <span className="mb-1.5 block" data-testid="episode-linkedin-too-long">{linkedinWhy}</span>}
+                  The whole episode goes to YouTube and LinkedIn. For Instagram, TikTok and Facebook, choose which of its clips to post.
                   <a href={`/host/dashboard/postify?rec=${target.clipsFrom ?? target.id}`} className="mt-1.5 flex items-center gap-1 font-semibold text-[#053877] hover:underline dark:text-white" data-testid="episode-choose-clips">Choose clips to post →</a>
                 </div>
               )}

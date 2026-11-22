@@ -3914,6 +3914,31 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  /**
+   * A whole episode goes to YouTube, and to LinkedIn when it fits (Andrew, 22 Nov: "it should also have LinkedIn there
+   * as well"). LinkedIn's API takes videos of 3 s to 30 min and up to 5 GB; a length or size we don't know yet is let
+   * through, and LinkedIn says no itself.
+   */
+  const LINKEDIN_MAX_SEC = 30 * 60;
+  const LINKEDIN_MAX_BYTES = 5 * 1024 ** 3;
+  const linkedinFit = (row: { durationSec: number; sizeBytes: string }): string => {
+    const sec = Number(row.durationSec) || 0;
+    const bytes = Number(row.sizeBytes) || 0;
+    const mmss = (n: number) => `${Math.floor(n / 60)}:${String(Math.round(n % 60)).padStart(2, "0")}`;
+    if (sec > LINKEDIN_MAX_SEC) return `LinkedIn takes videos up to 30:00, and this one is ${mmss(sec)}. Post one of its clips there instead.`;
+    if (bytes > LINKEDIN_MAX_BYTES) return "LinkedIn takes videos up to 5 GB, and this file is bigger. Post one of its clips there instead.";
+    return "";
+  };
+  /** What the Post it window needs to know about a whole episode before offering LinkedIn. */
+  app.get("/api/host/recordings/:id/post-info", requireHostSession, async (req, res) => {
+    noStore(res);
+    const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
+    const row = await storage.getRecording(Number(req.params.id));
+    if (!row || row.email !== email) return res.status(404).json({ message: "Not found" });
+    const why = linkedinFit(row);
+    res.json({ seconds: Number(row.durationSec) || 0, linkedin: { ok: !why, why } });
+  });
+
   /** Send a finished session to the podcaster's own connected accounts. */
   app.post("/api/host/recordings/:id/publish", requireHostSession, async (req, res) => {
     if (!isUploadPostConfigured()) {
@@ -3933,13 +3958,17 @@ export function registerRoutes(app: Express): void {
       return;
     }
     if (await socialBlocked(email, res)) return;
-    // A whole episode goes to YouTube only; the other apps get its clips.
+    // A whole episode goes to YouTube and LinkedIn (when it fits); the other apps get its clips.
     const platforms = (Array.isArray(req.body?.platforms) ? req.body.platforms : [])
       .map((p: unknown) => String(p).toLowerCase().trim())
-      .filter((p: string) => p === "youtube");
+      .filter((p: string) => p === "youtube" || p === "linkedin");
     if (platforms.length === 0) {
-      res.status(400).json({ message: "A whole episode goes to YouTube. For the other apps, post its clips." });
+      res.status(400).json({ message: "A whole episode goes to YouTube and LinkedIn. For the other apps, post its clips." });
       return;
+    }
+    if (platforms.includes("linkedin")) {
+      const why = linkedinFit(row);
+      if (why) return res.status(400).json({ message: why });
     }
     try {
       // Six hours: long enough for Upload-Post to fetch a large file, short
