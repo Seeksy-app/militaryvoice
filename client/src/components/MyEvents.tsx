@@ -61,7 +61,7 @@ function EventForm({ initial, onSaved, onCancel }: { initial?: MyEvent; onSaved:
     <form onSubmit={(e) => void save(e)} className="space-y-4 rounded-2xl border border-border bg-card p-5" data-testid="my-event-form">
       <div>
         <Label htmlFor="ev-name">Event name</Label>
-        <Input id="ev-name" className="mt-1.5" value={name} onChange={(e) => setName(e.target.value)} placeholder="Veterans Day Live" required />
+        <Input id="ev-name" className="mt-1.5" value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Live podcast day" required />
       </div>
       <div>
         <Label htmlFor="ev-tag">One line about it</Label>
@@ -91,8 +91,8 @@ function EventForm({ initial, onSaved, onCancel }: { initial?: MyEvent; onSaved:
         </div>
         {inPerson && (
           <div className="mt-3 grid gap-3 sm:grid-cols-[1fr_1fr_7rem]">
-            <div><Label htmlFor="ev-venue">Venue</Label><Input id="ev-venue" className="mt-1.5" value={venueName} onChange={(e) => setVenueName(e.target.value)} placeholder="VFW Post 1234" /></div>
-            <div><Label htmlFor="ev-addr">Address</Label><Input id="ev-addr" className="mt-1.5" value={venueAddress} onChange={(e) => setVenueAddress(e.target.value)} placeholder="123 Main St, San Diego, CA" /></div>
+            <div><Label htmlFor="ev-venue">Venue</Label><Input id="ev-venue" className="mt-1.5" value={venueName} onChange={(e) => setVenueName(e.target.value)} placeholder="Hall, post or hotel" /></div>
+            <div><Label htmlFor="ev-addr">Address</Label><Input id="ev-addr" className="mt-1.5" value={venueAddress} onChange={(e) => setVenueAddress(e.target.value)} placeholder="Street, city, state" /></div>
             <div><Label htmlFor="ev-air">Airport</Label><Input id="ev-air" className="mt-1.5" value={airport} maxLength={3} onChange={(e) => setAirport(e.target.value.toUpperCase())} placeholder="SAN" /></div>
             <p className="text-xs text-muted-foreground sm:col-span-3">Your event page will show Getting there: fares from each visitor's airport, military travel perks and hotels nearby.</p>
           </div>
