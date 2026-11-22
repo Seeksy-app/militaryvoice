@@ -1,6 +1,6 @@
-import { useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarDays, Check, ChevronDown, Headphones, Link2, Loader2, RefreshCw, Trophy, Upload, X } from "lucide-react";
+import { ArrowDownRight, ArrowUpRight, CalendarDays, Check, ChevronDown, Download, Headphones, Infinity as InfinityIcon, Link2, ListMusic, Loader2, RefreshCw, Sparkles, Trophy, Upload, Users, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
@@ -401,6 +401,178 @@ function inRange(d: PodcastStatsData, span: Span) {
   return { sum, prevSum, bars, ticks, monthly, first, last, startsLate, endsEarly, byDate, top: played.sort((a, b) => b.n - a.n).slice(0, 5), avg, apps };
 }
 
+/*
+ * The look (Andrew, 22 Nov: "can you make the analtyics page more engaging. I wan it to look very very cool"):
+ * a navy hero with the number counting up and a glowing line, a ring to the next milestone, medals on the top
+ * episodes and a ring of the apps people listen in. Same numbers as before; only how they're shown changed.
+ */
+const reduced = () => typeof window !== "undefined" && window.matchMedia?.("(prefers-reduced-motion: reduce)").matches;
+/** A number that counts up to `to` when it appears or changes. */
+function useCountUp(to: number, ms = 900) {
+  const [v, setV] = useState(() => (reduced() ? to : 0));
+  const from = useRef(0);
+  useEffect(() => {
+    if (reduced()) { setV(to); return; }
+    let raf = 0; const start = performance.now(); const a = from.current;
+    const tick = (t: number) => {
+      const k = Math.min(1, (t - start) / ms), e = 1 - Math.pow(1 - k, 3);
+      setV(a + (to - a) * e);
+      if (k < 1) raf = requestAnimationFrame(tick); else from.current = to;
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [to, ms]);
+  return v;
+}
+function CountUp({ n }: { n: number }) {
+  const v = useCountUp(n);
+  return <>{n >= 1000 ? compact(v) : Math.round(v).toLocaleString()}</>;
+}
+
+const MILESTONES = [10, 25, 50, 100, 250, 500, 1000, 2500, 5000, 10000, 25000, 50000, 100000, 250000, 500000, 1000000, 2500000, 5000000, 10000000];
+/** The ring to the next milestone, from all-time downloads. */
+function Milestone({ total, unit }: { total: number; unit: string }) {
+  const next = MILESTONES.find((m) => m > total) ?? total;
+  const passed = [...MILESTONES].reverse().find((m) => m <= total);
+  const share = next ? Math.min(1, total / next) : 1;
+  const [shown, setShown] = useState(reduced() ? share : 0);
+  useEffect(() => { const t = setTimeout(() => setShown(share), 60); return () => clearTimeout(t); }, [share]);
+  const R = 30, C = 2 * Math.PI * R;
+  return (
+    <div className="flex items-center gap-3" data-testid="podcast-milestone">
+      <svg viewBox="0 0 72 72" className="h-[72px] w-[72px] shrink-0 -rotate-90" aria-hidden>
+        <circle cx="36" cy="36" r={R} fill="none" stroke="rgba(255,255,255,0.14)" strokeWidth="7" />
+        <circle cx="36" cy="36" r={R} fill="none" stroke="url(#mv-ring)" strokeWidth="7" strokeLinecap="round" strokeDasharray={C} strokeDashoffset={C * (1 - shown)} style={{ transition: "stroke-dashoffset 1.1s cubic-bezier(.2,.8,.2,1)" }} />
+        <defs><linearGradient id="mv-ring" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stopColor="#FFD37A" /><stop offset="1" stopColor="#F0A71F" /></linearGradient></defs>
+      </svg>
+      <div className="min-w-0">
+        <p className="text-[11px] font-semibold uppercase tracking-[0.12em] text-white/60">Next milestone</p>
+        <p className="text-lg font-bold leading-tight text-white">{compact(next)} {unit}</p>
+        <p className="text-xs text-white/70">{compact(Math.max(0, next - total))} to go{passed ? <> · <span className="text-[#FFD37A]">passed {compact(passed)}</span></> : null}</p>
+      </div>
+    </div>
+  );
+}
+
+/** The line over the dates: a soft glow under it, a dot and the number on hover (or tap). */
+function GlowChart({ bars, ticks, unit }: { bars: Bar[]; ticks: number[]; unit: string }) {
+  const [hi, setHi] = useState<number | null>(null);
+  const [drawn, setDrawn] = useState(reduced());
+  useEffect(() => { const t = setTimeout(() => setDrawn(true), 30); return () => clearTimeout(t); }, []);
+  const W = 1000, H = 160, pad = 10;
+  const max = Math.max(1, ...bars.map((b) => b.count));
+  const x = (i: number) => (bars.length === 1 ? W / 2 : (i / (bars.length - 1)) * W);
+  const y = (n: number) => H - pad - (n / max) * (H - pad * 2);
+  // A smooth curve through the points.
+  const pts = bars.map((b, i) => [x(i), y(b.count)] as const);
+  let line = pts.length ? `M${pts[0][0]},${pts[0][1]}` : "";
+  for (let i = 1; i < pts.length; i++) {
+    const [x0, y0] = pts[i - 1], [x1, y1] = pts[i], cx = (x0 + x1) / 2;
+    line += ` C${cx},${y0} ${cx},${y1} ${x1},${y1}`;
+  }
+  const area = `${line} L${W},${H} L0,${H} Z`;
+  const pct = (i: number) => (bars.length === 1 ? 50 : (i / (bars.length - 1)) * 100);
+  const tipAt = (i: number) => { const l = pct(i); return { left: `${l}%`, transform: l < 12 ? "translateX(-8%)" : l > 88 ? "translateX(-92%)" : "translateX(-50%)" }; };
+  const pick = (e: React.PointerEvent<HTMLDivElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    setHi(Math.max(0, Math.min(bars.length - 1, Math.round(((e.clientX - r.left) / r.width) * (bars.length - 1)))));
+  };
+  return (
+    <div className="mt-5" data-testid="podcast-chart">
+      <div className="relative h-36 sm:h-40" onPointerMove={pick} onPointerDown={pick} onPointerLeave={() => setHi(null)} aria-label={`${unit} over time`}>
+        {hi !== null && bars[hi] && (
+          <div role="tooltip" className="pointer-events-none absolute -top-9 z-10 whitespace-nowrap rounded-lg bg-white px-2.5 py-1 text-xs font-semibold text-[#000741] shadow-lg" style={tipAt(hi)} data-testid="chart-tooltip">
+            {bars[hi].tip}: {bars[hi].count.toLocaleString()} {bars[hi].count === 1 ? unit.replace(/s$/, "") : unit}
+          </div>
+        )}
+        <svg viewBox={`0 0 ${W} ${H}`} preserveAspectRatio="none" className="absolute inset-0 h-full w-full overflow-visible">
+          <defs>
+            <linearGradient id="mv-area" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#FFD37A" stopOpacity="0.32" /><stop offset="0.55" stopColor="#3b82f6" stopOpacity="0.10" /><stop offset="1" stopColor="#3b82f6" stopOpacity="0" /></linearGradient>
+            <linearGradient id="mv-line" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stopColor="#8fb5e8" /><stop offset="1" stopColor="#FFD37A" /></linearGradient>
+            <filter id="mv-glow" x="-5%" y="-30%" width="110%" height="160%"><feGaussianBlur stdDeviation="6" /></filter>
+          </defs>
+          {[0.25, 0.5, 0.75].map((g) => <line key={g} x1="0" x2={W} y1={H * g} y2={H * g} stroke="rgba(255,255,255,0.07)" strokeWidth="1" vectorEffect="non-scaling-stroke" />)}
+          <path d={area} fill="url(#mv-area)" style={{ opacity: drawn ? 1 : 0, transition: "opacity .9s ease .3s" }} />
+          <path d={line} fill="none" stroke="#F0A71F" strokeWidth="8" opacity="0.35" filter="url(#mv-glow)" vectorEffect="non-scaling-stroke" />
+          <path d={line} fill="none" stroke="url(#mv-line)" strokeWidth="3" strokeLinecap="round" vectorEffect="non-scaling-stroke" pathLength={1} strokeDasharray="1" strokeDashoffset={drawn ? 0 : 1} style={{ transition: "stroke-dashoffset 1.2s cubic-bezier(.2,.8,.2,1)" }} />
+          {hi !== null && pts[hi] && <line x1={pts[hi][0]} x2={pts[hi][0]} y1="0" y2={H} stroke="rgba(255,255,255,0.35)" strokeWidth="1" strokeDasharray="3 4" vectorEffect="non-scaling-stroke" />}
+        </svg>
+        {hi !== null && pts[hi] && <span className="pointer-events-none absolute h-3.5 w-3.5 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-[#F0A71F] shadow-[0_0_0_6px_rgba(240,167,31,0.25)]" style={{ left: `${pct(hi)}%`, top: `${(pts[hi][1] / H) * 100}%` }} />}
+      </div>
+      <div className="relative mt-2 h-4 text-[11px] text-white/55">
+        {ticks.map((i) => <span key={i} className="absolute whitespace-nowrap" style={tipAt(i)}>{bars[i].tick}</span>)}
+      </div>
+    </div>
+  );
+}
+
+/** Top episodes with 1, 2, 3 medals and bars that grow in. */
+const MEDAL = ["bg-gradient-to-br from-[#FFE08A] to-[#E6A100] text-[#4a3300]", "bg-gradient-to-br from-[#F1F4F8] to-[#AEB8C6] text-[#2b3442]", "bg-gradient-to-br from-[#F5C9A4] to-[#B9733F] text-[#3d220c]"];
+function RankList({ items }: { items: [string, number][] }) {
+  const max = Math.max(1, ...items.map(([, n]) => n));
+  const [grown, setGrown] = useState(reduced());
+  useEffect(() => { const t = setTimeout(() => setGrown(true), 80); return () => clearTimeout(t); }, []);
+  return (
+    <ol className="space-y-3">
+      {items.map(([k, n], i) => (
+        <li key={k} className="flex items-center gap-3">
+          <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-xs font-black shadow-sm ${MEDAL[i] ?? "bg-muted text-muted-foreground"}`}>{i + 1}</span>
+          <div className="min-w-0 flex-1">
+            <div className="flex items-baseline justify-between gap-2"><span className="truncate text-sm font-medium text-foreground">{k}</span><span className="shrink-0 text-sm font-bold tabular-nums text-foreground">{compact(n)}</span></div>
+            <div className="mt-1 h-2 overflow-hidden rounded-full bg-muted"><div className="h-full rounded-full bg-gradient-to-r from-[#053877] to-[#3b82f6] dark:from-[#8ab4f8] dark:to-[#c3d7fb]" style={{ width: grown ? `${(n / max) * 100}%` : "0%", transition: `width .9s cubic-bezier(.2,.8,.2,1) ${i * 90}ms` }} /></div>
+          </div>
+        </li>
+      ))}
+    </ol>
+  );
+}
+
+/** Where they listen as a ring, each app in its own colour, with its logo when we have one. */
+const APP_LOOK: { re: RegExp; color: string; logo?: string }[] = [
+  { re: /apple/i, color: "#A45EE5", logo: "/brands/apple-podcasts.svg" },
+  { re: /spotify/i, color: "#1DB954", logo: "/brands/spotify.svg" },
+  { re: /youtube/i, color: "#FF0033", logo: "/brands/youtube.svg" },
+  { re: /overcast/i, color: "#FC7E0F" },
+  { re: /pocket ?casts/i, color: "#F43E37" },
+  { re: /addict/i, color: "#F4842D" },
+  { re: /castbox/i, color: "#F55B23" },
+  { re: /amazon|audible/i, color: "#25D1DA" },
+  { re: /iheart/i, color: "#C6002B" },
+  { re: /browser|web/i, color: "#64748B" },
+];
+const SPARE = ["#053877", "#3b82f6", "#14b8a6", "#F0A71F", "#94a3b8"];
+function Donut({ items }: { items: [string, number][] }) {
+  const total = items.reduce((a, [, n]) => a + n, 0) || 1;
+  const looks = items.map(([k], i) => { const l = APP_LOOK.find((x) => x.re.test(k)); return { color: l?.color ?? SPARE[i % SPARE.length], logo: l?.logo }; });
+  const [drawn, setDrawn] = useState(reduced());
+  useEffect(() => { const t = setTimeout(() => setDrawn(true), 80); return () => clearTimeout(t); }, []);
+  const R = 42, C = 2 * Math.PI * R;
+  let acc = 0;
+  return (
+    <div className="flex items-center gap-4 sm:gap-5">
+      <div className="relative h-[104px] w-[104px] shrink-0 sm:h-[120px] sm:w-[120px]">
+        <svg viewBox="0 0 120 120" className="h-full w-full -rotate-90" aria-hidden>
+          <circle cx="60" cy="60" r={R} fill="none" stroke="hsl(var(--muted))" strokeWidth="16" />
+          {items.map(([k, n], i) => {
+            const len = (n / total) * C, off = acc; acc += len;
+            return <circle key={k} cx="60" cy="60" r={R} fill="none" stroke={looks[i].color} strokeWidth="16" strokeDasharray={`${drawn ? Math.max(0, len - 2) : 0} ${C}`} strokeDashoffset={-off} style={{ transition: `stroke-dasharray .9s cubic-bezier(.2,.8,.2,1) ${i * 120}ms` }} />;
+          })}
+        </svg>
+        <div className="absolute inset-0 flex flex-col items-center justify-center"><span className="text-xl font-black tabular-nums text-foreground">{items.length}</span><span className="text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">{items.length === 1 ? "app" : "apps"}</span></div>
+      </div>
+      <ul className="min-w-0 flex-1 space-y-2">
+        {items.map(([k, n], i) => (
+          <li key={k} className="flex items-center gap-2 text-sm">
+            {looks[i].logo ? <img src={looks[i].logo} alt="" className="h-5 w-5 shrink-0 object-contain" /> : <span className="h-3 w-3 shrink-0 rounded-full" style={{ background: looks[i].color }} />}
+            <span className="min-w-0 flex-1 truncate text-foreground">{k}</span>
+            <span className="shrink-0 tabular-nums text-muted-foreground">{Math.round((n / total) * 100)}%</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /** The chart: bars for the dates, a few dates underneath, and the number on hover (or tap). */
 function RangeChart({ bars, ticks, unit }: { bars: Bar[]; ticks: number[]; unit: string }) {
   const [hi, setHi] = useState<number | null>(null);
@@ -614,50 +786,82 @@ export function PodcastListens({ onConnect, bare = false }: { onConnect: () => v
         if (v.startsLate) notes.push(s.source === "militaryvoices" ? `Hosted here from ${fmtDay(v.first)}, so this starts there.` : s.source === "buzzsprout" ? d.history?.complete ? `Buzzsprout's day-by-day numbers start ${fmtDay(v.first)}.` : `Buzzsprout's day-by-day numbers start ${fmtDay(v.first)} here; each refresh adds a month further back.` : `${isAll ? who : `${who}'s numbers`} start ${fmtDay(v.first)}, so this starts there.`);
         if (v.endsEarly) notes.push(s.source === "spotify" ? `Spotify's numbers run to ${fmtDay(v.last)}, from your last upload.` : `${isAll ? who : `${who}'s numbers`} run to ${fmtDay(v.last)}.`);
         if (!span.all && !v.byDate && d.episodes.length) notes.push(`${isAll ? "Buzzsprout gives" : `${who} gives`} each episode's total, not by date, so Top episodes is all time.`);
+        const tiles: { icon: ReactNode; label: string; n: string }[] = [
+          { icon: <Headphones className="h-4 w-4" />, label: stats[1][0], n: stats[1][1] },
+          { icon: <InfinityIcon className="h-4 w-4" />, label: `${d.unit} all time`, n: compact(d.total) },
+          ...(d.episodes.length ? [{ icon: <ListMusic className="h-4 w-4" />, label: d.episodes.length === 1 ? "episode" : "episodes", n: String(d.episodes.length) }] : []),
+          ...(d.followers ? [{ icon: <Users className="h-4 w-4" />, label: "followers", n: compact(d.followers) }] : []),
+        ];
+        const audience = !!(d.audience?.age || d.audience?.countries || (v.apps && Object.keys(v.apps).length > 0) || d.audience?.gender);
         return (
-          <div key={s.source} className="rounded-2xl border border-border bg-card p-5" data-testid={`listens-${isAll ? "all" : s.source}`}>
-            <CardHead
-              art={d.artwork || art}
-              mark={isAll ? ALL_MARK : MARK[s.source] ? markImg(MARK[s.source]!) : <span className="text-[10px] font-bold text-foreground">{NAME[s.source][0]}</span>}
-              title={s.showName || (isAll ? "Your show" : NAME[s.source])}
-              sub={<>
-                {isAll ? `All your sources together: ${sources.map((x) => NAME[x.source]).join(", ")}` : s.source === "militaryvoices" ? "Hosted on MilitaryVoices" : s.source === "spotify" ? "From Spotify for Creators" : `From ${NAME[s.source]}`}
-                {" · "}{s.source === "spotify" ? `Uploaded ${when(s.fetchedAt)}` : `Updated ${when(s.fetchedAt)}`}
-                {stale && <span className="font-semibold text-amber-700 dark:text-amber-400"> · a month old: upload this month's {hostedHere ? "below" : "in Integrations"}</span>}
-                {s.status === "failed" && <span className="text-destructive"> · {s.error}</span>}
-              </>}
-              right={!isAll && s.source !== "spotify" && s.source !== "militaryvoices" ? (
-                <Button variant="ghost" size="sm" className="h-8 gap-1 text-xs" onClick={() => void refresh(s.source)} disabled={refreshing === s.source}>
-                  <RefreshCw className={`h-3.5 w-3.5 ${refreshing === s.source ? "animate-spin" : ""}`} /> Refresh
-                </Button>
-              ) : undefined}
-            />
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {stats.map(([label, n, tone]) => (
-                <div key={label} className="rounded-xl bg-muted/50 px-3 py-2.5" data-testid="podcast-tile">
-                  <p className={`text-xl font-bold tabular-nums ${tone || "text-foreground"}`}>{n}</p>
-                  <p className="text-xs text-muted-foreground">{label}</p>
+          <div key={s.source} className="overflow-hidden rounded-3xl border border-border bg-card shadow-[0_10px_40px_rgba(0,7,65,0.08)]" data-testid={`listens-${isAll ? "all" : s.source}`}>
+            {/* The hero: the number, how it's moving, the next milestone and the line, on navy. */}
+            <div className="relative overflow-hidden bg-[#000741] px-5 pb-4 pt-5 text-white sm:px-7 sm:pt-6" data-testid="podcast-hero">
+              <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(120%_90%_at_100%_0%,rgba(59,130,246,0.35),transparent_55%),radial-gradient(80%_70%_at_0%_100%,rgba(240,167,31,0.18),transparent_60%)]" aria-hidden />
+              <div className="relative flex flex-wrap items-start gap-x-6 gap-y-4">
+                <div className="flex w-full min-w-0 items-center gap-3.5 sm:w-auto sm:flex-1">
+                  <span className="relative shrink-0">
+                    {d.artwork || art ? <img src={d.artwork || art} alt="" className="h-14 w-14 rounded-2xl object-cover shadow-[0_8px_24px_rgba(0,0,0,0.35)] ring-2 ring-white/20" /> : <span className="flex h-14 w-14 items-center justify-center rounded-2xl bg-white/10 ring-2 ring-white/20"><Headphones className="h-7 w-7" /></span>}
+                    <span className="absolute -bottom-1 -right-1 flex h-6 w-6 items-center justify-center overflow-hidden rounded-full bg-white ring-2 ring-[#000741]">{isAll ? ALL_MARK : MARK[s.source] ? markImg(MARK[s.source]!) : <span className="text-[10px] font-bold text-[#000741]">{NAME[s.source][0]}</span>}</span>
+                  </span>
+                  <div className="min-w-0">
+                    <p className="truncate text-lg font-bold leading-tight">{s.showName || (isAll ? "Your show" : NAME[s.source])}</p>
+                    <p className="text-xs text-white/65">
+                      {isAll ? `All your sources: ${sources.map((x) => NAME[x.source]).join(", ")}` : s.source === "militaryvoices" ? "Hosted on MilitaryVoices" : s.source === "spotify" ? "From Spotify for Creators" : `From ${NAME[s.source]}`}
+                      {" · "}<span className="whitespace-nowrap">{s.source === "spotify" ? `Uploaded ${when(s.fetchedAt)}` : `Updated ${when(s.fetchedAt)}`}</span>
+                      {stale && <span className="font-semibold text-[#FFD37A]"> · a month old: upload this month's {hostedHere ? "below" : "in Integrations"}</span>}
+                      {s.status === "failed" && <span className="text-red-300"> · {s.error}</span>}
+                    </p>
+                  </div>
+                  {!isAll && s.source !== "spotify" && s.source !== "militaryvoices" && (
+                    <button type="button" onClick={() => void refresh(s.source)} disabled={refreshing === s.source} className="ml-auto inline-flex h-8 shrink-0 items-center gap-1 rounded-full bg-white/10 px-3 text-xs font-semibold hover:bg-white/20 disabled:opacity-60">
+                      <RefreshCw className={`h-3.5 w-3.5 ${refreshing === s.source ? "animate-spin" : ""}`} /> Refresh
+                    </button>
+                  )}
                 </div>
-              ))}
-            </div>
-            {!span.all && <p className="mt-2 text-xs text-muted-foreground" data-testid="all-time-line">{compact(d.total)} {d.unit} all time{d.episodes.length ? ` · ${d.episodes.length} episode${d.episodes.length === 1 ? "" : "s"}` : ""}</p>}
-            {v.bars.length > 1 && <RangeChart bars={v.bars} ticks={v.ticks} unit={d.unit} />}
-            {notes.length > 0 && <p className="mt-3 text-xs text-muted-foreground" data-testid="range-note">{notes.join(" ")}</p>}
-            <div className="mt-5 grid gap-5 md:grid-cols-2">
-              {d.episodes.length > 0 && (
+                <Milestone total={d.total} unit={d.unit} />
+              </div>
+              <div className="relative mt-5 flex flex-wrap items-end gap-x-4 gap-y-2">
                 <div>
-                  <p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Top episodes{!span.all && v.byDate ? `, ${span.label}` : ""}</p>
-                  {v.top.length ? <Bars items={v.top.map((e) => [e.title, e.n])} /> : <p className="text-sm text-muted-foreground">No {d.unit} in these dates.</p>}
+                  <p className="text-[56px] font-black leading-none tracking-tight tabular-nums sm:text-[72px]" data-testid="podcast-hero-number"><CountUp n={v.sum} /></p>
+                  <p className="mt-1.5 flex items-center gap-1.5 text-sm text-white/75"><Download className="h-4 w-4 text-[#FFD37A]" /> {stats[0][0]}</p>
                 </div>
-              )}
-              {(d.audience?.age || d.audience?.countries || (v.apps && Object.keys(v.apps).length > 0) || d.audience?.gender) && (
-                <div className="space-y-4">
-                  {d.audience?.age && <div><p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Age</p><Bars items={top(d.audience.age, 6)} /></div>}
-                  {d.audience?.gender && <div><p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Gender</p><Bars items={top(d.audience.gender)} /></div>}
-                  {d.audience?.countries && Object.keys(d.audience.countries).length > 0 && <div><p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Countries</p><Bars items={top(d.audience.countries)} /></div>}
-                  {v.apps && Object.keys(v.apps).length > 0 && <div><p className="mb-2 text-xs font-semibold uppercase tracking-[0.08em] text-muted-foreground">Where they listen{d.appDays && !span.all ? `, ${span.label}` : ""}</p><Bars items={top(v.apps)} /></div>}
-                </div>
-              )}
+                {change !== null && (
+                  <span className={`mb-2 inline-flex items-center gap-1 rounded-full px-3 py-1 text-sm font-bold ${change >= 0 ? "bg-emerald-400/15 text-emerald-300" : "bg-red-400/15 text-red-300"}`} data-testid="podcast-change">
+                    {change >= 0 ? <ArrowUpRight className="h-4 w-4" /> : <ArrowDownRight className="h-4 w-4" />}{stats.find((x) => x[0].startsWith("vs "))?.[1]} <span className="font-medium opacity-80">{stats.find((x) => x[0].startsWith("vs "))?.[0]}</span>
+                  </span>
+                )}
+              </div>
+              {v.bars.length > 1 ? <GlowChart bars={v.bars} ticks={v.ticks} unit={d.unit} /> : <div className="h-4" />}
+            </div>
+
+            <div className="p-5 sm:p-7">
+              <div className={`grid gap-2.5 sm:gap-3 ${tiles.length >= 4 ? "grid-cols-2 lg:grid-cols-4" : tiles.length === 3 ? "grid-cols-3" : "grid-cols-2"}`}>
+                {tiles.map((t) => (
+                  <div key={t.label} className="min-w-0 rounded-2xl border border-border bg-background px-3 py-3 transition-shadow hover:shadow-md sm:px-4 sm:py-3.5" data-testid="podcast-tile">
+                    <span className="mb-2 flex h-8 w-8 items-center justify-center rounded-xl bg-gradient-to-br from-[#053877] to-[#3b82f6] text-white shadow-[0_4px_12px_rgba(5,56,119,0.25)]">{t.icon}</span>
+                    <p className="text-xl font-black tabular-nums text-foreground sm:text-2xl">{t.n}</p>
+                    <p className="text-xs leading-snug text-muted-foreground">{t.label}</p>
+                  </div>
+                ))}
+              </div>
+              {notes.length > 0 && <p className="mt-3 flex items-start gap-1.5 text-xs text-muted-foreground" data-testid="range-note"><Sparkles className="mt-px h-3.5 w-3.5 shrink-0 text-[#b36b00] dark:text-[#F0A71F]" />{notes.join(" ")}</p>}
+              <div className="mt-6 grid gap-6 md:grid-cols-2">
+                {d.episodes.length > 0 && (
+                  <div className="min-w-0 rounded-2xl border border-border p-4 sm:p-5">
+                    <p className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground"><Trophy className="h-4 w-4 text-[#b36b00] dark:text-[#F0A71F]" /> Top episodes{!span.all && v.byDate ? `, ${span.label}` : ""}</p>
+                    {v.top.length ? <RankList items={v.top.map((e) => [e.title, e.n])} /> : <p className="text-sm text-muted-foreground">No {d.unit} in these dates.</p>}
+                  </div>
+                )}
+                {audience && (
+                  <div className="min-w-0 space-y-5 rounded-2xl border border-border p-4 sm:p-5">
+                    {v.apps && Object.keys(v.apps).length > 0 && <div><p className="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground"><Headphones className="h-4 w-4 text-[#053877] dark:text-[#8ab4f8]" /> Where they listen{d.appDays && !span.all ? `, ${span.label}` : ""}</p><Donut items={top(v.apps)} /></div>}
+                    {d.audience?.age && <div><p className="mb-2 text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">Age</p><Bars items={top(d.audience.age, 6)} /></div>}
+                    {d.audience?.gender && <div><p className="mb-2 text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">Gender</p><Bars items={top(d.audience.gender)} /></div>}
+                    {d.audience?.countries && Object.keys(d.audience.countries).length > 0 && <div><p className="mb-2 text-xs font-bold uppercase tracking-[0.1em] text-muted-foreground">Countries</p><Bars items={top(d.audience.countries)} /></div>}
+                  </div>
+                )}
+              </div>
             </div>
           </div>
         );
