@@ -3996,6 +3996,43 @@ export function registerRoutes(app: Express): void {
     }
   });
 
+  /**
+   * Admin: post a podcaster's whole recording to their own connected accounts for them (Frank, 22 Nov 2026: Andrew
+   * asked us to put his full 19-minute talk on LinkedIn at the same time as YouTube). Same path as their own Post,
+   * so the row shows in their schedule. dryRun: true says what would go, and posts nothing.
+   */
+  app.post("/api/admin/recordings/:id/post-for", requireAdmin, async (req, res) => {
+    if (!isUploadPostConfigured()) return res.status(503).json({ message: "Upload-Post isn't configured." });
+    const row = await storage.getRecording(Number(req.params.id));
+    if (!row || row.status !== "Ready" || !row.url) return res.status(404).json({ message: "No such ready recording." });
+    const email = row.email.trim().toLowerCase();
+    const profile = await storage.getProfileByEmail(email);
+    const username = profile?.uploadPostUsername;
+    if (!username) return res.status(400).json({ message: "They have no connected accounts." });
+    const platforms = (Array.isArray(req.body?.platforms) ? req.body.platforms : []).map((p: unknown) => String(p).toLowerCase().trim()).filter((p: string) => p === "linkedin" || p === "youtube");
+    if (!platforms.length) return res.status(400).json({ message: "LinkedIn or YouTube." });
+    if (platforms.includes("linkedin")) {
+      const why = linkedinFit(row);
+      if (why) return res.status(400).json({ message: why });
+    }
+    const when = scheduleFrom(req.body);
+    if (when === "past") return res.status(400).json({ message: "Pick a time in the future." });
+    const title = String(req.body?.title ?? "").trim().slice(0, 300) || row.title;
+    const description = String(req.body?.description ?? "").trim().slice(0, 3000);
+    if (req.body?.dryRun === true) return res.json({ dryRun: true, email, username, platforms, when: when || "now", title, description, durationSec: row.durationSec });
+    try {
+      const videoUrl = await signedRecordingUrl(row.url, 7 * 24 * 3600);
+      const out = await publishAndRecord({
+        email, kind: "recording", refId: row.id, shape: "", title, description, platforms, when: when || "", queue: false,
+        publish: (x) => publishVideo({ username, platforms, videoUrl, title, description: description || undefined, scheduledDate: x.scheduledDate, addToQueue: false, externalId: x.externalId }),
+      });
+      res.json({ ok: true, ...out });
+    } catch (err: any) {
+      console.error("Admin post-for failed:", err);
+      res.status(502).json({ message: err?.message ?? "Couldn't post that right now." });
+    }
+  });
+
   /** The recording itself, for admin's thumbnail and player (a fresh signed link each time). */
   app.get("/api/admin/recordings/:id/video", requireAdmin, async (req, res) => {
     noStore(res);
