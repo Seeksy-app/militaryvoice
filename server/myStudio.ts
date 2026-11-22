@@ -191,6 +191,37 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     res.json(out);
   });
 
+  /**
+   * Saved teleprompter scripts (Andrew, 22 Nov: "make sure we can save promts"): a named list per studio, owner
+   * only. The client sends the whole list; using one copies it into Notes, which stays the live script.
+   */
+  type Script = { id: string; name: string; text: string; at: string };
+  const SCRIPTS_MAX = 50;
+  const scriptsKey = (id: number) => `studio-scripts:${id}`;
+  const readScripts = async (id: number): Promise<Script[]> => {
+    try { const v = JSON.parse((await storage.getSetting(scriptsKey(id))) ?? "[]"); return Array.isArray(v) ? (v as Script[]) : []; } catch { return []; }
+  };
+  app.get("/api/host/my-studio/scripts", requireHostSession, async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    res.json({ scripts: await readScripts((await mine(me(req))).id) });
+  });
+  app.put("/api/host/my-studio/scripts", requireHostSession, async (req, res) => {
+    const list = req.body?.scripts;
+    if (!Array.isArray(list)) return res.status(400).json({ message: "Those scripts didn't come through." });
+    if (list.length > SCRIPTS_MAX) return res.status(400).json({ message: `You can keep up to ${SCRIPTS_MAX} scripts. Delete one to save another.` });
+    const clean: Script[] = [];
+    for (const x of list) {
+      const text = typeof x?.text === "string" ? x.text : "";
+      if (text.length > NOTES_MAX) return res.status(400).json({ message: "That script is too long to save. Make it a little shorter." });
+      const name = String(x?.name ?? "").replace(/\s+/g, " ").trim().slice(0, 60) || "Untitled script";
+      const id = /^[a-z0-9-]{1,40}$/i.test(String(x?.id ?? "")) ? String(x.id) : Math.random().toString(36).slice(2, 10);
+      clean.push({ id, name, text, at: typeof x?.at === "string" ? x.at.slice(0, 40) : now() });
+    }
+    const s = await mine(me(req));
+    await storage.setSetting(scriptsKey(s.id), JSON.stringify(clean));
+    res.json({ scripts: clean });
+  });
+
   /** The owner into their room: publishes, and runs it. */
   app.post("/api/host/my-studio/token", requireHostSession, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");

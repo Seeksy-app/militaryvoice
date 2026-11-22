@@ -21,7 +21,7 @@ import { PhoneStudio } from "@/components/room/PhoneStudio";
 import { LayoutEditor } from "@/components/room/LayoutEditor";
 import { MarkClip } from "@/components/room/MarkClip";
 import { RoomStage } from "@/components/RoomStage";
-import { PrompterNews, PrompterOverlay, PrompterSwitch, useStudioNotes, type NotesSync } from "@/components/room/Teleprompter";
+import { PrompterNews, PrompterOverlay, PrompterSwitch, ScriptsBar, useStudioNotes, type NotesSync } from "@/components/room/Teleprompter";
 import { pdfToPictures, useDeck } from "@/components/room/slides";
 import { EXTRA_CAMS, addExtraCamera, freeCameras, isExtraCam, stopAllExtraCameras, stopExtraCamera, useExtraCams } from "@/components/room/extraCamera";
 
@@ -1006,6 +1006,8 @@ function NotesPanel({ roomKey, text, setText, prompter, sync }: { roomKey: strin
         </p>
       )}
       {prompter && <PrompterSwitch roomKey={roomKey} text={text} />}
+      {/* Saved scripts live on the studio, so only when Notes are saved there (the owner). */}
+      {prompter && sync !== undefined && <ScriptsBar roomKey={roomKey} text={text} setText={setText} />}
       <textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={"Questions for your guest, talking points, the sponsor read…"} className="m-4 min-h-0 flex-1 resize-none rounded-xl border border-[#d0d5dd] p-3.5 text-[14px] leading-relaxed outline-none focus:border-[#053877] focus:ring-2 focus:ring-[#053877]/15" data-testid="studio-notes" />
     </div>
   );
