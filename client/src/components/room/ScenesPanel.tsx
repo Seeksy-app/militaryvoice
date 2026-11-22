@@ -57,12 +57,13 @@ export function LayoutPicker({ value, onPick, size = "md" }: { value: Layout; on
 }
 
 /** A small drawing of a layout (the ready-made buttons, and a scene card with its own layout). */
-export function BoxThumb({ boxes, className = "" }: { boxes: { kind: RoomBoxKind; x: number; y: number; w: number; h: number; shape?: RoomBoxShape }[]; className?: string }) {
+export function BoxThumb({ boxes, light = false, className = "" }: { boxes: { kind: RoomBoxKind; x: number; y: number; w: number; h: number; shape?: RoomBoxShape }[]; light?: boolean; className?: string }) {
+  const ink = light ? "#053877" : "#ffffff";
   return (
     <svg viewBox="0 0 160 90" className={`block w-full rounded-md bg-[#0a3a8f] ${className}`} aria-hidden>
       {boxes.map((b, i) => (
         <rect key={i} x={b.x * 160 + 1} y={b.y * 90 + 1} width={Math.max(2, b.w * 160 - 2)} height={Math.max(2, b.h * 90 - 2)} rx={b.shape === "circle" ? Math.min(b.w * 160, b.h * 90) / 2 : b.shape === "square" ? 0 : 4}
-          fill={b.kind === "media" ? "#ffffff" : "#8ea4cf"} fillOpacity={b.kind === "grid" ? 0.55 : 0.95} stroke={b.kind === "grid" ? "#ffffff" : "none"} strokeDasharray={b.kind === "grid" ? "4 3" : undefined} />
+          fill={ink} fillOpacity={b.kind === "media" ? 0.95 : b.kind === "grid" ? 0.3 : 0.75} stroke={b.kind === "grid" ? ink : light ? "none" : "rgba(16,24,40,0.22)"} strokeWidth={b.kind === "grid" ? 1 : 0.6} strokeDasharray={b.kind === "grid" ? "4 3" : undefined} />
       ))}
     </svg>
   );
@@ -180,12 +181,16 @@ function SceneCard({ s, kit, v3, on, next, full, onPick, onRename, onEditLayout,
   const pick = (fn: () => void) => () => { setMenu(false); fn(); };
   const icon = LAYOUTS.find((l) => l.id === s.layout)?.icon;
   const logo = s.look && "logo" in s.look ? s.look.logo : look.logo;
+  // The layout drawing is white so it shows clearly on the dark, blue and picture backgrounds;
+  // navy on the light one.
+  const cardBg = s.look?.background ?? look.background;
+  const lightBg = cardBg.kind === "color" && cardBg.value === "light";
   return (
     <div className={`group relative shrink-0 rounded-[14px] ${on ? "border-2 border-[#053877] shadow-[0_6px_16px_rgba(5,56,119,0.16)]" : next ? "border-2 border-[#F0A71F] shadow-[0_0_0_4px_rgba(240,167,31,0.2)]" : "border border-[#e4e7ec]"}`} data-testid={`scene-${s.n}`}>
       {/* The clip is on the button, not the card, so the ⋯ menu isn't cut off. */}
       <button type="button" onClick={onPick} className="block w-full overflow-hidden rounded-[12px] text-left" aria-label={`Put ${s.name} on air (key ${s.n})`} aria-pressed={on}>
-        <div className="relative flex h-[88px] items-center justify-center" style={{ background: bgCss(s.look?.background ?? look.background) }}>
-          {v3 && s.boxes?.length ? <BoxThumb boxes={s.boxes} className="!w-[104px] !bg-transparent" /> : <svg width="88" height="64" viewBox="0 0 22 16" fill="rgba(28,44,82,0.92)" aria-hidden>{icon}</svg>}
+        <div className="relative flex h-[88px] items-center justify-center" style={{ background: bgCss(cardBg) }}>
+          {v3 && s.boxes?.length ? <BoxThumb boxes={s.boxes} light={lightBg} className="!w-[104px] !bg-transparent" /> : <svg width="88" height="64" viewBox="0 0 22 16" fill={lightBg ? "rgba(5,56,119,0.85)" : "rgba(255,255,255,0.92)"} stroke={lightBg ? "none" : "rgba(16,24,40,0.22)"} strokeWidth="0.3" aria-hidden data-testid="scene-thumb">{icon}</svg>}
           {logo && <img src={logo.asset.url} alt="" className={`absolute top-1 h-4 w-auto rounded-sm ${logo.corner === "tl" ? "left-1.5" : "right-1.5"}`} />}
           {on && <span className="absolute left-2 top-2 rounded-full bg-[#12b76a] px-[7px] py-0.5 text-[10px] font-bold tracking-[0.02em] text-white">ON STAGE</span>}
           {!on && next && <span className="absolute left-2 top-2 rounded-full bg-[#F0A71F] px-[7px] py-0.5 text-[10px] font-bold tracking-[0.02em] text-[#101828]">TAKE ME NEXT</span>}
