@@ -13,6 +13,7 @@ import type { SocialPlatform } from "@shared/schema";
 import { uploadToStorage } from "@/lib/upload";
 import { isSocialLocked402, socialLocked, SOCIAL_UPGRADE_NOTE, type SocialTrial } from "@/components/SocialTrial";
 import { UpgradeDialog } from "@/components/PostStudio";
+import { postableTitle } from "@shared/episodeTitle";
 import { CalendarClock, ImagePlus, Loader2, Send, Sparkles, X } from "lucide-react";
 
 interface YouTubeSettings { title: string; description: string; privacyStatus: "public" | "unlisted" | "private"; tags: string; thumbnailKey: string; thumbnailName: string; madeForKids: boolean; notifySubscribers: boolean }
@@ -31,7 +32,8 @@ function YouTubeFields({ target, yt, onChange }: { target: PostTarget; yt: YouTu
     setDrafting(true);
     try {
       const d = (await (await apiRequest("GET", `/api/host/recordings/${target.id}/youtube-draft`)).json()) as { title: string; description: string; tags: string[] };
-      onChange({ ...yt, title: yt.title || d.title, description: d.description, tags: yt.tags || d.tags.join(", ") });
+      // The title stays theirs: an empty YouTube title means the title above (Frank, 22 Nov: a drafted title silently overrode it).
+      onChange({ ...yt, description: d.description, tags: yt.tags || d.tags.join(", ") });
     } catch (e) {
       toast({ title: "Couldn't draft that", description: (e as Error).message, variant: "destructive" });
     } finally {
@@ -171,7 +173,7 @@ export function PostDialog({ target, onClose, at, schedule = false }: { target: 
   const key = target ? `${target.kind}-${target.id}-${target.kind === "photo" ? target.storageKey : ""}` : "";
   useEffect(() => {
     if (!target) return;
-    setTitle(target.title);
+    setTitle(target.kind === "recording" ? postableTitle(target.title) : target.title);
     setDescription(target.kind === "clip" ? target.caption ?? "" : "");
     setShape(target.kind === "clip" ? target.shapes[0] ?? "vertical" : "vertical");
     setMode(at || schedule ? "later" : "queue");

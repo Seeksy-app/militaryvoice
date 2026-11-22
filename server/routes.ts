@@ -203,6 +203,7 @@ import { registerCreatorCampaigns } from "./creatorCampaigns.js";
 import { registerContactProfile } from "./contactProfile.js";
 import { registerAskShow, claimTranscript } from "./askShow.js";
 import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, createProductionSubscription, readSessionMeta, readSubscription, reportExtraCredits, billingPortal, createAddonCheckout, readAddonSession, addonStateFrom, bundledAddonStatesFrom, readPlanSessionAddons, ensureExtraItem, type PlanState } from "./stripe.js";
+import { postableTitle } from "../shared/episodeTitle.js";
 import { foundingOpen, episodeCredits, SHORT_VIDEO_SEC, planOf, PLANS, ADDONS, DEFAULT_OVERAGE_CAP_CENTS, OVERAGE_CAP_CHOICES, type PlanKey, type AddonKey } from "../shared/tokens.js";
 import { setSessionCookie, clearSessionCookie, requireHostSession, getSessionEmail, getSession, setAdminCookie, clearAdminCookie, getAdminEmail } from "./session.js";
 import {
@@ -3595,7 +3596,7 @@ export function registerRoutes(app: Express): void {
     const show = await showNameFor(original);
     const description = await draftYoutubeDescription({ show, title: original.title, clips });
     res.json({
-      title: original.title.slice(0, 100),
+      title: postableTitle(original.title).slice(0, 100),
       description: chapters ? `${description}\n\nChapters\n${chapters}` : description,
       chapters: Boolean(chapters),
       tags: [show, "military podcast", "veteran podcast"].filter(Boolean),
