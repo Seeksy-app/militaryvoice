@@ -40,7 +40,8 @@ export const BRANDS: Record<Brand, Look> = {
 const MISSING = new Set<Brand>([]);
 export const hasBrandMark = (b: Brand) => !MISSING.has(b);
 
-function Mark({ brand, className, onDark }: { brand: Brand; className: string; onDark?: boolean }) {
+/** onWhite: it sits on a white tile, so a black mark stays black in dark mode too. */
+function Mark({ brand, className, onDark, onWhite }: { brand: Brand; className: string; onDark?: boolean; onWhite?: boolean }) {
   const b = BRANDS[brand];
   if (MISSING.has(brand)) return null;
   if (brand === "instagram") {
@@ -53,7 +54,7 @@ function Mark({ brand, className, onDark }: { brand: Brand; className: string; o
   }
   if (b.file) return <img src={b.file} alt="" className={`${className} object-contain`} draggable={false} />;
   const I = b.icon!;
-  return <I className={`${className} ${b.mono ? (onDark ? "text-white" : "text-black dark:text-white") : ""}`} style={b.mono ? undefined : { color: b.color }} aria-hidden />;
+  return <I className={`${className} ${b.mono ? (onWhite ? "text-black" : onDark ? "text-white" : "text-black dark:text-white") : ""}`} style={b.mono ? undefined : { color: b.color }} aria-hidden />;
 }
 
 /**
@@ -64,7 +65,7 @@ export function BrandMark({ brand, tile = false, className = "h-5 w-5", tileClas
   if (MISSING.has(brand)) return null;
   const mark = <Mark brand={brand} className={className} onDark={onDark && !tile} />;
   if (!tile) return <span className="inline-flex shrink-0 items-center justify-center" title={title ?? BRANDS[brand].name} data-brand={brand}>{mark}</span>;
-  return <span className={`inline-flex shrink-0 items-center justify-center border border-black/10 bg-white ${tileClassName}`} title={title ?? BRANDS[brand].name} data-brand={brand}><Mark brand={brand} className={className} /></span>;
+  return <span className={`inline-flex shrink-0 items-center justify-center border border-black/10 bg-white ${tileClassName}`} title={title ?? BRANDS[brand].name} data-brand={brand}><Mark brand={brand} className={className} onWhite /></span>;
 }
 
 /** Several marks overlapping, e.g. StreamYard + Restream + OBS in a page header. Missing marks are left out. */
@@ -82,7 +83,7 @@ export function BrandGroup({ brands, className = "h-[15px] w-[15px]", tileClassN
   const shown = brands.filter(hasBrandMark);
   return (
     <span className={`inline-flex shrink-0 flex-wrap content-center items-center justify-center gap-0.5 border border-black/10 bg-white p-0.5 ${tileClassName}`} title={shown.map((b) => BRANDS[b].name).join(", ")} data-testid="brand-group">
-      {shown.map((b) => <Mark key={b} brand={b} className={className} />)}
+      {shown.map((b) => <Mark key={b} brand={b} className={className} onWhite />)}
     </span>
   );
 }

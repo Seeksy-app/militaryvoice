@@ -390,3 +390,7 @@
 .mv-range:hover::-webkit-slider-thumb, .mv-range:active::-webkit-slider-thumb { transform: scale(1.12); }
 .mv-range:focus-visible::-webkit-slider-thumb { box-shadow: 0 0 0 4px rgba(5, 56, 119, 0.25), 0 2px 6px rgba(11, 16, 32, 0.3); }
 .mv-range:focus-visible::-moz-range-thumb { box-shadow: 0 0 0 4px rgba(5, 56, 119, 0.25); }
+
+/* While a dialog or sheet is open the page behind can't be clicked, so the Ask Alex bubble only covers the
+   dialog's own buttons (the Post window's button on a phone, 22 Nov 2026). Hide it until the dialog closes. */
+body[data-scroll-locked] [data-testid="button-help-open"] { display: none; }
