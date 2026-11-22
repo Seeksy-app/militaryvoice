@@ -32,7 +32,7 @@ b While it records, press Mark a clip at the top when something good happens. We
 c Press Stop recording when you're done. It's in your Library a minute or two later, named after your show and the date. From there, Pōstify makes the clips and a clean episode.
 The recorder needs at least one camera on. If it doesn't start, turn a camera on and press Start recording again.
 6 Go live
-a In your studio, press Go live at the top. Pick YouTube or add a streaming key, check the title of your show, and go. Not connected to YouTube yet? Press Connect YouTube.
+a In your studio, press Go live at the top. Pick YouTube or add a streaming key, check the title of your show, and go. No YouTube key yet? Paste your stream key right there, once.
 b A red LIVE timer shows you're on. Press Watch to see what your audience sees.
 c Press End live to stop. You can record and be live at the same time.
 Turn on live streaming first
@@ -298,29 +298,26 @@ Open my Podcast screen
 
 === MILITARYVOICES.AI PLATFORM · www.militaryvoices.ai/help/youtube ===
 All help Help · Going out live
-Your slot on your own YouTube, too
-Your slot airs on The Podcast Marathon either way. Connect your channel once and it goes out there as well — live, to your audience, at the same time. No stream key to find. Five minutes, start to finish.
-Your browser can't play this video. The steps below cover the same ground.
-45 seconds: the whole connection, start to finish.
-1 Connect your channel
-Sign in to your dashboard, open Integrations, and press Connect YouTube. Use the Google account that owns your channel.
+Your show on your own YouTube, too
+Your Radio slot and your studio shows air on MilitaryVoices.ai either way. Paste your YouTube stream key once and they go out live on your channel as well, at the same time. Two minutes, start to finish.
+1 Copy your stream key
+Open YouTube Studio with the account that owns your channel.
+Press Create, then Go live, then the Stream tab.
+Copy the stream key (the default one, not a new one).
+Turn on Auto-start, so the stream goes live on your channel by itself when we start sending.
+Keep the key to yourself: anyone with it can stream to your channel.
+2 Paste it once
+In your dashboard, open Integrations, find YouTube Live, paste the key and press Save key. You can also paste it in your studio's Go live window. It's the same key in both places, so you only do this once.
 Open Integrations
-2 Get past Google's warning
-Google shows "Google hasn't verified this app". That's us — our verification with Google is in review and hasn't come back yet. The permission only lets us open a live broadcast on your channel at your booked time; we can't post, edit or read anything else. Three presses get you through it.
-a Press Advanced.
-b Press Go to Military Voice (unsafe). It isn't — that word is Google's default wording until the review is done.
-c Press Continue.
-3 Choose what goes to your channel
-Straight after connecting, the card asks one question: just my segment, or the entire show.
-Just my segment — when your slot comes up, the producer opens a broadcast on your channel and your audience watches you there. Nothing else appears on your channel.
-The entire show — all sixteen hours, first show to last, on your channel too. A broadcast is scheduled on your channel for 7:00 AM Eastern on 5 October and starts when we do. YouTube keeps a recording of the first twelve hours of a live stream, so the replay on your channel ends around 7 PM even though the stream runs to 11.
-You can change your answer any time from the same card.
+After that: in your studio, press Go live and pick YouTube. On the Radio, your channel goes live while your segment is on air and stops when it's over.
+3 The title on YouTube
+With a stream key, YouTube uses your channel's default title and description for the live video. Set them in YouTube Studio under Go live → Stream → Edit. You can rename the video afterwards, as with any upload.
 4 Before the day
-Live streaming has to be switched on for your channel. YouTube asks for a verified phone number and takes up to 24 hours the first time you enable it — do it this week, not on the day. In YouTube Studio: Create → Go live.
-YouTube is the only place we can send to directly. Facebook, LinkedIn and X don't allow it without a third-party tool. Reply to any email from us and we'll set one up with you.
-Something not working? Reply to any email from us, or ask Alex in the green room on the day.
-Ready? It takes about five minutes.
-Connect my YouTube
+Live streaming has to be switched on for your channel. YouTube asks for a verified phone number and takes up to 24 hours the first time you enable it, so do it ahead of time, not on the day. In YouTube Studio: Create → Go live.
+Facebook, LinkedIn or another site? In the studio's Go live, press Add a key and paste that site's streaming key the same way.
+Something not working? Ask Alex, or reply to any email from us.
+Ready? It takes about two minutes.
+Add my stream key
 
 === MILITARYVOICES.AI PLATFORM · www.militaryvoices.ai/help/zoom ===
 All help Help · Your recordings
