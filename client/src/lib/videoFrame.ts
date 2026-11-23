@@ -8,7 +8,7 @@
  * dark, and hands back a 1280-wide JPEG. Never throws: null when the browser
  * can't read the frame (an unreachable file, a storage without CORS).
  */
-export async function videoFrame(src: string, opts: { timeoutMs?: number } = {}): Promise<Blob | null> {
+export async function videoFrame(src: string, opts: { timeoutMs?: number; /** Which good moment to start from ("Another frame" steps on). */ start?: number; /** A clip: its titled opening frame first. */ clip?: boolean } = {}): Promise<Blob | null> {
   const video = document.createElement("video");
   video.crossOrigin = "anonymous";
   video.muted = true;
@@ -33,8 +33,11 @@ export async function videoFrame(src: string, opts: { timeoutMs?: number } = {})
     video.src = src;
     if (!(await wait("loadedmetadata", 15_000))) return done(null);
     const d = Number.isFinite(video.duration) ? video.duration : 0;
-    // About two minutes in on an episode (well past any intro), a tenth of the way in on a short video, then fallbacks.
-    const tries = Array.from(new Set([Math.min(120, d * 0.1), d * 0.25, d * 0.5, Math.min(2, d * 0.5)].map((t) => Math.max(0, Math.round(t * 10) / 10))));
+    // The good moments: about two minutes in on an episode (well past any intro), a tenth of the way in on a short
+    // video, then on through it. "Another frame" starts further along the list and wraps.
+    const moments = goodMoments(d, opts.clip);
+    const from = ((opts.start ?? 0) % moments.length + moments.length) % moments.length;
+    const tries = [...moments.slice(from), ...moments.slice(0, from)];
     const w = Math.min(1280, video.videoWidth || 1280);
     const h = Math.round((w * (video.videoHeight || 720)) / (video.videoWidth || 1280));
     const canvas = document.createElement("canvas");
@@ -58,6 +61,12 @@ export async function videoFrame(src: string, opts: { timeoutMs?: number } = {})
     // A tainted canvas (no CORS) throws on read: no thumbnail rather than a broken post.
     return done(null);
   }
+}
+
+/** Where to look in a video `d` seconds long, best first. */
+export function goodMoments(d: number, clip = false): number[] {
+  const at = clip ? [Math.min(0.6, d * 0.1), d * 0.25, d * 0.5, d * 0.75] : [Math.min(120, d * 0.1), d * 0.25, d * 0.4, d * 0.55, d * 0.7, d * 0.85, Math.min(2, d * 0.5)];
+  return Array.from(new Set(at.map((t) => Math.max(0, Math.round(t * 10) / 10))));
 }
 
 /** Average brightness 0–255 over a coarse grid: black and near-black frames come out under ~25. */

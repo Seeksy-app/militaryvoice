@@ -16,36 +16,20 @@ import { videoFrame } from "@/lib/videoFrame";
 import { isSocialLocked402, socialLocked, SOCIAL_UPGRADE_NOTE, type SocialTrial } from "@/components/SocialTrial";
 import { UpgradeDialog } from "@/components/PostStudio";
 import { postableTitle } from "@shared/episodeTitle";
-import { CalendarClock, ImagePlus, Loader2, Send, Sparkles, X } from "lucide-react";
+import { CalendarClock, Loader2, Send, Sparkles } from "lucide-react";
 
-interface YouTubeSettings { privacyStatus: "public" | "unlisted" | "private"; tags: string; thumbnailKey: string; thumbnailName: string; madeForKids: boolean; notifySubscribers: boolean }
-const blankYt: YouTubeSettings = { privacyStatus: "public", tags: "", thumbnailKey: "", thumbnailName: "", madeForKids: false, notifySubscribers: true };
+interface YouTubeSettings { privacyStatus: "public" | "unlisted" | "private"; tags: string; madeForKids: boolean; notifySubscribers: boolean }
+const blankYt: YouTubeSettings = { privacyStatus: "public", tags: "", madeForKids: false, notifySubscribers: true };
 
 const chip = (on: boolean) => `rounded-full border px-3 py-1 text-xs font-semibold ${on ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:border-[#053877]/40"}`;
 const link = "font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]";
 
-/** YouTube's own extras, folded into one line until they press Change. The title and description are the shared ones. */
-function YouTubeExtras({ yt, onChange, frame }: { yt: YouTubeSettings; onChange: (y: YouTubeSettings) => void; /** A frame from the video is the cover unless they upload one. */ frame?: boolean }) {
-  const { toast } = useToast();
+/** YouTube's own extras, folded into one line until they press Change. The title, description and thumbnail are the shared ones. */
+function YouTubeExtras({ yt, onChange }: { yt: YouTubeSettings; onChange: (y: YouTubeSettings) => void }) {
   const [open, setOpen] = useState(false);
-  const [thumbPct, setThumbPct] = useState<number | null>(null);
-  const thumb = async (file: File) => {
-    if (!/^image\/(jpeg|png|webp)$/.test(file.type)) return toast({ title: "A JPG, PNG or WebP, please", variant: "destructive" });
-    if (file.size > 2 * 1024 ** 2) return toast({ title: "YouTube takes thumbnails up to 2MB", description: "1280×720 as a JPG is plenty.", variant: "destructive" });
-    try {
-      setThumbPct(0);
-      const storageKey = await uploadToStorage(file, setThumbPct);
-      onChange({ ...yt, thumbnailKey: storageKey, thumbnailName: file.name });
-    } catch (e) {
-      toast({ title: "Couldn't upload that", description: (e as Error).message, variant: "destructive" });
-    } finally {
-      setThumbPct(null);
-    }
-  };
   const summary = [
     yt.privacyStatus[0].toUpperCase() + yt.privacyStatus.slice(1),
     yt.notifySubscribers ? "Notifies subscribers" : "No notification",
-    yt.thumbnailKey ? "Your thumbnail" : frame ? "Thumbnail from the video" : "No thumbnail",
     ...(yt.madeForKids ? ["Made for kids"] : []),
   ].join(" · ");
   return (
@@ -67,26 +51,67 @@ function YouTubeExtras({ yt, onChange, frame }: { yt: YouTubeSettings; onChange:
             <Label htmlFor="yt-tags" className="text-xs">Tags</Label>
             <Input id="yt-tags" className="mt-1" value={yt.tags} onChange={(e) => onChange({ ...yt, tags: e.target.value })} placeholder="Comma-separated" data-testid="yt-tags" />
           </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <span className="mr-1 text-xs font-semibold text-muted-foreground">Thumbnail</span>
-            {yt.thumbnailKey ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-border bg-background px-2.5 py-1 text-xs">
-                <ImagePlus className="h-3 w-3" /> {yt.thumbnailName}
-                <button type="button" onClick={() => onChange({ ...yt, thumbnailKey: "", thumbnailName: "" })} aria-label="Remove thumbnail"><X className="h-3 w-3" /></button>
-              </span>
-            ) : (
-              <label className="inline-flex cursor-pointer items-center gap-1.5 rounded-full border border-border px-2.5 py-1 text-xs font-semibold hover:border-[#053877]/40">
-                <input type="file" accept="image/jpeg,image/png,image/webp" className="hidden" onChange={(e) => e.target.files?.[0] && void thumb(e.target.files[0])} />
-                {thumbPct === null ? <ImagePlus className="h-3 w-3" /> : <Loader2 className="h-3 w-3 animate-spin" />} {thumbPct === null ? "Upload (1280×720)" : `${thumbPct}%`}
-              </label>
-            )}
-          </div>
           <div className="flex flex-wrap gap-x-4 gap-y-1.5 text-xs">
             <label className="flex cursor-pointer items-center gap-2"><Checkbox checked={yt.notifySubscribers} onCheckedChange={(v) => onChange({ ...yt, notifySubscribers: v === true })} /> Notify subscribers</label>
             <label className="flex cursor-pointer items-center gap-2"><Checkbox checked={yt.madeForKids} onCheckedChange={(v) => onChange({ ...yt, madeForKids: v === true })} /> Made for kids</label>
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** The post's cover: what's being made, picked or uploaded. key is what's sent; preview is what they see. */
+type Thumb = { state: "busy" | "ready" | "failed"; own: boolean; key: string; preview: string; frameKey: string; titled: string; note: string };
+const blankThumb: Thumb = { state: "busy", own: false, key: "", preview: "", frameKey: "", titled: "", note: "" };
+// Where a cover set with the post shows (Upload-Post: thumbnail_url, cover_url for a Reel, TikTok's custom-cover capability).
+const THUMB_PLATFORMS: SocialPlatform[] = ["youtube", "linkedin", "facebook", "x", "instagram"];
+const THUMB_DETAIL = "Instagram uses it as the Reel cover. TikTok uses it only where the account allows custom covers. Threads shows the video's first frame.";
+
+/**
+ * One row: the cover on the left, Another frame · Upload your own on the right (UI/UX, 23 Nov). A whole episode opens
+ * on black and LinkedIn shows the first frame, so every video post carries a cover: a still from a good moment under
+ * our title band (a clip: its titled opening frame), or their own picture.
+ */
+function ThumbnailRow({ thumb, shape, onAnother, onUseFrame, onUpload }: { thumb: Thumb; /** A clip's shape; an episode is 16:9. */ shape?: "vertical" | "square" | "wide"; onAnother: () => void; onUseFrame: () => void; onUpload: (f: File) => void }) {
+  const box = shape === "vertical" ? "aspect-[9/16] h-[54px] sm:h-[63px]" : shape === "square" ? "aspect-square h-[54px] sm:h-[63px]" : "h-[54px] w-[96px] sm:h-[63px] sm:w-[112px]";
+  const failed = thumb.state === "failed" && !thumb.own;
+  return (
+    <div className="mt-3.5" data-testid="post-thumbnail">
+      <p className="mb-1.5 text-[13px] font-semibold">Thumbnail</p>
+      <div className="flex items-center gap-3">
+        <div className={`${box} shrink-0 overflow-hidden rounded-lg border border-black/10 dark:border-white/10`} aria-live="polite">
+          {thumb.state === "busy" ? (
+            <div className="h-full w-full animate-pulse bg-muted" aria-busy="true" aria-label="Making the thumbnail" />
+          ) : failed || !thumb.preview ? (
+            <div className="flex h-full w-full items-center justify-center bg-muted/60 text-[11px] font-medium text-muted-foreground">No frame</div>
+          ) : (
+            <img src={thumb.preview} alt="Thumbnail preview" className="h-full w-full object-cover" data-testid="post-thumbnail-img" />
+          )}
+        </div>
+        {/* w-0: the one-line note mustn't widen the dialog on a phone (its nowrap text would set the min width). */}
+        <div className="w-0 min-w-0 flex-1">
+          <p className="text-[13px] leading-snug">
+            {!failed && (
+              <>
+                <button type="button" onClick={thumb.own ? onUseFrame : onAnother} className={link} data-testid={thumb.own ? "thumb-use-frame" : "thumb-another"}>{thumb.own ? "Use a frame" : "Another frame"}</button>{" "}
+              </>
+            )}
+            <span className="whitespace-nowrap">
+              {!failed && <span className="text-muted-foreground">·{"\u00A0"}</span>}
+              <label className={`cursor-pointer ${link}`} data-testid="thumb-upload">
+                <input type="file" accept="image/jpeg,image/png" className="sr-only" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; if (f) onUpload(f); }} />
+                Upload your own
+              </label>
+            </span>
+          </p>
+          {thumb.note ? (
+            <p className="mt-0.5 text-xs font-medium text-destructive" role="alert">{thumb.note}</p>
+          ) : (
+            <p className="mt-0.5 text-pretty text-xs leading-snug text-muted-foreground sm:truncate" title={THUMB_DETAIL}>Shows on YouTube, LinkedIn, Facebook and{"\u00A0"}X.</p>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -203,9 +228,24 @@ export function PostDialog({ target, onClose, at, schedule = false }: { target: 
   const later = mode === "later";
   const [yt, setYt] = useState<YouTubeSettings>(blankYt);
   const [when, setWhen] = useState(inAnHour);
-  // A whole episode opens on black, and LinkedIn shows the first frame: a still from a little way in is
-  // picked and uploaded while they write, and goes with the post as every platform's cover (Andrew, 23 Nov).
-  const autoThumb = useRef<Promise<string> | null>(null);
+  // A whole episode opens on black, and LinkedIn shows the first frame: a still from a good moment is picked, put under
+  // our title band and uploaded while they write, and goes with the post as its cover (Andrew, 23 Nov). They can step to
+  // another frame or upload their own; the Post button never waits on it for long.
+  const [thumb, setThumb] = useState<Thumb>(blankThumb);
+  const thumbRef = useRef(thumb);
+  thumbRef.current = thumb;
+  const titleRef = useRef(title);
+  titleRef.current = title;
+  const thumbRun = useRef(0); // the newest grab wins; older ones drop their result
+  const thumbStep = useRef(0);
+  const thumbTimer = useRef<number | undefined>(undefined);
+  const thumbPending = useRef<Promise<void> | null>(null);
+  const lastFrame = useRef<Pick<Thumb, "key" | "preview" | "frameKey" | "titled"> | null>(null);
+  const videoSrc = useRef<{ for: string; url: string } | null>(null);
+  // Post pressed while the cover's still being made: the button says so, and a post that went without one says that after.
+  const [finishing, setFinishing] = useState(false);
+  const wentWithout = useRef(false);
+  const thumbFor = target && target.kind !== "photo" ? `${target.kind}-${target.id}-${target.kind === "clip" ? shape : ""}` : "";
 
   // Fresh each time a different thing is opened.
   const key = target ? `${target.kind}-${target.id}-${target.kind === "photo" ? target.storageKey : ""}` : "";
@@ -221,19 +261,84 @@ export function PostDialog({ target, onClose, at, schedule = false }: { target: 
     setYt(blankYt);
     // A whole episode: its description drafted straight away, chapters and all, for them to edit.
     if (target.kind === "recording") void draft(target.id, true);
-    autoThumb.current = target.kind === "recording" ? frameFor(target.id) : null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, schedule]);
   useEffect(() => setPicked(platforms), [platforms.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+  // A fresh cover for each video opened (and each clip shape): the first good moment, under the title as it opens.
+  useEffect(() => {
+    window.clearTimeout(thumbTimer.current);
+    if (!target || target.kind === "photo") return;
+    thumbStep.current = 0;
+    lastFrame.current = null;
+    setThumb(blankThumb);
+    grab(0, target.kind === "recording" ? postableTitle(target.title) : "");
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [thumbFor]);
 
-  async function frameFor(id: number): Promise<string> {
-    try {
-      const { url } = (await (await apiRequest("GET", `/api/host/recordings/${id}/video?json=1`)).json()) as { url: string };
-      const blob = await videoFrame(url);
-      return blob ? await uploadToStorage(new File([blob], "thumbnail.jpg", { type: "image/jpeg" }), () => {}) : "";
-    } catch {
-      return "";
-    }
+  /** A link to the video this post sends, for reading frames out of (episode: the recording; clip: the shape picked). */
+  async function videoUrl(): Promise<string> {
+    if (videoSrc.current?.for === thumbFor) return videoSrc.current.url;
+    if (!target || target.kind === "photo") return "";
+    const path = target.kind === "clip" ? `/api/host/clips/${target.id}/video?shape=${shape}` : `/api/host/recordings/${target.id}/video?json=1`;
+    const { url } = (await (await apiRequest("GET", path)).json()) as { url: string };
+    videoSrc.current = { for: thumbFor, url };
+    return url;
+  }
+
+  /** The cover from the step-th good moment: the frame uploaded, then (an episode) put under the title band. */
+  function grab(step: number, titleNow: string) {
+    const run = ++thumbRun.current;
+    const clip = target?.kind === "clip";
+    setThumb((t) => ({ ...t, state: "busy", own: false, note: "" }));
+    thumbPending.current = (async () => {
+      try {
+        const blob = await videoFrame(await videoUrl(), { start: step, clip });
+        if (!blob) throw new Error("no frame");
+        const frameKey = await uploadToStorage(new File([blob], "thumbnail.jpg", { type: "image/jpeg" }), () => {});
+        if (run !== thumbRun.current) return;
+        let next = { key: frameKey, preview: URL.createObjectURL(blob), frameKey, titled: "" };
+        if (!clip && titleNow) {
+          // The title band; the plain frame if it can't be made (sent tries the band again).
+          const r = await apiRequest("POST", "/api/host/thumbnails/compose", { frameKey, title: titleNow }).then((x) => x.json() as Promise<{ key: string; url?: string }>).catch(() => null);
+          if (r?.key) next = { key: r.key, preview: r.url || next.preview, frameKey, titled: titleNow };
+        }
+        if (run !== thumbRun.current) return;
+        lastFrame.current = next;
+        setThumb((t) => ({ ...t, ...next, state: "ready", own: false }));
+      } catch {
+        if (run === thumbRun.current) setThumb((t) => ({ ...t, state: "failed", own: false, key: "", preview: "" }));
+      }
+    })();
+  }
+
+  /** Another frame: steps along the good moments; quick presses settle on the last one before anything is fetched. */
+  function anotherFrame() {
+    thumbStep.current += 1;
+    thumbRun.current += 1; // whatever's in flight is stale now
+    setThumb((t) => ({ ...t, state: "busy", own: false, note: "" }));
+    window.clearTimeout(thumbTimer.current);
+    thumbTimer.current = window.setTimeout(() => grab(thumbStep.current, titleRef.current.trim()), 350);
+  }
+
+  function backToFrame() {
+    if (lastFrame.current) setThumb((t) => ({ ...t, ...lastFrame.current!, state: "ready", own: false, note: "" }));
+    else grab(thumbStep.current, titleRef.current.trim());
+  }
+
+  function uploadOwn(file: File) {
+    // Only said when a file breaks it (UI/UX, 23 Nov).
+    if (!/^image\/(jpeg|png)$/.test(file.type)) return setThumb((t) => ({ ...t, note: "A JPG or PNG, 1280×720, under 2 MB" }));
+    if (file.size > 2 * 1024 ** 2) return setThumb((t) => ({ ...t, note: "1280×720, under 2 MB" }));
+    const run = ++thumbRun.current;
+    window.clearTimeout(thumbTimer.current);
+    setThumb((t) => ({ ...t, state: "busy", own: true, key: "", preview: URL.createObjectURL(file), note: "" }));
+    thumbPending.current = uploadToStorage(file, () => {})
+      .then((k) => { if (run === thumbRun.current) setThumb((t) => ({ ...t, key: k, state: "ready" })); })
+      .catch(() => {
+        if (run !== thumbRun.current) return;
+        if (lastFrame.current) setThumb((t) => ({ ...t, ...lastFrame.current!, state: "ready", own: false, note: "Couldn't upload that. Try again?" }));
+        else setThumb((t) => ({ ...t, state: "failed", own: false, preview: "", note: "Couldn't upload that. Try again?" }));
+      });
   }
 
   async function draft(id: number, onlyIfEmpty = false) {
@@ -260,13 +365,24 @@ export function PostDialog({ target, onClose, at, schedule = false }: { target: 
     mutationFn: async () => {
       if (!target) return null;
       const words = description.trim();
-      // Their own upload wins; otherwise the frame, if it's ready within a few seconds (a post never waits long on it).
-      const frameKey = yt.thumbnailKey || !autoThumb.current ? "" : await Promise.race([autoThumb.current, new Promise<string>((r) => setTimeout(() => r(""), 15_000))]);
-      // The frame under our title band, in the clip style; the plain frame if that fails.
-      const composed = frameKey
-        ? await apiRequest("POST", "/api/host/thumbnails/compose", { frameKey, title: title.trim() }).then((r) => r.json() as Promise<{ key: string }>).then((r) => r.key).catch(() => frameKey)
-        : "";
-      const thumbnailKey = yt.thumbnailKey || composed;
+      // The cover: waited on for a few seconds at most if it's still being made (a post never waits long on it).
+      wentWithout.current = false;
+      const waited = target.kind !== "photo" && thumbRef.current.state === "busy" && !!thumbPending.current;
+      if (waited) {
+        setFinishing(true);
+        try {
+          await Promise.race([thumbPending.current, new Promise((r) => setTimeout(r, 15_000))]);
+        } finally {
+          setFinishing(false);
+        }
+      }
+      const th = thumbRef.current;
+      let thumbnailKey = target.kind !== "photo" && th.state === "ready" ? th.key : "";
+      // A title edited since the band was made: the band again with the title they settled on.
+      if (thumbnailKey && !th.own && target.kind === "recording" && th.frameKey && th.titled !== title.trim()) {
+        thumbnailKey = await apiRequest("POST", "/api/host/thumbnails/compose", { frameKey: th.frameKey, title: title.trim() }).then((r) => r.json() as Promise<{ key: string }>).then((r) => r.key || thumbnailKey).catch(() => thumbnailKey);
+      }
+      wentWithout.current = waited && !thumbnailKey;
       const body = {
         ...(thumbnailKey ? { thumbnailKey } : {}),
         platforms: picked,
@@ -290,6 +406,7 @@ export function PostDialog({ target, onClose, at, schedule = false }: { target: 
           ? { title: mode === "queue" ? "In your queue" : "Scheduled", description: `It goes out ${fmt(r.scheduledAt)}. It's on your Social calendar.` }
           : { title: "On its way", description: "Handed to your accounts. A long video can take a few minutes to appear." },
       );
+      if (wentWithout.current) toast({ title: "Posted without a thumbnail.", description: has("youtube") ? "You can add one on YouTube." : undefined });
       onClose();
     },
     onError: (e: Error) => {
@@ -434,7 +551,11 @@ export function PostDialog({ target, onClose, at, schedule = false }: { target: 
                     </div>
                   )}
 
-                  {has("youtube") && <div className="mt-3.5"><YouTubeExtras key={key} yt={yt} onChange={setYt} frame={episode} /></div>}
+                  {target && target.kind !== "photo" && picked.some((p) => THUMB_PLATFORMS.includes(p)) && (
+                    <ThumbnailRow thumb={thumb} shape={target.kind === "clip" ? shape : undefined} onAnother={anotherFrame} onUseFrame={backToFrame} onUpload={uploadOwn} />
+                  )}
+
+                  {has("youtube") && <div className="mt-3.5"><YouTubeExtras key={key} yt={yt} onChange={setYt} /></div>}
 
                   <div className="mt-3.5 pb-4">
                     <p className="mb-1.5 text-[13px] font-semibold">When</p>
@@ -470,7 +591,7 @@ export function PostDialog({ target, onClose, at, schedule = false }: { target: 
           <p className="mr-auto hidden text-xs text-muted-foreground sm:block">Nothing goes out until you press the button.</p>
                     <Button onClick={() => send.mutate()} disabled={loading || send.isPending || picked.length === 0 || !title.trim() || tooLong} className="flex-1 gap-2 rounded-full sm:flex-none" data-testid="button-publish-confirm">
             {send.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : mode === "now" ? <Send className="h-4 w-4" /> : <CalendarClock className="h-4 w-4" />}
-            {action}
+            {finishing ? "Finishing the thumbnail…" : action}
           </Button>
         </DialogFooter>
       </DialogContent>

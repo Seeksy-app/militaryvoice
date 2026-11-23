@@ -55,6 +55,8 @@ function titleBand(title: string, w: number, h: number, show: string): string {
     rows = wrap(title, 48, boxW);
     size = Math.min(...rows.map((r) => fitSize(r, "heavy", 48, 30, boxW)));
   }
+  // Two lines at most; anything that still won't fit (a long unbroken word) ends in an ellipsis rather than off the edge.
+  rows = rows.slice(0, 2).map((r) => clip(r, size, boxW));
   const lead = size * 1.1;
   const titleY = show ? h * 0.44 : h * 0.55;
   const titleSvg = rows
@@ -66,6 +68,14 @@ function titleBand(title: string, w: number, h: number, show: string): string {
     ? textPath(sub.toUpperCase(), { x: w / 2, y: h * 0.84 + subSize * 0.36, size: subSize, weight: "strong", fill: GOLD, anchor: "middle", letterSpacing: subSize * 0.08 })
     : "";
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect width="${w}" height="${h}" fill="${NAVY}"/>${titleSvg}${subSvg}</svg>`;
+}
+
+/** The row as it is when it fits, else cut back to the last whole character that leaves room for "…". */
+function clip(row: string, size: number, boxW: number): string {
+  if (textWidth(row, size, "heavy") <= boxW) return row;
+  let n = row.length;
+  while (n > 1 && textWidth(`${row.slice(0, n).trimEnd()}…`, size, "heavy") > boxW) n--;
+  return `${row.slice(0, n).trimEnd()}…`;
 }
 
 /** Two lines of about equal width. */

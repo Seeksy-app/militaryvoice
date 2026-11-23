@@ -3568,6 +3568,18 @@ export function registerRoutes(app: Express): void {
     res.redirect(302, url);
   });
 
+  /** A clip's file in one shape, as a link a page can read frames out of (its thumbnail picker). */
+  app.get("/api/host/clips/:id/video", requireHostSession, async (req, res) => {
+    noStore(res);
+    const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
+    const clip = await storage.getClip(Number(req.params.id));
+    if (!clip || clip.email.trim().toLowerCase() !== email) return res.status(404).json({ message: "Not found" });
+    const shape = String(req.query.shape ?? "vertical");
+    const url = shape === "square" ? clip.squareUrl : shape === "wide" ? clip.url : clip.verticalUrl;
+    if (!url) return res.status(404).json({ message: "That shape isn't ready." });
+    res.json({ url });
+  });
+
   /** The cover picked for a video post (a frame from it, or one they uploaded), signed for Upload-Post to fetch. */
   async function thumbnailFrom(body: any): Promise<string | undefined> {
     const k = typeof body?.thumbnailKey === "string" && /^show-assets\/[\w.-]+$/.test(body.thumbnailKey) ? body.thumbnailKey : "";
@@ -3600,7 +3612,8 @@ export function registerRoutes(app: Express): void {
   app.post("/api/host/thumbnails/compose", requireHostSession, async (req, res) => {
     const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
     try {
-      res.json({ key: await composeThumbnail(email, { frameKey: req.body?.frameKey, title: req.body?.title }) });
+      const key = await composeThumbnail(email, { frameKey: req.body?.frameKey, title: req.body?.title });
+      res.json({ key, url: await signedRecordingUrl(key, 3600) });
     } catch (err) {
       console.error("Thumbnail compose failed:", err);
       res.status(502).json({ message: "Couldn't make the thumbnail." });

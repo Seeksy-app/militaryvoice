@@ -412,7 +412,13 @@ export async function publishVideo(input: {
     if (yt.notifySubscribers !== undefined) form.set("youtube_notify_subscribers", yt.notifySubscribers ? "true" : "false");
   }
   const thumb = yt?.thumbnailUrl || input.thumbnailUrl;
-  if (thumb) form.set("thumbnail_url", thumb);
+  if (thumb) {
+    form.set("thumbnail_url", thumb);
+    // A clip's frame is the clip's own shape, so it fits a Reel or a TikTok as their cover too
+    // (TikTok only where the account allows custom covers; otherwise it's ignored with a warning).
+    if (input.platforms.includes("instagram")) form.set("cover_url", thumb);
+    if (input.platforms.includes("tiktok")) form.set("tiktok_cover_image_url", thumb);
+  }
   if (input.timezone) form.set("timezone", input.timezone);
   if (input.addToQueue && !input.scheduledDate) form.set("add_to_queue", "true");
   if (input.externalId) form.set("external_id", input.externalId);
