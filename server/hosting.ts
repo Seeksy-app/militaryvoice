@@ -604,7 +604,7 @@ Notes: plain text only (no HTML, no markdown symbols). A short opening paragraph
     max_tokens: 2500,
     system: `You write the title and show notes for one podcast episode on MilitaryVoices.ai, a platform for military and veteran creators. Work only from the transcript.
 ${shape}
-Invent nothing: no names, ranks, branches, numbers, dates or links that are not in the transcript (the host's name may come from the examples). If a speaker is not named, do not name them. Easy to read. No em dashes. No hype words like "journey", "delve" or "unlock". No episode number in the title.
+Invent nothing: no names, ranks, branches, numbers, dates or links that are not in the transcript (the host's name may come from the examples). Describe only what is actually said: if a list or a point is cut off, do not finish it. If a speaker is not named, do not name them. Easy to read. No em dashes. No hype words like "journey", "delve" or "unlock". No episode number in the title.
 Return JSON only: {"title":"","description":""}`,
     messages: [{ role: "user", content: `Show: ${show.title}${examples.map((x, i) => `\n\nPast episode ${i + 1}\nTitle: ${x.title}\nNotes:\n${x.notes}`).join("")}\n\nCurrent title (may just be a file name): ${currentTitle}\n\nTranscript:\n${text}` }],
   });
