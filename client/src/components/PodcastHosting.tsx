@@ -1,7 +1,8 @@
 import { shrinkImage } from "@/lib/shrinkImage";
 import { GuestInvites } from "@/components/GuestInvites";
 import type { IconType } from "react-icons";
-import { SiApplepodcasts, SiCastbox, SiDeezer, SiIheartradio, SiPlayerfm, SiPocketcasts, SiPodcastindex, SiSpotify, SiYoutubemusic } from "react-icons/si";
+import { SiApplepodcasts, SiCastbox, SiDeezer, SiIheartradio, SiPlayerfm, SiPocketcasts, SiPodcastindex, SiSpotify, SiYoutube, SiYoutubemusic } from "react-icons/si";
+import { PhotoCropDialog } from "@/components/PhotoCropDialog";
 import { FaAmazon } from "react-icons/fa";
 import { BrandMark } from "@/components/BrandMark";
 import { PodcastSetup, type SetupNext } from "@/components/PodcastSetup";
@@ -231,7 +232,7 @@ export function PodcastHosting() {
     setFocus(/description/i.test(m) ? "description" : /show name/i.test(m) ? "title" : /owner email/i.test(m) ? "ownerEmail" : "");
     go("details");
   };
-  const inSettings = tab === "details" || tab === "defaults" || tab === "sponsors";
+  const inSettings = tab === "publishing" || tab === "details" || tab === "sponsors" || tab === "move";
   const tabBtn = (t: PodTab, label: string) => (
     <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => go(t)} className={`border-b-2 px-1 pb-2.5 text-sm font-semibold transition-colors ${tab === t ? "border-[#053877] text-foreground dark:border-[#8fb5e8]" : "border-transparent text-muted-foreground hover:text-foreground"}`} data-testid={`hosting-tab-${t}`}>{label}</button>
   );
@@ -258,7 +259,7 @@ export function PodcastHosting() {
       <div className="flex gap-4 overflow-x-auto whitespace-nowrap border-b border-border pr-6 [mask-image:linear-gradient(to_right,black_82%,transparent)] [scrollbar-width:none] sm:gap-6 sm:pr-0 sm:[mask-image:none]" role="tablist">
         {tabBtn("episodes", "Episodes")}
         {/* Settings sits next to Episodes, where it is found: the show's details, how episodes go out, and its sponsors. */}
-        <button type="button" role="tab" aria-selected={inSettings} onClick={() => go(inSettings ? tab : "defaults")} className={`border-b-2 px-1 pb-2.5 text-sm font-semibold transition-colors ${inSettings ? "border-[#053877] text-foreground dark:border-[#8fb5e8]" : "border-transparent text-muted-foreground hover:text-foreground"}`} data-testid="hosting-tab-settings">Settings</button>
+        <button type="button" role="tab" aria-selected={inSettings} onClick={() => go(inSettings ? tab : "publishing")} className={`border-b-2 px-1 pb-2.5 text-sm font-semibold transition-colors ${inSettings ? "border-[#053877] text-foreground dark:border-[#8fb5e8]" : "border-transparent text-muted-foreground hover:text-foreground"}`} data-testid="hosting-tab-settings">Settings</button>
         {tabBtn("directories", ready ? "Directories" : "Directories · to do")}
         {tabBtn("invite", "Invite a guest")}
         {tabBtn("guests", "Book a guest")}
@@ -267,7 +268,7 @@ export function PodcastHosting() {
 
       {s.newFeedUrl && (
         <div className="rounded-2xl border border-destructive/40 bg-destructive/[0.05] p-4 text-sm" data-testid="hosting-leaving">
-          <span className="font-semibold">This show is moving to another host.</span> <span>The feed forwards apps to <span className="break-all font-mono text-xs">{s.newFeedUrl}</span>. <button type="button" onClick={() => go("details")} className="font-semibold text-primary hover:underline">Stop the move in Show details</button>.</span>
+          <span className="font-semibold">This show is moving to another host.</span> <span>The feed forwards apps to <span className="break-all font-mono text-xs">{s.newFeedUrl}</span>. <button type="button" onClick={() => go("move")} className="font-semibold text-primary hover:underline">Stop the move under Settings → Move</button>.</span>
         </div>
       )}
 
@@ -323,14 +324,16 @@ export function PodcastHosting() {
         </>
       )}
 
+      {/* Settings in plain words, one tab each (Andrew, 23 Nov: "Yes, build it"). */}
       {inSettings && (
-        <div className="flex flex-wrap gap-2" role="tablist" data-testid="hosting-settings-nav">
-          {([["defaults", "Defaults"], ["sponsors", "Sponsors"], ["details", "Show details"]] as const).map(([k, l]) => (
-            <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => go(k)} className={`rounded-full border px-4 py-1.5 text-sm font-semibold ${tab === k ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:bg-muted"}`} data-testid={`hosting-settings-${k}`}>{l}</button>
+        <div className="-mt-1 flex gap-5 overflow-x-auto whitespace-nowrap border-b border-border [scrollbar-width:none]" role="tablist" data-testid="hosting-settings-nav">
+          {([["publishing", "Publishing"], ["details", "Show details"], ["sponsors", "Sponsors"], ["move", "Move"]] as const).map(([k, l]) => (
+            <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => go(k)} className={`border-b-2 px-0.5 pb-2 text-sm font-medium transition-colors ${tab === k ? "border-[#053877] font-semibold text-[#053877] dark:border-[#8fb5e8] dark:text-[#8fb5e8]" : "border-transparent text-muted-foreground hover:text-foreground"}`} data-testid={`hosting-settings-${k}`}>{l}</button>
           ))}
         </div>
       )}
-      {tab === "defaults" && <DefaultsPanel key={s.id} h={h} onSaved={refresh} />}
+      {tab === "publishing" && <PublishingPanel key={s.id} h={h} youtubeReady={!!q.data?.youtubeReady} onSaved={refresh} onDirectories={() => go("directories")} />}
+      {tab === "move" && <MoveHost show={s} feedUrl={h.feedUrl} onSaved={refresh} />}
       {tab === "sponsors" && <SponsorsPanel key={`${s.id}-${spotFor ?? 0}`} h={h} onSaved={refresh} preset={spotFor} onPresetUsed={() => setSpotFor(null)} />}
 
       {tab === "directories" && (
@@ -355,7 +358,7 @@ export function PodcastHosting() {
           ) : null}
           {/* A moved show is in the apps already, by its old feed: forwarding that feed moves them all here. */}
           {s.importedFrom && <MoveSubscribers h={h} onDone={refresh} />}
-          <Directories h={h} ready={ready} onSaved={refresh} youtube={<YouTubeEpisodes embedded h={h} ready={!!q.data?.youtubeReady} onDone={refresh} />} />
+          <Directories h={h} ready={ready} onSaved={refresh} onSettings={() => go("publishing")} youtube={<YouTubeEpisodes embedded h={h} ready={!!q.data?.youtubeReady} onDone={refresh} />} />
         </>
       )}
 
@@ -363,14 +366,14 @@ export function PodcastHosting() {
       {tab === "guests" && <GuestFinder showTitle={s.title} onInvite={takeInvite} />}
       {tab === "pitch" && <ShowFinder topics={[s.category, s.subcategory].filter(Boolean) as string[]} />}
 
-      {tab === "details" && <ShowForm key={s.id} show={s} feedUrl={h.feedUrl} focus={focus} categories={q.data?.categories ?? {}} onSaved={() => { refresh(); setFocus(""); }} onDeleted={() => { setOpenId(null); refresh(); }} />}
+      {tab === "details" && <ShowForm key={s.id} show={s} onMove={() => go("move")} focus={focus} categories={q.data?.categories ?? {}} onSaved={() => { refresh(); setFocus(""); }} onDeleted={() => { setOpenId(null); refresh(); }} />}
 
       {addShowDialog}
     </section>
   );
 }
 
-type PodTab = "episodes" | "defaults" | "sponsors" | "directories" | "details" | "guests" | "pitch" | "invite";
+type PodTab = "episodes" | "publishing" | "sponsors" | "move" | "directories" | "details" | "guests" | "pitch" | "invite";
 type DirState = { state: "" | "submitted" | "live" | "rejected"; url: string; at?: string };
 const parseDirs = (raw: string | null | undefined): Record<string, DirState> => { try { const v = raw ? JSON.parse(raw) : {}; return v && typeof v === "object" ? v : {}; } catch { return {}; } };
 
@@ -434,7 +437,7 @@ const DIR_ICON: Record<string, { icon: IconType; color: string }> = {
   listennotes: { icon: ListenNotesMark, color: "#2D6CDF" },
 };
 
-function Directories({ h, ready, onSaved, youtube }: { h: Hosted; ready: boolean; onSaved: () => void; youtube?: React.ReactNode }) {
+function Directories({ h, ready, onSaved, onSettings, youtube }: { h: Hosted; ready: boolean; onSaved: () => void; onSettings: () => void; youtube?: React.ReactNode }) {
   const { toast } = useToast();
   const s = h.show;
   const moved = !!s.importedFrom;
@@ -474,8 +477,12 @@ function Directories({ h, ready, onSaved, youtube }: { h: Hosted; ready: boolean
           const st = dirs[d.key];
           const live = isLive(d.key);
           const isOpen = open === d.key;
+          // A moved show whose old feed forwards: the app follows on its own, so the row is its status only (Andrew,
+          // 23 Nov). Listing it by hand is inside the row, for the rare app that never had it.
+          const quiet = moved && !!s.redirectOk && !st?.state && !live && !d.auto;
           // "Spotify" under Spotify says nothing: the reach line only when it adds something (UI/UX, a1ee1d0d).
-          const reach = d.reach === d.name ? "" : d.reach;
+          // Status only once it's live (Andrew, 23 Nov): the reach line is for deciding to list it.
+          const reach = d.reach === d.name || (live && d.key !== "youtube") ? "" : d.reach;
           const badge = live ? "bg-emerald-600 text-white dark:bg-emerald-500"
             : st?.state === "submitted" ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : "bg-muted text-muted-foreground";
           return (
@@ -504,7 +511,7 @@ function Directories({ h, ready, onSaved, youtube }: { h: Hosted; ready: boolean
                 ) : st?.state === "live" ? (st.url
                   ? <Button asChild size="sm" variant="outline" className="h-8 gap-1 rounded-full"><a href={st.url} target="_blank" rel="noreferrer">Open <ExternalLink className="h-3 w-3" /></a></Button>
                   : <Button size="sm" variant="outline" onClick={() => setOpen(isOpen ? `-${d.key}` : d.key)} className="h-8 rounded-full" data-testid={`hosting-dir-confirm-${d.key}`}>Confirm</Button>
-                ) : (
+                ) : quiet ? null : (
                   <Button size="sm" variant={moved ? "outline" : "default"} onClick={() => void listIt(d)} disabled={!ready} title={ready ? undefined : "Finish what the apps need first (above)"} className={`h-8 gap-1 rounded-full ${moved ? "" : "bg-[#053877] text-white hover:bg-[#0a4a99]"}`} data-testid={`hosting-dir-list-${d.key}`}>{st?.state === "submitted" ? "Open again" : moved ? "Not there? List it" : "List it"} <ExternalLink className="h-3 w-3" /></Button>
                 )}
                 </span>
@@ -514,7 +521,9 @@ function Directories({ h, ready, onSaved, youtube }: { h: Hosted; ready: boolean
                   {live ? (
                     <p className="text-xs text-muted-foreground">{d.name} gets your episodes from your new feed. Optional: <a href={FIND[d.key]?.(s.title) ?? d.url} target="_blank" rel="noreferrer" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">find your show on {d.name}</a> and paste its address below to put a {d.name} button on your show page.</p>
                   ) : <>
+                  {quiet && <p className="text-xs text-muted-foreground">{d.name} follows your forward on its own. Not there after a week? List it once:</p>}
                   <ol className="list-decimal space-y-1 pl-5 text-muted-foreground">{d.steps.map((x) => <li key={x}>{x}</li>)}</ol>
+                  {quiet && <Button size="sm" variant="outline" onClick={() => void listIt(d)} disabled={!ready} className="h-8 gap-1 rounded-full" data-testid={`hosting-dir-list-${d.key}`}>List it on {d.name} <ExternalLink className="h-3 w-3" /></Button>}
                   <p className="text-xs text-muted-foreground">That's all: it goes live on its own once {d.name} approves it, usually within a few days. <span className="text-muted-foreground/80">Optional: <a href={FIND[d.key]?.(s.title) ?? d.url} target="_blank" rel="noreferrer" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">find your show on {d.name}</a> and paste its address below to put a {d.name} button on your show page.</span></p>
                   </>}
                   <form onSubmit={(e) => {
@@ -545,8 +554,8 @@ function Directories({ h, ready, onSaved, youtube }: { h: Hosted; ready: boolean
       {/* A clear line under the header, so the first app doesn't read as part of it (Andrew, 21 Nov). */}
       <div className="mb-1 flex flex-wrap items-center justify-between gap-2 border-b border-border pb-3">
         <div>
-          <h2 className="text-sm font-semibold">Where your show is listed</h2>
-          <p className="text-xs text-muted-foreground">{moved ? (s.redirectOk ? "Your old feed forwards here, so each app moves over on its own. List it only where it isn't yet." : "Your show is in these already, by your old feed: forwarding it (above) moves each one here. List it only where it isn't yet.") :"List it once in each; new episodes reach them on their own."}</p>
+          <h2 className="text-base font-semibold">Podcast apps</h2>
+          <p className="text-sm text-muted-foreground">{moved ? (s.redirectOk ? "Your old feed forwards here, so each app moves over on its own." : "Your show is in these already, by your old feed: forwarding it (above) moves each one here. List it only where it isn't yet.") : "Where people find and follow your show. List it once in each; new episodes reach them on their own."}</p>
           {/* The count on its own line, so it doesn't wrap mid-phrase (UI/UX, 21 Nov). */}
           {listed > 0 && <p className="mt-1 text-xs font-medium text-foreground" data-testid="hosting-dir-count">Live on {listed} · {DIRS.length} apps</p>}
         </div>
@@ -556,12 +565,22 @@ function Directories({ h, ready, onSaved, youtube }: { h: Hosted; ready: boolean
         {DIRS.filter((d) => d.key !== "youtube").map(renderRow)}
       </ul>
     </div>
-    {/* YouTube, in one place: the audio podcast on YouTube Music, and the episodes as videos on the channel. */}
+    {/* YouTube is two different places, one plain line each (Andrew, 23 Nov). The choices live in Settings → Publishing. */}
     <div className="mt-4 rounded-2xl border border-border bg-card p-4 shadow-sm" data-testid="hosting-youtube-section">
-      <h2 className="text-sm font-semibold">YouTube</h2>
-      <p className="text-xs text-muted-foreground">Your show on YouTube two ways: as an audio podcast on YouTube Music, and your episodes as videos on your channel.</p>
-      <ul className="mt-1 divide-y divide-border">{renderRow(DIRS.find((d) => d.key === "youtube")!)}</ul>
-      {youtube}
+      <h2 className="text-base font-semibold">YouTube</h2>
+      <p className="text-sm text-muted-foreground">Two different places on YouTube.</p>
+      <ul className="mt-1 divide-y divide-border">
+        {renderRow({ ...DIRS.find((d) => d.key === "youtube")!, reach: "Your podcast as audio, in the YouTube Music app. Set up once." })}
+        <li className="flex flex-wrap items-center gap-3 py-3" data-testid="hosting-yt-channel">
+          <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-border"><SiYoutube className="h-5 w-5" style={{ color: "#FF0000" }} /></span>
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-semibold">Your YouTube channel</span>
+            <span className="block text-xs text-muted-foreground">Each episode with video, as a video. {s.youtubeMode === "always" ? "Posts every one when you publish." : "Asks each time you publish."}</span>
+          </span>
+          <button type="button" onClick={onSettings} className="basis-full pl-12 text-left text-sm font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8] sm:basis-auto sm:pl-0" data-testid="hosting-yt-change">Change in Settings</button>
+        </li>
+      </ul>
+      {h.episodes.some((e) => e.hasVideo) && youtube}
     </div>
     </>
   );
@@ -591,10 +610,10 @@ function YouTubeEpisodes({ h, ready, onDone, embedded = false }: { h: Hosted; re
   const sel = "h-9 rounded-md border border-input bg-background px-2 text-sm";
   return (
     <div className={embedded ? "mt-3 border-t border-border pt-3" : "rounded-2xl border border-border bg-card p-4 shadow-sm"} data-testid="hosting-youtube">
-      <h2 className="text-sm font-semibold">Your episodes as videos on YouTube</h2>
+      <h2 className="text-sm font-semibold">Your episodes with video</h2>
       <p className="text-xs text-muted-foreground">Posted to your channel with their title, notes and picture. {ready ? "Your channel is connected on the " : "Connect your channel on the "}<a href="/host/dashboard/social" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Social</a> screen.</p>
-      {/* The choice, once: ask each time (a tick box when publishing) or always post. */}
-      <div className="mt-3 flex flex-wrap items-center gap-2 text-sm">
+      {/* The choice, once: ask each time (a tick box when publishing) or always post. In Settings → Publishing when embedded. */}
+      <div className={`mt-3 flex-wrap items-center gap-2 text-sm ${embedded ? "hidden" : "flex"}`}>
         <span className="text-muted-foreground">When I publish an episode with video:</span>
         <select value={s.youtubeMode} onChange={(e) => void setShow({ youtubeMode: e.target.value })} className={sel} aria-label="When I publish" data-testid="hosting-yt-mode">
           <option value="ask">Ask me each time</option>
@@ -836,6 +855,20 @@ function ArtworkButton({ show, onDone }: { show: HostedShowRow; onDone: () => vo
   const { toast } = useToast();
   const input = useRef<HTMLInputElement>(null);
   const [busy, setBusy] = useState(false);
+  // Change cover opens a square crop first (Andrew, 23 Nov: "Change cover with a square crop"). Too small for Apple: said
+  // before the crop, never blown up to fit.
+  const [cropSrc, setCropSrc] = useState<string | null>(null);
+  const closeCrop = () => { if (cropSrc) URL.revokeObjectURL(cropSrc); setCropSrc(null); if (input.current) input.current.value = ""; };
+  const pick = async (file: File) => {
+    let side = 0;
+    try { const bmp = await createImageBitmap(file); side = Math.min(bmp.width, bmp.height); bmp.close(); } catch { side = -1; }
+    if (side >= 0 && side < 1400) {
+      if (input.current) input.current.value = "";
+      return toast({ title: "That picture is too small", description: `It's ${side} pixels on its short side. Apple and Spotify ask for at least 1400 × 1400.`, variant: "destructive" });
+    }
+    if (side < 0) return void go(file); // a picture the browser can't read (HEIC): the server judges it
+    setCropSrc(URL.createObjectURL(file));
+  };
   const go = async (file: File) => {
     setBusy(true);
     try {
@@ -853,7 +886,8 @@ function ArtworkButton({ show, onDone }: { show: HostedShowRow; onDone: () => vo
   };
   return (
     <>
-      <input ref={input} id={`hosting-art-input-${show.id}`} type="file" accept="image/jpeg,image/png" className="hidden" onChange={(e) => e.target.files?.[0] && void go(e.target.files[0])} />
+      <input ref={input} id={`hosting-art-input-${show.id}`} type="file" accept="image/jpeg,image/png" className="hidden" onChange={(e) => e.target.files?.[0] && void pick(e.target.files[0])} />
+      <PhotoCropDialog kind="cover" open={!!cropSrc} imageSrc={cropSrc} onCancel={closeCrop} onConfirm={(blob) => { closeCrop(); void go(new File([blob], "cover.jpg", { type: "image/jpeg" })); }} />
       <button type="button" onClick={() => input.current?.click()} disabled={busy} className="group relative h-32 w-32 shrink-0 overflow-hidden rounded-2xl border border-border bg-muted" title="Cover art: square JPG or PNG, 1400 to 3000 pixels" data-testid="hosting-artwork">
         {show.artworkUrl ? <img src={show.artworkUrl} alt="" className="h-full w-full object-cover" /> : <span className="flex h-full flex-col items-center justify-center gap-1 text-xs font-medium text-muted-foreground"><ImagePlus className="h-6 w-6" /> Cover art</span>}
         <span className={`absolute inset-0 flex items-center justify-center bg-black/50 text-xs font-semibold text-white transition-opacity ${busy ? "opacity-100" : "opacity-0 group-hover:opacity-100"}`}>{busy ? <Loader2 className="h-5 w-5 animate-spin" /> : "Change"}</span>
@@ -862,7 +896,7 @@ function ArtworkButton({ show, onDone }: { show: HostedShowRow; onDone: () => vo
   );
 }
 
-function ShowForm({ show, feedUrl, categories, onSaved, onDeleted, focus = "" }: { show: HostedShowRow; feedUrl: string; categories: Record<string, string[]>; onSaved: () => void; onDeleted: () => void; focus?: string }) {
+function ShowForm({ show, onMove, categories, onSaved, onDeleted, focus = "" }: { show: HostedShowRow; onMove: () => void; categories: Record<string, string[]>; onSaved: () => void; onDeleted: () => void; focus?: string }) {
   const { toast } = useToast();
   // Deleting: they type the show's name to be sure.
   const [deleting, setDeleting] = useState(false);
@@ -882,12 +916,22 @@ function ShowForm({ show, feedUrl, categories, onSaved, onDeleted, focus = "" }:
   });
   const label = "block text-xs font-semibold text-muted-foreground";
   const dirty = Object.keys(f).length > 0;
-  const toMove = () => { setDeleting(false); setSure(""); document.getElementById("move-host")?.scrollIntoView({ behavior: "smooth", block: "start" }); };
+  const toMove = () => { setDeleting(false); setSure(""); onMove(); };
   return (
     <div className="space-y-4" data-testid="hosting-details">
       <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-        <p className="mb-3 text-sm text-muted-foreground">What Apple, Spotify and every podcast app show about your podcast.</p>
-        <div className="grid gap-3 sm:grid-cols-2">
+        <h2 className="text-base font-semibold">Show details</h2>
+        <p className="mb-4 mt-0.5 text-sm text-muted-foreground">What Apple, Spotify and every podcast app show about your podcast.</p>
+        <div className="flex flex-col gap-5 sm:flex-row sm:items-start">
+        {/* The cover, changed right here (a square crop first). */}
+        <div className="mx-auto w-40 shrink-0 text-center sm:mx-0" data-testid="hosting-details-cover">
+          <button type="button" onClick={() => document.getElementById(`hosting-art-input-${show.id}`)?.click()} className="block aspect-square w-40 overflow-hidden rounded-2xl border border-border bg-muted" aria-label="Change cover">
+            {show.artworkUrl ? <img src={show.artworkUrl} alt="" className="h-full w-full object-cover" /> : <span className="flex h-full flex-col items-center justify-center gap-1 text-xs font-medium text-muted-foreground"><ImagePlus className="h-7 w-7" /> No cover yet</span>}
+          </button>
+          <Button type="button" variant="outline" onClick={() => document.getElementById(`hosting-art-input-${show.id}`)?.click()} className="mt-2.5 h-9 w-full rounded-full font-semibold text-[#053877] dark:text-[#8fb5e8]" data-testid="hosting-change-cover">{show.artworkUrl ? "Change cover" : "Add a cover"}</Button>
+          <p className="mt-1.5 text-xs leading-snug text-muted-foreground">Square, at least 1400&nbsp;×&nbsp;1400. We crop it for&nbsp;you.</p>
+        </div>
+        <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-2">
           <label className={`${label} sm:col-span-2`}>Show name<Input autoFocus={focus === "title"} value={v.title} onChange={(e) => set("title", e.target.value)} className="mt-1" /></label>
           <label className={`${label} sm:col-span-2`}>Description<Textarea autoFocus={focus === "description"} value={v.description} onChange={(e) => set("description", e.target.value)} rows={4} className="mt-1" placeholder="What the show is about, who it's for, and who hosts it." /></label>
           <label className={label}>Host or author<Input value={v.author} onChange={(e) => set("author", e.target.value)} className="mt-1" /></label>
@@ -909,13 +953,13 @@ function ShowForm({ show, feedUrl, categories, onSaved, onDeleted, focus = "" }:
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={v.showType === "serial"} onChange={(e) => set("showType", e.target.checked ? "serial" : "episodic")} /> Listen in order (a series)</label>
           <label className="flex items-start gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={v.aiVoice} onChange={(e) => set("aiVoice", e.target.checked)} className="mt-1" data-testid="hosting-ai-voice" /><span>AI voices (a synthetic host or narrator)<span className="block text-xs text-muted-foreground">Listen Notes doesn't list AI-voiced shows, so we won't send this one there.</span></span></label>
         </div>
+        </div>
         <div className="mt-4 flex justify-end gap-2">
           {dirty && <Button variant="outline" onClick={() => setF({})}>Undo changes</Button>}
           <Button onClick={() => save.mutate()} disabled={save.isPending || !dirty} className="bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-details-save">{save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}</Button>
         </div>
       </div>
-      <MoveHost show={show} feedUrl={feedUrl} onSaved={onSaved} />
-      {/* Deleting the show: the apps first (the help says how), then here; its feed stops. Moving hosts is the card above. */}
+      {/* Deleting the show: the apps first (the help says how), then here; its feed stops. Moving hosts is the Move tab. */}
       <div className="rounded-2xl border border-destructive/30 p-4">
         {deleting ? (
           <div className="space-y-2">
@@ -1174,7 +1218,7 @@ function EpisodePage({ ep, show, youtubeReady, production, onDirectories, onBack
     try {
       await apiRequest("PATCH", `/api/host/hosting/episodes/${ep.id}`, { stage: st });
       onSaved();
-      toast(st === "final" ? { title: show.autoPublish ? "Final draft: it's going out" : "Final draft", description: show.autoPublish ? "Auto-post is on, so it's being published to your feed and YouTube." : "Press Publish when you're happy with it." } : { title: "Back in post-production" });
+      toast(st === "final" ? { title: show.autoPublish ? "Final draft: it's going out" : "Final draft", description: show.autoPublish ? "Your show publishes by itself (Settings → Publishing), so it's going out now." : "Press Publish when you're happy with it." } : { title: "Back in post-production" });
     } catch (e) { toast({ title: "Couldn't change that", description: (e as Error).message.replace(/^\d+:\s*/, ""), variant: "destructive" }); }
   };
   return (
@@ -1321,42 +1365,96 @@ function EpisodePage({ ep, show, youtubeReady, production, onDirectories, onBack
 }
 
 /** How the show's episodes go out. (The intro, outro and footer are done in post-production for now, so they are not here.) */
-function DefaultsPanel({ h, onSaved }: { h: Hosted; onSaved: () => void }) {
+/** One answer in a two-way question: a card with a dot, its name, and one line under it. */
+function Choice({ on, title, sub, badge, disabled, onPick, testid }: { on: boolean; title: string; sub: string; badge?: string; disabled?: boolean; onPick: () => void; testid: string }) {
+  return (
+    <button type="button" role="radio" aria-checked={on} disabled={disabled} onClick={onPick} className={`flex w-full items-start gap-3 rounded-xl border-[1.5px] p-3.5 text-left transition-colors disabled:opacity-60 ${on ? "border-[#053877] bg-[#053877]/[0.04] dark:border-[#8fb5e8] dark:bg-white/5" : "border-border hover:border-[#053877]/40"}`} data-testid={testid}>
+      <span className={`mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-2 ${on ? "border-[#053877] dark:border-[#8fb5e8]" : "border-muted-foreground/50"}`}>{on && <span className="h-2 w-2 rounded-full bg-[#053877] dark:bg-[#8fb5e8]" />}</span>
+      <span className="min-w-0">
+        <span className="flex flex-wrap items-center gap-2 text-sm font-semibold">{title}{badge && <span className="rounded-full bg-[#F0A71F]/20 px-2 py-px text-[11px] font-semibold text-[#8a5a00] dark:text-[#F0A71F]">{badge}</span>}</span>
+        <span className="mt-0.5 block text-sm text-muted-foreground">{sub}</span>
+      </span>
+    </button>
+  );
+}
+
+/** The picture on each clip layout card. */
+function LayoutPic({ v }: { v: DefaultLayout }) {
+  const a = "rounded-[3px] bg-[#053877]", b = "rounded-[3px] bg-[#F0A71F]";
+  return (
+    <span className="flex h-14 w-10 items-center justify-center rounded-md bg-muted/70 p-1" aria-hidden>
+      {v === "stacked" ? <span className="flex h-full w-full flex-col gap-1"><span className={`flex-1 ${a}`} /><span className={`flex-1 ${b}`} /></span>
+        : v === "side" ? <span className="flex h-6 w-full gap-1"><span className={`flex-1 ${a}`} /><span className={`flex-1 ${b}`} /></span>
+        : v === "single" ? <span className={`relative h-full w-full ${a}`}><span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-emerald-400" /></span>
+        : <Sparkles className="h-5 w-5 text-[#053877] dark:text-[#8fb5e8]" />}
+    </span>
+  );
+}
+
+/**
+ * Publishing: each question asked once, in plain words (Andrew, 23 Nov: "Yes, build it"). When an episode is ready
+ * (autoPublish), YouTube (youtubeMode, youtubePrivacy) and the clip layout Make clips starts on. Same fields as before.
+ */
+function PublishingPanel({ h, youtubeReady, onSaved, onDirectories }: { h: Hosted; youtubeReady: boolean; onSaved: () => void; onDirectories: () => void }) {
   const { toast } = useToast();
   const show = h.show;
   const [busy, setBusy] = useState(false);
-  const flip = async (on: boolean) => {
+  const patch = async (body: Record<string, unknown>, done: { title: string; description?: string }) => {
     setBusy(true);
-    try { await apiRequest("PATCH", `/api/host/hosting/shows/${show.id}`, { autoPublish: on }); onSaved(); toast({ title: on ? "Auto-post is on" : "Auto-post is off", description: on ? "When post-production is done, an episode goes out by itself." : "You press Publish on each episode." }); }
+    try { await apiRequest("PATCH", `/api/host/hosting/shows/${show.id}`, body); onSaved(); toast(done); }
     catch (e) { toast({ title: "Couldn't change that", description: (e as Error).message, variant: "destructive" }); } finally { setBusy(false); }
   };
   const layoutDefault = useClipLayoutDefault();
+  const card = "rounded-2xl border border-border bg-card p-5 shadow-sm";
+  const ask = show.youtubeMode !== "always";
   return (
-    <div className="space-y-4" data-testid="hosting-defaults">
-      <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-        <h2 className="text-sm font-semibold">How episodes go out</h2>
-        <p className="mt-0.5 text-sm text-muted-foreground">An episode goes from <b className="text-foreground">In post-production</b> to <b className="text-foreground">Final draft</b> to <b className="text-foreground">Live</b>. Publishing puts it in your feed, so Apple, Spotify and every directory pick it up, and on YouTube if it has video.</p>
-        <p className="mt-2 text-sm text-muted-foreground" data-testid="hosting-bookends-note">Your intro and outro are added in post-production.</p>
-        <label className="mt-4 flex items-start gap-3 rounded-xl border border-border p-4" data-testid="hosting-autopublish">
-          <input type="checkbox" className="mt-1 h-4 w-4" checked={!!show.autoPublish} disabled={busy} onChange={(e) => void flip(e.target.checked)} />
-          <span className="min-w-0 text-sm">
-            <span className="block font-semibold">Post to directories and YouTube by itself</span>
-            <span className="mt-0.5 block text-muted-foreground">When post-production is done, the episode goes out without you pressing Publish.</span>
-            <span className="mt-1.5 block text-xs font-semibold text-[#8a5a00] dark:text-[#F0A71F]">We recommend publishing by hand for a while, so you see each one before it goes out.</span>
-          </span>
-        </label>
-        {/* Shows with two people on screen: the layout Make clips starts on. Hidden until the server answers. */}
-        {layoutDefault.value !== null && (
-          <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl border border-border p-3" role="group" aria-label="My shows are" data-testid="hosting-layout-default">
-            <span className="text-sm font-semibold">My shows are</span>
-            <div className="flex flex-wrap items-center gap-1 rounded-full bg-muted/60 p-1 text-xs font-semibold">
-              {([["", "Automatic"], ["stacked", "Stacked"], ["side", "Side by side"], ["single", "Follow the speaker"]] as [DefaultLayout, string][]).map(([v, label]) => (
-                <button key={v || "auto"} type="button" onClick={() => layoutDefault.save.mutate(v, { onSuccess: () => toast({ title: "Saved", description: "Make clips starts on this for every show." }), onError: () => toast({ title: "Couldn't save that", variant: "destructive" }) })} aria-pressed={layoutDefault.value === v} className={`rounded-full px-3 py-1 ${layoutDefault.value === v ? "bg-[#F0A71F] text-[#1a1200]" : "text-muted-foreground hover:text-foreground"}`} data-testid={`hosting-layout-${v || "auto"}`}>{label}</button>
-              ))}
-            </div>
-          </div>
-        )}
+    <div className="space-y-4" data-testid="hosting-publishing">
+      <div className={card} role="radiogroup" aria-label="When an episode is ready" data-testid="hosting-autopublish">
+        <h2 className="text-base font-semibold">When an episode is ready</h2>
+        <p className="mt-0.5 text-sm text-muted-foreground">Ready means post-production is done. Publishing puts it in Apple, Spotify and every podcast&nbsp;app.</p>
+        <div className="mt-3.5 grid gap-3 sm:grid-cols-2">
+          <Choice on={!show.autoPublish} disabled={busy} onPick={() => show.autoPublish && void patch({ autoPublish: false }, { title: "You press Publish", description: "You see each episode before it goes out." })} title="I press Publish" badge="Recommended" sub="You see each episode before it goes out." testid="hosting-publish-hand" />
+          <Choice on={!!show.autoPublish} disabled={busy} onPick={() => !show.autoPublish && void patch({ autoPublish: true }, { title: "It publishes by itself", description: "Each episode goes out as soon as post-production is done." })} title="Publish it by itself" sub="It goes out as soon as it's ready." testid="hosting-publish-auto" />
+        </div>
       </div>
+
+      <div className={card} role="radiogroup" aria-label="YouTube" data-testid="hosting-publish-youtube">
+        <h2 className="text-base font-semibold">YouTube</h2>
+        <p className="mt-0.5 text-sm text-muted-foreground">Episodes that have video can go to your YouTube channel as videos&nbsp;too.</p>
+        <div className="mt-3.5 grid gap-3 sm:grid-cols-2">
+          <Choice on={ask} disabled={busy} onPick={() => !ask && void patch({ youtubeMode: "ask" }, { title: "We'll ask each time", description: "A tick box when you publish." })} title="Ask me each time" sub="A tick box when you publish." testid="hosting-yt-ask" />
+          <Choice on={!ask} disabled={busy} onPick={() => ask && void patch({ youtubeMode: "always" }, { title: "Every video goes up", description: "Each episode with video goes to your channel when it's published." })} title="Always post the video" sub="Every episode with video goes up." testid="hosting-yt-always" />
+        </div>
+        <div className="mt-3.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-sm">
+          <label className="flex items-center gap-2 text-muted-foreground">Who can see them
+            <select value={show.youtubePrivacy} disabled={busy} onChange={(e) => void patch({ youtubePrivacy: e.target.value }, { title: e.target.value === "unlisted" ? "Unlisted: only people with the link" : "Public: anyone on YouTube" })} className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground" data-testid="hosting-yt-privacy">
+              <option value="public">Public</option>
+              <option value="unlisted">Unlisted (only with the link)</option>
+            </select>
+          </label>
+          <span className="text-muted-foreground">{youtubeReady ? <>YouTube Music (audio) is under <button type="button" onClick={onDirectories} className="font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">Directories</button></> : <>First, <a href="/host/dashboard/social" className="font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">connect your channel</a> on the Social screen</>}</span>
+        </div>
+      </div>
+
+      {/* Shows with two people on screen: the layout Make clips starts on. Hidden until the server answers. */}
+      {layoutDefault.value !== null && (
+        <div className={card} role="radiogroup" aria-label="Clip layout" data-testid="hosting-layout-default">
+          <h2 className="text-base font-semibold">Clip layout</h2>
+          <p className="mt-0.5 text-sm text-muted-foreground">When two people are on screen, how your clips start. You can change any clip in&nbsp;Pōstify.</p>
+          <div className="mt-3.5 grid grid-cols-2 gap-3 lg:grid-cols-4">
+            {([["", "We pick", "fits the video"], ["stacked", "One above the other", ""], ["side", "Side by side", ""], ["single", "Whoever's talking", "fills the screen"]] as [DefaultLayout, string, string][]).map(([v, label, sub]) => {
+              const on = layoutDefault.value === v;
+              return (
+                <button key={v || "auto"} type="button" role="radio" aria-checked={on} onClick={() => !on && layoutDefault.save.mutate(v, { onSuccess: () => toast({ title: "Saved", description: "Make clips starts on this for every show." }), onError: () => toast({ title: "Couldn't save that", variant: "destructive" }) })} className={`flex flex-col items-center gap-2 rounded-xl border-[1.5px] px-2 py-3.5 text-center transition-colors ${on ? "border-[#053877] bg-[#053877]/[0.04] dark:border-[#8fb5e8] dark:bg-white/5" : "border-border hover:border-[#053877]/40"}`} data-testid={`hosting-layout-${v || "auto"}`}>
+                  <LayoutPic v={v} />
+                  <span className="text-sm font-semibold leading-tight">{label}</span>
+                  {sub && <span className="-mt-1.5 text-xs text-muted-foreground">{sub}</span>}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

@@ -3,7 +3,7 @@ import { apiRequest } from "@/lib/queryClient";
 
 /**
  * The account-wide default for two people on screen ("My shows are: Stacked / Side by side /
- * Follow the speaker"). "" is Automatic. Set in Podcast > Settings > Defaults; Make clips lights
+ * Follow the speaker"). "" is Automatic. Set in Podcast > Settings > Publishing (Clip layout); Make clips lights
  * it when the recording has no layout of its own and nothing has been picked on screen.
  * The server field is clipLayoutDefault; until it answers, `value` is null and the setting stays hidden.
  */

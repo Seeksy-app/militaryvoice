@@ -11,9 +11,12 @@ interface Props {
   imageSrc: string | null;
   onCancel: () => void;
   onConfirm: (blob: Blob) => void;
+  /** "cover": a podcast's square cover art (square frame, 1400 to 3000 pixels out, as Apple asks). Default: a round photo. */
+  kind?: "photo" | "cover";
 }
 
-export function PhotoCropDialog({ open, imageSrc, onCancel, onConfirm }: Props) {
+export function PhotoCropDialog({ open, imageSrc, onCancel, onConfirm, kind = "photo" }: Props) {
+  const cover = kind === "cover";
   const [crop, setCrop] = useState<Point>({ x: 0, y: 0 });
   const [zoom, setZoom] = useState(1);
   const [croppedArea, setCroppedArea] = useState<Area | null>(null);
@@ -49,7 +52,7 @@ export function PhotoCropDialog({ open, imageSrc, onCancel, onConfirm }: Props) 
     if (!imageSrc || !croppedArea) return;
     setBusy(true);
     try {
-      const blob = await getCroppedImageBlob(imageSrc, croppedArea, undefined, fill);
+      const blob = await getCroppedImageBlob(imageSrc, croppedArea, cover ? Math.max(1400, Math.min(3000, Math.round(croppedArea.width))) : undefined, fill);
       onConfirm(blob);
     } finally {
       setBusy(false);
@@ -65,9 +68,9 @@ export function PhotoCropDialog({ open, imageSrc, onCancel, onConfirm }: Props) 
     >
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
-          <DialogTitle>Adjust your photo</DialogTitle>
+          <DialogTitle>{cover ? "Crop your cover" : "Adjust your photo"}</DialogTitle>
           <DialogDescription>
-            Drag to frame your face and use the slider to zoom. A logo? Slide left until all of it fits.
+            {cover ? "Drag to place it in the square and use the slider to zoom. Slide left to fit all of it." : "Drag to frame your face and use the slider to zoom. A logo? Slide left until all of it fits."}
           </DialogDescription>
         </DialogHeader>
 
@@ -78,7 +81,7 @@ export function PhotoCropDialog({ open, imageSrc, onCancel, onConfirm }: Props) 
               crop={crop}
               zoom={zoom}
               aspect={1}
-              cropShape="round"
+              cropShape={cover ? "rect" : "round"}
               showGrid={false}
               // The photo covers the frame rather than fitting inside it. With
               // "contain" a portrait photo sat exactly in the circle at zoom 1
@@ -124,7 +127,7 @@ export function PhotoCropDialog({ open, imageSrc, onCancel, onConfirm }: Props) 
             Cancel
           </Button>
           <Button type="button" onClick={handleUse} disabled={busy || !croppedArea} data-testid="button-crop-use">
-            {busy ? "Applying…" : "Use this photo"}
+            {busy ? "Applying…" : cover ? "Use this cover" : "Use this photo"}
           </Button>
         </DialogFooter>
       </DialogContent>
