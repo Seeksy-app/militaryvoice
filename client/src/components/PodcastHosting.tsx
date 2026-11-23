@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { durationOf, uploadToStorage } from "@/lib/upload";
@@ -331,7 +332,7 @@ export function PodcastHosting() {
           ))}
         </div>
       )}
-      {tab === "publishing" && <PublishingPanel key={s.id} h={h} youtubeReady={!!q.data?.youtubeReady} onSaved={refresh} onDirectories={() => go("directories")} />}
+      {tab === "publishing" && <PublishingPanel key={s.id} h={h} youtubeReady={!!q.data?.youtubeReady} onSaved={refresh} />}
       {tab === "move" && <MoveHost show={s} feedUrl={h.feedUrl} onSaved={refresh} />}
       {tab === "sponsors" && <SponsorsPanel key={`${s.id}-${spotFor ?? 0}`} h={h} onSaved={refresh} preset={spotFor} onPresetUsed={() => setSpotFor(null)} />}
 
@@ -357,7 +358,7 @@ export function PodcastHosting() {
           ) : null}
           {/* A moved show is in the apps already, by its old feed: forwarding that feed moves them all here. */}
           {s.importedFrom && <MoveSubscribers h={h} onDone={refresh} />}
-          <Directories h={h} ready={ready} onSaved={refresh} onSettings={() => go("publishing")} youtube={<YouTubeEpisodes embedded h={h} ready={!!q.data?.youtubeReady} onDone={refresh} />} />
+          <Directories h={h} ready={ready} youtubeReady={!!q.data?.youtubeReady} onSaved={refresh} youtube={<YouTubeEpisodes embedded h={h} ready={!!q.data?.youtubeReady} onDone={refresh} />} />
         </>
       )}
 
@@ -436,7 +437,7 @@ const DIR_ICON: Record<string, { icon: IconType; color: string }> = {
   listennotes: { icon: ListenNotesMark, color: "#2D6CDF" },
 };
 
-function Directories({ h, ready, onSaved, onSettings, youtube }: { h: Hosted; ready: boolean; onSaved: () => void; onSettings: () => void; youtube?: React.ReactNode }) {
+function Directories({ h, ready, youtubeReady, onSaved, youtube }: { h: Hosted; ready: boolean; youtubeReady: boolean; onSaved: () => void; youtube?: React.ReactNode }) {
   const { toast } = useToast();
   const s = h.show;
   const moved = !!s.importedFrom;
@@ -564,7 +565,7 @@ function Directories({ h, ready, onSaved, onSettings, youtube }: { h: Hosted; re
         {DIRS.filter((d) => d.key !== "youtube").map(renderRow)}
       </ul>
     </div>
-    {/* YouTube is two different places, one plain line each (Andrew, 23 Nov). The choices live in Settings → Publishing. */}
+    {/* YouTube is two different places, one plain line each (Andrew, 23 Nov). Whether a video goes up is ticked in each episode's publish box. */}
     <div className="mt-4 rounded-2xl border border-border bg-card p-4 shadow-sm" data-testid="hosting-youtube-section">
       <h2 className="text-base font-semibold">YouTube</h2>
       <p className="text-sm text-muted-foreground">Two different places on YouTube.</p>
@@ -574,9 +575,9 @@ function Directories({ h, ready, onSaved, onSettings, youtube }: { h: Hosted; re
           <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-border"><SiYoutube className="h-5 w-5" style={{ color: "#FF0000" }} /></span>
           <span className="min-w-0 flex-1">
             <span className="block text-sm font-semibold">Your YouTube channel</span>
-            <span className="block text-xs text-muted-foreground">Each episode with video, as a video. {s.youtubeMode === "always" ? "Posts every one when you publish." : "Asks each time you publish."}</span>
+            <span className="block text-xs text-muted-foreground">Each episode with video, as a video. {youtubeReady ? "Ticked when you publish; untick it for one\u00a0episode." : "Connect your channel first."}</span>
           </span>
-          <button type="button" onClick={onSettings} className="basis-full pl-12 text-left text-sm font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8] sm:basis-auto sm:pl-0" data-testid="hosting-yt-change">Change in Settings</button>
+          {!youtubeReady && <a href="/host/dashboard/social" className="basis-full pl-12 text-left text-sm font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8] sm:basis-auto sm:pl-0" data-testid="hosting-yt-connect">Connect YouTube</a>}
         </li>
       </ul>
       {h.episodes.some((e) => e.hasVideo) && youtube}
@@ -611,7 +612,7 @@ function YouTubeEpisodes({ h, ready, onDone, embedded = false }: { h: Hosted; re
     <div className={embedded ? "mt-3 border-t border-border pt-3" : "rounded-2xl border border-border bg-card p-4 shadow-sm"} data-testid="hosting-youtube">
       <h2 className="text-sm font-semibold">Your episodes with video</h2>
       <p className="text-xs text-muted-foreground">Posted to your channel with their title, notes and picture. {ready ? "Your channel is connected on the " : "Connect your channel on the "}<a href="/host/dashboard/social" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Social</a> screen.</p>
-      {/* The choice, once: ask each time (a tick box when publishing) or always post. In Settings → Publishing when embedded. */}
+      {/* Standalone only: embedded in Directories, the choice is the tick in each episode's publish box. */}
       <div className={`mt-3 flex-wrap items-center gap-2 text-sm ${embedded ? "hidden" : "flex"}`}>
         <span className="text-muted-foreground">When I publish an episode with video:</span>
         <select value={s.youtubeMode} onChange={(e) => void setShow({ youtubeMode: e.target.value })} className={sel} aria-label="When I publish" data-testid="hosting-yt-mode">
@@ -1144,7 +1145,11 @@ function EpisodePage({ ep, show, youtubeReady, production, onDirectories, onBack
   const fileIn = useRef<HTMLInputElement>(null);
   const ytState = (() => { try { return ep.youtube ? (JSON.parse(ep.youtube) as { state?: string }).state ?? "" : ""; } catch { return ""; } })();
   const offerYt = ep.status === "draft" && !!ep.hasVideo && ytState !== "sent" && !ep.ytLibrary;
+  // The YouTube tick starts from the show's saved choice (youtubeMode; a show that never chose stays unticked). Publishing
+  // with it ticked makes it the show's choice; unticked leaves just this episode off. Who can see it is the show's too
+  // (youtubePrivacy), changed here. Nothing changes for a show until they publish (Andrew, 23 Nov 2026: "Yes, build both").
   const ytOn = yt ?? (youtubeReady && show.youtubeMode === "always" && ytState !== "skipped");
+  const [privacy, setPrivacy] = useState(show.youtubePrivacy || "public");
   const v = { ...ep, ...f } as Ep;
   const set = (k: string, val: unknown) => setF((x) => ({ ...x, [k]: val }));
   // People type notes in plain words: an imported episode's HTML is shown as text, and kept as it was unless they change it.
@@ -1161,7 +1166,15 @@ function EpisodePage({ ep, show, youtubeReady, production, onDirectories, onBack
       if (status) body.status = status;
       if (status === "published" && when === "later" && at) body.publishedAt = new Date(at).toISOString();
       if (status === "published" && ep.status !== "published" && when === "now") body.publishedAt = new Date().toISOString();
-      if (status === "published" && offerYt && youtubeReady) body.youtube = ytOn;
+      if (status === "published" && offerYt && youtubeReady) {
+        body.youtube = ytOn;
+        // Remembered for the show, before the episode goes (it's posted with the show's privacy). Ticking it sticks
+        // (the next one starts ticked); unticking leaves just this one off, as Directories says.
+        const showPatch: Record<string, unknown> = {};
+        if (ytOn && show.youtubeMode !== "always") showPatch.youtubeMode = "always";
+        if (ytOn && privacy !== show.youtubePrivacy) showPatch.youtubePrivacy = privacy;
+        if (Object.keys(showPatch).length) await apiRequest("PATCH", `/api/host/hosting/shows/${show.id}`, showPatch);
+      }
       const out = (await (await apiRequest("PATCH", `/api/host/hosting/episodes/${ep.id}`, body)).json()) as Ep & { youtubeError?: string };
       if (out.youtubeError) toast({ title: "Published, but not on YouTube", description: out.youtubeError, variant: "destructive" });
       onSaved();
@@ -1365,9 +1378,26 @@ function EpisodePage({ ep, show, youtubeReady, production, onDirectories, onBack
                     <span className="mt-1 block text-[11px] font-normal">{at ? `Goes out ${new Date(at).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} (${Intl.DateTimeFormat().resolvedOptions().timeZone}). ` : "Leave it empty to publish right away. "}{at && <button type="button" onClick={() => setAt("")} className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Clear</button>}</span>
                   </label>
                   {ep.ytLibrary && <p className="rounded-xl border border-border px-3 py-2 text-xs text-muted-foreground">Already on YouTube: you posted it from your Library on {dateOf(ep.ytLibrary)}.</p>}
-                  {offerYt && (youtubeReady
-                    ? <label className="flex items-center gap-2"><input type="checkbox" checked={ytOn} onChange={(e) => setYt(e.target.checked)} /> <span>Also post it to YouTube <span className="text-muted-foreground">({show.youtubePrivacy === "unlisted" ? "unlisted" : "public"})</span></span></label>
-                    : <span className="text-xs text-muted-foreground">Want it on YouTube too? <a href="/host/dashboard/social" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Connect YouTube</a> first.</span>)}
+                  {/* Where it goes: every podcast app always; their YouTube channel when it has video, ticked from the show's choice. */}
+                  <div className="rounded-xl border border-border p-3" data-testid="hosting-goes-to">
+                    <p className="text-xs font-semibold text-muted-foreground">It goes to</p>
+                    <ul className="mt-2 space-y-2 text-sm">
+                      <li className="flex items-center gap-2"><input type="checkbox" checked disabled aria-label="Every podcast app" className="h-4 w-4" /> <span title="Every podcast app">Apple, Spotify and&nbsp;more</span></li>
+                      {offerYt && (youtubeReady ? (
+                        <li className="flex flex-wrap items-center gap-2">
+                          <label className="flex items-center gap-2"><input type="checkbox" checked={ytOn} onChange={(e) => setYt(e.target.checked)} className="h-4 w-4" data-testid="hosting-publish-yt" /> Your YouTube channel</label>
+                          <select value={privacy} disabled={!ytOn} onChange={(e) => setPrivacy(e.target.value)} aria-label="Who can see it on YouTube" className="ml-auto h-8 rounded-md border border-input bg-background px-1.5 text-xs disabled:opacity-50" data-testid="hosting-publish-yt-privacy">
+                            <option value="public">Public</option>
+                            <option value="unlisted">Unlisted</option>
+                            <option value="private">Private</option>
+                          </select>
+                        </li>
+                      ) : (
+                        <li className="text-xs text-muted-foreground">Your YouTube channel too? <a href="/host/dashboard/social" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Connect YouTube</a> first.</li>
+                      ))}
+                    </ul>
+                    {offerYt && youtubeReady && !ytOn && <p className="mt-2 text-[11px] text-muted-foreground">Tick YouTube to post this one there&nbsp;too.</p>}
+                  </div>
                   <Button onClick={() => void save("published")} disabled={!v.title.trim() || (!!at && Date.parse(at) < Date.now() - 60_000) || (!hasAudio && !ep.audioJob && !ep.recordingId)} className="w-full gap-1.5 bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-publish"><Send className="h-4 w-4" /> {when === "later" ? "Schedule it" : "Publish now"}</Button>
                   {!hasAudio && !ep.audioJob && !ep.recordingId && <p className="text-xs text-muted-foreground">Add the audio first, then you can publish.</p>}
                   <Button variant="outline" onClick={() => void save()} disabled={!dirty} className="w-full">Save draft</Button>
@@ -1395,12 +1425,12 @@ function EpisodePage({ ep, show, youtubeReady, production, onDirectories, onBack
 
 /** How the show's episodes go out. (The intro, outro and footer are done in post-production for now, so they are not here.) */
 /** One answer in a two-way question: a card with a dot, its name, and one line under it. */
-function Choice({ on, title, sub, badge, disabled, onPick, testid }: { on: boolean; title: string; sub: string; badge?: string; disabled?: boolean; onPick: () => void; testid: string }) {
+function Choice({ on, title, sub, badge, disabled, onPick, testid }: { on: boolean; title: string; sub: string; badge?: React.ReactNode; disabled?: boolean; onPick: () => void; testid: string }) {
   return (
     <button type="button" role="radio" aria-checked={on} disabled={disabled} onClick={onPick} className={`flex w-full items-start gap-3 rounded-xl border-[1.5px] p-3.5 text-left transition-colors disabled:opacity-60 ${on ? "border-[#053877] bg-[#053877]/[0.04] dark:border-[#8fb5e8] dark:bg-white/5" : "border-border hover:border-[#053877]/40"}`} data-testid={testid}>
       <span className={`mt-0.5 flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-2 ${on ? "border-[#053877] dark:border-[#8fb5e8]" : "border-muted-foreground/50"}`}>{on && <span className="h-2 w-2 rounded-full bg-[#053877] dark:bg-[#8fb5e8]" />}</span>
       <span className="min-w-0">
-        <span className="flex flex-wrap items-center gap-2 text-sm font-semibold">{title}{badge && <span className="rounded-full bg-[#F0A71F]/20 px-2 py-px text-[11px] font-semibold text-[#8a5a00] dark:text-[#F0A71F]">{badge}</span>}</span>
+        <span className="flex flex-wrap items-center gap-2 text-sm font-semibold">{title}{typeof badge === "string" ? <span className="rounded-full bg-[#F0A71F]/20 px-2 py-px text-[11px] font-semibold text-[#8a5a00] dark:text-[#F0A71F]">{badge}</span> : badge}</span>
         <span className="mt-0.5 block text-sm text-muted-foreground">{sub}</span>
       </span>
     </button>
@@ -1408,11 +1438,30 @@ function Choice({ on, title, sub, badge, disabled, onPick, testid }: { on: boole
 }
 
 /**
- * Publishing: each question asked once, in plain words (Andrew, 23 Nov: "Yes, build it"). When an episode is ready
- * (autoPublish) and YouTube (youtubeMode, youtubePrivacy). Same fields as before. The clip layout lives in Pōstify only
- * (Andrew, 23 Nov: "Yes, Pōstify only"): it only shapes Pōstify clips, so it's chosen there.
+ * "Recommended", with the reason on hover (a computer) or tap (a phone): Andrew, 23 Nov 2026, "for the first few, until
+ * he gets comfortable with auto, he can change anytime".
  */
-function PublishingPanel({ h, youtubeReady, onSaved, onDirectories }: { h: Hosted; youtubeReady: boolean; onSaved: () => void; onDirectories: () => void }) {
+function RecommendedNote() {
+  const [open, setOpen] = useState(false);
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <span onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)} className="cursor-help rounded-full bg-[#F0A71F]/20 px-2 py-px text-[11px] font-semibold text-[#8a5a00] underline decoration-dotted underline-offset-2 dark:text-[#F0A71F]" data-testid="hosting-publish-recommended">Recommended</span>
+      </PopoverTrigger>
+      <PopoverContent side="top" className="w-64 rounded-xl border-0 bg-[#04102b] px-3 py-2.5 text-xs leading-snug text-white" onOpenAutoFocus={(e) => e.preventDefault()}>
+        Recommended for your first few episodes, until you're comfortable with auto. You can change it&nbsp;anytime.
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+/**
+ * Publishing: one question (Andrew, 23 Nov 2026: "Yes, build both"). Self-publish or Auto-publish (autoPublish), and
+ * publishing goes everywhere at once: every podcast app, and YouTube when the episode has video. Whether a video goes
+ * to YouTube, and who can see it there, is in the publish box on each episode (youtubeMode, youtubePrivacy: the same
+ * fields, remembered from there). The clip layout lives in Pōstify only ("Yes, Pōstify only").
+ */
+function PublishingPanel({ h, youtubeReady, onSaved }: { h: Hosted; youtubeReady: boolean; onSaved: () => void }) {
   const { toast } = useToast();
   const show = h.show;
   const [busy, setBusy] = useState(false);
@@ -1421,38 +1470,18 @@ function PublishingPanel({ h, youtubeReady, onSaved, onDirectories }: { h: Hoste
     try { await apiRequest("PATCH", `/api/host/hosting/shows/${show.id}`, body); onSaved(); toast(done); }
     catch (e) { toast({ title: "Couldn't change that", description: (e as Error).message, variant: "destructive" }); } finally { setBusy(false); }
   };
-  const card = "rounded-2xl border border-border bg-card p-5 shadow-sm";
-  const ask = show.youtubeMode !== "always";
   return (
-    <div className="space-y-4" data-testid="hosting-publishing">
-      <div className={card} role="radiogroup" aria-label="When an episode is ready" data-testid="hosting-autopublish">
-        <h2 className="text-base font-semibold">When an episode is ready</h2>
-        <p className="mt-0.5 text-sm text-muted-foreground">Ready means post-production is done. Publishing puts it in Apple, Spotify and every podcast&nbsp;app.</p>
-        <div className="mt-3.5 grid gap-3 sm:grid-cols-2">
-          <Choice on={!show.autoPublish} disabled={busy} onPick={() => show.autoPublish && void patch({ autoPublish: false }, { title: "You press Publish", description: "You see each episode before it goes out." })} title="I press Publish" badge="Recommended" sub="You see each episode before it goes out." testid="hosting-publish-hand" />
-          <Choice on={!!show.autoPublish} disabled={busy} onPick={() => !show.autoPublish && void patch({ autoPublish: true }, { title: "It publishes by itself", description: "Each episode goes out as soon as post-production is done." })} title="Publish it by itself" sub="It goes out as soon as it's ready." testid="hosting-publish-auto" />
-        </div>
+    <div className="rounded-2xl border border-border bg-card p-5 shadow-sm" role="radiogroup" aria-label="When an episode is ready" data-testid="hosting-publishing">
+      <h2 className="text-base font-semibold">When an episode is&nbsp;ready <span className="whitespace-nowrap font-normal text-muted-foreground">(audio and video)</span></h2>
+      <p className="mt-0.5 text-sm text-muted-foreground">Ready means post-production is&nbsp;done.</p>
+      <div className="mt-3.5 grid gap-3 sm:grid-cols-2" data-testid="hosting-autopublish">
+        <Choice on={!show.autoPublish} disabled={busy} onPick={() => show.autoPublish && void patch({ autoPublish: false }, { title: "Self-publish", description: "You press Publish on each episode." })} title="Self-publish" badge={<RecommendedNote />} sub="You press Publish." testid="hosting-publish-hand" />
+        <Choice on={!!show.autoPublish} disabled={busy} onPick={() => !show.autoPublish && void patch({ autoPublish: true }, { title: "Auto-publish", description: "Each episode goes out as soon as post-production is done." })} title="Auto-publish" sub="It goes out as soon as it's ready." testid="hosting-publish-auto" />
       </div>
-
-      <div className={card} role="radiogroup" aria-label="YouTube" data-testid="hosting-publish-youtube">
-        <h2 className="text-base font-semibold">YouTube</h2>
-        <p className="mt-0.5 text-sm text-muted-foreground">Episodes that have video can go to your YouTube channel as videos&nbsp;too.</p>
-        <div className="mt-3.5 grid gap-3 sm:grid-cols-2">
-          <Choice on={ask} disabled={busy} onPick={() => !ask && void patch({ youtubeMode: "ask" }, { title: "We'll ask each time", description: "A tick box when you publish." })} title="Ask me each time" sub="A tick box when you publish." testid="hosting-yt-ask" />
-          <Choice on={!ask} disabled={busy} onPick={() => ask && void patch({ youtubeMode: "always" }, { title: "Every video goes up", description: "Each episode with video goes to your channel when it's published." })} title="Always post the video" sub="Every episode with video goes up." testid="hosting-yt-always" />
-        </div>
-        {/* Left-aligned: the floating "to do" pill sits over the bottom right of a short page. */}
-        <div className="mt-3.5 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
-          <label className="flex items-center gap-2 text-muted-foreground">Who can see them
-            <select value={show.youtubePrivacy} disabled={busy} onChange={(e) => void patch({ youtubePrivacy: e.target.value }, { title: e.target.value === "unlisted" ? "Unlisted: only people with the link" : "Public: anyone on YouTube" })} className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground" data-testid="hosting-yt-privacy">
-              <option value="public">Public</option>
-              <option value="unlisted">Unlisted (only with the link)</option>
-            </select>
-          </label>
-          <span className="text-muted-foreground">{youtubeReady ? <>YouTube Music (audio) is under <button type="button" onClick={onDirectories} className="font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">Directories</button></> : <>First, <a href="/host/dashboard/social" className="font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">connect your channel</a> on the Social screen</>}</span>
-        </div>
-      </div>
-
+      <p className="mt-4 flex items-start gap-2 rounded-xl bg-muted/50 px-3 py-2.5 text-sm text-muted-foreground">
+        <Send className="mt-0.5 h-4 w-4 shrink-0 text-[#053877] dark:text-[#8fb5e8]" />
+        <span>Publishing sends it everywhere at once: Apple, Spotify, every podcast app, and YouTube when the episode has&nbsp;video.{!youtubeReady && <> <a href="/host/dashboard/social" className="font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">Connect YouTube</a> for&nbsp;that.</>}</span>
+      </p>
     </div>
   );
 }
