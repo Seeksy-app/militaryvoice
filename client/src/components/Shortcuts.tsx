@@ -10,8 +10,10 @@ import { useToast } from "@/hooks/use-toast";
 
 /**
  * The dashboard's Shortcuts row (Andrew, 23 Nov, mockup approved): compact cards, the 3D icon beside the words;
- * drag to arrange (press and hold on a phone, or Edit); Edit puts an × on each and an "Add a shortcut" tile at the
- * end; the picker lists the pages in the nav, up to 8. Saved per account on the server; read-only under View as.
+ * drag to arrange at any time (a handle on hover on a computer, press and hold on a phone); an "Add a shortcut" tile
+ * at the end whenever there's room; Edit only adds an × to remove (Andrew via PM, 23 Nov: "the drag ability … and
+ * then to add more cards"). The picker lists the pages in the nav, up to 8. Saved per account on the server, and
+ * under View as too (it saves to that account, like any admin edit there).
  * Their next setup step, when there is one, stands in front, outlined, and isn't one of the 8.
  */
 export type Shortcut = {
@@ -66,7 +68,7 @@ export function Shortcuts({ catalog, defaults, next, pinned }: { catalog: Shortc
 
   // ── Dragging ────────────────────────────────────────────────────────────────
   // Mouse: drag any card at any time (it starts after a few pixels, so a click is still a click).
-  // Touch: press and hold opens Edit; in Edit the cards drag straight away (touch-action off on them).
+  // Touch: press and hold picks the card up (a scroll before then is a scroll); in Edit they drag straight away.
   const els = useRef(new Map<string, HTMLElement>());
   const drag = useRef<{ key: string; id: number; x0: number; y0: number; ox: number; oy: number; w: number; h: number; on: boolean; moved: boolean } | null>(null);
   const [ghost, setGhost] = useState<{ key: string; x: number; y: number; w: number; h: number } | null>(null);
@@ -82,10 +84,16 @@ export function Shortcuts({ catalog, defaults, next, pinned }: { catalog: Shortc
     const r = el.getBoundingClientRect();
     drag.current = { key, id: e.pointerId, x0: e.clientX, y0: e.clientY, ox: e.clientX - r.left, oy: e.clientY - r.top, w: r.width, h: r.height, on: false, moved: false };
     if (e.pointerType !== "mouse" && !editing) {
+      const cur = order;
       hold.current = window.setTimeout(() => {
         hold.current = null;
-        if (drag.current && !drag.current.moved) { setEditing(true); swallowClick.current = true; navigator.vibrate?.(10); }
-        drag.current = null;
+        const d = drag.current;
+        if (!d || d.moved) { drag.current = null; return; }
+        d.on = true;
+        swallowClick.current = true;
+        navigator.vibrate?.(10);
+        setPreview(cur);
+        setGhost({ key: d.key, x: d.x0 - d.ox, y: d.y0 - d.oy, w: d.w, h: d.h });
       }, 450);
     }
   };
@@ -135,10 +143,13 @@ export function Shortcuts({ catalog, defaults, next, pinned }: { catalog: Shortc
         if (p) commit(p);
       }
     };
+    // A card picked up by a finger: the page mustn't scroll under it.
+    const noScroll = (e: TouchEvent) => { if (drag.current?.on && e.cancelable) e.preventDefault(); };
     window.addEventListener("pointermove", move, { passive: false });
     window.addEventListener("pointerup", up);
     window.addEventListener("pointercancel", up);
-    return () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); window.removeEventListener("pointercancel", up); };
+    window.addEventListener("touchmove", noScroll, { passive: false });
+    return () => { window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); window.removeEventListener("pointercancel", up); window.removeEventListener("touchmove", noScroll); };
   });
 
   const remove = (key: string) => commit(order.filter((k) => k !== key));
@@ -161,7 +172,7 @@ export function Shortcuts({ catalog, defaults, next, pinned }: { catalog: Shortc
             if (editing && !fixed) return;
             s.go();
           }}
-          onContextMenu={editing ? (e) => e.preventDefault() : undefined}
+          onContextMenu={canDrag ? (e) => e.preventDefault() : undefined}
           aria-expanded={s.expands ? !!s.active : undefined}
           className={`group flex h-16 w-full select-none items-center gap-2 sm:gap-2.5 rounded-2xl bg-card px-2 py-2.5 text-left shadow-sm sm:px-3 transition-colors hover:bg-muted/40 [-webkit-touch-callout:none] ${opts.pinned ? "border-2 border-teal-700 bg-gradient-to-br from-teal-50 to-card to-60% dark:border-teal-400 dark:from-teal-950/40" : opts.next || s.active ? "border-2 border-[#053877] dark:border-[#8ab4f8]" : "border border-border"} ${s.active ? "shadow-[0_6px_18px_rgba(5,56,119,0.14)]" : ""} ${canDrag ? "lg:cursor-grab" : ""} ${editing && canDrag ? "touch-none sm:pr-7" : ""}`}
           data-testid={fixed ? s.key : `door-${s.key}`}
@@ -190,6 +201,8 @@ export function Shortcuts({ catalog, defaults, next, pinned }: { catalog: Shortc
 
   const items = order.map((k) => byKey.get(k)!).filter(Boolean);
   const canAdd = !readOnly && order.length < max;
+  // On a phone (two across) the tile fills the empty half of the last row, or a row of its own.
+  const filled = items.length + (pinned ? 1 : 0) + (next ? 1 : 0);
   const addTile = (
     <button type="button" onClick={() => setPicking(true)} className="flex h-16 w-full items-center gap-2.5 rounded-2xl border-[1.5px] border-dashed border-border px-3 py-2.5 text-left text-sm font-semibold text-[#053877] hover:border-[#053877]/50 hover:bg-[#053877]/[0.03] dark:text-[#8ab4f8]" data-testid="shortcut-add">
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#053877]/[0.08] dark:bg-white/10"><Plus className="h-5 w-5" /></span>
@@ -204,7 +217,7 @@ export function Shortcuts({ catalog, defaults, next, pinned }: { catalog: Shortc
         <span className="uppercase tracking-[0.08em] text-foreground">Shortcuts</span>
         {editing ? (
           <>
-            <span className="hidden truncate font-normal text-muted-foreground sm:inline">· Drag to arrange, × to remove</span>
+            <span className="hidden truncate font-normal text-muted-foreground sm:inline">· × to remove, drag to arrange</span>
             <button type="button" onClick={() => setEditing(false)} className="ml-auto rounded-full bg-[#053877] px-3 py-1 text-xs font-semibold text-white hover:bg-[#0a4a99]" data-testid="shortcuts-done">Done</button>
           </>
         ) : !readOnly ? (
@@ -218,7 +231,7 @@ export function Shortcuts({ catalog, defaults, next, pinned }: { catalog: Shortc
         {pinned && card(pinned, { pinned: true })}
         {next && card(next, { next: true })}
         {items.map((s) => card(s))}
-        {(editing || items.length === 0) && canAdd && <div className="col-span-2 lg:col-span-1">{addTile}</div>}
+        {canAdd && <div className={filled % 2 ? "lg:col-span-1" : "col-span-2 lg:col-span-1"}>{addTile}</div>}
       </div>
       {ghost && ghostCard && (
         <div className="pointer-events-none fixed z-[60]" style={{ left: ghost.x, top: ghost.y, width: ghost.w }}>
