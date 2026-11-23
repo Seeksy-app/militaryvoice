@@ -105,6 +105,7 @@ import {
   webhooks,
 } from "./livekit.js";
 import { renderGuestCard } from "./guestCard.js";
+import { renderThumbnail } from "./thumbnail.js";
 import { ensureRecordingsBucket, signedRecordingUrl, signedRecordingUpload, putRecordingObject, startMultipart, signedPartUrl, completeMultipart, abortMultipart } from "./recordingStorage.js";
 import {
   isYoutubeConfigured,
@@ -3572,6 +3573,52 @@ export function registerRoutes(app: Express): void {
     const k = typeof body?.thumbnailKey === "string" && /^show-assets\/[\w.-]+$/.test(body.thumbnailKey) ? body.thumbnailKey : "";
     return k ? await signedRecordingUrl(k, 7 * 24 * 3600) : undefined;
   }
+
+  /**
+   * A thumbnail in our clip style (title band over a still), saved where post covers live. The still
+   * is one the page took from the video (frameKey); with none, the show's cover art. Returns its key.
+   */
+  async function composeThumbnail(email: string, o: { frameKey?: unknown; title?: unknown; show?: unknown }): Promise<string> {
+    const profile = await storage.getProfileByEmail(email);
+    const title = String(o.title ?? "").trim().slice(0, 140) || "New episode";
+    const show = (typeof o.show === "string" ? o.show : profile?.podcastName ?? "").trim().slice(0, 80);
+    const get = async (url: string) => {
+      const r = await fetch(url);
+      if (!r.ok) throw new Error(`Couldn't read the picture (${r.status}).`);
+      return Buffer.from(await r.arrayBuffer());
+    };
+    const frameKey = typeof o.frameKey === "string" && /^show-assets\/[\w.-]+$/.test(o.frameKey) ? o.frameKey : "";
+    const frame = frameKey ? await get(await signedRecordingUrl(frameKey, 600)) : undefined;
+    const cover = !frame && profile?.photoUrl ? await get(profile.photoUrl).catch(() => undefined) : undefined;
+    const jpg = await renderThumbnail({ title, show, frame, cover });
+    const key = `show-assets/${Date.now()}-${crypto.randomBytes(6).toString("hex")}-thumbnail.jpg`;
+    await putRecordingObject(key, jpg, "image/jpeg");
+    return key;
+  }
+
+  // Post it: the cover for a video post, built when they press the button so it carries the title they settled on.
+  app.post("/api/host/thumbnails/compose", requireHostSession, async (req, res) => {
+    const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
+    try {
+      res.json({ key: await composeThumbnail(email, { frameKey: req.body?.frameKey, title: req.body?.title }) });
+    } catch (err) {
+      console.error("Thumbnail compose failed:", err);
+      res.status(502).json({ message: "Couldn't make the thumbnail." });
+    }
+  });
+
+  // Post-production: the same, for a podcaster's post we make (post-for), with a preview link.
+  app.post("/api/admin/thumbnails/compose", requireAdmin, async (req, res) => {
+    const email = String(req.body?.email ?? "").toLowerCase().trim();
+    if (!email) return res.status(400).json({ message: "Whose post?" });
+    try {
+      const key = await composeThumbnail(email, { frameKey: req.body?.frameKey, title: req.body?.title, show: req.body?.show });
+      res.json({ key, url: await signedRecordingUrl(key, 3600) });
+    } catch (err) {
+      console.error("Admin thumbnail compose failed:", err);
+      res.status(502).json({ message: (err as Error).message || "Couldn't make the thumbnail." });
+    }
+  });
 
   /** YouTube's settings from a Post it body; a thumbnail is one of their uploads, signed for Upload-Post to fetch. */
   async function youtubeFrom(body: any) {

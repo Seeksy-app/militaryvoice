@@ -261,7 +261,12 @@ export function PostDialog({ target, onClose, at, schedule = false }: { target: 
       if (!target) return null;
       const words = description.trim();
       // Their own upload wins; otherwise the frame, if it's ready within a few seconds (a post never waits long on it).
-      const thumbnailKey = yt.thumbnailKey || (autoThumb.current ? await Promise.race([autoThumb.current, new Promise<string>((r) => setTimeout(() => r(""), 15_000))]) : "");
+      const frameKey = yt.thumbnailKey || !autoThumb.current ? "" : await Promise.race([autoThumb.current, new Promise<string>((r) => setTimeout(() => r(""), 15_000))]);
+      // The frame under our title band, in the clip style; the plain frame if that fails.
+      const composed = frameKey
+        ? await apiRequest("POST", "/api/host/thumbnails/compose", { frameKey, title: title.trim() }).then((r) => r.json() as Promise<{ key: string }>).then((r) => r.key).catch(() => frameKey)
+        : "";
+      const thumbnailKey = yt.thumbnailKey || composed;
       const body = {
         ...(thumbnailKey ? { thumbnailKey } : {}),
         platforms: picked,
