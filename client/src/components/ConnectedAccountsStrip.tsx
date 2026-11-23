@@ -68,23 +68,35 @@ export function ConnectedAccountsStrip({
   return (
     <div className={className}>
       <div className="mb-2 flex items-center justify-between gap-3">
-        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-foreground">
-          {showGhosts ? "Connect your accounts" : <>Connected accounts <span className="font-normal text-muted-foreground">({accounts.length + extraCount})</span></>}
+        {/* The action sits right after the label, so the two read together (Andrew, 23 Nov: "make the Manage
+            to Manage Connections, and should we put it next to connect accts"). */}
+        <p className="flex min-w-0 items-baseline gap-1.5 whitespace-nowrap sm:gap-2 text-xs font-semibold">
+          <span className="uppercase tracking-[0.08em] text-foreground">
+            {showGhosts ? "Connect your accounts" : <>Connected accounts <span className="font-normal text-muted-foreground">({accounts.length + extraCount})</span></>}
+          </span>
+          {onManage && !showGhosts && (
+            <>
+              <span aria-hidden className="text-muted-foreground">·</span>
+              <button type="button" onClick={onManage} className="text-primary hover:underline" data-testid="button-manage-integrations">
+                Manage connections
+              </button>
+            </>
+          )}
         </p>
         <span className="flex items-center gap-3">
         {(more || open) && !showGhosts && (
           <button type="button" onClick={() => setOpen((v) => !v)} className="hidden text-xs font-semibold text-muted-foreground hover:text-foreground sm:inline" data-testid="button-accounts-more">
-            {open ? "Show fewer" : showGhosts ? "Show all" : `Show all ${accounts.length + extraCount}`}
+            {open ? "Show fewer" : `Show all ${accounts.length + extraCount}`}
           </button>
         )}
-        {onManage && (
+        {onManage && showGhosts && (
           <button
             type="button"
-            onClick={showGhosts ? onConnect ?? onManage : onManage}
+            onClick={onConnect ?? onManage}
             className="text-xs font-semibold text-primary hover:underline"
             data-testid="button-manage-integrations"
           >
-            {showGhosts ? "Connect" : "Manage"}
+            Connect
           </button>
         )}
         </span>
