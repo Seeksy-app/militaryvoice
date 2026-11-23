@@ -14,6 +14,7 @@ import { uploadPhoto } from "./photoStorage.js";
 import { sendPodcastOwnerCodeEmail } from "./email.js";
 import { isUploadPostConfigured, publishVideo } from "./uploadPost.js";
 import { toTrash } from "./trash.js";
+import { slackNote } from "./slack.js";
 import { XMLParser } from "fast-xml-parser";
 import Anthropic from "@anthropic-ai/sdk";
 import { waitUntil } from "@vercel/functions";
@@ -1615,6 +1616,37 @@ Return JSON only: {"titles":["","",""],"description":""}`,
   });
 
   // Move a show here: read its feed from the old host, keep every episode (and its guid, so no app plays it twice).
+  // A show they named at sign-up that's already hosted here, on another account (23 Nov 2026: Andrew, "Admin-only is fine").
+  // Moving between accounts is admin-only (Admin → contact → Move), so the card offers "Ask us to move it" instead of an import that can only fail.
+  const hostedElsewhere = async (rss: string, me: string) => {
+    const slug = rss.match(/militaryvoices?\.ai\/feed\/([a-z0-9-]+)/i)?.[1] ?? "";
+    if (!slug && !/^https?:\/\//i.test(rss)) return null;
+    const [s] = await db.select({ id: hostedShows.id, email: hostedShows.email, title: hostedShows.title }).from(hostedShows)
+      .where(sql`${hostedShows.slug} = ${slug} or (${hostedShows.importedFrom} <> '' and ${hostedShows.importedFrom} = ${rss})`).limit(1);
+    return s && s.email.toLowerCase() !== me ? s : null;
+  };
+  const askKey = (showId: number, me: string) => `move-ask:${showId}:${me}`;
+  app.get("/api/host/hosting/elsewhere", requireHostSession, async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const me = emailOf(req), s = await hostedElsewhere(String(req.query.rss ?? "").trim(), me);
+    if (!s) return res.json({ elsewhere: false });
+    res.json({ elsewhere: true, title: s.title, asked: !!(await storage.getSetting(askKey(s.id, me)).catch(() => null)) });
+  });
+  app.post("/api/host/hosting/ask-move", requireHostSession, async (req, res) => {
+    const me = emailOf(req), s = await hostedElsewhere(String(req.body?.rss ?? "").trim(), me);
+    if (!s) return res.status(404).json({ message: "We couldn't find that show here." });
+    const key = askKey(s.id, me);
+    if (!(await storage.getSetting(key).catch(() => null))) {
+      await storage.setSetting(key, now());
+      const p = await storage.getProfileByEmail(me).catch(() => undefined);
+      const name = p?.hostName || "";
+      const link = `${ORIGIN}/admin/crm?profile=${encodeURIComponent(s.email.toLowerCase())}&move=${s.id}&to=${encodeURIComponent(me)}`;
+      await storage.createHelpRequest({ name, email: me, question: `Please move my show "${s.title}" (show ${s.id}, now on ${s.email}) to this account, ${me}.`, transcript: `Move: ${link}`, page: "/podcast" }).catch((e) => console.warn("move ask not saved:", (e as Error).message));
+      await slackNote(`:truck: Move request: ${name ? `${name} <${me}>` : me} asks to move "${s.title}" (show ${s.id}) from ${s.email} to ${me}.`, { label: "Open Move", url: link });
+    }
+    res.json({ ok: true });
+  });
+
   app.post("/api/host/hosting/import", requireHostSession, async (req, res) => {
     const email = emailOf(req);
     // An Apple Podcasts page link works too: we look up the feed behind it.

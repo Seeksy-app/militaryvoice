@@ -22,18 +22,18 @@ type Done = { move: { id: string }; feed: { before: { items: number }; after: { 
 
 const msg = async (e: unknown) => { const m = (e as Error).message ?? ""; return m.replace(/^\d+:\s*/, "").replace(/^\{"message":"(.*)"\}$/, "$1"); };
 
-export function MoveShowButton({ showId, title, onMoved }: { showId: number; title: string; onMoved: () => void }) {
-  const [open, setOpen] = useState(false);
+export function MoveShowButton({ showId, title, onMoved, startOpen = false, to = "" }: { showId: number; title: string; onMoved: () => void; startOpen?: boolean; to?: string }) {
+  const [open, setOpen] = useState(startOpen);
   return (
     <>
       <button type="button" onClick={() => setOpen(true)} className="shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold text-muted-foreground hover:border-[#053877]/40 hover:text-foreground" data-testid={`move-show-${showId}`}>Move</button>
-      {open && <MoveShow showId={showId} title={title} onClose={() => setOpen(false)} onMoved={onMoved} />}
+      {open && <MoveShow showId={showId} title={title} initialTo={to} onClose={() => setOpen(false)} onMoved={onMoved} />}
     </>
   );
 }
 
-export function MoveShow({ showId, title, onClose, onMoved }: { showId: number; title: string; onClose: () => void; onMoved: () => void }) {
-  const [to, setTo] = useState("");
+export function MoveShow({ showId, title, onClose, onMoved, initialTo = "" }: { showId: number; title: string; onClose: () => void; onMoved: () => void; initialTo?: string }) {
+  const [to, setTo] = useState(initialTo);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState("");
   const [p, setP] = useState<Preview | null>(null);

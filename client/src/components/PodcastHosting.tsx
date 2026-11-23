@@ -632,7 +632,7 @@ function YouTubeEpisodes({ h, ready, onDone, embedded = false }: { h: Hosted; re
 }
 
 /** The show they told us about at sign-up, hosted somewhere else: what it is, and moving it here in one press. */
-function YourShowElsewhere({ name, rss, onMoved }: { name: string; rss: string; onMoved: () => void }) {
+export function YourShowElsewhere({ name, rss, onMoved }: { name: string; rss: string; onMoved: () => void }) {
   const { toast } = useToast();
   const found = useQuery<{ title: string; host: string; rss: string; image: string; apple: string; episodes: number }[]>({
     queryKey: ["/api/host/find-show", name],
@@ -648,8 +648,21 @@ function YourShowElsewhere({ name, rss, onMoved }: { name: string; rss: string; 
   });
   let host = "";
   try { host = new URL(rss).hostname.replace(/^(www|feeds?|rss)\./, ""); } catch { /* fine */ }
-  // Already hosted here, on another account: importing would copy it under a second feed address. It moves between accounts instead (Admin → Move).
-  const ours = /(^|\.)militaryvoices?\.ai$/i.test(host);
+  // Already hosted here, on another account: importing would copy it under a second feed address. Moving between accounts is
+  // admin-only (Andrew, 23 Nov: "Admin-only is fine"), so the card asks us instead, and we move it (Admin → contact → Move).
+  const elsewhere = useQuery<{ elsewhere: boolean; title?: string; asked?: boolean }>({
+    queryKey: ["/api/host/hosting/elsewhere", rss],
+    queryFn: async () => (await apiRequest("GET", `/api/host/hosting/elsewhere?rss=${encodeURIComponent(rss)}`)).json(),
+    staleTime: 60_000,
+  });
+  const ours = elsewhere.data?.elsewhere ?? /(^|\.)militaryvoices?\.ai$/i.test(host);
+  const [asked, setAsked] = useState(false);
+  const ask = useMutation({
+    mutationFn: async () => (await apiRequest("POST", "/api/host/hosting/ask-move", { rss })).json(),
+    onSuccess: () => setAsked(true),
+    onError: (e: Error) => toast({ title: "Not sent yet", description: e.message.replace(/^\d+:\s*/, ""), variant: "destructive" }),
+  });
+  const sent = asked || !!elsewhere.data?.asked;
   return (
     <div className="mb-6 flex flex-wrap items-center gap-4 rounded-2xl border border-[#053877]/25 bg-[#053877]/[0.04] p-5 text-left" data-testid="hosting-yours">
       {show?.image ? <img src={show.image} alt="" className="h-20 w-20 shrink-0 rounded-xl object-cover shadow-sm" /> : <span className="flex h-20 w-20 shrink-0 items-center justify-center rounded-xl bg-[#053877] text-2xl font-bold text-white">{name.charAt(0)}</span>}
@@ -657,8 +670,11 @@ function YourShowElsewhere({ name, rss, onMoved }: { name: string; rss: string; 
         <p className="text-xs font-semibold uppercase tracking-[0.12em] text-muted-foreground">Your show</p>
         <p className="mt-0.5 text-lg font-semibold">{show?.title || name}</p>
         <p className="text-sm text-muted-foreground">{[show?.episodes ? `${show.episodes} episodes` : "", host && `hosted at ${host}`].filter(Boolean).join(" · ")}{show?.apple ? <> · <a href={show.apple} target="_blank" rel="noreferrer" className="hover:underline">on Apple Podcasts</a></> : null}</p>
-        <p className="mt-1 text-sm">{ours ? "It's already hosted on MilitaryVoices, on another account. Ask us and we'll move it to this one: its feed, its Apple and Spotify listings and every download stay as they are." : "It's on your card and SmartLink already. Host it here and your downloads are counted the way sponsors count them."}</p>
+        <p className="mt-1 text-sm">{!ours ? "It's on your card and SmartLink already. Host it here and your downloads are counted the way sponsors count them."
+          : sent ? <span className="font-medium text-emerald-700 dark:text-emerald-400" data-testid="hosting-ask-sent">Sent. We'll move it with its feed, listings and downloads unchanged, and email you when it's done.</span>
+          : "This show is hosted on another MilitaryVoices account. We'll move it to this one, with its feed, listings and downloads unchanged."}</p>
       </div>
+      {ours && !sent && <Button onClick={() => ask.mutate()} disabled={ask.isPending || elsewhere.isLoading} className="h-10 gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-ask-move">{ask.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Sending…</> : "Ask us to move it"}</Button>}
       {!ours && <Button onClick={() => move.mutate()} disabled={move.isPending} className="h-10 gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-move-yours">{move.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Moving…</> : "Move it here"}</Button>}
     </div>
   );

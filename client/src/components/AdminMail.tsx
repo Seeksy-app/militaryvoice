@@ -68,6 +68,9 @@ export function AdminMail() {
   const [open, setOpen] = useState<Item | null>(null);
   const [composing, setComposing] = useState(false);
   const [profile, setProfile] = useState<string | null>(null);
+  // Opened from a move request (Slack "Open Move"): that show's Move, with the account it goes to filled in.
+  const [moveShow, setMoveShow] = useState(0);
+  const [moveTo, setMoveTo] = useState("");
   const { toast } = useToast();
   // Ticked items, for doing several at once (as in a mail app).
   const [picked, setPicked] = useState<Set<string>>(new Set());
@@ -78,6 +81,8 @@ export function AdminMail() {
   useEffect(() => {
     const p = new URLSearchParams(window.location.search);
     const withEmail = (p.get("with") ?? "").trim().toLowerCase();
+    const prof = (p.get("profile") ?? "").trim().toLowerCase();
+    if (prof.includes("@")) { setProfile(prof); setMoveShow(Number(p.get("move")) || 0); setMoveTo((p.get("to") ?? "").trim().toLowerCase()); return; }
     if (!withEmail.includes("@")) return;
     setOpen({ key: p.get("focus") ?? "", dir: "in", email: withEmail } as Item);
   }, []);
@@ -111,7 +116,7 @@ export function AdminMail() {
   const anyWaiting = pickedItems.some((i) => i.dir === "in" && (i.status === "new" || i.status === "drafted"));
   return (
     <>
-    {profile && <ContactProfile email={profile} onClose={() => setProfile(null)} />}
+    {profile && <ContactProfile email={profile} moveShowId={moveShow} moveTo={moveTo} onClose={() => { setProfile(null); setMoveShow(0); }} />}
     <div className="grid min-h-[70vh] gap-0 overflow-hidden rounded-2xl border border-border bg-card shadow-sm lg:grid-cols-[13rem_minmax(18rem,26rem)_1fr]" data-testid="admin-mail">
       {/* Folders */}
       <aside className="border-b border-border bg-muted/30 p-3 lg:border-b-0 lg:border-r">

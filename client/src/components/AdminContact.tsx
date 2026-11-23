@@ -43,7 +43,7 @@ const ago = (iso: string) => {
 const full = (iso: string) => { const d = new Date(iso); return Number.isNaN(d.getTime()) ? "" : d.toLocaleString(undefined, { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" }); };
 const initials = (n: string, e: string) => (n || e).split(/[\s@.]+/).filter(Boolean).slice(0, 2).map((w) => w[0]?.toUpperCase()).join("");
 
-export function ContactProfile({ email, onClose }: { email: string; onClose: () => void }) {
+export function ContactProfile({ email, onClose, moveShowId = 0, moveTo = "" }: { email: string; onClose: () => void; moveShowId?: number; moveTo?: string }) {
   const qc = useQueryClient();
   const { toast } = useToast();
   const key = ["/api/admin/contact-profile", email.toLowerCase()];
@@ -138,7 +138,7 @@ export function ContactProfile({ email, onClose }: { email: string; onClose: () 
                   {d.shows.map((s) => (
                     <div key={s.id} className="flex items-center gap-2">
                       <a href={s.url} target="_blank" rel="noreferrer" className="flex min-w-0 flex-1 items-center gap-1 font-medium text-[#053877] hover:underline dark:text-[#8fb5e8]"><span className="truncate">{s.title} · {s.episodes} ep</span> <ExternalLink className="h-3 w-3 shrink-0" /></a>
-                      <MoveShowButton showId={s.id} title={s.title} onMoved={refresh} />
+                      <MoveShowButton showId={s.id} title={s.title} onMoved={refresh} startOpen={s.id === moveShowId} to={s.id === moveShowId ? moveTo : ""} />
                     </div>
                   ))}
                 </section>

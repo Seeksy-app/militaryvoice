@@ -96,6 +96,7 @@ export const STEP_GUIDE: Partial<Record<keyof typeof STEP_ANCHOR, GuideStep>> = 
   ] },
   podcast: { title: "Your podcast", at: [
     t("hosting-move-yours", "Move it here: your feed comes across and Apple and Spotify keep your listing."),
+    t("hosting-ask-move", "Your show is on another MilitaryVoices account. Click here and we'll move it to this one."),
     t("hosting-start", "Click here to set up your show. It's free, and works with every podcast app."),
   ] },
   accounts: { title: "Your accounts", at: [t("button-social-connect", "Click here and pick the accounts you use. Pōstify can post to them for you.")] },
