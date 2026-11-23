@@ -111,6 +111,10 @@ export function PodcastHosting() {
   // Podcast always opens on Episodes (not wherever they last wandered).
   const [tab, setTab] = useState<PodTab>("episodes");
   const go = (t: PodTab) => setTab(t);
+  // Their own stream key (Integrations → Live). The Stream in button shows only once they've made one (Andrew, 23 Nov:
+  // "restream banner should not be on the podcast unless an RTMP key was created. it will only confuse people").
+  const streamIn = useQuery<{ key: unknown | null }>({ queryKey: ["/api/host/stream-in"], queryFn: async () => (await apiRequest("GET", "/api/host/stream-in")).json(), staleTime: 60_000 });
+  const hasStreamKey = !!streamIn.data?.key;
   // Invite to my show (a Book a guest profile, here or on Discover) leaves the person in the session:
   // open Invite a guest with their name, and their email if it was found. n refills the same person.
   const [prefill, setPrefill] = useState<{ name: string; email: string; n: number } | undefined>(undefined);
@@ -282,10 +286,13 @@ export function PodcastHosting() {
                 <p className="text-xs text-muted-foreground">{compact(h.stats.last30)} downloads in the last 30 days · {compact(h.stats.total)} in all</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
-                {/* Recording somewhere else: their own stream key, and each live show lands in the Library (/stream-in). */}
-                <Button asChild variant="outline" className="h-9 gap-1.5 rounded-lg" data-testid="hosting-stream-in">
-                  <a href="/stream-in"><span className="inline-flex items-center gap-1"><BrandMark brand="streamyard" className="h-4 w-4" /><BrandMark brand="restream" className="h-4 w-4" /><BrandMark brand="obs" className="h-4 w-4" /></span> Stream in from StreamYard, Restream or OBS</a>
-                </Button>
+                {/* Recording somewhere else: their own stream key, and each live show lands in the Library (/stream-in). Only
+                    for those who made a key; everyone else sets one up in Integrations → Live. */}
+                {hasStreamKey && (
+                  <Button asChild variant="outline" className="h-9 gap-1.5 rounded-lg" data-testid="hosting-stream-in">
+                    <a href="/stream-in"><span className="inline-flex items-center gap-1"><BrandMark brand="streamyard" className="h-4 w-4" /><BrandMark brand="restream" className="h-4 w-4" /><BrandMark brand="obs" className="h-4 w-4" /></span> Stream in from StreamYard, Restream or OBS</a>
+                  </Button>
+                )}
                 <Button onClick={() => setAdding(true)} className="h-9 gap-1.5 rounded-lg bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-new-episode"><Plus className="h-4 w-4" /> New episode</Button>
               </div>
             </div>
