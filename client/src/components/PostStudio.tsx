@@ -25,7 +25,8 @@ import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/s
 import { Slider } from "@/components/ui/slider";
 import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2, Clapperboard, Plus, ArrowLeftToLine, ArrowRightToLine, MoreHorizontal, Blend, Brackets, Library, ArrowLeft, CalendarClock } from "lucide-react";
 import { IconTile } from "@/components/ui/icon-tile";
-import { LayoutPicker, parseLayoutSuggestion, seesOnePerson, suggestedLayout } from "@/components/LayoutPicker";
+import { seesTwoPeople, twoUpLayout, twoUpOf, type TwoUp } from "@/components/LayoutPicker";
+import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { useClipLayoutDefault } from "@/lib/clipLayoutDefault";
 
 // Postify: one recording going from "the segment ended" to clips ready
@@ -824,16 +825,16 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
   const [title, setTitle] = useState("");
   // Vertical to start with: it's the one almost everyone posts.
   const [formats, setFormats] = useState<ClipFormat[]>(["vertical"]);
-  // Two people on screen, for this clip: the recording's own layout (a Radio show's stack) first, then
-  // their last pick, then what the detector saw; Automatic otherwise. A pick here stays for the next clip and
-  // is remembered as their starting choice next time (Pōstify is the one place it's chosen).
+  // Two people on screen, for this clip: offered only when two people are seen (or the recording carries a layout of
+  // its own, a Radio show's stack). Stacked or Follow the speaker: the recording's own layout first, then their last
+  // pick, Stacked otherwise. A pick here stays for the next clip and is their starting choice next time. Nobody seen
+  // twice: Automatic, as before (Andrew, 23 Nov 2026: the simpler Ready for Pōstify, "Yes, build it").
   const ownLayout = parseClipOptions(rec.clipOptions).layout;
   const accountLayout = useClipLayoutDefault();
-  const seenLayout = suggestedLayout((rec as { layoutSuggestion?: string }).layoutSuggestion);
-  const startLayout = (ownLayout === "radio" ? "stacked" : ownLayout && ownLayout !== "auto" ? ownLayout : "") || accountLayout.value || seenLayout || "";
-  const [clipLayout, setClipLayout] = useState<"" | "stacked" | "side" | "single" | null>(null);
+  const showLayout = !!ownLayout || seesTwoPeople((rec as { layoutSuggestion?: string }).layoutSuggestion);
+  const startLayout: TwoUp = twoUpOf(ownLayout || accountLayout.value);
+  const [clipLayout, setClipLayout] = useState<TwoUp | null>(null);
   const layoutNow = clipLayout ?? startLayout;
-  const showLayout = !!ownLayout || !seesOnePerson((rec as { layoutSuggestion?: string }).layoutSuggestion);
   const titleRef = useRef<HTMLInputElement>(null);
   const len = mark.in !== null && mark.out !== null ? mark.out - mark.in : 0;
   const reset = () => { setMark({ in: null, out: null }); setTitle(""); setFormats(["vertical"]); };
@@ -863,7 +864,7 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
   };
   const pct = (t: number) => (pos.d ? `${Math.min(100, Math.max(0, (t / pos.d) * 100))}%` : "0%");
   const makeClip = useMutation({
-    mutationFn: async () => (await apiRequest("POST", `/api/host/recordings/${rec.id}/clips`, { startSec: mark.in, endSec: mark.out, title, source: source === "clean" ? "clean" : "", formats, layout: layoutNow === "stacked" && ownLayout === "radio" ? "radio" : layoutNow || "auto" })).json(),
+    mutationFn: async () => (await apiRequest("POST", `/api/host/recordings/${rec.id}/clips`, { startSec: mark.in, endSec: mark.out, title, source: source === "clean" ? "clean" : "", formats, layout: showLayout ? twoUpLayout(layoutNow, ownLayout) : "auto" })).json(),
     onSuccess: () => {
       reset();
       void qc.invalidateQueries({ queryKey: ["/api/host/clips"] });
@@ -1185,10 +1186,8 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
         })}
       </div>
       {/* Two people on screen: how this clip frames them. Same four choices as Make clips. */}
-      {showLayout && <select value={layoutNow} onChange={(e) => { const v = e.target.value as "" | "stacked" | "side" | "single"; setClipLayout(v); accountLayout.remember(v); }} aria-label="Two people on screen" title="Two people on screen: how this clip shows them" className="h-9 rounded-lg border border-border bg-background px-2 text-xs font-semibold text-foreground" data-testid="mark-layout">
-        <option value="">Two people: Automatic</option>
+      {showLayout && <select value={layoutNow} onChange={(e) => { const v = e.target.value as TwoUp; setClipLayout(v); accountLayout.remember(v); }} aria-label="Two people on screen" title="Two people on screen: how this clip shows them" className="h-9 rounded-lg border border-border bg-background px-2 text-xs font-semibold text-foreground" data-testid="mark-layout">
         <option value="stacked">Two people: Stacked</option>
-        <option value="side">Two people: Side by side</option>
         <option value="single">Two people: Follow the speaker</option>
       </select>}
       {tip(
@@ -2135,19 +2134,21 @@ export function PostStudio() {
   const cost = episodeCredits(opts, clipsN);
   const affordable = (r: Rec) => Boolean(beta?.unlimited || r.postifyBeta || freeLeft || (beta?.tokens ?? 0) >= cost || plan);
   const [showOptions, setShowOptions] = useState(false);
-  // The detector's look at this recording (a JSON string on the row, "" until it has looked).
-  const layoutHint = useMemo(() => parseLayoutSuggestion((rec as { layoutSuggestion?: string } | undefined)?.layoutSuggestion), [rec]);
-  // What Make clips starts on when the recording has no layout of its own and nothing has been picked
-  // on screen: their last pick here, else the detector's favourite, else automatic. It is lit and visible,
-  // a tap on the screen always wins, and that tap becomes their last pick (Andrew, 23 Nov: "Yes, Pōstify only").
+  // Two people seen on this recording (the detector's look, "" until it has looked), or a layout of its own: the one
+  // layout choice shows under Options. Nobody seen twice: no choice, and the clips frame themselves (Automatic).
+  const ownLayoutHere = rec ? parseClipOptions(rec.clipOptions).layout : undefined;
+  const twoUp = !!rec && (!!ownLayoutHere || seesTwoPeople((rec as { layoutSuggestion?: string }).layoutSuggestion));
+  // What Make clips starts on when the recording has no layout of its own and nothing has been picked: with two
+  // people seen, their last pick (Follow the speaker) or Stacked; otherwise automatic. A pick under Options always
+  // wins and becomes their last pick (Andrew, 23 Nov: "Yes, Pōstify only", then the simpler card).
   const layoutDefault = useClipLayoutDefault();
   const layoutTouched = useRef<number | null>(null);
   useEffect(() => {
     if (!rec || rec.clipStatus !== "none" || parseClipOptions(rec.clipOptions).layout) return;
     if (layoutTouched.current === rec.id || layoutDefault.loading) return;
-    const target = layoutDefault.value || layoutHint?.suggested || undefined;
+    const target = twoUp ? twoUpOf(layoutDefault.value) : undefined;
     setOpts((o) => (o.layout === target ? o : { ...o, layout: target }));
-  }, [rec?.id, rec?.clipStatus, rec?.clipOptions, layoutHint, layoutDefault.value, layoutDefault.loading]);
+  }, [rec?.id, rec?.clipStatus, rec?.clipOptions, twoUp, layoutDefault.value, layoutDefault.loading]);
   const [musicOpen, setMusicOpen] = useState(false);
   const musicList = useQuery<{ key: string; name: string }[]>({ queryKey: ["/api/music"], queryFn: async () => (await apiRequest("GET", "/api/music")).json(), staleTime: 300_000 });
 
@@ -2380,24 +2381,26 @@ export function PostStudio() {
                 </span>
               </button>
             ) : (
-              // Not started: one button. Every clip comes in all three shapes; captions are under Options.
-              <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 px-6 text-center text-white">
-                {/* Options open: the picture goes, so the three layout choices sit inside the card, not on its edge. */}
-                {!showOptions && <IconTile icon={Wand2} />}
-                <p className="text-xl font-bold sm:text-2xl">Ready for Pōstify</p>
-                <p className="max-w-md text-sm text-white/70">{clipsN} clips in vertical, square and wide, with {opts.captions === "classic" ? "Classic" : "animated"} captions, and a clean episode. You can add music at the end.</p>
-                {!affordable(rec) ? (
-                  <ChoosePlan beta={beta} plan={plan} />
-                ) : (
-                  <Button onClick={() => begin(rec.id)} disabled={start.isPending} className="h-11 gap-2 rounded-full bg-[#F0A71F] px-6 text-base font-semibold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="post-start-hero">
-                    {start.isPending ? <Loader2 className="h-5 w-5 animate-spin" /> : <Sparkles className="h-5 w-5" />} Start Pōstify
-                  </Button>
-                )}
-                <p className="text-xs text-white/55">
+              // Not started: a title, one line, one button (Andrew, 23 Nov 2026: "too much… make it simpler", then
+              // "Yes, build it"). Every clip comes in all three shapes and music is picked at the end; the captions and,
+              // with two people on screen, how they're framed are under Options, in a small panel off the link.
+              <div className="absolute inset-0 flex flex-col items-center justify-center gap-1.5 px-6 text-center text-white">
+                <p className="text-2xl font-extrabold leading-tight sm:text-[28px]">Ready for Pōstify</p>
+                <p className="text-sm text-white/70 sm:text-[15px]">{clipsN} clips and a clean&nbsp;episode.</p>
+                <div className="mt-3">
+                  {!affordable(rec) ? (
+                    <ChoosePlan beta={beta} plan={plan} />
+                  ) : (
+                    <Button onClick={() => begin(rec.id)} disabled={start.isPending} className="h-12 gap-2 rounded-full bg-[#F0A71F] px-8 text-base font-bold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="post-start-hero">
+                      {start.isPending && <Loader2 className="h-5 w-5 animate-spin" />} Start Pōstify
+                    </Button>
+                  )}
+                </div>
+                <p className="mt-2 text-xs text-white/55 sm:text-sm">
                   {beta?.unlimited || rec.postifyBeta
                     ? "Included"
                     : freeLeft
-                      ? "Free · your beta episode"
+                      ? "Free"
                       : (beta?.tokens ?? 0) >= cost
                         ? `${cost} credits · you have ${beta?.tokens}`
                         : plan
@@ -2405,15 +2408,31 @@ export function PostStudio() {
                           : `${cost} credits`}
                   {/* The mark's own padding is the gap, so no space before the dot. */}
                   {!(beta?.unlimited || rec.postifyBeta) ? <> <CreditsInfo className="text-white/60 hover:bg-white/10 hover:text-white" />{"· "}</> : " · "}
-                  <button type="button" onClick={() => setShowOptions((v) => !v)} className="underline underline-offset-2 hover:text-white" data-testid="post-options">Options</button>
+                  <Popover open={showOptions} onOpenChange={setShowOptions}>
+                    <PopoverTrigger asChild>
+                      <button type="button" className="font-semibold text-white/80 underline underline-offset-4 hover:text-white" data-testid="post-options">Options</button>
+                    </PopoverTrigger>
+                    <PopoverContent side="bottom" align="center" className="w-[min(calc(100vw-2rem),360px)] rounded-2xl p-1.5" data-testid="post-options-panel">
+                      <label className="flex items-center justify-between gap-3 px-3 py-2.5 text-sm font-semibold">Captions
+                        <select value={opts.captions} onChange={(e) => setOpts({ ...opts, captions: e.target.value as ClipOptions["captions"] })} className="h-9 w-44 rounded-lg border border-input bg-background px-2.5 text-sm font-normal" data-testid="post-captions">
+                          <option value="animated">Animated</option>
+                          <option value="classic">Classic (quicker)</option>
+                        </select>
+                      </label>
+                      {twoUp && (
+                        <>
+                          <label className="flex items-center justify-between gap-3 border-t border-border px-3 py-2.5 text-sm font-semibold">Two people
+                            <select value={twoUpOf(opts.layout ?? ownLayoutHere)} onChange={(e) => { const v = e.target.value as TwoUp; layoutTouched.current = rec.id; setOpts((o) => ({ ...o, layout: twoUpLayout(v, ownLayoutHere) })); layoutDefault.remember(v); }} className="h-9 w-44 rounded-lg border border-input bg-background px-2.5 text-sm font-normal" data-testid="post-two-people">
+                              <option value="stacked">Stacked</option>
+                              <option value="single">Follow the speaker</option>
+                            </select>
+                          </label>
+                          <p className="px-3 pb-2 text-xs text-muted-foreground">For vertical and square clips. Wide clips and the full episode stay as you&nbsp;recorded.</p>
+                        </>
+                      )}
+                    </PopoverContent>
+                  </Popover>
                 </p>
-                {showOptions && (
-                  <div className="flex items-center gap-1 rounded-full bg-white/10 p-1 text-xs font-semibold" role="group" aria-label="Caption style">
-                    {([["animated", "Animated captions"], ["classic", "Classic (cheaper, quicker)"]] as const).map(([v, label]) => (
-                      <button key={v} type="button" onClick={() => setOpts({ ...opts, captions: v })} aria-pressed={opts.captions === v} className={`rounded-full px-3 py-1 ${opts.captions === v ? "bg-[#F0A71F] text-[#1a1200]" : "text-white/75 hover:text-white"}`} data-testid={`post-captions-${v}`}>{label}</button>
-                    ))}
-                  </div>
-                )}
               </div>
             )}
           </div>
@@ -2564,10 +2583,6 @@ export function PostStudio() {
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,18rem)]">
         {/* The numbers sit under the player, in the space there; the side is just the pipeline. */}
         <div className="flex min-w-0 flex-col gap-3">
-          {/* How two people are framed: always on offer before the run; the detector only lights and marks the one it likes. */}
-          {rec.clipStatus === "none" && !intro && (
-            <LayoutPicker value={opts.layout} own={parseClipOptions(rec.clipOptions).layout} suggestion={layoutHint} onChange={(l) => { layoutTouched.current = rec.id; setOpts((o) => ({ ...o, layout: l })); layoutDefault.remember(l); }} />
-          )}
           {viewerEl}
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-6" data-testid="post-stats">
             {stats.map((st) => (
