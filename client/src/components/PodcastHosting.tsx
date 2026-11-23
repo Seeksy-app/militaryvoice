@@ -300,7 +300,7 @@ export function PodcastHosting() {
             {h.episodes.length ? (
               <ul className="divide-y divide-border">
                 {/* What still needs them (post-production, final drafts) first, newest first; then what is out. */}
-                {[...h.episodes].sort((a, b) => Number(b.status === "draft") - Number(a.status === "draft") || (a.status === "draft" && b.status === "draft" ? b.createdAt.localeCompare(a.createdAt) : 0)).map((e) => (
+                {[...h.episodes].sort((a, b) => Number(b.status === "draft") - Number(a.status === "draft") || (a.status === "draft" && b.status === "draft" ? (b.episodeNumber ?? 0) - (a.episodeNumber ?? 0) || b.createdAt.localeCompare(a.createdAt) : 0)).map((e) => (
                   <li key={e.id} className="flex items-center gap-3 py-2.5" data-testid={`hosting-episode-${e.id}`}>
                     <EpisodeArt ep={e} fallback={s.artworkUrl} onDone={refresh} />
                     {/* On a phone the badge moves under the title, which gets the width (8 Oct: "8. MCDP 1 Warfig…"). */}
