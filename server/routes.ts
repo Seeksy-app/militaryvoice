@@ -3605,7 +3605,7 @@ export function registerRoutes(app: Express): void {
     const frameKey = typeof o.frameKey === "string" && /^show-assets\/[\w.-]+$/.test(o.frameKey) ? o.frameKey : "";
     const frame = frameKey ? await get(await signedRecordingUrl(frameKey, 600)) : undefined;
     const cover = !frame && profile?.photoUrl ? await get(profile.photoUrl).catch(() => undefined) : undefined;
-    // Their show logo in the corner, as it sits while they're live (else their cover art); never holds the picture up.
+    // Their show logo bottom-left, as it sits while they're live (else their cover art); never holds the picture up.
     const corner = frame ? await cornerLogoOf(email).catch(() => ({ url: "", plate: "none" as const })) : { url: "", plate: "none" as const };
     const logoBuf = corner.url ? await get(corner.url).catch(() => undefined) : undefined;
     const jpg = await renderThumbnail({ title, show, frame, cover, logo: logoBuf ? { buf: logoBuf, plate: corner.plate } : undefined });
