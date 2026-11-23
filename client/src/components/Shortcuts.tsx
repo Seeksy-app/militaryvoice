@@ -22,6 +22,8 @@ export type Shortcut = {
   /** A shorter line for phones, where two cards share the width. */
   phoneHint?: string;
   tag?: string;
+  /** Your Discovery: their audience score, a small green chip beside the title (computers; phones say it in the hint). */
+  score?: number;
   go: () => void;
   /** Go live's panel is open under the row. */
   active?: boolean;
@@ -31,7 +33,8 @@ export type Shortcut = {
 type Saved = { keys: string[] | null; max: number; readOnly: boolean };
 const QK = ["/api/host/shortcuts"];
 
-export function Shortcuts({ catalog, defaults, next }: { catalog: Shortcut[]; defaults: string[]; next?: Shortcut | null }) {
+/** `pinned`: Your Discovery, always first and never one of the 8. */
+export function Shortcuts({ catalog, defaults, next, pinned }: { catalog: Shortcut[]; defaults: string[]; next?: Shortcut | null; pinned?: Shortcut | null }) {
   const { toast } = useToast();
   const { data } = useQuery<Saved>({ queryKey: QK, retry: false, staleTime: 60_000 });
   const max = data?.max ?? 8;
@@ -141,26 +144,27 @@ export function Shortcuts({ catalog, defaults, next }: { catalog: Shortcut[]; de
   const remove = (key: string) => commit(order.filter((k) => k !== key));
   const add = (key: string) => { commit([...order, key]); setPicking(false); };
 
-  const card = (s: Shortcut, opts: { next?: boolean; slot?: boolean } = {}) => {
+  const card = (s: Shortcut, opts: { next?: boolean; slot?: boolean; pinned?: boolean } = {}) => {
     const dragging = ghost?.key === s.key;
     if (dragging) {
       return <div key={s.key} ref={(el) => { if (el) els.current.set(s.key, el); else els.current.delete(s.key); }} className="h-16 rounded-2xl border-2 border-dashed border-[#053877]/35 bg-[#053877]/[0.04]" aria-hidden />;
     }
-    const canDrag = !readOnly && !opts.next;
+    const fixed = opts.next || opts.pinned;
+    const canDrag = !readOnly && !fixed;
     return (
-      <div key={s.key} ref={(el) => { if (!opts.next) { if (el) els.current.set(s.key, el); else els.current.delete(s.key); } }} className="relative">
+      <div key={s.key} ref={(el) => { if (!fixed) { if (el) els.current.set(s.key, el); else els.current.delete(s.key); } }} className="relative">
         <button
           type="button"
           onPointerDown={canDrag ? (e) => onPointerDown(e, s.key) : undefined}
           onClick={() => {
             if (swallowClick.current) { swallowClick.current = false; return; }
-            if (editing && !opts.next) return;
+            if (editing && !fixed) return;
             s.go();
           }}
           onContextMenu={editing ? (e) => e.preventDefault() : undefined}
           aria-expanded={s.expands ? !!s.active : undefined}
-          className={`group flex h-16 w-full select-none items-center gap-2 sm:gap-2.5 rounded-2xl bg-card px-2 py-2.5 text-left shadow-sm sm:px-3 transition-colors hover:bg-muted/40 [-webkit-touch-callout:none] ${opts.next || s.active ? "border-2 border-[#053877] dark:border-[#8ab4f8]" : "border border-border"} ${s.active ? "shadow-[0_6px_18px_rgba(5,56,119,0.14)]" : ""} ${canDrag ? "lg:cursor-grab" : ""} ${editing && canDrag ? "touch-none sm:pr-7" : ""}`}
-          data-testid={opts.next ? s.key : `door-${s.key}`}
+          className={`group flex h-16 w-full select-none items-center gap-2 sm:gap-2.5 rounded-2xl bg-card px-2 py-2.5 text-left shadow-sm sm:px-3 transition-colors hover:bg-muted/40 [-webkit-touch-callout:none] ${opts.pinned ? "border-2 border-teal-700 bg-gradient-to-br from-teal-50 to-card to-60% dark:border-teal-400 dark:from-teal-950/40" : opts.next || s.active ? "border-2 border-[#053877] dark:border-[#8ab4f8]" : "border border-border"} ${s.active ? "shadow-[0_6px_18px_rgba(5,56,119,0.14)]" : ""} ${canDrag ? "lg:cursor-grab" : ""} ${editing && canDrag ? "touch-none sm:pr-7" : ""}`}
+          data-testid={fixed ? s.key : `door-${s.key}`}
         >
           <Art3D name={s.art} size={36} className="h-8 w-8 shrink-0 sm:h-9 sm:w-9" />
           <span className="min-w-0 flex-1">
@@ -169,12 +173,13 @@ export function Shortcuts({ catalog, defaults, next }: { catalog: Shortcut[]; de
               {s.tag && <span className="shrink-0 rounded-full bg-[#F0A71F]/20 px-1.5 py-px text-[10px] font-semibold leading-4 text-[#8a5a00] dark:text-[#F0A71F]">{s.tag}</span>}
             </span>
             <span className="mt-0.5 block truncate text-xs leading-snug text-muted-foreground">
+              {s.score != null && <span className="mr-1.5 inline-block rounded-full bg-green-100 px-1.5 text-[10.5px] font-bold leading-4 text-green-800 dark:bg-green-900/50 dark:text-green-200" title="Audience credibility, out of 100">{s.score}</span>}
               {s.phoneHint ? <><span className="sm:hidden">{s.phoneHint}</span><span className="hidden sm:inline">{s.hint}</span></> : s.hint}
             </span>
           </span>
           {canDrag && <GripVertical className={`absolute right-1.5 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground/70 ${editing ? "hidden sm:block" : "hidden opacity-0 transition-opacity group-hover:opacity-100 lg:block"}`} aria-hidden />}
         </button>
-        {editing && !opts.next && (
+        {editing && !fixed && (
           <button type="button" onClick={() => remove(s.key)} aria-label={`Remove ${s.title}`} className="absolute -right-2 -top-2 z-10 flex h-6 w-6 items-center justify-center rounded-full bg-slate-700 text-white shadow ring-2 ring-background hover:bg-slate-900" data-testid={`shortcut-remove-${s.key}`}>
             <X className="h-3.5 w-3.5" />
           </button>
@@ -210,6 +215,7 @@ export function Shortcuts({ catalog, defaults, next }: { catalog: Shortcut[]; de
         ) : null}
       </div>
       <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4 lg:gap-3" data-testid="todo-strip">
+        {pinned && card(pinned, { pinned: true })}
         {next && card(next, { next: true })}
         {items.map((s) => card(s))}
         {(editing || items.length === 0) && canAdd && <div className="col-span-2 lg:col-span-1">{addTile}</div>}

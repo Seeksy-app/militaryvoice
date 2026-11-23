@@ -23,6 +23,7 @@ import { DiscoverEnrich, type EnrichCard } from "@/components/DiscoverEnrich";
 import { FiltersPanel, FilterChips, activeFilters, filtersForServer, type Filters } from "@/components/DiscoverFilters";
 import { PodcastResults, PodcastDrawer, POD_PEOPLE_SORTS, POD_SHOW_SORTS, podCard, type PodOpen } from "@/components/DiscoverPodcasts";
 import { IconTile } from "@/components/ui/icon-tile";
+import { FreeCounter, FreeUpgrade, FreeUsedUp, noteFree, openUpgrade, type FreeState } from "@/components/DiscoverFree";
 
 const NAVY = "#04102b";
 const GOLD = "#F0A71F";
@@ -51,7 +52,7 @@ type RowExtra = {
   country: { name: string; code: string; pct: number } | null;
   niches: { name: string; pct: number }[]; collabs: string[]; collabCount: number;
 };
-type Me = { discoveryPro?: boolean; signedIn: boolean; email?: string; isPodcaster?: boolean; member?: { role: string; orgName: string } | null; reveals?: { used: number; allowance: number; unlimited?: boolean } | null; lookups?: { used: number; allowance: number } | null; isAdmin?: boolean };
+type Me = { discoveryPro?: boolean; signedIn: boolean; email?: string; isPodcaster?: boolean; member?: { role: string; orgName: string } | null; reveals?: { used: number; allowance: number; unlimited?: boolean } | null; lookups?: { used: number; allowance: number } | null; isAdmin?: boolean; free?: FreeState | null };
 /** The saved sample search, every column filled; free to show. */
 type Sample = { q: string; platform: string; total: number; results: Card[]; builtAt: string };
 type SearchResult = { brief: string; mode?: string; total: number; page: number; pageSize: number; results: Card[]; verified: Card[]; understood?: { notes?: string[]; from_nlp?: Record<string, unknown> } | null };
@@ -171,6 +172,8 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
   const { data: me, isLoading: meLoading } = useQuery<Me>({ queryKey: ["/api/discover/me"], queryFn: async () => (await apiRequest("GET", "/api/discover/me")).json() });
   const { data: verified = [] } = useQuery<Card[]>({ queryKey: ["/api/discover/verified"], queryFn: async () => (await apiRequest("GET", "/api/discover/verified")).json() });
   const isMember = !!me?.member;
+  // Growth creators: a free taste (3 searches, 3 full profiles), counted on the server.
+  const free = me?.free ?? null;
   // Where they came from (?src=), remembered for the account they create, and a visit counted once per load.
   const [source] = useState(() => {
     try {
@@ -395,7 +398,15 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
         body: JSON.stringify({ q: s.q, mode: s.mode, filters: filtersForServer(s.filters), platform: s.platform, branch: s.branch, sort: s.sort, page: pageParam, minFollowers: SIZES[s.size].min, maxFollowers: SIZES[s.size].max }),
       });
       const j = await res.json();
-      if (!res.ok) throw new Error(j.message ?? "Search failed");
+      noteFree(queryClient, j);
+      if (!res.ok) {
+        if (res.status === 402 && j.upgrade) {
+          const line = j.free?.searches?.left === 0 ? `You've used your ${j.free.searches.allowance} free searches.` : "Searching every creator comes with Scale.";
+          openUpgrade(line);
+          throw Object.assign(new Error(line), { upgrade: true });
+        }
+        throw new Error(j.message ?? "Search failed");
+      }
       return j;
     },
     staleTime: 10 * 60_000,
@@ -512,7 +523,7 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
                   <p className="mt-1 text-sm text-muted-foreground">Find military and veteran creators, guests and sponsors, and reach them.</p>
                 </div>
                 <div className="flex flex-wrap items-center gap-3 text-xs text-muted-foreground">
-                  {me?.reveals && <span data-testid="discover-allowance">{me.reveals.unlimited ? "Unlimited contacts (admin)" : `${Math.max(0, me.reveals.allowance - me.reveals.used)} of ${me.reveals.allowance} contacts left this month`}</span>}
+                  {me?.reveals && !free && <span data-testid="discover-allowance">{me.reveals.unlimited ? "Unlimited contacts (admin)" : `${Math.max(0, me.reveals.allowance - me.reveals.used)} of ${me.reveals.allowance} contacts left this month`}</span>}
                   <button type="button" onClick={toEnrich} className="font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">Look up a list</button>
                 </div>
               </div>
@@ -525,6 +536,7 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
             <section className={`relative bg-background ${menuOpen ? "z-30" : "z-10"}`}>
               <div className={embedded ? "w-full pb-2 pt-4" : "mx-auto w-full max-w-[88rem] px-4 pb-2 pt-6 sm:px-6"}>
                 {bar}
+                {free && <FreeCounter free={free} className="mt-3" />}
                 {tries}
                 {tab !== "enrich" && (
                   <div className="mt-4 flex flex-wrap items-center gap-2">
@@ -643,9 +655,11 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
                 </span>
               </div>
             ) : null}
-            {search.isError && (
+            {search.isError && ((search.error as { upgrade?: boolean }).upgrade ? (
+              <FreeUsedUp line={(search.error as Error).message} className="mt-6" />
+            ) : (
               <div className="mt-6 rounded-2xl border border-destructive/30 bg-destructive/5 p-5 text-sm text-destructive">{(search.error as Error).message}</div>
-            )}
+            ))}
 
             {/* ours first */}
             {(r as { indexError?: string } | undefined)?.indexError && <p className="mb-3 rounded-lg bg-[#F0A71F]/10 px-3 py-2 text-sm text-[#8a5a00] dark:text-[#F0A71F]">{(r as { indexError?: string }).indexError}</p>}
@@ -663,7 +677,7 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
                 <div className="rounded-2xl border border-border bg-card">
                   <SonarLoader title="Searching the index" steps={submitted?.mode === "keywords" ? ["Reading bios for your words", "Applying your filters", "Measuring each creator"] : ["Understanding your brief", "Searching across the network", "Applying your filters", "Measuring each creator"]} />
                 </div>
-              ) : results.length === 0 && r ? (
+              ) : search.isError ? null : results.length === 0 && r ? (
                 <div className="rounded-2xl border border-dashed border-border p-10 text-center">
                   <p className="text-lg font-semibold">Nobody matched that.</p>
                   <p className="mt-1 text-sm text-muted-foreground">Try fewer words, another platform, or a wider audience size.</p>
@@ -684,7 +698,8 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
         )}
       </main>
 
-      <ProfileDrawer freeKeys={sampleKeys} card={open} siblings={openFrom} sharedKey={sharedKey} allowance={me?.reveals} onOpenCreator={setOpenRaw} onClose={() => setOpenRaw(null)} isMember={isMember} onJoin={() => setGate(true)} lists={lists.data ?? []} onSave={(card, listId) => saveTo.mutate({ card, listId })} saved={open ? saved.has(`${open.platform}:${open.handle.toLowerCase()}`) : false} />
+      <FreeUpgrade />
+      <ProfileDrawer free={!!free} freeKeys={sampleKeys} card={open} siblings={openFrom} sharedKey={sharedKey} allowance={me?.reveals} onOpenCreator={setOpenRaw} onClose={() => setOpenRaw(null)} isMember={isMember} onJoin={() => setGate(true)} lists={lists.data ?? []} onSave={(card, listId) => saveTo.mutate({ card, listId })} saved={open ? saved.has(`${open.platform}:${open.handle.toLowerCase()}`) : false} />
       <PodcastDrawer open={podOpen} from={podFrom} onGo={setPodOpen} onClose={() => setPodOpen(null)} isMember={isMember} onJoin={() => setGate(true)} saved={saved} onSave={(card) => (card.platform === "podperson" ? void saveGuest(card) : saveTo.mutate({ card }))} reveals={me?.reveals ?? null} onRevealed={() => queryClient.invalidateQueries({ queryKey: ["/api/discover/me"] })} />
       <JoinDialog
         open={gate}
@@ -1710,7 +1725,9 @@ const PLATFORM_ICON: Record<string, typeof Instagram> = { instagram: Instagram, 
  * toolbar that follows you (back, next, add to list, share, close), who they
  * are, and then the nine sections.
  */
-function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoin, lists, onSave, saved, allowance, sharedKey = "", freeKeys }: {
+function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoin, lists, onSave, saved, allowance, sharedKey = "", freeKeys, free = false }: {
+  /** On the free taste: contacts and lookalikes open the upgrade card instead of asking the server. */
+  free?: boolean;
   card: Card | null; siblings: Card[]; onClose: () => void; onOpenCreator: (c: Card) => void; isMember: boolean; onJoin: () => void; sharedKey?: string;
   /** platform:handle profiles anyone may open (the sample search's). */
   freeKeys?: Set<string>;
@@ -1738,7 +1755,15 @@ function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoi
     queryFn: async () => {
       const res = await fetch(`/api/discover/creator?platform=${card!.platform}&handle=${encodeURIComponent(card!.handle)}`, { credentials: "include" });
       const j = await res.json();
-      if (!res.ok) throw new Error(j.message);
+      noteFree(queryClient, j);
+      if (!res.ok) {
+        if (res.status === 402 && j.upgrade) {
+          const line = j.free?.lookups?.left === 0 ? `You've used your ${j.free.lookups.allowance} free look-ups.` : "Full profiles come with Scale.";
+          openUpgrade(line);
+          throw Object.assign(new Error(line), { upgrade: true });
+        }
+        throw new Error(j.message);
+      }
       return j;
     },
     staleTime: 60 * 60_000,
@@ -1890,10 +1915,10 @@ function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoi
             </div>
           ) : isMember && card.handle && !contact ? (
             <div className="mt-4 flex flex-wrap items-center gap-3 text-sm">
-              <Button size="sm" variant="outline" onClick={() => reveal.mutate()} disabled={reveal.isPending} className="h-8 gap-1.5 rounded-lg" data-testid="drawer-reveal">
+              <Button size="sm" variant="outline" onClick={() => (free ? openUpgrade("Contact emails come with Scale.") : reveal.mutate())} disabled={reveal.isPending} className="h-8 gap-1.5 rounded-lg" data-testid="drawer-reveal">
                 {reveal.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mail className="h-4 w-4" />} Reveal contact
               </Button>
-              {allowance && <span className="text-xs text-muted-foreground">{Math.max(0, allowance.allowance - allowance.used)} of {allowance.allowance} left this month</span>}
+              {allowance && !free && <span className="text-xs text-muted-foreground">{Math.max(0, allowance.allowance - allowance.used)} of {allowance.allowance} left this month</span>}
             </div>
           ) : null}
           {a.data?.partial && (
@@ -1926,7 +1951,7 @@ function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoi
       </div>
     </div>
   ) : a.isError ? (
-    <p className="m-8 rounded-xl bg-destructive/5 p-4 text-sm text-destructive">{(a.error as Error).message}</p>
+    (a.error as { upgrade?: boolean }).upgrade ? <FreeUsedUp line={(a.error as Error).message} className="m-5 sm:m-8" /> : <p className="m-8 rounded-xl bg-destructive/5 p-4 text-sm text-destructive">{(a.error as Error).message}</p>
   ) : (
     <div className="p-5 sm:p-8">
       <div className="rounded-2xl border border-border bg-card">
@@ -1951,7 +1976,7 @@ function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoi
               onOpenCreator={(p: ProfilePerson) => onOpenCreator({ platform: p.platform, handle: p.handle, name: p.name, picture: p.picture, followers: p.followers, engagement: null, branch: "" })}
               similar={
                 !wantSimilar ? (
-                  <Button variant="outline" className="self-start rounded-full" onClick={() => setWantSimilar(true)} data-testid="find-similar">Search for more creators like this</Button>
+                  <Button variant="outline" className="self-start rounded-full" onClick={() => (free ? openUpgrade("Creators like this one come with Scale.") : setWantSimilar(true))} data-testid="find-similar">Search for more creators like this</Button>
                 ) : similar.isLoading ? (
                   <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{Array.from({ length: 3 }, (_, i) => <Skeleton key={i} className="h-36 rounded-2xl" />)}</div>
                 ) : similar.isError ? (

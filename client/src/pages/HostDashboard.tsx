@@ -104,6 +104,8 @@ import { CrewDashboard, type CrewInfo } from "@/components/CrewDashboard";
 import { CohostDashboard, type CohostInfo } from "@/components/CohostDashboard";
 import { HostNav, AccountMenuContent, AccountAvatar } from "@/components/HostNav";
 import { Shortcuts, type Shortcut } from "@/components/Shortcuts";
+import { type FreeState } from "@/components/DiscoverFree";
+import { useYourDiscoveryCard, YourDiscoverySheet } from "@/components/YourDiscovery";
 import { IntegrationsScreen } from "@/components/IntegrationsScreen";
 import { ThemeSwitch } from "@/components/ThemeSwitch";
 import { ProScreen } from "@/components/ProScreen";
@@ -1102,12 +1104,15 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     refetchInterval: 120_000,
   });
   // Discovery is a paid tool for creators (7 Oct): on Growth it shows Upgrade instead.
-  const { data: discoverMe } = useQuery<{ locked?: boolean; verifiedLocked?: boolean }>({
+  const { data: discoverMe } = useQuery<{ locked?: boolean; verifiedLocked?: boolean; free?: FreeState | null }>({
     queryKey: ["/api/discover/me"],
     queryFn: async () => (await apiRequest("GET", "/api/discover/me")).json(),
     enabled: !!data && hasProfile,
     staleTime: 60_000,
   });
+  // Your Discovery: their own profile as brands see it, the first card on the home screen (a cache-only peek on load).
+  const [myDiscOpen, setMyDiscOpen] = useState(false);
+  const yourDiscovery = useYourDiscoveryCard({ enabled: !!data && hasProfile && screen === "dashboard", onOpen: () => setMyDiscOpen(true), onConnect: () => goTo("integrations") });
   if (isError) {
     return (
       <div className="min-h-screen">
@@ -1156,7 +1161,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   // has already taken a slot just loses a band of screen to it.
   const workspace = !!data && hasProfile && !inSetup;
   const newOpps = (oppsPeek ?? []).filter((o) => o.status === "new").length;
-  const discoveryLocked = Boolean(discoverMe?.locked);
+  // Growth creators have a free taste of Discovery now (3 searches, 3 full profiles): open, with its counter.
+  const discoveryLocked = Boolean(discoverMe?.locked) && !discoverMe?.free;
   const verifiedLocked = Boolean(discoverMe?.verifiedLocked);
   const eventsCountNav = (hostEvents ?? []).filter((e) => e.slotIndex != null && (!e.event || Date.now() < new Date(e.event.startAtUtc).getTime() + e.event.durationHours * 3600_000)).length;
   // Which path they came in on (podcaster, creator, planner): the dashboard follows it.
@@ -1688,7 +1694,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                     const next: Shortcut | null = step ? { key: `todo-${step.key}`, art: "sparkles", title: step.label, tag: step.tag, hint: "Your next step", go: () => goToStep(step) } : null;
                     return (
                       <>
-                      <Shortcuts catalog={catalog} defaults={[path === "planner" ? "myevents" : "episode", "clips", "live", "page"]} next={next} />
+                      <Shortcuts catalog={catalog} defaults={[path === "planner" ? "myevents" : "episode", "clips", "live", "page"]} next={next} pinned={yourDiscovery} />
+                      <YourDiscoverySheet open={myDiscOpen} onOpenChange={setMyDiscOpen} free={discoverMe?.free} onFind={() => { setMyDiscOpen(false); goTo("discovery"); }} onConnect={() => { setMyDiscOpen(false); goTo("integrations"); }} />
                       {/* Go live: our room, or their own software with our stream key. Both land in the Library. */}
                       {liveOpen && (
                         <div className="mt-3 rounded-[20px] border border-border bg-card px-5 py-5 shadow-[0_18px_44px_rgba(16,24,40,0.16)] sm:px-8 sm:pb-6 sm:pt-6" data-testid="go-live-panel">
