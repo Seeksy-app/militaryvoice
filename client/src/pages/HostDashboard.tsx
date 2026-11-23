@@ -103,6 +103,7 @@ import { StudioIcon } from "@/components/GreenRoomButton";
 import { CrewDashboard, type CrewInfo } from "@/components/CrewDashboard";
 import { CohostDashboard, type CohostInfo } from "@/components/CohostDashboard";
 import { HostNav, AccountMenuContent, AccountAvatar } from "@/components/HostNav";
+import { Shortcuts, type Shortcut } from "@/components/Shortcuts";
 import { IntegrationsScreen } from "@/components/IntegrationsScreen";
 import { ThemeSwitch } from "@/components/ThemeSwitch";
 import { ProScreen } from "@/components/ProScreen";
@@ -1664,35 +1665,33 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                   </div>
                   {/* Someone added them to a brand's, agency's or organizer's team. */}
                   <OrgInvites compact />
-                  {/* Four doors. The last is their next step, outlined, so it isn't a box of its own. */}
+                  {/* Shortcuts: their next step in front, then the ones they picked (today's four by default). */}
                   {(() => {
                     const step = buildSteps(checklistState, checklistNav).filter((x) => !x.done)[0];
                     const hosted = podcastSources.some((p) => p.source === "militaryvoices");
-                    const doors: { key: string; icon: typeof Plus; art: Icon3D; title: string; hint: string; go: () => void; tag?: string; next?: boolean }[] = [
+                    // Shortcuts (Andrew, 23 Nov, mockup approved): today's four are the default; the rest of the nav is
+                    // there to add. Keys are what the server stores, so never rename one.
+                    const catalog: Shortcut[] = [
                       path === "planner"
-                        ? { key: "myevents", icon: CalendarDays, art: "calendar", title: "My events", hint: "Create and run yours", go: () => goTo("myevents") }
-                        : { key: "episode", icon: Mic2, art: "mic", title: hosted ? "New episode" : "Your podcast", hint: hosted ? "Publish to every app" : "Host it free", go: () => goTo("podcast") },
-                      { key: "clips", icon: Wand2, art: "scissors", title: "Make clips", hint: "Pōstify a video", go: () => goTo("postify") },
-                      { key: "live", icon: Video, art: "video", title: "Go live", hint: "Studio, StreamYard or OBS", go: () => setLiveOpen((v) => !v) },
-                      step
-                        ? { key: `todo-${step.key}`, icon: Sparkles, art: "sparkles", title: step.label, tag: step.tag, hint: `Next step: ${step.cta.toLowerCase()}`, go: () => goToStep(step), next: true }
-                        : { key: "page", icon: Globe, art: "globe", title: "Your SmartLink", hint: "Edit your page", go: () => goTo("page") },
+                        ? { key: "myevents", art: "calendar", title: "My events", hint: "Create and run", go: () => goTo("myevents") }
+                        : { key: "episode", art: "mic", title: hosted ? "New episode" : "Your podcast", hint: hosted ? "To every app" : "Host it free", go: () => goTo("podcast") },
+                      { key: "clips", art: "scissors", title: "Make clips", hint: "Pōstify a video", go: () => goTo("postify") },
+                      { key: "live", art: "video", title: "Go live", hint: "Studio or OBS", go: () => setLiveOpen((v) => !v), active: liveOpen, expands: true },
+                      { key: "page", art: "globe", title: "Your SmartLink", hint: "Edit your page", go: () => goTo("page") },
+                      { key: "downloads", art: "chart", title: "Podcast stats", hint: "Downloads, listens", go: () => goTo("podcaststats") },
+                      { key: "library", art: "books", title: "Library", hint: "Your recordings", go: () => goTo("recordings") },
+                      { key: "social", art: "megaphone", title: "Social", hint: "Post everywhere", go: () => goTo("social") },
+                      { key: "calendar", art: "calendar", title: "Calendar", hint: "Your week of posts", go: () => goTo("calendar") },
+                      { key: "social-stats", art: "trend", title: "Social stats", hint: "How posts did", go: () => goTo("analytics") },
+                      { key: "email", art: "mail", title: "Email", hint: "Your subscribers", go: () => goTo("fans") },
+                      { key: "discovery", art: "compass", title: "Discovery", hint: "Guests, sponsors", go: () => goTo("discovery") },
+                      ...(path !== "planner" ? [{ key: "events", art: "party" as const, title: "Events", hint: "Yours and others", go: () => goTo("myevents") }] : []),
+                      { key: "studio", art: "tv", title: "Studio", hint: "Record or go live", go: () => { setProFeature("room"); goTo("pro"); } },
                     ];
+                    const next: Shortcut | null = step ? { key: `todo-${step.key}`, art: "sparkles", title: step.label, tag: step.tag, hint: "Your next step", go: () => goToStep(step) } : null;
                     return (
                       <>
-                      <div className="mt-6 grid grid-cols-2 gap-3 lg:grid-cols-4" data-testid="todo-strip">
-                        {doors.map((d) => {
-                          const on = d.key === "live" && liveOpen;
-                          return (
-                            <button key={d.key} type="button" onClick={d.go} aria-expanded={d.key === "live" ? liveOpen : undefined} className={`rounded-2xl bg-card p-4 text-left shadow-sm transition-colors hover:bg-muted/40 ${d.next || on ? "border-2 border-[#053877] dark:border-[#8ab4f8]" : "border border-border"} ${on ? "shadow-[0_6px_18px_rgba(5,56,119,0.14)]" : ""}`} data-testid={d.next ? d.key : `door-${d.key}`}>
-                              {/* 3D, Clay-style (Andrew, 21 Nov: "update the 3-d icon everywhere"). */}
-                              <Art3D name={d.art} size={40} className="-ml-0.5 -mt-0.5" />
-                              <span className="mt-1.5 flex items-center gap-2 text-sm font-semibold text-foreground">{d.title}{d.tag && <span className="rounded-full bg-[#F0A71F]/20 px-1.5 py-px text-[10px] font-semibold leading-4 text-[#8a5a00] dark:text-[#F0A71F]">{d.tag}</span>}</span>
-                              <span className="mt-0.5 block text-balance text-xs text-muted-foreground">{d.hint}</span>
-                            </button>
-                          );
-                        })}
-                      </div>
+                      <Shortcuts catalog={catalog} defaults={[path === "planner" ? "myevents" : "episode", "clips", "live", "page"]} next={next} />
                       {/* Go live: our room, or their own software with our stream key. Both land in the Library. */}
                       {liveOpen && (
                         <div className="mt-3 rounded-[20px] border border-border bg-card px-5 py-5 shadow-[0_18px_44px_rgba(16,24,40,0.16)] sm:px-8 sm:pb-6 sm:pt-6" data-testid="go-live-panel">
