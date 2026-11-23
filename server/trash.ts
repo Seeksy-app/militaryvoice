@@ -4,7 +4,7 @@
 // days are up; then a daily job removes the files and forgets the rows.
 import type { Express, RequestHandler } from "express";
 import { and, asc, eq, lte } from "drizzle-orm";
-import { db, schemaIsReady } from "./storage.js";
+import { db, schemaIsReady, inTransaction } from "./storage.js";
 import { getSessionEmail } from "./session.js";
 import { deleteRecordingObject } from "./recordingStorage.js";
 import { deleteShowAsset } from "./photoStorage.js";
@@ -63,7 +63,7 @@ export function registerTrash(app: Express, requireHostSession: RequestHandler) 
     // Parents before children: a show before its episodes, a recording before its clips.
     const order: TableName[] = ["hostedShows", "hostedEpisodes", "recordings", "clips", "showAssets"];
     try {
-      await db.transaction(async (tx) => {
+      await inTransaction(async (tx) => {
         for (const name of order) {
           const list = rows[name];
           if (!list?.length) continue;

@@ -3205,7 +3205,7 @@ class DatabaseStorage implements IStorage {
    */
   async moveSignupSlots(eventId: number, moves: { id: number; slotIndex: number }[]): Promise<number> {
     await ready();
-    return db.transaction(async (tx) => {
+    return inTransaction(async (tx) => {
       for (const m of moves) {
         await tx
           .update(signups)
