@@ -1,16 +1,12 @@
 import { useState, type ReactNode } from "react";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { apiRequest } from "@/lib/queryClient";
-import { useToast } from "@/hooks/use-toast";
 import { ZoomConnect, ImportLink } from "@/components/ZoomConnect";
 import { LiveSettings } from "@/components/LiveSettings";
 import { PodcastStatsRows, useHostedHere } from "@/components/PodcastStats";
 import { platformLabel, formatFollowers, ALL_PLATFORMS } from "@/components/SocialIcons";
 import { BrandMark, BrandGroup } from "@/components/BrandMark";
 import type { ProfileRow, SocialAccount } from "@shared/schema";
-import { Check, ChevronDown, ExternalLink, Headphones, Link2, Loader2, Radio, RefreshCw, Share2, Upload, User, Video, Webhook } from "lucide-react";
+import { Check, ChevronDown, Headphones, Link2, Radio, RefreshCw, Share2, Upload, Video, Webhook } from "lucide-react";
 import { IconTile } from "@/components/ui/icon-tile";
 
 /**
@@ -89,25 +85,13 @@ export function IntegrationsScreen({
                   )
                 }
                 name={platformLabel(platform)}
-                line={
-                  a && platform === "linkedin" ? (
-                    <LinkedinPostsAs account={a} />
-                  ) : a ? (
-                    <><span className="font-medium text-foreground">{handle}</span>{followers ? ` · ${followersText(a.followers)}` : ""}</>
-                  ) : (
-                    "Not connected"
-                  )
-                }
+                // LinkedIn's handle is the page it posts as (Upload-Post's pin; switch it under Manage accounts).
+                line={a ? <><span className="font-medium text-foreground">{handle}</span>{followers ? ` · ${followersText(a.followers)}` : ""}</> : "Not connected"}
                 right={
+                  // Connected or Connect, nothing else: disconnecting and switching live under Manage accounts
+                  // (Andrew, 23 Nov: the ↗ "always makes me think that's where I would go to manage").
                   a ? (
-                    <span className="flex items-center gap-2">
-                      <Connected />
-                      {a.url && (
-                        <a href={a.url} target="_blank" rel="noreferrer" className="rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground" aria-label={`Open ${platformLabel(platform)}`}>
-                          <ExternalLink className="h-3.5 w-3.5" />
-                        </a>
-                      )}
-                    </span>
+                    <Connected />
                   ) : (
                     <Button variant="outline" size="sm" className="h-8 rounded-full px-3.5 text-xs" onClick={onConnectSocial} disabled={connecting}>Connect</Button>
                   )
@@ -185,108 +169,6 @@ function followersText(n?: number): string {
   return f ? `${f} follower${n === 1 ? "" : "s"}` : "";
 }
 
-type LinkedinPageOption = { id: string; name: string; picture: string; followers?: number };
-
-/**
- * LinkedIn's line: "Posts as SmartLoads ▾ · 12 followers". One LinkedIn login
- * can run several company pages; this picks the one every LinkedIn post goes
- * out as (clips, full episodes, scheduled ones), or their personal profile.
- * It's Upload-Post's own pin, so it matches their connect page too (Andrew,
- * 23 Nov: he picked SmartLoads there and our row kept naming another page).
- */
-function LinkedinPostsAs({ account }: { account: SocialAccount }) {
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  const [open, setOpen] = useState(false);
-  const pagesQ = useQuery<{ pages: LinkedinPageOption[]; selectedId: string | null }>({
-    queryKey: ["/api/host/social/linkedin-pages"],
-    queryFn: async () => (await apiRequest("GET", "/api/host/social/linkedin-pages")).json(),
-    staleTime: 5 * 60_000,
-    retry: false,
-  });
-  const pick = useMutation({
-    mutationFn: async (pageId: string | null) => (await apiRequest("POST", "/api/host/social/linkedin-page", { pageId })).json() as Promise<{ accounts: SocialAccount[] }>,
-    onSuccess: (r, pageId) => {
-      qc.setQueryData(["/api/host/social"], (old: any) => (old ? { ...old, accounts: r.accounts } : old));
-      qc.setQueryData(["/api/host/social/linkedin-pages"], (old: any) => (old ? { ...old, selectedId: pageId } : old));
-      const name = r.accounts.find((x) => x.platform === "linkedin")?.displayName;
-      toast({ title: pageId ? `LinkedIn posts now go out as ${name ?? "that page"}.` : "LinkedIn posts now go out on your personal profile." });
-    },
-    onError: (e: Error) => toast({ title: "Couldn't change that", description: e.message.replace(/^\d+:\s*/, ""), variant: "destructive" }),
-  });
-  const pages = pagesQ.data?.pages ?? [];
-  const selectedId = pagesQ.data ? pagesQ.data.selectedId : account.pageId ?? null;
-  const current = selectedId ? pages.find((p) => p.id === selectedId) : undefined;
-  // Before the pages arrive, the row's cached name (already the pinned page, or "Personal profile").
-  const name = !pagesQ.data ? account.displayName || "Personal profile" : current?.name ?? (selectedId ? account.displayName : "Personal profile");
-  const followers = current ? current.followers : account.followers;
-  const canPick = pages.length > 0;
-  return (
-    <span className="flex min-w-0 items-center gap-1">
-      <span className="shrink-0">Posts as</span>
-      {canPick ? (
-        <DropdownMenu open={open} onOpenChange={setOpen}>
-          <DropdownMenuTrigger asChild>
-            <button
-              type="button"
-              className="-mx-0.5 inline-flex min-w-0 items-center gap-0.5 rounded-md px-1 py-0.5 font-medium text-foreground underline decoration-dotted underline-offset-4 hover:bg-muted focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
-              aria-label={`LinkedIn posts go out as ${name}. Change`}
-              data-testid="button-linkedin-posts-as"
-              disabled={pick.isPending}
-            >
-              <span className="truncate">{name}</span>
-              {pick.isPending ? <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin" /> : <ChevronDown className="h-3.5 w-3.5 shrink-0" />}
-            </button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="start" className="w-72 max-w-[calc(100vw-2rem)]">
-            <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">Every LinkedIn post goes out as:</DropdownMenuLabel>
-            <DropdownMenuSeparator />
-            <PageItem
-              selected={!selectedId}
-              picture=""
-              name="Personal profile"
-              note="You, on your own LinkedIn"
-              onSelect={() => { if (selectedId) pick.mutate(null); }}
-              testId="linkedin-page-personal"
-            />
-            {pages.map((p) => (
-              <PageItem
-                key={p.id}
-                selected={p.id === selectedId}
-                picture={p.picture}
-                name={p.name}
-                note={p.followers != null ? `Company page · ${followersText(p.followers)}` : "Company page"}
-                onSelect={() => { if (p.id !== selectedId) pick.mutate(p.id); }}
-                testId={`linkedin-page-${p.id.split(":").pop()}`}
-              />
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-      ) : (
-        <span className="truncate font-medium text-foreground">{name}</span>
-      )}
-      {followers != null && <span className="hidden shrink-0 sm:inline">· {followersText(followers)}</span>}
-    </span>
-  );
-}
-
-function PageItem({ selected, picture, name, note, onSelect, testId }: { selected: boolean; picture: string; name: string; note: string; onSelect: () => void; testId: string }) {
-  return (
-    <DropdownMenuItem onSelect={onSelect} className="gap-2.5 py-2" data-testid={testId}>
-      {picture ? (
-        <img src={picture} alt="" referrerPolicy="no-referrer" className="h-8 w-8 shrink-0 rounded-md object-cover ring-1 ring-border" />
-      ) : (
-        <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-muted text-muted-foreground"><User className="h-4 w-4" /></span>
-      )}
-      <span className="min-w-0 flex-1">
-        <span className="block truncate text-sm font-medium">{name}</span>
-        <span className="block truncate text-xs text-muted-foreground">{note}</span>
-      </span>
-      {selected && <Check className="h-4 w-4 shrink-0 text-primary" />}
-    </DropdownMenuItem>
-  );
-}
-
 function Group({ id, icon, title, line, after, action, children }: { id?: string; icon: ReactNode; title: string; line: string; /** A link under the intro line. */ after?: ReactNode; action?: ReactNode; children: ReactNode }) {
   return (
     <div id={id} className="mb-8 scroll-mt-24" data-testid={id}>
@@ -320,6 +202,5 @@ function Row({ icon, name, line, right, children, testId }: { icon: ReactNode; n
 }
 
 function Connected() {
-  // A tick alone on phones, so the account's name has the room (the LinkedIn page read "S…" at 390).
-  return <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600/10 px-1.5 py-1 text-xs font-semibold text-emerald-700 sm:px-2.5 dark:text-emerald-400" aria-label="Connected" title="Connected"><Check className="h-3.5 w-3.5" /><span className="hidden sm:inline">Connected</span></span>;
+  return <span className="inline-flex items-center gap-1 rounded-full bg-emerald-600/10 px-2.5 py-1 text-xs font-semibold text-emerald-700 dark:text-emerald-400"><Check className="h-3.5 w-3.5" /> Connected</span>;
 }
