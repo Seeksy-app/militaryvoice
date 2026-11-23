@@ -1107,14 +1107,14 @@ const localNow = () => { const d = new Date(Date.now() - new Date().getTimezoneO
  * The show's intro and outro on their own, from the episode page (Andrew, 23 Nov 2026: "so he can just easily go into
  * one and click intro and outro and listen"). The player above already plays the whole episode with them on.
  */
-function BookendListen({ show, state }: { show: HostedShowRow; state: string }) {
+function BookendListen({ show, ep, state }: { show: HostedShowRow; ep: Ep; state: string }) {
   const audio = useRef<HTMLAudioElement | null>(null);
   const [playing, setPlaying] = useState<"" | "intro" | "outro">("");
   useEffect(() => () => { audio.current?.pause(); }, []);
   const play = (kind: "intro" | "outro") => {
     if (playing === kind) { audio.current?.pause(); setPlaying(""); return; }
     audio.current?.pause();
-    const a = new Audio(`/api/host/hosting/shows/${show.id}/bookend/${kind}`);
+    const a = new Audio(`/api/host/hosting/shows/${show.id}/bookend/${kind}?ep=${ep.id}`);
     a.onended = () => setPlaying("");
     audio.current = a; setPlaying(kind); void a.play().catch(() => setPlaying(""));
   };
@@ -1126,7 +1126,7 @@ function BookendListen({ show, state }: { show: HostedShowRow; state: string }) 
   return (
     <div className="mt-3 flex flex-wrap items-center gap-2 rounded-xl bg-muted/50 px-3 py-2 text-xs" data-testid="episode-bookend-listen">
       <span className="text-muted-foreground">{state === "ready" ? "Plays with your intro and outro, as the apps hear it. Hear them on their own:" : state === "failed" ? "Your intro and outro couldn't be added yet. Hear them on their own:" : "Your intro and outro are being added (a few minutes). Hear them on their own:"}</span>
-      {show.introKey && btn("intro", "Intro")}
+      {(ep.introKey || show.introKey) && btn("intro", ep.introKey ? "Intro (this episode's)" : "Intro")}
       {show.outroKey && btn("outro", "Outro")}
     </div>
   );
@@ -1280,7 +1280,7 @@ function EpisodePage({ ep, show, youtubeReady, production, onDirectories, onBack
                 </button>
               </>
             )}
-            {hasAudio && bookendsOn && !!(show.introKey || show.outroKey) && <BookendListen show={show} state={bookendState} />}
+            {hasAudio && bookendsOn && !!(ep.introKey || show.introKey || show.outroKey) && <BookendListen show={show} ep={ep} state={bookendState} />}
             <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
               <span><b className="tabular-nums">{compact(ep.downloads)}</b> <span className="text-muted-foreground">downloads</span></span>
               {ep.durationSec > 0 && <span><b className="tabular-nums">{hms(ep.durationSec)}</b> <span className="text-muted-foreground">long</span></span>}

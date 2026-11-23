@@ -3,7 +3,7 @@ import type { Express, Request } from "express";
 import crypto from "node:crypto";
 import multer from "multer";
 import sharp from "sharp";
-import { and, desc, eq, gte, sql } from "drizzle-orm";
+import { and, desc, eq, gte, ne, sql } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { withCredits } from "./roomKit.js";
 import { fillFooter } from "../shared/footer.js";
@@ -79,8 +79,10 @@ const notesText = (html: string) => html
   .replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").trim();
 /** A show's description as plain words: one that came in with tags (from an old host) loses them; plain text is left alone. */
 /** The show's intro, outro and sponsor spots on an episode. What an episode is made from: when any part changes, the worker makes it again. */
+/** The intro an episode gets: its own (a teaser about it) when it has one, else the show's. */
+export const introOf = (s: HostedShowRow, e: HostedEpisodeRow) => e.introKey || s.introKey;
 export const wantsBookends = (s: HostedShowRow, e: HostedEpisodeRow) =>
-  !!(s.introKey || s.outroKey) && !!e.audioKey && e.bookends !== "off" && (e.bookends === "on" || (!!s.bookendsSince && e.createdAt >= s.bookendsSince));
+  !!(introOf(s, e) || s.outroKey) && !!e.audioKey && e.bookends !== "off" && (e.bookends === "on" || (!!s.bookendsSince && e.createdAt >= s.bookendsSince));
 const spotLive = (sp: HostedSpotRow, day: string) => sp.active && (!sp.startsOn || sp.startsOn <= day) && (!sp.endsOn || sp.endsOn >= day);
 const spotApplies = (sp: HostedSpotRow, e: HostedEpisodeRow) =>
   !e.spotsOff && !!e.audioKey && (sp.episodeId ? sp.episodeId === e.id : sp.scope === "all" || (sp.scope === "full" ? e.episodeType === "full" : e.createdAt >= sp.createdAt));
@@ -95,7 +97,7 @@ function planOf(s: HostedShowRow, e: HostedEpisodeRow, spots: HostedSpotRow[]) {
   const mids = mine.filter((x) => x.kind === "mid" && x.atSec > 0 && (!e.durationSec || x.atSec < e.durationSec - 5)).sort((a, b) => a.atSec - b.atSec).slice(0, 3);
   const bk = wantsBookends(s, e);
   const segs: Seg[] = [];
-  if (bk && s.introKey) segs.push({ key: s.introKey });
+  if (bk && introOf(s, e)) segs.push({ key: introOf(s, e) });
   if (pre) segs.push({ key: pre.audioKey });
   let at = 0;
   for (const m of mids) { segs.push({ key: "main", start: at, end: m.atSec }); segs.push({ key: m.audioKey }); at = m.atSec; }
@@ -516,13 +518,14 @@ export async function claimEpisodeBookends(canStitch = false, canSegments = fals
   if (Date.now() - lastBookendScan < 15_000) return null;
   const stale = new Date(Date.now() - 30 * 60_000).toISOString();
   const spots = await db.select().from(hostedSpots);
-  const shows = (await db.select().from(hostedShows)).filter((x) => x.introKey || x.outroKey || spots.some((p) => p.showId === x.id));
+  const ownIntro = new Set((await db.select({ showId: hostedEpisodes.showId }).from(hostedEpisodes).where(ne(hostedEpisodes.introKey, ""))).map((r) => r.showId));
+  const shows = (await db.select().from(hostedShows)).filter((x) => x.introKey || x.outroKey || ownIntro.has(x.id) || spots.some((p) => p.showId === x.id));
   for (const sh of shows) {
     for (const e of await episodesOf(sh.id)) {
       const plan = planOf(sh, e, spots);
       if (!plan.any || served(sh, e, spots)) continue;
       // A worker that doesn't know sponsor spots yet only does intro and outro.
-      if (!canStitch && plan.parts.length > (wantsBookends(sh, e) ? 1 + (sh.introKey ? 1 : 0) + (sh.outroKey ? 1 : 0) : 1)) continue;
+      if (!canStitch && plan.parts.length > (wantsBookends(sh, e) ? 1 + (introOf(sh, e) ? 1 : 0) + (sh.outroKey ? 1 : 0) : 1)) continue;
       // Only a worker that can cut the episode where a mid-roll goes does those.
       if (plan.hasMid && !canSegments) continue;
       if (e.bookendJob === "failed" || (e.bookendJob === "running" && e.bookendJobAt > stale)) continue;
@@ -536,7 +539,7 @@ export async function claimEpisodeBookends(canStitch = false, canSegments = fals
       const bk = wantsBookends(sh, e);
       return {
         id: e.id, title: e.title, durationSec: e.durationSec, audioUrl: await signedRecordingUrl(e.audioKey, 6 * 3600),
-        introUrl: bk && sh.introKey ? await signedRecordingUrl(sh.introKey, 6 * 3600) : "", outroUrl: bk && sh.outroKey ? await signedRecordingUrl(sh.outroKey, 6 * 3600) : "",
+        introUrl: bk && introOf(sh, e) ? await signedRecordingUrl(introOf(sh, e), 6 * 3600) : "", outroUrl: bk && sh.outroKey ? await signedRecordingUrl(sh.outroKey, 6 * 3600) : "",
         sig: plan.sig, parts: urls, spots: plan.spotIds, sources, segments,
       };
     }
@@ -1420,7 +1423,9 @@ Return JSON only: {"titles":["","",""],"description":""}`,
   /** Play the show's intro or outro (their own page's player). */
   app.get("/api/host/hosting/shows/:id/bookend/:kind", requireHostSession, async (req, res) => {
     const s = await ownShow(emailOf(req), Number(req.params.id));
-    const key = s ? (req.params.kind === "outro" ? s.outroKey : s.introKey) : "";
+    // ?ep=<id>: that episode's own intro when it has one (a teaser), else the show's.
+    const [ep] = s && req.query.ep ? await db.select().from(hostedEpisodes).where(and(eq(hostedEpisodes.id, Number(req.query.ep)), eq(hostedEpisodes.showId, s.id))).limit(1) : [];
+    const key = s ? (req.params.kind === "outro" ? s.outroKey : ep ? introOf(s, ep) : s.introKey) : "";
     if (!s || !key) return res.status(404).json({ message: "Not set." });
     res.setHeader("Cache-Control", "no-store");
     res.redirect(302, await signedRecordingUrl(key, 3600));

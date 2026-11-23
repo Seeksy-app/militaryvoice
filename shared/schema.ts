@@ -2967,6 +2967,8 @@ export const hostedEpisodes = pgTable("hosted_episodes", {
   servedSec: integer("served_sec").notNull().default(0),
   /** What it was made from (intro, outro and audio): when any change, it is made again. */
   servedSig: text("served_sig").notNull().default(""),
+  /** This episode's own intro in place of the show's (a teaser about this episode, 23 Nov 2026); "" = the show's. */
+  introKey: text("intro_key").notNull().default(""),
   bookendJob: text("bookend_job").notNull().default(""),
   bookendJobAt: text("bookend_job_at").notNull().default(""),
   /** Who was on it (fills {guest} in the show's footer). */
