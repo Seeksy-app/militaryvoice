@@ -1,4 +1,5 @@
 import { BonusCreditsButton } from "@/components/BonusCredits";
+import { MoveShowButton } from "@/components/AdminShowMove";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDownLeft, ArrowUpRight, Bell, CalendarDays, CalendarPlus, Check, MessageSquare, Sparkles, ExternalLink, Eye, Globe, Loader2, Mic2, MousePointerClick, PenSquare, Plus, StickyNote, Tag, Trash2, UserPlus, Users, X } from "lucide-react";
@@ -134,7 +135,12 @@ export function ContactProfile({ email, onClose }: { email: string; onClose: () 
                 <section className="space-y-1.5 rounded-xl border p-3 text-sm">
                   <p className="flex items-center gap-1.5 text-xs font-semibold uppercase tracking-wide text-muted-foreground"><Globe className="h-3.5 w-3.5" /> On MilitaryVoices</p>
                   {d.smartlink && <a href={d.smartlink.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 font-medium text-[#053877] hover:underline dark:text-[#8fb5e8]">SmartLink: /{d.smartlink.handle} <ExternalLink className="h-3 w-3" /></a>}
-                  {d.shows.map((s) => <a key={s.id} href={s.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 font-medium text-[#053877] hover:underline dark:text-[#8fb5e8]">{s.title} · {s.episodes} ep <ExternalLink className="h-3 w-3" /></a>)}
+                  {d.shows.map((s) => (
+                    <div key={s.id} className="flex items-center gap-2">
+                      <a href={s.url} target="_blank" rel="noreferrer" className="flex min-w-0 flex-1 items-center gap-1 font-medium text-[#053877] hover:underline dark:text-[#8fb5e8]"><span className="truncate">{s.title} · {s.episodes} ep</span> <ExternalLink className="h-3 w-3 shrink-0" /></a>
+                      <MoveShowButton showId={s.id} title={s.title} onMoved={refresh} />
+                    </div>
+                  ))}
                 </section>
               )}
               {d.ownEvents.length > 0 && (

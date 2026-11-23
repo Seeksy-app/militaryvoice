@@ -202,6 +202,7 @@ import { registerFreesoundImport } from "./studioLibrary.js";
 import { registerNudges, fireNudgeFor } from "./nudges.js";
 import { registerCreatorCampaigns } from "./creatorCampaigns.js";
 import { registerContactProfile } from "./contactProfile.js";
+import { registerShowMove } from "./showMove.js";
 import { registerAskShow, claimTranscript } from "./askShow.js";
 import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, createProductionSubscription, readSessionMeta, readSubscription, reportExtraCredits, billingPortal, createAddonCheckout, readAddonSession, addonStateFrom, bundledAddonStatesFrom, readPlanSessionAddons, ensureExtraItem, type PlanState } from "./stripe.js";
 import { postableTitle } from "../shared/episodeTitle.js";
@@ -7132,6 +7133,7 @@ export function registerRoutes(app: Express): void {
   registerRadioStreamIn(app);
   registerMail(app, requireAdmin);
   registerContactProfile(app, requireAdmin);
+  registerShowMove(app, requireAdmin);
   registerTrash(app, requireHostSession);
   registerMyStudio(app, requireHostSession, { youtubeToken });
   registerYoutubeKey(app, requireHostSession);
