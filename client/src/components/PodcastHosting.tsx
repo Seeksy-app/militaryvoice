@@ -1334,7 +1334,7 @@ function EpisodePage({ ep, show, youtubeReady, production, onDirectories, onBack
                 </div>
               )}
             </div>
-            <label className={`${label} mt-3`}>Guest (fills {"{guest}"} in your footer)<Input value={(v.guest as string) ?? ""} onChange={(e) => set("guest", e.target.value)} className="mt-1" placeholder="Who was on it" data-testid="hosting-ep-guest" /></label>
+            {/* No Guest box: the notes say who is on it, written from the episode (Andrew, 23 Nov). */}
             {false && (show.introKey || show.outroKey) && hasAudio && (
               <div className="mt-3 rounded-xl border border-border px-3 py-2.5 text-sm" data-testid="hosting-ep-bookends">
                 <label className="flex items-center gap-2"><input type="checkbox" checked={bookendsOn} onChange={(e) => set("bookends", e.target.checked ? "on" : "off")} /> Add your intro{show.outroKey ? " and outro" : ""} to this episode</label>

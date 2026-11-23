@@ -590,7 +590,7 @@ async function styleExamples(s: HostedShowRow): Promise<{ title: string; notes: 
 }
 
 /** A title and plain-text show notes from what was said, in the show's own style when it has past episodes. */
-async function writeEpisodeText(show: HostedShowRow, currentTitle: string, said: string): Promise<{ title: string; description: string }> {
+export async function writeEpisodeText(show: HostedShowRow, currentTitle: string, said: string): Promise<{ title: string; description: string }> {
   const text = said.length > 48000 ? `${said.slice(0, 24000)} [...] ${said.slice(-24000)}` : said;
   const examples = await styleExamples(show).catch(() => []);
   const shape = examples.length
