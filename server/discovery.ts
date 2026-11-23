@@ -1209,6 +1209,7 @@ export function registerDiscoveryRoutes(app: Express): void {
       const card = (await verifiedCreators()).find((c) => mine.some((s) => s.id === c.signupId) && c.handle);
       let platform = card?.platform ?? "";
       let handle = card?.handle ?? "";
+      let peekFollowers: number | null = null;
       if (!handle) {
         const [prof] = await db.select().from(podcasterProfiles).where(eq(podcasterProfiles.email, email));
         let accounts: { platform: string; username?: string; url?: string; followers?: number }[] = [];
@@ -1219,8 +1220,19 @@ export function registerDiscoveryRoutes(app: Express): void {
         const best = accounts.filter((a) => covered(a) && handleOf(a)).sort((x, y) => (y.followers ?? 0) - (x.followers ?? 0))[0];
         platform = best ? (best.platform === "x" ? "twitter" : best.platform) : "";
         handle = best ? handleOf(best) : "";
+        peekFollowers = best?.followers ?? null;
       }
       if (!handle) return { none: true };
+      // ?peek=1, for the dashboard card: only what we already hold (the 30-day analytics row), never an index read
+      // (Andrew, 23 Nov: "No IC read when the dashboard loads"). The full read runs when they open their own profile.
+      if (req.query.peek === "1") {
+        const [row] = await db.select().from(discoveryCache).where(eq(discoveryCache.key, `analytics:${asPlatform(platform)}:${handle.toLowerCase()}`));
+        if (!row || Date.now() - Date.parse(row.createdAt) > 30 * DAY) return { cached: false, platform, handle };
+        let a: any = {};
+        try { a = JSON.parse(row.payload); } catch { /* unreadable: treat as none */ }
+        const followers = num(pick(a?.raw ?? {}, "follower_count", "followers", "number_of_followers", "subscriber_count")) ?? (typeof peekFollowers === "number" ? peekFollowers : null);
+        return { cached: true, platform, handle, credibility: num(a?.audience?.credibility) ?? null, followers };
+      }
       const loaded = await loadCreator(asPlatform(platform), handle, req);
       return { platform, handle, card: card ?? null, ...loaded };
     }),
