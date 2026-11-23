@@ -14,7 +14,7 @@ import crypto from "node:crypto";
 import { buildProfile } from "./creatorProfile.js";
 import { registerPodcastRoutes } from "./podchaser.js";
 import type { Express, Request, Response } from "express";
-import { and, desc, eq, gte, inArray, or } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, or, sql } from "drizzle-orm";
 import { db, storage } from "./storage.js";
 import { uploadPhoto } from "./photoStorage.js";
 import { waitUntil } from "@vercel/functions";
@@ -123,7 +123,7 @@ function key(): string {
 }
 
 class HttpError extends Error {
-  constructor(public status: number, message: string) {
+  constructor(public status: number, message: string, public extra?: Record<string, unknown>) {
     super(message);
   }
 }
@@ -635,20 +635,41 @@ async function memberFor(email: string) {
     .returning();
   return row ?? (await db.select().from(discoveryMembers).where(eq(discoveryMembers.email, email)))[0];
 }
-async function requireMember(req: Request): Promise<{ email: string; member: NonNullable<Awaited<ReturnType<typeof memberFor>>> }> {
+/**
+ * Growth (free) creators get a taste of Discovery for life (Andrew, 23 Nov 2026, "B: searches too"): 3 searches
+ * and 3 full profiles, each counted on its own, no contacts. A search they've run before (or its next page) and a
+ * profile they've opened before cost nothing. Only the search and full-profile routes let them in; everything else
+ * (contacts, bulk look-ups, similar, lists, podcasts) still says upgrade.
+ */
+const FREE_TASTE = { searches: 3, lookups: 3 } as const;
+type FreeState = { searches: { used: number; allowance: number; left: number }; lookups: { used: number; allowance: number; left: number }; upgrade: boolean };
+async function freeState(email: string): Promise<FreeState> {
+  const [[s], [l]] = await Promise.all([
+    db.select({ n: sql<number>`count(*)::int` }).from(discoveryCache).where(sql`${discoveryCache.key} like ${`fsearch:${email}:%`}`),
+    db.select({ n: sql<number>`count(distinct ${discoveryLookups.subject})::int` }).from(discoveryLookups).where(and(eq(discoveryLookups.email, email), eq(discoveryLookups.kind, "profile"))),
+  ]);
+  const one = (used: number, allowance: number) => ({ used: Math.min(used, allowance), allowance, left: Math.max(0, allowance - used) });
+  const searches = one(s?.n ?? 0, FREE_TASTE.searches), lookups = one(l?.n ?? 0, FREE_TASTE.lookups);
+  return { searches, lookups, upgrade: searches.left === 0 || lookups.left === 0 };
+}
+const upgrade = (msg: string, free?: FreeState) => new HttpError(402, msg, { upgrade: true, ...(free ? { free } : {}) });
+async function requireMember(req: Request, opts: { free?: boolean } = {}): Promise<{ email: string; member: NonNullable<Awaited<ReturnType<typeof memberFor>>>; free: boolean }> {
   // Admins always have Discovery: by their admin session, or the admin key.
   const adminEmail = getAdminEmail(req);
   const adminKey = String(req.get("x-admin-password") ?? "");
   if (adminEmail || (adminKey && adminKey === (await storage.getFeaturedEvent()).adminPassword)) {
     const e = (adminEmail || "admin@militaryvoice.ai").toLowerCase();
-    return { email: e, member: (await memberFor(e)) ?? { id: 0, email: e, role: "admin", orgName: "MilitaryVoices", source: "admin", createdAt: "" } };
+    return { email: e, member: (await memberFor(e)) ?? { id: 0, email: e, role: "admin", orgName: "MilitaryVoices", source: "admin", createdAt: "" }, free: false };
   }
   const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
   if (!email) throw new HttpError(401, "Create your free account to search.");
   const member = await memberFor(email);
   if (!member) throw new HttpError(403, "Add Discovery to your account to search.");
-  if (!(await discoveryOpenTo(email))) throw new HttpError(402, "Discovery comes with Scale and Pro. Upgrade to search creators.");
-  return { email, member };
+  if (!(await discoveryOpenTo(email))) {
+    if (opts.free) return { email, member, free: true };
+    throw upgrade("Discovery comes with Scale and Pro. Upgrade to search creators.");
+  }
+  return { email, member, free: false };
 }
 /** The saved lists someone can see: their own, and their organizations'. */
 async function listsOf(email: string) {
@@ -676,7 +697,7 @@ function send(res: Response, fn: () => Promise<unknown>) {
     .catch((err: any) => {
       const status = err instanceof HttpError ? err.status : 500;
       if (status >= 500) console.error("discovery:", err);
-      res.status(status).json({ message: err?.message ?? "Something went wrong." });
+      res.status(status).json({ message: err?.message ?? "Something went wrong.", ...(err instanceof HttpError && err.extra ? err.extra : {}) });
     });
 }
 const asPlatform = (v: unknown): Platform => (PLATFORMS.includes(String(v) as Platform) ? (String(v) as Platform) : "instagram");
@@ -794,6 +815,8 @@ export function registerDiscoveryRoutes(app: Express): void {
         // On the free plan as a creator: Discovery shows an upgrade screen instead.
         // Judged on the member account they're signed in as (an admin testing a free account sees what it sees).
         locked: getSessionEmail(req) ? !(await discoveryOpenTo(String(getSessionEmail(req)))) : false,
+        // Growth (free) creators: their lifetime taste, 3 searches and 3 full profiles; upgrade once either is used up.
+        free: getSessionEmail(req) && profile && !(await discoveryOpenTo(String(getSessionEmail(req)))) ? await freeState(String(getSessionEmail(req)).trim().toLowerCase()) : null,
       };
     }),
   );
@@ -1004,15 +1027,18 @@ export function registerDiscoveryRoutes(app: Express): void {
       // few fresh searches a day per visitor — a repeat of any search is free
       // from the cache, so the cap only bites on new questions.
       let preview = false;
+      let freeEmail = "";
       try {
-        const m = await requireMember(req);
+        const m = await requireMember(req, { free: true });
+        if (m.free) freeEmail = m.email;
         // A new search (page 0) counts against the month's searches, unless it is the house's or an admin's.
-        if (m.member.role !== "admin" && (Number(req.body?.page) || 0) === 0) {
+        else if (m.member.role !== "admin" && (Number(req.body?.page) || 0) === 0) {
           const lim = (await allowanceFor(m.email)).searches;
           if (Number.isFinite(lim) && (await searchesThisMonth(m.email)) >= lim) throw new HttpError(402, `You've used this month's ${lim} searches. Discovery Pro has ${ADDONS.discovery.searches} a month.`);
         }
       } catch (err) {
         if (err instanceof HttpError && err.status === 402 && /searches/.test(err.message)) throw err;
+        if (err instanceof HttpError && err.extra?.upgrade) throw err;
         preview = true;
         if ((Number(req.body?.page) || 0) > 0) throw new HttpError(403, "Create a free account to see more.");
       }
@@ -1050,6 +1076,13 @@ export function registerDiscoveryRoutes(app: Express): void {
       }
       const body = { platform, ...(mode === "ai" ? { nlp_search: brief } : {}), paging: { limit: PAGE_SIZE, page }, sort: { sort_by: sortBy, sort_order: "desc" }, filters };
 
+      // Growth: three different searches for life. The same search again, or its next page, is free.
+      const freeKey = freeEmail ? `fsearch:${freeEmail}:${hash({ ...body, paging: { limit: PAGE_SIZE } })}` : "";
+      const freeKnown = freeKey ? (await db.select({ k: discoveryCache.key }).from(discoveryCache).where(eq(discoveryCache.key, freeKey))).length > 0 : false;
+      if (freeKey && !freeKnown) {
+        const st = await freeState(freeEmail);
+        if (st.searches.left <= 0) throw upgrade(`You've used your ${FREE_TASTE.searches} free searches. Upgrade to keep searching.`, st);
+      }
       // A week: the same search by anyone this week costs nothing. Pictures
       // are kept by us, so an old answer never shows a broken face.
       if (preview) {
@@ -1096,7 +1129,9 @@ export function registerDiscoveryRoutes(app: Express): void {
       if (mode === "keywords") verified = [];
       if (page === 0) void logSearch(req, "creators", mode, q || branch, platform, (found.total || 0) + verified.length);
       if (indexError && !verified.length) throw new HttpError(502, indexError);
-      return { brief: mode === "keywords" ? `bio mentions ${(filters.keywords_in_bio as string[]).join(" or ")}` : brief, mode, platform, page, pageSize: PAGE_SIZE, total: found.total, results: found.accounts, verified, understood: found.understood, preview, indexError: indexError ? "The wider creator index isn't answering right now, so these are only creators on MilitaryVoices." : "" };
+      if (freeKey && !freeKnown) await db.insert(discoveryCache).values({ key: freeKey, payload: "1", createdAt: new Date().toISOString() }).onConflictDoNothing();
+      const free = freeEmail ? await freeState(freeEmail) : null;
+      return { ...(free ? { free } : {}), brief: mode === "keywords" ? `bio mentions ${(filters.keywords_in_bio as string[]).join(" or ")}` : brief, mode, platform, page, pageSize: PAGE_SIZE, total: found.total, results: found.accounts, verified, understood: found.understood, preview, indexError: indexError ? "The wider creator index isn't answering right now, so these are only creators on MilitaryVoices." : "" };
     }),
   );
 
@@ -1111,9 +1146,20 @@ export function registerDiscoveryRoutes(app: Express): void {
       // spends a credit. Everything else needs Discovery.
       let payRef = "";
       let paidEmail = "";
+      let freeEmail = "";
       try {
-        const m = await requireMember(req);
-        if (m.member.role !== "admin") {
+        const m = await requireMember(req, { free: true });
+        if (m.free) {
+          // Growth: three different full profiles for life; one they've opened before is free to see again.
+          freeEmail = m.email;
+          const subject = `${platform}:${handle.toLowerCase()}`;
+          const [seen] = await db.select({ id: discoveryLookups.id }).from(discoveryLookups).where(and(eq(discoveryLookups.email, m.email), eq(discoveryLookups.kind, "profile"), eq(discoveryLookups.subject, subject))).limit(1);
+          if (!seen) {
+            const st = await freeState(m.email);
+            if (st.lookups.left <= 0) throw upgrade(`You've used your ${FREE_TASTE.lookups} free full profiles. Upgrade to see more.`, st);
+            await db.insert(discoveryLookups).values({ email: m.email, kind: "profile", subject, createdAt: new Date().toISOString() });
+          }
+        } else if (m.member.role !== "admin") {
           const lim = (await allowanceFor(m.email)).lookups;
           const held = await isFresh(`analytics:${platform}:${handle.toLowerCase()}`, 30 * DAY);
           if (!held) {
@@ -1134,6 +1180,7 @@ export function registerDiscoveryRoutes(app: Express): void {
         }
       } catch (err) {
         if (err instanceof HttpError && err.status === 402 && /full profiles/.test(err.message)) throw err;
+        if (err instanceof HttpError && err.extra?.upgrade && freeEmail) throw err;
         const ours = (await verifiedCreators()).some((c) => c.platform === platform && c.handle.toLowerCase() === handle.toLowerCase()) || (await inSample(platform, handle));
         const held = ours && (await db.select().from(discoveryCache).where(eq(discoveryCache.key, `analytics:${platform}:${handle.toLowerCase()}`))).length > 0;
         if (!held) throw err;
@@ -1143,6 +1190,7 @@ export function registerDiscoveryRoutes(app: Express): void {
         await storage.addTokens({ email: paidEmail, delta: -PROFILE_CREDITS, reason: `Full profile: @${handle} (${platform})`, ref: payRef });
         return out;
       }
+      if (freeEmail) return { ...(await loadCreator(platform, handle, req) as Record<string, unknown>), free: await freeState(freeEmail) };
       return loadCreator(platform, handle, req);
     }),
   );
