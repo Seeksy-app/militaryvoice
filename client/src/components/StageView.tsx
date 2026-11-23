@@ -476,6 +476,7 @@ export function Tile({ tile, muted, namePos = "bottom", fit, contain = false, fl
       <div
         className={`absolute bottom-0 left-0 max-w-[85%] ${namePos === "none" ? "hidden" : ""}`}
         style={{ padding: "0 0 clamp(4px, 2.6cqh, 16px) clamp(4px, 1.8cqw, 16px)", fontSize: "clamp(10px, 3.6cqh, 18px)" }}
+        data-testid="stage-name-tag"
       >
         <div className="flex items-stretch overflow-hidden rounded-md shadow-lg">
           <div className="w-[0.22em] shrink-0 bg-[#F0A71F]" />
@@ -888,33 +889,93 @@ function CountdownFrame({ endsAt, label }: { endsAt: number; label?: string }) {
 }
 
 /**
- * The podcaster's own show logo, small in the corner while they're on (Andrew, 23 Nov: "let's get that logo up in the
- * right-hand corner … It can be small"). Sized in cqw so a 1080p broadcast and a console monitor look alike: about a
- * tenth of the frame's height, never more than a fifth of its width, inside the title-safe margin. `plate` is chosen
- * from the logo when it's uploaded (server/showLogo.ts): a light plate behind dark ink, a dark one behind light ink, so
- * it reads over any video; "none" for a picture with its own background (cover art), which gets rounded corners.
- * Needs a container (container-type) on an ancestor that is the frame.
+ * The podcaster's own show logo, small, bottom-left while they're on (Andrew, 23 Nov: "let's get that logo up in the
+ * right-hand corner … It can be small", then "logo bottom left, using attached sample": the navy chip). Sized in cqw so
+ * a 1080p broadcast and a console monitor look alike: about a tenth of the frame's height, never more than a fifth of
+ * its width, inside the title-safe margin. `plate` is chosen from the logo when it's uploaded (server/showLogo.ts):
+ * navy behind it unless its ink is too dark to read there, then a light chip; "none" for a picture with its own
+ * background (cover art), which gets rounded corners.
+ *
+ * The bottom-left is where name tags and the lower third live, so the logo never sits on them: it measures what is
+ * drawn in that corner of its frame (the nearest [data-stage-root]) and steps up to just above it, again whenever the
+ * picture changes (someone joins, a lower third or captions come and go). Needs a container (container-type) on an
+ * ancestor that is the frame.
  */
+const CORNER_AVOID = '[data-testid="stage-name-tag"],[data-testid="stage-banner"],[data-testid="stage-captions"],[data-testid="stage-ticker"]';
 export function ShowCorner({ url, plate, corner }: { url: string; plate?: string; corner?: string }) {
+  const ref = useRef<HTMLDivElement | null>(null);
+  const measureRef = useRef<() => void>(() => {});
+  const [lift, setLift] = useState(0);
+  // Hidden until it has measured once, so a recording never opens on a logo sitting on someone's name.
+  const [placed, setPlaced] = useState(false);
+  // It slides when it has to move later on, but never on the way in.
+  const [settled, setSettled] = useState(false);
+  useEffect(() => {
+    if (!placed) { setSettled(false); return; }
+    const f = requestAnimationFrame(() => requestAnimationFrame(() => setSettled(true)));
+    return () => cancelAnimationFrame(f);
+  }, [placed]);
+  const side = corner ?? "bottom-left";
+  const bottom = side.startsWith("bottom");
+  useEffect(() => {
+    setPlaced(!bottom);
+    const el = ref.current;
+    if (!el || !url || !bottom) return;
+    const root = (el.parentElement?.closest("[data-stage-root]") as HTMLElement | null) ?? el.offsetParent as HTMLElement | null;
+    if (!root) { setPlaced(true); return; }
+    const measure = () => {
+      const fr = root.getBoundingClientRect();
+      const me = el.getBoundingClientRect();
+      if (!fr.width || !me.width || !el.querySelector("img")?.complete) return;
+      const gap = fr.width * 0.008;
+      const base = fr.width * 0.022;
+      const left = me.left, right = me.right, h = me.height;
+      const others = Array.from(root.querySelectorAll<HTMLElement>(CORNER_AVOID))
+        .filter((o) => !el.contains(o))
+        .map((o) => o.getBoundingClientRect())
+        .filter((r) => r.width > 0 && r.height > 0 && r.left < right + gap && r.right > left - gap);
+      let b = base;
+      for (let i = 0; i < 6; i++) {
+        const top = fr.bottom - b - h, bot = fr.bottom - b;
+        const hit = others.find((r) => r.top < bot + gap && r.bottom > top - gap);
+        if (!hit) break;
+        b = fr.bottom - hit.top + gap;
+      }
+      setLift((cur) => (Math.abs(cur - (b - base)) > 1 ? b - base : cur));
+      setPlaced(true);
+    };
+    measureRef.current = measure;
+    measure();
+    // Again whenever the picture changes: a size change, someone joining (a new name tag), a lower third or captions.
+    const ro = new ResizeObserver(measure);
+    ro.observe(root);
+    let queued = 0;
+    const mo = new MutationObserver(() => { if (!queued) queued = requestAnimationFrame(() => { queued = 0; measure(); }); });
+    mo.observe(root, { childList: true, subtree: true });
+    const t = window.setInterval(measure, 1000);
+    return () => { ro.disconnect(); mo.disconnect(); cancelAnimationFrame(queued); window.clearInterval(t); };
+  }, [url, bottom]);
   if (!url) return null;
-  const side = corner ?? "top-right";
   const pos: CSSProperties = {
     [side.endsWith("left") ? "left" : "right"]: "2.6cqw",
-    [side.startsWith("bottom") ? "bottom" : "top"]: "2.2cqw",
+    [bottom ? "bottom" : "top"]: bottom ? `calc(2.2cqw + ${Math.round(lift)}px)` : "2.2cqw",
     height: "5.2cqw",
     maxWidth: "20cqw",
+    visibility: placed ? "visible" : "hidden",
+    transition: settled ? "bottom 300ms ease" : "none",
   };
-  const bare = plate !== "light" && plate !== "dark";
+  const bare = plate === "none";
+  const onLoad = () => measureRef.current();
   return (
-    <div className={`pointer-events-none absolute z-30 flex ${side.endsWith("left") ? "justify-start" : "justify-end"}`} style={pos} data-testid="show-corner">
+    <div ref={ref} className={`pointer-events-none absolute z-30 flex ${side.endsWith("left") ? "justify-start" : "justify-end"}`} style={pos} data-testid="show-corner">
       {bare ? (
-        <img src={url} alt="" className="h-full w-auto max-w-full object-contain shadow-[0_0.2cqw_0.8cqw_rgba(0,0,0,0.45)]" style={{ borderRadius: "0.6cqw" }} />
+        <img src={url} alt="" onLoad={onLoad} className="h-full w-auto max-w-full object-contain shadow-[0_0.2cqw_0.8cqw_rgba(0,0,0,0.45)]" style={{ borderRadius: "0.6cqw" }} />
       ) : (
         <div
           className="flex h-full max-w-full items-center shadow-[0_0.2cqw_0.8cqw_rgba(0,0,0,0.35)]"
-          style={{ padding: "0.7cqw 1cqw", borderRadius: "0.8cqw", background: plate === "dark" ? "rgba(4,16,43,0.66)" : "rgba(255,255,255,0.9)" }}
+          style={{ padding: "0.7cqw 1cqw", borderRadius: "0.8cqw", background: plate === "light" ? "rgba(255,255,255,0.92)" : "rgba(0,7,65,0.9)" }}
         >
-          <img src={url} alt="" className="h-full w-auto max-w-full object-contain" />
+          <img src={url} alt="" onLoad={onLoad} className="h-full w-auto max-w-full object-contain" />
         </div>
       )}
     </div>
@@ -1579,7 +1640,7 @@ export function StageGrid({
   // below, and it is the container the overlays size their type against, so a
   // banner reads the same on a 1080p broadcast as in a 400px console panel.
   return (
-    <div className="relative h-full w-full" style={{ containerType: "inline-size" }}>
+    <div className="relative h-full w-full" style={{ containerType: "inline-size" }} data-stage-root>
       {body}
       <BannerOverlay
         title={banner}
@@ -1597,7 +1658,7 @@ export function Captions({ caption, lifted }: { caption?: { speaker: string; tex
   if (!caption?.text) return null;
   return (
     <div className={`pointer-events-none absolute inset-x-0 bottom-0 flex justify-center px-6 ${lifted ? "pb-[7%]" : "pb-6"}`}>
-      <p className="max-w-4xl rounded-xl bg-black/75 px-5 py-2.5 text-center text-lg leading-snug text-white backdrop-blur-sm sm:text-xl">
+      <p data-testid="stage-captions" className="max-w-4xl rounded-xl bg-black/75 px-5 py-2.5 text-center text-lg leading-snug text-white backdrop-blur-sm sm:text-xl">
         {caption.speaker && <span className="mr-2 font-semibold text-[#F0A71F]">{caption.speaker}:</span>}
         {caption.text}
       </p>

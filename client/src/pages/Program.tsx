@@ -250,7 +250,7 @@ export default function Program() {
   const demoAudio = !token && !listen && params.get("demo") === "audio" && !!current;
   const nextLine = next ? `Up next at ${hm(next.startAtUtc)}: ${next.show}` : "Back weekdays at 7 am Eastern";
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-[#000741] [container-type:size]">
+    <div className="relative h-screen w-screen overflow-hidden bg-[#000741] [container-type:size]" data-stage-root>
       {phase === "live" && !current!.mediaUrl && tiles.length > 0 && <StageGrid tiles={tiles} meta={{ status: "Live" }} caption={caption} />}
       {phase === "live" && clip && now >= clip.startedAtMs && now < clip.startedAtMs + clip.durationSec * 1000 && <ClipOverlay key={clip.startedAtMs} clip={clip} now={now} muted={muted} host={current!.host} />}
       {audioOnlyOk && <AudioOnAir tiles={tiles} show={current!.show} host={current!.host} photo={current!.photo} about={current!.about} />}

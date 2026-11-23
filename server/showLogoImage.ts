@@ -10,14 +10,14 @@ export type Plate = "light" | "dark" | "none";
  * kept at most 1000px on its long side, as PNG so a clear background stays clear. SVG goes as it is.
  */
 export async function prepareShowLogo(buf: Buffer, mime: string): Promise<{ buf: Buffer; mime: string; ext: string; plate: Plate }> {
-  if (mime === "image/svg+xml") return { buf, mime, ext: "svg", plate: await plateOf(buf).catch(() => "light" as Plate) };
+  if (mime === "image/svg+xml") return { buf, mime, ext: "svg", plate: await plateOf(buf).catch(() => "dark" as Plate) };
   let img = sharp(buf, { failOn: "none" }).rotate();
   try { img = sharp(await img.trim({ threshold: 10 }).toBuffer()); } catch { img = sharp(buf, { failOn: "none" }).rotate(); }
   const out = await img.resize({ width: 1000, height: 1000, fit: "inside", withoutEnlargement: true }).png({ compressionLevel: 9 }).toBuffer();
-  return { buf: out, mime: "image/png", ext: "png", plate: await plateOf(out).catch(() => "light" as Plate) };
+  return { buf: out, mime: "image/png", ext: "png", plate: await plateOf(out).catch(() => "dark" as Plate) };
 }
 
-/** Opaque all over: it brings its own background. Otherwise the plate is the opposite of how light the logo's ink is. */
+/** Opaque all over: it brings its own background. Otherwise navy, unless the ink is too dark for navy. */
 export async function plateOf(buf: Buffer): Promise<Plate> {
   const { data, info } = await sharp(buf, { failOn: "none" }).resize(64, 64, { fit: "inside" }).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
   let clear = 0, ink = 0, lum = 0;
@@ -30,6 +30,8 @@ export async function plateOf(buf: Buffer): Promise<Plate> {
   }
   const px = data.length / info.channels;
   if (clear / px < 0.03) return "none";
-  return ink && lum / ink > 0.62 ? "dark" : "light";
+  // Navy is the default chip (Andrew, 23 Nov: the navy one in his sample); a light chip only when the ink is too dark to
+  // read on navy.
+  return !ink || lum / ink > 0.3 ? "dark" : "light";
 }
 

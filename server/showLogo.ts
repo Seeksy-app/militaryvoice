@@ -29,7 +29,7 @@ async function stored(email: string): Promise<Stored> {
     const j = JSON.parse(raw) as Partial<Stored>;
     return { url: String(j.url ?? ""), plate: j.plate === "light" || j.plate === "dark" ? j.plate : "none" };
   } catch {
-    return { url: raw, plate: "light" };
+    return { url: raw, plate: "dark" };
   }
 }
 

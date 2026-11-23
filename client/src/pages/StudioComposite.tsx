@@ -40,7 +40,7 @@ export default function StudioComposite() {
   }, [connected, failed]);
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-[#000741] [container-type:size]">
+    <div className="relative h-screen w-screen overflow-hidden bg-[#000741] [container-type:size]" data-stage-root>
       <StageGrid tiles={tiles} meta={meta} caption={caption} />
 
       {corner.url ? (

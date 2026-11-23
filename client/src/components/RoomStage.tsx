@@ -139,7 +139,7 @@ export function RoomPicture({
   ) : null;
 
   return (
-    <div className="relative h-full w-full" style={{ containerType: "inline-size" }}>
+    <div className="relative h-full w-full" style={{ containerType: "inline-size" }} data-stage-root>
       {players.map((t) => <PlayerAudio key={t.identity} tile={t} muted={muted} />)}
       {full ? (
         <>

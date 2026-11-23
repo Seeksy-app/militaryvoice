@@ -195,15 +195,15 @@ export function roomStageMeta(look: RoomLook | null, live: RoomLive, name: strin
   const l: RoomLook = look ?? { scenes: [] };
   const scene = l.scenes.find((s) => s.id === live.activeScene) ?? l.scenes[0];
   const style: RoomLookStyle = { ...l, ...(scene?.look ?? {}) };
-  // A logo picked in Media wins. Without one, their show logo (else their cover) sits small in the top-right
-  // (Andrew, 23 Nov: "let's get that logo up in the right-hand corner"); with neither, as before.
+  // A logo picked in Media wins. Without one, their show logo (else their cover) sits small in the bottom-left
+  // (Andrew, 23 Nov: "logo bottom left"); with neither, as before.
   const picked = abs(style.logo?.asset?.url, origin);
   const own = !picked && corner?.url ? corner : null;
   const logoUrl = picked || own?.url || (style.logo === null || look ? "" : abs(DEFAULT_LOGO, origin));
   const meta: Record<string, unknown> = {
     studioName: name,
     logoUrl,
-    logoCorner: own ? "top-right" : CORNERS[style.logo?.corner ?? "tr"] ?? "top-right",
+    logoCorner: own ? "bottom-left" : CORNERS[style.logo?.corner ?? "tr"] ?? "top-right",
     logoSize: 150,
     ...(own ? { logoPlate: own.plate || "none" } : {}),
     backgroundUrl: backgroundOf(style.background, origin),
