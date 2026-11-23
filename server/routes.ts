@@ -128,6 +128,8 @@ import {
   sendBroadcastEmail,
   resendApiGet,
   bccFor,
+  copiesRiccoh,
+  RICCOH_EMAIL,
 } from "./email.js";
 import { renderBroadcastEmail, renderConfirmationEmail, renderNudge } from "./email.js";
 import { emailShell, EMAIL_BANNERS } from "./email.js";
@@ -9453,6 +9455,17 @@ export function registerRoutes(app: Express): void {
         }
       } catch (err) {
         console.warn("Watch alert failed:", (err as Error).message);
+      }
+      // Riccoh sees what the people on his copy list write to us (Andrew, 23 Nov: "ones to/from Frank for sure"); replies go to hello@.
+      try {
+        if (row.toAddr !== "Help chat" && (await copiesRiccoh(row.fromEmail))) {
+          const who = row.fromName && row.fromName !== row.fromEmail ? row.fromName : row.fromEmail;
+          const body = String(row.bodyText ?? "").split(/\n>|\nOn .* wrote:/)[0].trim().slice(0, 8000);
+          const esc = (t: string) => t.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+          await sendOneOffEmail({ kind: "riccoh-copy", to: RICCOH_EMAIL, replyTo: "hello@militaryvoices.ai", subject: `${who} wrote to us: ${row.subject}`.slice(0, 200), text: `${who} <${row.fromEmail}> wrote to hello@militaryvoices.ai:\n\n${body}\n\nYour copy. The team answers from hello@.`, html: `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:24px;color:#1a1a1a;font-size:16px;line-height:1.5"><p><b>${esc(who)}</b> wrote to hello@militaryvoices.ai:</p><blockquote style="margin:0;padding:0 0 0 14px;border-left:3px solid #ccd">${esc(body).replace(/\n/g, "<br>")}</blockquote><p style="color:#667085;font-size:14px">Your copy. The team answers from hello@.</p></div>` });
+        }
+      } catch (err) {
+        console.warn("Riccoh copy failed:", (err as Error).message);
       }
       let draft: Awaited<ReturnType<typeof draftReply>> | undefined;
       try {

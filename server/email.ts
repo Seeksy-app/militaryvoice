@@ -232,10 +232,15 @@ function buildText(input: ConfirmationEmailInput): string {
  *  returns false on failure so a flaky email provider never blocks a user flow. */
 /** A file sent with the email: Resend fetches it from the address. */
 export type MailAttachment = { filename: string; path?: string; /** Base64 file body, instead of an address to fetch. */ content?: string };
-async function sendRawEmail(opts: { to: string; subject: string; html: string; text: string; replyTo?: string; from?: string; headers?: Record<string, string>; bcc?: string[]; cc?: string[]; kind?: string; attachments?: MailAttachment[]; recipientName?: string }): Promise<string | null> {
+async function sendRawEmail(mail: { to: string; subject: string; html: string; text: string; replyTo?: string; from?: string; headers?: Record<string, string>; bcc?: string[]; cc?: string[]; kind?: string; attachments?: MailAttachment[]; recipientName?: string }): Promise<string | null> {
   let id: string | null = null;
   let error = "";
+  let opts = mail;
   try {
+    // Riccoh sees what we send to the people on his copy list (Frank, 23 Nov), never a sign-in code or a shared login.
+    if (!NEVER_COPIED.test(opts.kind ?? "") && addrOnly(opts.to) !== RICCOH_EMAIL && !(opts.bcc ?? []).some((b) => addrOnly(b) === RICCOH_EMAIL) && (await copiesRiccoh(opts.to))) {
+      opts = { ...opts, bcc: [...(opts.bcc ?? []), RICCOH_EMAIL] };
+    }
     // Andrew's rule (22 Nov): never his name, his address, or a copy to him on a customer's mail. Refused, not changed.
     const refused = mailGuard({ ...opts, from: opts.from ?? FROM_ADDRESS });
     if (refused) {
@@ -375,6 +380,24 @@ export async function sendStudioLeftLiveEmail(v: { to: string; studioName: strin
 
 /** Riccoh's own address: mail sent in his name is blind-copied to him. */
 export const RICCOH_EMAIL = (process.env.RICCOH_EMAIL || "riccoh.player@drphil.tv").trim().toLowerCase();
+
+const addrOnly = (s: string): string => (String(s ?? "").match(/<([^>]+)>/)?.[1] ?? String(s ?? "")).trim().toLowerCase();
+/**
+ * People whose mail Riccoh sees too (Andrew, 23 Nov 2026: "ones to/from Frank for sure"): everything we send them gets
+ * him as a hidden copy, and what they write to hello@ is copied to him. More addresses: the setting mail:copy-riccoh
+ * (comma separated), read through setCopyRiccohExtra.
+ */
+const COPY_RICCOH = ["frankzaccari@gmail.com"];
+let copyRiccohExtra: () => Promise<string[]> = async () => [];
+export function setCopyRiccohExtra(fn: () => Promise<string[]>) { copyRiccohExtra = fn; }
+export async function copiesRiccoh(addr: string): Promise<boolean> {
+  const a = addrOnly(addr);
+  if (!a || a === RICCOH_EMAIL) return false;
+  if (COPY_RICCOH.includes(a)) return true;
+  return (await copyRiccohExtra().catch(() => [] as string[])).map(addrOnly).includes(a);
+}
+/** Mail that lets its reader into someone's account is never copied to anyone: sign-in and owner codes, shared logins. */
+const NEVER_COPIED = /^(sendLoginCodeEmail|sendPodcastOwnerCodeEmail|share-login)$|code|login/i;
 /** The hidden copy for a mail sent as someone on the team, when it isn't already to them. */
 export function bccFor(from: string, to: string): string[] | undefined {
   return from === "riccoh" && to.trim().toLowerCase() !== RICCOH_EMAIL ? [RICCOH_EMAIL] : undefined;

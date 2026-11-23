@@ -5,8 +5,8 @@
 // (delivered, opened, clicked, bounced).
 import type { Express, RequestHandler, Response } from "express";
 import { and, desc, eq, ilike, inArray, notInArray, or, sql } from "drizzle-orm";
-import { db, schemaIsReady } from "./storage.js";
-import { setMailGuardAlarm, setMailLogger } from "./email.js";
+import { db, schemaIsReady, storage } from "./storage.js";
+import { setCopyRiccohExtra, setMailGuardAlarm, setMailLogger } from "./email.js";
 import { slackNote } from "./slack.js";
 import { broadcastEvents, broadcasts, contacts, inboundEmails, mailLog, type MailLogRow } from "../shared/schema.js";
 
@@ -30,6 +30,14 @@ export function installMailLog() {
     if (Date.now() - (lastAlarm.get(k) ?? 0) < 10 * 60_000) return;
     lastAlarm.set(k, Date.now());
     await slackNote(`:no_entry: Held back an email to ${m.to} ("${m.subject.slice(0, 120)}", ${m.kind}): ${m.why}`);
+  });
+  // More people whose mail Riccoh sees (Frank is built in): the setting mail:copy-riccoh, comma separated, read once a minute.
+  let extra: { at: number; list: string[] } = { at: 0, list: [] };
+  setCopyRiccohExtra(async () => {
+    if (Date.now() - extra.at < 60_000) return extra.list;
+    const value = await storage.getSetting("mail:copy-riccoh").catch(() => null);
+    extra = { at: Date.now(), list: String(value ?? "").split(/[,\s]+/).map((e) => e.trim().toLowerCase()).filter(Boolean) };
+    return extra.list;
   });
   setMailLogger(async (m) => {
     await schemaIsReady();
