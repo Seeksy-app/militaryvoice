@@ -828,7 +828,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     enabled: !!data,
     staleTime: 60_000,
   });
-  const { data: hostingMine } = useQuery<{ shows?: { show?: { title?: string; newFeedUrl?: string } }[] }>({
+  const { data: hostingMine } = useQuery<{ shows?: { show?: { title?: string; newFeedUrl?: string }; episodes?: { status?: string }[] }[] }>({
     queryKey: ["/api/host/hosting"],
     queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json(),
     enabled: !!data,
@@ -1668,17 +1668,23 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                   </div>
                   {/* Someone added them to a brand's, agency's or organizer's team. */}
                   <OrgInvites compact />
-                  {/* Shortcuts: their next step in front, then the ones they picked (today's four by default). */}
+                  {/* Shortcuts: their next step in front, then the ones they picked (five by default, five across on a computer). */}
                   {(() => {
                     const step = buildSteps(checklistState, checklistNav).filter((x) => !x.done)[0];
                     const hosted = podcastSources.some((p) => p.source === "militaryvoices");
-                    // Shortcuts (Andrew, 23 Nov, mockup approved): today's four are the default; the rest of the nav is
+                    // Shortcuts (Andrew, 23 Nov, mockups approved): Podcast, Episodes, Pōstify, Go live, SmartLink by default; the rest of the nav is
                     // there to add. Keys are what the server stores, so never rename one.
+                    // Episodes says what's waiting (Andrew, 23 Nov: "'to every app' doesn't really make any sense"), with the count on it.
+                    const shows = hostingMine?.shows ?? [];
+                    const eps = shows.flatMap((x) => x.episodes ?? []);
+                    const waiting = eps.filter((e) => e.status === "draft").length;
+                    const showTitle = shows.find((x) => x.show?.title)?.show?.title || showName;
                     const catalog: Shortcut[] = [
                       path === "planner"
                         ? { key: "myevents", art: "calendar", title: "My events", hint: "Create and run", go: () => goTo("myevents") }
-                        : { key: "episode", art: "mic", title: hosted ? "New episode" : "Your podcast", hint: hosted ? "To every app" : "Host it free", go: () => goTo("podcast") },
-                      { key: "clips", art: "scissors", title: "Make clips", hint: "Pōstify a video", go: () => goTo("postify") },
+                        : { key: "podcast", art: "headphone", title: "Podcast", hint: hosted && showTitle ? showTitle : "Host it free", go: () => goTo("podcast") },
+                      ...(path !== "planner" ? [{ key: "episode", art: "mic" as const, title: "Episodes", hint: waiting ? `${waiting} to publish` : eps.length ? "All published" : "Add an episode", badge: waiting || undefined, go: () => goTo("podcast") }] : []),
+                      { key: "clips", art: "wand", title: "Pōstify", hint: "Pōstify an episode", go: () => goTo("postify") },
                       { key: "live", art: "video", title: "Go live", hint: "Studio or OBS", go: () => setLiveOpen((v) => !v), active: liveOpen, expands: true },
                       { key: "page", art: "globe", title: "Your SmartLink", hint: "Edit your page", go: () => goTo("page") },
                       { key: "downloads", art: "chart", title: "Podcast stats", hint: "Downloads, listens", go: () => goTo("podcaststats") },
@@ -1686,7 +1692,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                       { key: "social", art: "megaphone", title: "Social", hint: "Post everywhere", go: () => goTo("social") },
                       { key: "calendar", art: "calendar", title: "Calendar", hint: "Your week of posts", go: () => goTo("calendar") },
                       { key: "social-stats", art: "trend", title: "Social stats", hint: "How posts did", go: () => goTo("analytics") },
-                      { key: "email", art: "mail", title: "Email", hint: "Your subscribers", go: () => goTo("fans") },
+                      { key: "email", art: "mail", title: "Audience", hint: "Email your subscribers", go: () => goTo("fans") },
                       { key: "discovery", art: "compass", title: "Discovery", hint: "Guests, sponsors", go: () => goTo("discovery") },
                       ...(path !== "planner" ? [{ key: "events", art: "party" as const, title: "Events", hint: "Yours and others", go: () => goTo("myevents") }] : []),
                       { key: "studio", art: "tv", title: "Studio", hint: "Record or go live", go: () => { setProFeature("room"); goTo("pro"); } },
@@ -1694,7 +1700,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                     const next: Shortcut | null = step ? { key: `todo-${step.key}`, art: "sparkles", title: step.label, tag: step.tag, hint: "Your next step", go: () => goToStep(step) } : null;
                     return (
                       <>
-                      <Shortcuts catalog={catalog} defaults={[path === "planner" ? "myevents" : "episode", "clips", "live", "page"]} next={next} pinned={yourDiscovery} />
+                      <Shortcuts catalog={catalog} defaults={path === "planner" ? ["myevents", "clips", "live", "page"] : ["podcast", "episode", "clips", "live", "page"]} next={next} pinned={yourDiscovery} />
                       <YourDiscoverySheet open={myDiscOpen} onOpenChange={setMyDiscOpen} free={discoverMe?.free} onFind={() => { setMyDiscOpen(false); goTo("discovery"); }} onConnect={() => { setMyDiscOpen(false); goTo("integrations"); }} />
                       {/* Go live: our room, or their own software with our stream key. Both land in the Library. */}
                       {liveOpen && (

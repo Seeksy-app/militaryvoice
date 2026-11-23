@@ -26,6 +26,8 @@ export type Shortcut = {
   tag?: string;
   /** Your Discovery: their audience score, a small green chip beside the title (computers; phones say it in the hint). */
   score?: number;
+  /** A count on the icon's corner (Episodes: how many are waiting to publish). */
+  badge?: number;
   go: () => void;
   /** Go live's panel is open under the row. */
   active?: boolean;
@@ -174,16 +176,19 @@ export function Shortcuts({ catalog, defaults, next, pinned }: { catalog: Shortc
           }}
           onContextMenu={canDrag ? (e) => e.preventDefault() : undefined}
           aria-expanded={s.expands ? !!s.active : undefined}
-          className={`group flex h-16 w-full select-none items-center gap-2 sm:gap-2.5 rounded-2xl bg-card px-2 py-2.5 text-left shadow-sm sm:px-3 transition-colors hover:bg-muted/40 [-webkit-touch-callout:none] ${opts.pinned ? "border-2 border-teal-700 bg-gradient-to-br from-teal-50 to-card to-60% dark:border-teal-400 dark:from-teal-950/40" : opts.next || s.active ? "border-2 border-[#053877] dark:border-[#8ab4f8]" : "border border-border"} ${s.active ? "shadow-[0_6px_18px_rgba(5,56,119,0.14)]" : ""} ${canDrag ? "lg:cursor-grab" : ""} ${editing && canDrag ? "touch-none sm:pr-7" : ""}`}
+          className={`group flex h-16 w-full select-none items-center gap-2 sm:gap-2.5 lg:gap-2 rounded-2xl bg-card px-2 py-2.5 text-left shadow-sm sm:px-3 lg:px-2.5 transition-colors hover:bg-muted/40 [-webkit-touch-callout:none] ${opts.pinned ? "border-2 border-teal-700 bg-gradient-to-br from-teal-50 to-card to-60% dark:border-teal-400 dark:from-teal-950/40" : opts.next || s.active ? "border-2 border-[#053877] dark:border-[#8ab4f8]" : "border border-border"} ${s.active ? "shadow-[0_6px_18px_rgba(5,56,119,0.14)]" : ""} ${canDrag ? "lg:cursor-grab" : ""} ${editing && canDrag ? "touch-none sm:pr-7" : ""}`}
           data-testid={fixed ? s.key : `door-${s.key}`}
         >
-          <Art3D name={s.art} size={36} className="h-8 w-8 shrink-0 sm:h-9 sm:w-9" />
+          <span className="relative shrink-0">
+            <Art3D name={s.art} size={36} className="h-8 w-8 sm:h-9 sm:w-9 lg:h-7 lg:w-7" />
+            {!!s.badge && <span className="absolute -right-1.5 -top-1.5 flex h-[18px] min-w-[18px] items-center justify-center rounded-full bg-[#F0A71F] px-1 text-[10.5px] font-bold leading-none text-[#053877] ring-2 ring-card tabular-nums" data-testid={`shortcut-badge-${s.key}`}>{s.badge}</span>}
+          </span>
           <span className="min-w-0 flex-1">
-            <span className="flex items-center gap-1.5 text-sm font-semibold leading-tight text-foreground">
+            <span className="flex items-center gap-1.5 text-sm font-semibold leading-tight text-foreground lg:text-[13px]">
               <span className="min-w-0 truncate">{s.title}</span>
               {s.tag && <span className="shrink-0 rounded-full bg-[#F0A71F]/20 px-1.5 py-px text-[10px] font-semibold leading-4 text-[#8a5a00] dark:text-[#F0A71F]">{s.tag}</span>}
             </span>
-            <span className="mt-0.5 block truncate text-xs leading-snug text-muted-foreground">
+            <span className="mt-0.5 block truncate text-xs leading-snug text-muted-foreground lg:text-[11.5px]">
               {s.score != null && <span className="mr-1.5 inline-block rounded-full bg-green-100 px-1.5 text-[10.5px] font-bold leading-4 text-green-800 dark:bg-green-900/50 dark:text-green-200" title="Audience credibility, out of 100">{s.score}</span>}
               {s.phoneHint ? <><span className="sm:hidden">{s.phoneHint}</span><span className="hidden sm:inline">{s.hint}</span></> : s.hint}
             </span>
@@ -204,8 +209,8 @@ export function Shortcuts({ catalog, defaults, next, pinned }: { catalog: Shortc
   // On a phone (two across) the tile fills the empty half of the last row, or a row of its own.
   const filled = items.length + (pinned ? 1 : 0) + (next ? 1 : 0);
   const addTile = (
-    <button type="button" onClick={() => setPicking(true)} className="flex h-16 w-full items-center gap-2.5 rounded-2xl border-[1.5px] border-dashed border-border px-3 py-2.5 text-left text-sm font-semibold text-[#053877] hover:border-[#053877]/50 hover:bg-[#053877]/[0.03] dark:text-[#8ab4f8]" data-testid="shortcut-add">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#053877]/[0.08] dark:bg-white/10"><Plus className="h-5 w-5" /></span>
+    <button type="button" onClick={() => setPicking(true)} className="flex h-16 w-full items-center gap-2.5 whitespace-nowrap rounded-2xl border-[1.5px] border-dashed border-border px-3 py-2.5 text-left text-sm font-semibold lg:gap-2 lg:px-2.5 lg:text-[13px] text-[#053877] hover:border-[#053877]/50 hover:bg-[#053877]/[0.03] dark:text-[#8ab4f8]" data-testid="shortcut-add">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#053877]/[0.08] dark:bg-white/10 lg:h-7 lg:w-7 lg:rounded-lg"><Plus className="h-5 w-5 lg:h-4 lg:w-4" /></span>
       Add a shortcut
     </button>
   );
@@ -227,7 +232,7 @@ export function Shortcuts({ catalog, defaults, next, pinned }: { catalog: Shortc
           </>
         ) : null}
       </div>
-      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4 lg:gap-3" data-testid="todo-strip">
+      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] lg:gap-2" data-testid="todo-strip">
         {pinned && card(pinned, { pinned: true })}
         {next && card(next, { next: true })}
         {items.map((s) => card(s))}
