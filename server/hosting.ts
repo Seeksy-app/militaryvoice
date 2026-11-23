@@ -1087,7 +1087,8 @@ Return JSON only: {"titles":["","",""],"description":""}`,
     const title = String(b.title ?? "").trim().slice(0, 200) || (profile?.podcastName ?? "").trim() || "My podcast";
     const slug = await uniqueSlug(slugify(title));
     const [s] = await db.insert(hostedShows).values({
-      email, slug, title,
+      // New shows post to YouTube with each episode unless they untick it (Publishing, 23 Nov 2026). Older shows keep theirs.
+      email, slug, title, youtubeMode: "always",
       description: String(b.description ?? "").slice(0, 4000),
       author: String(b.author ?? profile?.hostName ?? "").slice(0, 200),
       ownerName: String(b.ownerName ?? profile?.hostName ?? "").slice(0, 200),
@@ -1703,7 +1704,7 @@ Return JSON only: {"titles":["","",""],"description":""}`,
     };
     const [show] = target
       ? await db.update(hostedShows).set(fields).where(eq(hostedShows.id, target.id)).returning()
-      : await db.insert(hostedShows).values({ email, slug, ...fields, createdAt: now() }).returning();
+      : await db.insert(hostedShows).values({ email, slug, ...fields, youtubeMode: "always", createdAt: now() }).returning();
     const rows = feed.items.slice(0, 3000).map((it) => ({
       showId: show.id, title: it.title.slice(0, 300), description: it.notes.slice(0, 20000), notesFormat: "html",
       audioUrl: it.url, mime: it.mime, sizeBytes: Math.min(2_000_000_000, it.length), durationSec: it.duration,
