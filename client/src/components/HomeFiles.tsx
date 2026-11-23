@@ -79,11 +79,13 @@ export function HomeFiles({ goTo, handle }: { goTo: (s: Screen) => void; handle:
 
   return (
     <section className="mt-8" data-testid="dashboard-files">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h2 className="flex items-center gap-2 text-lg font-semibold tracking-tight text-foreground"><Art3D name="folder" size={28} />Your files</h2>
-        <div className="inline-flex rounded-xl border border-border bg-card p-1" role="tablist">
+      {/* The tabs sit right beside the heading, like Manage connections beside its label (Andrew, 23 Nov: "Move the filters
+          over to the right besides Your Files"); on a phone they drop under it and scroll sideways if they must. */}
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
+        <h2 className="flex shrink-0 items-center gap-2 text-lg font-semibold tracking-tight text-foreground"><Art3D name="folder" size={28} />Your files</h2>
+        <div className="inline-flex max-w-full overflow-x-auto rounded-xl border border-border bg-card p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" role="tablist">
           {tabs.map((t) => (
-            <button key={t.key} type="button" role="tab" aria-selected={t.key === cur.key} onClick={() => setTab(t.key)} className={`rounded-lg px-3 py-1.5 text-sm transition-colors ${t.key === cur.key ? "bg-[#053877]/[0.08] font-semibold text-foreground" : "text-muted-foreground hover:text-foreground"}`} data-testid={`files-tab-${t.key}`}>
+            <button key={t.key} type="button" role="tab" aria-selected={t.key === cur.key} onClick={() => setTab(t.key)} className={`shrink-0 whitespace-nowrap rounded-lg px-3 py-1.5 text-sm transition-colors ${t.key === cur.key ? "bg-[#053877]/[0.08] font-semibold text-foreground" : "text-muted-foreground hover:text-foreground"}`} data-testid={`files-tab-${t.key}`}>
               {t.label}{t.key !== "shows" && <span className="ml-1 text-xs text-muted-foreground">{t.rows.length}</span>}
             </button>
           ))}

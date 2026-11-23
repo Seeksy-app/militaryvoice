@@ -1288,6 +1288,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
             the title row makes room for them. Phones keep credits and the account; Help is under More. */}
         {workspace && (
           <div className="mv-top float-right ml-3 mt-0.5 flex items-center gap-1 lg:ml-4 lg:mt-2 lg:gap-1.5" data-testid="topbar">
+            {/* Home only: the tour sits in this row, left of credits (Andrew via PM, 23 Nov: it had dropped to a line of its own). */}
+            {screen === "dashboard" && !guideStep && <button type="button" onClick={() => showGuide(homeTour(guideName))} className="mr-2 hidden whitespace-nowrap text-sm font-semibold text-[#053877] hover:underline dark:text-[#8ab4f8] sm:inline" data-testid="todo-tour">Show me around</button>}
             <NavCredits variant="pill" />
             <Tooltip>
               <TooltipTrigger asChild><a href="/help" aria-label="Help" className="hidden h-10 w-10 items-center justify-center rounded-full text-foreground/70 hover:bg-muted hover:text-foreground lg:flex"><CircleHelp className="h-5 w-5" /></a></TooltipTrigger>
@@ -1640,11 +1642,6 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                     firstName={(profile?.hostName || "").trim().split(/\s+/)[0] || "there"}
                     photoUrl={profile?.photoUrl ?? ""}
                     podcastName={showName}
-                    actions={
-                      <div className="flex items-center gap-3">
-                        <button type="button" onClick={() => showGuide(homeTour(guideName))} className="text-xs font-semibold text-[#053877] hover:underline dark:text-[#8ab4f8]" data-testid="todo-tour">Show me around</button>
-                      </div>
-                    }
                   />
                   <div className="mt-5">
                     {/* Nothing connected yet: the networks greyed out in the same row, each one a door to connecting it;

@@ -103,27 +103,26 @@ function Library_({ socialAccounts }: { socialAccounts?: string | null }) {
         {" "}Record on Zoom?{" "}
         <a href="/host/dashboard/integrations#section-content" className="font-medium text-[#053877] underline-offset-2 hover:underline dark:text-[#8fb5e8]" data-testid="zoom-hint">Connect Zoom</a> and your recordings come in by themselves.
       </p>
-      <div className="mb-6 grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-7">
-        <div className="col-span-2 sm:col-span-3 lg:col-span-2">
-          <UploadRecording autoOpen />
-        </div>
-        {/* On a phone the counts are one swipeable row, so the recordings start on the first screen (8 Oct). */}
-        <div className="col-span-2 -mx-1 flex gap-2 overflow-x-auto px-1 pb-0.5 [scrollbar-width:none] sm:contents [&::-webkit-scrollbar]:hidden">
+      {/* The drop zone runs the full width as one short bar, and the counts sit under it as narrow pills, every number on
+          one line with its label (Andrew, 23 Nov: "make the Drag a video the width of the window, and then add the pills
+          below it (narrow the pills)"; the tall tiles had 0, 0m and 0s at different heights). */}
+      <UploadRecording autoOpen />
+      <div className="mb-6 mt-3 grid grid-cols-2 gap-2 sm:flex sm:flex-wrap" data-testid="library-stats">
         {stats.map((s) => {
           const inner = (
             <>
-              <s.icon className="h-4 w-4 text-[#b36b00] dark:text-[#F0A71F]" />
-              <p className="mt-1 text-xl font-bold tabular-nums text-foreground sm:mt-1.5 sm:text-2xl">{s.n}</p>
-              <p className="text-xs text-muted-foreground">{s.label}{s.go && <span aria-hidden> →</span>}</p>
+              <s.icon className="h-4 w-4 shrink-0 self-center text-[#b36b00] dark:text-[#F0A71F]" />
+              <span className="text-base font-bold leading-none tabular-nums text-foreground">{s.n}</span>
+              <span className="whitespace-nowrap text-sm leading-none text-muted-foreground">{s.label}{s.go && <span aria-hidden> →</span>}</span>
             </>
           );
+          const cls = "inline-flex items-baseline gap-2 rounded-xl border border-border bg-card px-3 py-2.5 text-left";
           return s.go ? (
-            <button key={s.label} type="button" onClick={s.go} className="flex min-w-[7.25rem] shrink-0 flex-col justify-center rounded-2xl border border-border bg-card px-3.5 py-2.5 text-left transition-colors hover:border-[#053877]/40 sm:min-w-0 sm:px-4 sm:py-3 hover:bg-[#053877]/[0.03]" data-testid={`library-stat-${s.label}`}>{inner}</button>
+            <button key={s.label} type="button" onClick={s.go} className={`${cls} transition-colors hover:border-[#053877]/40 hover:bg-[#053877]/[0.03]`} data-testid={`library-stat-${s.label}`}>{inner}</button>
           ) : (
-            <div key={s.label} className="flex min-w-[7.25rem] shrink-0 flex-col justify-center rounded-2xl border border-border bg-card px-3.5 py-2.5 sm:min-w-0 sm:px-4 sm:py-3" data-testid={`library-stat-${s.label}`}>{inner}</div>
+            <div key={s.label} className={cls} data-testid={`library-stat-${s.label}`}>{inner}</div>
           );
         })}
-        </div>
       </div>
 
       {/* The folders, for everything below: drag any card onto one, or open one to see all it holds. */}
