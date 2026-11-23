@@ -37,7 +37,7 @@ export async function renderThumbnail(i: ThumbInput): Promise<Buffer> {
   const band = titleBand(i.title.trim(), w, bandH, (i.show ?? "").trim());
   const layers: { input: Buffer; top: number; left: number }[] = [];
   if (i.frame) {
-    layers.push({ input: await sharp(i.frame).rotate().resize(w, below, { fit: "cover", position: "centre" }).toBuffer(), top: bandH, left: 0 });
+    layers.push({ input: await fitLow(i.frame, w, below), top: bandH, left: 0 });
   } else if (i.cover) {
     const s = below - 60;
     layers.push({ input: await sharp(i.cover).rotate().resize(s, s, { fit: "cover" }).toBuffer(), top: bandH + 30, left: Math.round((w - s) / 2) });
@@ -45,11 +45,28 @@ export async function renderThumbnail(i: ThumbInput): Promise<Buffer> {
   layers.push({ input: Buffer.from(band), top: 0, left: 0 });
   if (i.frame && i.logo) {
     const chip = await cornerChip(i.logo).catch(() => null);
-    if (chip) layers.push({ input: chip.buf, top: h - chip.h - 24, left: 24 });
+    if (chip) layers.push({ input: chip.buf, top: h - chip.h - 64, left: 24 });
   }
   return sharp({ create: { width: w, height: h, channels: 3, background: NAVY } })
     .composite(layers)
     .jpeg({ quality: 86, mozjpeg: true })
+    .toBuffer();
+}
+
+/**
+ * The frame filling w×h, cropped low rather than from the centre: the title band takes the top of the thumbnail, so a
+ * 16:9 frame loses about a quarter of its height, and a seated speaker's face sits in the lower half of the shot. A
+ * centre crop cut Frank Zaccari off at the chin (PM, 23 Nov). Most of what goes comes off the top (wall, the studio's
+ * LIVE badge); a sliver off the bottom, so a studio name tag stays whole. The logo chip sits above that name tag.
+ */
+async function fitLow(frame: Buffer, w: number, h: number): Promise<Buffer> {
+  const { data, info } = await sharp(frame).rotate().toBuffer({ resolveWithObject: true });
+  const scale = Math.max(w / info.width, h / info.height);
+  const rw = Math.max(w, Math.round(info.width * scale));
+  const rh = Math.max(h, Math.round(info.height * scale));
+  return sharp(data)
+    .resize(rw, rh)
+    .extract({ left: Math.floor((rw - w) / 2), top: Math.round((rh - h) * 0.85), width: w, height: h })
     .toBuffer();
 }
 
