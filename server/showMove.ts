@@ -103,6 +103,33 @@ export async function plan(showId: number, toRaw: string) {
   };
 }
 
+/** Move a show (the admin button, or a script on Andrew's word). Returns the log entry and the feed before and after. */
+export async function runMove(showId: number, to: string, by: string) {
+  const p = await plan(showId, to);
+  if ("error" in p) return { error: p.error as string };
+  const before = await feedItems(p.show.slug);
+  const stats = p.stats.filter((s) => s.moves).map((s) => s.id);
+  const t = new Date().toISOString();
+  await inTransaction(async (tx) => {
+    await tx.update(hostedShows).set({ email: p.to, updatedAt: t }).where(eq(hostedShows.id, showId));
+    if (p.folders.length) await tx.update(hostedEpisodes).set({ folderId: 0 }).where(inArray(hostedEpisodes.id, p.folders.map((f) => f.id)));
+    if (p.posts.length) await tx.update(hostPosts).set({ email: p.to }).where(inArray(hostPosts.id, p.posts));
+    if (p.transcripts.length) {
+      await tx.update(showTranscripts).set({ email: p.to }).where(inArray(showTranscripts.id, p.transcripts));
+      await tx.update(transcriptChunks).set({ email: p.to }).where(inArray(transcriptChunks.transcriptId, p.transcripts));
+    }
+    if (p.pageId) {
+      await tx.update(bioPages).set({ email: p.to }).where(eq(bioPages.id, p.pageId));
+      await tx.update(listenerQuestions).set({ email: p.to }).where(eq(listenerQuestions.pageId, p.pageId));
+    }
+    if (stats.length) await tx.update(podcastStats).set({ email: p.to }).where(inArray(podcastStats.id, stats));
+  });
+  const after = await feedItems(p.show.slug);
+  const move: MoveLog = { id: `${showId}-${Date.now()}`, showId, title: p.show.title, slug: p.show.slug, from: p.from, to: p.to, at: t, by, posts: p.posts, transcripts: p.transcripts, pageId: p.pageId, stats, folders: p.folders, feedBefore: before.items, feedAfter: after.items };
+  await writeLog([move, ...(await readLog())]);
+  return { move, feed: { before, after, same: after.status === 200 && after.items === before.items } };
+}
+
 export function registerShowMove(app: Express, requireAdmin: RequestHandler) {
   /** The preview: what moves, how many, and the feed as it is now. */
   app.get("/api/admin/show-move/preview", requireAdmin, async (req, res) => {
@@ -118,31 +145,10 @@ export function registerShowMove(app: Express, requireAdmin: RequestHandler) {
   /** The move. One transaction; the feed is read before and after, and both counts go in the log. */
   app.post("/api/admin/show-move", requireAdmin, async (req, res) => {
     await schemaIsReady();
-    const showId = Number(req.body?.showId), to = lc(req.body?.to);
     if (req.body?.confirm !== true) return res.status(400).json({ message: "Look at the preview first." });
-    const p = await plan(showId, to);
-    if ("error" in p) return res.status(400).json({ message: p.error });
-    const before = await feedItems(p.show.slug);
-    const stats = p.stats.filter((s) => s.moves).map((s) => s.id);
-    const t = new Date().toISOString();
-    await inTransaction(async (tx) => {
-      await tx.update(hostedShows).set({ email: to, updatedAt: t }).where(eq(hostedShows.id, showId));
-      if (p.folders.length) await tx.update(hostedEpisodes).set({ folderId: 0 }).where(inArray(hostedEpisodes.id, p.folders.map((f) => f.id)));
-      if (p.posts.length) await tx.update(hostPosts).set({ email: to }).where(inArray(hostPosts.id, p.posts));
-      if (p.transcripts.length) {
-        await tx.update(showTranscripts).set({ email: to }).where(inArray(showTranscripts.id, p.transcripts));
-        await tx.update(transcriptChunks).set({ email: to }).where(inArray(transcriptChunks.transcriptId, p.transcripts));
-      }
-      if (p.pageId) {
-        await tx.update(bioPages).set({ email: to }).where(eq(bioPages.id, p.pageId));
-        await tx.update(listenerQuestions).set({ email: to }).where(eq(listenerQuestions.pageId, p.pageId));
-      }
-      if (stats.length) await tx.update(podcastStats).set({ email: to }).where(inArray(podcastStats.id, stats));
-    });
-    const after = await feedItems(p.show.slug);
-    const entry: MoveLog = { id: `${showId}-${Date.now()}`, showId, title: p.show.title, slug: p.show.slug, from: p.from, to, at: t, by: getSessionEmail(req) ?? "", posts: p.posts, transcripts: p.transcripts, pageId: p.pageId, stats, folders: p.folders, feedBefore: before.items, feedAfter: after.items };
-    await writeLog([entry, ...(await readLog())]);
-    res.json({ ok: true, move: entry, feed: { before, after, same: after.status === 200 && after.items === before.items } });
+    const r = await runMove(Number(req.body?.showId), lc(req.body?.to), getSessionEmail(req) ?? "");
+    if ("error" in r) return res.status(400).json({ message: r.error });
+    res.json({ ok: true, ...r });
   });
 
   /** Every move, newest first. */
