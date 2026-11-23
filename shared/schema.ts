@@ -2969,6 +2969,8 @@ export const hostedEpisodes = pgTable("hosted_episodes", {
   servedSig: text("served_sig").notNull().default(""),
   /** This episode's own intro in place of the show's (a teaser about this episode, 23 Nov 2026); "" = the show's. */
   introKey: text("intro_key").notNull().default(""),
+  /** The title and notes written for them without a click (23 Nov 2026): "" not yet, queued, done, skip (they wrote their own), failed. */
+  autoWrite: text("auto_write").notNull().default(""),
   bookendJob: text("bookend_job").notNull().default(""),
   bookendJobAt: text("bookend_job_at").notNull().default(""),
   /** Who was on it (fills {guest} in the show's footer). */

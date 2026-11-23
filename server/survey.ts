@@ -448,6 +448,9 @@ export function registerSurvey(app: Express, requireAdmin: RequestHandler): void
         await db.update(outboxMail).set({ status: "failed", error: String(err?.message ?? err).slice(0, 300) }).where(eq(outboxMail.id, m.id));
       }
     }
+    // New podcast drafts get their title and notes written for them (hosting.ts, 23 Nov).
+    const written = await import("./hosting.js").then((m) => m.autoWriteSweep()).catch((e: Error) => { console.error("autoWriteSweep:", e.message); return 0; });
+    if (written) console.log(`outbox: wrote ${written} episode title(s) and notes`);
     // Texts set for now or earlier (the survey reminder, 7 Oct).
     const dueTexts = await db.select().from(scheduledTexts).where(and(eq(scheduledTexts.status, "queued"), lte(scheduledTexts.sendAt, t))).orderBy(asc(scheduledTexts.sendAt)).limit(60);
     let texted = 0;

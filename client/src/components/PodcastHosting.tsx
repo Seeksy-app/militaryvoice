@@ -1155,6 +1155,13 @@ function EpisodePage({ ep, show, youtubeReady, production, onDirectories, onBack
   // People type notes in plain words: an imported episode's HTML is shown as text, and kept as it was unless they change it.
   const notesPlain = ep.notesFormat === "html" ? htmlToText(ep.description) : ep.description;
   const hasAudio = !!(ep.audioKey || ep.audioUrl);
+  // A new draft's title and notes are written for them (server: autoWriteSweep); until then the notes box says so, and the page checks back.
+  const autoPending = ep.status === "draft" && hasAudio && !notesPlain.trim() && (ep.autoWrite === "queued" || (ep.autoWrite === "" && ep.createdAt >= "2026-11-23T00:00:00.000Z"));
+  useEffect(() => {
+    if (!autoPending) return;
+    const t = setInterval(onSaved, 20_000);
+    return () => clearInterval(t);
+  }, [autoPending, onSaved]);
   const dirty = Object.keys(f).length > 0;
   // The show's intro and outro: on for episodes made after they were set, unless this one says otherwise.
   const bookendsOn = (v.bookends ?? "") === "on" || ((v.bookends ?? "") !== "off" && !!show.bookendsSince && ep.createdAt >= show.bookendsSince);
@@ -1309,14 +1316,24 @@ function EpisodePage({ ep, show, youtubeReady, production, onDirectories, onBack
                 <button type="button" onClick={() => void writeIt()} disabled={writing || !hasAudio} title={hasAudio ? "We listen to the episode and write the title and notes" : undefined} className="inline-flex items-center gap-1 text-xs font-semibold text-[#053877] hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline disabled:opacity-80 dark:text-[#8fb5e8]" data-testid="episode-write">
                   {writing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} {writing ? "Listening…" : hasAudio ? "Write it for me" : ep.audioJob && ep.audioJob !== "failed" ? "Write it for me: ready when the audio is done" : "Write it for me: add the audio first"}
                 </button>
-                {show.importedFrom && (
+                {show.importedFrom && !ep.recordingId && (
                   <button type="button" onClick={() => void pullNow()} disabled={pull.busy} className="inline-flex items-center gap-1 text-xs font-semibold text-[#053877] hover:underline disabled:opacity-60 dark:text-[#8fb5e8]" data-testid="episode-pull">
                     {pull.busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Radio className="h-3.5 w-3.5" />} Pull from your old feed
                   </button>
                 )}
               </span>
             </div>
-            <Textarea value={typeof f.description === "string" ? f.description : notesPlain} onChange={(e) => setF((x) => ({ ...x, description: e.target.value, notesFormat: "text" }))} rows={12} placeholder="What it's about, who's on it, and any links you mention." data-testid="hosting-ep-notes" />
+            <div className="relative">
+              <Textarea value={typeof f.description === "string" ? f.description : notesPlain} onChange={(e) => setF((x) => ({ ...x, description: e.target.value, notesFormat: "text" }))} readOnly={writing || autoPending} rows={12} placeholder="What it's about, who's on it, and any links you mention." data-testid="hosting-ep-notes" />
+              {(writing || autoPending) && (
+                // The "listening" state sits in the box itself, so it's plain that something is happening (Andrew, 23 Nov).
+                <div className="absolute inset-0 flex flex-col items-center justify-center gap-2 rounded-md bg-card/90 px-6 text-center" data-testid="episode-writing">
+                  <Loader2 className="h-7 w-7 animate-spin text-[#053877] dark:text-[#8fb5e8]" />
+                  <p className="text-base font-semibold">{writing ? "Listening to your episode…" : "Writing your title and notes…"}</p>
+                  <p className="max-w-sm text-sm text-muted-foreground">This takes a few minutes. The title and notes appear here when they're ready. You can keep working.</p>
+                </div>
+              )}
+            </div>
             <label className={`${label} mt-3`}>Guest (fills {"{guest}"} in your footer)<Input value={(v.guest as string) ?? ""} onChange={(e) => set("guest", e.target.value)} className="mt-1" placeholder="Who was on it" data-testid="hosting-ep-guest" /></label>
             {false && (show.introKey || show.outroKey) && hasAudio && (
               <div className="mt-3 rounded-xl border border-border px-3 py-2.5 text-sm" data-testid="hosting-ep-bookends">

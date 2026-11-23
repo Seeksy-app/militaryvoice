@@ -548,6 +548,119 @@ export async function claimEpisodeBookends(canStitch = false, canSegments = fals
   return null;
 }
 
+// ---- "Write it for me" ------------------------------------------------------------------------------------
+type SaidLine = [number, number, string, string];
+/** What was said in an episode: its Library recording's transcript, else ours (queued for the worker the first time). */
+async function episodeSaid(e: HostedEpisodeRow, email: string, again = false): Promise<{ state: "ready"; said: string } | { state: "working" } | { state: "failed"; message: string }> {
+  let lines: SaidLine[] = [];
+  if (e.recordingId) {
+    const rec = await storage.getRecording(e.recordingId).catch(() => undefined);
+    try { lines = rec?.transcriptJson ? (JSON.parse(rec.transcriptJson) as SaidLine[]) : []; } catch { lines = []; }
+  }
+  if (!lines.length) {
+    const key = `hosted:${e.id}`;
+    const [t] = await db.select().from(showTranscripts).where(and(eq(showTranscripts.email, email), eq(showTranscripts.episodeKey, key))).limit(1);
+    if (!t) {
+      await db.insert(showTranscripts).values({ email, episodeKey: key, title: e.title, publishedAt: e.publishedAt, audioUrl: `${ORIGIN}/e/${e.id}.mp3`, status: "queued", createdAt: now() }).onConflictDoNothing();
+      return { state: "working" };
+    }
+    if (t.status === "failed") {
+      if (!again) return { state: "failed", message: t.error || "We couldn't listen to this one." };
+      await db.update(showTranscripts).set({ status: "queued", error: "" }).where(eq(showTranscripts.id, t.id));
+      return { state: "working" };
+    }
+    if (t.status !== "done" || !t.lines) return { state: "working" };
+    try { lines = JSON.parse(t.lines) as SaidLine[]; } catch { lines = []; }
+  }
+  const said = lines.map((l) => l[3]).join(" ").replace(/\s+/g, " ").trim();
+  if (said.length < 80) return { state: "failed", message: "There wasn't enough speech in it to write from." };
+  return { state: "ready", said };
+}
+
+/** The show's own recent titles and notes (without the footer), so new ones read the way the host's always have. */
+async function styleExamples(s: HostedShowRow): Promise<{ title: string; notes: string }[]> {
+  const eps = await db.select({ title: hostedEpisodes.title, description: hostedEpisodes.description, notesFormat: hostedEpisodes.notesFormat }).from(hostedEpisodes)
+    .where(and(eq(hostedEpisodes.showId, s.id), eq(hostedEpisodes.status, "published"))).orderBy(desc(hostedEpisodes.publishedAt)).limit(8);
+  const footerStart = (s.episodeFooter ?? "").trim().split("\n")[0].replace(/\{[a-z]+\}/gi, "").trim().slice(0, 12);
+  return eps.map((e) => {
+    let notes = (e.notesFormat === "html" ? notesText(e.description) : e.description).trim();
+    for (const cut of ["🎙", footerStart].filter(Boolean)) { const i = notes.indexOf(cut); if (i > 200) notes = notes.slice(0, i).trim(); }
+    return { title: e.title, notes: notes.slice(0, 1600) };
+  }).filter((x) => x.notes.length > 300).slice(0, 2);
+}
+
+/** A title and plain-text show notes from what was said, in the show's own style when it has past episodes. */
+async function writeEpisodeText(show: HostedShowRow, currentTitle: string, said: string): Promise<{ title: string; description: string }> {
+  const text = said.length > 48000 ? `${said.slice(0, 24000)} [...] ${said.slice(-24000)}` : said;
+  const examples = await styleExamples(show).catch(() => []);
+  const shape = examples.length
+    ? `Write the way this show's past episodes are written (examples below): the same voice and point of view, the same kind of title, the same shape, paragraph length and overall length. Take only their style, never their facts.
+Notes: plain text only (no HTML, no markdown symbols), short paragraphs with a blank line between them. Leave out any episode-number line, hashtags, links and contact details: those are added for them. Under 2000 characters.`
+    : `Title: under 70 characters, plain and specific, says what the episode is about. No clickbait, no episode number, no quotation marks.
+Notes: plain text only (no HTML, no markdown symbols). A short opening paragraph of two or three sentences, then a line "In this episode:" followed by 3 to 5 lines that each start with "- " and name one thing covered. Under 1500 characters in all.`;
+  const client = new Anthropic();
+  const r = await client.messages.create({
+    model: "claude-sonnet-5",
+    max_tokens: 1200,
+    system: `You write the title and show notes for one podcast episode on MilitaryVoices.ai, a platform for military and veteran creators. Work only from the transcript.
+${shape}
+Invent nothing: no names, ranks, branches, numbers, dates or links that are not in the transcript (the host's name may come from the examples). If a speaker is not named, do not name them. Easy to read. No em dashes. No hype words like "journey", "delve" or "unlock". No episode number in the title.
+Return JSON only: {"title":"","description":""}`,
+    messages: [{ role: "user", content: `Show: ${show.title}${examples.map((x, i) => `\n\nPast episode ${i + 1}\nTitle: ${x.title}\nNotes:\n${x.notes}`).join("")}\n\nCurrent title (may just be a file name): ${currentTitle}\n\nTranscript:\n${text}` }],
+  });
+  const out = r.content.map((c) => ("text" in c ? c.text : "")).join("");
+  const json = JSON.parse(out.slice(out.indexOf("{"), out.lastIndexOf("}") + 1)) as { title?: unknown; description?: unknown };
+  const title = String(json.title ?? "").replace(/^["']|["']$/g, "").trim().slice(0, 120);
+  const description = String(json.description ?? "").replace(/<[^>]*>/g, "").trim().slice(0, 4000);
+  if (!title || !description) throw new Error("empty");
+  return { title, description };
+}
+
+/** New drafts from here on get their title and notes written for them; older ones only when queued by hand. */
+const AUTO_WRITE_SINCE = "2026-11-23T00:00:00.000Z";
+/** A title nobody chose: a file name, "New episode", or the one we made from the recording. */
+const madeUpTitle = (t: string, recTitle = "") => !t.trim() || t.trim() === recTitle.trim() || /[_]|\.(mp3|m4a|mp4|wav|mov)$|^new episode$|\(clean\)$/i.test(t.trim());
+
+/**
+ * "Write it for me" without the click (Andrew, 23 Nov 2026: "create the title and description so he doesn't have
+ * to do it"): once a new draft has its audio and a transcript, the title and notes are filled in. Only what nobody
+ * wrote is filled: a typed title or typed notes stay. Runs from the 5-minute cron.
+ */
+export async function autoWriteSweep(limit = 3): Promise<number> {
+  const rows = await db.select().from(hostedEpisodes).where(and(eq(hostedEpisodes.status, "draft"), eq(hostedEpisodes.audioJob, ""), sql`(${hostedEpisodes.autoWrite} = 'queued' or (${hostedEpisodes.autoWrite} = '' and ${hostedEpisodes.createdAt} >= ${AUTO_WRITE_SINCE}))`, sql`(${hostedEpisodes.audioKey} <> '' or ${hostedEpisodes.audioUrl} <> '')`)).orderBy(desc(hostedEpisodes.id)).limit(20);
+  let done = 0;
+  for (const e of rows) {
+    if (done >= limit) break;
+    const [show] = await db.select().from(hostedShows).where(eq(hostedShows.id, e.showId)).limit(1);
+    if (!show) continue;
+    const rec = e.recordingId ? await storage.getRecording(e.recordingId).catch(() => undefined) : undefined;
+    const credits = e.recordingId ? (await withCredits("", e.recordingId).catch(() => "")).trim() : "";
+    const noNotes = !e.description.trim() || e.description.trim() === credits;
+    const noTitle = madeUpTitle(e.title, rec?.title ?? "");
+    if (!noNotes && !noTitle) { await db.update(hostedEpisodes).set({ autoWrite: "skip" }).where(eq(hostedEpisodes.id, e.id)); continue; }
+    const t = await episodeSaid(e, show.email);
+    if (t.state === "working") {
+      // Still being transcribed; give up after three days.
+      if (Date.now() - Date.parse(e.createdAt) > 3 * 86400_000) await db.update(hostedEpisodes).set({ autoWrite: "failed" }).where(eq(hostedEpisodes.id, e.id));
+      continue;
+    }
+    if (t.state === "failed") { await db.update(hostedEpisodes).set({ autoWrite: "failed" }).where(eq(hostedEpisodes.id, e.id)); continue; }
+    try {
+      const w = await writeEpisodeText(show, e.title, t.said);
+      // Claim it only if nobody changed it meanwhile.
+      await db.update(hostedEpisodes).set({
+        autoWrite: "done",
+        ...(noTitle ? { title: w.title } : {}),
+        ...(noNotes ? { description: credits ? `${w.description}\n\n${credits}` : w.description, notesFormat: "text" } : {}),
+      }).where(and(eq(hostedEpisodes.id, e.id), eq(hostedEpisodes.title, e.title), eq(hostedEpisodes.description, e.description)));
+      done++;
+    } catch (err) {
+      console.error("Auto-write failed:", e.id, (err as Error).message);
+    }
+  }
+  return done;
+}
+
 /** A new recording from their Zoom (a package account): the episode appears in their Episodes at once, in post-production. */
 export async function startEpisodeFromRecording(email: string, rec: { id: number; title: string; durationSec: number; url: string }): Promise<void> {
   await schemaIsReady();
@@ -699,8 +812,9 @@ async function postEpisodeToYouTube(e: HostedEpisodeRow, show: HostedShowRow, pr
   const profile = await storage.getProfileByEmail(show.email);
   if (!profile?.uploadPostUsername) throw fail("Connect your YouTube channel on the Social screen first.");
   const privacy = (["public", "unlisted", "private"].includes(privacyIn) ? privacyIn : "public") as "public";
-  const plain = e.description.replace(/<[^>]+>/g, " ").replace(/\s+\n/g, "\n").trim();
-  const description = [plain, `Listen wherever you get podcasts: ${ORIGIN}/podcast/${show.slug}`].filter(Boolean).join("\n\n").slice(0, 4900);
+  const plain = (e.notesFormat === "html" ? notesText(e.description) : e.description).replace(/<[^>]+>/g, " ").replace(/\s+\n/g, "\n").trim();
+  // The show's footer (episode line, sign-off, contact details) goes on YouTube too, the same as in the feed (23 Nov).
+  const description = [plain, footerText(show, e), `Listen wherever you get podcasts: ${ORIGIN}/podcast/${show.slug}`].filter(Boolean).join("\n\n").slice(0, 4900);
   const post = await storage.addHostPost({ email: show.email, kind: "episode", refId: e.id, shape: "", title: e.title, description, platforms: "youtube", scheduledAt: "", status: "sending", error: "", jobId: "", requestId: "", results: "", mediaKey: "", metrics: "", metricsAt: "" });
   try {
     const videoUrl = await signedRecordingUrl(key, 21_600);
@@ -1793,50 +1907,12 @@ Return JSON only: {"titles":["","",""],"description":""}`,
     const show = e ? await ownShow(email, e.showId) : null;
     if (!e || !show) return res.status(404).json({ message: "No such episode." });
     if (!(e.audioKey || e.audioUrl)) return res.status(400).json({ message: "Add the audio first, then we can listen to it." });
-    type Line = [number, number, string, string];
-    let lines: Line[] = [];
-    if (e.recordingId) {
-      const rec = await storage.getRecording(e.recordingId).catch(() => undefined);
-      try { lines = rec?.transcriptJson ? (JSON.parse(rec.transcriptJson) as Line[]) : []; } catch { lines = []; }
-    }
-    if (!lines.length) {
-      const key = `hosted:${e.id}`;
-      const find = async () => (await db.select().from(showTranscripts).where(and(eq(showTranscripts.email, email), eq(showTranscripts.episodeKey, key))).limit(1))[0];
-      let t = await find();
-      if (!t) {
-        await db.insert(showTranscripts).values({ email, episodeKey: key, title: e.title, publishedAt: e.publishedAt, audioUrl: `${ORIGIN}/e/${e.id}.mp3`, status: "queued", createdAt: now() }).onConflictDoNothing();
-        return res.json({ state: "working" });
-      }
-      if (t.status === "failed") {
-        if (req.body?.again !== true) return res.json({ state: "failed", message: t.error || "We couldn't listen to this one." });
-        await db.update(showTranscripts).set({ status: "queued", error: "" }).where(eq(showTranscripts.id, t.id));
-        return res.json({ state: "working" });
-      }
-      if (t.status !== "done" || !t.lines) return res.json({ state: "working" });
-      try { lines = JSON.parse(t.lines) as Line[]; } catch { lines = []; }
-    }
-    const said = lines.map((l) => l[3]).join(" ").replace(/\s+/g, " ").trim();
-    if (said.length < 80) return res.json({ state: "failed", message: "There wasn't enough speech in it to write from." });
+    const t = await episodeSaid(e, email, req.body?.again === true);
+    if (t.state === "working") return res.json({ state: "working" });
+    if (t.state === "failed") return res.json({ state: "failed", message: t.message });
     if (overLimit(`d:${email}`, 30)) return res.status(429).json({ message: "That's plenty for today. Try again tomorrow." });
-    const text = said.length > 48000 ? `${said.slice(0, 24000)} [...] ${said.slice(-24000)}` : said;
     try {
-      const client = new Anthropic();
-      const r = await client.messages.create({
-        model: "claude-sonnet-5",
-        max_tokens: 900,
-        system: `You write the title and show notes for one podcast episode on MilitaryVoices.ai, a platform for military and veteran creators. Work only from the transcript.
-Title: under 70 characters, plain and specific, says what the episode is about. No clickbait, no episode number, no quotation marks.
-Notes: plain text only (no HTML, no markdown symbols). A short opening paragraph of two or three sentences, then a line "In this episode:" followed by 3 to 5 lines that each start with "- " and name one thing covered. Under 1500 characters in all.
-Invent nothing: no names, ranks, branches, numbers, dates or links that are not in the transcript. If the speakers are not named, do not name them. 8th-grade reading level. No em dashes. No hype words like "journey", "delve" or "unlock".
-Return JSON only: {"title":"","description":""}`,
-        messages: [{ role: "user", content: `Show: ${show.title}\nCurrent title (may just be a file name): ${e.title}\n\nTranscript:\n${text}` }],
-      });
-      const out = r.content.map((c) => ("text" in c ? c.text : "")).join("");
-      const json = JSON.parse(out.slice(out.indexOf("{"), out.lastIndexOf("}") + 1)) as { title?: unknown; description?: unknown };
-      const title = String(json.title ?? "").replace(/^["']|["']$/g, "").trim().slice(0, 120);
-      const description = String(json.description ?? "").replace(/<[^>]*>/g, "").trim().slice(0, 4000);
-      if (!title || !description) throw new Error("empty");
-      res.json({ state: "done", title, description });
+      res.json({ state: "done", ...(await writeEpisodeText(show, e.title, t.said)) });
     } catch (err) {
       console.error("Episode write failed:", (err as Error).message);
       res.status(502).json({ message: "Couldn't write that just now. Try again, or type your own." });
