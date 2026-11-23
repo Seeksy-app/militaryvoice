@@ -29,6 +29,10 @@ export interface SocialAccount {
   url: string; // best-effort public profile URL ("" if we can't build one)
   image: string; // avatar URL from the platform, if provided
   followers?: number; // from /analytics when the platform reports it
+  /** LinkedIn: the company page posts go out as (Upload-Post's pin); unset = personal profile. */
+  pageId?: string;
+  /** LinkedIn: how many company pages this login manages (0 hides the picker). */
+  pages?: number;
 }
 
 export function isUploadPostConfigured(): boolean {
@@ -262,6 +266,83 @@ export async function enrichWithFollowers(username: string, accounts: SocialAcco
     console.warn("Upload-Post analytics failed (followers omitted):", (err as Error).message);
   }
   return out;
+}
+
+// ---------------------------------------------------------------------------
+// LinkedIn pages. One LinkedIn login can manage several company pages. Upload-Post
+// keeps one "pinned" page per profile, and every upload from that profile goes out
+// as that page: now, scheduled, queued and retried. No pin means the personal
+// profile. Its own connect page has the same dropdown, so the pin is the one
+// source of truth for where LinkedIn posts land (Andrew, 23 Nov: he picked
+// SmartLoads there, and our row went on saying YourVABenefits, then Podlogix,
+// which were only the labels on his login).
+// ---------------------------------------------------------------------------
+export interface LinkedinPage { id: string; name: string; picture: string; followers?: number; vanity: string }
+
+export async function linkedinPages(username: string): Promise<{ pages: LinkedinPage[]; selectedId: string | null; selectedName: string | null }> {
+  let res: any;
+  try {
+    res = await call<any>("GET", `/uploadposts/users/linkedin-page?profile_username=${encodeURIComponent(username)}`);
+  } catch (err: any) {
+    // 404: no LinkedIn connected, or a login with no pages. Either way, personal only.
+    if (err?.status === 404) return { pages: [], selectedId: null, selectedName: null };
+    throw err;
+  }
+  const pages: LinkedinPage[] = (Array.isArray(res?.pages) ? res.pages : [])
+    .filter((p: any) => p && typeof p.id === "string" && p.id)
+    .map((p: any) => ({
+      id: p.id,
+      name: String(p.name ?? "").trim() || "LinkedIn page",
+      picture: typeof p.picture === "string" ? p.picture : "",
+      followers: typeof p.followers === "number" && Number.isFinite(p.followers) ? Math.max(0, Math.round(p.followers)) : undefined,
+      vanity: typeof p.vanityName === "string" ? p.vanityName : "",
+    }));
+  const selectedId = typeof res?.selected_page_id === "string" && res.selected_page_id ? res.selected_page_id : null;
+  const selectedName = typeof res?.selected_page_name === "string" && res.selected_page_name ? res.selected_page_name : null;
+  return { pages, selectedId, selectedName };
+}
+
+/** Pin a page (every LinkedIn upload goes out as it), or null for the personal profile. */
+export async function setLinkedinPage(username: string, pageId: string | null): Promise<void> {
+  if (pageId) await call("POST", "/uploadposts/users/linkedin-page", { profile_username: username, linkedin_page_id: pageId });
+  else await call("DELETE", "/uploadposts/users/linkedin-page", { profile_username: username });
+}
+
+/**
+ * Make the LinkedIn account read as where posts really go: the pinned page's
+ * name, logo, link and followers, or "Personal profile" when nothing is pinned
+ * and Upload-Post's label is one of the pages (it labels a login with a page
+ * name). Never throws; on any failure the account is left as it was.
+ */
+export async function withLinkedinPage(username: string, accounts: SocialAccount[]): Promise<SocialAccount[]> {
+  const li = accounts.find((a) => a.platform === "linkedin");
+  if (!li) return accounts;
+  try {
+    const { pages, selectedId, selectedName } = await linkedinPages(username);
+    const page = selectedId ? pages.find((p) => p.id === selectedId || p.id.endsWith(`:${selectedId}`)) : undefined;
+    const out = accounts.map((a) => ({ ...a }));
+    const x = out.find((a) => a.platform === "linkedin")!;
+    x.pages = pages.length;
+    if (selectedId) {
+      x.pageId = selectedId;
+      x.displayName = page?.name || selectedName || x.displayName;
+      x.username = x.displayName;
+      if (page?.picture) x.image = page.picture;
+      x.url = page?.vanity ? `https://www.linkedin.com/company/${page.vanity}` : "";
+      x.followers = page?.followers;
+    } else {
+      x.pageId = undefined;
+      if (pages.some((p) => p.name.toLowerCase() === x.displayName.toLowerCase())) {
+        x.displayName = "Personal profile";
+        x.username = "";
+        x.url = "";
+      }
+    }
+    return out;
+  } catch (err) {
+    console.warn("Upload-Post linkedin pages failed (row left as is):", (err as Error).message);
+    return accounts;
+  }
 }
 
 export interface PublishResult {

@@ -530,6 +530,10 @@ export interface SocialAccount {
   image: string;
   /** Follower / subscriber count from the platform's analytics, when available. */
   followers?: number;
+  /** LinkedIn: the company page posts go out as (Upload-Post's pin); unset = personal profile. */
+  pageId?: string;
+  /** LinkedIn: how many company pages this login manages (0 hides the picker). */
+  pages?: number;
 }
 
 // ---------------------------------------------------------------------------

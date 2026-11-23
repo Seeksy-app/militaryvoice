@@ -216,6 +216,9 @@ import {
   createConnectUrl,
   fetchConnectedAccounts,
   enrichWithFollowers,
+  withLinkedinPage,
+  linkedinPages,
+  setLinkedinPage,
   parseSocialAccounts,
   publishVideo,
   editScheduledPost,
@@ -11663,17 +11666,56 @@ The Podcast Marathon team`;
       return;
     }
     try {
-      const accounts = await enrichWithFollowers(
-        profile.uploadPostUsername,
-        await fetchConnectedAccounts(profile.uploadPostUsername),
-      );
-      const json = JSON.stringify(accounts);
-      await storage.upsertProfile(email, { socialAccounts: json });
-      await storage.updateSignupSocialAccountsByEmail(email, json);
+      const accounts = await syncSocialAccounts(email, profile.uploadPostUsername);
       res.json({ configured: true, accounts });
     } catch (err: any) {
       console.error("Upload-Post refresh failed:", err);
       res.status(502).json({ message: "Couldn't read your connected accounts right now." });
+    }
+  });
+
+  /** Re-read what they linked (LinkedIn as the page it posts as) and cache it on profile + signups. */
+  async function syncSocialAccounts(email: string, username: string) {
+    const accounts = await withLinkedinPage(username, await enrichWithFollowers(username, await fetchConnectedAccounts(username)));
+    const json = JSON.stringify(accounts);
+    await storage.upsertProfile(email, { socialAccounts: json });
+    await storage.updateSignupSocialAccountsByEmail(email, json);
+    return accounts;
+  }
+
+  // LinkedIn: which page posts go out as. One login can manage several company
+  // pages; the choice is Upload-Post's pin on their profile, so it holds for
+  // clips, full episodes, scheduled and queued posts alike (Andrew, 23 Nov).
+  app.get("/api/host/social/linkedin-pages", requireHostSession, async (req, res) => {
+    const email = (req as any).hostEmail as string;
+    const profile = await storage.getProfileByEmail(email);
+    if (!isUploadPostConfigured() || !profile?.uploadPostUsername) return res.json({ pages: [], selectedId: null });
+    try {
+      const { pages, selectedId } = await linkedinPages(profile.uploadPostUsername);
+      res.json({ pages: pages.map(({ id, name, picture, followers }) => ({ id, name, picture, followers })), selectedId });
+    } catch (err: any) {
+      console.error("Upload-Post linkedin pages failed:", err);
+      res.status(502).json({ message: "Couldn't read your LinkedIn pages right now." });
+    }
+  });
+
+  app.post("/api/host/social/linkedin-page", requireHostSession, async (req, res) => {
+    const email = (req as any).hostEmail as string;
+    const profile = await storage.getProfileByEmail(email);
+    if (!isUploadPostConfigured() || !profile?.uploadPostUsername) return res.status(400).json({ message: "Connect LinkedIn first." });
+    const raw = req.body?.pageId;
+    const pageId = typeof raw === "string" && raw.trim() ? raw.trim() : null;
+    try {
+      if (pageId) {
+        const { pages } = await linkedinPages(profile.uploadPostUsername);
+        if (!pages.some((p) => p.id === pageId)) return res.status(400).json({ message: "That page isn't one your LinkedIn manages." });
+      }
+      await setLinkedinPage(profile.uploadPostUsername, pageId);
+      const accounts = await syncSocialAccounts(email, profile.uploadPostUsername);
+      res.json({ ok: true, accounts });
+    } catch (err: any) {
+      console.error("Upload-Post set linkedin page failed:", err);
+      res.status(502).json({ message: "Couldn't change that on LinkedIn right now. Try again in a minute." });
     }
   });
 
