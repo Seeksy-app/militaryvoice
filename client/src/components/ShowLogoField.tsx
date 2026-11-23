@@ -46,6 +46,8 @@ export default function ShowLogoField() {
 
   const d = q.data;
   const shown = d?.logo || "";
+  // No logo yet: the corner shows their cover art, so the preview does too (faded, with a line that says so).
+  const fallback = !shown ? d?.cover || "" : "";
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:gap-4" data-testid="show-logo-field">
       {/* How it reads in the corner, over dark video and light video. */}
@@ -59,6 +61,8 @@ export default function ShowLogoField() {
               >
                 <img src={shown} alt="" className="h-full w-auto max-w-full object-contain" />
               </span>
+            ) : fallback ? (
+              <img src={fallback} alt="" className="h-full w-auto rounded-md object-contain opacity-80" />
             ) : (
               <span className={`text-[11px] font-medium ${bg === "#0b1530" ? "text-white/50" : "text-slate-400"}`}>No logo</span>
             )}
@@ -67,7 +71,7 @@ export default function ShowLogoField() {
       </div>
       <div className="min-w-0 flex-1">
         <p className="text-sm font-semibold text-foreground">Your show logo</p>
-        <p className="text-sm text-muted-foreground text-pretty">A PNG with a clear background, square or wide. It goes small in the top corner when you're live.</p>
+        <p className="text-[13px] leading-snug text-muted-foreground text-pretty">A PNG with a clear background, square or wide. It goes small in the top corner when you're live.{fallback ? " Until you add one, your cover art goes\u00a0there." : ""}</p>
       </div>
       <div className="flex shrink-0 items-center gap-2">
         <input

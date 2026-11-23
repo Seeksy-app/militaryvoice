@@ -7,6 +7,7 @@ import { apiRequest } from "@/lib/queryClient";
 import { BrandMark, BrandGroup } from "@/components/BrandMark";
 import { ConnectYoutube } from "@/components/ConnectYoutube";
 import { InfoTip } from "@/components/InfoTip";
+import ShowLogoField from "@/components/ShowLogoField";
 
 /**
  * Integrations → Live, all of it in one place (Andrew, 22 Nov 2026: the one-place Live mockup, "Yes, build it").
@@ -268,6 +269,12 @@ export function LiveSettings() {
       <div className="mb-2.5 mt-6"><p className="text-[13px] font-bold uppercase tracking-wide text-muted-foreground">2 · Stream in from your own software</p><p className="text-[13px] text-muted-foreground">Only if you make your show somewhere else.</p></div>
       <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
         <StreamInBlock />
+      </div>
+      {/* Their logo in the corner of every live show (Andrew via PM, 23 Nov). Here, not in Podcast: everyone who goes live
+          comes through Live, and not everyone hosts their podcast with us. */}
+      <div className="mb-2.5 mt-6"><p className="text-[13px] font-bold uppercase tracking-wide text-muted-foreground">3 · How it looks</p><p className="text-[13px] text-muted-foreground">Your logo sits in the corner of every live show.</p></div>
+      <div className="overflow-hidden rounded-2xl border border-border bg-card px-5 py-4" data-testid="row-live-logo">
+        <ShowLogoField />
       </div>
       <p className="mt-3 text-[13px] text-muted-foreground">Posting episodes and clips to YouTube stays under <b>Social media</b> (Upload-Post). That one can't go live, so live has its own key here.</p>
     </div>
