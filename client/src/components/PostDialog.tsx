@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -12,6 +12,7 @@ import { platformLabel } from "@/components/SocialIcons";
 import { BrandMark, type Brand } from "@/components/BrandMark";
 import type { SocialPlatform } from "@shared/schema";
 import { uploadToStorage } from "@/lib/upload";
+import { videoFrame } from "@/lib/videoFrame";
 import { isSocialLocked402, socialLocked, SOCIAL_UPGRADE_NOTE, type SocialTrial } from "@/components/SocialTrial";
 import { UpgradeDialog } from "@/components/PostStudio";
 import { postableTitle } from "@shared/episodeTitle";
@@ -24,7 +25,7 @@ const chip = (on: boolean) => `rounded-full border px-3 py-1 text-xs font-semibo
 const link = "font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]";
 
 /** YouTube's own extras, folded into one line until they press Change. The title and description are the shared ones. */
-function YouTubeExtras({ yt, onChange }: { yt: YouTubeSettings; onChange: (y: YouTubeSettings) => void }) {
+function YouTubeExtras({ yt, onChange, frame }: { yt: YouTubeSettings; onChange: (y: YouTubeSettings) => void; /** A frame from the video is the cover unless they upload one. */ frame?: boolean }) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);
   const [thumbPct, setThumbPct] = useState<number | null>(null);
@@ -44,7 +45,7 @@ function YouTubeExtras({ yt, onChange }: { yt: YouTubeSettings; onChange: (y: Yo
   const summary = [
     yt.privacyStatus[0].toUpperCase() + yt.privacyStatus.slice(1),
     yt.notifySubscribers ? "Notifies subscribers" : "No notification",
-    yt.thumbnailKey ? "Your thumbnail" : "No thumbnail",
+    yt.thumbnailKey ? "Your thumbnail" : frame ? "Thumbnail from the video" : "No thumbnail",
     ...(yt.madeForKids ? ["Made for kids"] : []),
   ].join(" · ");
   return (
@@ -202,6 +203,9 @@ export function PostDialog({ target, onClose, at, schedule = false }: { target: 
   const later = mode === "later";
   const [yt, setYt] = useState<YouTubeSettings>(blankYt);
   const [when, setWhen] = useState(inAnHour);
+  // A whole episode opens on black, and LinkedIn shows the first frame: a still from a little way in is
+  // picked and uploaded while they write, and goes with the post as every platform's cover (Andrew, 23 Nov).
+  const autoThumb = useRef<Promise<string> | null>(null);
 
   // Fresh each time a different thing is opened.
   const key = target ? `${target.kind}-${target.id}-${target.kind === "photo" ? target.storageKey : ""}` : "";
@@ -217,9 +221,20 @@ export function PostDialog({ target, onClose, at, schedule = false }: { target: 
     setYt(blankYt);
     // A whole episode: its description drafted straight away, chapters and all, for them to edit.
     if (target.kind === "recording") void draft(target.id, true);
+    autoThumb.current = target.kind === "recording" ? frameFor(target.id) : null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [key, schedule]);
   useEffect(() => setPicked(platforms), [platforms.join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  async function frameFor(id: number): Promise<string> {
+    try {
+      const { url } = (await (await apiRequest("GET", `/api/host/recordings/${id}/video?json=1`)).json()) as { url: string };
+      const blob = await videoFrame(url);
+      return blob ? await uploadToStorage(new File([blob], "thumbnail.jpg", { type: "image/jpeg" }), () => {}) : "";
+    } catch {
+      return "";
+    }
+  }
 
   async function draft(id: number, onlyIfEmpty = false) {
     setDrafting(true);
@@ -245,7 +260,10 @@ export function PostDialog({ target, onClose, at, schedule = false }: { target: 
     mutationFn: async () => {
       if (!target) return null;
       const words = description.trim();
+      // Their own upload wins; otherwise the frame, if it's ready within a few seconds (a post never waits long on it).
+      const thumbnailKey = yt.thumbnailKey || (autoThumb.current ? await Promise.race([autoThumb.current, new Promise<string>((r) => setTimeout(() => r(""), 15_000))]) : "");
       const body = {
+        ...(thumbnailKey ? { thumbnailKey } : {}),
         platforms: picked,
         title: title.trim(),
         // The shared words go everywhere; LinkedIn's own, when they wrote some, go to LinkedIn and YouTube keeps the shared ones.
@@ -411,7 +429,7 @@ export function PostDialog({ target, onClose, at, schedule = false }: { target: 
                     </div>
                   )}
 
-                  {has("youtube") && <div className="mt-3.5"><YouTubeExtras key={key} yt={yt} onChange={setYt} /></div>}
+                  {has("youtube") && <div className="mt-3.5"><YouTubeExtras key={key} yt={yt} onChange={setYt} frame={episode} /></div>}
 
                   <div className="mt-3.5 pb-4">
                     <p className="mb-1.5 text-[13px] font-semibold">When</p>

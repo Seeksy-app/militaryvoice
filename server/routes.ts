@@ -3560,8 +3560,18 @@ export function registerRoutes(app: Express): void {
     const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
     const row = await storage.getRecording(Number(req.params.id));
     if (!row || row.email !== email || row.status !== "Ready" || !row.url) return res.status(404).end();
-    res.redirect(302, await signedRecordingUrl(row.url, 6 * 3600));
+    const url = await signedRecordingUrl(row.url, 6 * 3600);
+    // ?json=1: the link itself, for a page that reads frames out of it (a redirect would send
+    // the storage an "Origin: null" its cross-origin rule doesn't match, and taint the canvas).
+    if (req.query.json === "1") return res.json({ url });
+    res.redirect(302, url);
   });
+
+  /** The cover picked for a video post (a frame from it, or one they uploaded), signed for Upload-Post to fetch. */
+  async function thumbnailFrom(body: any): Promise<string | undefined> {
+    const k = typeof body?.thumbnailKey === "string" && /^show-assets\/[\w.-]+$/.test(body.thumbnailKey) ? body.thumbnailKey : "";
+    return k ? await signedRecordingUrl(k, 7 * 24 * 3600) : undefined;
+  }
 
   /** YouTube's settings from a Post it body; a thumbnail is one of their uploads, signed for Upload-Post to fetch. */
   async function youtubeFrom(body: any) {
@@ -3705,9 +3715,10 @@ export function registerRoutes(app: Express): void {
     const description = String(req.body?.description ?? "").trim();
     try {
       const youtube = await youtubeFrom(req.body);
+      const thumbnailUrl = await thumbnailFrom(req.body);
       const out = await publishAndRecord({
         email, kind: "clip", refId: clip.id, shape, title, description, platforms, when: when || "", queue: req.body?.queue === true,
-        publish: (x) => publishVideo({ username: profile.uploadPostUsername!, platforms, videoUrl, title, description: description || undefined, scheduledDate: x.scheduledDate, timezone: x.scheduledDate ? String(req.body?.timezone ?? "") || undefined : undefined, youtube, addToQueue: x.addToQueue, externalId: x.externalId }),
+        publish: (x) => publishVideo({ username: profile.uploadPostUsername!, platforms, videoUrl, title, description: description || undefined, scheduledDate: x.scheduledDate, timezone: x.scheduledDate ? String(req.body?.timezone ?? "") || undefined : undefined, youtube, thumbnailUrl, addToQueue: x.addToQueue, externalId: x.externalId }),
       });
       res.json({ ok: true, ...out });
     } catch (err: any) {
@@ -4003,6 +4014,7 @@ export function registerRoutes(app: Express): void {
       const title = String(req.body?.title ?? row.title ?? "").trim() || row.title || "My session";
       const description = String(req.body?.description ?? "").trim();
       const youtube = await youtubeFrom(req.body);
+      const thumbnailUrl = await thumbnailFrom(req.body);
       // Already on YouTube from their podcast: say so rather than post it twice (they can untick YouTube, or say again).
       if (platforms.includes("youtube") && req.body?.again !== true) {
         const sentAt = await podcastYouTubeAt(row.id);
@@ -4010,7 +4022,7 @@ export function registerRoutes(app: Express): void {
       }
       const out = await publishAndRecord({
         email, kind: "recording", refId: row.id, shape: "", title, description, platforms, when: when || "", queue: req.body?.queue === true,
-        publish: (x) => publishVideo({ username, platforms, videoUrl, title, description: description || undefined, scheduledDate: x.scheduledDate, timezone: x.scheduledDate ? String(req.body?.timezone ?? "") || undefined : undefined, youtube, addToQueue: x.addToQueue, externalId: x.externalId }),
+        publish: (x) => publishVideo({ username, platforms, videoUrl, title, description: description || undefined, scheduledDate: x.scheduledDate, timezone: x.scheduledDate ? String(req.body?.timezone ?? "") || undefined : undefined, youtube, thumbnailUrl, addToQueue: x.addToQueue, externalId: x.externalId }),
       });
       res.json({ ok: true, ...out });
     } catch (err: any) {
@@ -4045,9 +4057,10 @@ export function registerRoutes(app: Express): void {
     if (req.body?.dryRun === true) return res.json({ dryRun: true, email, username, platforms, when: when || "now", title, description, durationSec: row.durationSec });
     try {
       const videoUrl = await signedRecordingUrl(row.url, 7 * 24 * 3600);
+      const thumbnailUrl = await thumbnailFrom(req.body);
       const out = await publishAndRecord({
         email, kind: "recording", refId: row.id, shape: "", title, description, platforms, when: when || "", queue: false,
-        publish: (x) => publishVideo({ username, platforms, videoUrl, title, description: description || undefined, scheduledDate: x.scheduledDate, addToQueue: false, externalId: x.externalId }),
+        publish: (x) => publishVideo({ username, platforms, videoUrl, title, description: description || undefined, scheduledDate: x.scheduledDate, addToQueue: false, externalId: x.externalId, thumbnailUrl }),
       });
       res.json({ ok: true, ...out });
     } catch (err: any) {

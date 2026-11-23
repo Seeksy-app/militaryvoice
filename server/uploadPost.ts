@@ -384,6 +384,13 @@ export async function publishVideo(input: {
   addToQueue?: boolean;
   /** Our own id for it, read back from Upload-Post's history (live links, status). */
   externalId?: string;
+  /**
+   * The cover every platform shows (LinkedIn, YouTube, Facebook video, X all read
+   * `thumbnail_url`). A whole episode opens on a black frame, and LinkedIn takes the
+   * first frame, so without this the post sits there black (Andrew, 23 Nov).
+   * A thumbnail they uploaded for YouTube wins.
+   */
+  thumbnailUrl?: string;
 }): Promise<PublishResult> {
   if (!API_KEY) throw new Error("Upload-Post is not configured (UPLOAD_POST_API_KEY missing).");
   if (input.platforms.length === 0) throw new Error("Pick at least one account to post to.");
@@ -401,10 +408,11 @@ export async function publishVideo(input: {
     if (yt.description) form.set("youtube_description", yt.description.slice(0, 5000));
     if (yt.privacyStatus) form.set("privacyStatus", yt.privacyStatus);
     for (const t of (yt.tags ?? []).slice(0, 30)) form.append("tags[]", t.slice(0, 60));
-    if (yt.thumbnailUrl) form.set("thumbnail_url", yt.thumbnailUrl);
     form.set("selfDeclaredMadeForKids", yt.madeForKids ? "true" : "false");
     if (yt.notifySubscribers !== undefined) form.set("youtube_notify_subscribers", yt.notifySubscribers ? "true" : "false");
   }
+  const thumb = yt?.thumbnailUrl || input.thumbnailUrl;
+  if (thumb) form.set("thumbnail_url", thumb);
   if (input.timezone) form.set("timezone", input.timezone);
   if (input.addToQueue && !input.scheduledDate) form.set("add_to_queue", "true");
   if (input.externalId) form.set("external_id", input.externalId);
