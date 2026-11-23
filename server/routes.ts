@@ -9713,7 +9713,7 @@ export function registerRoutes(app: Express): void {
       return `<a href="${m[1]}" style="color:#053877;font-weight:600;">${m[1]}</a>${m[2]}`;
     });
     const paragraphs = text.split(/\n{2,}/).map((p) => `<p>${linkify(esc(p)).replace(/\n/g, "<br>")}</p>`).join("\n");
-    const html = emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "The Podcast Marathon · 5 October", heading: subject.replace(/^re:\s*/i, ""), body: paragraphs });
+    const html = emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "MilitaryVoices.ai", heading: subject.replace(/^re:\s*/i, ""), body: paragraphs });
     const headers: Record<string, string> = {};
     if (row.messageId) { headers["In-Reply-To"] = row.messageId; headers["References"] = row.messageId; }
     // Andrew's rule (22 Nov): a plain no, before anything is sent, when it names him, comes from him or copies him.
