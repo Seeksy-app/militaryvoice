@@ -35,7 +35,6 @@ import {
   Wand2,
   Video,
   Sparkles,
-  Menu,
   CircleHelp,
   Check,
   } from "lucide-react";
@@ -54,7 +53,6 @@ import {
   AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { NavBar } from "@/components/NavBar";
-import { LogoLockup, LogoLockupOnDark } from "@/components/Logo";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -1197,33 +1195,6 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           is no more a visitor deciding whether to take part than somebody with
           a slot, and the band of public links costs them the same screen. */}
       {!data && <NavBar />}
-      {/* On a computer, a bar across the top like Search Console's: the menu button and the mark on the left, credits, help and the account on the right. */}
-      {workspace && (
-        <header className="sticky top-0 z-40 hidden h-16 items-center gap-2 border-b border-border bg-card px-3 lg:flex" data-testid="topbar">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button type="button" onClick={toggleNav} aria-label={navTucked ? "Expand menu" : "Collapse menu"} className="flex h-11 w-11 items-center justify-center rounded-full text-foreground/70 hover:bg-muted hover:text-foreground" data-testid="nav-toggle"><Menu className="h-5 w-5" /></button>
-            </TooltipTrigger>
-            <TooltipContent side="bottom" className="text-xs">{navTucked ? "Expand menu" : "Collapse menu"}</TooltipContent>
-          </Tooltip>
-          <Link href="/host/dashboard" className="ml-1 shrink-0" data-testid="link-workspace-home-nav"><LogoLockup className="h-8 w-auto" /></Link>
-          <div className="ml-auto flex items-center gap-1.5">
-            <NavCredits variant="pill" />
-            <Tooltip>
-              <TooltipTrigger asChild><a href="/help" aria-label="Help" className="flex h-10 w-10 items-center justify-center rounded-full text-foreground/70 hover:bg-muted hover:text-foreground"><CircleHelp className="h-5 w-5" /></a></TooltipTrigger>
-              <TooltipContent side="bottom" className="text-xs">Help</TooltipContent>
-            </Tooltip>
-            {account && (
-              <DropdownMenu>
-                <DropdownMenuTrigger asChild>
-                  <button type="button" aria-label="Your account" className="ml-1 rounded-full p-0.5 hover:ring-2 hover:ring-[#053877]/25" data-testid="topbar-account"><AccountAvatar account={account} light /></button>
-                </DropdownMenuTrigger>
-                <AccountMenuContent account={account} onGo={(sc) => goTo(sc)} side="bottom" align="end" />
-              </DropdownMenu>
-            )}
-          </div>
-        </header>
-      )}
       {/* Wide, like the admin: with a column of nav on the left, 1152px left
           the page itself narrower than a phone in landscape. */}
       {/* On a phone the tab bar sits at the bottom: room under the page so it never hides the end of it. */}
@@ -1240,28 +1211,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
              who you are, View as and Sign out sit on the dashboard's own card
              (and the account card). A phone has no column, so it keeps one
              slim line. */
-          <div className="mb-4 flex items-center justify-between gap-3 rounded-2xl bg-[#04102b] px-4 py-2.5 text-white lg:hidden" data-testid="workspace-header">
-            <Link href="/host/dashboard" className="shrink-0" data-testid="link-workspace-home">
-              <LogoLockupOnDark className="h-8 w-auto" />
-            </Link>
-            {/* As on a computer: credits, and the account menu (Profile, Integrations,
-                Notifications, Appearance, Sign out, and View as for an admin). */}
-            <div className="flex min-w-0 items-center gap-1">
-              {hasProfile && !inSetup && <NavCredits variant="chip" />}
-              {account ? (
-                <DropdownMenu>
-                  <DropdownMenuTrigger asChild>
-                    <button type="button" aria-label="Your account" className="rounded-full p-0.5 hover:ring-2 hover:ring-white/30" data-testid="phone-account"><AccountAvatar account={account} /></button>
-                  </DropdownMenuTrigger>
-                  <AccountMenuContent account={account} onGo={(sc) => goTo(sc)} side="bottom" align="end" />
-                </DropdownMenu>
-              ) : (
-                <Button variant="outline" size="sm" className="shrink-0 gap-1.5 rounded-full border-white/25 bg-transparent text-white hover:bg-white/10 hover:text-white" onClick={() => logout.mutate()} disabled={logout.isPending} aria-label="Sign out" data-testid="button-host-logout">
-                  <LogOut className="h-3.5 w-3.5" />
-                </Button>
-              )}
-            </div>
-          </div>
+          null
         ) : (
           <div className="flex items-start justify-between gap-4">
             <div>
@@ -1331,7 +1281,31 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
         )}
         {/* Top-justified: whatever the screen is, it starts level with the
             top of the nav, not a band of white below it. */}
-        <div className={`min-w-0 [&>*:first-child]:mt-0 ${workspace ? "lg:mx-auto lg:w-full lg:max-w-[1440px] lg:px-8 lg:pb-36 lg:pt-6" : ""}`}>
+        <div className={`min-w-0 [&>*:first-child]:mt-0 [&>.mv-top+*]:mt-0 ${workspace ? "lg:mx-auto lg:w-full lg:max-w-[1440px] lg:px-8 lg:pb-36 lg:pt-6" : ""}`}>
+        {/* No bar across the top (Andrew, 23 Nov: "remove the MilitaryVoices logo at top left and pull the page
+            up"): credits, help and the account sit at the right of whatever the page's title line is, floated so
+            the title row makes room for them. Phones keep credits and the account; Help is under More. */}
+        {workspace && (
+          <div className="mv-top float-right ml-3 mt-0.5 flex items-center gap-1 lg:ml-4 lg:mt-2 lg:gap-1.5" data-testid="topbar">
+            <NavCredits variant="pill" />
+            <Tooltip>
+              <TooltipTrigger asChild><a href="/help" aria-label="Help" className="hidden h-10 w-10 items-center justify-center rounded-full text-foreground/70 hover:bg-muted hover:text-foreground lg:flex"><CircleHelp className="h-5 w-5" /></a></TooltipTrigger>
+              <TooltipContent side="bottom" className="text-xs">Help</TooltipContent>
+            </Tooltip>
+            {account ? (
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" aria-label="Your account" className="ml-0.5 rounded-full p-0.5 hover:ring-2 hover:ring-[#053877]/25" data-testid="topbar-account"><AccountAvatar account={account} light /></button>
+                </DropdownMenuTrigger>
+                <AccountMenuContent account={account} onGo={(sc) => goTo(sc)} side="bottom" align="end" />
+              </DropdownMenu>
+            ) : (
+              <Button variant="outline" size="sm" className="shrink-0 gap-1.5 rounded-full" onClick={() => logout.mutate()} disabled={logout.isPending} aria-label="Sign out" data-testid="button-host-logout">
+                <LogOut className="h-3.5 w-3.5" />
+              </Button>
+            )}
+          </div>
+        )}
         {/* Back to admin and View as, top right of the page (the dashboard
             has them on its own dark card). */}
 
@@ -1668,9 +1642,6 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                     actions={
                       <div className="flex items-center gap-3">
                         <button type="button" onClick={() => showGuide(homeTour(guideName))} className="text-xs font-semibold text-[#053877] hover:underline dark:text-[#8ab4f8]" data-testid="todo-tour">Show me around</button>
-                        <Button variant="outline" size="sm" className="hidden h-8 shrink-0 gap-1.5 rounded-full px-3 text-xs lg:inline-flex" onClick={() => logout.mutate()} disabled={logout.isPending} data-testid="button-card-logout">
-                          <LogOut className="h-3.5 w-3.5" /> Sign out
-                        </Button>
                       </div>
                     }
                   />
@@ -1717,7 +1688,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                               {/* 3D, Clay-style (Andrew, 21 Nov: "update the 3-d icon everywhere"). */}
                               <Art3D name={d.art} size={40} className="-ml-0.5 -mt-0.5" />
                               <span className="mt-1.5 flex items-center gap-2 text-sm font-semibold text-foreground">{d.title}{d.tag && <span className="rounded-full bg-[#F0A71F]/20 px-1.5 py-px text-[10px] font-semibold leading-4 text-[#8a5a00] dark:text-[#F0A71F]">{d.tag}</span>}</span>
-                              <span className="mt-0.5 block text-xs text-muted-foreground">{d.hint}</span>
+                              <span className="mt-0.5 block text-balance text-xs text-muted-foreground">{d.hint}</span>
                             </button>
                           );
                         })}

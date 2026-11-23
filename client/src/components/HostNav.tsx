@@ -7,7 +7,7 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { LogoLockup } from "@/components/Logo";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { GetTheApp } from "@/components/GetTheApp";
-import { LayoutDashboard, Plus, Podcast, Clapperboard, Film, Upload, Globe, ChevronRight, ChevronDown, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones, PanelLeftClose, PanelLeftOpen, Sun, Moon, Monitor, Check, MoreHorizontal, BadgeCheck, CalendarClock, CreditCard, Trash2, Video, Radio, Building2, Send, Inbox, SlidersHorizontal } from "lucide-react";
+import { LayoutDashboard, Plus, Podcast, Clapperboard, Film, Upload, Globe, ChevronRight, ChevronDown, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones, PanelLeftClose, PanelLeftOpen, Sun, Moon, Monitor, Check, MoreHorizontal, BadgeCheck, CalendarClock, CreditCard, Trash2, Video, Radio, Building2, Send, Inbox, SlidersHorizontal, Menu } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { NotificationsMenuItem } from "@/components/Notifications";
 import { Link } from "wouter";
@@ -346,8 +346,10 @@ export function HostNav({
       />
       {/* Desktop, folded: a rail of the same icons, names on hover, and the button that opens it. */}
       {collapsed ? (
-        <nav key="rail" className="sticky top-16 hidden h-[calc(100vh-4rem)] self-start overflow-y-auto border-r border-border bg-card lg:block" aria-label="Dashboard sections">
+        <nav key="rail" className="sticky top-0 hidden h-screen self-start overflow-y-auto border-r border-border bg-card lg:block" aria-label="Dashboard sections">
           <div className="flex min-h-full w-[72px] flex-col items-center gap-1 py-3">
+            {/* The menu button heads the rail now there's no bar across the top (23 Nov). */}
+            {onToggle && <div className="mb-1 border-b border-border pb-1"><RailButton tip="Expand menu" onClick={onToggle} testid="nav-toggle"><Menu className="h-5 w-5" /></RailButton></div>}
             {groups.flatMap((g) => g.items).map((it) => {
               const Icon = it.icon;
               const active = screen === it.key || (it.key === "myevents" && (screen === "events" || screen === "promotion" || screen === "greenroom"));
@@ -361,23 +363,34 @@ export function HostNav({
         </nav>
       ) : (
       /* Desktop: the column. Keyed apart from the rail: sharing DOM left a rail icon behind in it. */
-      <nav key="column" className="sticky top-16 hidden h-[calc(100vh-4rem)] self-start overflow-y-auto border-r border-border bg-card lg:block" aria-label="Dashboard sections">
+      <nav key="column" className="sticky top-0 hidden h-screen self-start overflow-y-auto border-r border-border bg-card lg:block" aria-label="Dashboard sections">
         {/* Like Search Console: flush to the edge, no card; what you're working on at the top; the page you're on as a pill. */}
         <div className="flex min-h-full flex-col px-3 py-3">
-          {account && !brand && (
-            <a
-              href={pathFor("page")}
-              onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); onGo("page"); }}
-              className="mb-3 flex items-center gap-3 rounded-2xl border border-border px-3 py-2.5 transition-colors hover:bg-muted"
-              data-testid="nav-show"
-            >
-              {avatar("h-8 w-8")}
-              <span className="min-w-0 flex-1 leading-tight">
-                <span className="block truncate text-sm font-semibold text-foreground">{account.name}</span>
-                <span className="block truncate text-[11px] text-muted-foreground">Your SmartLink</span>
-              </span>
-            </a>
-          )}
+          {/* The menu button beside the show card: no bar across the top any more (Andrew, 23 Nov). */}
+          <div className="mb-3 flex items-center gap-1.5">
+            {onToggle && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button type="button" onClick={onToggle} aria-label="Collapse menu" className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-foreground/70 hover:bg-muted hover:text-foreground" data-testid="nav-toggle"><Menu className="h-5 w-5" /></button>
+                </TooltipTrigger>
+                <TooltipContent side="right" className="text-xs">Collapse menu</TooltipContent>
+              </Tooltip>
+            )}
+            {account && !brand && (
+              <a
+                href={pathFor("page")}
+                onClick={(e) => { if (e.metaKey || e.ctrlKey || e.shiftKey || e.button !== 0) return; e.preventDefault(); onGo("page"); }}
+                className="flex min-w-0 flex-1 items-center gap-3 rounded-2xl border border-border px-3 py-2.5 transition-colors hover:bg-muted"
+                data-testid="nav-show"
+              >
+                {avatar("h-8 w-8")}
+                <span className="min-w-0 flex-1 leading-tight">
+                  <span className="block truncate text-sm font-semibold text-foreground">{account.name}</span>
+                  <span className="block truncate text-[11px] text-muted-foreground">Your SmartLink</span>
+                </span>
+              </a>
+            )}
+          </div>
           {admin && <div className="mb-1 px-1">{admin}</div>}
           {groups.filter((g) => g.title !== "Coming soon" && g.title !== "Help").map((g, i) => {
             const foldable = g.title !== "Your show";

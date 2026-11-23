@@ -48,15 +48,16 @@ export function CommandCenter({
   return (
     <section className="pt-2" data-testid="command-center">
       <div className="flex flex-wrap items-center justify-between gap-3">
+        {/* On a phone the account picture is right beside it (top right), so the greeting drops its own. */}
         <div className="flex min-w-0 items-center gap-3">
           {photoUrl ? (
-            <img src={resolveUploadUrl(photoUrl)} alt={podcastName} className="h-12 w-12 shrink-0 rounded-full object-cover ring-1 ring-border" />
+            <img src={resolveUploadUrl(photoUrl)} alt={podcastName} className="hidden h-12 w-12 shrink-0 rounded-full object-cover ring-1 ring-border sm:block" />
           ) : (
-            <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#053877]/10 text-lg font-bold text-[#053877]">{(podcastName || firstName).slice(0, 1)}</span>
+            <span className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#053877]/10 text-lg font-bold text-[#053877] sm:flex">{(podcastName || firstName).slice(0, 1)}</span>
           )}
           <div className="min-w-0">
-            <h1 className="text-2xl font-bold leading-tight tracking-tight text-foreground sm:text-3xl" style={HEADLINE_FONT}>{greeting(now)}, {firstName}</h1>
-            <p className="truncate text-sm text-muted-foreground">{podcastName}{podcastName ? " · " : ""}{now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p>
+            <h1 className="text-balance text-2xl font-bold leading-tight tracking-tight text-foreground sm:text-3xl" style={HEADLINE_FONT}>{greeting(now)}, {firstName}</h1>
+            <p className="text-balance text-sm text-muted-foreground sm:truncate">{podcastName}{podcastName ? " · " : ""}{now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p>
           </div>
         </div>
         {actions}
