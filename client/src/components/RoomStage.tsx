@@ -3,7 +3,7 @@ import { Captions, HiddenVoices, LogoOverlay, NameTagContext, StageGrid, Tile, u
 import { apiRequest } from "@/lib/queryClient";
 import {
   CARD_TITLE, boxCast, castOf, countdownText, gridColumns, isPlayer, musicCreditOf, roomStageMeta, sceneOf, shownOnStage, studioIdFromRoom,
-  type RoomBox, type RoomBoxShape, type RoomCardSlot, type RoomLive, type RoomLook, type RoomProfile,
+  type RoomBox, type RoomBoxShape, type RoomCardSlot, type RoomCorner, type RoomLive, type RoomLook, type RoomProfile,
 } from "@shared/roomLook";
 
 /** The room name inside a LiveKit token ("my-12"), without verifying anything: the page only needs to know which look to read. */
@@ -48,6 +48,7 @@ export function RoomPicture({
 }) {
   const id = studioId ?? studioIdFromRoom(roomOfToken(token));
   const [look, setLook] = useState<RoomLook | null>(null);
+  const [corner, setCorner] = useState<RoomCorner | null>(null);
   const lookRef = useRef<RoomLook | null>(null);
   const liveRef = useRef<RoomLive>({});
   // Who is shown depends on the scene on air, so the stage is read again when that changes.
@@ -71,7 +72,7 @@ export function RoomPicture({
     let alive = true;
     void fetch(`/api/room/${id}/look?k=${encodeURIComponent(lookKey)}`)
       .then((r) => (r.ok ? r.json() : null))
-      .then((j: { look?: RoomLook } | null) => { if (alive && j?.look) setLook(j.look); })
+      .then((j: { look?: RoomLook; corner?: RoomCorner | null } | null) => { if (alive && j?.look) { setLook(j.look); setCorner(j.corner ?? null); } })
       .catch(() => {});
     return () => { alive = false; };
   }, [id, lookKey, live.lookRev]);
@@ -87,8 +88,8 @@ export function RoomPicture({
   }, [until]);
 
   const { meta, banner } = useMemo(
-    () => roomStageMeta(look, live, name || (raw as RoomMeta).studioName || "", window.location.origin, now),
-    [look, live.activeScene, live.showing, live.playing, name, now], // eslint-disable-line react-hooks/exhaustive-deps
+    () => roomStageMeta(look, live, name || (raw as RoomMeta).studioName || "", window.location.origin, now, corner),
+    [look, corner, live.activeScene, live.showing, live.playing, name, now], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   // v3: the player bot is heard, never drawn; the scene type decides who is drawn and how.
@@ -127,7 +128,7 @@ export function RoomPicture({
 
   const full = boxed && bc ? (
     <NameTagContext.Provider value={tag}>
-      <BoxStage boxes={scene!.boxes!} byBox={bc.byBox} people={people} media={scene!.media?.url ? scene!.media : null} bg={bg} logo={logo} logoCorner={String((meta as { logoCorner?: string }).logoCorner ?? "")} muted={muted} caption={caption} />
+      <BoxStage boxes={scene!.boxes!} byBox={bc.byBox} people={people} media={scene!.media?.url ? scene!.media : null} bg={bg} logo={logo} logoCorner={String((meta as { logoCorner?: string }).logoCorner ?? "")} logoPlate={(meta as { logoPlate?: string }).logoPlate} muted={muted} caption={caption} />
     </NameTagContext.Provider>
   ) : card ? (
     <RoomCard slot={card.slot as RoomCardSlot} text={card.slot === "countdown" ? countdownText(card, now) : ""} name={name || (raw as RoomMeta).studioName || ""} bg={bg} logo={logo} color={style?.brandColor} font={style?.font} />
@@ -244,9 +245,9 @@ function RoomCard({ slot, text, name, bg, logo, color, font }: { slot: RoomCardS
  * top. A box with nobody (or no media) for it isn't drawn. Same tiles, name tags and talking ring
  * as every other layout, so the recording and the stream look like the rest of the show.
  */
-function BoxStage({ boxes, byBox, people, media, bg, logo, logoCorner, muted, caption }: {
+function BoxStage({ boxes, byBox, people, media, bg, logo, logoCorner, logoPlate, muted, caption }: {
   boxes: RoomBox[]; byBox: Record<string, string[]>; people: StageTile[]; media: { url: string; mime?: string } | null;
-  bg: string; logo: string; logoCorner: string; muted: boolean; caption?: { speaker: string; text: string } | null;
+  bg: string; logo: string; logoCorner: string; logoPlate?: string; muted: boolean; caption?: { speaker: string; text: string } | null;
 }) {
   const tileOf = (id: string) => people.find((t) => t.identity === id);
   return (
@@ -272,7 +273,7 @@ function BoxStage({ boxes, byBox, people, media, bg, logo, logoCorner, muted, ca
           </div>
         );
       })}
-      {logo && <div className="absolute inset-0 z-[60]"><LogoOverlay url={logo} corner={logoCorner} size={150} /></div>}
+      {logo && <div className="absolute inset-0 z-[60]"><LogoOverlay url={logo} corner={logoCorner} size={150} plate={logoPlate} /></div>}
       <div className="absolute inset-0 z-[61]"><Captions caption={caption} /></div>
     </div>
   );

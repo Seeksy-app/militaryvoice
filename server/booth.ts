@@ -13,6 +13,7 @@ import { recordings as recordingsTable } from "../shared/schema.js";
 import { getAdminEmail, getSessionEmail } from "./session.js";
 import { isLiveKitConfigured, publicLiveKitUrl, roomName, studioToken, rooms, egressIsActive } from "./livekit.js";
 import { dxEventIds } from "./digitalExperience.js";
+import { cornerLogoOf } from "./showLogo.js";
 import { buildShareCard } from "./shareCard.js";
 import { signedRecordingUrl, putRecordingObject } from "./recordingStorage.js";
 import type { EventRow, SignupRow } from "../shared/schema.js";
@@ -189,7 +190,8 @@ export function registerBooth(app: Express): void {
         const endedMs = endedRaw ? Date.parse(endedRaw) : NaN;
         const early = Number.isFinite(endedMs) && endedMs >= t.onAirStart && endedMs < t.onAirEnd;
         if (early) { t.onAirEnd = endedMs; t.end = Math.min(t.end, endedMs + 45_000); }
-        return { id: s.id, endedEarly: early, show: s.podcastName, host: s.hostName, photo: s.photoUrl, about: s.notes ?? "", mediaUrl, introUrl: voice.map[String(s.id)]?.introKey ? await signedRecordingUrl(voice.map[String(s.id)].introKey!, 6 * 3600).catch(() => "") : "", outroUrl: voice.map[String(s.id)]?.outroKey ? await signedRecordingUrl(voice.map[String(s.id)].outroKey!, 6 * 3600).catch(() => "") : "", startAtUtc: new Date(t.start).toISOString(), endAtUtc: new Date(t.end).toISOString(), onAirAtUtc: new Date(t.onAirStart).toISOString(), offAirAtUtc: new Date(t.onAirEnd).toISOString() };
+        const corner = await cornerLogoOf(s.email).catch(() => ({ url: "", plate: "none" as const }));
+        return { id: s.id, endedEarly: early, logo: corner.url, logoPlate: corner.plate, show: s.podcastName, host: s.hostName, photo: s.photoUrl, about: s.notes ?? "", mediaUrl, introUrl: voice.map[String(s.id)]?.introKey ? await signedRecordingUrl(voice.map[String(s.id)].introKey!, 6 * 3600).catch(() => "") : "", outroUrl: voice.map[String(s.id)]?.outroKey ? await signedRecordingUrl(voice.map[String(s.id)].outroKey!, 6 * 3600).catch(() => "") : "", startAtUtc: new Date(t.start).toISOString(), endAtUtc: new Date(t.end).toISOString(), onAirAtUtc: new Date(t.onAirStart).toISOString(), offAirAtUtc: new Date(t.onAirEnd).toISOString() };
       })),
     });
   });

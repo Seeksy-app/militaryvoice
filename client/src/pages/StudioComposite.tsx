@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef } from "react";
-import { StageGrid, useStageRoom } from "@/components/StageView";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { ShowCorner, StageGrid, useStageRoom } from "@/components/StageView";
 
 // The broadcast, as the recorder films it.
 //
@@ -23,6 +23,10 @@ export default function StudioComposite() {
   // this is the one place audio must actually flow.
   const { tiles, meta, connected, failed, caption } = useStageRoom(url, token, false, undefined, true);
 
+  // The podcaster whose scene is on air gets their show logo in the corner (Andrew, 23 Nov); the desk, sponsors and
+  // hand-offs keep our mark. Read again whenever the scene changes.
+  const corner = useSceneCorner(meta.currentSceneId);
+
   const started = useRef(false);
   useEffect(() => {
     if (started.current) return;
@@ -36,14 +40,18 @@ export default function StudioComposite() {
   }, [connected, failed]);
 
   return (
-    <div className="relative h-screen w-screen overflow-hidden bg-[#000741]">
+    <div className="relative h-screen w-screen overflow-hidden bg-[#000741] [container-type:size]">
       <StageGrid tiles={tiles} meta={meta} caption={caption} />
 
-      <img
-        src="/logo-wave.png?v=2"
-        alt=""
-        className="pointer-events-none absolute right-6 top-5 h-10 w-auto opacity-90 drop-shadow-lg"
-      />
+      {corner.url ? (
+        <ShowCorner url={corner.url} plate={corner.plate} />
+      ) : (
+        <img
+          src="/logo-wave.png?v=2"
+          alt=""
+          className="pointer-events-none absolute right-6 top-5 h-10 w-auto opacity-90 drop-shadow-lg"
+        />
+      )}
       {meta.status === "Live" && !meta.fallbackPlaying && (
         <div className="pointer-events-none absolute left-6 top-5 flex items-center gap-2 rounded-full bg-[#ED1C24] px-4 py-1.5">
           <span className="h-2.5 w-2.5 animate-pulse rounded-full bg-white" />
@@ -52,4 +60,19 @@ export default function StudioComposite() {
       )}
     </div>
   );
+}
+
+/** The show logo for the scene on air: /api/stage/corner (server/showLogo.ts). Empty for none, so the page keeps our mark. */
+export function useSceneCorner(sceneId: number | undefined): { url: string; plate: string } {
+  const [corner, setCorner] = useState({ url: "", plate: "none" });
+  useEffect(() => {
+    if (!sceneId) { setCorner({ url: "", plate: "none" }); return; }
+    let alive = true;
+    void fetch(`/api/stage/corner?scene=${sceneId}`)
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j: { url?: string; plate?: string } | null) => { if (alive) setCorner({ url: j?.url ?? "", plate: j?.plate ?? "none" }); })
+      .catch(() => {});
+    return () => { alive = false; };
+  }, [sceneId]);
+  return corner;
 }

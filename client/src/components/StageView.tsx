@@ -31,6 +31,8 @@ export interface RoomMeta {
   logoUrl?: string;
   logoCorner?: string;
   logoSize?: number;
+  /** Set when logoUrl is the podcaster's show logo: drawn small with its plate (ShowCorner). */
+  logoPlate?: string;
   countdownEndsAtUtc?: string;
   countdownLabel?: string;
   currentSceneId?: number;
@@ -885,6 +887,40 @@ function CountdownFrame({ endsAt, label }: { endsAt: number; label?: string }) {
   );
 }
 
+/**
+ * The podcaster's own show logo, small in the corner while they're on (Andrew, 23 Nov: "let's get that logo up in the
+ * right-hand corner … It can be small"). Sized in cqw so a 1080p broadcast and a console monitor look alike: about a
+ * tenth of the frame's height, never more than a fifth of its width, inside the title-safe margin. `plate` is chosen
+ * from the logo when it's uploaded (server/showLogo.ts): a light plate behind dark ink, a dark one behind light ink, so
+ * it reads over any video; "none" for a picture with its own background (cover art), which gets rounded corners.
+ * Needs a container (container-type) on an ancestor that is the frame.
+ */
+export function ShowCorner({ url, plate, corner }: { url: string; plate?: string; corner?: string }) {
+  if (!url) return null;
+  const side = corner ?? "top-right";
+  const pos: CSSProperties = {
+    [side.endsWith("left") ? "left" : "right"]: "2.6cqw",
+    [side.startsWith("bottom") ? "bottom" : "top"]: "2.2cqw",
+    height: "5.2cqw",
+    maxWidth: "20cqw",
+  };
+  const bare = plate !== "light" && plate !== "dark";
+  return (
+    <div className={`pointer-events-none absolute z-30 flex ${side.endsWith("left") ? "justify-start" : "justify-end"}`} style={pos} data-testid="show-corner">
+      {bare ? (
+        <img src={url} alt="" className="h-full w-auto max-w-full object-contain shadow-[0_0.2cqw_0.8cqw_rgba(0,0,0,0.45)]" style={{ borderRadius: "0.6cqw" }} />
+      ) : (
+        <div
+          className="flex h-full max-w-full items-center shadow-[0_0.2cqw_0.8cqw_rgba(0,0,0,0.35)]"
+          style={{ padding: "0.7cqw 1cqw", borderRadius: "0.8cqw", background: plate === "dark" ? "rgba(4,16,43,0.66)" : "rgba(255,255,255,0.9)" }}
+        >
+          <img src={url} alt="" className="h-full w-auto max-w-full object-contain" />
+        </div>
+      )}
+    </div>
+  );
+}
+
 const CORNER_CLASS: Record<string, string> = {
   "top-left": "left-[3%] top-[4%]",
   "top-right": "right-[3%] top-[4%]",
@@ -898,8 +934,9 @@ const CORNER_CLASS: Record<string, string> = {
  * at whatever width the watch page happens to be, and a 96px logo that looks
  * right in the console would be a postage stamp on the stream.
  */
-export function LogoOverlay({ url, corner, size }: { url: string; corner?: string; size?: number }) {
+export function LogoOverlay({ url, corner, size, plate }: { url: string; corner?: string; size?: number; plate?: string }) {
   if (!url) return null;
+  if (plate) return <ShowCorner url={url} plate={plate} corner={corner} />;
   // 96px against a 1280-wide reference frame — the number the console shows.
   const pct = Math.min(40, Math.max(4, ((size ?? 96) / 1280) * 100));
   return (
@@ -1550,7 +1587,7 @@ export function StageGrid({
         lifted={Boolean(ticker)}
       />
       <TickerOverlay text={ticker} />
-      <LogoOverlay url={meta.logoUrl ?? ""} corner={meta.logoCorner} size={meta.logoSize} />
+      <LogoOverlay url={meta.logoUrl ?? ""} corner={meta.logoCorner} size={meta.logoSize} plate={meta.logoPlate} />
     </div>
   );
 }

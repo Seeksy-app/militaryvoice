@@ -16,6 +16,7 @@ import crypto from "node:crypto";
 import { and, asc, eq } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { getSessionEmail } from "./session.js";
+import { cornerLogoOf } from "./showLogo.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
 import { libraryAsset, libraryReady, registerStudioLibrary, type LibraryItem, type LibrarySource } from "./studioLibrary.js";
 import { personalStudios, recordings, roomAssets, roomLooks, roomMarks, type PersonalStudioRow, type RoomAssetRow } from "../shared/schema.js";
@@ -430,7 +431,10 @@ export function registerRoomKit(app: Express, requireHostSession: RequestHandler
     const id = Number(req.params.studioId);
     if (!Number.isInteger(id) || !keyOk(id, req.query.k)) return res.status(404).json({ message: "Not found." });
     const { logos: _logos, backgrounds: _backgrounds, ...look } = await getLook(id);
-    res.json({ look });
+    // Their show logo (else their cover) for the corner when they haven't picked a logo in Media (Andrew, 23 Nov).
+    const [owner] = await db.select({ email: personalStudios.ownerEmail }).from(personalStudios).where(eq(personalStudios.id, id)).limit(1).catch(() => []);
+    const corner = owner?.email ? await cornerLogoOf(owner.email).catch(() => null) : null;
+    res.json({ look, corner });
   });
 
   // ---- files ----

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { StageGrid, useStageRoom, type StageTile } from "@/components/StageView";
+import { ShowCorner, StageGrid, useStageRoom, type StageTile } from "@/components/StageView";
 
 // MilitaryVoices Radio on air: what the broadcast films all day.
 //
@@ -14,7 +14,7 @@ import { StageGrid, useStageRoom, type StageTile } from "@/components/StageView"
 // once ready to be filmed. ?eventId=N without a token previews the cards;
 // add &at=<ISO time> to see any moment of the day.
 
-type Booking = { id: number; show: string; host: string; photo: string; about?: string; mediaUrl?: string; startAtUtc: string; endAtUtc: string; onAirAtUtc: string; offAirAtUtc: string };
+type Booking = { id: number; logo?: string; logoPlate?: string; show: string; host: string; photo: string; about?: string; mediaUrl?: string; startAtUtc: string; endAtUtc: string; onAirAtUtc: string; offAirAtUtc: string };
 type Replay_ = { id: number; show: string; host: string; photo: string; mediaUrl: string; durationSec: number };
 type VoiceInfo = { welcomeUrl: string; welcomeSec: number; signoffUrl: string; signoffSec: number; bedUrl?: string };
 type Program = { eventId: number; day: string; startAtUtc: string; endAtUtc: string; fillerUrl: string; voice?: VoiceInfo; dayIndex?: number; replays?: Replay_[]; bookings: Booking[] };
@@ -278,7 +278,10 @@ export default function Program() {
           {next.host && next.host !== next.show && <p className="truncate text-3xl text-white/80">with {next.host}</p>}
         </div>
       )}
-      <img src="/logo-wave.png?v=2" alt="" className="pointer-events-none absolute right-6 top-5 h-10 w-auto opacity-90 drop-shadow-lg" />
+      {/* Their show logo in the corner while they're on (Andrew, 23 Nov); our mark the rest of the day. */}
+      {phase === "live" && current?.logo
+        ? <ShowCorner url={current.logo} plate={current.logoPlate} />
+        : <img src="/logo-wave.png?v=2" alt="" className="pointer-events-none absolute right-6 top-5 h-10 w-auto opacity-90 drop-shadow-lg" />}
       {listen && tapped && (
         <button type="button" onClick={() => setMuted((m) => !m)} aria-label={muted ? "Unmute" : "Mute"} className={`absolute bottom-10 right-10 z-30 flex items-center gap-5 rounded-full px-12 py-7 text-6xl font-black shadow-2xl ${muted ? "bg-[#F0A71F] text-[#1a1200]" : "bg-[#000741]/85 text-white ring-4 ring-white/40"}`} data-testid="radio-mute">
           <span aria-hidden>{muted ? "🔇" : "🔊"}</span>{muted ? "Unmute" : "Mute"}

@@ -179,6 +179,9 @@ const CORNERS: Record<string, string> = { tl: "top-left", tr: "top-right", bl: "
 
 export const DEFAULT_LOGO = "/logo-lockup-dark.png";
 
+/** The owner's show logo for the corner (server/showLogo.ts cornerLogoOf), sent with the room's look. */
+export type RoomCorner = { url: string; plate: string };
+
 const abs = (u: string | undefined, origin: string) => (u && u.startsWith("/") && origin ? `${origin}${u}` : u || "");
 
 function backgroundOf(b: RoomBackground | undefined | null, origin: string): string {
@@ -188,16 +191,21 @@ function backgroundOf(b: RoomBackground | undefined | null, origin: string): str
 }
 
 /** What StageGrid draws, plus the banner text (StageGrid only shows its lower third over clips). */
-export function roomStageMeta(look: RoomLook | null, live: RoomLive, name: string, origin = "", now = Date.now()): { meta: Record<string, unknown>; banner: string } {
+export function roomStageMeta(look: RoomLook | null, live: RoomLive, name: string, origin = "", now = Date.now(), corner?: RoomCorner | null): { meta: Record<string, unknown>; banner: string } {
   const l: RoomLook = look ?? { scenes: [] };
   const scene = l.scenes.find((s) => s.id === live.activeScene) ?? l.scenes[0];
   const style: RoomLookStyle = { ...l, ...(scene?.look ?? {}) };
-  const logoUrl = style.logo === null ? "" : abs(style.logo?.asset?.url, origin) || (look ? "" : abs(DEFAULT_LOGO, origin));
+  // A logo picked in Media wins. Without one, their show logo (else their cover) sits small in the top-right
+  // (Andrew, 23 Nov: "let's get that logo up in the right-hand corner"); with neither, as before.
+  const picked = abs(style.logo?.asset?.url, origin);
+  const own = !picked && corner?.url ? corner : null;
+  const logoUrl = picked || own?.url || (style.logo === null || look ? "" : abs(DEFAULT_LOGO, origin));
   const meta: Record<string, unknown> = {
     studioName: name,
     logoUrl,
-    logoCorner: CORNERS[style.logo?.corner ?? "tr"] ?? "top-right",
+    logoCorner: own ? "top-right" : CORNERS[style.logo?.corner ?? "tr"] ?? "top-right",
     logoSize: 150,
+    ...(own ? { logoPlate: own.plate || "none" } : {}),
     backgroundUrl: backgroundOf(style.background, origin),
     stageLayout: ROOM_LAYOUT_TO_STAGE[scene?.layout ?? "side"],
   };
