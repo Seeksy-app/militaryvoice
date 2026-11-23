@@ -62,8 +62,8 @@ function YouTubeExtras({ yt, onChange }: { yt: YouTubeSettings; onChange: (y: Yo
 }
 
 /** The post's cover: what's being made, picked or uploaded. key is what's sent; preview is what they see. */
-type Thumb = { state: "busy" | "ready" | "failed"; own: boolean; key: string; preview: string; frameKey: string; titled: string; note: string };
-const blankThumb: Thumb = { state: "busy", own: false, key: "", preview: "", frameKey: "", titled: "", note: "" };
+type Thumb = { state: "busy" | "ready" | "failed"; own: boolean; /** The podcast cover, not a frame. */ cover: boolean; key: string; preview: string; frameKey: string; titled: string; note: string };
+const blankThumb: Thumb = { state: "busy", own: false, cover: false, key: "", preview: "", frameKey: "", titled: "", note: "" };
 // Where a cover set with the post shows (Upload-Post: thumbnail_url, cover_url for a Reel, TikTok's custom-cover capability).
 const THUMB_PLATFORMS: SocialPlatform[] = ["youtube", "linkedin", "facebook", "x", "instagram"];
 const THUMB_DETAIL = "Instagram uses it as the Reel cover. TikTok uses it only where the account allows custom covers. Threads shows the video's first frame.";
@@ -71,9 +71,10 @@ const THUMB_DETAIL = "Instagram uses it as the Reel cover. TikTok uses it only w
 /**
  * One row: the cover on the left, Another frame · Upload your own on the right (UI/UX, 23 Nov). A whole episode opens
  * on black and LinkedIn shows the first frame, so every video post carries a cover: a still from a good moment under
- * our title band (a clip: its titled opening frame), or their own picture.
+ * our title band (a clip: its titled opening frame), or their own picture. A whole episode whose show has cover art
+ * starts on the podcast cover, the way an audio episode's video looks (Andrew, 23 Nov), with Use a frame beside it.
  */
-function ThumbnailRow({ thumb, shape, onAnother, onUseFrame, onUpload }: { thumb: Thumb; /** A clip's shape; an episode is 16:9. */ shape?: "vertical" | "square" | "wide"; onAnother: () => void; onUseFrame: () => void; onUpload: (f: File) => void }) {
+function ThumbnailRow({ thumb, shape, onAnother, onUseFrame, onCover, onUpload }: { thumb: Thumb; /** A clip's shape; an episode is 16:9. */ shape?: "vertical" | "square" | "wide"; onAnother: () => void; onUseFrame: () => void; /** Only when their show has cover art. */ onCover?: () => void; onUpload: (f: File) => void }) {
   const box = shape === "vertical" ? "aspect-[9/16] h-[54px] sm:h-[63px]" : shape === "square" ? "aspect-square h-[54px] sm:h-[63px]" : "h-[54px] w-[96px] sm:h-[63px] sm:w-[112px]";
   const failed = thumb.state === "failed" && !thumb.own;
   return (
@@ -94,8 +95,14 @@ function ThumbnailRow({ thumb, shape, onAnother, onUseFrame, onUpload }: { thumb
           <p className="text-[13px] leading-snug">
             {!failed && (
               <>
-                <button type="button" onClick={thumb.own ? onUseFrame : onAnother} className={link} data-testid={thumb.own ? "thumb-use-frame" : "thumb-another"}>{thumb.own ? "Use a frame" : "Another frame"}</button>{" "}
+                <button type="button" onClick={thumb.own || thumb.cover ? onUseFrame : onAnother} className={link} data-testid={thumb.own || thumb.cover ? "thumb-use-frame" : "thumb-another"}>{thumb.own || thumb.cover ? "Use a frame" : "Another frame"}</button>{" "}
               </>
+            )}
+            {onCover && !thumb.cover && (
+              <span className="whitespace-nowrap">
+                {!failed && <span className="text-muted-foreground">·{"\u00A0"}</span>}
+                <button type="button" onClick={onCover} className={link} data-testid="thumb-cover">Podcast cover</button>{" "}
+              </span>
             )}
             <span className="whitespace-nowrap">
               {!failed && <span className="text-muted-foreground">·{"\u00A0"}</span>}
@@ -242,6 +249,8 @@ export function PostDialog({ target, onClose, at, schedule = false }: { target: 
   const thumbPending = useRef<Promise<void> | null>(null);
   const lastFrame = useRef<Pick<Thumb, "key" | "preview" | "frameKey" | "titled"> | null>(null);
   const videoSrc = useRef<{ for: string; url: string } | null>(null);
+  // Whether their show has cover art to offer (null: not asked yet). A whole episode starts on it when it does.
+  const [hasCover, setHasCover] = useState<boolean | null>(null);
   // Post pressed while the cover's still being made: the button says so, and a post that went without one says that after.
   const [finishing, setFinishing] = useState(false);
   const wentWithout = useRef(false);
@@ -271,7 +280,8 @@ export function PostDialog({ target, onClose, at, schedule = false }: { target: 
     thumbStep.current = 0;
     lastFrame.current = null;
     setThumb(blankThumb);
-    grab(0, target.kind === "recording" ? postableTitle(target.title) : "");
+    if (target.kind === "recording") pickCover(postableTitle(target.title), true);
+    else grab(0, "");
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [thumbFor]);
 
@@ -304,10 +314,32 @@ export function PostDialog({ target, onClose, at, schedule = false }: { target: 
         }
         if (run !== thumbRun.current) return;
         lastFrame.current = next;
-        setThumb((t) => ({ ...t, ...next, state: "ready", own: false }));
+        setThumb((t) => ({ ...t, ...next, state: "ready", own: false, cover: false }));
       } catch {
-        if (run === thumbRun.current) setThumb((t) => ({ ...t, state: "failed", own: false, key: "", preview: "" }));
+        if (run === thumbRun.current) setThumb((t) => ({ ...t, state: "failed", own: false, cover: false, key: "", preview: "" }));
       }
+    })();
+  }
+
+  /** The podcast cover in the audio-episode look, under the title as it stands. First: falls back to a frame when their show has no art. */
+  function pickCover(titleNow: string, first = false) {
+    const run = ++thumbRun.current;
+    window.clearTimeout(thumbTimer.current);
+    setThumb((t) => ({ ...t, state: "busy", own: false, note: "" }));
+    thumbPending.current = (async () => {
+      const res = await apiRequest("POST", "/api/host/thumbnails/compose", { cover: true, title: titleNow }).catch((e: Error) => e);
+      if (run !== thumbRun.current) return;
+      if (res instanceof Error) {
+        // 404: no cover art on their show. Anything else: a frame rather than nothing.
+        if ((res as Error & { status?: number }).status === 404) setHasCover(false);
+        if (first) return void grab(0, titleNow);
+        return void (lastFrame.current ? setThumb((t) => ({ ...t, ...lastFrame.current!, state: "ready", own: false, cover: false, note: "Couldn't make that. Try again?" })) : grab(thumbStep.current, titleNow));
+      }
+      const r = (await res.json().catch(() => null)) as { key: string; url?: string } | null;
+      if (run !== thumbRun.current) return;
+      if (!r?.key) return void grab(thumbStep.current, titleNow);
+      setHasCover(true);
+      setThumb((t) => ({ ...t, key: r.key, preview: r.url || "", frameKey: "", titled: titleNow, state: "ready", own: false, cover: true, note: "" }));
     })();
   }
 
@@ -321,7 +353,7 @@ export function PostDialog({ target, onClose, at, schedule = false }: { target: 
   }
 
   function backToFrame() {
-    if (lastFrame.current) setThumb((t) => ({ ...t, ...lastFrame.current!, state: "ready", own: false, note: "" }));
+    if (lastFrame.current) setThumb((t) => ({ ...t, ...lastFrame.current!, state: "ready", own: false, cover: false, note: "" }));
     else grab(thumbStep.current, titleRef.current.trim());
   }
 
@@ -331,12 +363,12 @@ export function PostDialog({ target, onClose, at, schedule = false }: { target: 
     if (file.size > 2 * 1024 ** 2) return setThumb((t) => ({ ...t, note: "1280×720, under 2 MB" }));
     const run = ++thumbRun.current;
     window.clearTimeout(thumbTimer.current);
-    setThumb((t) => ({ ...t, state: "busy", own: true, key: "", preview: URL.createObjectURL(file), note: "" }));
+    setThumb((t) => ({ ...t, state: "busy", own: true, cover: false, key: "", preview: URL.createObjectURL(file), note: "" }));
     thumbPending.current = uploadToStorage(file, () => {})
       .then((k) => { if (run === thumbRun.current) setThumb((t) => ({ ...t, key: k, state: "ready" })); })
       .catch(() => {
         if (run !== thumbRun.current) return;
-        if (lastFrame.current) setThumb((t) => ({ ...t, ...lastFrame.current!, state: "ready", own: false, note: "Couldn't upload that. Try again?" }));
+        if (lastFrame.current) setThumb((t) => ({ ...t, ...lastFrame.current!, state: "ready", own: false, cover: false, note: "Couldn't upload that. Try again?" }));
         else setThumb((t) => ({ ...t, state: "failed", own: false, preview: "", note: "Couldn't upload that. Try again?" }));
       });
   }
@@ -379,8 +411,8 @@ export function PostDialog({ target, onClose, at, schedule = false }: { target: 
       const th = thumbRef.current;
       let thumbnailKey = target.kind !== "photo" && th.state === "ready" ? th.key : "";
       // A title edited since the band was made: the band again with the title they settled on.
-      if (thumbnailKey && !th.own && target.kind === "recording" && th.frameKey && th.titled !== title.trim()) {
-        thumbnailKey = await apiRequest("POST", "/api/host/thumbnails/compose", { frameKey: th.frameKey, title: title.trim() }).then((r) => r.json() as Promise<{ key: string }>).then((r) => r.key || thumbnailKey).catch(() => thumbnailKey);
+      if (thumbnailKey && !th.own && target.kind === "recording" && (th.frameKey || th.cover) && th.titled !== title.trim()) {
+        thumbnailKey = await apiRequest("POST", "/api/host/thumbnails/compose", th.cover ? { cover: true, title: title.trim() } : { frameKey: th.frameKey, title: title.trim() }).then((r) => r.json() as Promise<{ key: string }>).then((r) => r.key || thumbnailKey).catch(() => thumbnailKey);
       }
       wentWithout.current = waited && !thumbnailKey;
       const body = {
@@ -552,7 +584,7 @@ export function PostDialog({ target, onClose, at, schedule = false }: { target: 
                   )}
 
                   {target && target.kind !== "photo" && picked.some((p) => THUMB_PLATFORMS.includes(p)) && (
-                    <ThumbnailRow thumb={thumb} shape={target.kind === "clip" ? shape : undefined} onAnother={anotherFrame} onUseFrame={backToFrame} onUpload={uploadOwn} />
+                    <ThumbnailRow thumb={thumb} shape={target.kind === "clip" ? shape : undefined} onAnother={anotherFrame} onUseFrame={backToFrame} onCover={target.kind === "recording" && hasCover !== false ? () => pickCover(titleRef.current.trim()) : undefined} onUpload={uploadOwn} />
                   )}
 
                   {has("youtube") && <div className="mt-3.5"><YouTubeExtras key={key} yt={yt} onChange={setYt} /></div>}

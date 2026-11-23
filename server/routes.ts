@@ -200,7 +200,7 @@ import { registerTrash, toTrash } from "./trash.js";
 import { registerMyStudio } from "./myStudio.js";
 import { getYoutubeKey, registerYoutubeKey, setYoutubeKey, YOUTUBE_OAUTH, YOUTUBE_RTMP } from "./youtubeKey.js";
 import { registerLivePage } from "./livePage.js";
-import { registerShowLogo, cornerLogoOf } from "./showLogo.js";
+import { registerShowLogo, cornerLogoOf, showCoverOf } from "./showLogo.js";
 import { registerShortcuts } from "./shortcuts.js";
 import { registerRoomKit, marksFor, withCredits } from "./roomKit.js";
 import { registerFreesoundImport } from "./studioLibrary.js";
@@ -3592,9 +3592,11 @@ export function registerRoutes(app: Express): void {
 
   /**
    * A thumbnail in our clip style (title band over a still), saved where post covers live. The still
-   * is one the page took from the video (frameKey); with none, the show's cover art. Returns its key.
+   * is one the page took from the video (frameKey). With cover (or no still): the podcast cover in the audio-episode
+   * look, from the show they host with us (Andrew, 23 Nov: "make the Thumbnail the Podcast image, just like it is with
+   * the audios"). Returns its key; NO_COVER when cover was asked for and their show has no art.
    */
-  async function composeThumbnail(email: string, o: { frameKey?: unknown; title?: unknown; show?: unknown }): Promise<string> {
+  async function composeThumbnail(email: string, o: { frameKey?: unknown; title?: unknown; show?: unknown; cover?: unknown }): Promise<string> {
     const profile = await storage.getProfileByEmail(email);
     const title = String(o.title ?? "").trim().slice(0, 140) || "New episode";
     const show = (typeof o.show === "string" ? o.show : profile?.podcastName ?? "").trim().slice(0, 80);
@@ -3603,9 +3605,14 @@ export function registerRoutes(app: Express): void {
       if (!r.ok) throw new Error(`Couldn't read the picture (${r.status}).`);
       return Buffer.from(await r.arrayBuffer());
     };
-    const frameKey = typeof o.frameKey === "string" && /^show-assets\/[\w.-]+$/.test(o.frameKey) ? o.frameKey : "";
+    const wantCover = o.cover === true;
+    const frameKey = !wantCover && typeof o.frameKey === "string" && /^show-assets\/[\w.-]+$/.test(o.frameKey) ? o.frameKey : "";
     const frame = frameKey ? await get(await signedRecordingUrl(frameKey, 600)) : undefined;
-    const cover = !frame && profile?.photoUrl ? await get(profile.photoUrl).catch(() => undefined) : undefined;
+    // The hosted show's cover art (what "Make a video" uses); the profile picture only as the old no-still fallback.
+    const art = frame ? "" : await showCoverOf(email).catch(() => "");
+    if (wantCover && !art) throw Object.assign(new Error("No podcast cover yet."), { code: "NO_COVER" });
+    const coverUrl = art || (frame ? "" : profile?.photoUrl ?? "");
+    const cover = coverUrl ? await get(coverUrl).catch(() => undefined) : undefined;
     // Their show logo bottom-left, as it sits while they're live (else their cover art); never holds the picture up.
     const corner = frame ? await cornerLogoOf(email).catch(() => ({ url: "", plate: "none" as const })) : { url: "", plate: "none" as const };
     const logoBuf = corner.url ? await get(corner.url).catch(() => undefined) : undefined;
@@ -3619,9 +3626,10 @@ export function registerRoutes(app: Express): void {
   app.post("/api/host/thumbnails/compose", requireHostSession, async (req, res) => {
     const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
     try {
-      const key = await composeThumbnail(email, { frameKey: req.body?.frameKey, title: req.body?.title });
+      const key = await composeThumbnail(email, { frameKey: req.body?.frameKey, title: req.body?.title, cover: req.body?.cover });
       res.json({ key, url: await signedRecordingUrl(key, 3600) });
     } catch (err) {
+      if ((err as { code?: string }).code === "NO_COVER") return res.status(404).json({ message: "No podcast cover yet." });
       console.error("Thumbnail compose failed:", err);
       res.status(502).json({ message: "Couldn't make the thumbnail." });
     }
@@ -3632,9 +3640,10 @@ export function registerRoutes(app: Express): void {
     const email = String(req.body?.email ?? "").toLowerCase().trim();
     if (!email) return res.status(400).json({ message: "Whose post?" });
     try {
-      const key = await composeThumbnail(email, { frameKey: req.body?.frameKey, title: req.body?.title, show: req.body?.show });
+      const key = await composeThumbnail(email, { frameKey: req.body?.frameKey, title: req.body?.title, show: req.body?.show, cover: req.body?.cover });
       res.json({ key, url: await signedRecordingUrl(key, 3600) });
     } catch (err) {
+      if ((err as { code?: string }).code === "NO_COVER") return res.status(404).json({ message: "No podcast cover yet." });
       console.error("Admin thumbnail compose failed:", err);
       res.status(502).json({ message: (err as Error).message || "Couldn't make the thumbnail." });
     }

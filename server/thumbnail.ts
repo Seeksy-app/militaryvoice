@@ -22,7 +22,7 @@ export interface ThumbInput {
   show?: string;
   /** A still from the video (any size; filled and cropped to the space under the band). */
   frame?: Buffer;
-  /** With no frame: the show's cover art, centred on navy. */
+  /** With no frame: the podcast cover, in the audio-episode look (blurred cover behind, square cover, title band at the foot). */
   cover?: Buffer;
   /** Their show logo (else their cover art), small in the picture's bottom-left corner, as it sits while they're live (Andrew, 23 Nov: "logo bottom left").
       plate: what reads behind it ("light" for dark ink, "dark" for light ink, "none" for an opaque picture). */
@@ -31,6 +31,7 @@ export interface ThumbInput {
 
 export async function renderThumbnail(i: ThumbInput): Promise<Buffer> {
   const { w, h } = THUMB;
+  if (!i.frame && i.cover) return coverThumbnail(i.cover, i.title.trim(), (i.show ?? "").trim());
   const bandH = Math.round(h * BAND);
   const below = h - bandH;
 
@@ -38,9 +39,6 @@ export async function renderThumbnail(i: ThumbInput): Promise<Buffer> {
   const layers: { input: Buffer; top: number; left: number }[] = [];
   if (i.frame) {
     layers.push({ input: await fitLow(i.frame, w, below), top: bandH, left: 0 });
-  } else if (i.cover) {
-    const s = below - 60;
-    layers.push({ input: await sharp(i.cover).rotate().resize(s, s, { fit: "cover" }).toBuffer(), top: bandH + 30, left: Math.round((w - s) / 2) });
   }
   layers.push({ input: Buffer.from(band), top: 0, left: 0 });
   if (i.frame && i.logo) {
@@ -49,6 +47,42 @@ export async function renderThumbnail(i: ThumbInput): Promise<Buffer> {
   }
   return sharp({ create: { width: w, height: h, channels: 3, background: NAVY } })
     .composite(layers)
+    .jpeg({ quality: 86, mozjpeg: true })
+    .toBuffer();
+}
+
+/**
+ * The podcast cover as the picture, the way an audio-only episode's "Make a video" looks (agent/clipper.ts,
+ * handleEpisodeVideo): the cover blurred and darkened behind, the square cover 440px centred near the top, a dark band
+ * across the bottom. Where the video has its moving wave, the still has the title (white) and the show (gold). Andrew,
+ * 23 Nov: "Let's make the Thumbnail the Podcast image, just like it is with the audios."
+ */
+async function coverThumbnail(cover: Buffer, title: string, show: string): Promise<Buffer> {
+  const { w, h } = THUMB;
+  const art = await sharp(cover).rotate().toBuffer();
+  const bg = await sharp(art).resize(w, h, { fit: "cover" }).blur(28).modulate({ brightness: 0.68 }).toBuffer();
+  const s = 440;
+  const fg = await sharp(art).resize(s, s, { fit: "cover" }).toBuffer();
+  const bandTop = 520;
+  const bandH = h - bandTop;
+  const boxW = w * 0.88;
+  let size = fitSize(title, "heavy", 46, 30, boxW);
+  let rows = title ? [title] : [];
+  if (title && textWidth(title, size, "heavy") > boxW) {
+    rows = wrap(title, 40, boxW);
+    size = Math.min(...rows.map((r) => fitSize(r, "heavy", 40, 26, boxW)));
+  }
+  rows = rows.slice(0, 2).map((r) => clip(r, size, boxW));
+  const sub = show.length > 52 ? `${show.slice(0, 50).trimEnd()}…` : show;
+  const subSize = sub ? fitSize(sub.toUpperCase(), "strong", 20, 14, boxW) : 0;
+  const lead = size * 1.1;
+  const block = rows.length * lead + (sub ? subSize * 1.9 : 0);
+  const y0 = bandTop + (bandH - block) / 2;
+  const titleSvg = rows.map((r, n) => textPath(r, { x: w / 2, y: y0 + lead * n + size * 0.86, size, weight: "heavy", fill: "#ffffff", anchor: "middle" })).join("");
+  const subSvg = sub ? textPath(sub.toUpperCase(), { x: w / 2, y: y0 + rows.length * lead + subSize * 1.45, size: subSize, weight: "strong", fill: GOLD, anchor: "middle", letterSpacing: subSize * 0.08 }) : "";
+  const band = `<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}"><rect y="${bandTop}" width="${w}" height="${bandH}" fill="#000" fill-opacity="0.5"/>${titleSvg}${subSvg}</svg>`;
+  return sharp(bg)
+    .composite([{ input: fg, top: 50, left: Math.round((w - s) / 2) }, { input: Buffer.from(band), top: 0, left: 0 }])
     .jpeg({ quality: 86, mozjpeg: true })
     .toBuffer();
 }
