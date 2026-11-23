@@ -128,7 +128,7 @@ export function PodcastHosting() {
   };
   useEffect(() => { takeInvite(); }, []);
   // The field Show details opens on (from the checklist): the description, the name, the owner email.
-  const [focus, setFocus] = useState<"" | "title" | "description" | "ownerEmail">("");
+  const [focus, setFocus] = useState<"" | "title" | "description" | "ownerEmail" | "signoff">("");
   const [adding, setAdding] = useState(false);
   const [newShow, setNewShow] = useState(false);
   // The setup screens stay up while a new show is made, even though the list now has one in it.
@@ -273,7 +273,7 @@ export function PodcastHosting() {
       )}
 
       {tab === "episodes" && editEp && (
-        <EpisodePage ep={h.episodes.find((x) => x.id === editEp.id) ?? editEp} show={s} youtubeReady={!!q.data?.youtubeReady} production={!!h.production} onDirectories={() => { setEditEp(null); go("directories"); }} onBack={() => setEditEp(null)} onSaved={refresh} onAddSpot={(id) => { setSpotFor(id); setEditEp(null); go("sponsors"); }} />
+        <EpisodePage ep={h.episodes.find((x) => x.id === editEp.id) ?? editEp} show={s} youtubeReady={!!q.data?.youtubeReady} production={!!h.production} onDirectories={() => { setEditEp(null); go("directories"); }} onBack={() => setEditEp(null)} onSaved={refresh} onAddSpot={(id) => { setSpotFor(id); setEditEp(null); go("sponsors"); }} onShowDetails={() => { setEditEp(null); setFocus("signoff"); go("details"); }} />
       )}
       {tab === "episodes" && !editEp && adding && (
         <NewEpisodePage show={s} onBack={() => setAdding(false)} onCreated={(e) => { refresh(); setAdding(false); setEditEp({ ...e, downloads: 0, live: false }); }} />
@@ -926,7 +926,7 @@ function ShowForm({ show, categories, onSaved, focus = "" }: { show: HostedShowR
           <label className={`${label} sm:col-span-2`}>Show name<Input autoFocus={focus === "title"} value={v.title} onChange={(e) => set("title", e.target.value)} className="mt-1 font-normal text-foreground" /></label>
           <label className={`${label} sm:col-span-2`}>Description<Textarea autoFocus={focus === "description"} value={v.description} onChange={(e) => set("description", e.target.value)} rows={9} className="mt-1 font-normal text-foreground" placeholder="What the show is about, who it's for, and who hosts it." /></label>
           <label className={`${label} sm:col-span-2`}>Under every episode (your sign-off)
-            <Textarea value={v.episodeFooter ?? ""} onChange={(e) => set("episodeFooter", e.target.value)} rows={11} className="mt-1 font-normal text-foreground" placeholder={"Your name and title\nYour website and social links\nYour email"} data-testid="hosting-signoff" />
+            <Textarea autoFocus={focus === "signoff"} value={v.episodeFooter ?? ""} onChange={(e) => set("episodeFooter", e.target.value)} rows={11} className="mt-1 font-normal text-foreground" placeholder={"Your name and title\nYour website and social links\nYour email"} data-testid="hosting-signoff" />
             <span className="mt-1 block font-normal">Added at the end of every episode's notes on Apple, Spotify and YouTube: who you are, your links, how to reach&nbsp;you.</span>
           </label>
           <label className={label}>Host or author<Input value={v.author} onChange={(e) => set("author", e.target.value)} className="mt-1 font-normal text-foreground" /></label>
@@ -1146,7 +1146,7 @@ function BookendListen({ show, ep, state }: { show: HostedShowRow; ep: Ep; state
   );
 }
 
-function EpisodePage({ ep, show, youtubeReady, production, onDirectories, onBack, onSaved, onAddSpot }: { ep: Ep; show: HostedShowRow; youtubeReady: boolean; production: boolean; onDirectories?: () => void; onBack: () => void; onSaved: () => void; onAddSpot: (episodeId: number) => void }) {
+function EpisodePage({ ep, show, youtubeReady, production, onDirectories, onBack, onSaved, onAddSpot, onShowDetails }: { ep: Ep; show: HostedShowRow; youtubeReady: boolean; production: boolean; onDirectories?: () => void; onBack: () => void; onSaved: () => void; onAddSpot: (episodeId: number) => void; /** Settings → Show details, at the host details box. */ onShowDetails: () => void }) {
   const { toast } = useToast();
   const [f, setF] = useState<Record<string, unknown>>({});
   const [at, setAt] = useState("");
@@ -1358,11 +1358,25 @@ function EpisodePage({ ep, show, youtubeReady, production, onDirectories, onBack
             {hasAudio && (
               <label className="mt-3 flex items-center gap-2 rounded-xl border border-border px-3 py-2.5 text-sm" data-testid="hosting-ep-spots"><input type="checkbox" checked={!(v.spotsOff as boolean)} onChange={(e) => set("spotsOff", !e.target.checked)} /> Play your sponsor spots on this episode<button type="button" onClick={() => onAddSpot(ep.id)} className="ml-auto text-xs font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]" data-testid="episode-add-spot">+ Add a sponsor or shout-out to this episode</button></label>
             )}
-            {false && (show.episodeFooter ?? "").trim() && (
+            {/* The show's host details (Settings → Show details, episodeFooter) go under every episode's notes in the feed
+                unless footerOff. Shown here, ticked, so nobody types them into the notes as well (Andrew, 23 Nov: "otherwise
+                … it'll be on there twice"). */}
+            {(show.episodeFooter ?? "").trim() ? (
               <div className="mt-3 rounded-xl border border-border px-3 py-2.5 text-sm" data-testid="hosting-ep-footer">
-                <label className="flex items-center gap-2"><input type="checkbox" checked={!(v.footerOff as boolean)} onChange={(e) => set("footerOff", !e.target.checked)} /> Add your show's footer to this episode</label>
-                {!(v.footerOff as boolean) && <p className="mt-2 whitespace-pre-line text-xs text-muted-foreground">{fillFooter(show.episodeFooter, { title: v.title, number: v.episodeNumber, season: v.season, guest: (v.guest as string) ?? "" })}</p>}
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <label className="flex items-center gap-2"><input type="checkbox" checked={!(v.footerOff as boolean)} onChange={(e) => set("footerOff", !e.target.checked)} data-testid="hosting-ep-footer-on" /> Host details automatically display</label>
+                  <button type="button" onClick={onShowDetails} className="ml-auto text-xs font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]" data-testid="hosting-ep-footer-edit">Edit in Settings → Show details</button>
+                </div>
+                {(v.footerOff as boolean)
+                  ? <p className="mt-1 text-xs text-muted-foreground">Not added to this episode.</p>
+                  : <p className="mt-2 line-clamp-4 whitespace-pre-line text-xs text-muted-foreground">{fillFooter(show.episodeFooter, { title: v.title, number: v.episodeNumber, season: v.season, guest: (v.guest as string) ?? "" })}</p>}
               </div>
+            ) : (
+              <p className="mt-3 rounded-xl border border-dashed border-border px-3 py-2.5 text-sm text-muted-foreground" data-testid="hosting-ep-footer-none">
+                Add your host details once in{" "}
+                <button type="button" onClick={onShowDetails} className="font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]" data-testid="hosting-ep-footer-add">Settings → Show details</button>{" "}
+                and they'll display on every&nbsp;episode.
+              </p>
             )}
           </div>
         </div>
@@ -1454,7 +1468,7 @@ function EpisodePage({ ep, show, youtubeReady, production, onDirectories, onBack
   );
 }
 
-/** How the show's episodes go out. (The intro, outro and footer are done in post-production for now, so they are not here.) */
+/** How the show's episodes go out. (The intro and outro are done in post-production for now, so they are not here; the host details are in Show details.) */
 /** One answer in a two-way question: a card with a dot, its name, and one line under it. */
 function Choice({ on, title, sub, badge, disabled, onPick, testid }: { on: boolean; title: string; sub: string; badge?: React.ReactNode; disabled?: boolean; onPick: () => void; testid: string }) {
   return (
