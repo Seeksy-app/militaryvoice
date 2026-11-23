@@ -16,9 +16,9 @@ import { apiRequest } from "@/lib/queryClient";
 import { useClipLayoutDefault, type DefaultLayout } from "@/lib/clipLayoutDefault";
 import { durationOf, uploadToStorage } from "@/lib/upload";
 import { GuestFinder, ShowFinder, INVITE_KEY } from "@/components/DiscoverPodcasts";
-import type { HostedEpisodeRow, HostedShowRow, HostedSpotRow, RecordingRow } from "@shared/schema";
+import type { HostedEpisodeRow, HostedShowRow, HostedSpotRow, PodcastStatsData, RecordingRow } from "@shared/schema";
 import { fillFooter, FOOTER_TOKENS } from "@shared/footer";
-import { AlertCircle, BarChart3, Check, ChevronLeft, Copy, ExternalLink, Film, ImagePlus, Loader2, Mic2, Pencil, Plus, Podcast, Radio, Send, Sparkles, Trash2, Upload } from "lucide-react";
+import { AlertCircle, BarChart3, Check, ChevronLeft, Copy, Download, ExternalLink, Film, ImagePlus, Loader2, Mic2, Pencil, Plus, Podcast, Radio, Send, Sparkles, Trash2, Upload } from "lucide-react";
 import { IconTile } from "@/components/ui/icon-tile";
 
 /**
@@ -263,7 +263,7 @@ export function PodcastHosting() {
 
       {s.newFeedUrl && (
         <div className="rounded-2xl border border-destructive/40 bg-destructive/[0.05] p-4 text-sm" data-testid="hosting-leaving">
-          <span className="font-semibold">This show is moving to another host.</span> The feed forwards apps to <span className="font-mono text-xs">{s.newFeedUrl}</span>. Clear it in Show details to stay.
+          <span className="font-semibold">This show is moving to another host.</span> <span>The feed forwards apps to <span className="break-all font-mono text-xs">{s.newFeedUrl}</span>. <button type="button" onClick={() => go("details")} className="font-semibold text-primary hover:underline">Stop the move in Show details</button>.</span>
         </div>
       )}
 
@@ -356,7 +356,7 @@ export function PodcastHosting() {
       {tab === "guests" && <GuestFinder showTitle={s.title} onInvite={takeInvite} />}
       {tab === "pitch" && <ShowFinder topics={[s.category, s.subcategory].filter(Boolean) as string[]} />}
 
-      {tab === "details" && <ShowForm key={s.id} show={s} focus={focus} categories={q.data?.categories ?? {}} onSaved={() => { refresh(); setFocus(""); }} onDeleted={() => { setOpenId(null); refresh(); }} />}
+      {tab === "details" && <ShowForm key={s.id} show={s} feedUrl={h.feedUrl} focus={focus} categories={q.data?.categories ?? {}} onSaved={() => { refresh(); setFocus(""); }} onDeleted={() => { setOpenId(null); refresh(); }} />}
 
       {addShowDialog}
     </section>
@@ -837,7 +837,7 @@ function ArtworkButton({ show, onDone }: { show: HostedShowRow; onDone: () => vo
   );
 }
 
-function ShowForm({ show, categories, onSaved, onDeleted, focus = "" }: { show: HostedShowRow; categories: Record<string, string[]>; onSaved: () => void; onDeleted: () => void; focus?: string }) {
+function ShowForm({ show, feedUrl, categories, onSaved, onDeleted, focus = "" }: { show: HostedShowRow; feedUrl: string; categories: Record<string, string[]>; onSaved: () => void; onDeleted: () => void; focus?: string }) {
   const { toast } = useToast();
   // Deleting: they type the show's name to be sure.
   const [deleting, setDeleting] = useState(false);
@@ -857,6 +857,7 @@ function ShowForm({ show, categories, onSaved, onDeleted, focus = "" }: { show: 
   });
   const label = "block text-xs font-semibold text-muted-foreground";
   const dirty = Object.keys(f).length > 0;
+  const toMove = () => { setDeleting(false); setSure(""); document.getElementById("move-host")?.scrollIntoView({ behavior: "smooth", block: "start" }); };
   return (
     <div className="space-y-4" data-testid="hosting-details">
       <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
@@ -879,7 +880,6 @@ function ShowForm({ show, categories, onSaved, onDeleted, focus = "" }: { show: 
           </label>
           <label className={label}>Website (optional)<Input value={v.website} onChange={(e) => set("website", e.target.value)} className="mt-1" placeholder="https://" /></label>
           <label className={label}>Copyright (optional)<Input value={v.copyright} onChange={(e) => set("copyright", e.target.value)} className="mt-1" placeholder={`© ${new Date().getFullYear()} ${v.author || v.title}`} /></label>
-          <label className={`${label} sm:col-span-2`}>Moving to another host? (optional)<Input value={v.newFeedUrl} onChange={(e) => set("newFeedUrl", e.target.value)} className="mt-1" placeholder="Your new host's feed address. Leave empty to stay." /><span className="mt-1 block font-normal">Your feed then forwards every app there (a 301), and your subscribers follow.</span></label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={v.explicit} onChange={(e) => set("explicit", e.target.checked)} /> Explicit language</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={v.showType === "serial"} onChange={(e) => set("showType", e.target.checked ? "serial" : "episodic")} /> Listen in order (a series)</label>
           <label className="flex items-start gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={v.aiVoice} onChange={(e) => set("aiVoice", e.target.checked)} className="mt-1" data-testid="hosting-ai-voice" /><span>AI voices (a synthetic host or narrator)<span className="block text-xs text-muted-foreground">Listen Notes doesn't list AI-voiced shows, so we won't send this one there.</span></span></label>
@@ -889,10 +889,14 @@ function ShowForm({ show, categories, onSaved, onDeleted, focus = "" }: { show: 
           <Button onClick={() => save.mutate()} disabled={save.isPending || !dirty} className="bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-details-save">{save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}</Button>
         </div>
       </div>
-      {/* Deleting the show: the apps first (the help says how), then here; its feed stops. */}
+      <MoveHost show={show} feedUrl={feedUrl} onSaved={onSaved} />
+      {/* Deleting the show: the apps first (the help says how), then here; its feed stops. Moving hosts is the card above. */}
       <div className="rounded-2xl border border-destructive/30 p-4">
         {deleting ? (
           <div className="space-y-2">
+            {show.newFeedUrl
+              ? <p className="rounded-lg bg-muted/60 px-3 py-2 text-sm"><b>Your move is on.</b> Deleting stops the forward, so any app that hasn't followed yet loses the show. Wait until Apple and Spotify show your new&nbsp;host.</p>
+              : <p className="rounded-lg bg-muted/60 px-3 py-2 text-sm"><b>Moving to another host?</b> Don't delete: use <button type="button" onClick={toMove} className="font-semibold text-primary hover:underline">Move to another host</button> instead. Deleting stops the feed, and your subscribers lose the&nbsp;show.</p>}
             <p className="text-sm">This deletes <b>{show.title}</b> and its episodes, and its feed stops. If it's in Apple or Spotify, <a href="/help/podcast#unlist" target="_blank" rel="noreferrer" className="font-semibold text-primary hover:underline">take it down there first</a>. You can put it back from Recently deleted for 15 days. Type the show's name to delete it.</p>
             <Input value={sure} onChange={(e) => setSure(e.target.value)} placeholder={show.title} data-testid="hosting-delete-confirm" />
             <div className="flex gap-2">
@@ -901,9 +905,126 @@ function ShowForm({ show, categories, onSaved, onDeleted, focus = "" }: { show: 
             </div>
           </div>
         ) : (
-          <button type="button" onClick={() => setDeleting(true)} className="text-sm font-semibold text-destructive hover:underline" data-testid="hosting-delete">Delete this show…</button>
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            <button type="button" onClick={() => setDeleting(true)} className="text-sm font-semibold text-destructive hover:underline" data-testid="hosting-delete">Delete this show…</button>
+            <span className="text-xs text-muted-foreground">{show.newFeedUrl ? <>Keep it until the apps follow your&nbsp;move.</> : <>Moving hosts? <button type="button" onClick={toMove} className="font-semibold text-primary hover:underline">Move&nbsp;to&nbsp;another&nbsp;host</button> keeps your&nbsp;subscribers.</>}</span>
+          </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Their downloads, every day since the first one, as a spreadsheet: before a move, since their new host counts from then on. */
+async function downloadStats(title: string): Promise<boolean> {
+  const r = (await (await apiRequest("GET", "/api/host/podcast-stats")).json()) as { sources: { source: string; showName: string; data: PodcastStatsData }[] };
+  const d = r.sources.find((x) => x.source === "militaryvoices" && x.showName === title)?.data;
+  if (!d) return false;
+  const cell = (v: string | number) => (typeof v === "number" ? String(v) : /[",\n]/.test(v) ? `"${v.replace(/"/g, '""')}"` : v);
+  const apps = Object.keys(d.appDays ?? {}).sort();
+  const lines = [
+    ["Date", "Downloads", ...apps].map(cell).join(","),
+    ...(d.series ?? []).map((x) => [x.date, x.count, ...apps.map((a) => d.appDays?.[a]?.[x.date] ?? 0)].map(cell).join(",")),
+    "",
+    ["Episode", "Published", "Downloads"].map(cell).join(","),
+    ...d.episodes.map((e) => [e.title, e.published, e.count].map(cell).join(",")),
+  ];
+  const url = URL.createObjectURL(new Blob([lines.join("\n")], { type: "text/csv" }));
+  const a = Object.assign(document.createElement("a"), { href: url, download: `${title.replace(/[^\w -]+/g, "").trim() || "podcast"} downloads.csv` });
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+  return true;
+}
+
+/**
+ * Moving the show to another host, as its own card with every step (Andrew, 23 Nov: "put a whole section down there,
+ * move to another host, and leave 'Optional' out … make sure we have all the steps that are entailed in moving it over").
+ * Saving the new host's feed address turns on the 301 and Apple's new-feed tag; clearing it stops the move.
+ */
+function MoveHost({ show, feedUrl, onSaved }: { show: HostedShowRow; feedUrl: string; onSaved: () => void }) {
+  const { toast } = useToast();
+  const [url, setUrl] = useState("");
+  const [confirm, setConfirm] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const moving = !!show.newFeedUrl;
+  const valid = /^https?:\/\/\S+\.\S+/i.test(url.trim()) && !url.trim().startsWith(feedUrl);
+  const save = useMutation({
+    mutationFn: async (newFeedUrl: string) => (await apiRequest("PATCH", `/api/host/hosting/shows/${show.id}`, { newFeedUrl })).json(),
+    onSuccess: (_d, newFeedUrl) => {
+      setConfirm(false); setUrl(""); onSaved();
+      toast(newFeedUrl ? { title: "Your feed is moving", description: "Every app is being sent to your new host. Keep this show here so the forward keeps working." } : { title: "Move stopped", description: "Your feed is here again, and the apps read it from MilitaryVoices." });
+    },
+    onError: (e: Error) => toast({ title: "Couldn't save that", description: e.message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, ""), variant: "destructive" }),
+  });
+  const stats = async () => {
+    setBusy(true);
+    try { if (!(await downloadStats(show.title))) toast({ title: "No downloads yet", description: "There's nothing to save until the show has an episode out." }); }
+    catch { toast({ title: "Couldn't get your stats", description: "Try again in a minute.", variant: "destructive" }); }
+    finally { setBusy(false); }
+  };
+  const statsBtn = (
+    <Button type="button" variant="outline" size="sm" onClick={stats} disabled={busy} className="mt-2 h-8 gap-1.5 rounded-full text-xs" data-testid="move-stats">
+      {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Download className="h-3.5 w-3.5" />} Download your stats
+    </Button>
+  );
+  const copyFeed = (
+    <button type="button" onClick={() => navigator.clipboard.writeText(feedUrl).then(() => toast({ title: "Feed address copied", description: "Paste it into your new host's import." }))} className="mt-2 inline-flex max-w-full items-center gap-1.5 rounded-full border border-border bg-muted/50 px-3 py-1.5 text-xs font-medium hover:bg-muted" data-testid="move-copy-feed">
+      <Radio className="h-3.5 w-3.5 shrink-0 text-[#b36b00]" /> <span className="truncate">{feedUrl.replace(/^https:\/\//, "")}</span> <Copy className="h-3 w-3 shrink-0 text-muted-foreground" />
+    </button>
+  );
+  const steps: { body: React.ReactNode; extra?: React.ReactNode; done?: boolean }[] = [
+    { body: <><b>Download your stats first.</b> After the move, your new host counts your downloads, not&nbsp;us.</>, extra: statsBtn },
+    { body: <><b>At your new host, import your show</b> using this feed address. They copy your episodes&nbsp;over.</>, extra: copyFeed },
+    { body: moving
+        ? <><b>Your feed forwards to your new host.</b> Every podcast app is sent there, and your subscribers follow. <span className="text-muted-foreground">(A 301 redirect, plus Apple's new-feed&nbsp;tag.)</span></>
+        : <><b>Paste your new host's feed address below</b> and press Move my feed. Every podcast app is sent there, and your subscribers follow. <span className="text-muted-foreground">(A 301 redirect, plus Apple's new-feed&nbsp;tag.)</span></>, done: moving },
+    { body: <><b>Keep this show here, and don't delete&nbsp;it.</b> The forward only works while it's here. Apple and Spotify usually follow within a few&nbsp;days.</> },
+    { body: <><b>Your SmartLink, Studio, clips and MilitaryVoices page stay&nbsp;yours.</b></> },
+  ];
+  return (
+    <div id="move-host" className="scroll-mt-24 rounded-2xl border border-border bg-card p-5 shadow-sm" data-testid="move-host">
+      <h3 className="text-base font-semibold text-foreground">Move to another host</h3>
+      <p className="mt-0.5 text-sm text-muted-foreground">Your subscribers come with you. Here's the whole move, in&nbsp;order.</p>
+      <ol className="mt-4 space-y-3.5">
+        {steps.map((st, i) => (
+          <li key={i} className="flex gap-3 text-sm leading-snug" data-testid={`move-step-${i + 1}`}>
+            <span className={`flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold ${st.done ? "bg-[#067647] text-white" : "bg-[#053877]/10 text-[#053877] dark:bg-white/10 dark:text-white"}`}>{st.done ? <Check className="h-3.5 w-3.5" /> : i + 1}</span>
+            <div className="min-w-0 pt-0.5 [text-wrap:pretty]">{st.body}{st.extra && <div>{st.extra}</div>}</div>
+          </li>
+        ))}
+      </ol>
+      <div className="mt-5 border-t border-border pt-4">
+        {moving ? (
+          <div className="rounded-xl border border-[#abefc6] bg-[#ecfdf3] p-3.5 text-sm text-[#05603a] dark:border-[#067647]/50 dark:bg-[#067647]/15 dark:text-[#a6f4c5]" data-testid="move-on">
+            <p className="font-semibold">The move is on.</p>
+            <p className="mt-0.5">Every app is sent to <span className="break-all font-mono text-xs">{show.newFeedUrl}</span>. Keep this show here so the forward keeps&nbsp;working.</p>
+            <Button type="button" variant="outline" size="sm" onClick={() => save.mutate("")} disabled={save.isPending} className="mt-3 h-8 rounded-full bg-white text-xs text-foreground dark:bg-transparent" data-testid="move-stop">
+              {save.isPending ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Stop the move
+            </Button>
+          </div>
+        ) : (
+          <form onSubmit={(e) => { e.preventDefault(); if (valid) setConfirm(true); }}>
+            <label htmlFor="move-url" className="block text-xs font-semibold text-muted-foreground">Your new host's feed address</label>
+            <div className="mt-1 flex flex-col gap-2 sm:flex-row">
+              <Input id="move-url" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://feeds.newhost.com/your-show" inputMode="url" autoComplete="off" spellCheck={false} className="min-w-0 flex-1" data-testid="move-url" />
+              <Button type="submit" disabled={!valid} className="shrink-0 bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="move-go">Move my feed</Button>
+            </div>
+            <p className="mt-1 text-xs text-muted-foreground">{url.trim() && url.trim().startsWith(feedUrl) ? "That's this feed. Paste the address from your new host." : "Leave it empty to stay here."}</p>
+          </form>
+        )}
+      </div>
+      <Dialog open={confirm} onOpenChange={(o) => !save.isPending && setConfirm(o)}>
+        <DialogContent className="sm:max-w-[460px]">
+          <DialogHeader>
+            <DialogTitle className="[text-wrap:balance]">Move {show.title} to your new&nbsp;host?</DialogTitle>
+            <DialogDescription className="[text-wrap:pretty]">Every podcast app will be sent to <span className="break-all font-mono text-xs text-foreground">{url.trim()}</span>, and your subscribers will follow. New downloads are counted there, not here. You can stop the move while this show is still&nbsp;here.</DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button variant="outline" onClick={() => setConfirm(false)} disabled={save.isPending}>Not yet</Button>
+            <Button onClick={() => save.mutate(url.trim())} disabled={save.isPending} className="bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="move-confirm">{save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Move my feed</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
