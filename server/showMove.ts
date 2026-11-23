@@ -23,7 +23,7 @@
 // Each move is written to setting "show-moves" (newest first) with every row id it touched, so it can be undone.
 import type { Express, RequestHandler } from "express";
 import { and, eq, inArray, ne, sql } from "drizzle-orm";
-import { db, storage, schemaIsReady } from "./storage.js";
+import { db, storage, schemaIsReady, inTransaction } from "./storage.js";
 import { getSessionEmail } from "./session.js";
 import { bioPages, hostPosts, hostedDownloads, hostedEpisodes, hostedFeedHits, hostedShows, hostedSpots, listenerQuestions, podcastStats, showTranscripts, transcriptChunks } from "../shared/schema.js";
 
@@ -125,7 +125,7 @@ export function registerShowMove(app: Express, requireAdmin: RequestHandler) {
     const before = await feedItems(p.show.slug);
     const stats = p.stats.filter((s) => s.moves).map((s) => s.id);
     const t = new Date().toISOString();
-    await db.transaction(async (tx) => {
+    await inTransaction(async (tx) => {
       await tx.update(hostedShows).set({ email: to, updatedAt: t }).where(eq(hostedShows.id, showId));
       if (p.folders.length) await tx.update(hostedEpisodes).set({ folderId: 0 }).where(inArray(hostedEpisodes.id, p.folders.map((f) => f.id)));
       if (p.posts.length) await tx.update(hostPosts).set({ email: to }).where(inArray(hostPosts.id, p.posts));
@@ -160,7 +160,7 @@ export function registerShowMove(app: Express, requireAdmin: RequestHandler) {
     const [pageBack] = m.pageId ? await db.select({ id: bioPages.id }).from(bioPages).where(eq(sql`lower(${bioPages.email})`, m.from)).limit(1) : [];
     if (pageBack) return res.status(409).json({ message: `${m.from} has a new SmartLink since, so the old one can't go back without clashing.` });
     const t = new Date().toISOString();
-    await db.transaction(async (tx) => {
+    await inTransaction(async (tx) => {
       await tx.update(hostedShows).set({ email: m.from, updatedAt: t }).where(eq(hostedShows.id, m.showId));
       for (const f of m.folders) await tx.update(hostedEpisodes).set({ folderId: f.folderId }).where(eq(hostedEpisodes.id, f.id));
       if (m.posts.length) await tx.update(hostPosts).set({ email: m.from }).where(inArray(hostPosts.id, m.posts));

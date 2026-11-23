@@ -72,6 +72,20 @@ function sealZoom<T extends { accessToken?: string; refreshToken?: string }>(v: 
 let _sql: ReturnType<typeof postgres> | null = null;
 let _db: ReturnType<typeof drizzle> | null = null;
 
+/** The pooler in transaction mode (6543), never session mode (5432): see getConnection. */
+function poolerUrl(connectionString: string): string {
+  try {
+    const u = new URL(connectionString);
+    if (/\.pooler\.supabase\.com$/i.test(u.hostname) && (u.port === "5432" || u.port === "")) {
+      u.port = "6543";
+      return u.toString();
+    }
+  } catch {
+    /* leave the string untouched if it isn't a parseable URL */
+  }
+  return connectionString;
+}
+
 function getConnection(): { sql: ReturnType<typeof postgres>; db: ReturnType<typeof drizzle> } {
   if (!_sql || !_db) {
     const CONNECTION_STRING =
@@ -96,17 +110,7 @@ function getConnection(): { sql: ReturnType<typeof postgres>; db: ReturnType<typ
     //    side by side; idle connections close so instances don't pin the pooler.
     //  - No pipelining (max_pipeline: 0): the pooler can't keep pipelined replies
     //    in order, and under a burst requests hung forever. See poolOptions.ts.
-    let url = CONNECTION_STRING;
-    try {
-      const u = new URL(url);
-      if (/\.pooler\.supabase\.com$/i.test(u.hostname) && (u.port === "5432" || u.port === "")) {
-        u.port = "6543";
-        url = u.toString();
-      }
-    } catch {
-      /* leave the string untouched if it isn't a parseable URL */
-    }
-    _sql = postgres(url, { ...poolOptions() });
+    _sql = postgres(poolerUrl(CONNECTION_STRING), { ...poolOptions() });
     _db = drizzle(_sql);
   }
   return { sql: _sql, db: _db };
@@ -120,6 +124,30 @@ export const db: ReturnType<typeof drizzle> = new Proxy({} as ReturnType<typeof 
     return (realDb as any)[prop];
   },
 });
+
+/**
+ * One transaction on the pooled connection. postgres.js refuses drizzle's db.transaction here
+ * (UNSAFE_TRANSACTION: "Only use sql.begin, sql.reserved or max: 1"), so this opens it with sql.begin and hands
+ * back a drizzle handle bound to that transaction: every query on `tx` runs inside it.
+ */
+export async function inTransaction<T>(fn: (tx: ReturnType<typeof drizzle>) => Promise<T>): Promise<T> {
+  // The shared pool can't do it: with max_pipeline 0 (poolOptions.ts) postgres.js never reserves the connection
+  // for sql.begin, so BEGIN lands on a shared connection and is refused (UNSAFE_TRANSACTION); db.transaction goes
+  // the same way. So each transaction gets its own one-connection client, closed afterwards. Through the pooler in
+  // transaction mode that is safe: the backend stays ours from BEGIN to COMMIT.
+  const url = process.env.POSTGRES_URL || process.env.POSTGRES_PRISMA_URL || process.env.DATABASE_URL;
+  if (!url) throw new Error("No Postgres connection string found.");
+  const one = postgres(poolerUrl(url), { prepare: false, max: 1, connect_timeout: 10 });
+  try {
+    return (await one.begin(async (t) => {
+      // drizzle reads the client's type parsers from .options, which a transaction handle doesn't carry.
+      Object.assign(t, { options: one.options });
+      return fn(drizzle(t as unknown as ReturnType<typeof postgres>));
+    })) as T;
+  } finally {
+    await one.end({ timeout: 5 }).catch(() => {});
+  }
+}
 
 const DEFAULT_EVENT_SLUG = "marathon";
 
