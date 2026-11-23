@@ -44,7 +44,7 @@ export function YourDiscoverySheet({ open, onOpenChange, free, onFind, onConnect
   const qc = useQueryClient();
   return (
     <Sheet open={open} onOpenChange={(o) => { onOpenChange(o); if (!o) void qc.invalidateQueries({ queryKey: PEEK_KEY, exact: true }); }}>
-      <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-[820px]" data-testid="your-discovery-sheet">
+      <SheetContent side="right" className="flex w-full flex-col gap-0 p-0 sm:max-w-[min(1120px,calc(100vw-3rem))]" data-testid="your-discovery-sheet">
         <div className="border-b border-border px-5 pb-3 pt-5 pr-12 sm:px-6">
           <SheetTitle className="text-lg font-bold">Your Discovery</SheetTitle>
           <SheetDescription asChild>

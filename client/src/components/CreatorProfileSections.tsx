@@ -330,22 +330,55 @@ function ProfileBody({ profile, toolbar, header, cardEngagement, scrollRoot, onO
         {toolbar}
         {header}
         {lead && section(lead.key, -1, lead.body)}
-        {section("signals", 0, (
-          <TileGrid>
-            <Tile keep label="Engagement rate" value={pctText(engagement, 2)} sub={cardEngagement != null ? "as the index measures it" : s.engagementBasis || "per post"} tone={engagement == null ? undefined : engagement >= 3 ? "good" : engagement >= 1 ? undefined : "warn"} />
-            <Tile keep label="Most recent post" value={last?.value ?? "–"} sub={last?.sub} tone={!s.lastPostAt ? undefined : Date.now() - Date.parse(s.lastPostAt) < 30 * 86_400_000 ? "good" : "warn"} />
-            <Tile label="Follower change · 6 mo" value={s.growth6m == null ? "–" : `${s.growth6m > 0 ? "+" : ""}${s.growth6m.toFixed(1)}%`} sub="as reported by the index" />
-            <Tile label="Posting cadence" value={s.postsPerWeek == null ? "–" : <>{s.postsPerWeek}<span className="text-sm font-medium text-muted-foreground"> / wk</span></>} />
-            {/* Was "Est. income": a guess at their earnings that read as a fact. Likes per post is what a sponsor weighs. */}
-            <Tile label="Likes per post" value={compact(profile.content?.likesMedian ?? null)} sub={profile.content?.commentsMedian != null ? `${compact(profile.content.commentsMedian)} comments, typical post` : "typical post"} />
-            <Tile label="Creator type" value={profile.identity.creatorType || "–"} sub={profile.identity.category || (profile.identity.verified ? "verified account" : undefined)} />
-            <Tile label="Top audience country" value={s.topCountry ? pctText(s.topCountry.pct) : "–"} sub={s.topCountry?.name} />
-            <Tile label="Audience gender" value={s.femalePct == null ? "–" : `${Math.round(s.femalePct)}% F · ${100 - Math.round(s.femalePct)}% M`} />
-            <Tile star label="Real reach" value={compact(s.realReach)} sub={s.realPct != null ? `${pctText(s.realPct)} of followers are real people` : undefined} />
-            <Tile star label="Audience credibility" value={s.credibility == null ? "–" : <>{s.credibility}<span className="text-sm font-medium text-muted-foreground"> /100</span></>} tone={s.credibility == null ? undefined : s.credibility >= 80 ? "good" : s.credibility >= 60 ? "warn" : "bad"} />
-            <Tile star label="Followers" value={compact(profile.identity.followers)} sub={profile.identity.posts != null ? `${compact(profile.identity.posts)} ${yt ? "videos" : "posts"}` : undefined} />
-          </TileGrid>
-        ))}
+        {section("signals", 0, (() => {
+          // Andrew, 23 Nov: "all cluttered". The four numbers a brand decides on, large, in one row;
+          // everything else as a plain two-column list underneath. Only what the index sent is shown,
+          // so a small channel gets a short, tidy section instead of a grid with holes in it.
+          const tone = (t?: "good" | "warn" | "bad") => (t === "good" ? "text-emerald-600 dark:text-emerald-400" : t === "warn" ? "text-[#b36b00]" : t === "bad" ? "text-destructive" : "text-foreground");
+          const fresh = !s.lastPostAt ? undefined : Date.now() - Date.parse(s.lastPostAt) < 30 * 86_400_000 ? "good" : "warn";
+          const engBasis = cardEngagement != null ? "per follower" : /view/i.test(s.engagementBasis) ? "per view" : "per follower";
+          const head = ([
+            [`${yt ? "Subscribers" : "Followers"}`, profile.identity.followers != null ? compact(profile.identity.followers) : null, profile.identity.posts != null ? `${compact(profile.identity.posts)} ${yt ? "videos" : "posts"}` : "", undefined],
+            ["Real reach", s.realReach != null ? compact(s.realReach) : null, s.realPct != null ? `${pctText(s.realPct)} are real people` : "", undefined],
+            ["Audience credibility", s.credibility != null ? <>{s.credibility}<span className="text-base font-medium text-muted-foreground">/100</span></> : null, credLabel, s.credibility == null ? undefined : s.credibility >= 80 ? "good" : s.credibility >= 60 ? "warn" : "bad"],
+            ["Engagement", engagement != null ? pctText(engagement, 2) : null, engBasis, engagement == null ? undefined : engagement >= 3 ? "good" : engagement >= 1 ? undefined : "warn"],
+          ] as [string, ReactNode, string, "good" | "warn" | "bad" | undefined][]).filter(([, v]) => v != null);
+          const daysAgo = last ? (last.value === "Today" ? "Today" : `${last.value} ago`) : null;
+          const rows = ([
+            ["Last post", daysAgo, fresh],
+            ["Posts", s.postsPerWeek != null ? `${s.postsPerWeek} a week` : null],
+            ["Followers, last 6 months", s.growth6m != null ? `${s.growth6m > 0 ? "+" : ""}${s.growth6m.toFixed(1)}%` : null],
+            ["Likes on a typical post", profile.content?.likesMedian != null ? `${compact(profile.content.likesMedian)}${profile.content.commentsMedian != null ? ` · ${compact(profile.content.commentsMedian)} comments` : ""}` : null],
+            ["Top audience country", s.topCountry ? `${s.topCountry.name} ${pctText(s.topCountry.pct)}` : null],
+            ["Audience", s.femalePct != null ? `${100 - Math.round(s.femalePct)}% men · ${Math.round(s.femalePct)}% women` : null],
+            ["Creator type", profile.identity.creatorType ? [profile.identity.creatorType, profile.identity.category].filter(Boolean).join(" · ") : null],
+          ] as [string, string | null, ("good" | "warn")?][]).filter(([, v]) => v);
+          return (
+            <div className="flex flex-col gap-5" data-testid="signals">
+              {head.length > 0 && (
+                <div className="flex flex-wrap overflow-hidden rounded-2xl border border-border bg-[#f6f6fe] dark:bg-[#11163a]">
+                  {head.map(([label, value, sub, t]) => (
+                    <div key={label} className="min-w-0 basis-1/2 border-border px-4 py-4 sm:flex-1 sm:basis-0 sm:border-l sm:first:border-l-0 sm:px-5 [&:nth-child(n+3)]:border-t sm:[&:nth-child(n+3)]:border-t-0">
+                      <div className="text-xs font-medium text-[#4f46e5] dark:text-[#a5b4fc]">{label}</div>
+                      <div className={`mt-1 text-[1.75rem] font-semibold leading-tight tabular-nums tracking-tight ${tone(t)}`}>{value}</div>
+                      {sub && <div className="mt-0.5 text-xs text-muted-foreground">{sub}</div>}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {rows.length > 0 && (
+                <dl className="grid gap-x-10 md:grid-cols-2">
+                  {rows.map(([label, value, t]) => (
+                    <div key={label} className="flex items-baseline justify-between gap-4 border-b border-border py-2.5 text-sm">
+                      <dt className="text-muted-foreground">{label}</dt>
+                      <dd className={`text-right font-semibold tabular-nums ${tone(t)}`}>{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+            </div>
+          );
+        })())}
 
         {section("quality", 1, aud ? (
           <div className="flex flex-col gap-8">
