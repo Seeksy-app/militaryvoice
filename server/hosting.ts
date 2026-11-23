@@ -601,7 +601,7 @@ Notes: plain text only (no HTML, no markdown symbols). A short opening paragraph
   const client = new Anthropic();
   const r = await client.messages.create({
     model: "claude-sonnet-5",
-    max_tokens: 1200,
+    max_tokens: 2500,
     system: `You write the title and show notes for one podcast episode on MilitaryVoices.ai, a platform for military and veteran creators. Work only from the transcript.
 ${shape}
 Invent nothing: no names, ranks, branches, numbers, dates or links that are not in the transcript (the host's name may come from the examples). If a speaker is not named, do not name them. Easy to read. No em dashes. No hype words like "journey", "delve" or "unlock". No episode number in the title.
@@ -609,6 +609,7 @@ Return JSON only: {"title":"","description":""}`,
     messages: [{ role: "user", content: `Show: ${show.title}${examples.map((x, i) => `\n\nPast episode ${i + 1}\nTitle: ${x.title}\nNotes:\n${x.notes}`).join("")}\n\nCurrent title (may just be a file name): ${currentTitle}\n\nTranscript:\n${text}` }],
   });
   const out = r.content.map((c) => ("text" in c ? c.text : "")).join("");
+  if (out.indexOf("{") < 0) throw new Error(`no JSON (stop: ${r.stop_reason}): ${out.slice(0, 200)}`);
   const json = JSON.parse(out.slice(out.indexOf("{"), out.lastIndexOf("}") + 1)) as { title?: unknown; description?: unknown };
   const title = String(json.title ?? "").replace(/^["']|["']$/g, "").trim().slice(0, 120);
   const description = String(json.description ?? "").replace(/<[^>]*>/g, "").trim().slice(0, 4000);
@@ -627,7 +628,7 @@ const madeUpTitle = (t: string, recTitle = "") => !t.trim() || t.trim() === recT
  * wrote is filled: a typed title or typed notes stay. Runs from the 5-minute cron.
  */
 export async function autoWriteSweep(limit = 3): Promise<number> {
-  const rows = await db.select().from(hostedEpisodes).where(and(eq(hostedEpisodes.status, "draft"), eq(hostedEpisodes.audioJob, ""), sql`(${hostedEpisodes.autoWrite} = 'queued' or (${hostedEpisodes.autoWrite} = '' and ${hostedEpisodes.createdAt} >= ${AUTO_WRITE_SINCE}))`, sql`(${hostedEpisodes.audioKey} <> '' or ${hostedEpisodes.audioUrl} <> '')`)).orderBy(desc(hostedEpisodes.id)).limit(20);
+  const rows = await db.select().from(hostedEpisodes).where(and(eq(hostedEpisodes.status, "draft"), eq(hostedEpisodes.audioJob, ""), sql`(${hostedEpisodes.autoWrite} in ('queued', 'retry') or (${hostedEpisodes.autoWrite} = '' and ${hostedEpisodes.createdAt} >= ${AUTO_WRITE_SINCE}))`, sql`(${hostedEpisodes.audioKey} <> '' or ${hostedEpisodes.audioUrl} <> '')`)).orderBy(desc(hostedEpisodes.id)).limit(20);
   let done = 0;
   for (const e of rows) {
     if (done >= limit) break;
@@ -656,6 +657,8 @@ export async function autoWriteSweep(limit = 3): Promise<number> {
       done++;
     } catch (err) {
       console.error("Auto-write failed:", e.id, (err as Error).message);
+      // One more go on the next run, then leave it for "Write it for me".
+      await db.update(hostedEpisodes).set({ autoWrite: e.autoWrite === "retry" ? "failed" : "retry" }).where(eq(hostedEpisodes.id, e.id));
     }
   }
   return done;

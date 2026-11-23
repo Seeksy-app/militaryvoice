@@ -268,7 +268,7 @@ export function PodcastHosting() {
 
       {s.newFeedUrl && (
         <div className="rounded-2xl border border-destructive/40 bg-destructive/[0.05] p-4 text-sm" data-testid="hosting-leaving">
-          <span className="font-semibold">This show is moving to another host.</span> <span>The feed forwards apps to <span className="break-all font-mono text-xs">{s.newFeedUrl}</span>. <button type="button" onClick={() => go("move")} className="font-semibold text-primary hover:underline">Stop the move under Settings → Move</button>.</span>
+          <span className="font-semibold">This show is moving to another host.</span> <span>The feed forwards apps to <span className="break-all font-mono text-xs">{s.newFeedUrl}</span>. <button type="button" onClick={() => go("move")} className="font-semibold text-primary hover:underline">Stop the move under Settings → Redirect</button>.</span>
         </div>
       )}
 
@@ -327,13 +327,13 @@ export function PodcastHosting() {
       {/* Settings in plain words, one tab each (Andrew, 23 Nov: "Yes, build it"). */}
       {inSettings && (
         <div className="-mt-1 flex gap-5 overflow-x-auto whitespace-nowrap border-b border-border [scrollbar-width:none]" role="tablist" data-testid="hosting-settings-nav">
-          {([["publishing", "Publishing"], ["details", "Show details"], ["sponsors", "Sponsors"], ["move", "Move"]] as const).map(([k, l]) => (
+          {([["publishing", "Publishing"], ["details", "Show details"], ["sponsors", "Sponsors"], ["move", "Redirect"]] as const).map(([k, l]) => (
             <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => go(k)} className={`border-b-2 px-0.5 pb-2 text-sm font-medium transition-colors ${tab === k ? "border-[#053877] font-semibold text-[#053877] dark:border-[#8fb5e8] dark:text-[#8fb5e8]" : "border-transparent text-muted-foreground hover:text-foreground"}`} data-testid={`hosting-settings-${k}`}>{l}</button>
           ))}
         </div>
       )}
       {tab === "publishing" && <PublishingPanel key={s.id} h={h} youtubeReady={!!q.data?.youtubeReady} onSaved={refresh} />}
-      {tab === "move" && <MoveHost show={s} feedUrl={h.feedUrl} onSaved={refresh} />}
+      {tab === "move" && <><MoveHost show={s} feedUrl={h.feedUrl} onSaved={refresh} /><DeleteShow show={s} onDeleted={() => { setOpenId(null); refresh(); }} /></>}
       {tab === "sponsors" && <SponsorsPanel key={`${s.id}-${spotFor ?? 0}`} h={h} onSaved={refresh} preset={spotFor} onPresetUsed={() => setSpotFor(null)} />}
 
       {tab === "directories" && (
@@ -366,7 +366,7 @@ export function PodcastHosting() {
       {tab === "guests" && <GuestFinder showTitle={s.title} onInvite={takeInvite} />}
       {tab === "pitch" && <ShowFinder topics={[s.category, s.subcategory].filter(Boolean) as string[]} />}
 
-      {tab === "details" && <ShowForm key={s.id} show={s} onMove={() => go("move")} focus={focus} categories={q.data?.categories ?? {}} onSaved={() => { refresh(); setFocus(""); }} onDeleted={() => { setOpenId(null); refresh(); }} />}
+      {tab === "details" && <ShowForm key={s.id} show={s} focus={focus} categories={q.data?.categories ?? {}} onSaved={() => { refresh(); setFocus(""); }} />}
 
       {addShowDialog}
     </section>
@@ -896,16 +896,8 @@ function ArtworkButton({ show, onDone }: { show: HostedShowRow; onDone: () => vo
   );
 }
 
-function ShowForm({ show, onMove, categories, onSaved, onDeleted, focus = "" }: { show: HostedShowRow; onMove: () => void; categories: Record<string, string[]>; onSaved: () => void; onDeleted: () => void; focus?: string }) {
+function ShowForm({ show, categories, onSaved, focus = "" }: { show: HostedShowRow; categories: Record<string, string[]>; onSaved: () => void; focus?: string }) {
   const { toast } = useToast();
-  // Deleting: they type the show's name to be sure.
-  const [deleting, setDeleting] = useState(false);
-  const [sure, setSure] = useState("");
-  const del = useMutation({
-    mutationFn: async () => (await apiRequest("DELETE", `/api/host/hosting/shows/${show.id}`, { confirm: sure })).json(),
-    onSuccess: () => { setDeleting(false); setSure(""); onDeleted(); toast({ title: "Show deleted", description: "Its feed has stopped. Put it back from Recently deleted within 15 days." }); },
-    onError: (e: Error) => toast({ title: "Not deleted", description: e.message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, ""), variant: "destructive" }),
-  });
   const [f, setF] = useState<Partial<HostedShowRow>>({});
   const v = { ...show, ...f };
   const set = (k: keyof HostedShowRow, val: unknown) => setF((x) => ({ ...x, [k]: val }));
@@ -916,7 +908,6 @@ function ShowForm({ show, onMove, categories, onSaved, onDeleted, focus = "" }: 
   });
   const label = "block text-xs font-semibold text-muted-foreground";
   const dirty = Object.keys(f).length > 0;
-  const toMove = () => { setDeleting(false); setSure(""); onMove(); };
   return (
     <div className="space-y-4" data-testid="hosting-details">
       <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
@@ -934,6 +925,10 @@ function ShowForm({ show, onMove, categories, onSaved, onDeleted, focus = "" }: 
         <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-2">
           <label className={`${label} sm:col-span-2`}>Show name<Input autoFocus={focus === "title"} value={v.title} onChange={(e) => set("title", e.target.value)} className="mt-1" /></label>
           <label className={`${label} sm:col-span-2`}>Description<Textarea autoFocus={focus === "description"} value={v.description} onChange={(e) => set("description", e.target.value)} rows={4} className="mt-1" placeholder="What the show is about, who it's for, and who hosts it." /></label>
+          <label className={`${label} sm:col-span-2`}>Under every episode (your sign-off)
+            <Textarea value={v.episodeFooter ?? ""} onChange={(e) => set("episodeFooter", e.target.value)} rows={5} className="mt-1 font-normal text-foreground" placeholder={"Your name and title\nYour website and social links\nYour email"} data-testid="hosting-signoff" />
+            <span className="mt-1 block font-normal">Added at the end of every episode's notes on Apple, Spotify and YouTube: who you are, your links, how to reach&nbsp;you.</span>
+          </label>
           <label className={label}>Host or author<Input value={v.author} onChange={(e) => set("author", e.target.value)} className="mt-1" /></label>
           <label className={label}>Owner email<Input autoFocus={focus === "ownerEmail"} type="email" value={v.ownerEmail} onChange={(e) => set("ownerEmail", e.target.value)} className="mt-1" /></label>
           <label className={label}>Category
@@ -959,27 +954,46 @@ function ShowForm({ show, onMove, categories, onSaved, onDeleted, focus = "" }: 
           <Button onClick={() => save.mutate()} disabled={save.isPending || !dirty} className="bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-details-save">{save.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Save"}</Button>
         </div>
       </div>
-      {/* Deleting the show: the apps first (the help says how), then here; its feed stops. Moving hosts is the Move tab. */}
-      <div className="rounded-2xl border border-destructive/30 p-4">
-        {deleting ? (
-          <div className="space-y-2">
+    </div>
+  );
+}
+
+/**
+ * Deleting the show, at the bottom of Settings → Redirect (Andrew, 23 Nov): a pop-up that says what goes and points to
+ * moving first. It goes to Recently deleted for 15 days, so it can be put back.
+ */
+function DeleteShow({ show, onDeleted }: { show: HostedShowRow; onDeleted: () => void }) {
+  const { toast } = useToast();
+  const [open, setOpen] = useState(false);
+  const [sure, setSure] = useState("");
+  const del = useMutation({
+    mutationFn: async () => (await apiRequest("DELETE", `/api/host/hosting/shows/${show.id}`, { confirm: sure })).json(),
+    onSuccess: () => { setOpen(false); setSure(""); onDeleted(); toast({ title: "Show deleted", description: "Its feed has stopped. Put it back from Recently deleted within 15 days." }); },
+    onError: (e: Error) => toast({ title: "Not deleted", description: e.message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, ""), variant: "destructive" }),
+  });
+  const close = () => { setOpen(false); setSure(""); };
+  return (
+    <div className="mt-6 flex justify-center" data-testid="hosting-delete-area">
+      <button type="button" onClick={() => setOpen(true)} className="text-sm font-semibold text-destructive hover:underline" data-testid="hosting-delete">Delete this show…</button>
+      <Dialog open={open} onOpenChange={(o) => (o ? setOpen(true) : close())}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Delete {show.title}?</DialogTitle>
+            <DialogDescription>Are you sure? All of your episodes will be deleted, and your feed stops, so Apple, Spotify and the other apps lose the&nbsp;show.</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-3 text-sm">
             {show.newFeedUrl
-              ? <p className="rounded-lg bg-muted/60 px-3 py-2 text-sm"><b>Your move is on.</b> Deleting stops the forward, so any app that hasn't followed yet loses the show. Wait until Apple and Spotify show your new&nbsp;host.</p>
-              : <p className="rounded-lg bg-muted/60 px-3 py-2 text-sm"><b>Moving to another host?</b> Don't delete: use <button type="button" onClick={toMove} className="font-semibold text-primary hover:underline">Move to another host</button> instead. Deleting stops the feed, and your subscribers lose the&nbsp;show.</p>}
-            <p className="text-sm">This deletes <b>{show.title}</b> and its episodes, and its feed stops. If it's in Apple or Spotify, <a href="/help/podcast#unlist" target="_blank" rel="noreferrer" className="font-semibold text-primary hover:underline">take it down there first</a>. You can put it back from Recently deleted for 15 days. Type the show's name to delete it.</p>
+              ? <p className="rounded-lg bg-muted/60 px-3 py-2"><b>Your move is on.</b> Deleting stops the forward, so any app that hasn't followed yet loses the show. Wait until Apple and Spotify show your new&nbsp;host.</p>
+              : <p className="rounded-lg bg-muted/60 px-3 py-2"><b>Moving to a new host?</b> Do that first with the steps above: they copy every episode over and your subscribers come with you. Download your stats there too.</p>}
+            <p>We keep it in Recently deleted for 15 days, in case you change your mind. Type the show's name to delete&nbsp;it.</p>
             <Input value={sure} onChange={(e) => setSure(e.target.value)} placeholder={show.title} data-testid="hosting-delete-confirm" />
-            <div className="flex gap-2">
-              <Button onClick={() => del.mutate()} disabled={del.isPending || sure.trim().toLowerCase() !== show.title.trim().toLowerCase()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90" data-testid="hosting-delete-go">{del.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Delete this show</Button>
-              <Button variant="outline" onClick={() => { setDeleting(false); setSure(""); }}>Keep it</Button>
-            </div>
           </div>
-        ) : (
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
-            <button type="button" onClick={() => setDeleting(true)} className="text-sm font-semibold text-destructive hover:underline" data-testid="hosting-delete">Delete this show…</button>
-            <span className="text-xs text-muted-foreground">{show.newFeedUrl ? <>Keep it until the apps follow your&nbsp;move.</> : <>Moving hosts? <button type="button" onClick={toMove} className="font-semibold text-primary hover:underline">Move&nbsp;to&nbsp;another&nbsp;host</button> keeps your&nbsp;subscribers.</>}</span>
-          </div>
-        )}
-      </div>
+          <DialogFooter className="gap-2">
+            <Button variant="outline" onClick={close}>Keep it</Button>
+            <Button onClick={() => del.mutate()} disabled={del.isPending || sure.trim().toLowerCase() !== show.title.trim().toLowerCase()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90" data-testid="hosting-delete-go">{del.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Delete this show</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
@@ -1156,7 +1170,7 @@ function EpisodePage({ ep, show, youtubeReady, production, onDirectories, onBack
   const notesPlain = ep.notesFormat === "html" ? htmlToText(ep.description) : ep.description;
   const hasAudio = !!(ep.audioKey || ep.audioUrl);
   // A new draft's title and notes are written for them (server: autoWriteSweep); until then the notes box says so, and the page checks back.
-  const autoPending = ep.status === "draft" && hasAudio && !notesPlain.trim() && (ep.autoWrite === "queued" || (ep.autoWrite === "" && ep.createdAt >= "2026-11-23T00:00:00.000Z"));
+  const autoPending = ep.status === "draft" && hasAudio && !notesPlain.trim() && (ep.autoWrite === "queued" || ep.autoWrite === "retry" || (ep.autoWrite === "" && ep.createdAt >= "2026-11-23T00:00:00.000Z"));
   useEffect(() => {
     if (!autoPending) return;
     const t = setInterval(onSaved, 20_000);
