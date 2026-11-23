@@ -29,7 +29,8 @@ export function registerLayoutDefault(app: Express, requireHostSession: RequestH
   app.put("/api/host/clip-layout-default", requireHostSession, async (req, res) => {
     const raw = String(req.body?.clipLayoutDefault ?? "").trim();
     const layout = (raw === "" ? "auto" : raw) as LayoutDefault;
-    if (!VALID.includes(layout)) return res.status(400).json({ message: "Pick Stacked, Side by side, Follow the speaker or Automatic." });
+    // Side by side went away as a choice on 23 Nov 2026 (a saved one reads as Stacked).
+    if (!VALID.includes(layout) || layout === "side") return res.status(400).json({ message: "Pick Stacked or Follow the speaker." });
     await storage.setSetting(key(getSessionEmail(req) ?? ""), layout);
     res.json(shape(layout));
   });
