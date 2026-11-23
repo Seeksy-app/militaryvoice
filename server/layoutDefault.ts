@@ -15,7 +15,8 @@ const key = (email: string) => `clip-layout-default:${email.trim().toLowerCase()
 export async function getLayoutDefault(email: string): Promise<LayoutDefault> {
   if (!email) return "auto";
   const v = ((await storage.getSetting(key(email)).catch(() => null)) ?? "").trim() as LayoutDefault;
-  return VALID.includes(v) ? v : "auto";
+  // Side by side is gone as a default (23 Nov 2026): one saved before reads as Stacked.
+  return v === "side" ? "stacked" : VALID.includes(v) ? v : "auto";
 }
 
 export function registerLayoutDefault(app: Express, requireHostSession: RequestHandler): void {

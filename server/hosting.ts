@@ -1507,7 +1507,13 @@ Return JSON only: {"titles":["","",""],"description":""}`,
       return res.json(cleared);
     }
     const readyToGo = !!(e.audioKey || e.audioUrl) && !e.audioJob;
-    const autoGo = stageIn === "final" && e.status === "draft" && readyToGo && !publish && !!(await ownShow(email, e.showId))?.autoPublish;
+    const autoShow = stageIn === "final" && e.status === "draft" && readyToGo && !publish ? await ownShow(email, e.showId) : null;
+    const autoGo = !!autoShow?.autoPublish;
+    // Publishing means everywhere at once (Andrew, 23 Nov 2026: Publishing mockup, "Yes, build both"): a show set to post to
+    // YouTube "always" sends it there too, when the channel is connected and the episode has video. An "ask" show is left
+    // as it was: nothing goes to YouTube it didn't tick. Already on YouTube (from the Library, or before): not again.
+    const autoYouTube = autoGo && autoShow?.youtubeMode === "always" && hasVideo(e) && !/"state":"(sent|done|working)"/.test(e.youtube || "")
+      && await storage.getProfileByEmail(email).then((p) => !!p?.uploadPostUsername && /youtube/i.test(p.socialAccounts ?? "")).catch(() => false);
     const at = typeof b.publishedAt === "string" && !Number.isNaN(Date.parse(b.publishedAt)) ? new Date(b.publishedAt).toISOString() : undefined;
     const [out] = await db.update(hostedEpisodes).set({
       ...(typeof b.title === "string" ? { title: b.title.slice(0, 300) } : {}),
@@ -1528,7 +1534,7 @@ Return JSON only: {"titles":["","",""],"description":""}`,
       ...(["full", "trailer", "bonus"].includes(b.episodeType) ? { episodeType: b.episodeType } : {}),
       ...(typeof b.explicit === "boolean" ? { explicit: b.explicit } : {}),
       ...(stageIn ? { stage: stageIn } : {}),
-      ...(autoGo ? { status: "published", publishedAt: now(), youtubeWanted: false } : {}),
+      ...(autoGo ? { status: "published", publishedAt: now(), youtubeWanted: autoYouTube } : {}),
       ...(publish ? { status: "published", publishedAt: at ?? (e.publishedAt || now()) } : b.status === "draft" ? { status: "draft" } : {}),
       ...(makeAudio ? { audioJob: "queued", audioJobAt: now(), audioError: "" } : {}),
       ...(!publish && at ? { publishedAt: at } : {}),

@@ -1593,9 +1593,14 @@ export async function framingFor(job: Job, source: string, m: Moment, within: Li
   let layout = job.options?.layout ?? "auto";
   // The podcaster's account-wide default, for a recording with no layout of its own and nothing chosen on screen: used only when two people
   // are really on screen, so a solo episode is never cut in half by a default meant for two.
-  if (layout === "auto" && job.layoutDefault && job.layoutDefault !== "auto" && (await twoPeopleAt(source, m.startSec))) {
-    layout = job.layoutDefault;
-    console.log(`[${job.recordingId}]   two people on screen: using the podcaster's default (${layout})`);
+  // Nothing chosen and two people really on screen (Radio tiles, or two equal panels: a Zoom gallery of two filling 16:9 too):
+  // vertical and square clips stack them (PM for Andrew, 23 Nov 2026). Their saved default still wins; a saved "side" is
+  // Stacked now. Can't tell: Automatic as before, so a solo show is never cut in half. Wide clips use the whole picture
+  // whatever this says, and the full episode never comes through here.
+  if (layout === "auto" && (await twoPeopleAt(source, m.startSec))) {
+    const def = job.layoutDefault === "side" ? "stacked" : job.layoutDefault;
+    layout = def && def !== "auto" ? def : "stacked";
+    console.log(`[${job.recordingId}]   two people on screen: ${def && def !== "auto" ? `the podcaster's default (${layout})` : "stacked"}`);
   }
   // Chosen by the person: the whole picture, both people in it, over a blurred copy of itself. No stack, no following.
   if (layout === "side") {
