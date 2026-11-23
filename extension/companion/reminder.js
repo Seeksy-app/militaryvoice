@@ -1,9 +1,11 @@
 // MilitaryVoices Zoom Reminder.
 // When a Zoom meeting page opens, show one small card: "Is cloud recording on?"
-// It reads nothing from the page and sends nothing anywhere. The only thing it
-// remembers (in this browser) is when you last said "It's on".
+// It reads nothing from the page and sends nothing anywhere. All it remembers (in this browser only) is when you last
+// said "It's on", and whether you said "Don't ask again" (Andrew, 23 Nov: "if he doesn't want to be asked, he can say,
+// 'Don't ask anymore.'"). The popup's footer turns it back on.
 (function () {
   const KEY = "mvCloudRecordingOk";
+  const NEVER = "mvZoomNever";
   const SNOOZE_MS = 6 * 60 * 60 * 1000; // after "It's on", stay quiet for six hours
   const SETTINGS = "https://zoom.us/profile/setting?tab=recording";
 
@@ -19,7 +21,9 @@
         .eyebrow{font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:#f0a71f;font-weight:700;margin:0 0 6px}
         h2{font-size:17px;margin:0 0 6px;font-weight:700}
         p{margin:0 0 12px;color:#dbe4f5}
-        .row{display:flex;gap:8px;flex-wrap:wrap}
+        .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+        .never{margin-left:auto;background:none;color:#9fb0d0;font-weight:500;font-size:12px;padding:4px 2px;text-decoration:underline;text-underline-offset:2px}
+        .never:hover{color:#fff}
         button,a.btn{font:inherit;font-weight:600;font-size:13px;border-radius:999px;padding:8px 16px;cursor:pointer;text-decoration:none;border:0}
         .go{background:#f0a71f;color:#1a1200}
         .ok{background:rgba(255,255,255,.14);color:#fff}
@@ -34,11 +38,16 @@
         <div class="row">
           <a class="btn go" href="${SETTINGS}" target="_blank" rel="noopener">Check my Zoom setting</a>
           <button class="ok">It's on</button>
+          <button class="never">Don't ask again</button>
         </div>
       </div>`;
     root.querySelector(".x").addEventListener("click", () => host.remove());
     root.querySelector(".ok").addEventListener("click", () => {
       try { chrome.storage.local.set({ [KEY]: Date.now() }); } catch (e) { /* storage unavailable: it will show next time */ }
+      host.remove();
+    });
+    root.querySelector(".never").addEventListener("click", () => {
+      try { chrome.storage.local.set({ [NEVER]: true }); } catch (e) { /* storage unavailable */ }
       host.remove();
     });
     (document.body || document.documentElement).appendChild(host);
@@ -47,7 +56,8 @@
   }
 
   try {
-    chrome.storage.local.get(KEY, (v) => {
+    chrome.storage.local.get([KEY, NEVER], (v) => {
+      if (v && v[NEVER]) return;
       const last = v && v[KEY];
       if (!last || Date.now() - last > SNOOZE_MS) show();
     });

@@ -35,7 +35,7 @@ async function senderSlug(email: string): Promise<string> {
 
 const etLabel = (ms: number) => new Date(ms).toLocaleString("en-US", { timeZone: "America/New_York", weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
 /** This host's coming live shows on MilitaryVoices Radio (as the booker or the co-host): where a guest can be invited into the booth. */
-async function boothBookings(owner: string) {
+export async function boothBookings(owner: string) {
   const out: { id: number; show: string; startMs: number; endMs: number }[] = [];
   for (const eventId of await dxEventIds()) {
     const ev = await storage.getEventById(eventId);

@@ -7,9 +7,124 @@
 import crypto from "node:crypto";
 import type { Express } from "express";
 import Anthropic from "@anthropic-ai/sdk";
-import { storage } from "./storage.js";
+import { sql } from "drizzle-orm";
+import { db, storage } from "./storage.js";
 import type { NextFunction, Request, Response } from "express";
 import { getAdminEmail, getSessionEmail, requireHostSession } from "./session.js";
+import { boothBookings } from "./guestInvites.js";
+import { myDiscoveryPeek } from "./discovery.js";
+import { hostedAsStats } from "./hosting.js";
+import { parseSocialAccounts } from "./uploadPost.js";
+import type { PodcastStatsData } from "../shared/schema.js";
+
+const SITE = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
+const DAY = 86_400_000;
+const rowsOf = (r: unknown) => ((r as { rows?: Record<string, unknown>[] }).rows ?? (r as Record<string, unknown>[]));
+const dayKey = (ms: number) => new Date(ms).toISOString().slice(0, 10);
+
+/** Their next show: a Radio slot they booked (or co-host), or an interview time they set when inviting a guest. */
+async function nextShow(email: string, show: string) {
+  type Next = { kind: "radio" | "studio" | "zoom" | "other"; title: string; where: string; guest: string; startAt: string; endAt: string; go: string };
+  const out: Next[] = [];
+  for (const b of await boothBookings(email).catch(() => [])) {
+    out.push({ kind: "radio", title: b.show || show || "Your Radio show", where: "MilitaryVoices Radio", guest: "", startAt: new Date(b.startMs).toISOString(), endAt: new Date(b.endMs).toISOString(), go: `${SITE}/booth/${b.id}` });
+  }
+  const invites = rowsOf(await db.execute(sql`select guest_name, when_iso, zoom_link, link_later from guest_invites where owner_email=${email} and when_iso <> '' and status <> 'cancelled' order by when_iso limit 50`).catch(() => []));
+  for (const r of invites) {
+    const start = Date.parse(String(r.when_iso));
+    if (!Number.isFinite(start)) continue;
+    const link = String(r.zoom_link ?? "");
+    const guest = String(r.guest_name ?? "");
+    const atRadio = out.find((x) => x.kind === "radio" && Math.abs(Date.parse(x.startAt) - start) < 30 * 60_000);
+    // A guest invited into a Radio booth: that slot gains the guest's name rather than becoming a second show.
+    if (atRadio || /\/booth\//.test(link)) { if (atRadio && !atRadio.guest) atRadio.guest = guest; continue; }
+    const studio = /\/my-studio\b/.test(link);
+    const zoom = /^https:\/\/([a-z0-9-]+\.)?zoom\.(us|com)\//i.test(link);
+    out.push({
+      kind: studio ? "studio" : zoom ? "zoom" : "other",
+      title: show || "Your show", where: studio ? "Your Studio" : zoom ? "Zoom" : "Interview", guest,
+      startAt: new Date(start).toISOString(), endAt: new Date(start + 60 * 60_000).toISOString(),
+      go: studio ? `${SITE}/my-studio` : zoom ? link : `${SITE}/host/dashboard/podcast`,
+    });
+  }
+  return out.filter((x) => Date.parse(x.endAt) > Date.now()).sort((a, b) => Date.parse(a.startAt) - Date.parse(b.startAt))[0] ?? null;
+}
+
+/** Downloads per day across every source we hold (hosted here, and the saved copy of a connected host; never a fresh fetch). */
+async function downloads(email: string) {
+  const sources: PodcastStatsData[] = [];
+  for (const h of await hostedAsStats(email).catch(() => [])) sources.push(h.data);
+  for (const r of await storage.listPodcastStats(email).catch(() => [])) {
+    try { const d = r.data ? (JSON.parse(r.data) as PodcastStatsData) : null; if (d && r.status === "ok") sources.push(d); } catch { /* unreadable */ }
+  }
+  const counted = sources.filter((d) => d.unit === "downloads" && d.series?.some((p) => p.date.length === 10));
+  if (!counted.length) return null;
+  const perDay = new Map<string, number>();
+  for (const d of counted) for (const p of d.series ?? []) if (p.date.length === 10) perDay.set(p.date, (perDay.get(p.date) ?? 0) + (Number(p.count) || 0));
+  const today = Date.now();
+  const days = Array.from({ length: 14 }, (_, i) => dayKey(today - (13 - i) * DAY));
+  const vals = days.map((k) => perDay.get(k) ?? 0);
+  const week = vals.slice(7).reduce((a, b) => a + b, 0);
+  const prev = vals.slice(0, 7).reduce((a, b) => a + b, 0);
+  return { week, prev, trend: vals.slice(7), days: days.slice(7) };
+}
+
+/**
+ * Followers across their connected accounts (the totals saved when they last synced). The platforms give a running total,
+ * not a history, so one number a day is kept here to say how many are new this week.
+ */
+async function followers(email: string, socialJson: string | null | undefined) {
+  const accounts = parseSocialAccounts(socialJson).filter((a) => typeof a.followers === "number");
+  if (!accounts.length) return null;
+  const total = accounts.reduce((n, a) => n + (a.followers ?? 0), 0);
+  const key = `ext-followers:${email}`;
+  let hist: Record<string, number> = {};
+  try { hist = JSON.parse((await storage.getSetting(key)) ?? "{}") || {}; } catch { hist = {}; }
+  const today = dayKey(Date.now());
+  if (hist[today] !== total) {
+    hist[today] = total;
+    const keep = Object.keys(hist).sort().slice(-30);
+    await storage.setSetting(key, JSON.stringify(Object.fromEntries(keep.map((k) => [k, hist[k]])))).catch(() => {});
+  }
+  const weekAgo = dayKey(Date.now() - 7 * DAY);
+  const base = Object.keys(hist).sort().filter((k) => k <= weekAgo).pop();
+  return { total, accounts: accounts.length, newThisWeek: base ? total - hist[base] : null };
+}
+
+/** What's happened in the last week that wants them: finished clips, a published episode, a guest asking to come on, a question to answer. */
+async function whatsNew(email: string) {
+  type Item = { kind: "clips" | "episode" | "guest" | "question" | "answered"; title: string; sub: string; at: string; url: string };
+  const since = Date.now() - 7 * DAY;
+  const items: Item[] = [];
+  const recent = (iso: unknown) => { const t = Date.parse(String(iso ?? "")); return Number.isFinite(t) && t >= since; };
+  for (const r of rowsOf(await db.execute(sql`select id, title, clip_progress from recordings where lower(email)=${email} and clip_status='done' and clip_progress <> '' order by id desc limit 20`).catch(() => []))) {
+    let p: { at?: string; finished?: number } = {};
+    try { p = JSON.parse(String(r.clip_progress)); } catch { continue; }
+    if (!recent(p.at)) continue;
+    const n = Number(p.finished) || 0;
+    items.push({ kind: "clips", title: n ? `${n} clips are ready` : "Your clips are ready", sub: `From ${String(r.title || "your episode")}`, at: String(p.at), url: `${SITE}/host/dashboard/postify?rec=${r.id}` });
+  }
+  for (const r of rowsOf(await db.execute(sql`select e.title, e.published_at, s.title as show from hosted_episodes e join hosted_shows s on s.id = e.show_id where lower(s.email)=${email} and e.status='published' and e.published_at <> '' order by e.published_at desc limit 5`).catch(() => []))) {
+    if (!recent(r.published_at) || Date.parse(String(r.published_at)) > Date.now()) continue;
+    items.push({ kind: "episode", title: `Published: ${String(r.title || "a new episode")}`, sub: String(r.show || "Your show"), at: String(r.published_at), url: `${SITE}/host/dashboard/podcast` });
+  }
+  for (const r of rowsOf(await db.execute(sql`select name, question, episode, created_at from listener_questions where lower(email)=${email} and status='new' order by id desc limit 10`).catch(() => []))) {
+    if (!recent(r.created_at)) continue;
+    const guest = String(r.episode) === "Be a guest";
+    const who = String(r.name || "").trim();
+    items.push({
+      kind: guest ? "guest" : "question",
+      title: guest ? `New guest request${who ? `: ${who}` : ""}` : `A question to answer${who ? ` from ${who}` : ""}`,
+      sub: String(r.question || "").replace(/\s+/g, " ").slice(0, 90),
+      at: String(r.created_at), url: `${SITE}/host/dashboard/page`,
+    });
+  }
+  for (const r of rowsOf(await db.execute(sql`select guest_name, answered_at from guest_invites where owner_email=${email} and status='answered' and answered_at <> '' order by answered_at desc limit 5`).catch(() => []))) {
+    if (!recent(r.answered_at)) continue;
+    items.push({ kind: "answered", title: `${String(r.guest_name || "Your guest")} answered your questions`, sub: "Their bio, topics and photo are in", at: String(r.answered_at), url: `${SITE}/host/dashboard/podcast` });
+  }
+  return items.sort((a, b) => Date.parse(b.at) - Date.parse(a.at)).slice(0, 4);
+}
 
 type Capture = { id: string; name: string; title: string; org: string; photoUrl: string; bio: string; url: string; savedAt: string };
 
@@ -58,6 +173,31 @@ export function registerExtensionApi(app: Express): void {
     const email = who(req);
     const profile = await storage.getProfileByEmail(email).catch(() => undefined);
     res.json({ email, show: profile?.podcastName ?? "", name: profile?.hostName ?? "", saved: (await readCaptures(email)).length });
+  });
+
+  /**
+   * The popup (Andrew, 23 Nov, mockup approved): Today, Your numbers, What's new, in one read. It never calls a third party:
+   * Discovery is the saved 30-day row (no Influencers Club read), followers are the totals saved at their last sync, and
+   * downloads are our own counts plus the saved copy of a connected host.
+   */
+  app.get("/api/ext/home", extSession, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    const email = who(req);
+    const profile = await storage.getProfileByEmail(email).catch(() => undefined);
+    const show = profile?.podcastName ?? "";
+    const [today, dl, fol, disc, news] = await Promise.all([
+      nextShow(email, show).catch(() => null),
+      downloads(email).catch(() => null),
+      followers(email, profile?.socialAccounts).catch(() => null),
+      myDiscoveryPeek(email).catch(() => ({ none: true as const })),
+      whatsNew(email).catch(() => []),
+    ]);
+    res.json({
+      email, show, name: profile?.hostName ?? "", photo: profile?.photoUrl ?? "",
+      today,
+      numbers: { downloads: dl, followers: fol, discovery: "cached" in disc && disc.cached ? { score: disc.credibility } : null },
+      news,
+    });
   });
 
   app.post("/api/ext/capture", extSession, async (req, res) => {
