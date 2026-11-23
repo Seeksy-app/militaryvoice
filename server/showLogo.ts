@@ -3,7 +3,7 @@
 //   - the live corner on Radio (/dx/program), event studios (/studio/composite) and their own Studio room;
 //   - Social's custom video thumbnails.
 // The corner's order: their show logo, else their podcast's cover art, else our gold mark (drawn by the page).
-// Stored as a setting (show-logo:<email>): JSON { url, plate }, so no table change.
+// Set in Integrations → Live → 3 · How it looks (LiveSettings.tsx). Stored as a setting (show-logo:<email>): JSON { url, plate }, so no table change.
 import type { Express, RequestHandler } from "express";
 import crypto from "node:crypto";
 import multer from "multer";
@@ -69,11 +69,11 @@ export function registerShowLogo(app: Express, requireHostSession: RequestHandle
   app.post(
     "/api/host/show-logo",
     requireHostSession,
-    (req, res, next) => upload.single("file")(req, res, (err: unknown) => (err ? res.status(400).json({ message: "That file is too big. Use one under 8 MB." }) : next())),
+    (req, res, next) => upload.single("file")(req, res, (err: unknown) => (err ? res.status(400).json({ message: "Under 8 MB, please." }) : next())),
     async (req, res) => {
       const email = norm(getSessionEmail(req) ?? "");
       const f = (req as unknown as { file?: { buffer: Buffer; mimetype: string } }).file;
-      if (!f) return res.status(400).json({ message: "Use a picture: PNG (best, with a clear background), SVG, WebP or JPG." });
+      if (!f) return res.status(400).json({ message: "That's not a PNG or JPG." });
       let ready: Awaited<ReturnType<typeof prepare>>;
       try {
         ready = await prepare(f.buffer, f.mimetype);

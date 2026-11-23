@@ -7,13 +7,14 @@ import { apiRequest } from "@/lib/queryClient";
 import { BrandMark, BrandGroup } from "@/components/BrandMark";
 import { ConnectYoutube } from "@/components/ConnectYoutube";
 import { InfoTip } from "@/components/InfoTip";
-import ShowLogoField from "@/components/ShowLogoField";
+import { ShowCorner } from "@/components/StageView";
 
 /**
  * Integrations → Live, all of it in one place (Andrew, 22 Nov 2026: the one-place Live mockup, "Yes, build it").
  * 1. Where it goes: their MilitaryVoices live page (a switch), YouTube (their stream key), Facebook and any other key.
  * 2. Stream in from their own software: StreamYard, Restream or OBS send to us; it records to the Library and, unless
  *    they untick it, goes live on their page and on to the places above.
+ * 3. How it looks: their show logo, small in the top-right corner while they're live (23 Nov).
  * Posting episodes and clips to YouTube is Upload-Post, under Social media; it can't go live, hence a key here.
  */
 
@@ -256,6 +257,65 @@ function StreamInBlock() {
   );
 }
 
+/**
+ * 3. Their show logo (Andrew, 23 Nov 2026: "let's get that logo up in the right-hand corner … It can be small"). It goes
+ * top-right on Radio, events and their own Studio while they're on, and on Social's thumbnails; server/showLogo.ts.
+ * The preview is a 16:9 frame with the logo drawn by the same ShowCorner the broadcast uses, so its size is the real one.
+ */
+type ShowLogo = { logo: string; plate: "light" | "dark" | "none"; cover: string };
+const SHOW_LOGO = ["/api/host/show-logo"];
+const LOGO_TYPES = ["image/png", "image/jpeg", "image/webp", "image/svg+xml"];
+const LOGO_MAX = 8 * 1024 * 1024;
+function ShowLogoRow() {
+  const qc = useQueryClient();
+  const { toast } = useToast();
+  const file = useRef<HTMLInputElement>(null);
+  const { data } = useQuery<ShowLogo>({ queryKey: SHOW_LOGO, queryFn: async () => (await apiRequest("GET", "/api/host/show-logo")).json() });
+  const send = useMutation({
+    mutationFn: async (f: File | null) => {
+      const r = f
+        ? await fetch("/api/host/show-logo", { method: "POST", body: (() => { const b = new FormData(); b.append("file", f); return b; })(), credentials: "include" })
+        : await fetch("/api/host/show-logo", { method: "DELETE", credentials: "include" });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.message || "That didn't save. Try again.");
+      return j as ShowLogo;
+    },
+    onSuccess: (d, f) => { qc.setQueryData(SHOW_LOGO, d); if (f) toast({ title: "Show logo saved" }); },
+    onError: (e: Error) => toast({ title: e.message, variant: "destructive" }),
+  });
+  const pick = (f?: File) => {
+    if (!f) return;
+    if (!LOGO_TYPES.includes(f.type)) return toast({ title: "That's not a PNG or JPG.", variant: "destructive" });
+    if (f.size > LOGO_MAX) return toast({ title: "Under 8 MB, please.", variant: "destructive" });
+    send.mutate(f);
+  };
+  if (!data) return null;
+  const has = !!data.logo;
+  const tile = has
+    ? <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-black/10 p-1" style={{ background: data.plate === "dark" ? "#0b1530" : "#fff" }}><img src={data.logo} alt="" className="max-h-full max-w-full object-contain" data-testid="show-logo-tile" /></span>
+    : <span className="h-10 w-10 shrink-0 rounded-xl border-2 border-dashed border-[#d0d5dd] dark:border-white/20" />;
+  const hint = "A PNG with a clear background, square or wide. It goes small in the top corner when you're live.";
+  return (
+    <LiveRow testId="row-show-logo" icon={tile} name="Your show logo"
+      line={has ? hint : <>{hint} <span className="font-medium text-foreground/80">{data.cover ? "No logo yet: your cover art shows." : "No logo yet: the MilitaryVoices mark shows."}</span></>}
+      right={<>
+        <input ref={file} type="file" accept={LOGO_TYPES.join(",")} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; pick(f); }} data-testid="show-logo-input" />
+        <button type="button" onClick={() => file.current?.click()} disabled={send.isPending} className={has ? `${ghost} flex items-center gap-1.5` : "flex h-8 items-center gap-1.5 rounded-full px-4 text-xs font-bold text-white disabled:opacity-60"} style={has ? undefined : { background: NAVY }} data-testid="show-logo-upload">
+          {send.isPending && send.variables && <Loader2 className="h-3.5 w-3.5 animate-spin" />} {has ? "Replace" : "Upload"}
+        </button>
+        {has && <button type="button" onClick={() => send.mutate(null)} disabled={send.isPending} className={ghost} data-testid="show-logo-remove">Remove</button>}
+      </>}>
+      {has && (
+        // How it sits on a live frame: the broadcast's own corner, at its real share of the picture.
+        <div className="relative mt-3 aspect-video w-full max-w-[240px] overflow-hidden rounded-lg bg-gradient-to-br from-[#1b2a4a] via-[#0b1530] to-[#3a4a6b] [container-type:size]" data-testid="show-logo-preview">
+          <div className="absolute inset-[4%] grid grid-cols-2 gap-[3%]"><div className="rounded bg-white/10" /><div className="rounded bg-white/15" /></div>
+          <ShowCorner url={data.logo} plate={data.plate} />
+        </div>
+      )}
+    </LiveRow>
+  );
+}
+
 /** Integrations → Live. */
 export function LiveSettings() {
   return (
@@ -270,11 +330,9 @@ export function LiveSettings() {
       <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
         <StreamInBlock />
       </div>
-      {/* Their logo in the corner of every live show (Andrew via PM, 23 Nov). Here, not in Podcast: everyone who goes live
-          comes through Live, and not everyone hosts their podcast with us. */}
       <div className="mb-2.5 mt-6"><p className="text-[13px] font-bold uppercase tracking-wide text-muted-foreground">3 · How it looks</p><p className="text-[13px] text-muted-foreground">Your logo sits in the corner of every live show.</p></div>
-      <div className="overflow-hidden rounded-2xl border border-border bg-card px-5 py-4" data-testid="row-live-logo">
-        <ShowLogoField />
+      <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
+        <ShowLogoRow />
       </div>
       <p className="mt-3 text-[13px] text-muted-foreground">Posting episodes and clips to YouTube stays under <b>Social media</b> (Upload-Post). That one can't go live, so live has its own key here.</p>
     </div>
