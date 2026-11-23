@@ -827,7 +827,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     enabled: !!data,
     staleTime: 60_000,
   });
-  const { data: hostingMine } = useQuery<{ shows?: unknown[] }>({
+  const { data: hostingMine } = useQuery<{ shows?: { show?: { title?: string; newFeedUrl?: string } }[] }>({
     queryKey: ["/api/host/hosting"],
     queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json(),
     enabled: !!data,
@@ -1140,8 +1140,12 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   const inSetup = !!data && !loadingProfile && !hasProfile && !crewMode;
   const guideStep = guideOffered(guide) && hasProfile && !inSetup && !crewMode && screen === "dashboard";
   // Who's signed in, for the account menu (the nav's foot on a computer, the header on a phone).
+  // The show this account has now: its hosted show (one that isn't moving away), so a move or a rename shows in the
+  // account card and the greeting without anyone editing the profile's own show name (Andrew, 23 Nov: "the profile
+  // title is still not changing").
+  const showName = (hostingMine?.shows ?? []).find((h) => h.show?.title && !h.show.newFeedUrl)?.show?.title?.trim() || profile?.podcastName || "";
   const account = data ? {
-    name: profile?.podcastName || profile?.hostName || data.email,
+    name: showName || profile?.hostName || data.email,
     email: data.email,
     photo: profile?.photoUrl ? resolveUploadUrl(profile.photoUrl) : "",
     onSignOut: () => logout.mutate(),
@@ -1660,7 +1664,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                   <CommandCenter
                     firstName={(profile?.hostName || "").trim().split(/\s+/)[0] || "there"}
                     photoUrl={profile?.photoUrl ?? ""}
-                    podcastName={profile?.podcastName ?? ""}
+                    podcastName={showName}
                     actions={
                       <div className="flex items-center gap-3">
                         <button type="button" onClick={() => showGuide(homeTour(guideName))} className="text-xs font-semibold text-[#053877] hover:underline dark:text-[#8ab4f8]" data-testid="todo-tour">Show me around</button>
