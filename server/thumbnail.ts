@@ -24,6 +24,9 @@ export interface ThumbInput {
   frame?: Buffer;
   /** With no frame: the show's cover art, centred on navy. */
   cover?: Buffer;
+  /** Their show logo (else their cover art), small in the picture's top-right corner, as it sits while they're live.
+      plate: what reads behind it ("light" for dark ink, "dark" for light ink, "none" for an opaque picture). */
+  logo?: { buf: Buffer; plate: "light" | "dark" | "none" };
 }
 
 export async function renderThumbnail(i: ThumbInput): Promise<Buffer> {
@@ -40,10 +43,31 @@ export async function renderThumbnail(i: ThumbInput): Promise<Buffer> {
     layers.push({ input: await sharp(i.cover).rotate().resize(s, s, { fit: "cover" }).toBuffer(), top: bandH + 30, left: Math.round((w - s) / 2) });
   }
   layers.push({ input: Buffer.from(band), top: 0, left: 0 });
+  if (i.frame && i.logo) {
+    const chip = await cornerChip(i.logo).catch(() => null);
+    if (chip) layers.push({ input: chip.buf, top: bandH + 22, left: w - chip.w - 24 });
+  }
   return sharp({ create: { width: w, height: h, channels: 3, background: NAVY } })
     .composite(layers)
     .jpeg({ quality: 86, mozjpeg: true })
     .toBuffer();
+}
+
+/** The logo on its plate: at most 150×84 of logo, 10px of plate round it, rounded corners. */
+async function cornerChip(logo: { buf: Buffer; plate: "light" | "dark" | "none" }): Promise<{ buf: Buffer; w: number }> {
+  const img = await sharp(logo.buf, { density: 300 }).rotate().resize(150, 84, { fit: "inside", withoutEnlargement: false }).png().toBuffer();
+  const m = await sharp(img).metadata();
+  const lw = m.width ?? 150, lh = m.height ?? 84;
+  const pad = logo.plate === "none" ? 0 : 10;
+  const cw = lw + pad * 2, ch = lh + pad * 2;
+  const fill = logo.plate === "light" ? "rgba(255,255,255,0.94)" : logo.plate === "dark" ? "rgba(0,7,65,0.88)" : "none";
+  const plate = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${cw}" height="${ch}"><rect width="${cw}" height="${ch}" rx="10" fill="${fill}"/></svg>`);
+  const mask = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${cw}" height="${ch}"><rect width="${cw}" height="${ch}" rx="10" fill="#fff"/></svg>`);
+  const buf = await sharp(plate)
+    .composite([{ input: img, top: pad, left: pad }, { input: mask, blend: "dest-in" }])
+    .png()
+    .toBuffer();
+  return { buf, w: cw };
 }
 
 /** The band as SVG: one line of title as large as fits, two when it won't, the show line under it. */
