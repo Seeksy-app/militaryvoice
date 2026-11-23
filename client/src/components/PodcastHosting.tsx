@@ -925,9 +925,9 @@ function ShowForm({ show, categories, onSaved, focus = "" }: { show: HostedShowR
         <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-2">
           <label className={`${label} sm:col-span-2`}>Show name<Input autoFocus={focus === "title"} value={v.title} onChange={(e) => set("title", e.target.value)} className="mt-1 font-normal text-foreground" /></label>
           <label className={`${label} sm:col-span-2`}>Description<Textarea autoFocus={focus === "description"} value={v.description} onChange={(e) => set("description", e.target.value)} rows={9} className="mt-1 font-normal text-foreground" placeholder="What the show is about, who it's for, and who hosts it." /></label>
-          <label className={`${label} sm:col-span-2`}>Under every episode (your sign-off)
+          <label className={`${label} sm:col-span-2`}>Host details (under every episode)
             <Textarea autoFocus={focus === "signoff"} value={v.episodeFooter ?? ""} onChange={(e) => set("episodeFooter", e.target.value)} rows={11} className="mt-1 font-normal text-foreground" placeholder={"Your name and title\nYour website and social links\nYour email"} data-testid="hosting-signoff" />
-            <span className="mt-1 block font-normal">Added at the end of every episode's notes on Apple, Spotify and YouTube: who you are, your links, how to reach&nbsp;you.</span>
+            <span className="mt-1 block font-normal">Added at the end of every episode's notes on Apple, Spotify and YouTube: who you are, your links, how to reach&nbsp;you. Don't add them to your notes as&nbsp;well.</span>
           </label>
           <label className={label}>Host or author<Input value={v.author} onChange={(e) => set("author", e.target.value)} className="mt-1 font-normal text-foreground" /></label>
           <label className={label}>Owner email<Input autoFocus={focus === "ownerEmail"} type="email" value={v.ownerEmail} onChange={(e) => set("ownerEmail", e.target.value)} className="mt-1 font-normal text-foreground" /></label>
