@@ -1630,6 +1630,12 @@ Return JSON only: {"titles":["","",""],"description":""}`,
       return res.status(400).json({ message: (e as Error).message });
     }
     if (!feed.items.length) return res.status(400).json({ message: "That feed has no episodes we can play." });
+    // Already hosted here (our own feed, or an old feed that forwards to it): importing would copy it under a second address and
+    // chain a redirect off our own feed. A show moves between accounts instead (Admin → contact → Move).
+    const ourSlug = url.match(/militaryvoices?\.ai\/feed\/([a-z0-9-]+)/i)?.[1];
+    const [already] = await db.select({ id: hostedShows.id, email: hostedShows.email }).from(hostedShows)
+      .where(sql`${hostedShows.slug} = ${ourSlug ?? ""} or ${hostedShows.importedFrom} = ${url} or (${hostedShows.guid} <> '' and ${hostedShows.guid} = ${feed.guid || "-"})`).limit(1);
+    if (already && already.id !== target?.id) return res.status(409).json({ message: already.email.toLowerCase() === email ? "That show is already hosted here, on this account." : "That show is already hosted on MilitaryVoices, on another account. Ask us and we'll move it to this one, with its feed, listings and downloads unchanged." });
     const slug = target?.slug ?? await uniqueSlug(slugify(feed.title || "show"));
     const fields = {
       title: feed.title.slice(0, 200), description: plainDesc(feed.description).slice(0, 4000), author: feed.author.slice(0, 200),
