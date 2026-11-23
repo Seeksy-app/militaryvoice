@@ -923,30 +923,30 @@ function ShowForm({ show, categories, onSaved, focus = "" }: { show: HostedShowR
           <p className="mt-1.5 text-xs leading-snug text-muted-foreground">Square, at least 1400&nbsp;×&nbsp;1400. We crop it for&nbsp;you.</p>
         </div>
         <div className="grid min-w-0 flex-1 gap-3 sm:grid-cols-2">
-          <label className={`${label} sm:col-span-2`}>Show name<Input autoFocus={focus === "title"} value={v.title} onChange={(e) => set("title", e.target.value)} className="mt-1" /></label>
-          <label className={`${label} sm:col-span-2`}>Description<Textarea autoFocus={focus === "description"} value={v.description} onChange={(e) => set("description", e.target.value)} rows={4} className="mt-1" placeholder="What the show is about, who it's for, and who hosts it." /></label>
+          <label className={`${label} sm:col-span-2`}>Show name<Input autoFocus={focus === "title"} value={v.title} onChange={(e) => set("title", e.target.value)} className="mt-1 font-normal text-foreground" /></label>
+          <label className={`${label} sm:col-span-2`}>Description<Textarea autoFocus={focus === "description"} value={v.description} onChange={(e) => set("description", e.target.value)} rows={9} className="mt-1 font-normal text-foreground" placeholder="What the show is about, who it's for, and who hosts it." /></label>
           <label className={`${label} sm:col-span-2`}>Under every episode (your sign-off)
-            <Textarea value={v.episodeFooter ?? ""} onChange={(e) => set("episodeFooter", e.target.value)} rows={5} className="mt-1 font-normal text-foreground" placeholder={"Your name and title\nYour website and social links\nYour email"} data-testid="hosting-signoff" />
+            <Textarea value={v.episodeFooter ?? ""} onChange={(e) => set("episodeFooter", e.target.value)} rows={11} className="mt-1 font-normal text-foreground" placeholder={"Your name and title\nYour website and social links\nYour email"} data-testid="hosting-signoff" />
             <span className="mt-1 block font-normal">Added at the end of every episode's notes on Apple, Spotify and YouTube: who you are, your links, how to reach&nbsp;you.</span>
           </label>
-          <label className={label}>Host or author<Input value={v.author} onChange={(e) => set("author", e.target.value)} className="mt-1" /></label>
-          <label className={label}>Owner email<Input autoFocus={focus === "ownerEmail"} type="email" value={v.ownerEmail} onChange={(e) => set("ownerEmail", e.target.value)} className="mt-1" /></label>
+          <label className={label}>Host or author<Input value={v.author} onChange={(e) => set("author", e.target.value)} className="mt-1 font-normal text-foreground" /></label>
+          <label className={label}>Owner email<Input autoFocus={focus === "ownerEmail"} type="email" value={v.ownerEmail} onChange={(e) => set("ownerEmail", e.target.value)} className="mt-1 font-normal text-foreground" /></label>
           <label className={label}>Category
-            <select value={v.category} onChange={(e) => { set("category", e.target.value); set("subcategory", ""); }} className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground">
+            <select value={v.category} onChange={(e) => { set("category", e.target.value); set("subcategory", ""); }} className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2 text-sm font-normal text-foreground">
               {Object.keys(categories).map((c) => <option key={c}>{c}</option>)}
             </select>
           </label>
           <label className={label}>Subcategory
-            <select value={v.subcategory} onChange={(e) => set("subcategory", e.target.value)} disabled={!(categories[v.category] ?? []).length} className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground disabled:opacity-50">
+            <select value={v.subcategory} onChange={(e) => set("subcategory", e.target.value)} disabled={!(categories[v.category] ?? []).length} className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2 text-sm font-normal text-foreground disabled:opacity-50">
               <option value="">None</option>
               {(categories[v.category] ?? []).map((c) => <option key={c}>{c}</option>)}
             </select>
           </label>
-          <label className={label}>Website (optional)<Input value={v.website} onChange={(e) => set("website", e.target.value)} className="mt-1" placeholder="https://" /></label>
-          <label className={label}>Copyright (optional)<Input value={v.copyright} onChange={(e) => set("copyright", e.target.value)} className="mt-1" placeholder={`© ${new Date().getFullYear()} ${v.author || v.title}`} /></label>
+          <label className={label}>Website (optional)<Input value={v.website} onChange={(e) => set("website", e.target.value)} className="mt-1 font-normal text-foreground" placeholder="https://" /></label>
+          <label className={label}>Copyright (optional)<Input value={v.copyright} onChange={(e) => set("copyright", e.target.value)} className="mt-1 font-normal text-foreground" placeholder={`© ${new Date().getFullYear()} ${v.author || v.title}`} /></label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={v.explicit} onChange={(e) => set("explicit", e.target.checked)} /> Explicit language</label>
           <label className="flex items-center gap-2 text-sm"><input type="checkbox" checked={v.showType === "serial"} onChange={(e) => set("showType", e.target.checked ? "serial" : "episodic")} /> Listen in order (a series)</label>
-          <label className="flex items-start gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={v.aiVoice} onChange={(e) => set("aiVoice", e.target.checked)} className="mt-1" data-testid="hosting-ai-voice" /><span>AI voices (a synthetic host or narrator)<span className="block text-xs text-muted-foreground">Listen Notes doesn't list AI-voiced shows, so we won't send this one there.</span></span></label>
+          <label className="flex items-start gap-2 text-sm sm:col-span-2"><input type="checkbox" checked={v.aiVoice} onChange={(e) => set("aiVoice", e.target.checked)} className="mt-1 font-normal text-foreground" data-testid="hosting-ai-voice" /><span>AI voices (a synthetic host or narrator)<span className="block text-xs text-muted-foreground">Listen Notes doesn't list AI-voiced shows, so we won't send this one there.</span></span></label>
         </div>
         </div>
         <div className="mt-4 flex justify-end gap-2">
