@@ -825,7 +825,8 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
   // Vertical to start with: it's the one almost everyone posts.
   const [formats, setFormats] = useState<ClipFormat[]>(["vertical"]);
   // Two people on screen, for this clip: the recording's own layout (a Radio show's stack) first, then
-  // the account's default, then what the detector saw; Automatic otherwise. A pick here stays for the next clip.
+  // their last pick, then what the detector saw; Automatic otherwise. A pick here stays for the next clip and
+  // is remembered as their starting choice next time (Pōstify is the one place it's chosen).
   const ownLayout = parseClipOptions(rec.clipOptions).layout;
   const accountLayout = useClipLayoutDefault();
   const seenLayout = suggestedLayout((rec as { layoutSuggestion?: string }).layoutSuggestion);
@@ -1184,7 +1185,7 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
         })}
       </div>
       {/* Two people on screen: how this clip frames them. Same four choices as Make clips. */}
-      {showLayout && <select value={layoutNow} onChange={(e) => setClipLayout(e.target.value as "" | "stacked" | "side" | "single")} aria-label="Two people on screen" title="Two people on screen: how this clip shows them" className="h-9 rounded-lg border border-border bg-background px-2 text-xs font-semibold text-foreground" data-testid="mark-layout">
+      {showLayout && <select value={layoutNow} onChange={(e) => { const v = e.target.value as "" | "stacked" | "side" | "single"; setClipLayout(v); accountLayout.remember(v); }} aria-label="Two people on screen" title="Two people on screen: how this clip shows them" className="h-9 rounded-lg border border-border bg-background px-2 text-xs font-semibold text-foreground" data-testid="mark-layout">
         <option value="">Two people: Automatic</option>
         <option value="stacked">Two people: Stacked</option>
         <option value="side">Two people: Side by side</option>
@@ -2137,8 +2138,8 @@ export function PostStudio() {
   // The detector's look at this recording (a JSON string on the row, "" until it has looked).
   const layoutHint = useMemo(() => parseLayoutSuggestion((rec as { layoutSuggestion?: string } | undefined)?.layoutSuggestion), [rec]);
   // What Make clips starts on when the recording has no layout of its own and nothing has been picked
-  // on screen: the account default (Podcast > Settings), else the detector's favourite, else automatic.
-  // It is lit and visible, and a tap on the screen always wins.
+  // on screen: their last pick here, else the detector's favourite, else automatic. It is lit and visible,
+  // a tap on the screen always wins, and that tap becomes their last pick (Andrew, 23 Nov: "Yes, Pōstify only").
   const layoutDefault = useClipLayoutDefault();
   const layoutTouched = useRef<number | null>(null);
   useEffect(() => {
@@ -2565,7 +2566,7 @@ export function PostStudio() {
         <div className="flex min-w-0 flex-col gap-3">
           {/* How two people are framed: always on offer before the run; the detector only lights and marks the one it likes. */}
           {rec.clipStatus === "none" && !intro && (
-            <LayoutPicker value={opts.layout} own={parseClipOptions(rec.clipOptions).layout} suggestion={layoutHint} onChange={(l) => { layoutTouched.current = rec.id; setOpts((o) => ({ ...o, layout: l })); }} />
+            <LayoutPicker value={opts.layout} own={parseClipOptions(rec.clipOptions).layout} suggestion={layoutHint} onChange={(l) => { layoutTouched.current = rec.id; setOpts((o) => ({ ...o, layout: l })); layoutDefault.remember(l); }} />
           )}
           {viewerEl}
           <div className="grid grid-cols-3 gap-2 sm:grid-cols-6" data-testid="post-stats">

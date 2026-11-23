@@ -14,7 +14,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { useClipLayoutDefault, type DefaultLayout } from "@/lib/clipLayoutDefault";
 import { durationOf, uploadToStorage } from "@/lib/upload";
 import { GuestFinder, ShowFinder, INVITE_KEY } from "@/components/DiscoverPodcasts";
 import type { HostedEpisodeRow, HostedShowRow, HostedSpotRow, PodcastStatsData, RecordingRow } from "@shared/schema";
@@ -1408,22 +1407,10 @@ function Choice({ on, title, sub, badge, disabled, onPick, testid }: { on: boole
   );
 }
 
-/** The picture on each clip layout card. */
-function LayoutPic({ v }: { v: DefaultLayout }) {
-  const a = "rounded-[3px] bg-[#053877]", b = "rounded-[3px] bg-[#F0A71F]";
-  return (
-    <span className="flex h-14 w-10 items-center justify-center rounded-md bg-muted/70 p-1" aria-hidden>
-      {v === "stacked" ? <span className="flex h-full w-full flex-col gap-1"><span className={`flex-1 ${a}`} /><span className={`flex-1 ${b}`} /></span>
-        : v === "side" ? <span className="flex h-6 w-full gap-1"><span className={`flex-1 ${a}`} /><span className={`flex-1 ${b}`} /></span>
-        : v === "single" ? <span className={`relative h-full w-full ${a}`}><span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-emerald-400" /></span>
-        : <Sparkles className="h-5 w-5 text-[#053877] dark:text-[#8fb5e8]" />}
-    </span>
-  );
-}
-
 /**
  * Publishing: each question asked once, in plain words (Andrew, 23 Nov: "Yes, build it"). When an episode is ready
- * (autoPublish), YouTube (youtubeMode, youtubePrivacy) and the clip layout Make clips starts on. Same fields as before.
+ * (autoPublish) and YouTube (youtubeMode, youtubePrivacy). Same fields as before. The clip layout lives in Pōstify only
+ * (Andrew, 23 Nov: "Yes, Pōstify only"): it only shapes Pōstify clips, so it's chosen there.
  */
 function PublishingPanel({ h, youtubeReady, onSaved, onDirectories }: { h: Hosted; youtubeReady: boolean; onSaved: () => void; onDirectories: () => void }) {
   const { toast } = useToast();
@@ -1434,7 +1421,6 @@ function PublishingPanel({ h, youtubeReady, onSaved, onDirectories }: { h: Hoste
     try { await apiRequest("PATCH", `/api/host/hosting/shows/${show.id}`, body); onSaved(); toast(done); }
     catch (e) { toast({ title: "Couldn't change that", description: (e as Error).message, variant: "destructive" }); } finally { setBusy(false); }
   };
-  const layoutDefault = useClipLayoutDefault();
   const card = "rounded-2xl border border-border bg-card p-5 shadow-sm";
   const ask = show.youtubeMode !== "always";
   return (
@@ -1455,7 +1441,8 @@ function PublishingPanel({ h, youtubeReady, onSaved, onDirectories }: { h: Hoste
           <Choice on={ask} disabled={busy} onPick={() => !ask && void patch({ youtubeMode: "ask" }, { title: "We'll ask each time", description: "A tick box when you publish." })} title="Ask me each time" sub="A tick box when you publish." testid="hosting-yt-ask" />
           <Choice on={!ask} disabled={busy} onPick={() => ask && void patch({ youtubeMode: "always" }, { title: "Every video goes up", description: "Each episode with video goes to your channel when it's published." })} title="Always post the video" sub="Every episode with video goes up." testid="hosting-yt-always" />
         </div>
-        <div className="mt-3.5 flex flex-wrap items-center justify-between gap-x-4 gap-y-2 text-sm">
+        {/* Left-aligned: the floating "to do" pill sits over the bottom right of a short page. */}
+        <div className="mt-3.5 flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
           <label className="flex items-center gap-2 text-muted-foreground">Who can see them
             <select value={show.youtubePrivacy} disabled={busy} onChange={(e) => void patch({ youtubePrivacy: e.target.value }, { title: e.target.value === "unlisted" ? "Unlisted: only people with the link" : "Public: anyone on YouTube" })} className="h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground" data-testid="hosting-yt-privacy">
               <option value="public">Public</option>
@@ -1466,25 +1453,6 @@ function PublishingPanel({ h, youtubeReady, onSaved, onDirectories }: { h: Hoste
         </div>
       </div>
 
-      {/* Shows with two people on screen: the layout Make clips starts on. Hidden until the server answers. */}
-      {layoutDefault.value !== null && (
-        <div className={card} role="radiogroup" aria-label="Clip layout" data-testid="hosting-layout-default">
-          <h2 className="text-base font-semibold">Clip layout</h2>
-          <p className="mt-0.5 text-sm text-muted-foreground">When two people are on screen, how your clips start. You can change any clip in&nbsp;Pōstify.</p>
-          <div className="mt-3.5 grid grid-cols-2 gap-3 lg:grid-cols-4">
-            {([["", "We pick", "fits the video"], ["stacked", "One above the other", ""], ["side", "Side by side", ""], ["single", "Whoever's talking", "fills the screen"]] as [DefaultLayout, string, string][]).map(([v, label, sub]) => {
-              const on = layoutDefault.value === v;
-              return (
-                <button key={v || "auto"} type="button" role="radio" aria-checked={on} onClick={() => !on && layoutDefault.save.mutate(v, { onSuccess: () => toast({ title: "Saved", description: "Make clips starts on this for every show." }), onError: () => toast({ title: "Couldn't save that", variant: "destructive" }) })} className={`flex flex-col items-center gap-2 rounded-xl border-[1.5px] px-2 py-3.5 text-center transition-colors ${on ? "border-[#053877] bg-[#053877]/[0.04] dark:border-[#8fb5e8] dark:bg-white/5" : "border-border hover:border-[#053877]/40"}`} data-testid={`hosting-layout-${v || "auto"}`}>
-                  <LayoutPic v={v} />
-                  <span className="text-sm font-semibold leading-tight">{label}</span>
-                  {sub && <span className="-mt-1.5 text-xs text-muted-foreground">{sub}</span>}
-                </button>
-              );
-            })}
-          </div>
-        </div>
-      )}
     </div>
   );
 }

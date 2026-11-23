@@ -2,10 +2,11 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 
 /**
- * The account-wide default for two people on screen ("My shows are: Stacked / Side by side /
- * Follow the speaker"). "" is Automatic. Set in Podcast > Settings > Publishing (Clip layout); Make clips lights
- * it when the recording has no layout of its own and nothing has been picked on screen.
- * The server field is clipLayoutDefault; until it answers, `value` is null and the setting stays hidden.
+ * The creator's last pick for two people on screen (Stacked / Side by side / Follow the speaker; "" is Automatic).
+ * Pōstify is the one place it's chosen (Andrew, 23 Nov 2026: "Yes, Pōstify only"): every pick in Make clips is
+ * remembered here, and the next recording starts on it, after the recording's own layout (a Radio stack) and
+ * before what the detector saw. Only Pōstify clips use it: a Zoom recording stays as Zoom recorded it, and in
+ * Studio the host picks live. The server field is clipLayoutDefault; until it answers, `value` is null.
  */
 export type DefaultLayout = "" | "stacked" | "side" | "single";
 
@@ -31,5 +32,10 @@ export function useClipLayoutDefault() {
     onMutate: async (v) => { qc.setQueryData(KEY, v); },
     onError: () => { void qc.invalidateQueries({ queryKey: KEY }); },
   });
-  return { value: q.data ?? null, loading: q.isLoading, save };
+  /** Keep a pick made on screen as the starting choice next time. Quiet: nothing to confirm, and a miss costs nothing. */
+  const remember = (l: string | undefined | null) => {
+    const v: DefaultLayout = l === "radio" ? "stacked" : VALID.includes((l ?? "") as DefaultLayout) ? ((l ?? "") as DefaultLayout) : "";
+    if (q.data !== null && q.data !== undefined && q.data !== v) save.mutate(v);
+  };
+  return { value: q.data ?? null, loading: q.isLoading, save, remember };
 }
