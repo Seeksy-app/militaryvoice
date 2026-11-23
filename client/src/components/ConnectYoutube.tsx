@@ -185,10 +185,11 @@ export function ConnectYoutube({ row = false }: { row?: boolean } = {}) {
   const showForm = connect ? changing : (!data.saved && !data.legacy) || changing;
   return (
     <section className={row ? "px-5 py-4" : "rounded-2xl border border-border bg-card p-6"} data-testid="youtube-live-row">
-      <div className="flex flex-wrap items-center gap-3">
-        <BrandMark brand="youtube" tile />
+      {/* As a row in Live, it lines up with the rows around it: the same icon column, gap and title size. */}
+      <div className={`flex flex-wrap items-center ${row ? "gap-x-3.5 gap-y-2" : "gap-3"}`}>
+        {row ? <span className="flex w-12 shrink-0 justify-center"><BrandMark brand="youtube" tile /></span> : <BrandMark brand="youtube" tile />}
         <div className="min-w-0 flex-1 basis-[180px]">
-          <div className="text-base font-semibold text-card-foreground">YouTube Live</div>
+          <div className={`${row ? "text-sm" : "text-base"} font-semibold text-card-foreground`}>YouTube Live</div>
           <p className="text-[13px] text-muted-foreground">{line}</p>
         </div>
         {data.saved && !changing && (
@@ -211,7 +212,7 @@ export function ConnectYoutube({ row = false }: { row?: boolean } = {}) {
           </div>
         )}
       </div>
-      <div className="pl-[56px]">
+      <div className={row ? "sm:pl-[62px]" : "pl-[56px]"}>
         {data.saved && !changing && (
           <p className="mt-2 text-[13px] text-muted-foreground">
             It goes live under your channel's default title, set in YouTube Studio.

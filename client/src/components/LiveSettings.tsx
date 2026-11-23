@@ -16,7 +16,7 @@ import { InfoTip } from "@/components/InfoTip";
  * Posting episodes and clips to YouTube is Upload-Post, under Social media; it can't go live, hence a key here.
  */
 
-type LivePage = { on: boolean; url: string; handle: string; streamInOut: boolean; live: boolean };
+type LivePage = { on: boolean; url: string; handle: string; photo?: string; streamInOut: boolean; live: boolean };
 const LIVE_PAGE = ["/api/host/live-page"];
 type StudioKeys = { streams: { id: string; name: string; on: boolean; key?: string }[] };
 const MY_STUDIO = ["/api/host/my-studio"];
@@ -28,6 +28,15 @@ const FACEBOOK_RTMP = "rtmps://live-api-s.facebook.com:443/rtmp/";
 const NAVY = "#053877";
 const ghost = "h-8 shrink-0 rounded-full border border-[#d0d5dd] bg-white px-3.5 text-xs font-semibold text-[#344054] hover:bg-[#f9fafb] disabled:opacity-50 dark:bg-transparent dark:text-foreground";
 const mvTile = <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl text-[13px] font-extrabold tracking-tight text-white" style={{ background: NAVY }}>MV</span>;
+
+/** Their own page wears their own picture, the one on their SmartLink and live page (Andrew, 23 Nov: "Please make ICON
+    for MilitaryVoices the Profile image"); the MV tile when they have none or it won't load. Same size as the brand tiles. */
+function PageTile({ photo }: { photo?: string }) {
+  const [broken, setBroken] = useState(false);
+  useEffect(() => setBroken(false), [photo]);
+  if (!photo || broken) return mvTile;
+  return <img src={photo} alt="" className="h-10 w-10 shrink-0 rounded-xl border border-black/10 bg-white object-cover" onError={() => setBroken(true)} data-testid="live-page-photo" />;
+}
 
 function LiveRow({ icon, name, line, right, children, testId }: { icon: ReactNode; name: ReactNode; line: ReactNode; right?: ReactNode; children?: ReactNode; testId?: string }) {
   return (
@@ -70,7 +79,7 @@ function LivePageRow() {
         {data.live ? " · live now" : ": every live show plays there."}
       </>;
   return (
-    <LiveRow testId="row-live-page" icon={mvTile} name="Your MilitaryVoices page" line={line}
+    <LiveRow testId="row-live-page" icon={<PageTile photo={data.photo} />} name="Your MilitaryVoices page" line={line}
       right={data.handle ? <Switch checked={data.on} onCheckedChange={(on) => set.mutate({ on })} disabled={set.isPending} aria-label="Live on your MilitaryVoices page" data-testid="live-page-switch" /> : undefined} />
   );
 }

@@ -30,6 +30,12 @@ export async function liveHandleOf(email: string): Promise<string> {
   const [row] = await db.select({ handle: bioPages.handle, published: bioPages.published }).from(bioPages).where(eq(bioPages.email, norm(email))).limit(1);
   return row?.published ? row.handle : "";
 }
+/** Their SmartLink picture, the one their live page shows: the Live settings row wears it (Andrew, 23 Nov: "Please make
+    ICON for MilitaryVoices the Profile image"). Empty when there's none, and the row keeps the MV tile. */
+export async function livePhotoOf(email: string): Promise<string> {
+  const [row] = await db.select({ avatarUrl: bioPages.avatarUrl }).from(bioPages).where(eq(bioPages.email, norm(email))).limit(1);
+  return row?.avatarUrl || "";
+}
 export const liveUrlOf = (handle: string) => (handle ? `${ORIGIN}/${handle}/live` : "");
 
 /** A hidden, watch-only seat in a room: never drawn, never heard, never counted as a person. */
@@ -81,13 +87,13 @@ export function registerLivePage(app: Express, requireHostSession: RequestHandle
     res.setHeader("Cache-Control", "no-store");
     const email = norm(getSessionEmail(req) ?? "");
     const handle = await liveHandleOf(email);
-    res.json({ on: await livePageOn(email), url: liveUrlOf(handle), handle, streamInOut: await streamInOutOn(email), live: !!(await liveNowFor(email, false).catch(() => null)) });
+    res.json({ on: await livePageOn(email), url: liveUrlOf(handle), handle, photo: await livePhotoOf(email).catch(() => ""), streamInOut: await streamInOutOn(email), live: !!(await liveNowFor(email, false).catch(() => null)) });
   });
   app.put("/api/host/live-page", requireHostSession, async (req, res) => {
     const email = norm(getSessionEmail(req) ?? "");
     if (typeof req.body?.on === "boolean") await storage.setSetting(`live-page:${email}`, req.body.on ? "" : "0");
     if (typeof req.body?.streamInOut === "boolean") await storage.setSetting(`streamin:out:${email}`, req.body.streamInOut ? "" : "0");
     const handle = await liveHandleOf(email);
-    res.json({ on: await livePageOn(email), url: liveUrlOf(handle), handle, streamInOut: await streamInOutOn(email), live: !!(await liveNowFor(email, false).catch(() => null)) });
+    res.json({ on: await livePageOn(email), url: liveUrlOf(handle), handle, photo: await livePhotoOf(email).catch(() => ""), streamInOut: await streamInOutOn(email), live: !!(await liveNowFor(email, false).catch(() => null)) });
   });
 }
