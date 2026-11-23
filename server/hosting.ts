@@ -259,6 +259,16 @@ async function ownShow(email: string, id: number) {
   const [s] = await db.select().from(hostedShows).where(and(eq(hostedShows.id, id), eq(hostedShows.email, email))).limit(1);
   return s ?? null;
 }
+/**
+ * The number a new full episode gets: one past the highest number the show has used, so gaps and unnumbered
+ * episodes in an imported back catalogue don't push it ahead (Frank's 57 came after 54 when this was a count).
+ */
+function nextEpisodeNumber(eps: { episodeType: string; episodeNumber: number | null }[]): number {
+  const full = eps.filter((x) => x.episodeType === "full");
+  const nums = full.map((x) => x.episodeNumber).filter((n): n is number => typeof n === "number" && n > 0);
+  return nums.length ? Math.max(...nums) + 1 : full.length + 1;
+}
+
 async function episodesOf(showId: number) {
   await schemaIsReady(); // a new column is added on the first request after a deploy; wait for it
   return db.select().from(hostedEpisodes).where(eq(hostedEpisodes.showId, showId)).orderBy(desc(hostedEpisodes.publishedAt), desc(hostedEpisodes.id));
@@ -546,7 +556,7 @@ export async function startEpisodeFromRecording(email: string, rec: { id: number
   await db.insert(hostedEpisodes).values({
     showId: show.id, title: (rec.title || "New episode").slice(0, 300), recordingId: rec.id, durationSec: Math.round(rec.durationSec || 0),
     description: await withCredits("", rec.id),
-    episodeNumber: show.showType === "serial" ? null : eps.filter((x) => x.episodeType === "full").length + 1,
+    episodeNumber: show.showType === "serial" ? null : nextEpisodeNumber(eps),
     guid: crypto.randomUUID(), status: "draft", stage: "post", createdAt: now(), audioJob: "queued", audioJobAt: now(), bookends: "off",
   });
 }
@@ -580,11 +590,17 @@ export async function claimEpisodeAudio(mode: "convert" | "copy" = "convert"): P
   return { id: r.id, title: r.title, durationSec: r.duration_sec || rec.durationSec, recordingUrl };
 }
 
+const STILLS_OFF = true;
+
 /**
  * An episode that's a video (uploaded, or made from a Library recording), with no picture of its own: the worker
  * takes a still from the video for it (the page's thumbnail, and the feed's).
  */
 export async function claimEpisodeStill(): Promise<{ id: number; title: string; durationSec: number; url: string } | null> {
+  // Off (Andrew, 23 Nov 2026: the podcast cover goes in the feed, not a frame from the video). An episode with no
+  // picture of its own uses the show's cover in the feed, on its page and in the list; a podcaster can still add
+  // one from the episode page. The worker asks and gets nothing.
+  if (STILLS_OFF) return null;
   await schemaIsReady();
   const stale = new Date(Date.now() - 30 * 60_000).toISOString();
   const rows = await db.execute(sql`
@@ -1187,7 +1203,7 @@ Return JSON only: {"titles":["","",""],"description":""}`,
       const [e] = await db.insert(hostedEpisodes).values({
         showId: s.id, title: it.title.slice(0, 300), description: it.notes.slice(0, 20000), notesFormat: "html",
         audioUrl: it.url, mime: it.mime, sizeBytes: Math.min(2_000_000_000, it.length), durationSec: it.duration,
-        episodeNumber: it.episode ?? (s.showType === "serial" ? null : eps0.filter((x) => x.episodeType === "full").length + 1), season: it.season,
+        episodeNumber: it.episode ?? (s.showType === "serial" ? null : nextEpisodeNumber(eps0)), season: it.season,
         episodeType: it.episodeType, explicit: it.explicit, artworkUrl: it.image,
         guid: it.guid, status: "draft", publishedAt: it.published || "", createdAt: now(), audioJob: "copy", bookends: "off", spotsOff: true,
       }).returning();
@@ -1199,7 +1215,7 @@ Return JSON only: {"titles":["","",""],"description":""}`,
     const [e] = await db.insert(hostedEpisodes).values({
       showId: s.id, title: title || "New episode", description: (await withCredits(String(b.description ?? ""), recordingId)).slice(0, 20000),
       audioKey, mime, sizeBytes: num(b.sizeBytes) ?? 0, durationSec, recordingId,
-      episodeNumber: num(b.episodeNumber) ?? (s.showType === "serial" ? null : eps.filter((x) => x.episodeType === "full").length + 1),
+      episodeNumber: num(b.episodeNumber) ?? (s.showType === "serial" ? null : nextEpisodeNumber(eps)),
       season: num(b.season), guid: crypto.randomUUID(), status: "draft", createdAt: now(), spotsOff: true,
       audioJob: audioKey || !recordingId ? "" : "queued", audioJobAt: audioKey || !recordingId ? "" : now(),
     }).returning();

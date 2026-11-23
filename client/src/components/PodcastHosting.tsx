@@ -1220,8 +1220,8 @@ function EpisodePage({ ep, show, youtubeReady, production, onDirectories, onBack
             <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
               <span className={label}>Description (show notes)</span>
               <span className="flex flex-wrap items-center gap-x-4 gap-y-1">
-                <button type="button" onClick={() => void writeIt()} disabled={writing || !hasAudio} title={hasAudio ? "We listen to the episode and write the title and notes" : "Add the audio first"} className="inline-flex items-center gap-1 text-xs font-semibold text-[#053877] hover:underline disabled:opacity-60 dark:text-[#8fb5e8]" data-testid="episode-write">
-                  {writing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} {writing ? "Listening…" : "Write it for me"}
+                <button type="button" onClick={() => void writeIt()} disabled={writing || !hasAudio} title={hasAudio ? "We listen to the episode and write the title and notes" : undefined} className="inline-flex items-center gap-1 text-xs font-semibold text-[#053877] hover:underline disabled:cursor-not-allowed disabled:text-muted-foreground disabled:no-underline disabled:opacity-80 dark:text-[#8fb5e8]" data-testid="episode-write">
+                  {writing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Sparkles className="h-3.5 w-3.5" />} {writing ? "Listening…" : hasAudio ? "Write it for me" : ep.audioJob && ep.audioJob !== "failed" ? "Write it for me: ready when the audio is done" : "Write it for me: add the audio first"}
                 </button>
                 {show.importedFrom && (
                   <button type="button" onClick={() => void pullNow()} disabled={pull.busy} className="inline-flex items-center gap-1 text-xs font-semibold text-[#053877] hover:underline disabled:opacity-60 dark:text-[#8fb5e8]" data-testid="episode-pull">
