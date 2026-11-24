@@ -19,3 +19,22 @@ export async function inviteShow(email: string, showId: unknown): Promise<Show |
   const list = await ownerShows(email);
   return list.length > 1 ? list.find((x) => x.id === id) ?? null : null;
 }
+
+const titleKey = (v: string) => String(v ?? "").toLowerCase().replace(/[^a-z0-9]+/g, "");
+/**
+ * Which of the host's shows something is for (one lookup for link cards and the studio's show icon; Andrew, 24 Nov:
+ * Riccoh's Warriors' Voice studio showed his Devil Dawg cover): the picked one (?show=), else the first of `names`
+ * that is one of their show titles (the room's name, then their profile's podcast), else their only show. Null when
+ * it can't tell, never just the oldest.
+ */
+export async function showFor(email: string, picked: unknown, ...names: (string | null | undefined)[]): Promise<Show | null> {
+  const chosen = await inviteShow(email, picked);
+  if (chosen) return chosen;
+  const list = await ownerShows(email);
+  for (const n of names) {
+    const k = titleKey(n ?? "");
+    const hit = k ? list.find((x) => titleKey(x.title) === k) : undefined;
+    if (hit) return hit;
+  }
+  return list.length === 1 ? list[0] : null;
+}

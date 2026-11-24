@@ -14,7 +14,7 @@ import { sendInterviewInvite, sendInterviewAnswered } from "./email.js";
 import { boothGuestKey, bookingTimes } from "./booth.js";
 import { dxEventIds } from "./digitalExperience.js";
 import { roomInviteLink } from "./myStudio.js";
-import { inviteShow, ownerShows, type Show } from "./hostShows.js";
+import { inviteShow, showFor, type Show } from "./hostShows.js";
 import { buildShareCard } from "./shareCard.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
@@ -212,11 +212,7 @@ export function registerGuestInvites(app: Express, requireHostSession: RequestHa
   const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
   /** Which show a link is for: the picked one, else the one whose title matches the name the guest sees, else their only show. */
   const showForLink = async (owner: string, picked: unknown, name: string): Promise<Show | null> => {
-    const chosen = await inviteShow(owner, picked);
-    if (chosen) return chosen;
-    const list = await ownerShows(owner);
-    const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, "");
-    return list.find((x) => name && norm(x.title) === norm(name)) ?? (list.length === 1 ? list[0] : null);
+    return showFor(owner, picked, name);
   };
   const previewPage = async (req: Parameters<RequestHandler>[0], res: Parameters<RequestHandler>[1], o: { owner: string; show: Show | null; name: string; join: boolean }) => {
     const profile = await storage.getProfileByEmail(o.owner);

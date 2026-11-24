@@ -12,6 +12,7 @@ import { db, storage } from "./storage.js";
 import { getSessionEmail } from "./session.js";
 import { uploadPhoto } from "./photoStorage.js";
 import { hostedShows } from "../shared/schema.js";
+import { showFor } from "./hostShows.js";
 import { prepareShowLogo as prepare, type Plate } from "./showLogoImage.js";
 
 const norm = (e: string) => String(e ?? "").trim().toLowerCase();
@@ -38,18 +39,30 @@ export async function showLogoOf(email: string): Promise<string> {
   return (await stored(email)).url;
 }
 
-/** Their podcast's cover art (the first show they host with us), or "". */
-export async function showCoverOf(email: string): Promise<string> {
+/**
+ * Their podcast's cover art, or "". With `room` (their studio's name, and ?show= when there is one), the cover of that
+ * room's show (showFor: the picked show, else the title that matches the room, else their profile's podcast, else their
+ * only show), and "" when it can't tell, so the page draws our mark rather than another show's cover (Riccoh, 24 Nov).
+ * Without it, as before: the first show they host with us.
+ */
+export async function showCoverOf(email: string, room?: { name?: string | null; show?: unknown }): Promise<string> {
   if (!norm(email)) return "";
+  if (room) {
+    const profile = await storage.getProfileByEmail(norm(email)).catch(() => undefined);
+    const show = await showFor(norm(email), room.show, room.name, profile?.podcastName);
+    if (!show) return "";
+    const [hit] = await db.select({ art: hostedShows.artworkUrl }).from(hostedShows).where(eq(hostedShows.id, show.id)).limit(1).catch(() => []);
+    return hit?.art || "";
+  }
   const [row] = await db.select({ art: hostedShows.artworkUrl }).from(hostedShows).where(eq(hostedShows.email, norm(email))).orderBy(asc(hostedShows.id)).limit(1).catch(() => []);
   return row?.art || "";
 }
 
-/** What goes in the live corner for this person: their logo, else their cover, else "" (the page draws our mark). */
-export async function cornerLogoOf(email: string): Promise<{ url: string; plate: Plate }> {
+/** What goes in the live corner for this person: their logo, else their (room's) show cover, else "" (the page draws our mark). */
+export async function cornerLogoOf(email: string, room?: { name?: string | null; show?: unknown }): Promise<{ url: string; plate: Plate }> {
   const own = await stored(email);
   if (own.url) return own;
-  return { url: await showCoverOf(email).catch(() => ""), plate: "none" };
+  return { url: await showCoverOf(email, room).catch(() => ""), plate: "none" };
 }
 
 const upload = multer({
