@@ -7,13 +7,49 @@ import type { Express, RequestHandler, Request } from "express";
 import { and, desc, eq, inArray, ne, or } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { slackNote } from "./slack.js";
-import { events, signups } from "../shared/schema.js";
+import { events, signups, siteSettings } from "../shared/schema.js";
+import { sendOneOffEmail } from "./email.js";
+import { creditExempt } from "./creditsAlert.js";
 import { orgIdsOf, organizerOrgFor } from "./orgs.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 const now = () => new Date().toISOString();
 const meOf = (req: Request) => String((req as unknown as { hostEmail?: string }).hostEmail ?? "").trim().toLowerCase();
 const slugify = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ]/g, "").replace(/&/g, " and ").replace(/[^a-z0-9]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 48) || "event";
+
+/**
+ * The planner hears back when we decide (Andrew via PM, 24 Nov: "Yes, add it"): approved and live, or sent
+ * back with the one thing to change. Andrew's approved text; only the names, the link and the reason are filled
+ * in. Plain text from hello@, logged in Mail. Andrew's own and test accounts (the credits exempt list) get none.
+ */
+export function plannerDecisionEmail(d: { approve: boolean; first: string; event: string; slug: string; reason?: string }): { subject: string; text: string } {
+  const hi = `Hi ${d.first || "there"},`;
+  if (d.approve) {
+    return {
+      subject: `Your event is live: ${d.event}`,
+      text: [hi, "", `${d.event} is approved and live. Share its page so people can book a slot: ${ORIGIN}/event/${d.slug}`, "", "You'll see who's booked, and open your studio, under My events.", "", "The MilitaryVoices.ai team"].join("\n"),
+    };
+  }
+  return {
+    subject: `Your event needs a change: ${d.event}`,
+    text: [hi, "", `Thanks for sending ${d.event}. Before it goes live, please change one thing:`, "", (d.reason ?? "").trim(), "", "Make the change under My events and send it back to us. We'll look again within a working day.", "", "The MilitaryVoices.ai team"].join("\n"),
+  };
+}
+/** When they last sent it to us: one email per decision on each sending, however many times the button is pressed. */
+const submittedKey = (id: number) => `planner-submitted:${id}`;
+async function tellPlanner(e: typeof events.$inferSelect, approve: boolean, reason: string): Promise<"sent" | "skipped"> {
+  const to = e.ownerEmail.trim().toLowerCase();
+  if (!to || creditExempt(to)) return "skipped";
+  const sentAt = (await storage.getSetting(submittedKey(e.id))) || "before-24-nov";
+  const claimed = await db.insert(siteSettings).values({ key: `planner-mail:${e.id}:${approve ? "live" : "change"}:${sentAt}`, value: now() }).onConflictDoNothing().returning({ key: siteSettings.key });
+  if (!claimed.length) return "skipped";
+  const name = ((await storage.getProfileByEmail(to).catch(() => undefined))?.hostName ?? "").trim().split(/\s+/)[0] ?? "";
+  const first = /^[A-Za-z][A-Za-z'’-]{1,}$/.test(name) ? name : "";
+  const mail = plannerDecisionEmail({ approve, first, event: e.name, slug: e.slug, reason });
+  if (process.env.PLANNER_MAIL_DRY === "1") { console.log(`[planner mail dry run] to ${to}: ${mail.subject}\n${mail.text}`); return "sent"; }
+  const id = await sendOneOffEmail({ to, subject: mail.subject, html: "", text: mail.text, kind: approve ? "planner-live" : "planner-change", recipientName: first });
+  return id ? "sent" : "skipped";
+}
 
 /** The fields a planner sets, cleaned. Times are ISO; lengths have sensible bounds. */
 function details(b: Record<string, unknown>) {
@@ -110,6 +146,7 @@ export function registerOrganizer(app: Express, requireHostSession: RequestHandl
     if (!e) return res.status(404).json({ message: "That isn't one of your events." });
     if (e.review === "approved") return res.json(view(e, 0));
     const [row] = await db.update(events).set({ review: "pending" }).where(eq(events.id, e.id)).returning();
+    await storage.setSetting(submittedKey(e.id), now());
     await slackNote(`:calendar: ${meOf(req)} sent an event for approval: "${e.name}" (${new Date(e.startAtUtc).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}).`, { label: "Review it", url: `${ORIGIN}/admin` }).catch(() => {});
     res.json(view(row, 0));
   });
@@ -143,8 +180,14 @@ export function registerOrganizer(app: Express, requireHostSession: RequestHandl
   app.post("/api/admin/planner-events/:id/approve", requireAdmin, async (req, res) => {
     if ((req as { studioHost?: unknown }).studioHost) return res.status(403).json({ message: "Admins only." });
     const approve = req.body?.approve !== false;
-    const [row] = await db.update(events).set(approve ? { review: "approved", visible: true } : { review: "draft", visible: false }).where(eq(events.id, Number(req.params.id))).returning();
-    if (!row) return res.status(404).json({ message: "No such event." });
-    res.json({ ...view(row, 0), ownerEmail: row.ownerEmail });
+    // Sending it back says what to change: the planner reads it in the email.
+    const reason = String(req.body?.reason ?? "").trim().slice(0, 1000);
+    if (!approve && !reason) return res.status(400).json({ message: "Say what they need to change." });
+    const [before] = await db.select().from(events).where(eq(events.id, Number(req.params.id)));
+    if (!before) return res.status(404).json({ message: "No such event." });
+    const [row] = await db.update(events).set(approve ? { review: "approved", visible: true } : { review: "draft", visible: false }).where(eq(events.id, before.id)).returning();
+    // Only a decision on one waiting for us is news to the planner; a second click finds it decided already.
+    const mail = before.review === "pending" ? await tellPlanner(row, approve, reason).catch((err) => { console.error("Planner email failed:", (err as Error).message); return "skipped" as const; }) : "skipped";
+    res.json({ ...view(row, 0), ownerEmail: row.ownerEmail, mail });
   });
 }

@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Link } from "wouter";
 import { adminGet, adminSend } from "@/lib/adminApi";
@@ -43,8 +44,20 @@ export function PlatformOverview() {
   const qc = useQueryClient();
   const planner = useQuery<{ id: number; name: string; startAtUtc: string; review: string; ownerEmail: string; pageUrl: string; description: string }[]>({ queryKey: ["/api/admin/planner-events"], queryFn: () => adminGet("/api/admin/planner-events") });
   const waiting = (planner.data ?? []).filter((e) => e.review === "pending");
-  const decide = async (id: number, approve: boolean) => {
-    await adminSend("POST", `/api/admin/planner-events/${id}/approve`, { approve });
+  // Send back asks what to change first: the planner gets it in their email (24 Nov).
+  const [backFor, setBackFor] = useState<number | null>(null);
+  const [reason, setReason] = useState("");
+  const [deciding, setDeciding] = useState(false);
+  const decide = async (id: number, approve: boolean, why = "") => {
+    if (deciding) return;
+    setDeciding(true);
+    try {
+      await adminSend("POST", `/api/admin/planner-events/${id}/approve`, approve ? { approve } : { approve, reason: why });
+      setBackFor(null);
+      setReason("");
+    } finally {
+      setDeciding(false);
+    }
     void qc.invalidateQueries({ queryKey: ["/api/admin/planner-events"] });
     void qc.invalidateQueries({ queryKey: ["/api/admin/events"] });
   };
@@ -123,9 +136,19 @@ export function PlatformOverview() {
                   {e.description && <span className="mt-1 block text-sm text-foreground/80">{e.description.slice(0, 220)}{e.description.length > 220 ? "…" : ""}</span>}
                 </span>
                 <span className="flex shrink-0 gap-2">
-                  <Button size="sm" onClick={() => void decide(e.id, true)} data-testid={`approve-${e.id}`}>Approve</Button>
-                  <Button size="sm" variant="outline" onClick={() => void decide(e.id, false)}>Send back</Button>
+                  <Button size="sm" disabled={deciding} onClick={() => void decide(e.id, true)} data-testid={`approve-${e.id}`}>Approve</Button>
+                  <Button size="sm" variant="outline" disabled={deciding} onClick={() => { setBackFor(backFor === e.id ? null : e.id); setReason(""); }} data-testid={`send-back-${e.id}`}>Send back</Button>
                 </span>
+                {backFor === e.id && (
+                  <form className="w-full space-y-2" onSubmit={(ev) => { ev.preventDefault(); if (reason.trim()) void decide(e.id, false, reason.trim()); }}>
+                    <label htmlFor={`back-reason-${e.id}`} className="block text-sm font-medium">What should they change? It goes in their email.</label>
+                    <textarea id={`back-reason-${e.id}`} autoFocus value={reason} onChange={(ev) => setReason(ev.target.value)} maxLength={1000} rows={3} className="w-full rounded-lg border border-border bg-background p-2 text-sm" placeholder="Add a short description, so people know what the event is." data-testid={`back-reason-${e.id}`} />
+                    <span className="flex gap-2">
+                      <Button size="sm" type="submit" disabled={deciding || !reason.trim()} data-testid={`send-back-go-${e.id}`}>Send it back</Button>
+                      <Button size="sm" type="button" variant="ghost" onClick={() => setBackFor(null)}>Cancel</Button>
+                    </span>
+                  </form>
+                )}
               </li>
             ))}
           </ul>
