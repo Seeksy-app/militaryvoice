@@ -555,6 +555,45 @@ Search the help, or ask Alex: militaryvoices.ai/help.
 Book a guest and Be a guest are tabs on your show.
 Open my Podcast screen
 
+=== MILITARYVOICES.AI PLATFORM · www.militaryvoices.ai/help/stats ===
+All help Help · Podcast stats
+Bring your podcast stats in
+Put your Spotify plays and your Buzzsprout history beside the downloads we count, so you see your whole show in one place. Only you see your numbers.
+1 Spotify: plays, not downloads
+Looking for a downloads number in Spotify for Creators? There isn't one. Spotify shows plays.
+Spotify keeps its own copy of each episode and plays it from there, so its plays never reach your podcast host, us included.
+That's why your Spotify numbers come in as an upload: Spotify doesn't share them with anyone.
+Our Downloads count every other app: Apple Podcasts, Overcast, Pocket Casts and the rest.
+2 Export your numbers from Spotify
+a Sign in at creators.spotify.com, open your show and choose Analytics.
+b On Plays, press Export.
+c Do the same on Episodes, and on Audience (age, gender, location).
+d Each one saves a CSV file to your computer, usually in Downloads. Leave them as they are: no need to open them.
+3 Upload the files
+Your show is hosted with us:
+a In your menu, under Podcast, press Analytics.
+b Choose the Spotify tab and press Upload CSVs.
+c Pick all the files at once. We tell you which ones we read.
+Your show is hosted somewhere else:
+a Open your account menu and press Integrations.
+b Under Podcast stats, on Spotify, press Upload CSVs and pick all the files at once.
+c Press See your numbers in Podcast analytics.
+Spotify's numbers don't update on their own. Export and upload again about once a month: we let you know when it's time, and the button says Update.
+4 Buzzsprout
+Buzzsprout connects with a key, and its numbers then update on their own.
+a In Buzzsprout, open Profile → API and copy your API token.
+b Here, open your account menu, press Integrations, and under Podcast stats press Connect on Buzzsprout.
+c Paste the token. With more than one show in Buzzsprout, add the podcast's ID too: the number in its Buzzsprout address.
+We read your download numbers only, and keep the token encrypted.
+Moved your show here from Buzzsprout? Analytics asks you to Bring in your Buzzsprout history. Press Add Buzzsprout and paste the same token, and every episode's plays from before the move join your numbers. Bringing in Buzzsprout's apps, devices and locations is coming soon.
+5 Other hosts
+Hosted with someone other than Buzzsprout? Connecting more hosts is coming. Once your show moves here, we count every download ourselves from the first day. See moving your podcast here.
+6 Help and contact
+Email us: hello@militaryvoices.ai. A person reads every message and writes back.
+Search the help, or ask Alex: militaryvoices.ai/help.
+Your downloads, plays and listens are in Analytics, under Podcast.
+Open my Analytics
+
 === MILITARYVOICES.AI PLATFORM · www.militaryvoices.ai/help/account ===
 All help Help · Your account
 Your plan, credits, and what you deleted
