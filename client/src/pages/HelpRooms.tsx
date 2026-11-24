@@ -42,9 +42,11 @@ export default function HelpRooms() {
 
         <HelpSection n={3} id="scenes" title="Scenes and your look">
           <p>On a computer, your scenes are on the left and <strong>Your look</strong> is on the right. What you change shows on the stage straight away, and it's what your recording and your live show see.</p>
-          <HelpStep k="a"><strong>Scenes:</strong> click a scene card, or press its number key (1 to 9), to put it on stage. The one on stage says <strong>ON STAGE</strong>. Press <strong>+ New scene</strong> to add one, and pick its layout under the stage.</HelpStep>
+          <HelpStep k="a"><strong>Scenes</strong> are what viewers see. <strong>People</strong> are who's in the room. Click a scene card, or press its number key (1 to 9), to put it on stage. The one on stage says <strong>ON STAGE</strong>, and each card says who's on it. Press <strong>+ New scene</strong> and pick its type. A <strong>Media presentation</strong> asks what it shows: a clip, a picture or a shared screen.</HelpStep>
           <HelpStep k="b"><strong>Intro and outro video:</strong> add them at the top and bottom of the scenes, then press play to show one. The stage goes back to your people when it ends.</HelpStep>
-          <HelpStep k="c"><strong>Your look:</strong> pick your logo and its corner, a background colour or picture, and banners. Press <strong>Show</strong> on a banner to put it on screen; it goes away by itself after its time.</HelpStep>
+          <HelpStep k="c"><strong>Play a video:</strong> press <strong>Present or invite</strong>, then <strong>Video file</strong>. It plays once, with its sound, for everyone in your studio and in the recording, then the stage goes back to your scene. Tick <strong>Loop it</strong> to keep it going until you stop presenting.</HelpStep>
+          <HelpStep k="d"><strong>Your name on screen:</strong> open <strong>People</strong> and use your own row. Change the name, or switch <strong>Show my name</strong> off. The host can switch <strong>Show my show's icon</strong> off there too.</HelpStep>
+          <HelpStep k="e"><strong>Your look:</strong> pick your logo and its corner, a background colour or picture, and banners. Press <strong>Show</strong> on a banner to put it on screen; it goes away by itself after its time.</HelpStep>
         </HelpSection>
 
         <HelpSection n={4} id="backstage" title="On stage and backstage">

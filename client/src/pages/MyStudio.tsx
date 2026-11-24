@@ -67,6 +67,20 @@ function useInter() {
 const isPlayer = (p: Participant) => p.identity.startsWith("player-") || p.attributes?.role === "player";
 const say = (e: unknown) => ((e as Error).message ?? "").replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, "") || "Try again in a moment.";
 const clock = (since: string, now: number) => { const s = Math.max(0, Math.floor((now - Date.parse(since)) / 1000)); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60); return `${h ? `${h}:${String(m).padStart(2, "0")}` : m}:${String(s % 60).padStart(2, "0")}`; };
+/**
+ * How each person shows on stage in this studio, kept in this browser so it stays the way they left it
+ * (Andrew, 24 Nov: "let them toggle their icon on and off… where can we edit that to show or not show?").
+ * The host's key is "own", a guest's their invite.
+ */
+type MyStage = { name?: string; showName?: boolean };
+const meKeyOf = (invite?: string) => `mv-studio-me:${invite || "own"}`;
+function readMe(key: string): MyStage {
+  try { return JSON.parse(window.localStorage.getItem(key) || "{}") as MyStage; } catch { return {}; }
+}
+function saveMe(key: string, patch: MyStage) {
+  try { window.localStorage.setItem(key, JSON.stringify({ ...readMe(key), ...patch })); } catch { /* private mode: it still works for this visit */ }
+}
+
 const initials = (n: string) => n.trim().split(/\s+/).map((w) => w[0] ?? "").slice(0, 2).join("").toUpperCase() || "?";
 const today = () => new Date().toLocaleDateString(undefined, { month: "short", day: "numeric" });
 const useNow = () => { const [now, setNow] = useState(Date.now()); useEffect(() => { const t = window.setInterval(() => setNow(Date.now()), 1000); return () => window.clearInterval(t); }, []); return now; };
@@ -119,8 +133,9 @@ export default function MyStudio({ invite }: { invite?: string }) {
         owner={owner}
         roomName={roomName}
         blocked={blocked}
-        defaultName={owner ? studio.data?.you ?? "" : ""}
+        defaultName={readMe(meKeyOf(invite)).name || (owner ? studio.data?.you ?? "" : "")}
         onEnter={async (s) => {
+          if (s.name.trim()) saveMe(meKeyOf(invite), { name: s.name.trim().slice(0, 60) });
           const r = owner
             ? await apiRequest("POST", "/api/host/my-studio/token", { name: s.name })
             : await apiRequest("POST", `/api/my-studio/invite/${invite}/token`, { name: s.name });
@@ -142,7 +157,7 @@ export default function MyStudio({ invite }: { invite?: string }) {
       style={{ height: "100dvh" }}
     >
       <RoomAudioRenderer />
-      <StudioFrame owner={owner} roomName={conn.name} studio={owner ? studio.data : undefined} title={setup.title} />
+      <StudioFrame owner={owner} roomName={conn.name} studio={owner ? studio.data : undefined} title={setup.title} meKey={meKeyOf(invite)} />
     </LiveKitRoom>
   );
 }
@@ -328,7 +343,7 @@ function RailHandle({ width, cap, save }: { width: number; cap: number; save: (n
   );
 }
 
-function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomName: string; studio?: Studio; title: string }) {
+function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean; roomName: string; studio?: Studio; title: string; meKey: string }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const room = useRoomContext();
@@ -375,6 +390,8 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
   // Their title from the set-up screen rides on their participant, so it shows under their name for everyone.
   useEffect(() => {
     if (state === ConnectionState.Connected && title) void localParticipant.setAttributes({ title, displayTitle: title }).catch(() => {});
+    // Show name, as they left it last time in this studio.
+    if (state === ConnectionState.Connected && readMe(meKey).showName === false) void localParticipant.setAttributes({ showName: "0" }).catch(() => {});
   }, [state, title, localParticipant]);
 
   const rec = studio?.recording;
@@ -538,7 +555,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
             {tab === "look" && editing && <LookPanel kit={kit} />}
             {tab === "media" && v3 && <MediaPanel kit={kit} />}
             {tab === "style" && v3 && <StylePanel kit={kit} />}
-            {tab === "people" && <PeoplePanel owner={owner} studio={studio} onCopy={copyInvite} />}
+            {tab === "people" && <PeoplePanel owner={owner} studio={studio} onCopy={copyInvite} kit={kit} meKey={meKey} showArt={!!logo} />}
             {tab === "notes" && <NotesPanel roomKey={noteKey} text={notes} setText={setNotes} prompter={owner} sync={owner ? notesSync : undefined} />}
             {tab === "recording" && owner && <RecordingPanel studio={studio} now={now} busy={busy} onRecord={(on) => void record(on)} onGoLive={() => setSheet(true)} onEndLive={() => void endLive()} />}
             {tab === "chat" && <ChatPanel />}
@@ -698,6 +715,7 @@ const roleOf = (p: Participant) => p.attributes?.displayTitle || p.attributes?.t
 
 function Tile({ t, big, small }: { t: TrackReferenceOrPlaceholder; big?: boolean; small?: boolean }) {
   const speaking = useIsSpeaking(t.participant);
+  const nameOff = useParticipantAttribute("showName", { participant: t.participant }) === "0";
   const name = t.participant.name || t.participant.identity;
   const shows = isTrackReference(t) && !t.publication.isMuted && !!t.publication.track;
   const screen = t.source === Track.Source.ScreenShare;
@@ -705,8 +723,8 @@ function Tile({ t, big, small }: { t: TrackReferenceOrPlaceholder; big?: boolean
     <div className={`relative flex h-full w-full items-center justify-center overflow-hidden rounded-xl bg-[#16264a] ${speaking && !screen ? "ring-[3px] ring-[rgba(18,183,106,0.9)]" : ""}`}>
       {shows && isTrackReference(t) ? <VideoTrack trackRef={t} className={`h-full w-full ${screen ? "object-contain" : "object-cover"} ${t.participant.isLocal && !screen ? "-scale-x-100" : ""}`} />
         : <div className={`flex items-center justify-center rounded-full bg-[#3a4f80] font-bold text-white ${small ? "h-10 w-10 text-sm" : big ? "h-28 w-28 text-4xl" : "h-24 w-24 text-3xl"}`}>{initials(name)}</div>}
-      {!small && <div className="absolute bottom-3 left-3 max-w-[85%] truncate rounded-full bg-[rgba(5,18,48,0.78)] px-3 py-1.5 text-[13px] font-semibold text-white">{screen ? `${name}'s screen` : name}{!screen && <span className="font-medium text-[#9bb6e8]"> · {roleOf(t.participant)}</span>}</div>}
-      {small && <div className="absolute bottom-1 left-1.5 max-w-[90%] truncate rounded-full bg-[rgba(5,18,48,0.78)] px-2 py-0.5 text-[11px] font-semibold text-white">{name}</div>}
+      {!small && !(nameOff && !screen) && <div className="absolute bottom-3 left-3 max-w-[85%] truncate rounded-full bg-[rgba(5,18,48,0.78)] px-3 py-1.5 text-[13px] font-semibold text-white">{screen ? `${name}'s screen` : name}{!screen && <span className="font-medium text-[#9bb6e8]"> · {roleOf(t.participant)}</span>}</div>}
+      {small && !nameOff && <div className="absolute bottom-1 left-1.5 max-w-[90%] truncate rounded-full bg-[rgba(5,18,48,0.78)] px-2 py-0.5 text-[11px] font-semibold text-white">{name}</div>}
       {speaking && !screen && !small && <Meter p={t.participant} />}
     </div>
   );
@@ -1056,18 +1074,19 @@ function PanelHead({ title, line }: { title: string; line: string }) {
   return <div className="px-5 pt-5"><p className="text-lg font-bold tracking-tight">{title}</p><p className="mt-0.5 text-[13px] text-[#667085]">{line}</p></div>;
 }
 
-function PeoplePanel({ owner, studio, onCopy }: { owner: boolean; studio?: Studio; onCopy: () => void }) {
+function PeoplePanel({ owner, studio, onCopy, kit, meKey, showArt }: { owner: boolean; studio?: Studio; onCopy: () => void; kit: RoomKit; meKey: string; showArt: boolean }) {
   const people = useParticipants().filter((p) => !isPlayer(p));
   return (
     <div className="flex min-h-0 flex-1 flex-col">
       <PanelHead title="People" line={(() => { const back = people.filter((p) => p.attributes?.stage === "off").length; return back ? `${people.length} in the studio, ${back} backstage.` : `${people.length} in the studio. Everyone here is on the stage.`; })()} />
       <ul className="mt-4 min-h-0 flex-1 space-y-1 overflow-y-auto px-3">
         {people.map((p) => (
-          <li key={p.identity} className="flex items-center gap-3 rounded-xl px-2 py-2 hover:bg-[#f9fafb]">
+          <li key={p.identity} className={`flex flex-wrap items-center gap-3 rounded-xl px-2 py-2 ${p.isLocal ? "bg-[#f9fafb]" : "hover:bg-[#f9fafb]"}`} data-testid={p.isLocal ? "people-me" : undefined}>
             <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#3a4f80] text-xs font-bold text-white">{initials(p.name || p.identity)}</div>
             <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{p.name || p.identity}{p.isLocal ? " (you)" : ""}</p><p className="truncate text-xs text-[#667085]">{roleOf(p)}</p></div>
             {p.isMicrophoneEnabled ? <Mic className="h-4 w-4 text-[#475467]" aria-label="Mic on" /> : <MicOff className="h-4 w-4 text-[#b42318]" aria-label="Muted" />}
             {p.isCameraEnabled ? <Video className="h-4 w-4 text-[#475467]" aria-label="Camera on" /> : <VideoOff className="h-4 w-4 text-[#98a2b3]" aria-label="Camera off" />}
+            {p.isLocal && <div className="basis-full"><MyStageRow kit={kit} meKey={meKey} icon={owner && showArt && !!kit.look && !kit.look.logo} /></div>}
           </li>
         ))}
       </ul>
@@ -1082,6 +1101,51 @@ function PeoplePanel({ owner, studio, onCopy }: { owner: boolean; studio?: Studi
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * Your own row in People: the name on stage, and whether it shows; for the host, their show's icon too
+ * (Andrew, 24 Nov). Saved at once, remembered for this studio, and the stage, recording and live
+ * show change straight away. The logo picked in Look is separate (its own None).
+ */
+function MyStageRow({ kit, meKey, icon }: { kit: RoomKit; meKey: string; icon: boolean }) {
+  const { localParticipant } = useLocalParticipant();
+  const { toast } = useToast();
+  const shown = useParticipantAttribute("showName", { participant: localParticipant }) !== "0";
+  const [name, setName] = useState(localParticipant.name ?? "");
+  const saved = useRef(localParticipant.name ?? "");
+  const saveName = async () => {
+    const n = name.replace(/\s+/g, " ").trim().slice(0, 60);
+    if (!n) { setName(saved.current); return; }
+    if (n === saved.current) return;
+    try { await localParticipant.setName(n); saved.current = n; saveMe(meKey, { name: n }); }
+    catch (e) { setName(saved.current); toast({ title: "Couldn't change your name", description: say(e), variant: "destructive" }); }
+  };
+  const setShown = (on: boolean) => {
+    saveMe(meKey, { showName: on });
+    void localParticipant.setAttributes({ showName: on ? "1" : "0" }).catch((e) => toast({ title: "Couldn't change that", description: say(e), variant: "destructive" }));
+  };
+  const iconOn = kit.look?.showIcon !== false;
+  return (
+    <div className="mt-1 space-y-2.5 pl-12 pb-1">
+      <label className="block text-xs font-semibold text-[#475467]">
+        Your name on screen
+        <input value={name} maxLength={60} onChange={(e) => setName(e.target.value)} onBlur={() => void saveName()} onKeyDown={(e) => { if (e.key === "Enter") (e.target as HTMLInputElement).blur(); if (e.key === "Escape") { setName(saved.current); (e.target as HTMLInputElement).blur(); } }}
+          className="mt-1 block h-9 w-full rounded-lg border border-[#d0d5dd] bg-white px-2.5 text-sm font-semibold text-[#101828]" data-testid="me-name" />
+      </label>
+      <Switch on={shown} onChange={setShown} label="Show my name" testId="me-show-name" />
+      {icon && <Switch on={iconOn} onChange={(on) => kit.change((l) => ({ ...l, showIcon: on }))} label="Show my show's icon" testId="me-show-icon" />}
+    </div>
+  );
+}
+
+function Switch({ on, onChange, label, testId }: { on: boolean; onChange: (on: boolean) => void; label: string; testId: string }) {
+  return (
+    <button type="button" role="switch" aria-checked={on} onClick={() => onChange(!on)} className="flex w-full items-center justify-between gap-3 text-left text-sm font-medium text-[#344054]" data-testid={testId}>
+      {label}
+      <span className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${on ? "bg-[#053877]" : "bg-[#d0d5dd]"}`}><span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow transition-[left] ${on ? "left-[18px]" : "left-0.5"}`} /></span>
+    </button>
   );
 }
 

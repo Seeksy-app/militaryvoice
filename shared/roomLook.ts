@@ -109,6 +109,8 @@ export interface RoomStyle {
 
 export interface RoomLook extends RoomLookStyle {
   scenes: RoomScene[];
+  /** The show's icon in the bottom-left when no logo is picked (absent = on). Off from the host's row in People. */
+  showIcon?: boolean;
   logos?: RoomAsset[];
   banners?: { id: string; text: string; seconds: number }[];
   intro?: RoomAsset | null;
@@ -210,7 +212,7 @@ export function roomStageMeta(look: RoomLook | null, live: RoomLive, name: strin
   // A logo picked in Media wins. Without one, their show logo (else their cover) sits small in the bottom-left
   // (Andrew, 23 Nov: "logo bottom left"); with neither, as before.
   const picked = abs(style.logo?.asset?.url, origin);
-  const own = !picked && corner?.url ? corner : null;
+  const own = !picked && corner?.url && l.showIcon !== false ? corner : null;
   const logoUrl = picked || own?.url || (style.logo === null || look ? "" : abs(DEFAULT_LOGO, origin));
   const meta: Record<string, unknown> = {
     studioName: name,

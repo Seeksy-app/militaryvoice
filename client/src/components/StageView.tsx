@@ -96,6 +96,8 @@ export interface StageTile {
   audio: Track | null;
   /** A shared screen's or tab's own sound (Share tab audio), kept apart so it never replaces their voice. */
   shareAudio?: Track | null;
+  /** They switched Show name off on their row in People: no name tag on stage, in the recording or live. */
+  hideName?: boolean;
   speaking: boolean;
   /** An avatar, whose feed arrives on a chroma-key green background. */
   keyed?: boolean;
@@ -185,6 +187,7 @@ export function useStageRoom(
           photoUrl: p.attributes?.photoUrl || "",
           host: p.attributes?.role === "studio-host",
           video, audio, shareAudio, speaking: p.isSpeaking,
+          hideName: p.attributes?.showName === "0",
           // The avatar renders on green — that is the right output for a
           // source meant to be composited, not a shortcoming. It gets keyed
           // here so she sits on our stage instead of a wall of green.
@@ -204,6 +207,7 @@ export function useStageRoom(
       .on(RoomEvent.TrackMuted, snapshot)
       .on(RoomEvent.TrackUnmuted, snapshot)
       .on(RoomEvent.ParticipantAttributesChanged, snapshot)
+      .on(RoomEvent.ParticipantNameChanged, snapshot)
       .on(RoomEvent.ActiveSpeakersChanged, snapshot)
       .on(RoomEvent.RoomMetadataChanged, readMeta)
       .on(RoomEvent.DataReceived, (payload: Uint8Array, _p, _k, topic?: string) => {
@@ -476,9 +480,9 @@ export function Tile({ tile, muted, namePos = "bottom", fit, contain = false, fl
       {/* The one name on screen: each person's own, bottom left of their
           frame, as they typed it in the green room, with their title under
           it. Sized to the frame, so it reads the same big or small. */}
-      {nameTag ? (nameTag.show !== false && namePos !== "none" && <StyledNameTag tile={tile} tag={nameTag} />) : (
+      {nameTag ? (nameTag.show !== false && namePos !== "none" && !tile.hideName && <StyledNameTag tile={tile} tag={nameTag} />) : (
       <div
-        className={`absolute bottom-0 left-0 max-w-[85%] ${namePos === "none" ? "hidden" : ""}`}
+        className={`absolute bottom-0 left-0 max-w-[85%] ${namePos === "none" || tile.hideName ? "hidden" : ""}`}
         style={{ padding: "0 0 clamp(4px, 2.6cqh, 16px) clamp(4px, 1.8cqw, 16px)", fontSize: "clamp(10px, 3.6cqh, 18px)" }}
         data-testid="stage-name-tag"
       >

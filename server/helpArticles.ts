@@ -819,6 +819,14 @@ export const QUICK_ANSWERS: { q: string; a: string }[] = [
     "a": "1. In your studio, press **Present or invite**.\n2. Pick **Video file**, tick that you have the rights, and choose your video.\nIt plays once, with its sound, for everyone in the studio and in the recording, then goes back to your scene.\n[[GO:studio]]"
   },
   {
+    "q": "How do I hide or change my name on screen?",
+    "a": "1. In your studio, open **People**.\n2. On your own row, change **Your name on screen**, or switch **Show my name** off.\nThe host can also switch **Show my show's icon** off there. It changes on stage straight away.\n[[GO:studio]]"
+  },
+  {
+    "q": "What's the difference between scenes and people?",
+    "a": "**Scenes** are what viewers see. **People** are who's in the room.\n1. Click a scene on the left to put it on stage.\n2. Each scene card says who's on it.\n3. Under the stage, send a guest backstage to keep them off every scene.\n[[GO:studio]]"
+  },
+  {
     "q": "How do I invite a guest to my show?",
     "a": "1. Open your show, then **Invite a guest**.\n2. Add their name and email, when, and where you'll record.\n3. Press **Send the invitation**.\n[[GO:guest-invite]]"
   }

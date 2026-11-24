@@ -25,6 +25,15 @@ export const TYPES: { id: SceneType; label: string; line: string; layout: Layout
 export const typeOf = (s: Scene): SceneType => s.type ?? (s.layout === "solo" || s.layout === "speaker" ? "single" : s.layout === "side" ? "two" : s.layout === "grid" ? "group" : "media");
 export const peopleOf = (s: Scene) => s.people ?? PEOPLE_DEFAULT[typeOf(s)];
 const typeLabel = (t: SceneType) => TYPES.find((x) => x.id === t)!.label;
+/**
+ * Who's on a scene, in plain words, on its card (Andrew, 24 Nov: "How are both of them kind of
+ * choreographed together?"): a scene is what viewers see; this says which of the people in the room it shows.
+ */
+export function whoOn(s: Scene): string {
+  if (typeOf(s) === "media") { const n = peopleOf(s); return n === 0 ? "Media only" : `Media + ${n} ${n === 1 ? "person" : "people"}`; }
+  if (s.stage?.length) { const n = s.stage.length + 1; return `${n} people`; }
+  return "Everyone on stage";
+}
 
 /**
  * The left column of the studio (mockup v8): numbered scene cards, the one on air marked
@@ -129,6 +138,8 @@ export function ScenesPanel({ kit, v3 = false, sheet = false, onEditLayout }: { 
   return (
     <aside className={sheet ? "flex flex-col gap-3 px-4 pb-6 pt-2" : "hidden w-[208px] shrink-0 flex-col gap-3 overflow-y-auto border-r border-[#e4e7ec] bg-white px-3.5 pb-4 pt-[18px] lg:flex 2xl:w-[232px]"} data-testid={sheet ? "scenes-sheet" : "scenes-panel"}>
       {!sheet && <div><p className="text-[15px] font-bold">Scenes</p>{last > 1 && <p className="text-xs text-[#667085]">Press 1–{last} to switch</p>}</div>}
+      {/* Scenes vs People (Andrew, 24 Nov). */}
+      <p className="rounded-lg bg-[#f5f8fd] px-2.5 py-2 text-[11.5px] leading-snug text-[#344054]" data-testid="scenes-vs-people">Scenes = what viewers see. People = who's in the room.</p>
       {!v3 && <VideoSlot slot="intro" kit={kit} />}
       {scenes.map((s) => (
         <div key={s.id}>
@@ -196,7 +207,8 @@ function SceneCard({ s, kit, v3, on, next, full, onPick, onRename, onEditLayout,
           {!on && next && <span className="absolute left-2 top-2 rounded-full bg-[#F0A71F] px-[7px] py-0.5 text-[10px] font-bold tracking-[0.02em] text-[#101828]">TAKE ME NEXT</span>}
         </div>
         <div className="flex items-center justify-between gap-2 bg-white px-3 py-2">
-          <span className="min-w-0"><span className="block truncate text-[13px] font-bold">{s.name}</span>{v3 && (s.boxes?.length ? <span className="block text-[11px] text-[#667085]">Your own layout</span> : <span className="flex items-center gap-1 text-[11px] text-[#667085]">{typeLabel(typeOf(s))} · <Users className="h-3 w-3" aria-label="People on stage" />{peopleOf(s)}</span>)}</span>
+          <span className="min-w-0"><span className="block truncate text-[13px] font-bold">{s.name}</span>{v3 ? (s.boxes?.length ? <span className="block text-[11px] text-[#667085]">Your own layout</span> : <span className="flex items-center gap-1 text-[11px] text-[#667085]">{typeLabel(typeOf(s))} · <Users className="h-3 w-3" aria-label="People on stage" />{peopleOf(s)}</span>)
+            : <span className="flex items-center gap-1 text-[11px] text-[#667085]" data-testid="scene-who"><Users className="h-3 w-3 shrink-0" aria-hidden />{whoOn(s)}</span>}</span>
           <span className="rounded-md bg-[#f2f4f7] px-[7px] py-px text-xs font-semibold text-[#667085]">{s.n}</span>
         </div>
       </button>
@@ -246,6 +258,23 @@ function SceneEditor({ s, kit, v3, onDelete, onClose }: { s: Scene; kit: RoomKit
           {type === "media" && <MediaPick s={s} kit={kit} set={set} />}
           {type === "profile" && <ProfileFields s={s} kit={kit} set={set} />}
         </>
+      ) : type === "media" && s.type === "media" ? (
+        // v2 (Andrew, 24 Nov: "It just drops down to scene 2 and then asks for a layout"): a Media presentation
+        // asks what it shows, and how many people sit with it; the layout icons wait under More layouts.
+        <>
+          <MediaPick s={s} kit={kit} set={set} upload />
+          <p className="mt-3 text-xs font-semibold text-[#475467]">People on stage</p>
+          <div className="mt-1.5 flex items-center gap-2" data-testid="scene-people">
+            <button type="button" onClick={() => set({ people: Math.max(0, people - 1) })} disabled={people <= 0} aria-label="Fewer people" className="h-8 w-8 rounded-lg border border-[#d0d5dd] bg-white text-base font-bold disabled:opacity-40">−</button>
+            <span className="w-6 text-center text-sm font-bold tabular-nums">{people}</span>
+            <button type="button" onClick={() => set({ people: Math.min(9, people + 1) })} disabled={people >= 9} aria-label="More people" className="h-8 w-8 rounded-lg border border-[#d0d5dd] bg-white text-base font-bold disabled:opacity-40">+</button>
+            <span className="text-[11px] leading-snug text-[#667085]">{people === 0 ? "The media fills the scene" : people === 1 ? "One person in a corner" : "People in a strip"}</span>
+          </div>
+          <details className="mt-3" data-testid="scene-more-layouts">
+            <summary className="cursor-pointer text-xs font-semibold text-[#053877]">More layouts</summary>
+            <div className="mt-1.5"><LayoutPicker value={s.layout} onPick={(layout) => set({ layout, type: undefined, people: undefined, media: undefined })} size="sm" /></div>
+          </details>
+        </>
       ) : (
         <>
           <p className="mt-3 text-xs font-semibold text-[#475467]">Layout</p>
@@ -260,18 +289,49 @@ function SceneEditor({ s, kit, v3, onDelete, onClose }: { s: Scene; kit: RoomKit
   );
 }
 
-/** A media scene shows one clip or picture from Media (or a shared screen when it has none). */
-function MediaPick({ s, kit, set }: { s: Scene; kit: RoomKit; set: (p: Partial<Scene>) => void }) {
+/**
+ * A media scene shows one clip or picture from Media (or a shared screen when it has none). `upload`
+ * (the v2 editor, where there's no Media tab): "What does this scene show?" with Upload one beside the list.
+ */
+function MediaPick({ s, kit, set, upload = false }: { s: Scene; kit: RoomKit; set: (p: Partial<Scene>) => void; upload?: boolean }) {
   const look = kit.look!;
-  const all = [...(look.videos ?? []).map((v) => v.asset), ...(look.backgrounds ?? []), ...look.logos].filter((a, i, xs) => xs.findIndex((b) => b.id === a.id) === i);
+  const { toast } = useToast();
+  const input = useRef<HTMLInputElement>(null);
+  const [rights, setRights] = useState(false);
+  const [adding, setAdding] = useState(false);
+  const [pct, setPct] = useState<number | null>(null);
+  const all = [...(look.videos ?? []).map((v) => v.asset), ...(look.backgrounds ?? []), ...look.logos, ...(s.media ? [s.media] : [])].filter((a, i, xs) => xs.findIndex((b) => b.id === a.id) === i);
+  const pick = async (f?: File) => {
+    if (!f) return;
+    const video = f.type.startsWith("video/");
+    setPct(0);
+    try { set({ media: await kit.addAsset(video ? "video" : "photo", f, setPct, video ? true : undefined) }); setAdding(false); }
+    catch (e) { toast({ title: "Couldn't add that file", description: (e as Error).message, variant: "destructive" }); }
+    finally { setPct(null); if (input.current) input.current.value = ""; }
+  };
   return (
     <>
-      <label className="mt-3 block text-xs font-semibold text-[#475467]" htmlFor={`media-${s.id}`}>Shows</label>
+      <label className="mt-3 block text-xs font-semibold text-[#475467]" htmlFor={`media-${s.id}`}>{upload ? "What does this scene show?" : "Shows"}</label>
       <select id={`media-${s.id}`} value={s.media?.id ?? ""} onChange={(e) => set({ media: all.find((a) => a.id === e.target.value) ?? null })} className="mt-1.5 h-9 w-full rounded-lg border border-[#d0d5dd] bg-white px-2 text-sm" data-testid="scene-media">
         <option value="">A shared screen</option>
         {all.map((a) => <option key={a.id} value={a.id}>{a.name || (a.kind === "video" ? "Video" : "Picture")}</option>)}
       </select>
-      {!all.length && <p className="mt-1 text-[11px] text-[#98a2b3]">Add clips or pictures in Media to show one here.</p>}
+      {!upload && !all.length && <p className="mt-1 text-[11px] text-[#98a2b3]">Add clips or pictures in Media to show one here.</p>}
+      {upload && (pct !== null ? (
+        <p className="mt-2 flex items-center gap-1.5 text-[12px] font-semibold text-[#667085]"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading {pct}%</p>
+      ) : !adding ? (
+        <button type="button" onClick={() => setAdding(true)} className="mt-2 flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#98a2b3] bg-white text-[12px] font-semibold text-[#475467] hover:bg-[#f9fafb]" data-testid="scene-media-upload"><Plus className="h-3.5 w-3.5" /> Upload a video or picture</button>
+      ) : (
+        <div className="mt-2 rounded-lg border border-[#e4e7ec] bg-white p-2.5">
+          <input ref={input} type="file" accept="video/mp4,video/quicktime,video/webm,image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => void pick(e.target.files?.[0])} />
+          <label className="flex items-start gap-2 text-[12px] font-semibold text-[#344054]"><input type="checkbox" checked={rights} onChange={(e) => setRights(e.target.checked)} className="mt-0.5" data-testid="scene-media-rights" /> I have the rights to use this</label>
+          <div className="mt-2 flex items-center gap-2">
+            <button type="button" disabled={!rights} onClick={() => input.current?.click()} className="h-8 rounded-lg bg-[#053877] px-3 text-[12px] font-bold text-white disabled:opacity-40">Choose a file</button>
+            <button type="button" onClick={() => setAdding(false)} className="h-8 px-1.5 text-[12px] font-semibold text-[#475467]">Cancel</button>
+          </div>
+        </div>
+      ))}
+      {upload && !s.media && <p className="mt-1.5 text-[11px] leading-snug text-[#667085]">A shared screen: press Present or invite, then Share screen.</p>}
     </>
   );
 }

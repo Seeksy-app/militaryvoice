@@ -56,6 +56,8 @@ export type Look = {
   rev: number;
   background: Background;
   logo: Logo;
+  /** Their show's icon in the bottom-left when no logo is picked (absent = on). Switched from the host's row in People. */
+  showIcon?: boolean;
   logos: Asset[];
   /** Uploaded pictures to pick from (asked of Podcasting; until then only the one in use). */
   backgrounds?: Asset[];

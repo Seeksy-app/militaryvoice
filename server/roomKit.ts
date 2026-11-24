@@ -122,6 +122,8 @@ export type Look = {
   /** v3: the background a NEW scene starts with (and the fallback); each scene carries its own. */
   background: Background;
   logo: { asset: Asset; corner: "tl" | "tr" } | null;
+  /** Their show's icon in the bottom-left when no logo is picked (default on). The host's row in People switches it (Andrew, 24 Nov). */
+  showIcon?: boolean;
   logos: Asset[];
   /** Uploaded background pictures to pick from. */
   backgrounds: Asset[];
@@ -337,6 +339,7 @@ export function clean(raw: any, assets: Map<string, Asset>): Look | string {
     rev: 0,
     background: fallbackBg,
     logo: logo(raw.logo) ?? null,
+    showIcon: raw.showIcon !== false,
     logos: (Array.isArray(raw.logos) ? raw.logos : []).map((v: any) => asset(v, "logo")).filter(Boolean).slice(0, 6) as Asset[],
     backgrounds: (Array.isArray(raw.backgrounds) ? raw.backgrounds : []).map((v: any) => asset(v, "background")).filter(Boolean).slice(0, 6) as Asset[],
     banners,
