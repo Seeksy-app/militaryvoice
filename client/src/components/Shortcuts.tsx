@@ -12,9 +12,9 @@ import { useToast } from "@/hooks/use-toast";
  * The dashboard's Shortcuts row (Andrew, 23 Nov, mockup approved): compact cards, the 3D icon beside the words;
  * drag to arrange at any time (a handle on hover on a computer, press and hold on a phone); an "Add a shortcut" tile
  * at the end whenever there's room; Edit only adds an × to remove (Andrew via PM, 23 Nov: "the drag ability … and
- * then to add more cards"). The picker lists the pages in the nav, up to 8. Saved per account on the server, and
- * under View as too (it saves to that account, like any admin edit there).
- * Their next setup step, when there is one, stands in front, outlined, and isn't one of the 8.
+ * then to add more cards"). The picker lists the pages in the nav, up to 14 (three rows of five with Your Discovery).
+ * Saved per account on the server, and under View as too (it saves to that account, like any admin edit there).
+ * Their next setup step, when there is one, stands in front, outlined, and isn't one of the 14.
  */
 export type Shortcut = {
   key: string;
@@ -36,12 +36,14 @@ export type Shortcut = {
 
 type Saved = { keys: string[] | null; max: number; readOnly: boolean };
 const QK = ["/api/host/shortcuts"];
+/** Three rows of five on a computer (Andrew, 24 Nov: "two rows, and the ability to create a third"). */
+const TILES_MAX = 15;
 
-/** `pinned`: Your Discovery, always first and never one of the 8. */
+/** `pinned`: Your Discovery, always first and never one of the 14. */
 export function Shortcuts({ catalog, defaults, next, pinned }: { catalog: Shortcut[]; defaults: string[]; next?: Shortcut | null; pinned?: Shortcut | null }) {
   const { toast } = useToast();
   const { data } = useQuery<Saved>({ queryKey: QK, retry: false, staleTime: 60_000 });
-  const max = data?.max ?? 8;
+  const max = Math.min(data?.max ?? 14, TILES_MAX - (pinned ? 1 : 0));
   const readOnly = data?.readOnly ?? false;
   const byKey = new Map(catalog.map((c) => [c.key, c]));
   const saved = (data?.keys ?? defaults).filter((k) => byKey.has(k));
@@ -205,9 +207,10 @@ export function Shortcuts({ catalog, defaults, next, pinned }: { catalog: Shortc
   };
 
   const items = order.map((k) => byKey.get(k)!).filter(Boolean);
-  const canAdd = !readOnly && order.length < max;
   // On a phone (two across) the tile fills the empty half of the last row, or a row of its own.
   const filled = items.length + (pinned ? 1 : 0) + (next ? 1 : 0);
+  // Three rows of five at most, Your Discovery included; once they're full, "Add a shortcut" goes.
+  const canAdd = !readOnly && order.length < max && filled < TILES_MAX;
   const addTile = (
     <button type="button" onClick={() => setPicking(true)} className="flex h-16 w-full items-center gap-2.5 whitespace-nowrap rounded-2xl border-[1.5px] border-dashed border-border px-3 py-2.5 text-left text-sm font-semibold lg:gap-2 lg:px-2.5 lg:text-[13px] text-[#053877] hover:border-[#053877]/50 hover:bg-[#053877]/[0.03] dark:text-[#8ab4f8]" data-testid="shortcut-add">
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#053877]/[0.08] dark:bg-white/10 lg:h-7 lg:w-7 lg:rounded-lg"><Plus className="h-5 w-5 lg:h-4 lg:w-4" /></span>
@@ -232,7 +235,9 @@ export function Shortcuts({ catalog, defaults, next, pinned }: { catalog: Shortc
           </>
         ) : null}
       </div>
-      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-[repeat(auto-fill,minmax(10rem,1fr))] lg:gap-2" data-testid="todo-strip">
+      {/* Five across on a computer, never more (Andrew, 24 Nov: "Five across is default"): each column is at least a fifth
+          of the row, so a wide screen can't fit a sixth; under five 10rem columns (1024) it falls to four. Up to three rows. */}
+      <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-[repeat(auto-fill,minmax(max(10rem,calc((100%_-_2rem)/5)),1fr))] lg:gap-2" data-testid="todo-strip">
         {pinned && card(pinned, { pinned: true })}
         {next && card(next, { next: true })}
         {items.map((s) => card(s))}

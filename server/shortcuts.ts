@@ -12,7 +12,8 @@ import type { Express, RequestHandler } from "express";
 import { storage } from "./storage.js";
 import { getSessionEmail } from "./session.js";
 
-export const SHORTCUT_MAX = 8;
+/** Three rows of five on the dashboard, Your Discovery being one (Andrew, 24 Nov). */
+export const SHORTCUT_MAX = 14;
 const KEY_RE = /^[a-z][a-z0-9-]{0,31}$/;
 const norm = (e: string) => e.trim().toLowerCase();
 const keyOf = (email: string) => `shortcuts:${norm(email)}`;

@@ -1672,8 +1672,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                   {(() => {
                     const step = buildSteps(checklistState, checklistNav).filter((x) => !x.done)[0];
                     const hosted = podcastSources.some((p) => p.source === "militaryvoices");
-                    // Shortcuts (Andrew, 23 Nov, mockups approved): Podcast, Episodes, Pōstify, Go live, SmartLink by default; the rest of the nav is
-                    // there to add. Keys are what the server stores, so never rename one.
+                    // Shortcuts (Andrew, 24 Nov): Your Discovery, Podcast, Episodes, Go live, Pōstify across the top; SmartLink and
+                    // "Add a shortcut" start the second row. The rest of the nav is there to add. Keys are what the server stores, so never rename one.
                     // Episodes says what's waiting (Andrew, 23 Nov: "'to every app' doesn't really make any sense"), with the count on it.
                     const shows = hostingMine?.shows ?? [];
                     const eps = shows.flatMap((x) => x.episodes ?? []);
@@ -1700,7 +1700,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                     const next: Shortcut | null = step ? { key: `todo-${step.key}`, art: "sparkles", title: step.label, tag: step.tag, hint: "Your next step", go: () => goToStep(step) } : null;
                     return (
                       <>
-                      <Shortcuts catalog={catalog} defaults={path === "planner" ? ["myevents", "clips", "live", "page"] : ["podcast", "episode", "clips", "live", "page"]} next={next} pinned={yourDiscovery} />
+                      <Shortcuts catalog={catalog} defaults={path === "planner" ? ["myevents", "live", "clips", "page"] : ["podcast", "episode", "live", "clips", "page"]} next={next} pinned={yourDiscovery} />
                       <YourDiscoverySheet open={myDiscOpen} onOpenChange={setMyDiscOpen} free={discoverMe?.free} onFind={() => { setMyDiscOpen(false); goTo("discovery"); }} onConnect={() => { setMyDiscOpen(false); goTo("integrations"); }} />
                       {/* Go live: our room, or their own software with our stream key. Both land in the Library. */}
                       {liveOpen && (
