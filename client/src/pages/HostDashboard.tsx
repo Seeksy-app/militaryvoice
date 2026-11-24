@@ -95,7 +95,7 @@ import { MyAnalytics } from "@/components/MyAnalytics";
 import { PodcastChips, PodcastListens, usePodcastSources, ListingChips, useListings } from "@/components/PodcastStats";
 import { ConnectedAccountsStrip } from "@/components/ConnectedAccountsStrip";
 import { HomeFiles } from "@/components/HomeFiles";
-import { PodcastHosting } from "@/components/PodcastHosting";
+import { PodcastHosting, OPEN_SHOW_KEY } from "@/components/PodcastHosting";
 import { BioBuilder } from "@/components/BioBuilder";
 import { GetTheApp } from "@/components/GetTheApp";
 import { isPodcaster, pathOf } from "@shared/schema";
@@ -828,7 +828,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     enabled: !!data,
     staleTime: 60_000,
   });
-  const { data: hostingMine } = useQuery<{ shows?: { show?: { title?: string; newFeedUrl?: string }; episodes?: { status?: string }[] }[] }>({
+  const { data: hostingMine } = useQuery<{ shows?: { show?: { id?: number; title?: string; newFeedUrl?: string }; episodes?: { status?: string }[] }[] }>({
     queryKey: ["/api/host/hosting"],
     queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json(),
     enabled: !!data,
@@ -1683,7 +1683,12 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                       path === "planner"
                         ? { key: "myevents", art: "calendar", title: "My events", hint: "Create and run", go: () => goTo("myevents") }
                         : { key: "podcast", art: "headphone", title: "Podcast", hint: hosted && showTitle ? showTitle : "Host it free", go: () => goTo("podcast") },
-                      ...(path !== "planner" ? [{ key: "episode", art: "mic" as const, title: "Episodes", hint: waiting ? `${waiting} to publish` : eps.length ? "All published" : "Add an episode", badge: waiting || undefined, go: () => goTo("podcast") }] : []),
+                      ...(path !== "planner" ? [{ key: "episode", art: "mic" as const, title: "Episodes", hint: waiting ? `${waiting} to publish` : eps.length ? "All published" : "Add an episode", badge: waiting || undefined, go: () => {
+                        // One show with drafts: open it on its episodes. More than one: Your shows, where each card says how many (Andrew, 24 Nov).
+                        const withDrafts = shows.filter((x) => (x.episodes ?? []).some((e) => e.status === "draft"));
+                        if (withDrafts.length === 1 && withDrafts[0].show?.id) { try { sessionStorage.setItem(OPEN_SHOW_KEY, String(withDrafts[0].show.id)); } catch { /* fine */ } }
+                        goTo("podcast");
+                      } }] : []),
                       { key: "clips", art: "wand", title: "Pōstify", hint: "Pōstify an episode", go: () => goTo("postify") },
                       { key: "live", art: "video", title: "Go live", hint: "Studio or OBS", go: () => setLiveOpen((v) => !v), active: liveOpen, expands: true },
                       { key: "page", art: "globe", title: "Your SmartLink", hint: "Edit your page", go: () => goTo("page") },

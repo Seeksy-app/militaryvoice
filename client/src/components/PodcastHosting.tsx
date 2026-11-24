@@ -91,6 +91,9 @@ const STAGE: Record<Stage, { label: string; cls: string }> = {
 };
 const dateOf = (iso: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) : "");
 
+/** The dashboard's Episodes card leaves the one show with drafts here, so Podcast opens on its episodes. */
+export const OPEN_SHOW_KEY = "mv:podcast-open-show";
+
 export function PodcastHosting() {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -108,7 +111,7 @@ export function PodcastHosting() {
     onError: (e: Error) => toast({ title: "Couldn't set that up", description: e.message, variant: "destructive" }),
   });
   // Which show is open (none: the grid of shows), and which of its tabs.
-  const [openId, setOpenId] = useState<number | null>(null);
+  const [openId, setOpenId] = useState<number | null>(() => { try { const v = Number(sessionStorage.getItem(OPEN_SHOW_KEY)) || null; sessionStorage.removeItem(OPEN_SHOW_KEY); return v; } catch { return null; } });
   // Podcast always opens on Episodes (not wherever they last wandered).
   const [tab, setTab] = useState<PodTab>("episodes");
   const go = (t: PodTab) => setTab(t);
@@ -194,6 +197,8 @@ export function PodcastHosting() {
         <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 2xl:grid-cols-5" data-testid="hosting-shows">
           {shows.map((x) => {
             const live = x.episodes.filter((e) => e.live).length;
+            // Drafts waiting (Andrew, 24 Nov: Riccoh's 27 imported drafts showed nowhere): the same count as the dashboard's Episodes card.
+            const drafts = x.episodes.filter((e) => e.status === "draft").length;
             const xd = parseDirs(x.show.directories);
             const listed = DIRS.filter((d) => liveOn(x, xd, d.key)).length;
             return (
@@ -201,8 +206,8 @@ export function PodcastHosting() {
                 <div className="aspect-square w-full bg-muted">{x.show.artworkUrl ? <img src={x.show.artworkUrl} alt="" className="h-full w-full object-cover" /> : <span className="flex h-full items-center justify-center text-muted-foreground"><Podcast className="h-10 w-10" /></span>}</div>
                 <div className="p-3 sm:p-3.5">
                   <p className="line-clamp-2 text-balance text-sm font-semibold leading-snug group-hover:text-[#053877] dark:group-hover:text-[#8fb5e8]">{x.show.title || "Untitled show"}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{live} {live === 1 ? "episode" : "episodes"} out{x.stats.last30 ? ` · ${compact(x.stats.last30)} ${x.stats.last30 === 1 ? "download" : "downloads"} this month` : ""}</p>
-                  <span className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${listed ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : x.missing.length ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : "bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]"}`}>{listed ? `Listed on ${listed} ${listed === 1 ? "app" : "apps"}` : x.missing.length ? "Getting set up" : "Ready to list"}</span>
+                  <p className="mt-1 text-xs text-muted-foreground">{live} {live === 1 ? "episode" : "episodes"} out{drafts ? ` · ${drafts} to publish` : ""}{x.stats.last30 ? ` · ${compact(x.stats.last30)} ${x.stats.last30 === 1 ? "download" : "downloads"} this month` : ""}</p>
+                  <span className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${drafts ? "bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]" : listed ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : x.missing.length ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : "bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]"}`}>{drafts ? `${drafts} to publish` : listed ? `Listed on ${listed} ${listed === 1 ? "app" : "apps"}` : x.missing.length ? "Getting set up" : "Ready to list"}</span>
                 </div>
               </button>
             );
@@ -519,12 +524,12 @@ function Directories({ h, ready, youtubeReady, onSaved, youtube }: { h: Hosted; 
               {(isOpen || (st?.state === "submitted" && !live && open !== `-${d.key}`)) && (
                 <div className="ml-12 mt-2 space-y-2 text-sm">
                   {live ? (
-                    <p className="text-xs text-muted-foreground">{d.name} gets your episodes from your new feed. Optional: <a href={FIND[d.key]?.(s.title) ?? d.url} target="_blank" rel="noreferrer" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">find your show on {d.name}</a> and paste its address below to put a {d.name} button on your show page.</p>
+                    <p className="text-xs text-foreground">{d.name} gets your episodes from your new feed. <span className="text-muted-foreground">Optional: <a href={FIND[d.key]?.(s.title) ?? d.url} target="_blank" rel="noreferrer" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">find your show on {d.name}</a> and paste its address below to put a {d.name} button on your show page.</span></p>
                   ) : <>
-                  {quiet && <p className="text-xs text-muted-foreground">{d.name} follows your forward on its own. Not there after a week? List it once:</p>}
-                  <ol className="list-decimal space-y-1 pl-5 text-muted-foreground">{d.steps.map((x) => <li key={x}>{x}</li>)}</ol>
+                  {quiet && <p className="text-xs text-foreground">{d.name} follows your forward on its own. Not there after a week? List it once:</p>}
+                  <ol className="list-decimal space-y-1 pl-5 text-foreground">{d.steps.map((x) => <li key={x}>{x}</li>)}</ol>
                   {quiet && <Button size="sm" variant="outline" onClick={() => void listIt(d)} disabled={!ready} className="h-8 gap-1 rounded-full" data-testid={`hosting-dir-list-${d.key}`}>List it on {d.name} <ExternalLink className="h-3 w-3" /></Button>}
-                  <p className="text-xs text-muted-foreground">That's all: it goes live on its own once {d.name} approves it, usually within a few days. <span className="text-muted-foreground/80">Optional: <a href={FIND[d.key]?.(s.title) ?? d.url} target="_blank" rel="noreferrer" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">find your show on {d.name}</a> and paste its address below to put a {d.name} button on your show page.</span></p>
+                  <p className="text-xs text-foreground">That's all: it goes live on its own once {d.name} approves it, usually within a few days. <span className="text-muted-foreground">Optional: <a href={FIND[d.key]?.(s.title) ?? d.url} target="_blank" rel="noreferrer" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">find your show on {d.name}</a> and paste its address below to put a {d.name} button on your show page.</span></p>
                   </>}
                   <form onSubmit={(e) => {
                     e.preventDefault();
