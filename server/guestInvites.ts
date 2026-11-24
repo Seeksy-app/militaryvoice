@@ -14,7 +14,8 @@ import { sendInterviewInvite, sendInterviewAnswered } from "./email.js";
 import { boothGuestKey, bookingTimes } from "./booth.js";
 import { dxEventIds } from "./digitalExperience.js";
 import { roomInviteLink } from "./myStudio.js";
-import { inviteShow, type Show } from "./hostShows.js";
+import { inviteShow, ownerShows, type Show } from "./hostShows.js";
+import { buildShareCard } from "./shareCard.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 
@@ -201,6 +202,82 @@ export function registerGuestInvites(app: Express, requireHostSession: RequestHa
     const r = rows(await db.execute(sql`select photo_key from guest_invites where id=${Number(req.params.id)} and owner_email=${mine(req)}`))[0];
     if (!r?.photo_key) return res.status(404).end();
     res.redirect(await signedRecordingUrl(String(r.photo_key), 900));
+  });
+
+  // ── Link previews (Andrew, 24 Nov: Riccoh's invite unfurled as the Podcast Marathon card) ──
+  // A guest-invite or studio-join link pasted into a message shows the host's own show: its name, the host, its cover.
+  // Only the preview robots get this page (vercel.json routes their user agents here). The guest's name and email,
+  // and the invite's token, never go in it; the picture is keyed by the show (or the host's profile), not the invite.
+  const PREVIEW_BOT = /facebookexternalhit|facebot|twitterbot|slackbot|linkedinbot|whatsapp|telegrambot|discordbot|applebot|redditbot|pinterest|embedly|skypeuripreview|mastodon|bluesky|iframely|vkshare|quora link preview/i;
+  const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  /** Which show a link is for: the picked one, else the one whose title matches the name the guest sees, else their only show. */
+  const showForLink = async (owner: string, picked: unknown, name: string): Promise<Show | null> => {
+    const chosen = await inviteShow(owner, picked);
+    if (chosen) return chosen;
+    const list = await ownerShows(owner);
+    const norm = (v: string) => v.toLowerCase().replace(/[^a-z0-9]+/g, "");
+    return list.find((x) => name && norm(x.title) === norm(name)) ?? (list.length === 1 ? list[0] : null);
+  };
+  const previewPage = async (req: Parameters<RequestHandler>[0], res: Parameters<RequestHandler>[1], o: { owner: string; show: Show | null; name: string; join: boolean }) => {
+    const profile = await storage.getProfileByEmail(o.owner);
+    const host = profile?.hostName || "Your host";
+    const showName = o.show?.title || o.name || profile?.podcastName || "a MilitaryVoices.ai show";
+    const origin = `https://${req.get("host")}`;
+    const title = o.join ? `Join ${host} on ${showName}` : `${host} invites you to be a guest on ${showName}`;
+    const line = o.join
+      ? `Open the link at interview time, allow your camera and microphone, and you're in. No account needed.`
+      : `A few quick questions and the photo you'd like shown with your name, about five minutes. Then you're set for the interview.`;
+    const img = `${origin}/og/invite.jpg?${o.show ? `show=${o.show.id}` : `p=${profile?.id ?? 0}`}${o.join ? "&join=1" : ""}&v=2`;
+    const url = `${origin}${req.path}`;
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=300, s-maxage=600");
+    // Not for search engines: the link is the guest's key.
+    res.end(`<!doctype html><html lang="en"><head><meta charset="utf-8" /><meta name="robots" content="noindex" /><title>${esc(title)}</title><meta name="description" content="${esc(line)}" /><meta property="og:type" content="website" /><meta property="og:site_name" content="MilitaryVoices.ai" /><meta property="og:title" content="${esc(title)}" /><meta property="og:description" content="${esc(line)}" /><meta property="og:url" content="${esc(url)}" /><meta property="og:image" content="${esc(img)}" /><meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" /><meta property="og:image:alt" content="${esc(`${showName}, with ${host}`)}" /><meta name="twitter:card" content="summary_large_image" /><meta name="twitter:title" content="${esc(title)}" /><meta name="twitter:description" content="${esc(line)}" /><meta name="twitter:image" content="${esc(img)}" /></head><body><h1>${esc(title)}</h1><p>${esc(line)}</p></body></html>`);
+  };
+  app.get("/guest-invite/:token", async (req, res, next) => {
+    if (!PREVIEW_BOT.test(String(req.get("user-agent") ?? ""))) return next();
+    await ensure();
+    const r = rows(await db.execute(sql`select owner_email, show_id from guest_invites where token=${String(req.params.token)}`))[0];
+    if (!r) return next();
+    const owner = String(r.owner_email);
+    const profile = await storage.getProfileByEmail(owner);
+    await previewPage(req, res, { owner, show: await showForLink(owner, r.show_id, profile?.podcastName ?? ""), name: profile?.podcastName ?? "", join: false });
+  });
+  app.get("/my-studio/join/:token", async (req, res, next) => {
+    if (!PREVIEW_BOT.test(String(req.get("user-agent") ?? ""))) return next();
+    const r = rows(await db.execute(sql`select owner_email, name from personal_studios where invite_token=${String(req.params.token)}`))[0];
+    if (!r) return next();
+    const owner = String(r.owner_email).trim().toLowerCase();
+    await previewPage(req, res, { owner, show: await showForLink(owner, req.query.show, String(r.name ?? "")), name: String(r.name ?? ""), join: true });
+  });
+  /** The picture: the show's cover on our navy, its name and the host. By show id, or the host's profile when there's no show. */
+  app.get("/og/invite.jpg", async (req, res) => {
+    let name = "", host = "", photo = "", photoShape: "art" | "circle" = "art";
+    const sid = Number(req.query.show) || 0;
+    if (sid) {
+      const s0 = rows(await db.execute(sql`select email, title, artwork_url from hosted_shows where id=${sid}`))[0];
+      if (s0) {
+        const profile = await storage.getProfileByEmail(String(s0.email).trim().toLowerCase());
+        name = String(s0.title ?? ""); host = profile?.hostName ?? ""; photo = String(s0.artwork_url ?? "") || profile?.photoUrl || "";
+        if (!s0.artwork_url) photoShape = "circle";
+      }
+    } else if (Number(req.query.p)) {
+      const p0 = rows(await db.execute(sql`select podcast_name, host_name, photo_url from podcaster_profiles where id=${Number(req.query.p)}`))[0];
+      if (p0) { name = String(p0.podcast_name ?? ""); host = String(p0.host_name ?? ""); photo = String(p0.photo_url ?? ""); photoShape = "circle"; }
+    }
+    const jpg = await buildShareCard({
+      podcastName: name || "MilitaryVoices.ai",
+      hostName: host,
+      subline: host ? undefined : "Podcasts by and for the military community",
+      whenLabel: req.query.join ? "Join the interview" : "You're invited",
+      photoUrl: photo || undefined,
+      photoShape,
+      eyebrow: "Guest invitation",
+      footer: "militaryvoices.ai",
+    }, "wide");
+    res.setHeader("Content-Type", "image/jpeg");
+    res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=86400");
+    res.end(jpg);
   });
 
   // The guest's side: no account, the link is the key.

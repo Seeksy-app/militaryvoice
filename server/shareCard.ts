@@ -31,6 +31,19 @@ function fit(v: string, max: number): string {
   return s.length <= max ? s : `${s.slice(0, max - 1).trimEnd()}…`;
 }
 
+async function coverArt(url: string, size: number): Promise<Buffer | null> {
+  try {
+    const res = await fetch(url);
+    if (!res.ok) return null;
+    const src = Buffer.from(await res.arrayBuffer());
+    const r = Math.round(size * 0.07);
+    const mask = Buffer.from(`<svg width="${size}" height="${size}"><rect width="${size}" height="${size}" rx="${r}" ry="${r}" fill="#fff"/></svg>`);
+    return await sharp(src).resize(size, size, { fit: "cover" }).composite([{ input: mask, blend: "dest-in" }]).png().toBuffer();
+  } catch {
+    return null;
+  }
+}
+
 async function circularAvatar(url: string, size: number): Promise<Buffer | null> {
   try {
     const res = await fetch(url);
@@ -62,6 +75,8 @@ export interface CardInput {
   hostName: string;
   whenLabel: string;
   photoUrl?: string;
+  /** "art": the picture is the show's cover, drawn square with round corners (cover art carries words a circle would cut). */
+  photoShape?: "circle" | "art";
   /** Campaign cards swap the lines; the share card keeps the defaults. */
   eyebrow?: string;
   subline?: string;
@@ -91,7 +106,8 @@ export async function buildShareCard(input: CardInput, size: CardSize = "wide"):
   </svg>`);
 
   const AV = Math.round(vertical ? W * 0.34 : 260);
-  const avatar = input.photoUrl ? await circularAvatar(input.photoUrl, AV) : null;
+  const art = input.photoShape === "art";
+  const avatar = input.photoUrl ? await (art ? coverArt(input.photoUrl, AV) : circularAvatar(input.photoUrl, AV)) : null;
 
   // Generous: fitSize shrinks the type to the box before this ever cuts.
   const name = fit(input.podcastName, vertical ? 46 : 48);
@@ -143,7 +159,7 @@ export async function buildShareCard(input: CardInput, size: CardSize = "wide"):
 
     if (avatar) {
       layers.push(
-        { input: ring(AV), top: top - 10, left: Math.round(cx - (AV + 20) / 2) },
+        ...(art ? [] : [{ input: ring(AV), top: top - 10, left: Math.round(cx - (AV + 20) / 2) }]),
         { input: avatar, top, left: Math.round(cx - AV / 2) },
       );
     }
@@ -167,7 +183,7 @@ export async function buildShareCard(input: CardInput, size: CardSize = "wide"):
 
     if (avatar) {
       layers.push(
-        { input: ring(AV), top: (H - AV) / 2 - 10, left: 70 },
+        ...(art ? [] : [{ input: ring(AV), top: (H - AV) / 2 - 10, left: 70 }]),
         { input: avatar, top: (H - AV) / 2, left: 80 },
       );
     }
