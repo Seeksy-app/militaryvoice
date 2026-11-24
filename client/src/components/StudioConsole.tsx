@@ -38,6 +38,7 @@ import { stageMetaFromStudio } from "@shared/stageMeta";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { STUDIO_STATUSES, LOGO_CORNERS, type StudioRow, type StudioParticipantRow, type RunItemRow, type SignupRow, type SceneRow } from "@shared/schema";
 import { formatTimeInZone } from "@/lib/schedule";
+import { NewVersionBar } from "@/components/NewVersionBar";
 import { MonitorPlay, Users, Headphones, Mic, MicOff, Video, VideoOff, ArrowUp, ArrowDown, X, PlayCircle, Radio, Copy, AlertTriangle, Clock, Disc, Pause, Play, Square, Signal, Cable, Trash2, Check, Upload, Volume2, VolumeX, Film, Image as ImageIcon, Clapperboard, ListOrdered, Plus, Maximize2, Minimize2, LogOut, ChevronDown, Settings2, Timer, Loader2, Sparkles, MessagesSquare } from "lucide-react";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
@@ -1466,6 +1467,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
           : "overflow-hidden"
       }
     >
+      <NewVersionBar busy={recording || broadcasting} />
       {/* 5, 4, 3, 2, 1: the room sees it coming. Cancel stops it before anything goes out. */}
       {goCount !== null && goCount > 0 && (
         <div className="fixed inset-0 z-[80] flex flex-col items-center justify-center bg-black/70 text-white" data-testid="golive-countdown">

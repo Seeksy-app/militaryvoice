@@ -1,8 +1,39 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Clapperboard, Copy, LayoutDashboard, Loader2, Lock, MoreHorizontal, Pencil, Play, Plus, Square, Trash2, Users, X } from "lucide-react";
+import { Check, Clapperboard, Copy, Image as ImageIcon, LayoutDashboard, Loader2, Lock, MonitorUp, MoreHorizontal, Pencil, Play, Plus, Square, Trash2, Users, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import type { RoomBoxKind, RoomBoxShape } from "@shared/roomLook";
-import { LIMITS, PEOPLE_DEFAULT, bgCss, newId, type Layout, type RoomKit, type Scene, type SceneType, type Slot } from "./look";
+import { LIMITS, PEOPLE_DEFAULT, bgCss, newId, type Asset, type Layout, type RoomKit, type Scene, type SceneType, type Slot } from "./look";
+import { isVideo, mmss, useThumb } from "./thumbs";
+
+/**
+ * What a media scene shows, as a small picture (Andrew, 24 Nov: "we need to be able to see the video
+ * thumbnail in the scene"): the clip's frame or the picture; ▶ and the length on a video; a screen
+ * icon for a shared screen. A picture that won't load shows a plain clapperboard or picture icon.
+ */
+function MediaTile({ a, className = "" }: { a: Asset | null | undefined; className?: string }) {
+  const t = useThumb(a);
+  const vid = isVideo(a);
+  const len = mmss(a?.sec || t?.sec);
+  return (
+    <span className={`relative block overflow-hidden rounded-[4px] bg-[#101828] ${className}`} data-testid="media-tile">
+      {!a ? <span className="flex h-full w-full items-center justify-center text-white/90"><MonitorUp className="h-4 w-4" aria-label="A shared screen" /></span>
+        : t ? <img src={t.src} alt="" className="h-full w-full object-cover" draggable={false} />
+        : <span className="flex h-full w-full items-center justify-center text-white/70">{vid ? <Clapperboard className="h-4 w-4" aria-hidden /> : <ImageIcon className="h-4 w-4" aria-hidden />}</span>}
+      {vid && <span className="absolute bottom-0.5 left-0.5 flex items-center gap-0.5 rounded-[3px] bg-black/75 px-1 text-[9px] font-bold leading-[13px] text-white tabular-nums"><Play className="h-2 w-2 fill-current" aria-label="Video" />{len}</span>}
+    </span>
+  );
+}
+
+/** A media scene's card drawing: its media filling the media box, the people boxes as drawn beside it. */
+function MediaFace({ s, light }: { s: Scene; light: boolean }) {
+  const people = peopleOf(s);
+  return (
+    <span className="flex h-[60px] w-[106px] gap-[3px]" data-testid="scene-thumb">
+      <MediaTile a={s.media} className={`h-full ring-1 ${light ? "ring-[rgba(5,56,119,0.25)]" : "ring-white/40"} ${people ? "w-[76%]" : "w-full"}`} />
+      {people > 0 && <span className="flex flex-1 flex-col gap-[3px]">{Array.from({ length: Math.min(people, 3) }, (_, i) => <span key={i} className={`flex-1 rounded-[3px] ${light ? "bg-[rgba(5,56,119,0.85)]" : "bg-white/90"}`} />)}</span>}
+    </span>
+  );
+}
 
 /** Scroll the rail (only the rail, never the page) so a just-opened editor or picker is in view. */
 function reveal(el: HTMLElement | null) {
@@ -201,7 +232,7 @@ function SceneCard({ s, kit, v3, on, next, full, onPick, onRename, onEditLayout,
       {/* The clip is on the button, not the card, so the ⋯ menu isn't cut off. */}
       <button type="button" onClick={onPick} className="block w-full overflow-hidden rounded-[12px] text-left" aria-label={`Put ${s.name} on air (key ${s.n})`} aria-pressed={on}>
         <div className="relative flex h-[88px] items-center justify-center" style={{ background: bgCss(cardBg) }}>
-          {v3 && s.boxes?.length ? <BoxThumb boxes={s.boxes} light={lightBg} className="!w-[104px] !bg-transparent" /> : <svg width="88" height="64" viewBox="0 0 22 16" fill={lightBg ? "rgba(5,56,119,0.85)" : "rgba(255,255,255,0.92)"} stroke={lightBg ? "none" : "rgba(16,24,40,0.22)"} strokeWidth="0.3" aria-hidden data-testid="scene-thumb">{icon}</svg>}
+          {v3 && s.boxes?.length ? <BoxThumb boxes={s.boxes} light={lightBg} className="!w-[104px] !bg-transparent" /> : typeOf(s) === "media" && (s.type === "media" || s.media) ? <MediaFace s={s} light={lightBg} /> : <svg width="88" height="64" viewBox="0 0 22 16" fill={lightBg ? "rgba(5,56,119,0.85)" : "rgba(255,255,255,0.92)"} stroke={lightBg ? "none" : "rgba(16,24,40,0.22)"} strokeWidth="0.3" aria-hidden data-testid="scene-thumb">{icon}</svg>}
           {logo && <img src={logo.asset.url} alt="" className={`absolute top-1 h-4 w-auto rounded-sm ${logo.corner === "tl" ? "left-1.5" : "right-1.5"}`} />}
           {on && <span className="absolute left-2 top-2 rounded-full bg-[#12b76a] px-[7px] py-0.5 text-[10px] font-bold tracking-[0.02em] text-white">ON STAGE</span>}
           {!on && next && <span className="absolute left-2 top-2 rounded-full bg-[#F0A71F] px-[7px] py-0.5 text-[10px] font-bold tracking-[0.02em] text-[#101828]">TAKE ME NEXT</span>}
@@ -311,11 +342,21 @@ function MediaPick({ s, kit, set, upload = false }: { s: Scene; kit: RoomKit; se
   };
   return (
     <>
-      <label className="mt-3 block text-xs font-semibold text-[#475467]" htmlFor={`media-${s.id}`}>{upload ? "What does this scene show?" : "Shows"}</label>
-      <select id={`media-${s.id}`} value={s.media?.id ?? ""} onChange={(e) => set({ media: all.find((a) => a.id === e.target.value) ?? null })} className="mt-1.5 h-9 w-full rounded-lg border border-[#d0d5dd] bg-white px-2 text-sm" data-testid="scene-media">
-        <option value="">A shared screen</option>
-        {all.map((a) => <option key={a.id} value={a.id}>{a.name || (a.kind === "video" ? "Video" : "Picture")}</option>)}
-      </select>
+      <p className="mt-3 block text-xs font-semibold text-[#475467]" id={`media-${s.id}`}>{upload ? "What does this scene show?" : "Shows"}</p>
+      <div role="radiogroup" aria-labelledby={`media-${s.id}`} className="mt-1.5 max-h-[232px] space-y-1 overflow-y-auto" data-testid="scene-media">
+        {[null, ...all].map((a) => {
+          const on = (s.media?.id ?? null) === (a?.id ?? null);
+          const name = !a ? "A shared screen" : a.name || (isVideo(a) ? "Video" : "Picture");
+          return (
+            <button key={a?.id ?? "screen"} type="button" role="radio" aria-checked={on} onClick={() => set({ media: a })} title={name}
+              className={`flex w-full items-center gap-2 rounded-lg border p-1.5 text-left ${on ? "border-[#053877] bg-[#eef3fb]" : "border-[#e4e7ec] bg-white hover:bg-[#f9fafb]"}`} data-testid={`scene-media-${a?.id ?? "screen"}`}>
+              <MediaTile a={a} className="h-[34px] w-[60px] shrink-0" />
+              <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-[#101828]">{name}</span>
+              {on && <Check className="mr-1 h-4 w-4 shrink-0 text-[#053877]" aria-hidden />}
+            </button>
+          );
+        })}
+      </div>
       {!upload && !all.length && <p className="mt-1 text-[11px] text-[#98a2b3]">Add clips or pictures in Media to show one here.</p>}
       {upload && (pct !== null ? (
         <p className="mt-2 flex items-center gap-1.5 text-[12px] font-semibold text-[#667085]"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading {pct}%</p>
@@ -369,7 +410,6 @@ function ProfileFields({ s, kit, set }: { s: Scene; kit: RoomKit; set: (p: Parti
   );
 }
 
-const mmss = (sec?: number) => (sec ? `${Math.floor(sec / 60)}:${String(Math.round(sec % 60)).padStart(2, "0")}` : "");
 
 /** Intro or outro video: add one, play it full screen, remove it. */
 export function VideoSlot({ slot, kit }: { slot: Slot; kit: RoomKit }) {

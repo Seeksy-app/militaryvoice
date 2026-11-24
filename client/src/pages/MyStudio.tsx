@@ -25,6 +25,7 @@ import { RoomStage } from "@/components/RoomStage";
 import { YoutubeKeyForm, useYoutubeKey, useYoutubeConnectResult, youtubeConnectHref } from "@/components/ConnectYoutube";
 import { PrompterNews, PrompterOverlay, PrompterSwitch, ScriptsBar, usePrompter, useStudioNotes, type NotesSync } from "@/components/room/Teleprompter";
 import { pdfToPictures, useDeck } from "@/components/room/slides";
+import { NewVersionBar } from "@/components/NewVersionBar";
 import { EXTRA_CAMS, addExtraCamera, freeCameras, isExtraCam, stopAllExtraCameras, stopExtraCamera, useExtraCams } from "@/components/room/extraCamera";
 
 /** The room is light in both themes, so always the light logo file. */
@@ -459,6 +460,8 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
     <div className="flex h-[100dvh] flex-col bg-[#f3f4f7] text-[#101828]" data-testid="my-studio" style={{ fontFamily: INTER }}>
       {/* A video on stage, heard by everyone in the studio (whatever panel or editor is open). */}
       {editing && <StageClipSound kit={kit} />}
+      {/* Guests can't see whether the host is recording, so they're told it loads next time they join. */}
+      <NewVersionBar busy={owner ? !!(rec || live) : true} afterLine={owner ? "Reload after your show." : "It loads next time you join."} />
       {/* Top bar */}
       <header className="flex h-16 shrink-0 items-center gap-3 border-b border-[#e4e7ec] bg-white px-4 lg:gap-3.5 lg:px-5" data-testid="my-studio-bar">
         <button type="button" onClick={exit} className="hidden shrink-0 sm:block" aria-label={owner ? "MilitaryVoices.ai, back to your dashboard" : "MilitaryVoices.ai, exit the studio"}><Logo className="h-[38px]" /></button>
