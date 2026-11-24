@@ -8,7 +8,7 @@ import { storage, db } from "./storage.js";
 import { sql } from "drizzle-orm";
 import { requireHuman, turnstileSiteKey } from "./turnstile.js";
 import { answerHelp, isHelpAgentConfigured, CHECKING, GET_BACK, type HelpTurn } from "./help.js";
-import { registerHelpDesk, openQuestion, askerEmail, learnedForAlex, WAIT_MS } from "./helpDesk.js";
+import { registerHelpDesk, openQuestion, askerEmail, learnedForAlex, WAIT_MS, waitingHelpRow } from "./helpDesk.js";
 import { registerGuide } from "./guide.js";
 import { KINDS, effectiveSchedule, cardInput, caption as campaignCaption, isKind, type CampaignContext } from "./campaign.js";
 import { uploadPhoto, uploadShowAsset, signedAssetUpload, listShowAssets } from "./photoStorage.js";
@@ -9694,7 +9694,7 @@ export function registerRoutes(app: Express): void {
    * forward to the inbox carries only the words, so this is where the files are.
    */
   async function inboundAttachments(resendId: string): Promise<{ id: string; filename: string; contentType: string; size: number; url: string }[]> {
-    if (!resendId || !process.env.RESEND_API_KEY) return [];
+    if (!resendId || resendId.startsWith("help-q:") || !process.env.RESEND_API_KEY) return [];
     const r = await fetch(`https://api.resend.com/emails/receiving/${encodeURIComponent(resendId)}/attachments`, { headers: { Authorization: `Bearer ${process.env.RESEND_API_KEY}` }, signal: AbortSignal.timeout(15_000) });
     if (!r.ok) return [];
     const j = (await r.json().catch(() => ({}))) as { data?: any[] };
@@ -10894,6 +10894,14 @@ export function registerRoutes(app: Express): void {
     // Into Mail's Needs a reply, and Alex writes to them straight away: they asked for a
     // person, so they hear from us now, not whenever someone next opens the inbox.
     try {
+      // The same question already filed from a timed-out Ask Alex chat: that row, not a second one.
+      const already = await waitingHelpRow(email, question).catch(() => null);
+      if (already) {
+        if (!already.fromName && name) await storage.updateInbound(already.id, { fromName: name });
+        draftLater(already.id, { ack: true });
+        res.json({ ok: true, id: row.id, sent });
+        return;
+      }
       const inbound = await storage.createInbound({
         resendId: "", messageId: "", fromEmail: email, fromName: name, toAddr: "Help chat",
         subject: `Your question: ${question.replace(/\s+/g, " ").slice(0, 70)}${question.length > 70 ? "…" : ""}`,

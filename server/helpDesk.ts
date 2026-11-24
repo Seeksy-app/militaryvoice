@@ -6,12 +6,12 @@
 // in 5 minutes: the chat says someone will get back to them and offers the usual email form.
 import type { Express, Request, RequestHandler } from "express";
 import crypto from "node:crypto";
-import { and, desc, eq } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { getSessionEmail } from "./session.js";
 import { slackNote } from "./slack.js";
 import { onTextReply, sendSms, toE164 } from "./sms.js";
-import { helpQuestions, type HelpQuestionRow } from "../shared/schema.js";
+import { helpQuestions, inboundEmails, podcasterProfiles, type HelpQuestionRow } from "../shared/schema.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 const now = () => new Date().toISOString();
@@ -46,11 +46,64 @@ export async function learnedForAlex(): Promise<string> {
   return `TEAM ANSWERS (the team answered these for visitors before; they are true, use them when the same question comes up, in your own words):\n${items.map((x) => `Q: ${x.q}\nA: ${x.a}`).join("\n\n")}`;
 }
 
-/** Past its 5 minutes with no answer: timed out. Returns the row as it now stands. */
+/** Past its 5 minutes with no answer: timed out, and into Mail as Needs a reply. Returns the row as it now stands. */
 async function settle(q: HelpQuestionRow): Promise<HelpQuestionRow> {
   if (q.status !== "open" || Date.now() - Date.parse(q.createdAt) < WAIT_MS) return q;
   const [out] = await db.update(helpQuestions).set({ status: "timed_out" }).where(and(eq(helpQuestions.id, q.id), eq(helpQuestions.status, "open"))).returning();
+  if (out) await fileInMail(out).catch((e) => console.error("[help-desk] file in Mail", e));
   return out ?? (await db.select().from(helpQuestions).where(eq(helpQuestions.id, q.id)))[0];
+}
+
+// A question nobody answered in time goes to Admin → CRM → Mail as Needs a reply (PM for Andrew, 24 Nov: "Yes, fix it";
+// Daniel Flint's #4 sat unseen for hours). One Mail row per question, keyed resend_id = "help-q:<id>". It files as
+// "Help chat" like the email form does, so a reply to that person (Mail, a one-off, Chat with Alex) answers and
+// archives it (clearWaiting). Nothing is sent to them from here.
+export const helpKey = (id: number) => `help-q:${id}`;
+const RECENT_MS = 2 * 3600_000;
+/** The same question from this person, still waiting in Mail from the last two hours (the email form or a timed-out chat). */
+export async function waitingHelpRow(email: string, question: string) {
+  const qn = question.replace(/\s+/g, " ").trim();
+  if (!qn) return null;
+  const rows = await db.select().from(inboundEmails).where(and(
+    eq(sql`lower(${inboundEmails.fromEmail})`, email.trim().toLowerCase()), eq(inboundEmails.toAddr, "Help chat"),
+    inArray(inboundEmails.status, ["new", "drafted"]), eq(inboundEmails.archived, false),
+    gte(inboundEmails.receivedAt, new Date(Date.now() - RECENT_MS).toISOString()),
+  )).orderBy(desc(inboundEmails.id)).limit(10);
+  return rows.find((r) => r.bodyText.replace(/\s+/g, " ").trim().startsWith(qn)) ?? null;
+}
+function chatText(turnsJson: string): string {
+  try {
+    const turns = JSON.parse(turnsJson) as { role: string; content: string }[];
+    return turns.map((t) => `${t.role === "assistant" ? "Alex" : "Them"}: ${t.content}`).join("\n");
+  } catch { return ""; }
+}
+export async function fileInMail(q: HelpQuestionRow, done?: { at: string; by: string; text: string; resendId: string }): Promise<number | null> {
+  const email = q.email.trim().toLowerCase();
+  if (!/^[^@\s:<>]+@[^@\s:<>]+\.[^@\s:<>]+$/.test(email)) return null; // no address, nobody to write back to
+  const [have] = await db.select({ id: inboundEmails.id }).from(inboundEmails).where(eq(inboundEmails.resendId, helpKey(q.id))).limit(1);
+  if (have) return have.id;
+  if (!done && (await waitingHelpRow(email, q.question))) return null; // they already sent it with the email form: that row stands for it
+  const [p] = await db.select({ name: podcasterProfiles.hostName }).from(podcasterProfiles).where(eq(sql`lower(${podcasterProfiles.email})`, email)).limit(1);
+  const question = q.question.replace(/\s+/g, " ").trim();
+  const row = await storage.createInbound({
+    resendId: helpKey(q.id), messageId: "", fromEmail: email, fromName: p?.name?.trim() ?? "", toAddr: "Help chat",
+    subject: `Your question: ${question.slice(0, 70)}${question.length > 70 ? "…" : ""}`,
+    bodyText: `${q.question}\n\n(Asked Ask Alex${q.page ? ` on ${q.page}` : ""}. Alex didn't know, and nobody answered on the help desk within ${WAIT_MS / 60_000} minutes.)\n\nThe chat:\n${chatText(q.turns)}`,
+    receivedAt: q.createdAt, broadcastId: null, category: "question", summary: short(question, 140),
+    draftFrom: "team", draftSubject: "", draftText: "",
+    status: done ? "sent" : "new", repliedAt: done?.at ?? null, replyResendId: done?.resendId ?? "", replyFrom: done?.by ?? "", replyText: done?.text ?? "",
+    ackAt: null, ackResendId: "", ackText: "",
+    ...(done ? { archived: true, readAt: done.at } : {}),
+  });
+  return row.id;
+}
+
+/** Every open question past its 5 minutes, settled (and so filed). The chat may have closed, so nothing else would. */
+export async function sweepHelpQuestions(): Promise<number> {
+  await schemaIsReady();
+  const stale = await db.select().from(helpQuestions).where(and(eq(helpQuestions.status, "open"), lte(helpQuestions.createdAt, new Date(Date.now() - WAIT_MS).toISOString())));
+  for (const q of stale) await settle(q);
+  return stale.length;
 }
 
 /** A question Alex couldn't answer: saved, and the team pinged everywhere at once. */
@@ -95,6 +148,12 @@ const adminView = (q: HelpQuestionRow) => {
 };
 
 export function registerHelpDesk(app: Express, requireAdmin: RequestHandler): void {
+  app.get("/api/cron/help-desk", async (req, res) => {
+    const secret = process.env.CRON_SECRET;
+    if (secret && (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "") !== secret) return res.status(401).json({ message: "Not authorised." });
+    try { res.json({ settled: await sweepHelpQuestions() }); } catch (err) { console.error("[help-desk] sweep", err); res.status(500).json({ message: (err as Error).message }); }
+  });
+
   /** The visitor's chat, every few seconds: still checking, the answer, or timed out. */
   app.get("/api/help/question/:token", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
