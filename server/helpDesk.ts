@@ -60,17 +60,22 @@ async function settle(q: HelpQuestionRow): Promise<HelpQuestionRow> {
 // archives it (clearWaiting). Nothing is sent to them from here.
 export const helpKey = (id: number) => `help-q:${id}`;
 const RECENT_MS = 2 * 3600_000;
-/** The same question from this person, still waiting in Mail from the last two hours (the email form or a timed-out chat). */
-export async function waitingHelpRow(email: string, question: string) {
+/** The same question from this person already in Mail as a Help chat row, from up to two hours after `since`
+ *  (the email form, or a timed-out chat). `waiting` limits it to rows still waiting for a reply. */
+export async function sameHelpRow(email: string, question: string, opts: { since: string; waiting: boolean }) {
   const qn = question.replace(/\s+/g, " ").trim();
   if (!qn) return null;
+  const from = new Date(Date.parse(opts.since) - 10 * 60_000).toISOString(), to = new Date(Date.parse(opts.since) + RECENT_MS).toISOString();
   const rows = await db.select().from(inboundEmails).where(and(
     eq(sql`lower(${inboundEmails.fromEmail})`, email.trim().toLowerCase()), eq(inboundEmails.toAddr, "Help chat"),
-    inArray(inboundEmails.status, ["new", "drafted"]), eq(inboundEmails.archived, false),
-    gte(inboundEmails.receivedAt, new Date(Date.now() - RECENT_MS).toISOString()),
+    gte(inboundEmails.receivedAt, from), lte(inboundEmails.receivedAt, to),
+    ...(opts.waiting ? [inArray(inboundEmails.status, ["new", "drafted"]), eq(inboundEmails.archived, false)] : []),
   )).orderBy(desc(inboundEmails.id)).limit(10);
   return rows.find((r) => r.bodyText.replace(/\s+/g, " ").trim().startsWith(qn)) ?? null;
 }
+/** For the email form: the same question, filed from a timed-out chat in the last two hours and still waiting. */
+export const waitingHelpRow = (email: string, question: string) =>
+  sameHelpRow(email, question, { since: new Date(Date.now() - RECENT_MS).toISOString(), waiting: true });
 function chatText(turnsJson: string): string {
   try {
     const turns = JSON.parse(turnsJson) as { role: string; content: string }[];
@@ -82,7 +87,7 @@ export async function fileInMail(q: HelpQuestionRow, done?: { at: string; by: st
   if (!/^[^@\s:<>]+@[^@\s:<>]+\.[^@\s:<>]+$/.test(email)) return null; // no address, nobody to write back to
   const [have] = await db.select({ id: inboundEmails.id }).from(inboundEmails).where(eq(inboundEmails.resendId, helpKey(q.id))).limit(1);
   if (have) return have.id;
-  if (!done && (await waitingHelpRow(email, q.question))) return null; // they already sent it with the email form: that row stands for it
+  if (!done && (await sameHelpRow(email, q.question, { since: q.createdAt, waiting: false }))) return null; // they sent it with the email form too: that row stands for it
   const [p] = await db.select({ name: podcasterProfiles.hostName }).from(podcasterProfiles).where(eq(sql`lower(${podcasterProfiles.email})`, email)).limit(1);
   const question = q.question.replace(/\s+/g, " ").trim();
   const row = await storage.createInbound({
