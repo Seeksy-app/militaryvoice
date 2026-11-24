@@ -456,7 +456,7 @@ export function PodcastHosting() {
         </>
       )}
 
-      {tab === "invite" && <GuestInvites prefill={prefill} />}
+      {tab === "invite" && <GuestInvites prefill={prefill} shows={shows.map((x) => ({ id: x.show.id, title: x.show.title }))} showId={s.id} />}
       {tab === "guests" && <GuestFinder showTitle={s.title} onInvite={takeInvite} />}
       {tab === "pitch" && <ShowFinder topics={[s.category, s.subcategory].filter(Boolean) as string[]} />}
 

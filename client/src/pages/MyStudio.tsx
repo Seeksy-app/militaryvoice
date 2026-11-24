@@ -78,7 +78,9 @@ export default function MyStudio({ invite }: { invite?: string }) {
   const [setup, setSetup] = useState<Setup | null>(null);
   const [left, setLeft] = useState(false);
   const [removed, setRemoved] = useState(false);
-  const guestInfo = useQuery<{ name: string }>({ queryKey: ["/api/my-studio/invite", invite], enabled: !owner, queryFn: async () => (await apiRequest("GET", `/api/my-studio/invite/${invite}`)).json(), retry: false });
+  // An invitation for one of the host's shows carries ?show=<id>: the room greets the guest with that show's name.
+  const forShow = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("show") ?? "" : "";
+  const guestInfo = useQuery<{ name: string }>({ queryKey: ["/api/my-studio/invite", invite, forShow], enabled: !owner, queryFn: async () => (await apiRequest("GET", `/api/my-studio/invite/${invite}${/^\d+$/.test(forShow) ? `?show=${forShow}` : ""}`)).json(), retry: false });
   const studio = useQuery<Studio>({ queryKey: ["/api/host/my-studio"], enabled: owner, queryFn: async () => (await apiRequest("GET", "/api/host/my-studio")).json(), retry: false, refetchInterval: conn ? 8000 : false });
   const roomName = (owner ? studio.data?.name : guestInfo.data?.name) || "";
 

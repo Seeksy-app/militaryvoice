@@ -44,7 +44,7 @@ function linkify(text: string, key: string): ReactNode[] {
 
 /** One line: **bold** as bold, links as links. */
 function inline(line: string, key: string): ReactNode[] {
-  return line.split(/(\*\*[^*\n]+\*\*)/g).flatMap((part, i) =>
+  return line.split(/(\*\*[^*\n]+\*\*)/g).flatMap<ReactNode>((part, i) =>
     /^\*\*[^*]+\*\*$/.test(part)
       ? [<strong key={`${key}b${i}`} className="font-semibold">{part.slice(2, -2)}</strong>]
       : linkify(part, `${key}t${i}`),

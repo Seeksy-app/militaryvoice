@@ -19,7 +19,11 @@ const typoFix = (email: string) => {
 };
 
 /** The guest's name for the card is theirs to type: an invitation from the host asks them, with the photo they want shown. */
-export function GuestInvites({ prefill }: { prefill?: { name: string; email: string; n: number } } = {}) {
+export function GuestInvites({ prefill, shows = [], showId }: { prefill?: { name: string; email: string; n: number }; /** All their shows: two or more and the form asks which one it's for. */ shows?: { id: number; title: string }[]; /** The show they're working in, the picker's default. */ showId?: number } = {}) {
+  // "For which show?" (Riccoh, 24 Nov 2026: two shows, and the invite went out under the wrong one). One show: nothing to pick.
+  const many = shows.length > 1;
+  const [forShow, setForShow] = useState<number | null>(null);
+  const pickedShow = many ? forShow ?? (shows.some((x) => x.id === showId) ? showId! : shows[0].id) : null;
   const { toast } = useToast();
   const qc = useQueryClient();
   const list = useQuery<Invite[]>({ queryKey: ["/api/host/guest-invites"], queryFn: async () => (await apiRequest("GET", "/api/host/guest-invites")).json() });
@@ -44,7 +48,7 @@ export function GuestInvites({ prefill }: { prefill?: { name: string; email: str
     onError: (e) => toast({ title: "Couldn't send that", description: say(e), variant: "destructive" }),
   });
   const [questions, setQuestions] = useState<string[]>([]);
-  const sender = useQuery<{ slug: string; address: string; replyTo: string }>({ queryKey: ["/api/host/guest-invites/sender"], queryFn: async () => (await apiRequest("GET", "/api/host/guest-invites/sender")).json() });
+  const sender = useQuery<{ slug: string; address: string; replyTo: string; fromShow?: boolean }>({ queryKey: ["/api/host/guest-invites/sender", pickedShow], queryFn: async () => (await apiRequest("GET", `/api/host/guest-invites/sender${pickedShow ? `?show=${pickedShow}` : ""}`)).json() });
   const [editSlug, setEditSlug] = useState<string | null>(null);
   const saveSlug = useMutation({
     mutationFn: async () => (await apiRequest("PUT", "/api/host/guest-invites/sender", { slug: editSlug })).json(),
@@ -63,7 +67,7 @@ export function GuestInvites({ prefill }: { prefill?: { name: string; email: str
     mutationFn: async () => {
       const whenIso = f.when ? new Date(f.when).toISOString() : "";
       const whenText = f.when ? new Date(f.when).toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }) : "";
-      return (await apiRequest("POST", "/api/host/guest-invites", { guestName: f.guestName, guestEmail: f.guestEmail, whenText, whenIso, zoomLink: where === "zoom" && !linkLater ? f.zoomLink.trim() : "", linkLater: where === "zoom" && linkLater, note: f.note, ...(where === "booth" ? { where: "booth", bookingId: pickedBooking } : where === "studio" ? { where: "studio" } : {}), questions: questions.map((q) => q.trim()).filter(Boolean) })).json();
+      return (await apiRequest("POST", "/api/host/guest-invites", { guestName: f.guestName, guestEmail: f.guestEmail, whenText, whenIso, zoomLink: where === "zoom" && !linkLater ? f.zoomLink.trim() : "", linkLater: where === "zoom" && linkLater, note: f.note, ...(where === "booth" ? { where: "booth", bookingId: pickedBooking } : where === "studio" ? { where: "studio" } : {}), questions: questions.map((q) => q.trim()).filter(Boolean), ...(pickedShow ? { showId: pickedShow } : {}) })).json();
     },
     onSuccess: () => { setF({ guestName: "", guestEmail: "", when: "", zoomLink: "", note: "" }); setQuestions([]); setWhere("zoom"); setLinkLater(false); setNeedLink(false); void qc.invalidateQueries({ queryKey: ["/api/host/guest-invites"] }); toast({ title: "Invitation sent", description: "They'll get an email from you through MilitaryVoices.ai, and you'll hear when they answer." }); },
     onError: (e) => toast({ title: "Couldn't send that", description: say(e), variant: "destructive" }),
@@ -141,6 +145,14 @@ export function GuestInvites({ prefill }: { prefill?: { name: string; email: str
         <h3 className="text-lg font-semibold">Invite a guest</h3>
         <p className="mt-1 text-sm text-muted-foreground [text-wrap:pretty]">We email your guest from you. They answer a few questions and add the photo they want shown, and you get it all before the interview. Their name and photo go on your episode's guest card.</p>
         <form data-testid="guest-invite-form" className="mt-5 grid gap-5 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); const fix = typoFix(f.guestEmail); if (fix && window.confirm(`Is ${f.guestEmail} right? It looks like it should end in .com (${fix}).\n\nOK sends it to ${f.guestEmail}. Cancel lets you fix it.`) === false) return; if (where === "zoom" && !f.zoomLink.trim() && !linkLater) { setNeedLink(true); document.getElementById("gi-f-zoom")?.focus(); return; } send.mutate(); }}>
+          {many && (
+            <div className="space-y-1.5 sm:col-span-2" data-testid="invite-show">
+              <Label htmlFor="gi-f-show">For which show?</Label>
+              <select id="gi-f-show" value={pickedShow ?? ""} onChange={(e) => setForShow(Number(e.target.value))} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm sm:max-w-sm" data-testid="invite-show-select">
+                {shows.map((x) => <option key={x.id} value={x.id}>{x.title || "Untitled show"}</option>)}
+              </select>
+            </div>
+          )}
           <div className="space-y-1.5"><Label htmlFor="gi-f-name">Guest's name</Label><Input id="gi-f-name" value={f.guestName} onChange={set("guestName")} maxLength={80} required /></div>
           <div className="space-y-1.5"><Label htmlFor="gi-f-email">Guest's email</Label><Input id="gi-f-email" type="email" value={f.guestEmail} onChange={set("guestEmail")} required />{typoFix(f.guestEmail) && <p className="text-xs text-amber-800">Did you mean <button type="button" onClick={() => setF((x) => ({ ...x, guestEmail: typoFix(x.guestEmail) }))} className="font-semibold underline">{typoFix(f.guestEmail)}</button>?</p>}</div>
           <div className="space-y-1.5 sm:col-span-2" data-testid="invite-where">
@@ -193,7 +205,7 @@ export function GuestInvites({ prefill }: { prefill?: { name: string; email: str
           <div className="sm:col-span-2"><Button type="submit" disabled={send.isPending || !f.guestName.trim() || !f.guestEmail.trim()} className="rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="guest-invite-submit">{send.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}Send the invitation</Button></div>
           <div className="space-y-1 sm:col-span-2 text-xs text-muted-foreground" data-testid="invite-sender">
             {editSlug === null ? (
-              <p>* The email comes from <b className="text-foreground">{sender.data?.address ?? "…"}</b>. When your guest replies, it comes to you ({sender.data?.replyTo ?? "your email"}). <button type="button" onClick={() => setEditSlug(sender.data?.slug ?? "")} className="font-semibold text-[#053877] underline underline-offset-2 dark:text-[#8fb5e8]" data-testid="invite-sender-edit">Change the name</button></p>
+              <p>* The email comes from <b className="text-foreground">{sender.data?.address ?? "…"}</b>. When your guest replies, it comes to you ({sender.data?.replyTo ?? "your email"}). {!sender.data?.fromShow && <button type="button" onClick={() => setEditSlug(sender.data?.slug ?? "")} className="font-semibold text-[#053877] underline underline-offset-2 dark:text-[#8fb5e8]" data-testid="invite-sender-edit">Change the name</button>}</p>
             ) : (
               <div className="flex flex-wrap items-center gap-2">
                 <span>* From</span>

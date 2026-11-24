@@ -17,6 +17,7 @@ import { onLookSaved, roomLookKey } from "./roomKit.js";
 import { liveHandleOf, livePageOn, liveUrlOf } from "./livePage.js";
 import { bumpLookRev, noteMusicOnAir, registerRoomStage, roomTemplateUrl, STUDIO_V3, useRoomKit } from "./roomStage.js";
 import { personalStudios, type PersonalStudioRow } from "../shared/schema.js";
+import { inviteShow } from "./hostShows.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 const now = () => new Date().toISOString();
@@ -265,7 +266,9 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     await schemaIsReady();
     const [s] = await db.select().from(personalStudios).where(eq(personalStudios.inviteToken, String(req.params.token))).limit(1);
     if (!s) return res.status(404).json({ message: "This invite link has expired. Ask the host for a new one." });
-    res.json({ name: s.name, v3: STUDIO_V3 });
+    // An invitation for one of the host's shows (?show=11) greets the guest with that show's name.
+    const show = req.query.show ? await inviteShow(s.ownerEmail.trim().toLowerCase(), req.query.show).catch(() => null) : null;
+    res.json({ name: show?.title || s.name, v3: STUDIO_V3 });
   });
   app.post("/api/my-studio/invite/:token/token", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
