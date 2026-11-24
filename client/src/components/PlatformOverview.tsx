@@ -44,17 +44,14 @@ export function PlatformOverview() {
   const qc = useQueryClient();
   const planner = useQuery<{ id: number; name: string; startAtUtc: string; review: string; ownerEmail: string; pageUrl: string; description: string }[]>({ queryKey: ["/api/admin/planner-events"], queryFn: () => adminGet("/api/admin/planner-events") });
   const waiting = (planner.data ?? []).filter((e) => e.review === "pending");
-  // Send back asks what to change first: the planner gets it in their email (24 Nov).
-  const [backFor, setBackFor] = useState<number | null>(null);
-  const [reason, setReason] = useState("");
+  // Members' events publish themselves since 24 Nov (no Send back); any still waiting from before can be approved
+  // here. Taking one down is the event's Public switch under Events.
   const [deciding, setDeciding] = useState(false);
-  const decide = async (id: number, approve: boolean, why = "") => {
+  const decide = async (id: number, approve: boolean) => {
     if (deciding) return;
     setDeciding(true);
     try {
-      await adminSend("POST", `/api/admin/planner-events/${id}/approve`, approve ? { approve } : { approve, reason: why });
-      setBackFor(null);
-      setReason("");
+      await adminSend("POST", `/api/admin/planner-events/${id}/approve`, { approve });
     } finally {
       setDeciding(false);
     }
@@ -137,18 +134,7 @@ export function PlatformOverview() {
                 </span>
                 <span className="flex shrink-0 gap-2">
                   <Button size="sm" disabled={deciding} onClick={() => void decide(e.id, true)} data-testid={`approve-${e.id}`}>Approve</Button>
-                  <Button size="sm" variant="outline" disabled={deciding} onClick={() => { setBackFor(backFor === e.id ? null : e.id); setReason(""); }} data-testid={`send-back-${e.id}`}>Send back</Button>
                 </span>
-                {backFor === e.id && (
-                  <form className="w-full space-y-2" onSubmit={(ev) => { ev.preventDefault(); if (reason.trim()) void decide(e.id, false, reason.trim()); }}>
-                    <label htmlFor={`back-reason-${e.id}`} className="block text-sm font-medium">What should they change? It goes in their email.</label>
-                    <textarea id={`back-reason-${e.id}`} autoFocus value={reason} onChange={(ev) => setReason(ev.target.value)} maxLength={1000} rows={3} className="w-full rounded-lg border border-border bg-background p-2 text-sm" placeholder="Add a short description, so people know what the event is." data-testid={`back-reason-${e.id}`} />
-                    <span className="flex gap-2">
-                      <Button size="sm" type="submit" disabled={deciding || !reason.trim()} data-testid={`send-back-go-${e.id}`}>Send it back</Button>
-                      <Button size="sm" type="button" variant="ghost" onClick={() => setBackFor(null)}>Cancel</Button>
-                    </span>
-                  </form>
-                )}
               </li>
             ))}
           </ul>

@@ -330,7 +330,8 @@ async function enhanceAndSavePhoto(buffer: Buffer): Promise<{ url: string; origi
 
 function toPublicEvent(event: EventRow): PublicEvent {
   const { adminPassword, ownerEmail, ...rest } = event;
-  return rest;
+  // Where people join an online event goes to who registered, unless nobody signs up (24 Nov).
+  return { ...rest, joinUrl: event.signupMode === "none" ? event.joinUrl : "" };
 }
 
 /**
@@ -2169,6 +2170,12 @@ export function registerRoutes(app: Express): void {
       return;
     }
     publicCache(res, 60);
+    // A member's event says who's hosting it: their name, show and photo, never their email (24 Nov).
+    if (event.kind && event.ownerEmail) {
+      const p = await storage.getProfileByEmail(event.ownerEmail).catch(() => undefined);
+      res.json({ ...toPublicEvent(event), host: p ? { name: p.hostName, show: p.podcastName, photo: p.photoUrl } : null });
+      return;
+    }
     res.json(toPublicEvent(event));
   });
 
@@ -10220,6 +10227,11 @@ export function registerRoutes(app: Express): void {
     const body = req.body as Record<string, unknown>;
     const featured = await storage.getFeaturedEvent();
     const eventId = body.eventId ? Number(body.eventId) : featured.id;
+    // A member's "Just me" event has no slots to claim (24 Nov).
+    if (body.eventId && (await storage.getEventById(eventId))?.kind === "me") {
+      res.status(400).json({ message: "That event doesn't take bookings." });
+      return;
+    }
 
     // The show belongs to the event, so that is where the name, the format
     // and the artwork come from — not the profile.
@@ -11603,7 +11615,8 @@ The Podcast Marathon team`;
     // Switching an event off hides it from podcasters too, not just the
     // public — a test event in somebody's dashboard is the thing the switch
     // exists to stop.
-    const events = (await storage.listEvents()).filter((e) => e.visible);
+    // A member's "Just me" event has no slots for podcasters to take (24 Nov).
+    const events = (await storage.listEvents()).filter((e) => e.visible && e.kind !== "me");
     const shows = await storage.listEventShows(email);
     const out = [];
     for (const event of events) {

@@ -57,6 +57,43 @@ export const events = pgTable("events", {
   venueAddress: text("venue_address").notNull().default(""),
   /** The nearest airport's three-letter code (SAN), for fares to it. */
   airport: text("airport").notNull().default(""),
+  // Members' own events (24 Nov 2026, Andrew: "Yes, build free first"). All empty for the events we run, which
+  // keep their own page and behaviour. kind: "me" (one host, one time, no slots) | "lineup" (podcasters book slots).
+  kind: text("kind").notNull().default(""),
+  /** "online" | "person". */
+  mode: text("mode").notNull().default(""),
+  /** The event's own zone (IANA), so its times read the way its people will be there: "9:00 AM PT". */
+  timezone: text("timezone").notNull().default(""),
+  /** When it ends (ISO UTC); durationHours stays filled for everything older that reads it. */
+  endAtUtc: text("end_at_utc").notNull().default(""),
+  /** Do people sign up? "none" | "free" ("paid" is coming, not built). */
+  signupMode: text("signup_mode").notNull().default(""),
+  /** The planner's own sign-up questions, JSON: [{ q, type: "text" | "choice", options: string[] }], up to 5. */
+  questions: text("questions").notNull().default(""),
+  /** Where people join or watch an online event. Public only when nobody signs up; else it goes to who registered. */
+  joinUrl: text("join_url").notNull().default(""),
+});
+
+/** Who signed up to attend a member's event (24 Nov 2026): one row per person per event. */
+export const eventRegistrations = pgTable("event_registrations", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull(),
+  name: text("name").notNull().default(""),
+  email: text("email").notNull().default(""),
+  /** JSON: [{ q, a }], in the order the planner asked them. */
+  answers: text("answers").notNull().default(""),
+  /** Which shared link brought them (linkedin, facebook…), from /go/event/<id>?src=. */
+  src: text("src").notNull().default(""),
+  createdAt: text("created_at").notNull().default(""),
+});
+export type EventRegistration = typeof eventRegistrations.$inferSelect;
+
+/** One click on an event's shared link, /go/event/<id>?src=<network>, counted like a sponsor's. */
+export const eventClicks = pgTable("event_clicks", {
+  id: serial("id").primaryKey(),
+  eventId: integer("event_id").notNull(),
+  src: text("src").notNull().default(""),
+  createdAt: text("created_at").notNull().default(""),
 });
 
 export const insertEventSchema = createInsertSchema(events)

@@ -24,6 +24,7 @@ import MyStudio from "@/pages/MyStudio";
 import StreamIn from "@/pages/StreamIn";
 import HostDashboard from "@/pages/HostDashboard";
 import Landing from "@/pages/Landing";
+import EventRoute from "@/pages/EventPage";
 import Faq from "@/pages/Faq";
 import HelpYoutube from "@/pages/HelpYoutube";
 import ReviewLogin from "@/pages/ReviewLogin";
@@ -114,7 +115,8 @@ function AppRouter() {
       <Route path="/marathon">{() => <Landing />}</Route>
       <Route path="/event/:slug/agenda">{(params) => <Agenda slug={params.slug} />}</Route>
       <Route path="/event/:slug/schedule">{(params) => <Home slug={params.slug} />}</Route>
-      <Route path="/event/:slug">{(params) => <Landing slug={params.slug} />}</Route>
+      {/* A member's own event gets its own page; ours keep Landing (24 Nov). */}
+      <Route path="/event/:slug">{(params) => <EventRoute slug={params.slug} />}</Route>
       <Route path="/events">{() => <Events />}</Route>
       <Route path="/schedule">{() => <Home />}</Route>
       <Route path="/agenda">{() => <Agenda />}</Route>

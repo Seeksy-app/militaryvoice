@@ -574,6 +574,35 @@ async function ensureSchema() {
   await sql`UPDATE events SET slug = ${DEFAULT_EVENT_SLUG} WHERE slug = '' AND id = (SELECT MIN(id) FROM events)`;
   await sql`UPDATE events SET is_featured = true WHERE id = (SELECT MIN(id) FROM events) AND NOT EXISTS (SELECT 1 FROM events WHERE is_featured = true)`;
   await sql`UPDATE events SET created_at = start_at_utc WHERE created_at = ''`;
+  // Members' own events (24 Nov 2026): what kind, where, its zone, its end, and who signs up. Empty for ours.
+  await sql`ALTER TABLE events ADD COLUMN IF NOT EXISTS kind TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE events ADD COLUMN IF NOT EXISTS mode TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE events ADD COLUMN IF NOT EXISTS timezone TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE events ADD COLUMN IF NOT EXISTS end_at_utc TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE events ADD COLUMN IF NOT EXISTS signup_mode TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE events ADD COLUMN IF NOT EXISTS questions TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE events ADD COLUMN IF NOT EXISTS join_url TEXT NOT NULL DEFAULT ''`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS event_registrations (
+      id SERIAL PRIMARY KEY,
+      event_id INTEGER NOT NULL,
+      name TEXT NOT NULL DEFAULT '',
+      email TEXT NOT NULL DEFAULT '',
+      answers TEXT NOT NULL DEFAULT '',
+      src TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT ''
+    );
+  `;
+  await sql`CREATE UNIQUE INDEX IF NOT EXISTS event_registrations_one_each ON event_registrations (event_id, email)`;
+  await sql`
+    CREATE TABLE IF NOT EXISTS event_clicks (
+      id SERIAL PRIMARY KEY,
+      event_id INTEGER NOT NULL,
+      src TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT ''
+    );
+  `;
+  await sql`CREATE INDEX IF NOT EXISTS event_clicks_event_idx ON event_clicks (event_id)`;
 
   await sql`ALTER TABLE signups ADD COLUMN IF NOT EXISTS event_id INTEGER`;
   await sql`UPDATE signups SET event_id = (SELECT id FROM events WHERE is_featured = true LIMIT 1) WHERE event_id IS NULL`;

@@ -81,6 +81,7 @@ const EVENT_FALLBACK: PublicEvent = {
   venueName: "",
   venueAddress: "",
   airport: "",
+  kind: "", mode: "", timezone: "", endAtUtc: "", signupMode: "", questions: "", joinUrl: "",
   createdAt: "",
 };
 const HERO_IMAGES = [

@@ -4,10 +4,11 @@ import { Link } from "wouter";
 import { NavBar } from "@/components/NavBar";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CalendarDays, Plus, ArrowRight } from "lucide-react";
+import { CalendarDays, MapPin, Plus, ArrowRight } from "lucide-react";
 import type { PublicEvent } from "@shared/schema";
 import { detectLocalTimeZone, formatDateInZone, formatTimeInZone } from "@/lib/schedule";
 import { SiteFooter } from "@/components/SiteFooter";
+import { eventDay, eventTimes } from "@shared/eventTime";
 import { InterestDialog } from "@/components/InterestDialog";
 import { IconTile } from "@/components/ui/icon-tile";
 
@@ -19,7 +20,9 @@ const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as c
  * "Plan an event with us" on the About page.
  */
 /** One card's worth: an event, or MilitaryVoices Radio's week (its days are one thing to the public). */
-type Item = { key: string; title: string; tagline: string; image: string; start: Date; end: Date; when: string; href: string; cta: string; agenda?: string };
+type Item = { key: string; title: string; tagline: string; image: string; start: Date; end: Date; when: string; href: string; cta: string; agenda?: string;
+  /** A member's own event (24 Nov): its tag, where, and how to get in, in its own zone. */
+  tag?: string; where?: string; entry?: string; zone?: string };
 
 export default function Events() {
   const { data: events, isLoading } = useQuery<PublicEvent[]>({ queryKey: ["/api/events"] });
@@ -29,6 +32,18 @@ export default function Events() {
   const items: Item[] = (events ?? []).map((e) => {
     const start = new Date(e.startAtUtc);
     const slug = e.isFeatured ? "" : e.slug;
+    if (e.kind) {
+      const tz = e.timezone || "America/New_York";
+      const endIso = e.endAtUtc || new Date(start.getTime() + e.durationHours * 3600_000).toISOString();
+      const city = (e.venueAddress.split(",").slice(-2).join(",").trim() || e.venueName);
+      return {
+        key: e.slug, title: e.name, tagline: e.tagline || e.description.split("\n")[0].slice(0, 180), image: e.imageUrl, start, end: new Date(endIso),
+        when: `${eventDay(e.startAtUtc, tz)} · ${eventTimes(e.startAtUtc, endIso, tz)}`, zone: tz,
+        href: `/event/${e.slug}`, cta: e.signupMode === "free" ? "Register" : "See the event",
+        tag: e.kind === "me" ? "" : "Lineup", where: e.mode === "person" ? `In person${city ? ` · ${city}` : ""}` : "Online",
+        entry: e.signupMode === "free" ? "Free · Register to attend" : "Free · No sign-up needed",
+      };
+    }
     return {
       key: e.slug, title: e.name, tagline: e.tagline, image: e.imageUrl, start, end: new Date(start.getTime() + e.durationHours * 3600_000),
       when: `${formatDateInZone(start, zone)} · ${formatTimeInZone(start, zone)} · ${e.durationHours} hours, live`,
@@ -88,14 +103,24 @@ export default function Events() {
             shown.map((item) => (
               <article key={item.key} className="group flex flex-col overflow-hidden rounded-3xl border border-border bg-card shadow-sm transition-shadow hover:shadow-lg lg:col-span-2" data-testid={`event-${item.key}`}>
                 <Link href={item.href} className="relative block aspect-video overflow-hidden bg-[#000741]">
-                  {item.image && <img src={item.image} alt="" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]" />}
+                  {item.image ? <img src={item.image} alt="" className="h-full w-full object-cover transition-transform duration-500 group-hover:scale-[1.02]" /> : item.zone ? (
+                    // No artwork: the date, big, in the event's own zone.
+                    <span className="flex h-full w-full flex-col items-center justify-center text-white" style={{ background: "radial-gradient(ellipse 70% 120% at 82% 50%, #0d3a8a 0%, #05175a 40%, #000741 75%)" }}>
+                      <span className="text-sm font-bold uppercase tracking-[0.2em] text-[#F0A71F]">{item.start.toLocaleDateString("en-US", { timeZone: item.zone, month: "short" })}</span>
+                      <span className="text-7xl font-bold leading-none" style={HEADLINE_FONT}>{item.start.toLocaleDateString("en-US", { timeZone: item.zone, day: "numeric" })}</span>
+                      <span className="mt-1 text-sm text-white/70">{item.start.toLocaleDateString("en-US", { timeZone: item.zone, weekday: "long" })}</span>
+                    </span>
+                  ) : null}
                 </Link>
                 <div className="flex flex-1 flex-col p-6">
                   <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
                     <span className="inline-flex items-center gap-1.5"><CalendarDays className="h-4 w-4 text-[#F0A71F]" /> {item.when}</span>
+                    {item.where && <span className="inline-flex items-center gap-1.5"><MapPin className="h-4 w-4 text-[#F0A71F]" /> {item.where}</span>}
+                    {item.tag && <span className="rounded-full bg-[#F0A71F]/20 px-2 py-0.5 text-xs font-semibold text-[#8a5a00] dark:text-[#F0A71F]">{item.tag}</span>}
                   </div>
                   <h2 className="mt-3 text-2xl font-bold tracking-tight text-card-foreground" style={HEADLINE_FONT}>{item.title}</h2>
                   {item.tagline && <p className="mt-1.5 text-muted-foreground">{item.tagline}</p>}
+                  {item.entry && tab === "upcoming" && <p className="mt-2 text-sm font-semibold text-[#053877] dark:text-[#8ab4f8]">{item.entry}</p>}
                   <div className="mt-6 flex flex-wrap gap-3">
                     <Link href={item.href}>
                       <Button className="gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]">{tab === "past" ? "See how it went" : item.cta} <ArrowRight className="h-4 w-4" /></Button>
