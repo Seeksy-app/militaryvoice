@@ -64,6 +64,14 @@ function Library_({ socialAccounts }: { socialAccounts?: string | null }) {
   const mains = (recordings ?? []).filter((r) => !r.egressId.startsWith("CLEAN_") && !isHowTo(r.title));
   const folderCounts = new Map<number, number>();
   for (const x of [...mains, ...published, ...(clips ?? [])]) if (x.folderId) folderCounts.set(x.folderId, (folderCounts.get(x.folderId) ?? 0) + 1);
+  // Library (no folder open) holds only what isn't filed, like Drive (Andrew, 24 Nov): filing moves it out. The stats
+  // above still count everything; the tabs count what's here.
+  const loose = <T extends { folderId: number }>(x: T) => !x.folderId;
+  const hereOriginals = originals.filter(loose);
+  const herePublished = published.filter(loose);
+  const hereClips = (clips ?? []).filter(loose);
+  const herePodOnly = herePublished.filter((e) => !e.recordingId).length;
+  const unfiled = mains.filter(loose).length + herePublished.length + hereClips.length;
   // Podcast episodes get a tab of their own once there are recordings too (with none, they are the Episodes tab).
   const podTab = published.length > 0 && (recordings?.length ?? 0) > 0;
   const hours = originals.reduce((n, r) => n + r.durationSec, 0) / 3600;
@@ -126,7 +134,7 @@ function Library_({ socialAccounts }: { socialAccounts?: string | null }) {
       </div>
 
       {/* The folders, for everything below: drag any card onto one, or open one to see all it holds. */}
-      <FolderBar counts={folderCounts} tutorials={tutorials.length} />
+      <FolderBar counts={folderCounts} tutorials={tutorials.length} unfiled={unfiled} />
 
       {open === TUTORIALS ? (
         <MyRecordings tutorials />
@@ -135,7 +143,7 @@ function Library_({ socialAccounts }: { socialAccounts?: string | null }) {
       ) : (<>
       {/* Views of one Library: the recordings, the podcast's episodes, and every clip made from them. */}
       <div className="mb-4 inline-flex rounded-full border border-border bg-card p-1" role="tablist">
-        {([["episodes", mainLabel, podTab ? originals.length : originals.length + podOnly], ...(podTab ? [["podcast", "Podcast episodes", published.length] as const] : []), ["clips", "Clips", clips?.length ?? 0]] as const).map(([k, label, n]) => (
+        {([["episodes", mainLabel, podTab ? hereOriginals.length : hereOriginals.length + herePodOnly], ...(podTab ? [["podcast", "Podcast episodes", herePublished.length] as const] : []), ["clips", "Clips", hereClips.length]] as const).map(([k, label, n]) => (
           <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => (k === "clips" ? showClips(clipEp) : setTab(k))} className={`rounded-full px-4 py-1.5 text-sm font-semibold transition-colors ${tab === k ? "bg-[#053877] text-white" : "text-muted-foreground hover:text-foreground"}`} data-testid={`library-tab-${k}`}>
             {label} <span className={tab === k ? "text-white/70" : ""}>{n}</span>
           </button>
@@ -143,9 +151,9 @@ function Library_({ socialAccounts }: { socialAccounts?: string | null }) {
       </div>
 
       {tab === "clips" ? (
-        <ClipsLibrary clips={clips ?? []} posts={posts ?? []} recordings={recordings ?? []} episode={clipEp} onEpisode={setClipEp} />
+        <ClipsLibrary clips={hereClips} posts={posts ?? []} recordings={recordings ?? []} episode={clipEp} onEpisode={setClipEp} />
       ) : tab === "podcast" && podTab ? (
-        <PodcastEpisodeGrid testid="library-podcast" min={240} fileable onPick={(rec) => { window.location.href = `/host/dashboard/postify?rec=${rec.id}`; }} />
+        <PodcastEpisodeGrid testid="library-podcast" min={240} fileable only={(e) => !e.folderId} onPick={(rec) => { window.location.href = `/host/dashboard/postify?rec=${rec.id}`; }} />
       ) : (<>
       {options.length > 1 && (
         <div className="mb-4 flex flex-wrap gap-2">
@@ -173,7 +181,7 @@ function Library_({ socialAccounts }: { socialAccounts?: string | null }) {
         </div>
       )}
 
-      <MyRecordings socialAccounts={socialAccounts} eventId={eventId} showEmpty clipCounts={clipCounts} onShowClips={showClips} />
+      <MyRecordings socialAccounts={socialAccounts} eventId={eventId} folder={0} showEmpty clipCounts={clipCounts} onShowClips={showClips} />
       </>)}
       </>)}
 

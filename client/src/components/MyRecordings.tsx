@@ -42,6 +42,12 @@ function size(bytes: string): string {
 // Theirs to delete: uploads, imports, Pōstify's copies, staged test episodes, and what they recorded in their Room (no event).
 const deletable = (r: RecordingRow) => /^(UPLOAD_|CLEAN_|ZOOM_|LINK_|STAGED_)/.test(r.egressId) || (r.eventId === 0 && r.studioId === 0);
 
+/** What's running on it right now, in words, or "" when nothing is. */
+function working(r: RecordingRow): string {
+  try { if (r.clean && (JSON.parse(r.clean) as { status?: string }).status === "running") return "Cleaning…"; } catch { /* not ours */ }
+  return r.clipStatus === "queued" || r.clipStatus === "running" ? "Making clips…" : "";
+}
+
 /** The episode a clean or edited copy was made from (CLEAN_12, CLEAN_EDIT_12_…). */
 function sourceOf(r: RecordingRow): number | null {
   const m = r.egressId.match(/^CLEAN_(EDIT_)?(\d+)/);
@@ -210,7 +216,13 @@ export function MyRecordings({
   }
   if (isLoading) return null;
   if (tutorials) return <section className="mt-2">{tutorialGrid()}</section>;
-  if (folder != null && shown.length === 0) return null;
+  // The Library view with every recording filed away: say where they went, rather than look empty.
+  if (folder === 0 && shown.length === 0 && eps.some((e) => !isHowTo(e.main.title))) return (
+    <p className="rounded-2xl border border-dashed border-border bg-card p-6 text-center text-sm text-muted-foreground" data-testid="library-all-filed">
+      Every recording here is in a folder. Open a folder above to see it.
+    </p>
+  );
+  if (folder != null && folder !== 0 && shown.length === 0) return null;
   // Nothing of their own (our tutorials alone are in the Tutorials folder): same as empty.
   if (!data || shown.length === 0) {
     // Only a podcast, no recordings (an audio show, say): its episodes are the Library.
@@ -285,7 +297,6 @@ export function MyRecordings({
           const all = [...versions, ...earlier];
           const r = all.find((v) => v.rec.id === picked[main.id])?.rec ?? versions.find((v) => v.label === "Edited")?.rec ?? versions[0]?.rec ?? main;
           const olderPicked = earlier.find((v) => v.rec.id === r.id);
-          const clean = versions.length > 0 || main.egressId.startsWith("CLEAN_");
           const inShow = episodeOf([main.id, ...all.map((v) => v.rec.id)]);
           return (
           <li
@@ -305,11 +316,13 @@ export function MyRecordings({
                       <span className="flex h-12 w-12 items-center justify-center rounded-full bg-white/90 text-[#000741] shadow-lg"><Play className="h-5 w-5 fill-current" /></span>
                     </span>
                     {r.durationSec > 0 && <span className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white">{clock(r.durationSec)}</span>}
-                    {/* What the episode has, whichever version is showing. */}
-                    <span className="absolute left-2 top-2 flex flex-wrap gap-1">
-                      {main.clipStatus === "done" && <span className="inline-flex items-center gap-1 rounded-full bg-[#F0A71F] px-2 py-0.5 text-[10px] font-bold text-[#1a1200]"><Wand2 className="h-3 w-3" /> Clips ready</span>}
-                      {clean && <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold text-white"><Wand2 className="h-3 w-3" /> Clean episode</span>}
-                    </span>
+                    {/* Only while work is running (Andrew, 24 Nov): "Clips ready" and "Clean episode" repeated the card, covered
+                        the picture and looked like buttons. The card's "Open in Pōstify" and Clean / Original switch say it. */}
+                    {(working(main) || working(r)) && (
+                      <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-bold text-white" data-testid={`working-${main.id}`}>
+                        <Loader2 className="h-3 w-3 animate-spin" /> {working(main) || working(r)}
+                      </span>
+                    )}
                   </button>
                 )
               ) : (

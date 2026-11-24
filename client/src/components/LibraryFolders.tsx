@@ -82,7 +82,7 @@ export function dragToFolder(lib: Ctx | null, item: Fileable) {
 }
 
 /** The bar: All, each folder (click to open, drop to file), New folder; Rename and Delete for the open one. */
-export function FolderBar({ counts, tutorials = 0 }: { counts: Map<number, number>; tutorials?: number }) {
+export function FolderBar({ counts, tutorials = 0, unfiled }: { counts: Map<number, number>; tutorials?: number; /** What the Library chip holds: everything not in a folder. */ unfiled?: number }) {
   const lib = useLibraryFolders();
   const bar = useContext(BarCtx);
   const qc = useQueryClient();
@@ -119,7 +119,19 @@ export function FolderBar({ counts, tutorials = 0 }: { counts: Map<number, numbe
 
   return (
     <div className="mb-4 flex flex-wrap items-center gap-2" data-testid="library-folders">
-      <Chip active={open == null} onClick={() => setOpen(null)} icon={<Library className="h-3.5 w-3.5" />} label="All" testId="folder-all" />
+      {/* Library: what isn't in a folder, like Drive's My Drive (Andrew, 24 Nov). Drop a card here to take it out of its folder. */}
+      <Chip
+        active={open == null}
+        over={over === 0}
+        onClick={() => setOpen(null)}
+        icon={<Library className="h-3.5 w-3.5" />}
+        label="Library"
+        n={unfiled}
+        onDragOver={(e) => { if (e.dataTransfer.types.includes(DRAG)) { e.preventDefault(); setOver(0); } }}
+        onDragLeave={() => setOver(null)}
+        onDrop={drop(0)}
+        testId="folder-all"
+      />
       {tutorials > 0 && <Chip active={open === TUTORIALS} onClick={() => setOpen(TUTORIALS)} icon={<GraduationCap className="h-3.5 w-3.5" />} label="Tutorials" n={tutorials} testId="folder-tutorials" />}
       {folders.map((f) =>
         naming?.id === f.id ? (
