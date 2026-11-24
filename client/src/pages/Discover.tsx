@@ -23,7 +23,7 @@ import { DiscoverEnrich, type EnrichCard } from "@/components/DiscoverEnrich";
 import { FiltersPanel, FilterChips, activeFilters, filtersForServer, type Filters } from "@/components/DiscoverFilters";
 import { PodcastResults, PodcastDrawer, POD_PEOPLE_SORTS, POD_SHOW_SORTS, podCard, type PodOpen } from "@/components/DiscoverPodcasts";
 import { IconTile } from "@/components/ui/icon-tile";
-import { FreeCounter, FreeUpgrade, FreeUsedUp, noteFree, openUpgrade, type FreeState } from "@/components/DiscoverFree";
+import { CreditsUpgrade, CreditsUsedUp, FreeCounter, FreeUpgrade, FreeUsedUp, noteFree, openCredits, openUpgrade, type FreeState } from "@/components/DiscoverFree";
 
 const NAVY = "#04102b";
 const GOLD = "#F0A71F";
@@ -699,6 +699,7 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
       </main>
 
       <FreeUpgrade />
+      <CreditsUpgrade />
       <ProfileDrawer free={!!free} freeKeys={sampleKeys} card={open} siblings={openFrom} sharedKey={sharedKey} allowance={me?.reveals} onOpenCreator={setOpenRaw} onClose={() => setOpenRaw(null)} isMember={isMember} onJoin={() => setGate(true)} lists={lists.data ?? []} onSave={(card, listId) => saveTo.mutate({ card, listId })} saved={open ? saved.has(`${open.platform}:${open.handle.toLowerCase()}`) : false} />
       <PodcastDrawer open={podOpen} from={podFrom} onGo={setPodOpen} onClose={() => setPodOpen(null)} isMember={isMember} onJoin={() => setGate(true)} saved={saved} onSave={(card) => (card.platform === "podperson" ? void saveGuest(card) : saveTo.mutate({ card }))} reveals={me?.reveals ?? null} onRevealed={() => queryClient.invalidateQueries({ queryKey: ["/api/discover/me"] })} />
       <JoinDialog
@@ -1757,6 +1758,11 @@ function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoi
       const j = await res.json();
       noteFree(queryClient, j);
       if (!res.ok) {
+        // A member out of credits: the credit packs and plans, not the Scale offer.
+        if (res.status === 402 && j.credits) {
+          openCredits();
+          throw Object.assign(new Error(j.message), { upgrade: true, credits: true });
+        }
         if (res.status === 402 && j.upgrade) {
           const line = j.free?.lookups?.left === 0 ? `You've used your ${j.free.lookups.allowance} free look-ups.` : "Full profiles come with Scale.";
           openUpgrade(line);
@@ -1785,6 +1791,10 @@ function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoi
     mutationFn: async () => {
       const res = await fetch("/api/discover/reveal", { method: "POST", credentials: "include", headers: { "content-type": "application/json" }, body: JSON.stringify({ platform: card!.platform, handle: card!.handle }) });
       const j = await res.json();
+      if (res.status === 402 && j.credits) {
+        openCredits();
+        throw Object.assign(new Error(j.message), { credits: true });
+      }
       if (!res.ok) throw new Error(j.message);
       return j;
     },
@@ -1793,7 +1803,8 @@ function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoi
       queryClient.invalidateQueries({ queryKey: ["/api/discover/me"] });
       if (!j.email && !j.phone) toast({ title: "No public contact for this creator", description: "Try their profile link, or their website." });
     },
-    onError: (e: Error) => toast({ title: "Couldn't get the contact", description: e.message, variant: "destructive" }),
+    // Out of credits: the dialog is already open, no red toast on top of it.
+    onError: (e: Error & { credits?: boolean }) => { if (!e.credits) toast({ title: "Couldn't get the contact", description: e.message, variant: "destructive" }); },
   });
 
   // Back and next through the list it was opened from; the arrow keys too.
@@ -1951,7 +1962,7 @@ function ProfileDrawer({ card, siblings, onClose, onOpenCreator, isMember, onJoi
       </div>
     </div>
   ) : a.isError ? (
-    (a.error as { upgrade?: boolean }).upgrade ? <FreeUsedUp line={(a.error as Error).message} className="m-5 sm:m-8" /> : <p className="m-8 rounded-xl bg-destructive/5 p-4 text-sm text-destructive">{(a.error as Error).message}</p>
+    (a.error as { credits?: boolean }).credits ? <CreditsUsedUp line={(a.error as Error).message} className="m-5 sm:m-8" /> : (a.error as { upgrade?: boolean }).upgrade ? <FreeUsedUp line={(a.error as Error).message} className="m-5 sm:m-8" /> : <p className="m-8 rounded-xl bg-destructive/5 p-4 text-sm text-destructive">{(a.error as Error).message}</p>
   ) : (
     <div className="p-5 sm:p-8">
       <div className="rounded-2xl border border-border bg-card">

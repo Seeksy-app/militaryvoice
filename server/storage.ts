@@ -877,6 +877,7 @@ export interface IStorage {
   tokenBalance(email: string): Promise<number>;
   /** False when that ref has already been recorded (so nothing changed). */
   addTokens(v: { email: string; delta: number; reason: string; ref: string; overage?: number; overageCents?: number }): Promise<boolean>;
+  spendTokens(v: { email: string; credits: number; ref: string; reason: string; short?: (balance: number) => Promise<{ overage: number; overageCents: number } | "no" | "limit"> }): Promise<{ result: "dup" | "paid" | "no" | "limit"; balance: number }>;
   /** Extra credits billed since a date (this plan period). */
   overageCentsSince(email: string, sinceIso: string): Promise<number>;
   getSubscription(email: string): Promise<PostifySubscriptionRow | undefined>;
@@ -2428,6 +2429,38 @@ class DatabaseStorage implements IStorage {
       .onConflictDoNothing()
       .returning({ id: postifyTokens.id });
     return rows.length > 0;
+  }
+
+  /**
+   * Take credits, once per ref, with the balance check and the ledger row in one transaction
+   * under a lock on the person (24 Nov): two spends at once can't both see the same credits and
+   * take the balance below zero. Short of credits, `short` decides: extras on their plan
+   * (it reports them to Stripe and says how many), or "no" / "limit".
+   * `balance` is what's left afterwards (or now, when nothing was taken).
+   */
+  async spendTokens(v: { email: string; credits: number; ref: string; reason: string; short?: (balance: number) => Promise<{ overage: number; overageCents: number } | "no" | "limit"> }): Promise<{ result: "dup" | "paid" | "no" | "limit"; balance: number }> {
+    await ready();
+    const email = v.email.trim().toLowerCase();
+    const ref = v.ref.slice(0, 200);
+    const reason = v.reason.slice(0, 200);
+    // inTransaction, not db.transaction: the shared pool refuses BEGIN (see inTransaction).
+    return inTransaction(async (tx) => {
+      await tx.execute(sqlExpr`select pg_advisory_xact_lock(hashtext(${`tokens:${email}`}))`);
+      const [dup] = await tx.select({ id: postifyTokens.id }).from(postifyTokens).where(eq(postifyTokens.ref, ref)).limit(1);
+      const [row] = await tx.select({ n: sqlExpr<number>`coalesce(sum(${postifyTokens.delta}), 0)::int` }).from(postifyTokens).where(eq(postifyTokens.email, email));
+      const balance = Number(row?.n ?? 0);
+      if (dup) return { result: "dup" as const, balance };
+      const now = new Date().toISOString();
+      if (balance >= v.credits) {
+        await tx.insert(postifyTokens).values({ email, delta: -v.credits, overage: 0, overageCents: 0, reason, ref, createdAt: now }).onConflictDoNothing();
+        return { result: "paid" as const, balance: balance - v.credits };
+      }
+      const s = v.short ? await v.short(balance) : "no";
+      if (s === "no" || s === "limit") return { result: s, balance };
+      const take = Math.max(0, balance);
+      await tx.insert(postifyTokens).values({ email, delta: -take, overage: s.overage, overageCents: s.overageCents, reason, ref, createdAt: now }).onConflictDoNothing();
+      return { result: "paid" as const, balance: balance - take };
+    });
   }
 
   async markPostifyBeta(recordingId: number): Promise<void> {

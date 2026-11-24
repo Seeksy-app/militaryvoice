@@ -10,7 +10,8 @@ import { db, storage } from "./storage.js";
 import { discoveryCache, postifyTokens } from "../shared/schema.js";
 import { getAdminEmail } from "./session.js";
 
-export type Notice = { kind: "bonus"; title: string; body: string; credits?: number; at: string };
+// "credits": out of credits (server/creditsAlert.ts), at most once a month; gone by itself once they have credits again.
+export type Notice = { kind: "bonus" | "credits"; title: string; body: string; credits?: number; at: string };
 const key = (email: string) => `notice:${email.trim().toLowerCase()}`;
 /** When they last saw a pop-up, so admin can tell "seen" from "waiting". */
 const seenKey = (email: string) => `notice-seen:${email.trim().toLowerCase()}`;
@@ -72,6 +73,11 @@ export function registerNotices(app: Express, requireAdmin: RequestHandler, requ
     const [row] = await db.select().from(discoveryCache).where(eq(discoveryCache.key, key(email)));
     let notice: Notice | null = null;
     try { notice = row ? (JSON.parse(row.payload) as Notice) : null; } catch { notice = null; }
+    // Out of credits, but they've topped up since: nothing to say any more.
+    if (notice?.kind === "credits" && (await storage.tokenBalance(email)) > 0) {
+      await db.delete(discoveryCache).where(eq(discoveryCache.key, key(email)));
+      notice = null;
+    }
     res.json({ notice, balance: notice?.kind === "bonus" ? await storage.tokenBalance(email) : undefined });
   });
 

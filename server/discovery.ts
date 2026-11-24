@@ -22,6 +22,7 @@ import sharp from "sharp";
 import { getAdminEmail, getSessionEmail, requireHostSession } from "./session.js";
 import { ensureOrg, orgIdsOf, orgsOf } from "./orgs.js";
 import { slackNote } from "./slack.js";
+import { outOfCredits } from "./creditsAlert.js";
 import { bioPages, pathOf, postifySubscriptions } from "../shared/schema.js";
 import { parseBrands } from "../shared/bio.js";
 import { ADDONS, FREE_DISCOVERY, HOUSE_DISCOVERY } from "../shared/tokens.js";
@@ -653,6 +654,8 @@ async function freeState(email: string): Promise<FreeState> {
   return { searches, lookups, upgrade: searches.left === 0 || lookups.left === 0 };
 }
 const upgrade = (msg: string, free?: FreeState) => new HttpError(402, msg, { upgrade: true, ...(free ? { free } : {}) });
+/** Out of credits (not of a plan): the page opens the credit packs and plans (24 Nov). */
+const OUT_OF_CREDITS = { upgrade: true, credits: true };
 async function requireMember(req: Request, opts: { free?: boolean } = {}): Promise<{ email: string; member: NonNullable<Awaited<ReturnType<typeof memberFor>>>; free: boolean }> {
   // Admins always have Discovery: by their admin session, or the admin key.
   const adminEmail = getAdminEmail(req);
@@ -1211,7 +1214,8 @@ export function registerDiscoveryRoutes(app: Express): void {
                 payRef = ref;
                 paidEmail = m.email;
               } else {
-                throw new HttpError(402, `You've used this month's ${lim} full profiles. Each one after that is ${PROFILE_CREDITS} credit, and you're out of credits: add some under Pōstify, Plan. Discovery Pro has ${ADDONS.discovery.lookups} a month.`);
+                await outOfCredits(m.email);
+                throw new HttpError(402, `You've used this month's ${lim} full profiles. Each one after that is ${PROFILE_CREDITS} credit, and you're out of credits. Discovery Pro has ${ADDONS.discovery.lookups} a month.`, OUT_OF_CREDITS);
               }
             }
           }
@@ -1225,7 +1229,13 @@ export function registerDiscoveryRoutes(app: Express): void {
       }
       if (payRef) {
         const out = await loadCreator(platform, handle, req);
-        await storage.addTokens({ email: paidEmail, delta: -PROFILE_CREDITS, reason: `Full profile: @${handle} (${platform})`, ref: payRef });
+        // Locked with the balance check (storage.spendTokens): two at once can't take it below zero.
+        const r = await storage.spendTokens({ email: paidEmail, credits: PROFILE_CREDITS, reason: `Full profile: @${handle} (${platform})`, ref: payRef });
+        if (r.result === "no") {
+          await outOfCredits(paidEmail);
+          throw new HttpError(402, `You're out of credits for full profiles. Each one is ${PROFILE_CREDITS} credit.`, OUT_OF_CREDITS);
+        }
+        if (r.balance <= 0) await outOfCredits(paidEmail);
         return out;
       }
       if (freeEmail) return { ...(await loadCreator(platform, handle, req) as Record<string, unknown>), free: await freeState(freeEmail) };
@@ -1317,7 +1327,10 @@ export function registerDiscoveryRoutes(app: Express): void {
         const { reveals, pro } = await allowanceFor(email);
         if (used >= reveals) {
           if ((await storage.tokenBalance(email)) >= REVEAL_CREDITS) byCredit = true;
-          else throw new HttpError(402, pro ? `You've used your ${reveals} contacts this month. Each one after that is ${REVEAL_CREDITS} credit, and you're out of credits: add some under Pōstify, Plan.` : `You've used your ${reveals} free contacts this month. Discovery Pro gives you ${ADDONS.discovery.reveals} a month, or use credits (${REVEAL_CREDITS} a contact).`);
+          else {
+            await outOfCredits(email);
+            throw new HttpError(402, pro ? `You've used your ${reveals} contacts this month. Each one after that is ${REVEAL_CREDITS} credit, and you're out of credits.` : `You've used your ${reveals} free contacts this month. Discovery Pro gives you ${ADDONS.discovery.reveals} a month, or use credits (${REVEAL_CREDITS} a contact).`, OUT_OF_CREDITS);
+          }
         }
       }
       const contact = await cached(`contact:${platform}:${handle.toLowerCase()}`, 3650 * DAY, async () => {
@@ -1330,12 +1343,20 @@ export function registerDiscoveryRoutes(app: Express): void {
           website: pick(res0, "website", `${platform}.external_url`, `${platform}.website`) ?? null,
         };
       });
-      if (!again && !paid) {
+      // Only charged when we find one to show them (the help page says so): no email and no phone, nothing taken.
+      const found = Boolean(contact?.email || contact?.phone);
+      if (!again && !paid && found) {
         // Past the allowance: the credit comes off only once we have the contact to show.
-        if (byCredit) await storage.addTokens({ email, delta: -REVEAL_CREDITS, reason: `Contact: @${handle} (${platform})`, ref: `reveal:${email}:${platform}:${handle.toLowerCase()}` });
-        else await db.insert(discoveryReveals).values({ email, platform, handle: handle.toLowerCase(), createdAt: new Date().toISOString() });
+        if (byCredit) {
+          const r = await storage.spendTokens({ email, credits: REVEAL_CREDITS, reason: `Contact: @${handle} (${platform})`, ref: `reveal:${email}:${platform}:${handle.toLowerCase()}` });
+          if (r.result === "no") {
+            await outOfCredits(email);
+            throw new HttpError(402, `You're out of credits for contacts. Each one is ${REVEAL_CREDITS} credit.`, OUT_OF_CREDITS);
+          }
+          if (r.balance <= 0) await outOfCredits(email);
+        } else await db.insert(discoveryReveals).values({ email, platform, handle: handle.toLowerCase(), createdAt: new Date().toISOString() });
       }
-      return { ...contact, byCredit, credits: await storage.tokenBalance(email), reveals: { used: await revealsThisMonth(email), allowance: (await allowanceFor(email)).reveals } };
+      return { ...contact, byCredit: byCredit && found, credits: await storage.tokenBalance(email), reveals: { used: await revealsThisMonth(email), allowance: (await allowanceFor(email)).reveals } };
     }),
   );
 

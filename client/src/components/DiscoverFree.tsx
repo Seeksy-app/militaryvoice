@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { Suspense, lazy, useEffect, useRef, useState } from "react";
 import type { QueryClient } from "@tanstack/react-query";
 import { Check } from "lucide-react";
 import { Dialog, DialogContent, DialogTitle, DialogDescription } from "@/components/ui/dialog";
@@ -83,6 +83,42 @@ export function FreeUsedUp({ line, className = "" }: { line: string; className?:
         <p className="mt-0.5 text-sm text-muted-foreground">Scale opens every creator. Founding Members get it free for 30&nbsp;days.</p>
       </div>
       <a href="/go/bf" className="shrink-0 rounded-full bg-[#F0A71F] px-5 py-2.5 text-sm font-bold text-[#04102b] hover:brightness-105">Start 30 days free</a>
+    </div>
+  );
+}
+
+// ---- Out of credits (24 Nov) ----------------------------------------------------------------------------------------
+// A Scale or Pro member past the month's profiles or contacts with no credits left: not the Founding Members card
+// (they have a plan) but the credit packs and plans, the same dialog Pōstify opens.
+const CREDITS_EVENT = "mv:discover-credits";
+const UpgradeDialog = lazy(() => import("@/components/PostStudio").then((m) => ({ default: m.UpgradeDialog })));
+
+/** Open the credit packs and plans. */
+export function openCredits() {
+  window.dispatchEvent(new CustomEvent(CREDITS_EVENT));
+}
+
+/** The credits dialog, mounted once on the Discovery page next to the upgrade card. */
+export function CreditsUpgrade() {
+  const [open, setOpen] = useState(false);
+  useEffect(() => {
+    const on = () => setOpen(true);
+    window.addEventListener(CREDITS_EVENT, on);
+    return () => window.removeEventListener(CREDITS_EVENT, on);
+  }, []);
+  if (!open) return null;
+  return <Suspense fallback={null}><UpgradeDialog open={open} onOpenChange={setOpen} /></Suspense>;
+}
+
+/** Where the profile would be, once the dialog is closed: the same way to more credits. */
+export function CreditsUsedUp({ line, className = "" }: { line: string; className?: string }) {
+  return (
+    <div className={`flex flex-col items-start gap-3 rounded-2xl border border-[#053877]/15 bg-[#053877]/[0.04] p-5 sm:flex-row sm:items-center ${className}`} data-testid="discover-credits-out">
+      <div className="min-w-0 flex-1">
+        <p className="font-semibold text-foreground">{line}</p>
+        <p className="mt-0.5 text-sm text-muted-foreground">Add a credit pack, or move up a plan for more credits every&nbsp;month.</p>
+      </div>
+      <button type="button" onClick={openCredits} className="shrink-0 rounded-full bg-[#F0A71F] px-5 py-2.5 text-sm font-bold text-[#04102b] hover:brightness-105" data-testid="discover-credits-go">Get credits</button>
     </div>
   );
 }

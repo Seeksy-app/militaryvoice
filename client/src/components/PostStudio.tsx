@@ -2123,8 +2123,20 @@ export function PostStudio() {
       void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] });
       void qc.invalidateQueries({ queryKey: ["/api/host/features"] });
     },
-    onError: (e: Error) => toast({ title: "Couldn't start that", description: e.message, variant: "destructive" }),
+    // Out of credits: the packs and plans, here, not a red toast that says go somewhere else (24 Nov).
+    onError: (e: Error & { status?: number }) => (e.status === 402 ? setCreditsOpen(true) : toast({ title: "Couldn't start that", description: e.message, variant: "destructive" })),
   });
+  // ?credits=packs or plans (the out-of-credits email and notice): open on the packs and plans.
+  const [creditsOpen, setCreditsOpen] = useState(() => typeof window !== "undefined" && new URLSearchParams(window.location.search).has("credits"));
+  const closeCredits = (o: boolean) => {
+    setCreditsOpen(o);
+    if (o || typeof window === "undefined") return;
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("credits")) return;
+    url.searchParams.delete("credits");
+    window.history.replaceState(null, "", url.pathname + url.search);
+  };
+  const creditsDialog = <UpgradeDialog open={creditsOpen} onOpenChange={closeCredits} />;
 
   const beta = features.data?.beta;
   const plan = features.data?.plan ?? null;
@@ -2232,6 +2244,7 @@ export function PostStudio() {
     return (
       <section className="mt-6" data-testid="post-studio">
         {paidBanner}
+        {creditsDialog}
         <div className="mb-4 flex items-center justify-between gap-3">
           <h2 className="text-lg font-bold text-foreground">Pick a recording</h2>
           {betaBadge}
@@ -2513,6 +2526,7 @@ export function PostStudio() {
   return (
     <section className="mt-2" data-testid="post-studio">
       {paidBanner}
+      {creditsDialog}
       {/* The switcher sits above both columns, so the player and the side start level. */}
       <div className="mb-2 flex min-w-0 items-center gap-2">
         {/* The way out: back to the Library, where every episode lives. */}

@@ -165,6 +165,7 @@ import { eventAdminEmails, eventAdminEvents, eventAdminKey, eventAdminMay } from
 import { registerDeviceCheck } from "./deviceCheck.js";
 import { registerHealth, beat, addHealthCheck } from "./health.js";
 import { registerNotices } from "./notices.js";
+import { outOfCredits, setExtrasRoom } from "./creditsAlert.js";
 import { registerGreenRoomChat, logWatchChat } from "./greenRoomChat.js";
 import { draftReply, matchBroadcast, isKnownSender, looksAutomatic, composeAck, firstNameFor, stripQuoted, alexSignatureHtml, threadKey } from "./inbox.js";
 import { adminChat, type ChatTurn } from "./adminChat.js";
@@ -8744,28 +8745,44 @@ export function registerRoutes(app: Express): void {
     return chargeCredits(email, allowance, credits, `episode:${rec.id}`, `Pōstify: ${rec.title || "episode"}`);
   }
 
-  /** Take credits once per ref: from the balance, then as extras on their plan up to their limit. */
+  /**
+   * Take credits once per ref: from the balance, then as extras on their plan up to their limit.
+   * The check and the ledger row are one locked step (storage.spendTokens), so two at once can't
+   * go below zero. Out of credits afterwards, or refused: the out-of-credits alert (once a month).
+   */
   async function chargeCredits(email: string, allowance: Awaited<ReturnType<typeof postifyAllowance>>, credits: number, ref: string, why: string): Promise<"free" | "paid" | "no" | "limit"> {
     if (allowance.unlimited) return "free";
-    if (await storage.hasTokenRef(ref)) return "paid";
-    const reason = why.slice(0, 200);
-    if (allowance.tokens >= credits) {
-      await storage.addTokens({ email, delta: -credits, reason, ref });
-      return "paid";
-    }
     const sub = allowance.sub;
     const plan = sub ? planOf(sub.plan) : undefined;
-    // Extras are monthly-only (Stripe bills the meter with a monthly plan); yearly tops up with packs.
-    if (!sub || !plan || !sub.customerId || sub.interval === "year") return "no";
-    // A free trial (Founding Members) uses its own credits only: nothing is billed before the first payment.
-    if (sub.status === "trialing") return "no";
-    const extra = credits - Math.max(0, allowance.tokens);
-    const extraCents = extra * plan.overageCents;
-    if (allowance.extraCents + extraCents > sub.overageCapCents) return "limit";
-    await reportExtraCredits({ customerId: sub.customerId, credits: extra, identifier: `${ref}:${email}` });
-    await storage.addTokens({ email, delta: -Math.max(0, allowance.tokens), reason, ref, overage: extra, overageCents: extraCents });
-    return "paid";
+    const r = await storage.spendTokens({
+      email, credits, ref, reason: why,
+      short: async (balance) => {
+        // Extras are monthly-only (Stripe bills the meter with a monthly plan); yearly tops up with packs.
+        if (!sub || !plan || !sub.customerId || sub.interval === "year") return "no";
+        // A free trial (Founding Members) uses its own credits only: nothing is billed before the first payment.
+        if (sub.status === "trialing") return "no";
+        const extra = credits - Math.max(0, balance);
+        const extraCents = extra * plan.overageCents;
+        if (allowance.extraCents + extraCents > sub.overageCapCents) return "limit";
+        await reportExtraCredits({ customerId: sub.customerId, credits: extra, identifier: `${ref}:${email}` });
+        return { overage: extra, overageCents: extraCents };
+      },
+    });
+    if (r.result === "dup") return "paid";
+    if (r.result === "paid" && r.balance > 0) return "paid";
+    await outOfCredits(email);
+    return r.result;
   }
+  /** A monthly plan with room left under their limit: the next episode goes on the bill, so nothing waits. */
+  setExtrasRoom(async (email) => {
+    const a = await postifyAllowance(email);
+    const plan = a.sub ? planOf(a.sub.plan) : undefined;
+    if (!a.sub || !plan || !a.sub.customerId || a.sub.interval === "year" || a.sub.status === "trialing") return false;
+    return a.extraCents + plan.overageCents <= a.sub.overageCapCents;
+  });
+  /** Out of credits on a plan isn't "your free episode is used": the way on is a pack or a bigger plan. */
+  const needCredits = (a: Awaited<ReturnType<typeof postifyAllowance>>) =>
+    a.sub ? "You're out of Pōstify credits. Add a credit pack or move up a plan to keep going." : NEED_CREDITS;
 
   /** Keep our copy of a subscription current, and give the credits for each paid month once. */
   async function syncPlan(state: PlanState, invoiceId?: string): Promise<void> {
@@ -9056,14 +9073,19 @@ export function registerRoutes(app: Express): void {
     }
     const title = String(req.body?.title ?? "").trim().slice(0, 140) || String(req.body?.fileName ?? "Episode").replace(/\.[a-z0-9]+$/i, "").slice(0, 140);
     const free = allowance.unlimited || allowance.left > 0;
-    const rec = await storage.createUploadedRecording({ email, title, storageKey, durationSec, sizeBytes: Number(req.body?.sizeBytes) || 0, free });
+    // A paid one is filed unqueued and only queued once the credits are taken, so the worker never clips one for free.
+    const rec = await storage.createUploadedRecording({ email, title, storageKey, durationSec, sizeBytes: Number(req.body?.sizeBytes) || 0, free, ...(free ? {} : { queue: false }) });
     if (!free) {
-      const paid = await payForEpisode(email, rec, allowance, episodeCredits(allShapes(parseClipOptions(req.body?.options)), durationSec > 0 && durationSec <= SHORT_VIDEO_SEC ? 1 : await clipsFor(email)));
-      if (paid === "no" || paid === "limit") {
-        // Kept in the Library, just not clipped: they can start it once they have credits.
-        await storage.setClipStatus(rec.id, "none", "");
-        return res.status(402).json({ message: paid === "limit" ? OVER_LIMIT : NEED_CREDITS, id: rec.id });
+      let paid;
+      try {
+        paid = await payForEpisode(email, rec, allowance, episodeCredits(allShapes(parseClipOptions(req.body?.options)), durationSec > 0 && durationSec <= SHORT_VIDEO_SEC ? 1 : await clipsFor(email)));
+      } catch (err: any) {
+        console.error("Charging an uploaded episode failed:", err?.message);
+        return res.status(502).json({ message: "We couldn't record the extra credits with Stripe just now. Your episode is in your Library; start it from there in a moment.", id: rec.id });
       }
+      // Kept in the Library, just not clipped: they can start it once they have credits.
+      if (paid === "no" || paid === "limit") return res.status(402).json({ message: paid === "limit" ? OVER_LIMIT : needCredits(allowance), id: rec.id });
+      await storage.setClipStatus(rec.id, "queued", "");
     }
     res.status(201).json({ id: rec.id });
   });
@@ -9158,7 +9180,7 @@ export function registerRoutes(app: Express): void {
         console.error("Charging an episode failed:", err?.message);
         return res.status(502).json({ message: "We couldn't record the extra credits with Stripe just now. Try again in a moment." });
       }
-      if (paid === "no") return res.status(402).json({ message: NEED_CREDITS });
+      if (paid === "no") return res.status(402).json({ message: needCredits(allowance) });
       if (paid === "limit") return res.status(402).json({ message: OVER_LIMIT });
       if (paid === "free") await storage.markPostifyBeta(rec.id);
     }
@@ -9181,16 +9203,18 @@ export function registerRoutes(app: Express): void {
     const count = await clipsFor(email);
     const credits = opts.captions === "classic" ? count : count * 2;
     const allowance = await postifyAllowance(email);
+    // One charge per run: the ref is the clips it has now, so a double click is the same run, never two.
+    const have = await storage.listClips(rec.id);
     let paid;
     try {
-      paid = await chargeCredits(email, allowance, credits, `more:${rec.id}:${Date.now()}`, `Pōstify: ${count} more clips from ${rec.title || "an episode"}`);
+      paid = await chargeCredits(email, allowance, credits, `more:${rec.id}:${have.length}:${have.reduce((m, c) => Math.max(m, c.id), 0)}`, `Pōstify: ${count} more clips from ${rec.title || "an episode"}`);
     } catch (err: any) {
       console.error("Charging more clips failed:", err?.message);
       return res.status(502).json({ message: "We couldn't record the extra credits with Stripe just now. Try again in a moment." });
     }
     if (paid === "no") return res.status(402).json({ message: "Not enough credits for more clips. Pick a plan or buy credits." });
     if (paid === "limit") return res.status(402).json({ message: OVER_LIMIT });
-    const avoid = (await storage.listClips(rec.id)).map((c) => [c.startSec, c.endSec] as [number, number]);
+    const avoid = have.map((c) => [c.startSec, c.endSec] as [number, number]);
     await storage.setClipOptions(rec.id, JSON.stringify({ ...opts, more: { count, avoid } }));
     await storage.setClipStatus(rec.id, "queued", "");
     res.json({ ok: true, count, credits });
@@ -9213,12 +9237,12 @@ export function registerRoutes(app: Express): void {
     const allowance = await postifyAllowance(email);
     let paid;
     try {
-      paid = await chargeCredits(email, allowance, 1, `reclean:${rec.id}:${Date.now()}`, `Pōstify: clean ${rec.title || "an episode"} again`);
+      paid = await chargeCredits(email, allowance, 1, `reclean:${rec.id}:${String(prev.at ?? "first")}`, `Pōstify: clean ${rec.title || "an episode"} again`);
     } catch (err: any) {
       console.error("Charging a re-clean failed:", err?.message);
       return res.status(502).json({ message: "We couldn't record the credit with Stripe just now. Try again in a moment." });
     }
-    if (paid === "no") return res.status(402).json({ message: NEED_CREDITS });
+    if (paid === "no") return res.status(402).json({ message: needCredits(allowance) });
     if (paid === "limit") return res.status(402).json({ message: OVER_LIMIT });
     await storage.setClean(rec.id, JSON.stringify({ ...prev, status: "queued", at: new Date().toISOString() }));
     res.json({ ok: true });

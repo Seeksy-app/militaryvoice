@@ -6,11 +6,11 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Button } from "@/components/ui/button";
 import { IconTile } from "@/components/ui/icon-tile";
 
-type Notice = { kind: "bonus"; title: string; body: string; credits?: number; at: string };
+type Notice = { kind: "bonus" | "credits"; title: string; body: string; credits?: number; at: string };
 
 /**
- * A one-time celebration waiting for this podcaster (bonus credits, for now): a pop-up with
- * confetti the next time they open the dashboard, then never again.
+ * A one-time pop-up waiting for this podcaster, the next time they open the dashboard, then never again:
+ * bonus credits (with confetti), or out of credits (24 Nov: no confetti, and the way to more).
  */
 export function HostNotice() {
   const qc = useQueryClient();
@@ -25,7 +25,7 @@ export function HostNotice() {
   const fired = useRef(false);
 
   useEffect(() => {
-    if (!n || fired.current) return;
+    if (!n || n.kind !== "bonus" || fired.current) return;
     fired.current = true;
     if (window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) return;
     // Brand colours, two bursts from the sides and one from the middle.
@@ -52,7 +52,14 @@ export function HostNotice() {
         {typeof q.data?.balance === "number" && (
           <p className="text-sm">Your balance: <span className="font-bold tabular-nums text-[#053877] dark:text-white">{q.data.balance} credits</span></p>
         )}
-        <Button onClick={() => void close()} className="mt-1 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="host-notice-ok">Let's go</Button>
+        {n.kind === "credits" ? (
+          <div className="mt-1 flex flex-col gap-2">
+            <Button onClick={() => { void close().then(() => { window.location.href = "/host/dashboard/postify?credits=packs"; }); }} className="rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="host-notice-credits">Get more credits</Button>
+            <button type="button" onClick={() => void close()} className="text-sm font-semibold text-muted-foreground hover:text-foreground" data-testid="host-notice-later">Not now</button>
+          </div>
+        ) : (
+          <Button onClick={() => void close()} className="mt-1 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="host-notice-ok">Let's go</Button>
+        )}
       </DialogContent>
     </Dialog>
   );
