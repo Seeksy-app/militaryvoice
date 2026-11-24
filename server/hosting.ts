@@ -1893,6 +1893,33 @@ Return JSON only: {"titles":["","",""],"description":""}`,
     res.json({ ok: true });
   });
 
+  // Move an episode to another of their shows (Andrew, 24 Nov 2026: Riccoh's Warriors' Voice episodes). It keeps its
+  // guid, so an app that already has it doesn't count it twice when it turns up in the other feed; it takes the next
+  // number there (the highest used + 1). Its downloads and its own sponsor spots go with it; its clips and transcript
+  // hang off its id and its recording, so they come along by themselves. An intro made for this episode was made for
+  // the old show, so it goes: the new show's own intro and outro play.
+  app.post("/api/host/hosting/episodes/:id/move", requireHostSession, async (req, res) => {
+    const email = emailOf(req);
+    const [e] = await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.id, Number(req.params.id))).limit(1);
+    if (!e || !(await ownShow(email, e.showId))) return res.status(404).json({ message: "No such episode." });
+    const to = await ownShow(email, Number(req.body?.showId));
+    if (!to) return res.status(404).json({ message: "No such show." });
+    if (to.id === e.showId) return res.json(e);
+    const eps = await episodesOf(to.id);
+    const full = e.episodeType === "full";
+    const [out] = await db.update(hostedEpisodes).set({
+      showId: to.id,
+      episodeNumber: full ? (to.showType === "serial" ? e.episodeNumber : nextEpisodeNumber(eps)) : e.episodeNumber,
+      season: to.showType === "serial" ? e.season : null,
+      introKey: "",
+    }).where(and(eq(hostedEpisodes.id, e.id), eq(hostedEpisodes.showId, e.showId))).returning();
+    if (!out) return res.status(409).json({ message: "That episode just changed. Try again." });
+    await db.update(hostedDownloads).set({ showId: to.id }).where(eq(hostedDownloads.episodeId, e.id));
+    await db.update(hostedSpots).set({ showId: to.id }).where(eq(hostedSpots.episodeId, e.id));
+    console.log(`Episode ${e.id} moved from show ${e.showId} to ${to.id} by ${email}`);
+    res.json(out);
+  });
+
   app.delete("/api/host/hosting/episodes/:id", requireHostSession, async (req, res) => {
     const email = emailOf(req);
     const [e] = await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.id, Number(req.params.id))).limit(1);

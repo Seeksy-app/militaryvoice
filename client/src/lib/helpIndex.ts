@@ -79,6 +79,14 @@ export const HELP_INDEX: HelpEntry[] = [
     category: "youtube",
   },
   {
+    title: "Move an episode to another of your shows",
+    summary: "In your Library press ⋯ on it and choose Move episode to, or press Move to another show on the episode's page.",
+    href: "/help/library",
+    keywords: "move episode another show wrong show switch show transfer episode between shows second podcast library add as an episode",
+    audience: "podcasters",
+    category: "youtube",
+  },
+  {
     title: "Send your slot to your own YouTube",
     summary: "Connect your channel once and your segment streams there too, live. A 45-second video and the steps.",
     href: "/help/youtube",

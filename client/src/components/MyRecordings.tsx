@@ -4,11 +4,12 @@ import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { useMoveEpisode } from "@/components/MoveEpisode";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, DropdownMenuSubContent, DropdownMenuSubTrigger, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { PostDialog } from "@/components/PostDialog";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { DEFAULT_CLIP_OPTIONS, parseClipOptions, type RecordingRow } from "@shared/schema";
-import { CalendarClock, Download, Library, Loader2, Mic2, MoreHorizontal, Pencil, Play, Share2, Trash2, Wand2, X, Send } from "lucide-react";
+import { CalendarClock, Check, Download, Library, Loader2, Mic2, MoreHorizontal, Pencil, Play, Share2, Trash2, Wand2, X, Send } from "lucide-react";
 import { PodcastEpisodeGrid, usePodcastEpisodes } from "@/components/PodcastEpisodes";
 import { MoveToFolder, dragToFolder, useLibraryFolders } from "@/components/LibraryFolders";
 import { seesTwoPeople } from "@/components/LayoutPicker";
@@ -110,7 +111,7 @@ export function MyRecordings({
   const [publishing, setPublishing] = useState<RecordingRow | null>(null);
   const [scheduling, setScheduling] = useState(false);
   // Their podcast shows, so a recording becomes an episode in one step (then its words, on the Podcast screen).
-  const showsQ = useQuery<{ shows: { show: { id: number; title: string } }[] }>({ queryKey: ["/api/host/hosting"], queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json(), staleTime: 60_000 });
+  const showsQ = useQuery<{ shows: { show: { id: number; title: string }; episodes?: { id: number; title: string; recordingId: number | null; live?: boolean }[] }[] }>({ queryKey: ["/api/host/hosting"], queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json(), staleTime: 60_000 });
   const podShows = showsQ.data?.shows ?? [];
   // Folders are the Library's, one set for episodes, podcast episodes and clips (LibraryFolders.tsx).
   const lib = useLibraryFolders();
@@ -118,6 +119,12 @@ export function MyRecordings({
   const podQ = usePodcastEpisodes();
   const hasPodcast = (podQ.data ?? []).some((e) => e.status === "published");
   const [makingEp, setMakingEp] = useState(false);
+  // Already an episode: which show it's in, so the menu says "Move episode to" instead of adding it twice (Andrew, 24 Nov).
+  const episodeOf = (ids: number[]) => {
+    for (const x of podShows) { const e = (x.episodes ?? []).find((y) => y.recordingId != null && ids.includes(y.recordingId)); if (e) return { show: x.show, ep: e }; }
+    return null;
+  };
+  const mover = useMoveEpisode();
   const { toast: epToast } = useToast();
   async function toEpisode(recId: number, showId: number) {
     setMakingEp(true);
@@ -270,6 +277,7 @@ export function MyRecordings({
 
   return (
     <section className="mt-2">
+      {mover.dialog}
       {/* Thumbnails, each with one menu: the things you do with an episode. */}
       {shown.length > 0 && <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
         {shown.map(({ main, versions, earlier }) => {
@@ -278,6 +286,7 @@ export function MyRecordings({
           const r = all.find((v) => v.rec.id === picked[main.id])?.rec ?? versions.find((v) => v.label === "Edited")?.rec ?? versions[0]?.rec ?? main;
           const olderPicked = earlier.find((v) => v.rec.id === r.id);
           const clean = versions.length > 0 || main.egressId.startsWith("CLEAN_");
+          const inShow = episodeOf([main.id, ...all.map((v) => v.rec.id)]);
           return (
           <li
             key={main.id}
@@ -378,17 +387,33 @@ export function MyRecordings({
                     <DropdownMenuItem onSelect={() => setRenaming({ id: main.id, title: plainTitle(main.title) })} className="gap-2" data-testid={`button-rename-recording-${main.id}`}>
                       <Pencil className="h-4 w-4" /> Rename
                     </DropdownMenuItem>
-                    {/* An episode of their podcast: one show, straight in; more, pick one; none, start one. */}
-                    {podShows.length > 1 ? (
+                    {/* An episode of their podcast (Andrew, 24 Nov): not one yet, add it to a show (one show, straight in; none, start one).
+                        Already one: which show it's in, and the others to move it to. */}
+                    {inShow ? (podShows.length > 1 ? (
                       <DropdownMenuSub>
-                        <DropdownMenuSubTrigger className="gap-2" disabled={makingEp} data-testid={`button-episode-recording-${r.id}`}><Mic2 className="h-4 w-4" /> Add to my podcast</DropdownMenuSubTrigger>
-                        <DropdownMenuSubContent className="w-56">
+                        <DropdownMenuSubTrigger className="gap-2" disabled={mover.busy} data-testid={`button-move-episode-recording-${r.id}`}><Mic2 className="h-4 w-4" /> Move episode to</DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="w-60">
+                          {podShows.map((x) => x.show.id === inShow.show.id ? (
+                            <DropdownMenuItem key={x.show.id} disabled className="justify-between gap-2 data-[disabled]:opacity-100"><span className="truncate">{x.show.title || "Untitled show"}</span><Check className="h-4 w-4 shrink-0 text-emerald-600" /></DropdownMenuItem>
+                          ) : (
+                            <DropdownMenuItem key={x.show.id} onSelect={() => mover.move({ epId: inShow.ep.id, title: inShow.ep.title, live: !!inShow.ep.live, from: inShow.show.title, to: { id: x.show.id, title: x.show.title } })} className="truncate" data-testid={`button-move-to-${x.show.id}`}>{x.show.title || "Untitled show"}</DropdownMenuItem>
+                          ))}
+                        </DropdownMenuSubContent>
+                      </DropdownMenuSub>
+                    ) : (
+                      <DropdownMenuItem disabled className="gap-2 data-[disabled]:opacity-100" data-testid={`episode-in-show-${r.id}`}>
+                        <Mic2 className="h-4 w-4" /> <span className="min-w-0 truncate">In {inShow.show.title || "your show"}</span> <Check className="ml-auto h-4 w-4 shrink-0 text-emerald-600" />
+                      </DropdownMenuItem>
+                    )) : podShows.length > 1 ? (
+                      <DropdownMenuSub>
+                        <DropdownMenuSubTrigger className="gap-2" disabled={makingEp} data-testid={`button-episode-recording-${r.id}`}><Mic2 className="h-4 w-4" /> Add as an episode to</DropdownMenuSubTrigger>
+                        <DropdownMenuSubContent className="w-60">
                           {podShows.map((x) => <DropdownMenuItem key={x.show.id} onSelect={() => void toEpisode(r.id, x.show.id)} className="truncate">{x.show.title || "Untitled show"}</DropdownMenuItem>)}
                         </DropdownMenuSubContent>
                       </DropdownMenuSub>
                     ) : (
                       <DropdownMenuItem disabled={makingEp} onSelect={() => { if (podShows[0]) void toEpisode(r.id, podShows[0].show.id); else window.location.href = "/host/dashboard/podcast"; }} className="gap-2" data-testid={`button-episode-recording-${r.id}`}>
-                        {makingEp ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic2 className="h-4 w-4" />} {podShows[0] ? "Add to my podcast" : "Start my podcast"}
+                        {makingEp ? <Loader2 className="h-4 w-4 animate-spin" /> : <Mic2 className="h-4 w-4" />} {podShows[0] ? "Add as an episode" : "Start my podcast"}
                       </DropdownMenuItem>
                     )}
                     <DropdownMenuItem onSelect={() => { setScheduling(false); setPublishing(r); }} className="gap-2" data-testid={`button-publish-recording-${r.id}`}>

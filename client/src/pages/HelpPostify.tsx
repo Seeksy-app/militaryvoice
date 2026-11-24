@@ -64,7 +64,7 @@ export default function HelpPostify() {
           <HelpStep k="a">When your edits are done, press <strong>Save to Library</strong>.</HelpStep>
           <HelpStep k="b">It takes a few minutes. You can close the page; it keeps going.</HelpStep>
           <HelpStep k="c">It lands in your Library as a new copy, <strong>Edited</strong>, next to your original. The original isn't touched.</HelpStep>
-          <HelpNote>Nothing goes to your podcast yet. When you're happy with it, press <strong>⋯</strong> on it in your Library and choose <strong>Add to my podcast</strong>.</HelpNote>
+          <HelpNote>Nothing goes to your podcast yet. When you're happy with it, press <strong>⋯</strong> on it in your Library and choose <strong>Add as an episode</strong>.</HelpNote>
         </HelpSection>
 
         <HelpSection n={6} id="music" title="Music for the episode">

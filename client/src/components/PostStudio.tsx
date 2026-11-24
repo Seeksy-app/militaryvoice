@@ -972,7 +972,7 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
     })).json(),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] });
-      toast({ title: "Saving to your Library", description: "It takes a few minutes, and you can close this page. It lands next to your original as a new copy; to put it in your podcast, choose Add to my podcast there." });
+      toast({ title: "Saving to your Library", description: "It takes a few minutes, and you can close this page. It lands next to your original as a new copy; to put it in your podcast, choose Add as an episode there." });
     },
     onError: (e: Error) => toast({ title: "Couldn't start that", description: e.message, variant: "destructive" }),
   });

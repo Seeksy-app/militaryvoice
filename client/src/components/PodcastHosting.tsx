@@ -21,6 +21,7 @@ import type { HostedEpisodeRow, HostedShowRow, HostedSpotRow, PodcastStatsData, 
 import { fillFooter, FOOTER_TOKENS } from "@shared/footer";
 import { AlertCircle, BarChart3, Check, ChevronLeft, Copy, Download, ExternalLink, Film, ImagePlus, Loader2, Mic2, Pause, Pencil, Play, Plus, Podcast, Radio, Send, Sparkles, Trash2, Upload } from "lucide-react";
 import { IconTile } from "@/components/ui/icon-tile";
+import { useMoveEpisode } from "@/components/MoveEpisode";
 
 /**
  * Podcast: the show hosted on MilitaryVoices. A feed Apple, Spotify and every
@@ -139,7 +140,7 @@ export function PodcastHosting() {
   const [editEp, setEditEp] = useState<Ep | null>(null);
   // An episode a sponsor spot is being added for (from that episode's page).
   const [spotFor, setSpotFor] = useState<number | null>(null);
-  // From the Library ("Add to my podcast"): ?ep=<id> opens that episode, ready for its words.
+  // From the Library ("Add as an episode"): ?ep=<id> opens that episode, ready for its words.
   const [wantEp, setWantEp] = useState<number | null>(() => { try { return Number(new URLSearchParams(window.location.search).get("ep")) || null; } catch { return null; } });
   useEffect(() => {
     if (!wantEp || !q.data) return;
@@ -278,7 +279,7 @@ export function PodcastHosting() {
       )}
 
       {tab === "episodes" && editEp && (
-        <EpisodePage ep={h.episodes.find((x) => x.id === editEp.id) ?? editEp} show={s} youtubeReady={!!q.data?.youtubeReady} production={!!h.production} onDirectories={() => { setEditEp(null); go("directories"); }} onBack={() => setEditEp(null)} onSaved={refresh} onAddSpot={(id) => { setSpotFor(id); setEditEp(null); go("sponsors"); }} onShowDetails={() => { setEditEp(null); setFocus("signoff"); go("details"); }} />
+        <EpisodePage ep={h.episodes.find((x) => x.id === editEp.id) ?? editEp} show={s} shows={shows.map((x) => x.show)} onMoved={(id) => { setOpenId(id); refresh(); }} youtubeReady={!!q.data?.youtubeReady} production={!!h.production} onDirectories={() => { setEditEp(null); go("directories"); }} onBack={() => setEditEp(null)} onSaved={refresh} onAddSpot={(id) => { setSpotFor(id); setEditEp(null); go("sponsors"); }} onShowDetails={() => { setEditEp(null); setFocus("signoff"); go("details"); }} />
       )}
       {tab === "episodes" && !editEp && adding && (
         <NewEpisodePage show={s} onBack={() => setAdding(false)} onCreated={(e) => { refresh(); setAdding(false); setEditEp({ ...e, downloads: 0, live: false }); }} />
@@ -1151,7 +1152,7 @@ function BookendListen({ show, ep, state }: { show: HostedShowRow; ep: Ep; state
   );
 }
 
-function EpisodePage({ ep, show, youtubeReady, production, onDirectories, onBack, onSaved, onAddSpot, onShowDetails }: { ep: Ep; show: HostedShowRow; youtubeReady: boolean; production: boolean; onDirectories?: () => void; onBack: () => void; onSaved: () => void; onAddSpot: (episodeId: number) => void; /** Settings → Show details, at the host details box. */ onShowDetails: () => void }) {
+function EpisodePage({ ep, show, shows, onMoved, youtubeReady, production, onDirectories, onBack, onSaved, onAddSpot, onShowDetails }: { ep: Ep; show: HostedShowRow; /** All their shows, for Move to another show. */ shows: HostedShowRow[]; onMoved: (showId: number) => void; youtubeReady: boolean; production: boolean; onDirectories?: () => void; onBack: () => void; onSaved: () => void; onAddSpot: (episodeId: number) => void; /** Settings → Show details, at the host details box. */ onShowDetails: () => void }) {
   const { toast } = useToast();
   const [f, setF] = useState<Record<string, unknown>>({});
   const [at, setAt] = useState("");
@@ -1213,6 +1214,8 @@ function EpisodePage({ ep, show, youtubeReady, production, onDirectories, onBack
       toast({ title: "Couldn't save", description: (e as Error).message.replace(/^\d+:\s*/, ""), variant: "destructive" });
     }
   };
+  const mover = useMoveEpisode(onMoved);
+  const [moveOpen, setMoveOpen] = useState(false);
   const remove = async () => {
     if (!window.confirm(`Delete "${ep.title}"?\n\nIt leaves your feed and your show page right away. Apple Podcasts, Spotify and the other apps drop it the next time they check (usually within hours).${ytState === "sent" || ep.ytLibrary ? "\n\nIt stays on YouTube until you remove it there." : ""}\n\nWe keep a copy for 15 days in Recently deleted, in case you change your mind. After that it's gone for good.`)) return;
     await apiRequest("DELETE", `/api/host/hosting/episodes/${ep.id}`);
@@ -1465,6 +1468,22 @@ function EpisodePage({ ep, show, youtubeReady, production, onDirectories, onBack
           <div className="space-y-1 rounded-2xl border border-border bg-card p-2 shadow-sm">
             {ep.live && <a href={`/podcast/${show.slug}`} target="_blank" rel="noreferrer" className="flex items-center gap-2 rounded-xl px-3 py-2 text-sm hover:bg-muted"><ExternalLink className="h-4 w-4 text-muted-foreground" /> Open your show's page</a>}
             {hasAudio && <button type="button" onClick={() => void copy(`${origin}/e/${ep.id}.mp3`, "Audio link")} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm hover:bg-muted" data-testid="episode-copy-audio"><Copy className="h-4 w-4 text-muted-foreground" /> Copy the direct link to the audio</button>}
+            {/* Move to another show (Andrew, 24 Nov): the same as the Library's "Move episode to". */}
+            {shows.length > 1 && (
+              <Popover open={moveOpen} onOpenChange={setMoveOpen}>
+                <PopoverTrigger asChild>
+                  <button type="button" disabled={mover.busy} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm hover:bg-muted" data-testid="episode-move"><Podcast className="h-4 w-4 text-muted-foreground" /> Move to another show</button>
+                </PopoverTrigger>
+                <PopoverContent align="start" className="w-64 p-1">
+                  {shows.map((x) => x.id === show.id ? (
+                    <div key={x.id} className="flex items-center justify-between gap-2 rounded-lg px-3 py-2 text-sm"><span className="truncate">{x.title || "Untitled show"}</span><Check className="h-4 w-4 shrink-0 text-emerald-600" /></div>
+                  ) : (
+                    <button key={x.id} type="button" onClick={() => { setMoveOpen(false); mover.move({ epId: ep.id, title: ep.title, live: ep.live, from: show.title, to: { id: x.id, title: x.title } }); }} className="block w-full truncate rounded-lg px-3 py-2 text-left text-sm hover:bg-muted" data-testid={`episode-move-to-${x.id}`}>{x.title || "Untitled show"}</button>
+                  ))}
+                </PopoverContent>
+              </Popover>
+            )}
+            {mover.dialog}
             <button type="button" onClick={() => void remove()} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-destructive hover:bg-destructive/10" data-testid="episode-delete"><Trash2 className="h-4 w-4" /> Delete this episode</button>
           </div>
         </aside>

@@ -61,7 +61,8 @@ export default function HelpLibrary() {
             <li><strong>Download</strong> the version you're looking at.</li>
             <li><strong>Pōstify it</strong> makes clips and a clean episode. Once made, it reads <strong>Clips in Pōstify</strong>. See <Link href="/help/postify" className="font-medium text-primary hover:underline">Pōstify help</Link>.</li>
             <li><strong>Rename</strong> it.</li>
-            <li><strong>Add to my podcast</strong> makes it an episode of your show. Nothing goes to your podcast until you do this. No show yet? It reads <strong>Start my podcast</strong>.</li>
+            <li><strong>Add as an episode</strong> makes it an episode of your show (with more than one show, pick which). Nothing goes to your podcast until you do this. No show yet? It reads <strong>Start my podcast</strong>.</li>
+            <li>Already an episode? The menu says which show it's in. With more than one show, <strong>Move episode to</strong> moves it to another; a published one asks first, since it leaves one show's feed for the other. You can do the same from the episode's own page: <strong>Move to another show</strong>.</li>
             <li><strong>Post it</strong> sends the whole video to YouTube. Other apps get its clips (see below).</li>
             <li><strong>Move to folder</strong>, or make a <strong>New folder…</strong>.</li>
             <li><strong>Delete</strong>, for uploads, Zoom imports and Pōstify's copies.</li>
