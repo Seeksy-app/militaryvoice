@@ -39,6 +39,7 @@ import HelpAccount from "@/pages/HelpAccount";
 import HelpCredits from "@/pages/HelpCredits";
 import HelpSmartlink from "@/pages/HelpSmartlink";
 import HelpGuests from "@/pages/HelpGuests";
+import HelpStats from "@/pages/HelpStats";
 import Discover from "@/pages/Discover";
 import Directory from "@/pages/Directory";
 import PodcastPage from "@/pages/PodcastPage";
@@ -146,6 +147,7 @@ function AppRouter() {
       <Route path="/help/credits">{() => <HelpCredits />}</Route>
       <Route path="/help/smartlink">{() => <HelpSmartlink />}</Route>
       <Route path="/help/guests">{() => <HelpGuests />}</Route>
+      <Route path="/help/stats">{() => <HelpStats />}</Route>
       {/* Registered on the Google OAuth consent screen — these URLs are
           load-bearing for verification, so don't rename them. */}
       <Route path="/policy">{() => <PrivacyPolicy />}</Route>

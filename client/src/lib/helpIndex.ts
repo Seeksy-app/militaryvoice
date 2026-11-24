@@ -63,6 +63,22 @@ export const HELP_INDEX: HelpEntry[] = [
     category: "youtube",
   },
   {
+    title: "Bring your Spotify and Buzzsprout stats in",
+    summary: "Export Plays, Episodes and Audience from Spotify for Creators and upload them in Analytics. Buzzsprout connects with its API token.",
+    href: "/help/stats",
+    keywords: "stats statistics analytics downloads plays listens export import upload csv spotify for creators buzzsprout api token numbers history audience age gender location episodes",
+    audience: "podcasters",
+    category: "youtube",
+  },
+  {
+    title: "Why Spotify shows plays, not downloads",
+    summary: "Spotify keeps its own copy of each episode, so its plays never reach your host. Our Downloads count every other app.",
+    href: "/help/stats#plays",
+    keywords: "spotify downloads missing no downloads plays streams where are my downloads spotify numbers not counted",
+    audience: "podcasters",
+    category: "youtube",
+  },
+  {
     title: "Send your slot to your own YouTube",
     summary: "Connect your channel once and your segment streams there too, live. A 45-second video and the steps.",
     href: "/help/youtube",
