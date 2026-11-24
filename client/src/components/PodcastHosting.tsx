@@ -191,7 +191,7 @@ export function PodcastHosting() {
       <section className="mt-2" data-testid="podcast-hosting">
         <h1 className="text-2xl font-bold tracking-tight">Your shows</h1>
         <p className="mt-1 text-sm text-muted-foreground">Each one has its own feed for Apple, Spotify and every podcast app.</p>
-        <div className="mt-5 grid gap-4 sm:grid-cols-2 xl:grid-cols-3" data-testid="hosting-shows">
+        <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 2xl:grid-cols-5" data-testid="hosting-shows">
           {shows.map((x) => {
             const live = x.episodes.filter((e) => e.live).length;
             const xd = parseDirs(x.show.directories);
@@ -199,16 +199,16 @@ export function PodcastHosting() {
             return (
               <button key={x.show.id} type="button" onClick={() => setOpenId(x.show.id)} className="group overflow-hidden rounded-2xl border border-border bg-card text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#053877]/40 hover:shadow-md" data-testid={`hosting-show-${x.show.id}`}>
                 <div className="aspect-square w-full bg-muted">{x.show.artworkUrl ? <img src={x.show.artworkUrl} alt="" className="h-full w-full object-cover" /> : <span className="flex h-full items-center justify-center text-muted-foreground"><Podcast className="h-10 w-10" /></span>}</div>
-                <div className="p-4">
-                  <p className="line-clamp-2 text-balance font-semibold leading-snug group-hover:text-[#053877] dark:group-hover:text-[#8fb5e8]">{x.show.title || "Untitled show"}</p>
-                  <p className="mt-1 text-xs text-muted-foreground">{live} {live === 1 ? "episode" : "episodes"} out{x.stats.last30 ? ` · ${compact(x.stats.last30)} downloads this month` : ""}</p>
+                <div className="p-3 sm:p-3.5">
+                  <p className="line-clamp-2 text-balance text-sm font-semibold leading-snug group-hover:text-[#053877] dark:group-hover:text-[#8fb5e8]">{x.show.title || "Untitled show"}</p>
+                  <p className="mt-1 text-xs text-muted-foreground">{live} {live === 1 ? "episode" : "episodes"} out{x.stats.last30 ? ` · ${compact(x.stats.last30)} ${x.stats.last30 === 1 ? "download" : "downloads"} this month` : ""}</p>
                   <span className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${listed ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : x.missing.length ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : "bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]"}`}>{listed ? `Listed on ${listed} ${listed === 1 ? "app" : "apps"}` : x.missing.length ? "Getting set up" : "Ready to list"}</span>
                 </div>
               </button>
             );
           })}
-          <button type="button" onClick={() => setInSetup(true)} className="flex min-h-[16rem] flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border text-muted-foreground transition-colors hover:border-[#053877]/40 hover:text-[#053877] dark:hover:text-[#8fb5e8]" data-testid="hosting-add-show">
-            <Plus className="h-7 w-7" /><span className="font-semibold">Add a show</span>
+          <button type="button" onClick={() => setInSetup(true)} className="flex min-h-[12rem] flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border text-muted-foreground transition-colors hover:border-[#053877]/40 hover:text-[#053877] dark:hover:text-[#8fb5e8]" data-testid="hosting-add-show">
+            <Plus className="h-6 w-6" /><span className="text-sm font-semibold">Add a show</span>
           </button>
         </div>
         {addShowDialog}
