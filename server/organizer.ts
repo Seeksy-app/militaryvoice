@@ -23,12 +23,19 @@ const slugify = (s: string) => s.toLowerCase().normalize("NFKD").replace(/[̀-ͯ
  * back with the one thing to change. Andrew's approved text; only the names, the link and the reason are filled
  * in. Plain text from hello@, logged in Mail. Andrew's own and test accounts (the credits exempt list) get none.
  */
-export function plannerDecisionEmail(d: { approve: boolean; first: string; event: string; slug: string; reason?: string }): { subject: string; text: string } {
+export function plannerDecisionEmail(d: { approve: boolean; first: string; event: string; slug: string; reason?: string; justMe?: boolean }): { subject: string; text: string } {
   const hi = `Hi ${d.first || "there"},`;
+  // "Just me" has its own wording; the lineup line dropped "approved" (Andrew via PM, 24 Nov: "Yes, use all three").
+  if (d.approve && d.justMe) {
+    return {
+      subject: `Your event is live: ${d.event}`,
+      text: [hi, "", `${d.event} is live. Here's its page to share: ${ORIGIN}/event/${d.slug}`, "", "Under My events you'll find a link for each place you post it, with its clicks, and the list of who's signed up.", "", "The MilitaryVoices.ai team"].join("\n"),
+    };
+  }
   if (d.approve) {
     return {
       subject: `Your event is live: ${d.event}`,
-      text: [hi, "", `${d.event} is approved and live. Share its page so people can book a slot: ${ORIGIN}/event/${d.slug}`, "", "You'll see who's booked, and open your studio, under My events.", "", "The MilitaryVoices.ai team"].join("\n"),
+      text: [hi, "", `${d.event} is live. Share its page so people can book a slot: ${ORIGIN}/event/${d.slug}`, "", "You'll see who's booked, and open your studio, under My events.", "", "The MilitaryVoices.ai team"].join("\n"),
     };
   }
   return {
@@ -46,25 +53,23 @@ async function tellPlanner(e: typeof events.$inferSelect, approve: boolean, reas
   if (!claimed.length) return "skipped";
   const name = ((await storage.getProfileByEmail(to).catch(() => undefined))?.hostName ?? "").trim().split(/\s+/)[0] ?? "";
   const first = /^[A-Za-z][A-Za-z'’-]{1,}$/.test(name) ? name : "";
-  const mail = plannerDecisionEmail({ approve, first, event: e.name, slug: e.slug, reason });
+  const mail = plannerDecisionEmail({ approve, first, event: e.name, slug: e.slug, reason, justMe: e.kind === "me" });
   if (process.env.PLANNER_MAIL_DRY === "1") { console.log(`[planner mail dry run] to ${to}: ${mail.subject}\n${mail.text}`); return "sent"; }
   const id = await sendOneOffEmail({ to, subject: mail.subject, html: "", text: mail.text, kind: approve ? "planner-live" : "planner-change", recipientName: first });
   return id ? "sent" : "skipped";
 }
 
 /**
- * Made and live: we hear about it in Slack, and the planner gets the "Your event is live" email (68f725d3) when it's
- * a lineup, whose approved text asks people to book a slot. A "Just me" event has no slots to book, so its email
- * waits for Andrew's go on its own wording (24 Nov) rather than saying the wrong thing.
+ * Made and live: we hear about it in Slack, and the planner gets "Your event is live": the lineup wording asks
+ * people to book a slot, the "Just me" wording points at the share links (both Andrew's, 24 Nov).
  */
 async function announce(e: typeof events.$inferSelect, me: string) {
   await slackNote(`:calendar: ${me} published an event: "${e.name}" (${new Date(e.startAtUtc).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric" })}).`, { label: "See it", url: `${ORIGIN}/event/${e.slug}` }).catch(() => {});
-  if (e.kind === "me") return;
   await storage.setSetting(submittedKey(e.id), now());
   await tellPlanner(e, true, "").catch((err) => console.error("Planner email failed:", (err as Error).message));
 }
 
-/** Off until Andrew's go on the exact text (24 Nov); Admin flips the setting. */
+/** Text approved by Andrew (via PM, 24 Nov: "Yes, use all three"); sends only while the setting is "on". */
 export const SIGNUP_MAIL_KEY = "event-signup-mail";
 export function signupEmail(d: { first: string; event: string; day: string; time: string; zone: string; online: boolean; venue: string; address: string; joinUrl: string; pageUrl: string }): { subject: string; text: string } {
   const where = d.online ? (d.joinUrl ? `Online. Join here: ${d.joinUrl}` : "Online.") : [d.venue, d.address].filter(Boolean).join(", ");
