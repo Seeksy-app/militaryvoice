@@ -891,7 +891,7 @@ function StageClipSound({ kit }: { kit: RoomKit }) {
   useClipSound(clip, clip && !clip.loop && !p ? () => {
     const now = kit.look ? sceneLive(kit.look, kit.live) : undefined;
     if (now?.id === sceneId && !kit.live.playing) kit.stopPresenting(sceneId);
-  } : undefined, !p && kit.live.clip?.scene === sceneId ? kit.live.clip : null);
+  } : undefined, !p && sceneId && kit.live.clip?.scene === sceneId ? kit.live.clip : null);
   return null;
 }
 
@@ -912,7 +912,7 @@ function ClipBar({ kit }: { kit: RoomKit }) {
     const t = window.setInterval(() => tick((x) => x + 1), 250);
     return () => window.clearInterval(t);
   }, [on, el]);
-  const paused = kit.live.clip?.scene === scene?.id ? kit.live.clip!.paused : false;
+  const paused = !!scene && kit.live.clip?.scene === scene.id && kit.live.clip.paused === true;
   const toggle = () => { if (el) void kit.clipAct(paused ? "play" : "pause", el.currentTime); };
   const toggleRef = useRef(toggle);
   toggleRef.current = toggle;
