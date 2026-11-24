@@ -71,7 +71,7 @@ export function FoundingHero() {
               <div className="px-5 py-3 text-center sm:text-left">
                 <p className="whitespace-nowrap text-3xl font-black uppercase italic leading-none tracking-tight text-white sm:text-[2rem]" style={HEADLINE_FONT}>30 days free</p>
                 <p className="mt-1.5 whitespace-nowrap text-xs font-bold uppercase tracking-wide text-white/90 sm:text-[13px]">
-                  Then just <span className={`text-base font-black italic ${GOLD_TEXT}`}>{price}</span> / month · card needed
+                  Then just <span className={`text-base font-black italic ${GOLD_TEXT}`}>{price}</span> / month
                 </p>
               </div>
               <div className="flex items-center justify-center gap-3 border-t border-[#F0A71F]/40 px-5 py-3 sm:border-l sm:border-t-0">

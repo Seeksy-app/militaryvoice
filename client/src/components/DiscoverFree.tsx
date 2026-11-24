@@ -68,7 +68,7 @@ export function FreeUpgrade() {
           <a ref={go} href="/go/bf" className="flex-1 rounded-full bg-[#F0A71F] px-4 py-2.5 text-center text-sm font-bold text-[#04102b] hover:brightness-105" data-testid="discover-upgrade-go">Start 30 days free</a>
           <button type="button" onClick={() => setLine(null)} className="px-3 py-2.5 text-sm font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]">Not now</button>
         </div>
-        <p className="px-6 pb-5 text-xs text-muted-foreground">Founding Members get Scale free for 30 days. Card needed, cancel any&nbsp;time.</p>
+        <p className="px-6 pb-5 text-xs text-muted-foreground">Founding Members get Scale free for 30 days. Cancel any&nbsp;time.</p>
       </DialogContent>
     </Dialog>
   );

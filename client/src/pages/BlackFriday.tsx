@@ -211,7 +211,7 @@ export default function BlackFriday() {
             <Button onClick={toBox} className={`mt-7 h-12 w-full gap-2 rounded-full text-[15px] font-extrabold uppercase italic tracking-tight text-[#2a1800] shadow-[0_0_26px_rgba(240,167,31,0.5),inset_0_2px_0_rgba(255,255,255,0.6)] hover:brightness-110 ${GOLD_FILL}`} data-testid="bf-scale-cta">
               Start 30 days free <ArrowRight className="h-4 w-4" />
             </Button>
-            <p className="mt-3 text-center text-xs text-white/60">Card needed. Cancel before day 30 and you won't pay for the plan.</p>
+            <p className="mt-3 text-center text-xs text-white/60">Cancel before day 30 and you won't pay for the plan.</p>
           </section>
 
           <section className="flex flex-col rounded-3xl border border-white/20 bg-[#050d56]/60 p-6 text-white" data-testid="bf-free">
@@ -411,7 +411,7 @@ function JoinBox({ src }: { src: string }) {
           <button type="button" onClick={() => { setStep("email"); setCode(""); setError(""); }} className="mt-3 text-xs font-semibold text-[#4a5568] underline underline-offset-4">Use a different email</button>
         </form>
       )}
-      <p className={fine}><Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" /> We'll email you a 6-digit code, then on to checkout. Card needed; cancel before day 30 and you won't pay for the plan.</p>
+      <p className={fine}><Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" /> We'll email you a 6-digit code, then on to checkout. Cancel before day 30 and you won't pay for the plan.</p>
       {err}
     </div>
   );
