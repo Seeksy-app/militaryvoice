@@ -134,7 +134,8 @@ Press ⋯ on a recording's card. What you do applies to the version showing.
 Download the version you're looking at.
 Pōstify it makes clips and a clean episode. Once made, it reads Clips in Pōstify. See Pōstify help.
 Rename it.
-Add to my podcast makes it an episode of your show. Nothing goes to your podcast until you do this. No show yet? It reads Start my podcast.
+Add as an episode makes it an episode of your show (with more than one show, pick which). Nothing goes to your podcast until you do this. No show yet? It reads Start my podcast.
+Already an episode? The menu says which show it's in. With more than one show, Move episode to moves it to another; a published one asks first, since it leaves one show's feed for the other. You can do the same from the episode's own page: Move to another show.
 Post it sends the whole video to YouTube. Other apps get its clips (see below).
 Move to folder, or make a New folder….
 Delete, for uploads, Zoom imports and Pōstify's copies.
@@ -190,7 +191,7 @@ Save & close keeps your edits and takes you to your Library. Open the episode ag
 a When your edits are done, press Save to Library.
 b It takes a few minutes. You can close the page; it keeps going.
 c It lands in your Library as a new copy, Edited, next to your original. The original isn't touched.
-Nothing goes to your podcast yet. When you're happy with it, press ⋯ on it in your Library and choose Add to my podcast.
+Nothing goes to your podcast yet. When you're happy with it, press ⋯ on it in your Library and choose Add as an episode.
 6 Music for the episode
 Our own tracks, cleared for podcasts and YouTube.
 a In Edit episode, press Music at the bottom.
@@ -464,7 +465,7 @@ Top Middle Lower third Bottom
 Back to the usual
 Edit text and captions: a bigger size, and the captions moved to the top. On a clip, press ⋯ and choose Edit text and captions. Make them bigger or smaller with Size, and under Where they sit pick Top, Middle, Lower third or Bottom, or slide them exactly where you want. Back to the usual puts them back.
 6 Out to your podcast and social
-Your podcast: press ⋯ on the episode and choose Add to my podcast. It goes to Apple Podcasts, Spotify and the rest through your feed.
+Your podcast: press ⋯ on the episode and choose Add as an episode. It goes to Apple Podcasts, Spotify and the rest through your feed.
 Social: press Post on a clip, tick your accounts (Instagram, TikTok, Facebook, LinkedIn, YouTube), and choose Now, Next open slot or Pick a time. Everything you've scheduled is on the Social calendar.
 Nothing goes out until you press the button.
 7 Your Zoom stays yours
