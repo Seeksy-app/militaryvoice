@@ -58,7 +58,7 @@ export default function HelpIndex() {
           <p className="text-xs font-semibold uppercase tracking-[0.2em] text-[#F0A71F]">Help</p>
           <h1 className="mt-3 text-4xl font-bold tracking-tight sm:text-5xl" style={HEADLINE_FONT}>How can we help?</h1>
           <p className="mx-auto mt-4 max-w-2xl text-lg text-white/75">
-            Search the help, or ask Alex. She answers now, and gets you to a person when she can't.
+            Search the help, or ask Alex. She answers now, and when she can't, someone will get back to you as soon as possible.
           </p>
           <div className="mt-8 text-left">
             <HelpSearch autoFocus />

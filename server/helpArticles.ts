@@ -751,7 +751,7 @@ Yes. The schedule and agenda both show times in the zone you pick, and default t
 Can I share a show?
 Every card has a Share button that copies a ready-to-post line with the show, the host, and the time.
 Still have a question?
-Ask Alex, or email hello@militaryvoices.ai and a human will get back to you.
+Ask Alex, or email hello@militaryvoices.ai and someone will get back to you as soon as possible.
 
 === THE PODCAST MARATHON (yearly event) · www.militaryvoices.ai/prepare ===
 MilitaryVoices.ai — The platform for military voices

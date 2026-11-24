@@ -120,7 +120,7 @@ export async function inboundContext(m: InboundEmailRow): Promise<string> {
 export async function draftReply(m: InboundEmailRow): Promise<InboundDraft> {
   const context = await inboundContext(m);
   const client = new Anthropic();
-  const system = `You draft replies for MilitaryVoices.ai, a year-round platform for military and veteran podcasters and creators (Rooms, Studio, the Library, Pōstify, podcast hosting, SmartLink, Discovery), which also runs The Podcast Marathon, a yearly one-day livestream of military and veteran shows (the last one was 5 October and is over). It also runs MilitaryVoices Radio, the live station for military and veteran voices, Monday to Friday, 7 am to 10 pm Eastern; its launch week is 16 to 20 November 2026. A person will read, edit and send your "reply" draft; it is not sent automatically.
+  const system = `You draft replies for MilitaryVoices.ai, a year-round platform for military and veteran podcasters and creators (Rooms, Studio, the Library, Pōstify, podcast hosting, SmartLink, Discovery), which also runs The Podcast Marathon, a yearly one-day livestream of military and veteran shows (the last one was 5 October and is over). It also runs MilitaryVoices Radio, the live station for military and veteran voices, Monday to Friday, 7 am to 10 pm Eastern; its launch week is 16 to 20 November 2026. Someone on the team reads, edits and sends your "reply" draft; it is not sent automatically.
 
 First decide "topic": "marathon" when they're asking about the event — a slot, the agenda, show day, their segment, reminders, the day's sponsors — and "platform" for everything else (recording, their studio (once called Rooms), the Studio console, the Library, Pōstify, clips, posting, their podcast, SmartLink, their account). Never answer a platform question with Marathon details. MilitaryVoices Radio (its sessions, times, the booth, guests, the lineup, replays) is "platform", never "marathon". If unsure, "platform".
 
@@ -132,12 +132,12 @@ Rules:
 - 8th-grade reading level. Short. No corporate phrases. The event is "The Podcast Marathon"; the platform is "MilitaryVoices.ai"; the station is "MilitaryVoices Radio" and its time slots are "sessions". Never call anything about Radio "the Marathon".
 - Use only the facts in the context. Never invent times, links, names or promises.
 - Never say a change is done. Say what will happen and who will confirm ("I'll move you and confirm by tomorrow").
-- If they ask to cancel, acknowledge it kindly, do not argue, and say a person will confirm.
-- If they ask a question you cannot answer from the context, say a person will get back to them today.
+- If they ask to cancel, acknowledge it kindly, do not argue, and say someone on the team will confirm.
+- If they ask a question you cannot answer from the context, say someone will get back to them as soon as possible. Never promise "a person", "a human", a call, or a time ("shortly", "today").
 - Give times in Eastern and, when the sender's signature shows another zone, in theirs too.
 - Address them by first name if known. End with the signature line only.
 
-Also write "ack": one to three plain sentences, team voice, no greeting and no sign-off, that answer what they asked using only the context or the site knowledge below — the part of Alex's first reply that goes out the moment their mail arrives. When the site knowledge has the steps, give them and name the page as a full link (https://www.militaryvoices.ai/help/library and so on). If neither answers it, or they asked to cancel or change a slot, or it's about a charge, refund or their account, make "ack" an empty string so the reply only promises a person. Say "SI", never "AI"; write Pōstify with the ō.
+Also write "ack": one to three plain sentences, team voice, no greeting and no sign-off, that answer what they asked using only the context or the site knowledge below — the part of Alex's first reply that goes out the moment their mail arrives. When the site knowledge has the steps, give them and name the page as a full link (https://www.militaryvoices.ai/help/library and so on). If neither answers it, or they asked to cancel or change a slot, or it's about a charge, refund or their account, make "ack" an empty string so the reply only says someone will get back to them as soon as possible. Say "SI", never "AI"; write Pōstify with the ō.
 
 When the context shows earlier messages in this conversation, this is a follow-up: "ack" answers their newest message in light of what was already said, without repeating it.
 
@@ -249,16 +249,22 @@ export async function firstNameFor(m: { fromName: string; fromEmail: string }): 
   return first.length >= 2 && local.includes(first.toLowerCase()) ? first : "";
 }
 
+// Alex never promises "a person", "a human", a call or "shortly" (Andrew, 20 Nov; PM 24 Nov after Daniel Flint's ack).
+// The wording is "someone will get back to you as soon as possible". Test: script/alex-wording.test.ts.
+export const ALEX_FOLLOW_UP = "If that doesn't cover it, just reply and someone will get back to you as soon as possible.";
+export const ALEX_IF_NOT_ANSWERED = "If this doesn't answer your question, just reply to this email and someone will get back to you as soon as possible.";
+export const ALEX_NO_ANSWER = "Someone will get back to you as soon as possible. If you have anything to add, just reply to this email.";
+
 export function composeAck(m: InboundEmailRow, ack: string, first = (m.fromName || "").trim().split(/\s+/)[0] || "", followUp = false): { subject: string; text: string; html: string } {
   const subject = m.subject.trim() ? (/^re:/i.test(m.subject) ? m.subject.trim() : `Re: ${m.subject.trim()}`) : "Re: your email to MilitaryVoices.ai";
   const answer = ack.trim();
   const greeting = first ? `Hi ${first},` : "Hi,";
   // A follow-up is a conversation already under way: the answer, and the way to a person.
-  const paragraphs = followUp && answer ? [answer, "If that doesn't cover it, just reply and we'll get a person on it."] : [
+  const paragraphs = followUp && answer ? [answer, ALEX_FOLLOW_UP] : [
     "Thank you for contacting us. Your message is very important to us.",
     ...(answer
-      ? [answer, "If this doesn't answer your question, please reply to this email. We'll get a human on it, and someone will reach out to you shortly."]
-      : ["I've passed this to a person on our team, and someone will get back to you shortly. If you have anything to add, just reply to this email."]),
+      ? [answer, ALEX_IF_NOT_ANSWERED]
+      : [ALEX_NO_ANSWER]),
     "For quick answers any time, I'm the Help button on militaryvoices.ai.",
   ];
   const text = `${greeting}\n\n${paragraphs.join("\n\n")}\n\nAlex\nSI help desk · MilitaryVoices.ai`;

@@ -324,7 +324,7 @@ export default function Faq() {
                 <a href="mailto:hello@militaryvoices.ai" className="text-primary underline-offset-2 hover:underline">
                   hello@militaryvoices.ai
                 </a>{" "}
-                and a human will get back to you.
+                and someone will get back to you as soon as possible.
               </p>
             </div>
             <div className="flex flex-wrap gap-2">
