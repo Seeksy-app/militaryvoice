@@ -46,7 +46,7 @@ c On the Studio screen, each key has a switch to turn it on or off for your next
 You can add up to six. Go live needs at least one place to go: YouTube or a key.
 On Radio or Marathon day, your slot goes out from your Radio show or the green room, not your studio. See the podcaster guide.
 8 Help and contact
-Email us: hello@militaryvoices.ai. A person reads every message and writes back.
+Email us: hello@militaryvoices.ai. We read every message and write back as soon as we can.
 Search the help, or ask Alex: militaryvoices.ai/help.
 Your studio is one press away: Studio, in your dashboard menu.
 Open my studio
@@ -100,7 +100,7 @@ You'll see You've left your Radio show. Press Go back in. It's there until 10 mi
 It says to sign in
 Sign in with the same email you booked with. A guest uses the guest link they were sent instead.
 8 Help and contact
-Email us: hello@militaryvoices.ai. A person reads every message and writes back.
+Email us: hello@militaryvoices.ai. We read every message and write back as soon as we can.
 Search the help, or ask Alex: militaryvoices.ai/help.
 Your Radio show and your times are on your dashboard.
 Open my dashboard
@@ -151,7 +151,7 @@ b Deleting a recording takes its clean copy and its clips with it. They move to 
 c Changed your mind? You have 15 days to put it back. See Recently deleted.
 Deleting one version (a clean or edited copy) leaves the original and its clips alone.
 7 Help and contact
-Email us: hello@militaryvoices.ai. A person reads every message and writes back.
+Email us: hello@militaryvoices.ai. We read every message and write back as soon as we can.
 Search the help, or ask Alex: militaryvoices.ai/help.
 Your recordings, clips and versions are all in your Library.
 Open my Library
@@ -226,7 +226,7 @@ A whole episode goes to YouTube only. Instagram takes videos up to 15 minutes, a
 Nothing goes out until you press the button. Everything you've sent or scheduled is on the Social calendar.
 Your podcast can post episodes to YouTube too. See your episodes on YouTube.
 10 Help and contact
-Email us: hello@militaryvoices.ai. A person reads every message and writes back.
+Email us: hello@militaryvoices.ai. We read every message and write back as soon as we can.
 Search the help, or ask Alex: militaryvoices.ai/help.
 Pick an episode to edit, or see the clips Pōstify made.
 Open Pōstify
@@ -288,10 +288,10 @@ b At your old host, find Redirect feed (sometimes Move to a new host), paste you
 c Back here, press Check the redirect. When it says forwarding works, you're done: Apple and Spotify move over as each checks in, usually within a few days. Keep your old host's account until they have.
 Moving your show away
 a Set up the show at your new host first.
-b Here, open Show details and paste the new host's feed into Moving to another host?. Your feed then sends every app a 301 to the new address, and tells Apple the new one too.
+b Here, open Settings → Redirect, paste the new host's feed into Your new host's feed address and press Move my feed. Your feed then sends every app a 301 to the new address, and tells Apple the new one too.
 c Leave it in place for at least four weeks before deleting the show here, so every app has time to follow.
 7 Help and contact
-Email us: hello@militaryvoices.ai. A person reads every message and writes back.
+Email us: hello@militaryvoices.ai. We read every message and write back as soon as we can.
 Search the help, or ask Alex: militaryvoices.ai/help.
 Your feed, your episodes and your downloads are on your Podcast screen.
 Open my Podcast screen
@@ -388,7 +388,7 @@ Read your meetings, chats, contacts or calendar.
 Sell your data, or use it for advertising.
 The full detail, and your rights over your data, are in our privacy policy.
 5 Help and contact
-Email us: hello@militaryvoices.ai. A person reads every message and writes back.
+Email us: hello@militaryvoices.ai. We read every message and write back as soon as we can.
 Search the help, or ask Alex: militaryvoices.ai/help.
 The small print: privacy policy and terms of service.
 Ready? It takes about a minute.
@@ -473,7 +473,7 @@ We copy the meeting's video, nothing else: no chat, contacts or calendar.
 Press Disconnect on the Zoom card any time and the connection is deleted at once.
 The full detail is in what we access and store.
 8 Help and contact
-Email us: hello@militaryvoices.ai. A person reads every message and writes back.
+Email us: hello@militaryvoices.ai. We read every message and write back as soon as we can.
 Search the help, or ask Alex: militaryvoices.ai/help.
 It takes a minute. Your next Zoom call comes in on its own.
 Connect Zoom
@@ -515,7 +515,7 @@ c Add blocks (text, heading, picture, button, callout, divider) and watch the em
 d Press Review & send, then Send now or Schedule.
 It comes from Your show via MilitaryVoices.ai, and replies come to you. Your SmartLink's cover picture sits at the top. You can send one email a day, and every fan can unsubscribe from your emails in one click. People who only asked for a reminder of your show aren't on this list.
 5 Help and contact
-Email us: hello@militaryvoices.ai. A person reads every message and writes back.
+Email us: hello@militaryvoices.ai. We read every message and write back as soon as we can.
 Search the help, or ask Alex: militaryvoices.ai/help.
 Edit your page and see it change on the phone beside it.
 Open my SmartLink
@@ -550,7 +550,7 @@ Open one to pick up where you left off.
 Press its ✕ to take it off the list.
 Your saved guests are in Discovery too, under Saved.
 5 Help and contact
-Email us: hello@militaryvoices.ai. A person reads every message and writes back.
+Email us: hello@militaryvoices.ai. We read every message and write back as soon as we can.
 Search the help, or ask Alex: militaryvoices.ai/help.
 Book a guest and Be a guest are tabs on your show.
 Open my Podcast screen
@@ -589,7 +589,7 @@ Moved your show here from Buzzsprout? Analytics asks you to Bring in your Buzzsp
 5 Other hosts
 Hosted with someone other than Buzzsprout? Connecting more hosts is coming. Once your show moves here, we count every download ourselves from the first day. See moving your podcast here.
 6 Help and contact
-Email us: hello@militaryvoices.ai. A person reads every message and writes back.
+Email us: hello@militaryvoices.ai. We read every message and write back as soon as we can.
 Search the help, or ask Alex: militaryvoices.ai/help.
 Your downloads, plays and listens are in Analytics, under Podcast.
 Open my Analytics
@@ -642,7 +642,7 @@ Zoom: they join your Zoom meeting as usual. The recording comes into your Librar
 Can my team share one account?
 Not with their own logins yet. An account belongs to one email address, and each sign-in sends a 6-digit code to that address. If your team uses a shared show email, everyone who reads it can sign in. Separate team logins are on our list; if you need one now, write to us.
 8 Help and contact
-Email us: hello@militaryvoices.ai. A person reads every message and writes back.
+Email us: hello@militaryvoices.ai. We read every message and write back as soon as we can.
 Search the help, or ask Alex: militaryvoices.ai/help.
 Your plan, credits and Discovery Pro are in one place.
 Open Plan & billing
@@ -695,7 +695,7 @@ Yearly plans and free trials don't add extras: top up with a pack instead.
 7 Seeing your balance
 Your credits left show at the top of Pōstify and in Plan & billing (press your photo, top right). For plans and billing, see Your plan, credits, and what you deleted.
 8 Help and contact
-Email us: hello@militaryvoices.ai. A person reads every message and writes back.
+Email us: hello@militaryvoices.ai. We read every message and write back as soon as we can.
 Search the help, or ask Alex: militaryvoices.ai/help.
 Your credits, plan and packs are in one place.
 Open Plan & billing
