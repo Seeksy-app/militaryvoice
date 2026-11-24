@@ -5,6 +5,7 @@ import { Check, Loader2, Mic, Send, Sparkles, Square, Volume2, X } from "lucide-
 import { DropdownMenuItem } from "@/components/ui/dropdown-menu";
 import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
 import { GuideLayer, showGuide, hideGuide } from "@/components/Guide";
+import { AnswerBody } from "@/components/AlexAnswer";
 import type { GuideTarget } from "@shared/guideTargets";
 import { DEFAULT_AGE, DEFAULT_GUIDE, GUIDES, guideById, isAge, type GuideAge, type GuideId } from "@shared/guides";
 import { GuidePicker, guidePickable, useSaveGuide } from "@/components/GuidePicker";
@@ -259,7 +260,7 @@ export function LoriGuide({ g, compact = false }: { g: Extract<GuideMe, { enable
               <div key={i}>
                 {m.role === "user"
                   ? <div className="flex justify-end"><p className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-[#053877] px-3.5 py-2.5 text-white">{m.content}</p></div>
-                  : <div className="flex items-end gap-2"><Face g={g} size="h-6 w-6 text-[11px]" /><p className="max-w-[85%] whitespace-pre-wrap rounded-2xl bg-[#f2f4f7] px-3.5 py-2.5">{m.content}</p></div>}
+                  : <div className="flex items-end gap-2"><Face g={g} size="h-6 w-6 text-[11px]" /><div className="max-w-[85%] rounded-2xl bg-[#f2f4f7] px-3.5 py-2.5"><AnswerBody text={m.content} /></div></div>}
                 {m.offer && !m.answered && (
                   <div className="ml-8 mt-3 rounded-2xl border border-[#053877]/25 bg-[#f5f8fd] p-3.5" data-testid="lori-offer">
                     <p className="text-[14px] font-semibold text-[#0b1f4a]">Want me to open that for you?</p>

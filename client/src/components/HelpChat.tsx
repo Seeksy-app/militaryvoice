@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { Link, useLocation } from "wouter";
+import { useLocation } from "wouter";
+import { AnswerActions, AnswerBody, type HelpAction } from "@/components/AlexAnswer";
 import { useMutation, useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,47 +16,8 @@ import { X, Send, User, Check, Loader2 } from "lucide-react";
 // the team" hands the whole thing over by email at any point. Hidden on the studio and admin surfaces, where it would only be in
 // the way.
 
-type Msg = { role: "user" | "assistant"; content: string };
+type Msg = { role: "user" | "assistant"; content: string; actions?: HelpAction[] };
 
-// Site paths and full URLs in an answer become links. The assistant is told to
-// name pages as paths ("/schedule"), so this is what makes them tappable.
-// Site paths Alex writes as links: any dashboard screen (/host/dashboard/library) and help article (/help/zoom#auto) too (8 Oct).
-const LINK_RE = /(https?:\/\/[^\s)]+|(?<![\w/])\/(?:schedule|agenda|prepare|faq|platform|about|sponsors|host\/dashboard(?:\/[\w-]+)?|help(?:\/[\w-]+)?(?:#[\w-]+)?|discover|directory|for-brands|tour|studio|watch|s\/\d+|event\/[\w-]+(?:\/[\w-]+)?)(?![\w/-]))/g;
-
-function linkify(text: string) {
-  const out: React.ReactNode[] = [];
-  let last = 0;
-  for (const m of Array.from(text.matchAll(LINK_RE))) {
-    const start = m.index ?? 0;
-    const raw = m[0];
-    // Trailing punctuation belongs to the sentence, not the link.
-    const trimmed = raw.replace(/[.,;:!?]+$/, "");
-    const trail = raw.slice(trimmed.length);
-    if (start > last) out.push(text.slice(last, start));
-    const cls = "font-medium underline underline-offset-2 text-primary hover:opacity-80";
-    if (/^https?:\/\//.test(trimmed)) {
-      let internal = false;
-      try {
-        internal = new URL(trimmed).host.replace(/^www\./, "") === window.location.host.replace(/^www\./, "");
-      } catch {
-        /* leave external */
-      }
-      out.push(
-        internal ? (
-          <Link key={start} href={new URL(trimmed).pathname + new URL(trimmed).search} className={cls}>{trimmed}</Link>
-        ) : (
-          <a key={start} href={trimmed} target="_blank" rel="noopener noreferrer" className={cls}>{trimmed}</a>
-        ),
-      );
-    } else {
-      out.push(<Link key={start} href={trimmed} className={cls}>{trimmed}</Link>);
-    }
-    if (trail) out.push(trail);
-    last = start + raw.length;
-  }
-  if (last < text.length) out.push(text.slice(last));
-  return out;
-}
 
 // Andrew, 20 Nov 2026: Ask Alex on the whole site for now (booths, Radio, show pages and podcasters' own pages
 // included), until there's a permanent placement. Still never on a page the recorder films (it would be on air
@@ -136,9 +98,9 @@ function AlexChat() {
 
   const ask = useMutation({
     mutationFn: async (history: Msg[]) =>
-      (await apiRequest("POST", "/api/help/chat", { messages: history, page: location, canWait: true })).json() as Promise<{ text: string; handoff: boolean; waiting?: string; waitSec?: number }>,
+      (await apiRequest("POST", "/api/help/chat", { messages: history, page: location, canWait: true })).json() as Promise<{ text: string; handoff: boolean; waiting?: string; waitSec?: number; actions?: HelpAction[] }>,
     onSuccess: (r) => {
-      setMsgs((m) => [...m, { role: "assistant", content: r.text }]);
+      setMsgs((m) => [...m, { role: "assistant", content: r.text, ...(r.actions?.length ? { actions: r.actions } : {}) }]);
       if (r.waiting) setWaiting({ token: r.waiting, until: Date.now() + ((r.waitSec ?? 300) + 30) * 1000 });
       else if (r.handoff) {
         // Carry their last question into the form so they don't retype it.
@@ -263,11 +225,16 @@ function AlexChat() {
                   <div key={i} className={`flex items-end gap-2 ${m.role === "user" ? "justify-end" : "justify-start"}`}>
                     {m.role === "assistant" && <img src="/alex.jpg" alt="" className="h-6 w-6 shrink-0 rounded-full object-cover" />}
                     <div
-                      className={`max-w-[85%] whitespace-pre-line rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
-                        m.role === "user" ? "bg-[#053877] text-white" : "bg-muted text-foreground"
+                      className={`max-w-[85%] rounded-2xl px-3.5 py-2.5 text-sm leading-relaxed ${
+                        m.role === "user" ? "whitespace-pre-line bg-[#053877] text-white" : "bg-muted text-foreground"
                       }`}
                     >
-                      {m.role === "assistant" ? linkify(m.content) : m.content}
+                      {m.role === "assistant" ? (
+                        <>
+                          <AnswerBody text={m.content} />
+                          <AnswerActions actions={m.actions} onGo={() => setOpen(false)} />
+                        </>
+                      ) : m.content}
                     </div>
                   </div>
                 ))}

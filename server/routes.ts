@@ -10870,7 +10870,7 @@ export function registerRoutes(app: Express): void {
         res.json({ text: GET_BACK, handoff: true });
         return;
       }
-      res.json({ text: out.text, handoff: out.handoff });
+      res.json({ text: out.text, handoff: out.handoff, ...(out.actions ? { actions: out.actions } : {}) });
     } catch (err) {
       console.error("help chat failed:", (err as Error).message);
       res.json({ text: "I couldn't reach my notes just now. Leave your email and someone will get back to you as soon as possible.", handoff: true });

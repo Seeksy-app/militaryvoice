@@ -787,3 +787,35 @@ Make sure your profile says how you normally record or stream, and what platform
 Still have questions?
 The FAQ covers slot lengths, changing your time, pre-recorded episodes and more. Anything it doesn't answer, just reply to any email from us.
 `;
+
+/** Alex's answers to the most-asked how-tos, in the house shape (see QUICK in scripts/build-help-kb.mjs). */
+export const QUICK_ANSWERS: { q: string; a: string }[] = [
+  {
+    "q": "How do I get my podcast on Spotify and Apple?",
+    "a": "Two steps, about 5 minutes:\n1. Open your show, then **Directories**.\n2. Press **List it** next to Apple, then next to Spotify.\nIf anything's missing, like a cover or a description, that screen tells you first.\n[[GO:directories]]"
+  },
+  {
+    "q": "How do I make clips from an episode?",
+    "a": "1. Open **Pōstify**.\n2. Drop in your video, or pick one from your Library.\n3. Press **Start Pōstify**.\nYour captioned clips are ready in a few minutes. Your first episode is free.\n[[GO:postify]]"
+  },
+  {
+    "q": "Where are my Marathon recording and clips?",
+    "a": "They're in your **Library**. Open the Marathon recording to see its clips and files.\n[[GO:library]]"
+  },
+  {
+    "q": "How do I connect Zoom?",
+    "a": "1. Open **Integrations**.\n2. Press **Connect Zoom** and sign in to Zoom.\n3. Switch on **Auto-import new**.\nYour cloud recordings then come into your Library by themselves.\n[[GO:zoom]]"
+  },
+  {
+    "q": "How do I add a new episode?",
+    "a": "1. Open your show and press **New episode**.\n2. Pick a recording from your Library, or drop in a file.\n3. Add a title, then publish it now or schedule it.\n[[GO:new-episode]]"
+  },
+  {
+    "q": "How do I set up my SmartLink?",
+    "a": "1. Open **SmartLink**.\n2. Pick the name for your link.\n3. Work down the steps. Everything saves as you go.\n[[GO:smartlink]]"
+  },
+  {
+    "q": "How do I invite a guest to my show?",
+    "a": "1. Open your show, then **Invite a guest**.\n2. Add their name and email, when, and where you'll record.\n3. Press **Send the invitation**.\n[[GO:guest-invite]]"
+  }
+];

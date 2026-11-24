@@ -50,6 +50,12 @@ export const GUIDE_TARGETS: GuideTarget[] = [
       t("hosting-start", "Click here to set up your show. It's free."),
       { sel: '[data-testid^="hosting-show-"]', text: "Pick your show to see its episodes and settings." },
     ] }] },
+  // Apple and Spotify (PM for Andrew, 24 Nov: "Take me there" from Ask Alex). The link opens the show on Directories.
+  { id: "directories", label: "Directories, for Apple and Spotify", about: "List the show on Apple Podcasts, Spotify and the other apps: one List it each.", path: "/host/dashboard/podcast?tab=directories",
+    steps: [
+      pickShow,
+      { title: "Apple and Spotify", at: [t("hosting-dir-list-apple", "Press List it for Apple, then the one for Spotify."), t("hosting-tab-directories", "Click Directories.")] },
+    ] },
   { id: "new-episode", label: "a new episode", about: "Add a new podcast episode from the Library or a file, and publish it or schedule it.", path: "/host/dashboard/podcast",
     steps: [
       { title: "New episode", at: [t("hosting-new-episode", "Click New episode.")] },

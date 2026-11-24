@@ -1,6 +1,7 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { EventRow } from "../shared/schema.js";
-import { HELP_ARTICLES } from "./helpArticles.js";
+import { HELP_ARTICLES, QUICK_ANSWERS } from "./helpArticles.js";
+import { GUIDE_TARGETS, guideTarget } from "../shared/guideTargets.js";
 
 // The help chat. A visitor asks; Claude answers from what we actually know
 // about the site, and hands off to a person the moment it can't. No third
@@ -125,18 +126,76 @@ export const KNOWLEDGE = `${CORE}
 HELP ARTICLES, FAQ AND PODCASTER GUIDE (full text; follow these for exact steps and on-screen labels)
 ${HELP_ARTICLES}`;
 
+// ── How an answer looks (PM for Andrew, 24 Nov: "Yes, fix Alex", after a dense paragraph about Apple and Spotify) ──
+// A how-to is at most 3 short numbered steps, buttons and tabs in **bold** as the screen says them, about 60 words,
+// no jargon, and one button that takes them there. Alex never types a path: she ends with [[GO:<page>]] (a dashboard
+// page from shared/guideTargets.ts, or a public page below) and/or [[READ:<article>]], and the chat draws the buttons.
+export const WORD_CAP = 60;
+const PUBLIC_PAGES: Record<string, { path: string; about: string }> = {
+  agenda: { path: "/agenda", about: "The Marathon's running order." },
+  schedule: { path: "/schedule", about: "The Marathon schedule and slots." },
+  radio: { path: "/radio", about: "Listen to MilitaryVoices Radio and see who's on." },
+  "radio-book": { path: "/radio/book", about: "Book a session on MilitaryVoices Radio." },
+  faq: { path: "/faq", about: "The FAQ." },
+  prepare: { path: "/prepare", about: "The Marathon podcaster guide." },
+};
+export const HELP_SLUGS = ["studio", "booth", "library", "postify", "podcast", "youtube", "zoom", "smartlink", "guests", "stats", "account", "credits"] as const;
+export type HelpAction = { label: string; href: string; guide?: string };
+const GO = /\[\[GO:([a-z-]+)\]\]/g;
+const READ = /\[\[READ:([a-z-]+)\]\]/g;
+// A path in the words (the old way): "/help/podcast", "https://www.militaryvoices.ai/help/podcast#x", "/host/dashboard/library".
+const PATH = /(?:https?:\/\/(?:www\.)?militaryvoices\.ai)?\/(?:help\/([\w-]+)(?:#[\w-]+)?|host\/dashboard(?:\/[\w-]+)*)/g;
+
+/** Tokens to buttons, and any path left in the words taken out (a help article becomes "Read the full guide"). */
+export function shapeAnswer(raw: string): { text: string; actions: HelpAction[] } {
+  let go = "", read = "";
+  let text = raw
+    .replace(GO, (_m, id: string) => { if (!go && (guideTarget(id) || PUBLIC_PAGES[id])) go = id; return ""; })
+    .replace(READ, (_m, slug: string) => { if (!read && (HELP_SLUGS as readonly string[]).includes(slug)) read = slug; return ""; });
+  // "Full steps at /help/podcast." and the like: the sentence goes, the article becomes the button.
+  text = text.replace(/[^.!?\n]*(?:https?:\/\/(?:www\.)?militaryvoices\.ai)?\/help\/([\w-]+)(?:#[\w-]+)?[^.!?\n]*[.!?]?/g, (m, slug: string) => {
+    if (!read && (HELP_SLUGS as readonly string[]).includes(slug)) read = slug;
+    // Only a short pointer sentence goes; a sentence with more in it keeps its words and loses just the path.
+    return m.split(/\s+/).length <= 8 ? "" : m.replace(PATH, "the help guide");
+  });
+  text = text.replace(PATH, "your dashboard").replace(/[ \t]+\n/g, "\n").replace(/\n{3,}/g, "\n\n").replace(/[ \t]{2,}/g, " ").trim();
+  const actions: HelpAction[] = [];
+  if (go) {
+    const t = guideTarget(go);
+    actions.push(t ? { label: "Take me there", href: t.path, guide: t.id } : { label: "Take me there", href: PUBLIC_PAGES[go].path });
+  }
+  if (read) actions.push({ label: "Read the full guide", href: `/help/${read}` });
+  return { text, actions };
+}
+
+/** Words a visitor reads (tokens and markdown marks don't count). */
+export const wordCount = (s: string) => s.replace(/\[\[[A-Z]+:[^\]]*\]\]/g, " ").replace(/\*\*/g, "").split(/\s+/).filter((w) => /[A-Za-z0-9\u00C0-\u024F]/.test(w)).length;
+
+const SHAPE = `How every answer looks:
+- Plain words, 8th-grade level. You may use **bold** only for the exact name of a button, tab or menu as the screen shows it, and a numbered list (1. 2. 3.) for steps. No headings, no bullets, no links.
+- A how-to ("how do I…", "where do I…"): at most 3 short numbered steps, one action each. About ${WORD_CAP} words in all, never more. Start with the steps (a short lead-in like "Two steps, about 5 minutes:" is fine).
+- No jargon: not "feed address", "RSS", "owner email", "turn the feed away" or the like. Mention a requirement only when the screen won't catch it for them.
+- If there's more worth knowing, end with one short offer ("Want the details on any step?"). Only one.
+- Never type a path or address (no /help/…, no /host/dashboard/…, no URLs). Instead, when one of these pages is where they do it, end with [[GO:<id>]] on its own line (one only), and the chat shows a "Take me there" button:
+${GUIDE_TARGETS.map((x) => `  - ${x.id}: ${x.about}`).join("\n")}
+${Object.entries(PUBLIC_PAGES).map(([id, x]) => `  - ${id}: ${x.about}`).join("\n")}
+- When the full write-up would help, also end with [[READ:<article>]] (one of: ${HELP_SLUGS.join(", ")}); the chat shows "Read the full guide".
+
+HOW-TO ANSWERS (when the question matches one of these, give that answer as written, tokens included):
+${QUICK_ANSWERS.map((x) => `Q: ${x.q}\nA: ${x.a}`).join("\n\n")}`;
+
 function systemPrompt(event: EventRow | undefined, taken: number, total: number, agenda = ""): string {
   const when = event
     ? new Intl.DateTimeFormat("en-US", { weekday: "long", month: "long", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "America/New_York", timeZoneName: "short" }).format(new Date(event.startAtUtc))
     : "October 5, 2026";
-  return `You are Alex, the SI help desk on MilitaryVoices.ai — the same Alex who produces the show day. Say your name only if asked. You answer visitors' questions about MilitaryVoices.ai (the year-round platform) and The Podcast Marathon (its yearly event) — work out which one they mean — briefly and warmly, using ONLY the knowledge below. Plain text, no markdown headings, no bullet lists longer than three items, two to four sentences for most answers. Use "we" for MilitaryVoices.ai.
+  return `You are Alex, the SI help desk on MilitaryVoices.ai — the same Alex who produces the show day. Say your name only if asked. You answer visitors' questions about MilitaryVoices.ai (the year-round platform) and The Podcast Marathon (its yearly event) — work out which one they mean — briefly and warmly, using ONLY the knowledge below. Use "we" for MilitaryVoices.ai.
 
 Live facts right now:
 - Event: ${event?.name ?? "The Podcast Marathon"}, starting ${when}. ${taken} of ${total} slots are booked.
-${agenda ? `\n${agenda}\n\nWhen someone asks when a show or a person is on, answer with the exact time from the running order above (Eastern). Don't point them to /agenda unless they ask where to see the schedule.\n` : ""}
+${agenda ? `\n${agenda}\n\nWhen someone asks when a show or a person is on, answer with the exact time from the running order above (Eastern). Don't send them to the agenda unless they ask where to see the schedule.\n` : ""}
 Rules:
-- Answer exactly what was asked, in the first sentence, and stop. Asked "when", give the time; asked "who", the name. No background they didn't ask for (who someone is, what the event is), no extra suggestions. One or two short sentences unless they ask for more.
-- If the answer is in the knowledge, give it, and when useful name the page to go to as its path — /schedule, /agenda, /prepare, /faq, /host/dashboard, or a help article such as /help/studio, /help/library, /help/postify, /help/podcast, /help/account, /help/credits, /help/smartlink, /help/guests — since paths become links the visitor can tap.
+- Answer exactly what was asked, first, and stop. Asked "when", give the time; asked "who", the name. No background they didn't ask for (who someone is, what the event is), no extra suggestions. One or two short sentences unless it's a how-to or they ask for more.
+${SHAPE}
 - Use the on-screen labels exactly as the knowledge gives them. Say "SI" (never "AI") for our own smart features, and write Pōstify with the ō.
 - If the question is about a charge, refund, payment or any money matter, a legal matter, a complaint, or press: reply with exactly "Someone will get back to you as soon as possible." and end your reply with the exact token ${PRIVATE} on its own.
 - If it's about a specific person's booking or account, a partnership, or anything the knowledge doesn't cover, or the visitor asks for the team: reply with exactly "Hold on, let me check with the team." and end your reply with the exact token ${HANDOFF} on its own.
@@ -147,6 +206,9 @@ KNOWLEDGE:
 ${KNOWLEDGE}`;
 }
 
+/** The system prompt with no event, for the answer-shape tests. */
+export const systemPromptForTest = () => systemPrompt(undefined, 0, 0);
+
 export interface HelpTurn {
   role: "user" | "assistant";
   content: string;
@@ -155,7 +217,7 @@ export interface HelpTurn {
 export async function answerHelp(
   turns: HelpTurn[],
   ctx: { event?: EventRow; taken: number; total: number; agenda?: string; learned?: string },
-): Promise<{ text: string; handoff: boolean; sensitive?: boolean }> {
+): Promise<{ text: string; handoff: boolean; sensitive?: boolean; actions?: HelpAction[] }> {
   const client = new Anthropic();
   const response = await client.messages.create({
     model: "claude-opus-5",
@@ -181,5 +243,7 @@ export async function answerHelp(
   const handoff = sensitive || text.includes(HANDOFF);
   text = text.replace(PRIVATE, "").replace(HANDOFF, "").trim();
   if (sensitive) return { text: GET_BACK, handoff: true, sensitive: true };
-  return { text: text || CHECKING, handoff };
+  if (handoff) return { text: text.replace(GO, "").replace(READ, "").trim() || CHECKING, handoff };
+  const shaped = shapeAnswer(text);
+  return { text: shaped.text || CHECKING, handoff, ...(shaped.actions.length ? { actions: shaped.actions } : {}) };
 }

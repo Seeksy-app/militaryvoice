@@ -114,7 +114,15 @@ export function PodcastHosting() {
   // Which show is open (none: the grid of shows), and which of its tabs.
   const [openId, setOpenId] = useState<number | null>(() => { try { const v = Number(sessionStorage.getItem(OPEN_SHOW_KEY)) || null; sessionStorage.removeItem(OPEN_SHOW_KEY); return v; } catch { return null; } });
   // Podcast always opens on Episodes (not wherever they last wandered).
-  const [tab, setTab] = useState<PodTab>("episodes");
+  // ...unless a link asks for a tab (?tab=directories, from Ask Alex's "Take me there").
+  const [tab, setTab] = useState<PodTab>(() => {
+    try {
+      const u = new URL(window.location.href); const want = u.searchParams.get("tab");
+      if (!want) return "episodes";
+      u.searchParams.delete("tab"); window.history.replaceState(null, "", u.pathname + u.search);
+      return (["episodes", "publishing", "sponsors", "move", "directories", "details", "guests", "pitch", "invite"] as const).find((x) => x === want) ?? "episodes";
+    } catch { return "episodes"; }
+  });
   const go = (t: PodTab) => setTab(t);
   // Their own stream key (Integrations → Live). The Stream in button shows only once they've made one (Andrew, 23 Nov:
   // "restream banner should not be on the podcast unless an RTMP key was created. it will only confuse people").
