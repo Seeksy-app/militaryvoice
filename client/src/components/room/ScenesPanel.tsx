@@ -1,7 +1,9 @@
-import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
+import { useParticipants } from "@livekit/components-react";
+import { RoomEvent } from "livekit-client";
 import { Check, Clapperboard, Copy, Image as ImageIcon, LayoutDashboard, Loader2, Lock, MonitorUp, MoreHorizontal, Pencil, Play, Plus, Square, Trash2, Users, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import type { RoomBoxKind, RoomBoxShape } from "@shared/roomLook";
+import { isPlayer, type RoomBoxKind, type RoomBoxShape } from "@shared/roomLook";
 import { LIMITS, PEOPLE_DEFAULT, bgCss, newId, type Asset, type Layout, type RoomKit, type Scene, type SceneType, type Slot } from "./look";
 import { isVideo, mmss, useThumb } from "./thumbs";
 
@@ -10,12 +12,12 @@ import { isVideo, mmss, useThumb } from "./thumbs";
  * thumbnail in the scene"): the clip's frame or the picture; ▶ and the length on a video; a screen
  * icon for a shared screen. A picture that won't load shows a plain clapperboard or picture icon.
  */
-function MediaTile({ a, className = "" }: { a: Asset | null | undefined; className?: string }) {
+function MediaTile({ a, className = "", style }: { a: Asset | null | undefined; className?: string; style?: CSSProperties }) {
   const t = useThumb(a);
   const vid = isVideo(a);
   const len = mmss(a?.sec || t?.sec);
   return (
-    <span className={`relative block overflow-hidden rounded-[4px] bg-[#101828] ${className}`} data-testid="media-tile">
+    <span className={`relative block overflow-hidden rounded-[4px] bg-[#101828] ${className}`} style={style} data-testid="media-tile">
       {!a ? <span className="flex h-full w-full items-center justify-center text-white/90"><MonitorUp className="h-4 w-4" aria-label="A shared screen" /></span>
         : t ? <img src={t.src} alt="" className="h-full w-full object-cover" draggable={false} />
         : <span className="flex h-full w-full items-center justify-center text-white/70">{vid ? <Clapperboard className="h-4 w-4" aria-hidden /> : <ImageIcon className="h-4 w-4" aria-hidden />}</span>}
@@ -24,16 +26,116 @@ function MediaTile({ a, className = "" }: { a: Asset | null | undefined; classNa
   );
 }
 
-/** A media scene's card drawing: its media filling the media box, the people boxes as drawn beside it. */
-function MediaFace({ s, light }: { s: Scene; light: boolean }) {
-  const people = peopleOf(s);
+export const isMediaScene = (s: Scene) => typeOf(s) === "media" && (s.type === "media" || !!s.media);
+
+/** Who a scene would show, in order (the host first): the people in the room who are on stage and, when the scene names guests, only those. */
+function useCast(kit: RoomKit): (s: Scene) => string[] {
+  const parts = useParticipants({ updateOnlyOn: [RoomEvent.ParticipantConnected, RoomEvent.ParticipantDisconnected, RoomEvent.ParticipantNameChanged, RoomEvent.ParticipantAttributesChanged] });
+  const roster = parts
+    .filter((p) => !isPlayer(p.identity, p.attributes) && p.attributes?.role !== "listener" && kit.isOnStage(p.identity, p.attributes?.stage))
+    .map((p) => ({ name: p.name || p.identity, host: p.attributes?.role === "host", who: p.attributes?.who ?? p.identity }))
+    .sort((a, b) => Number(b.host) - Number(a.host));
+  return (s) => roster.filter((p) => p.host || !s.stage?.length || s.stage.includes(p.who)).map((p) => p.name);
+}
+const initials = (name: string) => name.trim().split(/\s+/).map((w) => w[0] ?? "").slice(0, 2).join("").toUpperCase();
+
+type MiniBox = { x: number; y: number; w: number; h: number; k: "p" | "media" | "screen"; i: number };
+/** A scene's boxes in a 16:9 frame (0 to 1), as the stage lays it out: who sits where, and where the media goes. */
+function boxesOf(s: Scene, cast: number): MiniBox[] {
+  const P = (x: number, y: number, w: number, h: number, i: number): MiniBox => ({ x, y, w, h, k: "p", i });
+  const column = (x: number, w: number, n: number, from: number) => {
+    const m = Math.min(n, 3), h = (0.9 - (m - 1) * 0.04) / m;
+    return Array.from({ length: m }, (_, j) => P(x, 0.05 + j * (h + 0.04), w, h, from + j));
+  };
+  const grid = (n: number) => {
+    const cols = n <= 1 ? 1 : n <= 4 ? 2 : 3, rows = Math.ceil(n / cols);
+    const w = (0.94 - (cols - 1) * 0.03) / cols, h = (0.9 - (rows - 1) * 0.04) / rows;
+    return Array.from({ length: n }, (_, j) => {
+      const row = Math.floor(j / cols), inRow = Math.min(cols, n - row * cols);
+      const pad = ((cols - inRow) * (w + 0.03)) / 2; // a short last row sits in the middle, as on the stage
+      return P(0.03 + pad + (j % cols) * (w + 0.03), 0.05 + row * (h + 0.04), w, h, j);
+    });
+  };
+  if (isMediaScene(s)) {
+    const n = peopleOf(s);
+    return [{ x: 0.03, y: 0.05, w: n ? 0.7 : 0.94, h: 0.9, k: s.media ? "media" : "screen", i: -1 }, ...(n ? column(0.76, 0.21, n, 0) : [])];
+  }
+  const t = s.type;
+  const layout = t === "single" || t === "profile" ? "solo" : t === "two" ? "side" : t === "group" ? "grid" : s.layout;
+  switch (layout) {
+    case "solo": return [P(0.03, 0.05, 0.94, 0.9, 0)];
+    case "side": return [P(0.03, 0.12, 0.455, 0.76, 0), P(0.515, 0.12, 0.455, 0.76, 1)];
+    case "speaker": return [P(0.03, 0.04, 0.94, 0.64, 0), ...Array.from({ length: Math.min(3, Math.max(1, cast - 1)) }, (_, j) => P(0.03 + j * 0.25, 0.73, 0.22, 0.23, j + 1))];
+    case "screen": return [{ x: 0.03, y: 0.05, w: 0.7, h: 0.9, k: "screen", i: -1 }, ...column(0.76, 0.21, Math.max(1, cast), 0)];
+    case "pip": return [P(0.03, 0.05, 0.94, 0.9, 0), P(0.64, 0.56, 0.3, 0.36, 1)];
+    default: return grid(Math.min(6, Math.max(1, t === "group" ? peopleOf(s) : cast)));
+  }
+}
+
+/**
+ * A scene's card picture: a small copy of the scene itself (Andrew, 24 Nov, from StreamYard's own: "Their system
+ * even confuses me"), so each one reads at a glance: its own background and logo (on the card behind this), the
+ * media's frame, and the people's initials in their boxes.
+ */
+function MiniScene({ s, cast, light }: { s: Scene; cast: string[]; light: boolean }) {
   return (
-    <span className="flex h-[60px] w-[106px] gap-[3px]" data-testid="scene-thumb">
-      <MediaTile a={s.media} className={`h-full ring-1 ${light ? "ring-[rgba(5,56,119,0.25)]" : "ring-white/40"} ${people ? "w-[76%]" : "w-full"}`} />
-      {people > 0 && <span className="flex flex-1 flex-col gap-[3px]">{Array.from({ length: Math.min(people, 3) }, (_, i) => <span key={i} className={`flex-1 rounded-[3px] ${light ? "bg-[rgba(5,56,119,0.85)]" : "bg-white/90"}`} />)}</span>}
+    <span className="relative block h-[72px] w-[128px]" data-testid="scene-thumb">
+      {boxesOf(s, cast.length).map((b, j) => {
+        const style = { left: `${b.x * 100}%`, top: `${b.y * 100}%`, width: `${b.w * 100}%`, height: `${b.h * 100}%` };
+        if (b.k === "media") return <MediaTile key={j} a={s.media} className={`!absolute ring-1 ${light ? "ring-[rgba(5,56,119,0.25)]" : "ring-white/40"}`} style={style} />;
+        if (b.k === "screen") return <span key={j} className={`absolute flex items-center justify-center rounded-[4px] border border-dashed ${light ? "border-[rgba(5,56,119,0.45)] text-[#053877]" : "border-white/60 text-white"}`} style={style} data-testid="mini-screen"><MonitorUp className="h-4 w-4" aria-label="A shared screen" /></span>;
+        const name = cast[b.i];
+        return (
+          <span key={j} className={`absolute flex items-center justify-center overflow-hidden rounded-[4px] ${light ? "bg-[#053877] text-white" : "bg-white/90 text-[#053877]"} ${name ? "" : "opacity-45"}`} style={style} title={name} data-testid="mini-person">
+            {name && <span className="text-[10px] font-bold leading-none">{initials(name)}</span>}
+          </span>
+        );
+      })}
     </span>
   );
 }
+
+const ACCEPT = "video/mp4,video/quicktime,video/webm,image/png,image/jpeg,image/webp";
+/**
+ * Add a video or picture from right where the scene is (Andrew, 24 Nov: "you would think the uploads would be with
+ * the scenes as well"): pick (or drop) the file, tick the rights, and it uploads. `done` gets the new asset.
+ */
+function useAddMedia(kit: RoomKit, done: (a: Asset) => void) {
+  const { toast } = useToast();
+  const input = useRef<HTMLInputElement>(null);
+  const [file, setFile] = useState<File | null>(null);
+  const [rights, setRights] = useState(false);
+  const [pct, setPct] = useState<number | null>(null);
+  const offer = (f?: File | null) => {
+    if (!f) return;
+    if (!/^(video|image)\//.test(f.type)) { toast({ title: "That isn't a video or picture", description: "Use an MP4, MOV or WebM video, or a PNG, JPG or WebP picture.", variant: "destructive" }); return; }
+    setRights(false);
+    setFile(f);
+  };
+  const send = async () => {
+    if (!file || !rights) return;
+    const video = file.type.startsWith("video/");
+    setPct(0);
+    try { const a = await kit.addAsset(video ? "video" : "photo", file, setPct, video ? true : undefined); setFile(null); done(a); }
+    catch (e) { toast({ title: "Couldn't add that file", description: (e as Error).message, variant: "destructive" }); }
+    finally { setPct(null); }
+  };
+  const el = <input ref={input} type="file" accept={ACCEPT} className="hidden" onChange={(e) => { offer(e.target.files?.[0]); e.target.value = ""; }} data-testid="media-file" />;
+  const panel = pct !== null ? (
+    <p className="flex items-center gap-1.5 rounded-lg bg-white p-2 text-[12px] font-semibold text-[#667085]" data-testid="media-uploading"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading {pct}%</p>
+  ) : file ? (
+    <div className="rounded-lg border border-[#e4e7ec] bg-white p-2.5" data-testid="media-rights-box">
+      <p className="truncate text-[12px] font-semibold text-[#101828]" title={file.name}>{file.name}</p>
+      <label className="mt-1.5 flex items-start gap-2 text-[12px] font-semibold text-[#344054]"><input type="checkbox" checked={rights} onChange={(e) => setRights(e.target.checked)} className="mt-0.5" data-testid="scene-media-rights" /> I have the rights to use this</label>
+      <div className="mt-2 flex items-center gap-2">
+        <button type="button" disabled={!rights} onClick={() => void send()} className="h-8 rounded-lg bg-[#053877] px-3 text-[12px] font-bold text-white disabled:opacity-40" data-testid="media-add">Add it</button>
+        <button type="button" onClick={() => setFile(null)} className="h-8 px-1.5 text-[12px] font-semibold text-[#475467]">Cancel</button>
+      </div>
+    </div>
+  ) : null;
+  return { choose: () => input.current?.click(), offer, el, panel, busy: !!file || pct !== null };
+}
+const hasFile = (e: DragEvent) => Array.from(e.dataTransfer.types).includes("Files");
 
 /** Scroll the rail (only the rail, never the page) so a just-opened editor or picker is in view. */
 function reveal(el: HTMLElement | null) {
@@ -116,6 +218,7 @@ export function ScenesPanel({ kit, v3 = false, sheet = false, onEditLayout }: { 
   const scenes = [...look.scenes].sort((a, b) => a.n - b.n);
   const last = scenes[scenes.length - 1]?.n ?? 0;
   const onAir = kit.live.activeScene ?? scenes[0]?.id;
+  const castOf = useCast(kit);
 
   // 1 to 9 put that scene on air, unless they're typing.
   useEffect(() => {
@@ -138,19 +241,19 @@ export function ScenesPanel({ kit, v3 = false, sheet = false, onEditLayout }: { 
     if (after === null) return { ...l, scenes: [...l.scenes, s] };
     return { ...l, scenes: [...l.scenes.map((x) => (x.n > after ? { ...x, n: x.n + 1 } : x)), { ...s, n: after + 1 }] };
   };
-  const add = (type?: SceneType, people?: number) => {
+  const add = (type?: SceneType, people?: number, media?: Asset | null, edit = true) => {
     const n = below !== null ? below + 1 : [1, 2, 3, 4, 5, 6, 7, 8, 9].find((x) => !look.scenes.some((s) => s.n === x));
     if (!n || look.scenes.length >= LIMITS.scenes) return;
     const t = type && TYPES.find((x) => x.id === type)!;
     // v3: a new scene starts with the studio's starting background (look.background).
     const s: Scene = t
-      ? { id: newId(), n, name: t.label, layout: t.layout, stage: [], type: t.id, people: people ?? PEOPLE_DEFAULT[t.id], look: { background: look.background }, ...(t.id === "profile" ? { profile: { photo: null, name: "", title: "", line: "", links: [] } } : {}) }
+      ? { id: newId(), n, name: t.label, layout: t.layout, stage: [], type: t.id, people: people ?? PEOPLE_DEFAULT[t.id], look: { background: look.background }, ...(t.id === "profile" ? { profile: { photo: null, name: "", title: "", line: "", links: [] } } : {}), ...(t.id === "media" && media ? { media, name: (media.name || t.label).replace(/\.[a-z0-9]{2,4}$/i, "").slice(0, LIMITS.sceneName) } : {}) }
       : { id: newId(), n, name: `Scene ${n}`, layout: "grid", stage: [] };
     const after = below;
     kit.change((l) => place(l, s, after));
     setPicking(false);
     setBelow(null);
-    setEditing(s.id);
+    setEditing(edit ? s.id : null);
   };
   const duplicate = (s: Scene) => {
     if (look.scenes.length >= LIMITS.scenes) return;
@@ -174,15 +277,15 @@ export function ScenesPanel({ kit, v3 = false, sheet = false, onEditLayout }: { 
       {!v3 && <VideoSlot slot="intro" kit={kit} />}
       {scenes.map((s) => (
         <div key={s.id}>
-          <SceneCard s={s} kit={kit} v3={v3} on={onAir === s.id} next={kit.live.playing?.slot === "countdown" && kit.live.playing.next === s.id} onPick={() => kit.toScene(s.id)}
+          <SceneCard s={s} kit={kit} v3={v3} cast={castOf(s)} onChooseMedia={() => setEditing(s.id)} on={onAir === s.id} next={kit.live.playing?.slot === "countdown" && kit.live.playing.next === s.id} onPick={() => kit.toScene(s.id)}
             full={look.scenes.length >= LIMITS.scenes}
             onRename={() => setEditing(editing === s.id ? null : s.id)} onEditLayout={onEditLayout ? () => { setEditing(null); onEditLayout(s.id); } : undefined} onDuplicate={() => duplicate(s)} onAddBelow={() => addBelow(s)} onDelete={look.scenes.length > 1 ? () => remove(s) : undefined} />
           {editing === s.id && <SceneEditor s={s} kit={kit} v3={v3} onDelete={look.scenes.length > 1 ? () => remove(s) : undefined} onClose={() => setEditing(null)} />}
-          {picking && below === s.n && <div className="mt-3"><TypePicker onPick={add} onClose={() => { setPicking(false); setBelow(null); }} /></div>}
+          {picking && below === s.n && <div className="mt-3"><TypePicker kit={kit} onPick={add} onClose={() => { setPicking(false); setBelow(null); }} /></div>}
         </div>
       ))}
       {look.scenes.length < LIMITS.scenes && (picking && below === null
-        ? <TypePicker onPick={add} onClose={() => setPicking(false)} />
+        ? <TypePicker kit={kit} onPick={add} onClose={() => setPicking(false)} />
         : <button type="button" onClick={() => { setBelow(null); setPicking(true); }} className="h-[42px] shrink-0 rounded-xl border border-dashed border-[#98a2b3] bg-white text-sm font-semibold text-[#344054] hover:bg-[#f9fafb]" data-testid="scene-add">+ New scene</button>)}
       {!v3 && <VideoSlot slot="outro" kit={kit} />}
     </aside>
@@ -190,16 +293,27 @@ export function ScenesPanel({ kit, v3 = false, sheet = false, onEditLayout }: { 
 }
 
 /** v3: what kind of scene, and for a group how many people. More types come with the add-on. */
-function TypePicker({ onPick, onClose }: { onPick: (t: SceneType, people?: number) => void; onClose: () => void }) {
+function TypePicker({ kit, onPick, onClose }: { kit: RoomKit; onPick: (t: SceneType, people?: number, media?: Asset | null, edit?: boolean) => void; onClose: () => void }) {
   const [group, setGroup] = useState(3);
+  const [mediaStep, setMediaStep] = useState(false);
   const box = useRef<HTMLDivElement>(null);
-  useEffect(() => { reveal(box.current); }, []);
+  useEffect(() => { reveal(box.current); }, [mediaStep]);
+  // Media presentation goes straight to the file picker (Andrew via PM, 24 Nov); the other two ways wait beside it.
+  const add = useAddMedia(kit, (a) => onPick("media", undefined, a));
+  const choice = "flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left text-[13px] font-bold text-[#101828] hover:bg-[#f5f8fd]";
   return (
-    <div ref={box} className="shrink-0 rounded-xl border border-[#e4e7ec] bg-white p-2 shadow-[0_12px_32px_rgba(16,24,40,0.14)]" data-testid="scene-type-picker">
-      <div className="flex items-center justify-between px-1.5 pb-1"><span className="text-xs font-bold uppercase tracking-[0.06em] text-[#667085]">New scene</span><button type="button" onClick={onClose} aria-label="Close" className="text-[#667085] hover:text-[#101828]"><X className="h-4 w-4" /></button></div>
+    <div ref={box} className="shrink-0 rounded-xl border border-[#e4e7ec] bg-white p-2 shadow-[0_12px_32px_rgba(16,24,40,0.14)]" data-testid={mediaStep ? "scene-media-step" : "scene-type-picker"}>
+      {add.el}
+      <div className="flex items-center justify-between px-1.5 pb-1"><span className="text-xs font-bold uppercase tracking-[0.06em] text-[#667085]">{mediaStep ? "Media presentation" : "New scene"}</span><button type="button" onClick={onClose} aria-label="Close" className="text-[#667085] hover:text-[#101828]"><X className="h-4 w-4" /></button></div>
+      {mediaStep ? (add.panel ? <div className="p-0.5">{add.panel}</div> : <>
+        <button type="button" onClick={add.choose} className={choice} data-testid="new-media-upload"><Plus className="h-4 w-4 text-[#053877]" /> Upload a video or picture</button>
+        <button type="button" onClick={() => onPick("media")} className={choice} data-testid="new-media-pick"><ImageIcon className="h-4 w-4 text-[#053877]" /> Pick from Media</button>
+        <button type="button" onClick={() => onPick("media", undefined, null, false)} className={choice} data-testid="new-media-screen"><MonitorUp className="h-4 w-4 text-[#053877]" /> A shared screen</button>
+        <button type="button" onClick={() => setMediaStep(false)} className="mt-1 px-2 text-[12px] font-semibold text-[#667085] hover:text-[#101828]">Back</button>
+      </>) : <>
       {TYPES.map((t) => (
         <div key={t.id} className="rounded-lg hover:bg-[#f5f8fd]">
-          <button type="button" onClick={() => onPick(t.id, t.id === "group" ? group : undefined)} className="block w-full px-2 py-1.5 text-left" data-testid={`scene-type-${t.id}`}>
+          <button type="button" onClick={() => { if (t.id === "media") { add.choose(); setMediaStep(true); } else onPick(t.id, t.id === "group" ? group : undefined); }} className="block w-full px-2 py-1.5 text-left" data-testid={`scene-type-${t.id}`}>
             <span className="block text-[13px] font-bold">{t.label}</span><span className="block text-[11px] leading-snug text-[#667085]">{t.line}</span>
           </button>
           {t.id === "group" && (
@@ -212,27 +326,37 @@ function TypePicker({ onPick, onClose }: { onPick: (t: SceneType, people?: numbe
       <div className="mt-1 flex items-center gap-1.5 rounded-lg px-2 py-1.5 text-[#98a2b3]" title="Screen and speaker, picture in picture and a panel with a topic bar come with an add-on">
         <Lock className="h-3.5 w-3.5 shrink-0" /><span className="min-w-0 flex-1"><span className="block text-[12px] font-semibold">More scene types</span><span className="block text-[11px]">With the add-on</span></span>
       </div>
+      </>}
     </div>
   );
 }
 
-function SceneCard({ s, kit, v3, on, next, full, onPick, onRename, onEditLayout, onDuplicate, onAddBelow, onDelete }: { s: Scene; kit: RoomKit; v3: boolean; on: boolean; next: boolean; full: boolean; onPick: () => void; onRename: () => void; onEditLayout?: () => void; onDuplicate: () => void; onAddBelow: () => void; onDelete?: () => void }) {
+function SceneCard({ s, kit, v3, cast, on, next, full, onPick, onChooseMedia, onRename, onEditLayout, onDuplicate, onAddBelow, onDelete }: { s: Scene; kit: RoomKit; v3: boolean; cast: string[]; on: boolean; next: boolean; full: boolean; onPick: () => void; onChooseMedia: () => void; onRename: () => void; onEditLayout?: () => void; onDuplicate: () => void; onAddBelow: () => void; onDelete?: () => void }) {
   const look = kit.look!;
   const [menu, setMenu] = useState(false);
-  const item = "flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-semibold text-[#101828] hover:bg-[#f2f4f7] disabled:opacity-40 disabled:hover:bg-transparent";
+  const media = isMediaScene(s);
+  const [drag, setDrag] = useState(false);
+  const add = useAddMedia(kit, (a) => kit.change((l) => ({ ...l, scenes: l.scenes.map((x) => (x.id === s.id ? { ...x, media: a } : x)) })));
+  // A video or picture dropped on a media scene's card goes into that scene.
+  const drop = media ? {
+    onDragOver: (e: DragEvent) => { if (hasFile(e)) { e.preventDefault(); setDrag(true); } },
+    onDragLeave: () => setDrag(false),
+    onDrop: (e: DragEvent) => { if (!hasFile(e)) return; e.preventDefault(); setDrag(false); add.offer(e.dataTransfer.files?.[0]); },
+  } : {};
+  const item = "flex w-full [&>svg]:shrink-0 items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-[13px] font-semibold text-[#101828] hover:bg-[#f2f4f7] disabled:opacity-40 disabled:hover:bg-transparent";
   const pick = (fn: () => void) => () => { setMenu(false); fn(); };
-  const icon = LAYOUTS.find((l) => l.id === s.layout)?.icon;
   const logo = s.look && "logo" in s.look ? s.look.logo : look.logo;
   // The layout drawing is white so it shows clearly on the dark, blue and picture backgrounds;
   // navy on the light one.
   const cardBg = s.look?.background ?? look.background;
   const lightBg = cardBg.kind === "color" && cardBg.value === "light";
   return (
-    <div className={`group relative shrink-0 rounded-[14px] ${on ? "border-2 border-[#053877] shadow-[0_6px_16px_rgba(5,56,119,0.16)]" : next ? "border-2 border-[#F0A71F] shadow-[0_0_0_4px_rgba(240,167,31,0.2)]" : "border border-[#e4e7ec]"}`} data-testid={`scene-${s.n}`}>
+    <div {...drop} className={`group relative shrink-0 rounded-[14px] ${drag ? "border-2 border-dashed border-[#053877] bg-[#eef3fb]" : on ? "border-2 border-[#053877] shadow-[0_6px_16px_rgba(5,56,119,0.16)]" : next ? "border-2 border-[#F0A71F] shadow-[0_0_0_4px_rgba(240,167,31,0.2)]" : "border border-[#e4e7ec]"}`} data-testid={`scene-${s.n}`}>
+      {add.el}
       {/* The clip is on the button, not the card, so the ⋯ menu isn't cut off. */}
       <button type="button" onClick={onPick} className="block w-full overflow-hidden rounded-[12px] text-left" aria-label={`Put ${s.name} on air (key ${s.n})`} aria-pressed={on}>
         <div className="relative flex h-[88px] items-center justify-center" style={{ background: bgCss(cardBg) }}>
-          {v3 && s.boxes?.length ? <BoxThumb boxes={s.boxes} light={lightBg} className="!w-[104px] !bg-transparent" /> : typeOf(s) === "media" && (s.type === "media" || s.media) ? <MediaFace s={s} light={lightBg} /> : <svg width="88" height="64" viewBox="0 0 22 16" fill={lightBg ? "rgba(5,56,119,0.85)" : "rgba(255,255,255,0.92)"} stroke={lightBg ? "none" : "rgba(16,24,40,0.22)"} strokeWidth="0.3" aria-hidden data-testid="scene-thumb">{icon}</svg>}
+          {v3 && s.boxes?.length ? <BoxThumb boxes={s.boxes} light={lightBg} className="!w-[104px] !bg-transparent" /> : <MiniScene s={s} cast={cast} light={lightBg} />}
           {logo && <img src={logo.asset.url} alt="" className={`absolute top-1 h-4 w-auto rounded-sm ${logo.corner === "tl" ? "left-1.5" : "right-1.5"}`} />}
           {on && <span className="absolute left-2 top-2 rounded-full bg-[#12b76a] px-[7px] py-0.5 text-[10px] font-bold tracking-[0.02em] text-white">ON STAGE</span>}
           {!on && next && <span className="absolute left-2 top-2 rounded-full bg-[#F0A71F] px-[7px] py-0.5 text-[10px] font-bold tracking-[0.02em] text-[#101828]">TAKE ME NEXT</span>}
@@ -243,6 +367,13 @@ function SceneCard({ s, kit, v3, on, next, full, onPick, onRename, onEditLayout,
           <span className="rounded-md bg-[#f2f4f7] px-[7px] py-px text-xs font-semibold text-[#667085]">{s.n}</span>
         </div>
       </button>
+      {/* Nothing picked yet: add it right here (a sibling of the card's button, so pressing it never puts the scene on air). */}
+      {media && !s.media && !add.busy && (
+        <button type="button" onClick={add.choose} className="absolute left-1/2 top-[44px] flex h-7 -translate-x-1/2 -translate-y-1/2 items-center gap-1 whitespace-nowrap rounded-full bg-white px-2.5 text-[11px] font-bold text-[#053877] shadow-[0_2px_8px_rgba(16,24,40,0.25)] hover:bg-[#eef3fb]" data-testid="scene-card-add-media">
+          <Plus className="h-3.5 w-3.5" /> Add a video or picture
+        </button>
+      )}
+      {add.panel && <div className="border-t border-[#e4e7ec] p-1.5">{add.panel}</div>}
       <button type="button" onClick={() => setMenu(!menu)} aria-label={`${s.name}: more`} aria-expanded={menu} title="Scene options" className={`absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-[#344054] shadow transition-opacity focus:opacity-100 group-hover:opacity-100 ${menu ? "opacity-100" : "opacity-0"}`} data-testid={`scene-menu-${s.n}`}><MoreHorizontal className="h-4 w-4" /></button>
       {menu && (
         <>
@@ -250,6 +381,7 @@ function SceneCard({ s, kit, v3, on, next, full, onPick, onRename, onEditLayout,
           {/* Scene ⋯ (StreamYard's own set, Andrew 21 Nov). Nothing here puts a scene on air. */}
           <div className="absolute inset-x-1.5 top-10 z-20 rounded-xl border border-[#e4e7ec] bg-white p-1 shadow-[0_12px_32px_rgba(16,24,40,0.18)]" data-testid={`scene-menu-list-${s.n}`}>
             <button type="button" onClick={pick(onRename)} className={item} data-testid="scene-rename"><Pencil className="h-4 w-4" /> {v3 ? "Rename and edit" : "Rename"}</button>
+            {media && <button type="button" onClick={pick(onChooseMedia)} className={item} data-testid="scene-choose-media"><ImageIcon className="h-4 w-4" /> Choose video or picture</button>}
             {onEditLayout && <button type="button" onClick={pick(onEditLayout)} className={item} data-testid="scene-edit-layout"><LayoutDashboard className="h-4 w-4" /> Edit layout</button>}
             <button type="button" onClick={pick(onDuplicate)} disabled={full} title={full ? "9 scenes is the most" : undefined} className={item} data-testid="scene-duplicate"><Copy className="h-4 w-4" /> Duplicate</button>
             <button type="button" onClick={pick(onAddBelow)} disabled={full} title={full ? "9 scenes is the most" : undefined} className={item} data-testid="scene-add-below"><Plus className="h-4 w-4" /> Add scene below</button>
@@ -286,7 +418,7 @@ function SceneEditor({ s, kit, v3, onDelete, onClose }: { s: Scene; kit: RoomKit
             <button type="button" onClick={() => set({ people: Math.min(9, people + 1) })} disabled={people >= 9} aria-label="More people" className="h-8 w-8 rounded-lg border border-[#d0d5dd] bg-white text-base font-bold disabled:opacity-40">+</button>
             <span className="text-[11px] leading-snug text-[#667085]">{type === "media" ? (people === 0 ? "The media fills the scene" : people === 1 ? "One person in a corner" : "People in a strip") : ""}</span>
           </div></>}
-          {type === "media" && <MediaPick s={s} kit={kit} set={set} />}
+          {type === "media" && <MediaPick s={s} kit={kit} set={set} upload />}
           {type === "profile" && <ProfileFields s={s} kit={kit} set={set} />}
         </>
       ) : type === "media" && s.type === "media" ? (
@@ -326,23 +458,17 @@ function SceneEditor({ s, kit, v3, onDelete, onClose }: { s: Scene; kit: RoomKit
  */
 function MediaPick({ s, kit, set, upload = false }: { s: Scene; kit: RoomKit; set: (p: Partial<Scene>) => void; upload?: boolean }) {
   const look = kit.look!;
-  const { toast } = useToast();
-  const input = useRef<HTMLInputElement>(null);
-  const [rights, setRights] = useState(false);
-  const [adding, setAdding] = useState(false);
-  const [pct, setPct] = useState<number | null>(null);
+  const add = useAddMedia(kit, (a) => set({ media: a }));
   const all = [...(look.videos ?? []).map((v) => v.asset), ...(look.backgrounds ?? []), ...look.logos, ...(s.media ? [s.media] : [])].filter((a, i, xs) => xs.findIndex((b) => b.id === a.id) === i);
-  const pick = async (f?: File) => {
-    if (!f) return;
-    const video = f.type.startsWith("video/");
-    setPct(0);
-    try { set({ media: await kit.addAsset(video ? "video" : "photo", f, setPct, video ? true : undefined) }); setAdding(false); }
-    catch (e) { toast({ title: "Couldn't add that file", description: (e as Error).message, variant: "destructive" }); }
-    finally { setPct(null); if (input.current) input.current.value = ""; }
-  };
   return (
     <>
       <p className="mt-3 block text-xs font-semibold text-[#475467]" id={`media-${s.id}`}>{upload ? "What does this scene show?" : "Shows"}</p>
+      {/* Upload first (Andrew via PM, 24 Nov): the scene is where people look for it. */}
+      {upload && <>
+        {add.el}
+        {add.panel ? <div className="mt-1.5">{add.panel}</div>
+          : <button type="button" onClick={add.choose} className="mt-1.5 flex h-9 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#98a2b3] bg-white text-[12px] font-semibold text-[#344054] hover:bg-[#f9fafb]" data-testid="scene-media-upload"><Plus className="h-3.5 w-3.5" /> Upload a video or picture</button>}
+      </>}
       <div role="radiogroup" aria-labelledby={`media-${s.id}`} className="mt-1.5 max-h-[232px] space-y-1 overflow-y-auto" data-testid="scene-media">
         {[null, ...all].map((a) => {
           const on = (s.media?.id ?? null) === (a?.id ?? null);
@@ -358,20 +484,6 @@ function MediaPick({ s, kit, set, upload = false }: { s: Scene; kit: RoomKit; se
         })}
       </div>
       {!upload && !all.length && <p className="mt-1 text-[11px] text-[#98a2b3]">Add clips or pictures in Media to show one here.</p>}
-      {upload && (pct !== null ? (
-        <p className="mt-2 flex items-center gap-1.5 text-[12px] font-semibold text-[#667085]"><Loader2 className="h-3.5 w-3.5 animate-spin" /> Uploading {pct}%</p>
-      ) : !adding ? (
-        <button type="button" onClick={() => setAdding(true)} className="mt-2 flex h-8 w-full items-center justify-center gap-1.5 rounded-lg border border-dashed border-[#98a2b3] bg-white text-[12px] font-semibold text-[#475467] hover:bg-[#f9fafb]" data-testid="scene-media-upload"><Plus className="h-3.5 w-3.5" /> Upload a video or picture</button>
-      ) : (
-        <div className="mt-2 rounded-lg border border-[#e4e7ec] bg-white p-2.5">
-          <input ref={input} type="file" accept="video/mp4,video/quicktime,video/webm,image/png,image/jpeg,image/webp" className="hidden" onChange={(e) => void pick(e.target.files?.[0])} />
-          <label className="flex items-start gap-2 text-[12px] font-semibold text-[#344054]"><input type="checkbox" checked={rights} onChange={(e) => setRights(e.target.checked)} className="mt-0.5" data-testid="scene-media-rights" /> I have the rights to use this</label>
-          <div className="mt-2 flex items-center gap-2">
-            <button type="button" disabled={!rights} onClick={() => input.current?.click()} className="h-8 rounded-lg bg-[#053877] px-3 text-[12px] font-bold text-white disabled:opacity-40">Choose a file</button>
-            <button type="button" onClick={() => setAdding(false)} className="h-8 px-1.5 text-[12px] font-semibold text-[#475467]">Cancel</button>
-          </div>
-        </div>
-      ))}
       {upload && !s.media && <p className="mt-1.5 text-[11px] leading-snug text-[#667085]">A shared screen: press Present or invite, then Share screen.</p>}
     </>
   );
