@@ -24,6 +24,7 @@ const PROMO_ID = 0;
 const STEPS = new Set(["page", "start", "join", "code", "signedin", "checkout", "free"]);
 const clean = (v: unknown) => String(v ?? "").toLowerCase().replace(/[^a-z0-9-]+/g, "").slice(0, 20) || "link";
 const LIVE = ["active", "trialing", "past_due"];
+const ACTIVATION_SINCE = "founding-activation:since";
 
 function count(step: string, src: string, req: { get(h: string): string | undefined }): void {
   storage.recordSponsorClick(PROMO_ID, `bf:${step}:${clean(src)}`, String(req.get("referer") ?? ""), String(req.get("user-agent") ?? "")).catch(() => {});
@@ -103,7 +104,9 @@ export function registerPromo(app: Express, requireAdmin: RequestHandler): void 
     try {
       const sub = await storage.getSubscription(email);
       const origin = (process.env.PUBLIC_ORIGIN || `${req.protocol}://${req.get("host")}`).replace(/\/+$/, "");
-      const url = await createPlanCheckout({ email, plan, interval: plan === "pro" ? "quarter" : "month", origin, customerId: sub?.customerId || undefined, trialDays: FOUNDING.trialDays, cohort: FOUNDING.cohort, cancelPath: "/black-friday" });
+      // When the $5 activation first went on, so the funnel can compare checkouts opened vs trials started since.
+      if (FOUNDING.activationCents && !(await storage.getSetting(ACTIVATION_SINCE))) await storage.setSetting(ACTIVATION_SINCE, new Date().toISOString());
+      const url = await createPlanCheckout({ email, plan, interval: plan === "pro" ? "quarter" : "month", origin, customerId: sub?.customerId || undefined, trialDays: FOUNDING.trialDays, activationCents: FOUNDING.activationCents, cohort: FOUNDING.cohort, cancelPath: "/black-friday" });
       count("checkout", String(req.body?.src ?? ""), req);
       if (plan === "pro") count("checkout-pro", String(req.body?.src ?? ""), req);
       res.json({ url });
@@ -123,6 +126,13 @@ export function registerPromo(app: Express, requireAdmin: RequestHandler): void 
       .groupBy(sponsorClicks.source);
     const marks = await db.select({ key: siteSettings.key, value: siteSettings.value }).from(siteSettings).where(like(siteSettings.key, "founding:%"));
     const list = marks.map((r) => { let v: { at?: string; via?: string; test?: boolean; note?: string } = {}; try { v = JSON.parse(String(r.value)); } catch { /* keep empty */ } return { email: r.key.slice("founding:".length), at: v.at ?? "", via: v.via ?? "", test: Boolean(v.test), note: v.note ?? "" }; }).sort((a, b) => a.at.localeCompare(b.at));
-    res.json({ members: list.length, tests: list.filter((x) => x.test).length, added: list.filter((x) => x.via === "andrew").length, list, clicks: rows.map((r) => { const [, step, src] = r.source.split(":"); return { step, src, n: r.n }; }) });
+    // Since the $5 activation went on (24 Nov): Stripe checkouts opened vs trials that started. Do people stop at the $5?
+    const since = (await storage.getSetting(ACTIVATION_SINCE)) || "";
+    const [opened] = since
+      ? await db.select({ n: sql<number>`count(*)::int` }).from(sponsorClicks).where(and(eq(sponsorClicks.sponsorId, PROMO_ID), like(sponsorClicks.source, "bf:checkout:%"), sql`${sponsorClicks.createdAt} >= ${since}`))
+      : [{ n: 0 }];
+    const finished = since ? list.filter((x) => !x.test && x.via === "trial" && x.at >= since).length : 0;
+    const activation = { cents: FOUNDING.activationCents, since, started: opened?.n ?? 0, finished, stopped: Math.max(0, (opened?.n ?? 0) - finished) };
+    res.json({ members: list.length, tests: list.filter((x) => x.test).length, added: list.filter((x) => x.via === "andrew").length, activation, list, clicks: rows.map((r) => { const [, step, src] = r.source.split(":"); return { step, src, n: r.n }; }) });
   });
 }

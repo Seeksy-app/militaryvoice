@@ -31,7 +31,11 @@ export const planOf = (key: string) => (key in PLANS ? PLANS[key as PlanKey] : u
  * 30 days free (Stripe's own trial, card taken at checkout), one trial per email, open until the end of
  * December 31, 2026, Eastern. The plan's credits come on day 1; extras aren't billed during the trial.
  */
-export const FOUNDING = { plan: "creator", plans: ["creator", "pro"], trialDays: 30, endsAt: "2027-01-01T05:00:00.000Z", endsLabel: "December 31, 2026", cohort: "founding-2026" } as const;
+// activationCents: $5 charged at checkout, once, not credited toward the plan (Andrew, 24 Nov: "add $5", so the card is
+// really on file and they're committed). Shown only on Stripe's page, not on ours ("Let it be in Stripe the first time
+// they see it"); off again if people stop there (Admin → Black Friday funnel: activation started vs finished).
+// People who joined before pay nothing more.
+export const FOUNDING = { plan: "creator", plans: ["creator", "pro"], trialDays: 30, activationCents: 500, endsAt: "2027-01-01T05:00:00.000Z", endsLabel: "December 31, 2026", cohort: "founding-2026" } as const;
 export const foundingOpen = (now = Date.now()) => now < Date.parse(FOUNDING.endsAt);
 
 /** The limit on extra credits each month, unless they choose another. */
