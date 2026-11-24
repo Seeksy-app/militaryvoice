@@ -100,7 +100,7 @@ export function HelpContact({ n }: { n: number }) {
   return (
     <HelpSection n={n} id="support" title="Help and contact">
       <ul className="list-disc space-y-2 pl-5">
-        <li><strong>Email us:</strong>{" "}<a href="mailto:hello@militaryvoices.ai" className="font-medium text-primary hover:underline">hello@militaryvoices.ai</a>. A person reads every message and writes back.</li>
+        <li><strong>Email us:</strong>{" "}<a href="mailto:hello@militaryvoices.ai" className="font-medium text-primary hover:underline">hello@militaryvoices.ai</a>. We read every message and write back as soon as we can.</li>
         <li><strong>Search the help, or ask Alex:</strong>{" "}<Link href="/help" className="font-medium text-primary hover:underline">militaryvoices.ai/help</Link>.</li>
       </ul>
     </HelpSection>

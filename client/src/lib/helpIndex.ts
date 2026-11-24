@@ -56,7 +56,7 @@ export const HELP_INDEX: HelpEntry[] = [
   },
   {
     title: "Move your podcast here, or away, with a 301",
-    summary: "Import your feed, turn on the redirect at your old host, then Check the redirect. Moving away: Moving to another host? in Show details.",
+    summary: "Import your feed, turn on the redirect at your old host, then Check the redirect. Moving away: paste the new host's feed in Settings → Redirect.",
     href: "/help/podcast#move",
     keywords: "podcast move host migrate import redirect 301 new feed url forward subscribers buzzsprout libsyn anchor spotify for creators podbean transistor",
     audience: "podcasters",

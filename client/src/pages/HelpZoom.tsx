@@ -251,8 +251,8 @@ export default function HelpZoom() {
           <ul className="list-disc space-y-2 pl-5">
             <li>
               <strong>Email us:</strong>{" "}
-              <a href={`mailto:${CONTACT}`} className="font-medium text-primary hover:underline">{CONTACT}</a>. A person reads
-              every message and writes back.
+              <a href={`mailto:${CONTACT}`} className="font-medium text-primary hover:underline">{CONTACT}</a>. We read every
+              message and write back as soon as we can.
             </li>
             <li>
               <strong>Search the help, or ask Alex:</strong>{" "}

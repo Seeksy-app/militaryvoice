@@ -106,13 +106,13 @@ export default function HelpPodcast() {
 
           <p className="mt-6 font-semibold text-foreground">Moving your show away</p>
           <Step k="a" text={<>Set up the show at your new host first.</>} />
-          <Step k="b" text={<>Here, open <em>Show details</em> and paste the new host's feed into <strong>Moving to another host?</strong>. Your feed then sends every app a 301 to the new address, and tells Apple the new one too.</>} />
+          <Step k="b" text={<>Here, open <em>Settings → Redirect</em>, paste the new host's feed into <strong>Your new host's feed address</strong> and press <strong>Move my feed</strong>. Your feed then sends every app a 301 to the new address, and tells Apple the new one too.</>} />
           <Step k="c" text={<>Leave it in place for at least four weeks before deleting the show here, so every app has time to follow.</>} />
         </Section>
 
         <Section n={7} id="support" title="Help and contact">
           <ul className="list-disc space-y-2 pl-5">
-            <li><strong>Email us:</strong>{" "}<a href={`mailto:${CONTACT}`} className="font-medium text-primary hover:underline">{CONTACT}</a>. A person reads every message and writes back.</li>
+            <li><strong>Email us:</strong>{" "}<a href={`mailto:${CONTACT}`} className="font-medium text-primary hover:underline">{CONTACT}</a>. We read every message and write back as soon as we can.</li>
             <li><strong>Search the help, or ask Alex:</strong>{" "}<Link href="/help" className="font-medium text-primary hover:underline">militaryvoices.ai/help</Link>.</li>
           </ul>
         </Section>
