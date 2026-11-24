@@ -13,7 +13,7 @@ import { useToast } from "@/hooks/use-toast";
 // something in it; each row opens the screen it lives on.
 
 type Screen = "podcast" | "page" | "recordings" | "postify" | "social";
-type HostingShow = { show: { id: number; title: string; artworkUrl: string }; episodes: { live?: boolean }[]; stats?: { total: number } };
+type HostingShow = { show: { id: number; title: string; artworkUrl: string }; episodes: { live?: boolean; status?: string }[]; stats?: { total: number } };
 type Tab = "shows" | "episodes" | "clips" | "posts";
 
 const get = <T,>(url: string) => async () => (await apiRequest("GET", url)).json() as Promise<T>;
@@ -32,15 +32,20 @@ export function HomeFiles({ goTo, handle }: { goTo: (s: Screen) => void; handle:
 
   const icon = (I: typeof Film) => <I className="h-4 w-4 shrink-0 text-muted-foreground" />;
   const shows: Row[] = [
-    ...(hosting.data?.shows ?? []).map(({ show, episodes, stats }) => ({
+    ...(hosting.data?.shows ?? []).map(({ show, episodes, stats }) => {
+      // Same counts as the Your shows cards (a3093924): out = live, waiting = still in draft (Andrew, 24 Nov).
+      const out = episodes.filter((e) => e.live).length;
+      const drafts = episodes.filter((e) => e.status === "draft").length;
+      return {
       key: `show-${show.id}`,
       icon: show.artworkUrl ? <img src={show.artworkUrl} alt="" className="h-6 w-6 shrink-0 rounded object-cover" /> : icon(Headphones),
       name: show.title || "Your show",
       detail: `${(stats?.total ?? 0).toLocaleString()} downloads`,
-      when: `${episodes.filter((e) => e.live !== false).length} episodes`,
+      when: drafts ? `${out} out · ${drafts} to publish` : `${out} ${out === 1 ? "episode" : "episodes"}`,
       action: "Open",
       go: () => goTo("podcast"),
-    })),
+    };
+    }),
     ...((hosting.data?.shows.length ?? 0) === 0 && hosting.isSuccess
       ? [{ key: "show-new", icon: icon(Headphones), name: "Your podcast", detail: "Host it free, or bring it over", when: "", action: "Start", go: () => goTo("podcast") }]
       : []),
@@ -92,11 +97,11 @@ export function HomeFiles({ goTo, handle }: { goTo: (s: Screen) => void; handle:
         </div>
       </div>
       <div className="mt-3 overflow-hidden rounded-2xl border border-border bg-card">
-        <div className="hidden grid-cols-[minmax(0,1fr)_200px_140px_72px] gap-4 border-b border-border px-4 py-2 text-xs font-medium text-muted-foreground sm:grid">
+        <div className="hidden grid-cols-[minmax(0,1fr)_200px_170px_72px] gap-4 border-b border-border px-4 py-2 text-xs font-medium text-muted-foreground sm:grid">
           <span>Name</span><span>Details</span><span>{cur.key === "shows" ? "Episodes" : "Date"}</span><span />
         </div>
         {rows.map((r) => (
-          <button key={r.key} type="button" onClick={r.go} className="grid w-full grid-cols-[minmax(0,1fr)_72px] items-center gap-4 border-b border-border px-4 py-3 text-left text-sm last:border-b-0 hover:bg-muted/50 sm:grid-cols-[minmax(0,1fr)_200px_140px_72px]" data-testid={`files-row-${r.key}`}>
+          <button key={r.key} type="button" onClick={r.go} className="grid w-full grid-cols-[minmax(0,1fr)_72px] items-center gap-4 border-b border-border px-4 py-3 text-left text-sm last:border-b-0 hover:bg-muted/50 sm:grid-cols-[minmax(0,1fr)_200px_170px_72px]" data-testid={`files-row-${r.key}`}>
             <span className="flex min-w-0 items-center gap-3">{r.icon}<span className="min-w-0"><span className="block truncate font-medium text-foreground">{r.name}</span><span className="block truncate text-xs text-muted-foreground sm:hidden">{[r.detail, r.when].filter(Boolean).join(" · ")}</span></span></span>
             <span className="hidden truncate text-muted-foreground sm:block">{r.detail}</span>
             <span className="hidden truncate text-muted-foreground sm:block">{r.when}</span>
