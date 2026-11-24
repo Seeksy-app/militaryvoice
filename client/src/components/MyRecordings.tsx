@@ -369,7 +369,7 @@ export function MyRecordings({
                       <MoreHorizontal className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
-                  <DropdownMenuContent align="end" className="w-52">
+                  <DropdownMenuContent align="end" className="w-60">
                     {r.status === "Ready" && (<>
                     <DropdownMenuItem onSelect={() => void download(r.id)} className="gap-2" data-testid={`button-download-recording-${r.id}`}>
                       <Download className="h-4 w-4" /> {versions.length > 0 ? `Download ${olderPicked ? "this edit" : versions.find((v) => v.rec.id === r.id)?.label.toLowerCase()}` : "Download"}
