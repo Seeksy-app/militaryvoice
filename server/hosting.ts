@@ -3,8 +3,8 @@ import type { Express, Request } from "express";
 import crypto from "node:crypto";
 import multer from "multer";
 import sharp from "sharp";
-import { and, desc, eq, gte, ne, sql } from "drizzle-orm";
-import { db, storage, schemaIsReady } from "./storage.js";
+import { and, desc, eq, gte, inArray, ne, sql } from "drizzle-orm";
+import { db, storage, schemaIsReady, inTransaction } from "./storage.js";
 import { withCredits } from "./roomKit.js";
 import { fillFooter } from "../shared/footer.js";
 import { hostedSpots, type HostedSpotRow } from "../shared/schema.js";
@@ -662,6 +662,43 @@ export async function autoWriteSweep(limit = 3): Promise<number> {
     }
   }
   return done;
+}
+
+/**
+ * Move episodes to another of the person's shows (Andrew, 24 Nov 2026), one or many, in one transaction so a half-move
+ * can't happen. Each keeps its guid, so an app that already has it doesn't count it twice when it turns up in the other
+ * feed. Full episodes are numbered on from the new show's highest, in the order they already had (oldest number first);
+ * trailers and bonuses keep theirs, and a serial show keeps number and season. Their downloads and their own sponsor
+ * spots go with them; clips and transcripts hang off the episode and its recording, so they come along by themselves.
+ * An intro made for one episode was made for the old show, so it goes: the new show's own intro and outro play.
+ */
+export async function moveEpisodes(email: string, ids: number[], toShowId: number): Promise<{ moved: HostedEpisodeRow[] } | { error: string; status: number }> {
+  const to = await ownShow(email, toShowId);
+  if (!to) return { error: "No such show.", status: 404 };
+  const rows = ids.length ? await db.select().from(hostedEpisodes).where(inArray(hostedEpisodes.id, ids)) : [];
+  if (rows.length !== new Set(ids).size) return { error: "No such episode.", status: 404 };
+  for (const sid of Array.from(new Set(rows.map((e) => e.showId)))) if (!(await ownShow(email, sid))) return { error: "No such episode.", status: 404 };
+  const going = rows.filter((e) => e.showId !== to.id)
+    .sort((a, b) => (a.episodeNumber ?? Number.MAX_SAFE_INTEGER) - (b.episodeNumber ?? Number.MAX_SAFE_INTEGER) || (a.publishedAt || a.createdAt).localeCompare(b.publishedAt || b.createdAt));
+  if (!going.length) return { moved: [] };
+  const serial = to.showType === "serial";
+  let next = nextEpisodeNumber(await episodesOf(to.id));
+  const moved = await inTransaction(async (tx) => {
+    const out: HostedEpisodeRow[] = [];
+    for (const e of going) {
+      const number = e.episodeType === "full" && !serial ? next++ : e.episodeNumber;
+      const [m] = await tx.update(hostedEpisodes).set({ showId: to.id, episodeNumber: number, season: serial ? e.season : null, introKey: "" })
+        .where(and(eq(hostedEpisodes.id, e.id), eq(hostedEpisodes.showId, e.showId))).returning();
+      if (!m) throw new Error(`Episode ${e.id} changed while it was being moved.`);
+      await tx.update(hostedDownloads).set({ showId: to.id }).where(eq(hostedDownloads.episodeId, e.id));
+      await tx.update(hostedSpots).set({ showId: to.id }).where(eq(hostedSpots.episodeId, e.id));
+      out.push(m as HostedEpisodeRow);
+    }
+    return out;
+  }).catch((err: Error) => ({ error: err.message }));
+  if ("error" in moved) return { error: "Some of those just changed, so nothing moved. Try again.", status: 409 };
+  console.log(`Moved episodes ${going.map((e) => e.id).join(",")} to show ${to.id} for ${email}`);
+  return { moved };
 }
 
 /** A new recording from their Zoom (a package account): the episode appears in their Episodes at once, in post-production. */
@@ -1899,25 +1936,17 @@ Return JSON only: {"titles":["","",""],"description":""}`,
   // hang off its id and its recording, so they come along by themselves. An intro made for this episode was made for
   // the old show, so it goes: the new show's own intro and outro play.
   app.post("/api/host/hosting/episodes/:id/move", requireHostSession, async (req, res) => {
-    const email = emailOf(req);
-    const [e] = await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.id, Number(req.params.id))).limit(1);
-    if (!e || !(await ownShow(email, e.showId))) return res.status(404).json({ message: "No such episode." });
-    const to = await ownShow(email, Number(req.body?.showId));
-    if (!to) return res.status(404).json({ message: "No such show." });
-    if (to.id === e.showId) return res.json(e);
-    const eps = await episodesOf(to.id);
-    const full = e.episodeType === "full";
-    const [out] = await db.update(hostedEpisodes).set({
-      showId: to.id,
-      episodeNumber: full ? (to.showType === "serial" ? e.episodeNumber : nextEpisodeNumber(eps)) : e.episodeNumber,
-      season: to.showType === "serial" ? e.season : null,
-      introKey: "",
-    }).where(and(eq(hostedEpisodes.id, e.id), eq(hostedEpisodes.showId, e.showId))).returning();
-    if (!out) return res.status(409).json({ message: "That episode just changed. Try again." });
-    await db.update(hostedDownloads).set({ showId: to.id }).where(eq(hostedDownloads.episodeId, e.id));
-    await db.update(hostedSpots).set({ showId: to.id }).where(eq(hostedSpots.episodeId, e.id));
-    console.log(`Episode ${e.id} moved from show ${e.showId} to ${to.id} by ${email}`);
-    res.json(out);
+    const r = await moveEpisodes(emailOf(req), [Number(req.params.id)], Number(req.body?.showId));
+    if ("error" in r) return res.status(r.status).json({ message: r.error });
+    res.json(r.moved[0] ?? null);
+  });
+  // Several at once (Andrew, 24 Nov: "if he wanted to move 12 of them over"): one request, all or none.
+  app.post("/api/host/hosting/episodes/move", requireHostSession, async (req, res) => {
+    const ids = Array.isArray(req.body?.ids) ? req.body.ids.map(Number).filter((n: number) => Number.isInteger(n) && n > 0).slice(0, 500) : [];
+    if (!ids.length) return res.status(400).json({ message: "Choose the episodes to move." });
+    const r = await moveEpisodes(emailOf(req), ids, Number(req.body?.toShowId));
+    if ("error" in r) return res.status(r.status).json({ message: r.error });
+    res.json({ moved: r.moved.length });
   });
 
   app.delete("/api/host/hosting/episodes/:id", requireHostSession, async (req, res) => {

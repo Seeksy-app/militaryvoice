@@ -138,6 +138,14 @@ export function PodcastHosting() {
   // The setup screens stay up while a new show is made, even though the list now has one in it.
   const [inSetup, setInSetup] = useState(() => { try { const u = new URL(window.location.href); const on = u.searchParams.get("setup") === "1"; if (on) { u.searchParams.delete("setup"); window.history.replaceState(null, "", u.pathname + u.search); } return on; } catch { return false; } });
   const [editEp, setEditEp] = useState<Ep | null>(null);
+  // Select mode on Episodes (Andrew, 24 Nov: "could he do a bulk move?"): tick episodes, then act on them all from the bar.
+  // The bar is built to take more actions (Publish, Delete) later; Move is the only one today.
+  const [selecting, setSelecting] = useState(false);
+  const [picked, setPicked] = useState<number[]>([]);
+  const [bulkTo, setBulkTo] = useState<{ id: number; title: string } | null>(null);
+  const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkBusy, setBulkBusy] = useState(false);
+  const endSelect = () => { setSelecting(false); setPicked([]); setBulkTo(null); };
   // An episode a sponsor spot is being added for (from that episode's page).
   const [spotFor, setSpotFor] = useState<number | null>(null);
   // From the Library ("Add as an episode"): ?ep=<id> opens that episode, ready for its words.
@@ -238,6 +246,36 @@ export function PodcastHosting() {
     setFocus(/description/i.test(m) ? "description" : /show name/i.test(m) ? "title" : /owner email/i.test(m) ? "ownerEmail" : "");
     go("details");
   };
+  // Move the ticked episodes, all in one request (all or none). Drafts only: straight in. Any live: the confirm first.
+  const bulkMove = async (to: { id: number; title: string }) => {
+    const ids = picked.filter((id) => h.episodes.some((e) => e.id === id));
+    if (!ids.length) return;
+    setBulkBusy(true);
+    try {
+      await apiRequest("POST", "/api/host/hosting/episodes/move", { ids, toShowId: to.id });
+      toast({ title: `Moved ${ids.length} to ${to.title || "your other show"}`, description: h.episodes.some((e) => ids.includes(e.id) && e.live) ? "They're in that show's feed now. The apps pick them up within the hour." : undefined });
+      endSelect();
+      refresh();
+    } catch (e) {
+      toast({ title: "Couldn't move them", description: (e as Error).message.replace(/^\d+:\s*/, ""), variant: "destructive" });
+    } finally { setBulkBusy(false); setBulkTo(null); }
+  };
+  const bulkLive = h.episodes.filter((e) => picked.includes(e.id) && e.live).length;
+  const bulkN = picked.filter((id) => h.episodes.some((e) => e.id === id)).length;
+  const bulkDialog = (
+    <Dialog open={!!bulkTo} onOpenChange={(o) => { if (!o && !bulkBusy) setBulkTo(null); }}>
+      <DialogContent className="max-w-md" data-testid="hosting-bulk-confirm">
+        <DialogHeader>
+          <DialogTitle className="text-balance">Move {bulkN} {bulkN === 1 ? "episode" : "episodes"} to {bulkTo?.title || "your other show"}?</DialogTitle>
+          <DialogDescription className="text-foreground">{bulkLive} {bulkLive === 1 ? "is live and will leave" : "are live and will leave"} {s.title} in podcast apps.</DialogDescription>
+        </DialogHeader>
+        <DialogFooter className="gap-2 sm:gap-0">
+          <Button variant="outline" onClick={() => setBulkTo(null)} disabled={bulkBusy}>Cancel</Button>
+          <Button onClick={() => bulkTo && void bulkMove(bulkTo)} disabled={bulkBusy} className="gap-1.5 bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-bulk-go">{bulkBusy && <Loader2 className="h-4 w-4 animate-spin" />} Move {bulkN}</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
   const inSettings = tab === "publishing" || tab === "details" || tab === "sponsors" || tab === "move";
   const tabBtn = (t: PodTab, label: string) => (
     <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => go(t)} className={`border-b-2 px-1 pb-2.5 text-sm font-semibold transition-colors ${tab === t ? "border-[#053877] text-foreground dark:border-[#8fb5e8]" : "border-transparent text-muted-foreground hover:text-foreground"}`} data-testid={`hosting-tab-${t}`}>{label}</button>
@@ -245,7 +283,8 @@ export function PodcastHosting() {
 
   return (
     <section className="mt-2 space-y-4 pb-24" data-testid="podcast-hosting">
-      {shows.length > 1 && <button type="button" onClick={() => setOpenId(null)} className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground" data-testid="hosting-all-shows"><ChevronLeft className="h-4 w-4" /> All shows</button>}
+      {bulkDialog}
+      {shows.length > 1 && <button type="button" onClick={() => { endSelect(); setOpenId(null); }} className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground" data-testid="hosting-all-shows"><ChevronLeft className="h-4 w-4" /> All shows</button>}
       {/* The show: its art, its name, its feed. */}
       <div className="flex flex-wrap items-start gap-5">
         <ArtworkButton show={s} onDone={refresh} />
@@ -300,26 +339,59 @@ export function PodcastHosting() {
                     <a href="/stream-in"><span className="inline-flex items-center gap-1"><BrandMark brand="streamyard" className="h-4 w-4" /><BrandMark brand="restream" className="h-4 w-4" /><BrandMark brand="obs" className="h-4 w-4" /></span> Stream in from StreamYard, Restream or OBS</a>
                   </Button>
                 )}
+                {shows.length > 1 && h.episodes.length > 0 && <Button variant="outline" onClick={() => (selecting ? endSelect() : setSelecting(true))} className="h-9 rounded-lg" data-testid="hosting-select">{selecting ? "Done" : "Select"}</Button>}
                 <Button onClick={() => setAdding(true)} className="h-9 gap-1.5 rounded-lg bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-new-episode"><Plus className="h-4 w-4" /> New episode</Button>
               </div>
             </div>
+            {selecting && (() => {
+              const all = h.episodes.map((e) => e.id);
+              const allOn = all.length > 0 && all.every((id) => picked.includes(id));
+              const others = shows.filter((x) => x.show.id !== s.id);
+              return (
+                <div className="sticky top-2 z-10 mb-3 flex flex-wrap items-center gap-2 rounded-xl border border-[#053877]/30 bg-[#053877]/5 px-3 py-2 backdrop-blur dark:bg-[#053877]/20" data-testid="hosting-select-bar">
+                  <label className="flex cursor-pointer items-center gap-2 text-sm font-medium">
+                    <input type="checkbox" checked={allOn} onChange={() => setPicked(allOn ? [] : all)} className="h-4 w-4 accent-[#053877]" data-testid="hosting-select-all" /> Select all
+                  </label>
+                  <span className="text-sm text-muted-foreground">{picked.length} selected</span>
+                  <span className="ml-auto flex flex-wrap items-center gap-2">
+                    <Popover open={bulkOpen} onOpenChange={setBulkOpen}>
+                      <PopoverTrigger asChild>
+                        <Button size="sm" disabled={!picked.length || bulkBusy} className="h-8 gap-1 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-bulk-move">{bulkBusy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : null} Move {picked.length || ""} to ›</Button>
+                      </PopoverTrigger>
+                      <PopoverContent align="end" className="w-64 p-1">
+                        {others.map((x) => (
+                          <button key={x.show.id} type="button" onClick={() => {
+                            setBulkOpen(false);
+                            const live = h.episodes.filter((e) => picked.includes(e.id) && e.live).length;
+                            const to = { id: x.show.id, title: x.show.title };
+                            if (live) setBulkTo(to); else void bulkMove(to);
+                          }} className="block w-full truncate rounded-lg px-3 py-2 text-left text-sm hover:bg-muted" data-testid={`hosting-bulk-to-${x.show.id}`}>{x.show.title || "Untitled show"}</button>
+                        ))}
+                      </PopoverContent>
+                    </Popover>
+                    <Button size="sm" variant="ghost" className="h-8 rounded-full" onClick={endSelect}>Cancel</Button>
+                  </span>
+                </div>
+              );
+            })()}
             {h.episodes.length ? (
               <ul className="divide-y divide-border">
                 {/* What still needs them (post-production, final drafts) first, newest first; then what is out. */}
                 {[...h.episodes].sort((a, b) => Number(b.status === "draft") - Number(a.status === "draft") || (a.status === "draft" && b.status === "draft" ? (b.episodeNumber ?? 0) - (a.episodeNumber ?? 0) || b.createdAt.localeCompare(a.createdAt) : 0)).map((e) => (
-                  <li key={e.id} className="flex items-center gap-3 py-2.5" data-testid={`hosting-episode-${e.id}`}>
+                  <li key={e.id} className={`flex items-center gap-3 py-2.5 ${selecting && picked.includes(e.id) ? "bg-[#053877]/5" : ""}`} data-testid={`hosting-episode-${e.id}`}>
+                    {selecting && <input type="checkbox" checked={picked.includes(e.id)} onChange={() => setPicked((p) => (p.includes(e.id) ? p.filter((x) => x !== e.id) : [...p, e.id]))} aria-label={`Select ${e.title}`} className="h-4 w-4 shrink-0 accent-[#053877]" data-testid={`hosting-pick-${e.id}`} />}
                     <EpisodeArt ep={e} fallback={s.artworkUrl} onDone={refresh} />
                     {/* On a phone the badge moves under the title, which gets the width (8 Oct: "8. MCDP 1 Warfig…"). */}
                     <span className={`hidden shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold sm:inline-flex sm:items-center sm:gap-1 ${STAGE[stageOf(e)].cls}`} data-testid={`hosting-stage-${e.id}`}>
                       {e.audioJob && e.audioJob !== "failed" && <Loader2 className="h-3 w-3 animate-spin" />}{STAGE[stageOf(e)].label}
                     </span>
-                    <button type="button" onClick={() => setEditEp(e)} className="min-w-0 flex-1 text-left">
+                    <button type="button" onClick={() => (selecting ? setPicked((p) => (p.includes(e.id) ? p.filter((x) => x !== e.id) : [...p, e.id])) : setEditEp(e))} className="min-w-0 flex-1 text-left">
                       <span className="line-clamp-2 text-sm font-medium sm:line-clamp-none sm:block sm:truncate">{e.episodeNumber != null ? `${e.episodeNumber}. ` : ""}{e.title}</span>
                       <span className="block text-xs text-muted-foreground"><span className="font-semibold sm:hidden">{STAGE[stageOf(e)].label} · </span>{e.publishedAt ? dateOf(e.publishedAt) : "Not published"}{e.durationSec ? ` · ${hms(e.durationSec)}` : ""}{e.youtube ? " · on YouTube" : ""}</span>
                       <DeliveryChips ep={e} />
                     </button>
                     <span className="hidden w-24 shrink-0 text-right text-xs tabular-nums text-muted-foreground sm:block"><b className="text-foreground">{compact(e.downloads)}</b> downloads</span>
-                    <Button size="sm" variant="outline" className="h-8 shrink-0 rounded-full" onClick={() => setEditEp(e)}>{stageOf(e) === "final" ? "Publish" : stageOf(e) === "post" ? "Open" : "Edit"}</Button>
+                    {!selecting && <Button size="sm" variant="outline" className="h-8 shrink-0 rounded-full" onClick={() => setEditEp(e)}>{stageOf(e) === "final" ? "Publish" : stageOf(e) === "post" ? "Open" : "Edit"}</Button>}
                   </li>
                 ))}
               </ul>
