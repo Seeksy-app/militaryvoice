@@ -3492,7 +3492,8 @@ export function registerRoutes(app: Express): void {
   app.get("/api/host/recordings", requireHostSession, async (req, res) => {
     noStore(res);
     const email = getSessionEmail(req) ?? "";
-    res.json(await storage.listRecordingsByEmail(email));
+    // One taken out of their Library (an event session the event keeps) isn't shown to them.
+    res.json((await storage.listRecordingsByEmail(email)).filter((r) => !r.libraryHidden));
   });
 
   /** Library folders: the podcaster's own, for sorting episodes. */
@@ -3525,7 +3526,7 @@ export function registerRoutes(app: Express): void {
     const folder = (await storage.listFolders(email)).find((f) => f.id === id);
     if (!folder) return res.status(404).json({ message: "No such folder." });
     const [recs, episodes, clipRows] = await Promise.all([storage.listRecordingsByEmail(email), listHostEpisodes(email), hostClips(email)]);
-    res.json({ folder, recordings: recs.filter((r) => r.folderId === id), episodes: episodes.filter((e) => e.folderId === id), clips: clipRows.filter((c) => c.folderId === id) });
+    res.json({ folder, recordings: recs.filter((r) => r.folderId === id && !r.libraryHidden), episodes: episodes.filter((e) => e.folderId === id), clips: clipRows.filter((c) => c.folderId === id) });
   });
   app.delete("/api/host/folders/:id", requireHostSession, async (req, res) => {
     await storage.deleteFolder(getSessionEmail(req) ?? "", Number(req.params.id));
@@ -8073,9 +8074,21 @@ export function registerRoutes(app: Express): void {
     const upload = rec.egressId.startsWith("UPLOAD_") || rec.egressId.startsWith("ZOOM_") || rec.egressId.startsWith("LINK_") || (rec.eventId === 0 && rec.studioId === 0);
     // A test episode we staged into someone's Library: theirs to remove; its file may be shared, so it stays.
     const staged = rec.egressId.startsWith("STAGED_");
-    if (!upload && !staged && !rec.egressId.startsWith("CLEAN_")) return res.status(403).json({ message: "Studio recordings stay with the event, so they can't be deleted here." });
     if (rec.clipStatus === "queued" || rec.clipStatus === "running") return res.status(409).json({ message: "Pōstify is still working on this one." });
     if (rec.status === "Recording") return res.status(409).json({ message: "It's still recording. Stop the recording first." });
+    // A studio or event session (Andrew, 24 Nov: "Please add a delete option"): the row is the event's too (Radio
+    // replays, Admin, the event's recording list), so it only leaves this person's Library. Its own clean and edited
+    // copies are theirs and go to Recently deleted as usual; the event's copy and its file stay put.
+    if (!upload && !staged && !rec.egressId.startsWith("CLEAN_")) {
+      if (rec.libraryHidden) return res.json({ ok: true });
+      const copies = (await storage.listRecordingsByEmail(rec.email)).filter((r) => new RegExp(`^CLEAN_(EDIT_)?${rec.id}(_|$)`).test(r.egressId));
+      if (copies.some((r) => r.clipStatus === "queued" || r.clipStatus === "running")) return res.status(409).json({ message: "Pōstify is still working on this one." });
+      const copyClips = (await Promise.all(copies.map((r) => storage.listClips(r.id)))).flat();
+      await toTrash({ email, kind: "recording", label: rec.title || "A recording", rows: { recordings: copies, clips: copyClips }, unhide: [rec.id] });
+      await db.execute(sql`update recordings set library_hidden = true where id = ${rec.id}`);
+      for (const r of copies) await storage.deleteRecordingAndClips(r.id);
+      return res.json({ ok: true, hidden: true });
+    }
     // The episode goes as a whole: its clean and edited copies share its Library card.
     const copies = upload || staged ? (await storage.listRecordingsByEmail(rec.email)).filter((r) => new RegExp(`^CLEAN_(EDIT_)?${rec.id}(_|$)`).test(r.egressId)) : [];
     const all = [rec, ...copies];

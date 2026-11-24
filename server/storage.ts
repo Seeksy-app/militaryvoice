@@ -279,6 +279,7 @@ async function ensureSchema() {
   await sql`ALTER TABLE recordings ADD COLUMN IF NOT EXISTS clean TEXT NOT NULL DEFAULT ''`;
   await sql`ALTER TABLE recordings ADD COLUMN IF NOT EXISTS postify_beta BOOLEAN NOT NULL DEFAULT false`;
   await sql`ALTER TABLE recordings ADD COLUMN IF NOT EXISTS layout_suggestion TEXT NOT NULL DEFAULT ''`;
+  await sql`ALTER TABLE recordings ADD COLUMN IF NOT EXISTS library_hidden BOOLEAN NOT NULL DEFAULT false`;
   await sql`ALTER TABLE admin_users ADD COLUMN IF NOT EXISTS no_finance BOOLEAN NOT NULL DEFAULT false`;
 
   await sql`

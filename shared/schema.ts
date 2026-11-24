@@ -1490,6 +1490,8 @@ export const recordings = pgTable("recordings", {
   transcriptJson: text("transcript_json").notNull().default(""),
   /** The Library folder it's filed in (library_folders.id); 0 for none. */
   folderId: integer("folder_id").notNull().default(0),
+  /** Taken out of the owner's Library (a studio or event session, which the event keeps): hidden for them, never deleted. */
+  libraryHidden: boolean("library_hidden").notNull().default(false),
 });
 export type RecordingRow = typeof recordings.$inferSelect;
 

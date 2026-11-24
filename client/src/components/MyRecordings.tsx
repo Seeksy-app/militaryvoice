@@ -38,7 +38,7 @@ function size(bytes: string): string {
   return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`;
 }
 
-/** Ours to delete: uploads, imports, Pōstify's copies and staged test episodes. Studio sessions belong to the event. */
+/** Fully theirs (deleted outright): uploads, imports, Pōstify's copies, staged test episodes. A studio or event session only leaves their Library. */
 // Theirs to delete: uploads, imports, Pōstify's copies, staged test episodes, and what they recorded in their Room (no event).
 const deletable = (r: RecordingRow) => /^(UPLOAD_|CLEAN_|ZOOM_|LINK_|STAGED_)/.test(r.egressId) || (r.eventId === 0 && r.studioId === 0);
 
@@ -362,7 +362,7 @@ export function MyRecordings({
                   {starting === main.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />} {starting === main.id ? "Starting…" : main.clipStatus === "none" || main.clipStatus === "failed" ? "Pōstify it" : main.clipStatus === "done" ? "Open in Pōstify" : "Pōstifying…"}
                 </a>
               )}
-              {(r.status === "Ready" || (r.status !== "Recording" && deletable(r))) && (
+              {r.status !== "Recording" && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 rounded-full" aria-label="More" data-testid={`menu-recording-${r.id}`}>
@@ -424,8 +424,8 @@ export function MyRecordings({
                     </DropdownMenuItem>
                     <MoveToFolder item={{ kind: "recording", id: main.id }} current={main.folderId} />
                     </>)}
-                    {/* Uploads, imports and Pōstify's copies (a failed import too); a studio session is the event's too. */}
-                    {deletable(r) && (
+                    {/* Every item (Andrew, 24 Nov). A studio or event session only leaves their Library: the event keeps its copy. */}
+                    {r.status !== "Recording" && (
                       <DropdownMenuItem onSelect={() => setDeleting(r)} className="gap-2 text-destructive focus:text-destructive" data-testid={`button-delete-recording-${r.id}`}>
                         <Trash2 className="h-4 w-4" /> Delete
                       </DropdownMenuItem>
@@ -478,7 +478,7 @@ export function MyRecordings({
         open={!!deleting}
         onOpenChange={(v) => !v && setDeleting(null)}
         title={`Delete "${deleting?.title || "this recording"}"?`}
-        description={deleting?.egressId.startsWith("CLEAN_") ? "This version leaves your Library. The original recording and its clips aren't touched." : "The video, its clean copy and any clips made from it move to Recently deleted. You can put them back for 15 days."}
+        description={deleting?.egressId.startsWith("CLEAN_") ? "This version leaves your Library. The original recording and its clips aren't touched." : deleting && !deletable(deleting) ? "It leaves your Library. The event keeps its own copy." : "The video, its clean copy and any clips made from it move to Recently deleted. You can put them back for 15 days."}
         url={`/api/host/recordings/${deleting?.id}`}
         restorable
       />

@@ -3,7 +3,7 @@
 // are kept as they were (ids and all), and any stored files stay where they are until the 15
 // days are up; then a daily job removes the files and forgets the rows.
 import type { Express, RequestHandler } from "express";
-import { and, asc, eq, lte } from "drizzle-orm";
+import { and, asc, eq, inArray, lte, sql } from "drizzle-orm";
 import { db, schemaIsReady, inTransaction } from "./storage.js";
 import { getSessionEmail } from "./session.js";
 import { deleteRecordingObject } from "./recordingStorage.js";
@@ -22,14 +22,18 @@ export type TrashFiles = { r2?: string[]; supabase?: string[] };
 const now = () => new Date().toISOString();
 
 /** Keep what's about to be deleted. Call it before the delete, with the rows as they are. */
-export async function toTrash(o: { email: string; kind: TrashKind; label: string; rows: Partial<Record<TableName, object[]>>; files?: TrashFiles }): Promise<void> {
+/**
+ * `unhide`: recordings taken out of this person's Library without being deleted (a studio or event session the
+ * event keeps). Putting it back shows them again; once the 15 days are up they stay out, and no file is touched.
+ */
+export async function toTrash(o: { email: string; kind: TrashKind; label: string; rows: Partial<Record<TableName, object[]>>; files?: TrashFiles; unhide?: number[] }): Promise<void> {
   await schemaIsReady();
   const t = Date.now();
   await db.insert(trash).values({
     email: o.email.trim().toLowerCase(),
     kind: o.kind,
     label: o.label.slice(0, 300),
-    rows: JSON.stringify(o.rows),
+    rows: JSON.stringify(o.unhide?.length ? { ...o.rows, unhide: o.unhide } : o.rows),
     files: JSON.stringify(o.files ?? {}),
     deletedAt: new Date(t).toISOString(),
     expiresAt: new Date(t + TRASH_DAYS * 86400_000).toISOString(),
@@ -59,7 +63,7 @@ export function registerTrash(app: Express, requireHostSession: RequestHandler) 
     await schemaIsReady();
     const [item] = await db.select().from(trash).where(and(eq(trash.id, Number(req.params.id)), eq(trash.email, me(req))));
     if (!item) return res.status(404).json({ message: "It's not in Recently deleted any more." });
-    const rows = JSON.parse(item.rows || "{}") as Partial<Record<TableName, Record<string, unknown>[]>>;
+    const { unhide, ...rows } = JSON.parse(item.rows || "{}") as Partial<Record<TableName, Record<string, unknown>[]>> & { unhide?: number[] };
     // Parents before children: a show before its episodes, a recording before its clips.
     const order: TableName[] = ["hostedShows", "hostedEpisodes", "recordings", "clips", "showAssets"];
     try {
@@ -71,6 +75,8 @@ export function registerTrash(app: Express, requireHostSession: RequestHandler) 
           const back = await tx.insert(TABLES[name]).values(list as never).onConflictDoNothing().returning();
           if (back.length !== list.length) throw new Error(`${name}: ${list.length - back.length} clashed`);
         }
+        // Back in their Library: only their own recordings.
+        if (unhide?.length) await tx.update(recordings).set({ libraryHidden: false }).where(and(inArray(recordings.id, unhide.map(Number)), sql`lower(${recordings.email}) = ${me(req)}`));
         await tx.delete(trash).where(eq(trash.id, item.id));
       });
     } catch (err) {
