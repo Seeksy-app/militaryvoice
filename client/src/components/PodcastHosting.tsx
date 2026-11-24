@@ -261,13 +261,20 @@ export function PodcastHosting() {
     } finally { setBulkBusy(false); setBulkTo(null); }
   };
   const bulkLive = h.episodes.filter((e) => picked.includes(e.id) && e.live).length;
+  // Scheduled: published with a time still to come. Their time stays; they go out in the new show (PM, 24 Nov).
+  const bulkSched = h.episodes.filter((e) => picked.includes(e.id) && e.status === "published" && !e.live).length;
   const bulkN = picked.filter((id) => h.episodes.some((e) => e.id === id)).length;
   const bulkDialog = (
     <Dialog open={!!bulkTo} onOpenChange={(o) => { if (!o && !bulkBusy) setBulkTo(null); }}>
       <DialogContent className="max-w-md" data-testid="hosting-bulk-confirm">
         <DialogHeader>
           <DialogTitle className="text-balance">Move {bulkN} {bulkN === 1 ? "episode" : "episodes"} to {bulkTo?.title || "your other show"}?</DialogTitle>
-          <DialogDescription className="text-foreground">{bulkLive} {bulkLive === 1 ? "is live and will leave" : "are live and will leave"} {s.title} in podcast apps.</DialogDescription>
+          <DialogDescription asChild>
+            <div className="space-y-1 text-sm text-foreground">
+              {bulkLive > 0 && <p>{bulkLive} {bulkLive === 1 ? "is live and will leave" : "are live and will leave"} {s.title} in podcast apps.</p>}
+              {bulkSched > 0 && <p>{bulkSched} scheduled will publish in {bulkTo?.title || "the other show"}.</p>}
+            </div>
+          </DialogDescription>
         </DialogHeader>
         <DialogFooter className="gap-2 sm:gap-0">
           <Button variant="outline" onClick={() => setBulkTo(null)} disabled={bulkBusy}>Cancel</Button>
@@ -329,7 +336,7 @@ export function PodcastHosting() {
             <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
               <div>
                 <h2 className="flex items-center gap-2 text-sm font-semibold"><Mic2 className="h-4 w-4 text-[#053877] dark:text-[#8fb5e8]" /> Episodes</h2>
-                <p className="text-xs text-muted-foreground">{compact(h.stats.last30)} downloads in the last 30 days · {compact(h.stats.total)} in all</p>
+                <p className="text-xs text-muted-foreground">{compact(h.stats.last30)} {h.stats.last30 === 1 ? "download" : "downloads"} in the last 30 days · {compact(h.stats.total)} in all</p>
               </div>
               <div className="flex flex-wrap items-center gap-2">
                 {/* Recording somewhere else: their own stream key, and each live show lands in the Library (/stream-in). Only
@@ -362,9 +369,10 @@ export function PodcastHosting() {
                         {others.map((x) => (
                           <button key={x.show.id} type="button" onClick={() => {
                             setBulkOpen(false);
-                            const live = h.episodes.filter((e) => picked.includes(e.id) && e.live).length;
+                            // Live or scheduled ones get the confirm; drafts only move straight in.
+                            const asks = h.episodes.filter((e) => picked.includes(e.id) && e.status === "published").length;
                             const to = { id: x.show.id, title: x.show.title };
-                            if (live) setBulkTo(to); else void bulkMove(to);
+                            if (asks) setBulkTo(to); else void bulkMove(to);
                           }} className="block w-full truncate rounded-lg px-3 py-2 text-left text-sm hover:bg-muted" data-testid={`hosting-bulk-to-${x.show.id}`}>{x.show.title || "Untitled show"}</button>
                         ))}
                       </PopoverContent>
