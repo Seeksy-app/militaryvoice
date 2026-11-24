@@ -14,6 +14,12 @@ import { broadcastEvents, broadcasts, contacts, inboundEmails, mailLog, type Mai
 const SECRET_KINDS = new Set(["sendLoginCodeEmail", "sendPodcastOwnerCodeEmail"]);
 /** One campaign is one line in Campaigns, not a line per person in Sent. */
 const BULK_KINDS = ["sendBroadcastEmail", "campaign", "cadence"];
+/**
+ * Sends that answer a person: a reply from Mail, Chat with Alex, a one-off email. Any of them, however it was sent,
+ * marks everything waiting from that person answered and archives it. Campaigns, codes, reminders, notices and Alex's
+ * automatic acknowledgement aren't answers (his acknowledgement settles only the email it answers).
+ */
+const REPLY_KINDS = new Set(["reply", "chat-send", "admin-send", "one-off"]);
 
 const now = () => new Date().toISOString();
 const noStore = (res: Response) => res.setHeader("Cache-Control", "no-store");
@@ -46,7 +52,24 @@ export function installMailLog() {
       bodyText: SECRET_KINDS.has(m.kind) ? "(The code in this email isn't kept.)" : m.text.slice(0, 20000),
       resendId: m.resendId, ok: m.ok, error: m.error.slice(0, 300), replyTo: m.replyTo, sentAt: now(),
     });
+    // Andrew (24 Nov): "if it needs a reply and then you guys reply to it … it needs to be marked off and archived."
+    if (m.ok && REPLY_KINDS.has(m.kind)) {
+      await clearWaiting(m.to, { replyFrom: /michael/i.test(m.from) ? "michael" : /riccoh/i.test(m.from) ? "riccoh" : "team", replyText: m.text, replyResendId: m.resendId });
+    }
   });
+}
+
+
+/** Everything waiting from this person: answered and archived. Leaves anything already archived alone. */
+export async function clearWaiting(to: string, reply: { replyFrom: string; replyText: string; replyResendId: string }): Promise<number> {
+  const email = (to.match(/<([^>]+)>/)?.[1] ?? to).trim().toLowerCase();
+  if (!email.includes("@")) return 0;
+  const t = now();
+  const rows = await db.update(inboundEmails).set({
+    status: "sent", repliedAt: t, archived: true, readAt: sql`case when ${inboundEmails.readAt} = '' then ${t} else ${inboundEmails.readAt} end`,
+    replyFrom: reply.replyFrom, replyText: reply.replyText.slice(0, 20000), replyResendId: reply.replyResendId,
+  }).where(and(sql`lower(${inboundEmails.fromEmail}) = ${email}`, inArray(inboundEmails.status, ["new", "drafted"]), eq(inboundEmails.archived, false))).returning({ id: inboundEmails.id });
+  return rows.length;
 }
 
 type Events = { delivered: boolean; opened: boolean; clicked: boolean; bounced: boolean; complained: boolean };
@@ -161,7 +184,11 @@ export function registerMail(app: Express, requireAdmin: RequestHandler) {
     if (ins.length) {
       if (action === "read") await db.update(inboundEmails).set({ readAt: now() }).where(and(inArray(inboundEmails.id, ins), eq(inboundEmails.readAt, "")));
       else if (action === "unread") await db.update(inboundEmails).set({ readAt: "" }).where(inArray(inboundEmails.id, ins));
-      else if (action === "archive") await db.update(inboundEmails).set({ archived: true, readAt: now() }).where(inArray(inboundEmails.id, ins));
+      else if (action === "archive") {
+        // Archive means done (Andrew, 24 Nov): one still waiting becomes "No reply needed", so nothing archived still asks for a reply.
+        await db.update(inboundEmails).set({ status: "ignored" }).where(and(inArray(inboundEmails.id, ins), inArray(inboundEmails.status, ["new", "drafted"])));
+        await db.update(inboundEmails).set({ archived: true, readAt: now() }).where(inArray(inboundEmails.id, ins));
+      }
       else if (action === "unarchive") await db.update(inboundEmails).set({ archived: false }).where(inArray(inboundEmails.id, ins));
       else if (action === "noreply") await db.update(inboundEmails).set({ status: "ignored", readAt: now() }).where(and(inArray(inboundEmails.id, ins), inArray(inboundEmails.status, ["new", "drafted"])));
       else if (action === "delete") await db.delete(inboundEmails).where(inArray(inboundEmails.id, ins));
@@ -182,9 +209,20 @@ export function registerMail(app: Express, requireAdmin: RequestHandler) {
       db.select().from(contacts).where(sql`lower(${contacts.email}) = ${email}`).limit(1),
     ]);
     const ev = await eventsFor(outs.map((r) => r.resendId));
+    // What each email they sent is now: waiting, answered (when, and by whom), or no reply needed. An older one
+    // marked done by hand still shows the answer we sent after it, from the mail log.
+    const iso = (t: string | null) => (t ?? "").replace(" ", "T");
+    const byOf = (who: string) => (who === "alex" ? "Alex" : who === "riccoh" ? "Riccoh" : who === "michael" ? "Michael" : "the team");
+    const stateOf = (r: typeof ins[number]): { state: "needs" | "answered" | "none"; answeredAt: string; answeredBy: string } => {
+      if (r.status === "sent") return { state: "answered", answeredAt: iso(r.repliedAt), answeredBy: byOf(r.replyFrom) };
+      const later = outs.find((o) => o.ok && REPLY_KINDS.has(o.kind) && iso(o.sentAt) > iso(r.receivedAt));
+      if (later) return { state: "answered", answeredAt: iso(later.sentAt), answeredBy: byOf(/michael/i.test(later.fromAddr) ? "michael" : /riccoh/i.test(later.fromAddr) ? "riccoh" : "team") };
+      if (r.status === "ignored" || r.archived) return { state: "none", answeredAt: "", answeredBy: "" };
+      return { state: "needs", answeredAt: "", answeredBy: "" };
+    };
     const messages = [
       ...ins.map((r) => ({ key: `in-${r.id}`, dir: "in" as const, at: r.receivedAt, subject: r.subject, body: said(r.bodyText) || r.bodyText, from: r.fromName || r.fromEmail, kind: r.category || "other",
-        inbound: { id: r.id, status: r.status, draftFrom: r.draftFrom, draftSubject: r.draftSubject, draftText: r.draftText, summary: r.summary, replyFrom: r.replyFrom } })),
+        inbound: { id: r.id, status: r.status, archived: r.archived, ...stateOf(r), draftFrom: r.draftFrom, draftSubject: r.draftSubject, draftText: r.draftText, summary: r.summary, replyFrom: r.replyFrom } })),
       ...outs.map((r) => ({ key: `out-${r.id}`, dir: "out" as const, at: r.sentAt, subject: r.subject, body: r.bodyText, from: r.fromAddr, kind: r.kind, ok: r.ok, error: r.error, events: ev.get(r.resendId) ?? null })),
     ].sort((a, b) => a.at.localeCompare(b.at));
     const name = ins.find((r) => r.fromName)?.fromName || [contact?.firstName, contact?.lastName].filter(Boolean).join(" ") || email;

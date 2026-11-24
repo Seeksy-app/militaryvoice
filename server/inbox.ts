@@ -200,7 +200,29 @@ export function looksAutomatic(m: { subject: string; fromEmail: string; bodyText
   const from = m.fromEmail.toLowerCase();
   if (/^(auto(matic)?[\s-]*reply|out of office|automatic reply|delivery status|undeliverable|mail delivery)/i.test(subj)) return true;
   if (/(no-?reply|mailer-daemon|postmaster|bounce|notification)@/.test(from)) return true;
-  if (/@(militaryvoice\.(ai|io)|resend\.dev)$/.test(from)) return true;
+  if (/@(militaryvoices?\.(ai|io)|resend\.dev)$/.test(from)) return true;
+  return false;
+}
+
+/**
+ * Mail that never needs a person's answer (Andrew, 24 Nov): no-reply senders, our own sends coming back in,
+ * sign-in codes, Google / Zoom / Chrome Web Store notices, and newsletters (a List-Unsubscribe header, or
+ * Precedence bulk or list). It lands as "No reply needed"; real people still land in Needs a reply.
+ */
+export function isAutomaticMail(m: { subject: string; fromEmail: string; bodyText: string }, headers: unknown): boolean {
+  if (looksAutomatic(m)) return true;
+  const subj = m.subject.toLowerCase();
+  const from = m.fromEmail.toLowerCase();
+  if (/\b(sign[- ]?in|log[- ]?in|verification|security|one[- ]time|confirmation)\s+code\b|\byour code\b|\bverify your (email|account)\b/.test(subj)) return true;
+  const [local, domain = ""] = from.split("@");
+  if (/(^|\.)(google\.com|zoom\.us|youtube\.com)$/.test(domain) && /(no-?reply|notif|alert|workspace|payments|calendar|cloud|chromewebstore|marketplace|billing|security|info|team|support)/.test(local)) return true;
+  const h = new Map<string, string>();
+  if (Array.isArray(headers)) for (const x of headers) { if (x && typeof x === "object") h.set(String((x as any).name ?? "").toLowerCase(), String((x as any).value ?? "")); }
+  else if (headers && typeof headers === "object") for (const [k, v] of Object.entries(headers as Record<string, unknown>)) h.set(k.toLowerCase(), String(v ?? ""));
+  if (h.get("list-unsubscribe") || h.get("list-id")) return true;
+  if (/^(bulk|list|junk)$/i.test((h.get("precedence") ?? "").trim())) return true;
+  const auto = (h.get("auto-submitted") ?? "").trim().toLowerCase();
+  if (auto && auto !== "no") return true;
   return false;
 }
 

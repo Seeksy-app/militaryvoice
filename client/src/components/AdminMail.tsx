@@ -19,13 +19,13 @@ import { ContactProfile } from "@/components/AdminContact";
 type Events = { delivered: boolean; opened: boolean; clicked: boolean; bounced: boolean; complained: boolean } | null;
 type Item = { key: string; dir: "in" | "out" | "campaign"; email: string; name: string; subject: string; snippet: string; at: string; kind: string; status: string; ok: boolean; events: Events; inboundId?: number; broadcastId?: number; count?: number; opened?: number; clicked?: number; unread?: boolean; archived?: boolean; replyFrom?: string };
 type Msg = { key: string; dir: "in" | "out"; at: string; subject: string; body: string; from: string; kind: string; ok?: boolean; error?: string; events?: Events;
-  inbound?: { id: number; status: string; draftFrom: string; draftSubject: string; draftText: string; summary: string; replyFrom?: string } };
+  inbound?: { id: number; status: string; archived?: boolean; state?: "needs" | "answered" | "none"; answeredAt?: string; answeredBy?: string; draftFrom: string; draftSubject: string; draftText: string; summary: string; replyFrom?: string } };
 type Thread = { email: string; name: string; contact: { status: string; lifecycleStage: string; source: string } | null; messages: Msg[] };
 type Folder = "needs" | "inbox" | "sent" | "campaigns" | "failed" | "all" | "archive";
 
 /** What each kind of email we send is, in words. */
 const KIND: Record<string, string> = {
-  reply: "Reply", ack: "Automatic acknowledgement", "chat-send": "Written in Chat with Alex", "admin-send": "One-off email", "one-off": "One-off email",
+  reply: "Reply", ack: "Automatic acknowledgement", "chat-send": "Written in Chat with Alex", "admin-send": "One-off email", "one-off": "One-off email", "chat-copy": "Written in Chat with Alex (a copy)",
   "directory-invite": "Directory invite", "inbound-forward": "Forwarded to the team inbox", "reminder-notice": "Reminder notice to the host", "crew-invite": "Crew invite",
   compose: "Written here", campaign: "Campaign", cadence: "Automation", sendBroadcastEmail: "Campaign",
   sendConfirmationEmail: "Slot confirmation", sendLoginCodeEmail: "Sign-in code", sendListenerQuestionEmail: "A listener's question, to the host",
@@ -198,11 +198,23 @@ export function AdminMail() {
   );
 }
 
+/** What one email they sent is now: Needs a reply, Answered {date} by {who}, or No reply needed. */
+function InState({ m }: { m: NonNullable<Msg["inbound"]> }) {
+  const state = m.state ?? (m.status === "sent" ? "answered" : !m.archived && (m.status === "new" || m.status === "drafted") ? "needs" : "none");
+  if (state === "needs") return <span className="rounded-full bg-[#F0A71F]/20 px-2 py-0.5 text-[11px] font-semibold text-[#8a5a00] dark:text-[#F0A71F]" data-testid="mail-state">Needs a reply</span>;
+  if (state === "answered") {
+    const when = m.answeredAt ? new Date(m.answeredAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
+    return <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400" data-testid="mail-state">Answered{when ? ` ${when}` : ""} by {m.answeredBy || (m.replyFrom === "alex" ? "Alex" : "the team")}</span>;
+  }
+  return <span className="rounded-full bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground" data-testid="mail-state">No reply needed</span>;
+}
+
 /** One person: every email both ways, oldest first, and a box to write back. */
 export function ThreadView({ email, focus, onChanged, onProfile }: { email: string; focus: string; onChanged: () => void; onProfile?: (email: string) => void }) {
   const { toast } = useToast();
   const t = useQuery<Thread>({ queryKey: ["/api/admin/mail/thread", email], queryFn: async () => (await apiRequest("GET", `/api/admin/mail/thread?email=${encodeURIComponent(email)}`)).json() });
-  const waiting = [...(t.data?.messages ?? [])].reverse().find((m) => m.dir === "in" && m.inbound && (m.inbound.status === "new" || m.inbound.status === "drafted"));
+  // Only one still waiting: never one that's archived or already answered.
+  const waiting = [...(t.data?.messages ?? [])].reverse().find((m) => m.dir === "in" && m.inbound && (m.inbound.state ? m.inbound.state === "needs" : !m.inbound.archived && (m.inbound.status === "new" || m.inbound.status === "drafted")));
   const lastIn = [...(t.data?.messages ?? [])].reverse().find((m) => m.dir === "in");
   const [from, setFrom] = useState("team");
   const [subject, setSubject] = useState("");
@@ -266,7 +278,7 @@ export function ThreadView({ email, focus, onChanged, onProfile }: { email: stri
               <div className="mb-1.5 flex flex-wrap items-center gap-2 text-xs">
                 <span className="font-semibold">{m.dir === "in" ? m.from : kindOf(m.kind)}</span>
                 <span className="text-muted-foreground">{full(m.at)}</span>
-                <span className="ml-auto">{m.dir === "out" ? <Fate ok={m.ok} events={m.events} error={m.error} /> : m.inbound?.status === "sent" ? <span className="rounded-full bg-emerald-500/15 px-2 py-0.5 text-[11px] font-semibold text-emerald-700 dark:text-emerald-400">{m.inbound.replyFrom === "alex" ? "Alex replied" : "Answered"}</span> : m.inbound && (m.inbound.status === "new" || m.inbound.status === "drafted") ? <span className="rounded-full bg-[#F0A71F]/20 px-2 py-0.5 text-[11px] font-semibold text-[#8a5a00] dark:text-[#F0A71F]">Needs a reply</span> : null}</span>
+                <span className="ml-auto">{m.dir === "out" ? <Fate ok={m.ok} events={m.events} error={m.error} /> : m.inbound ? <InState m={m.inbound} /> : null}</span>
               </div>
               <p className="text-sm font-semibold">{m.subject || "(no subject)"}</p>
               {/* Long ones (a campaign) fold to a few lines, so the conversation reads at a glance. */}

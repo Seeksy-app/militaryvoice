@@ -4021,12 +4021,13 @@ function CrmEventPanel({ eventId, event }: { eventId: number | null; event?: Pub
     enabled: eventId != null,
   });
 
-  const { data: inboundRows = [] } = useQuery<InboundEmailRow[]>({
-    queryKey: ["/api/admin/inbound"],
-    queryFn: () => adminGet<InboundEmailRow[]>("/api/admin/inbound"),
+  // The tab's badge is Mail's own Needs a reply count (archived ones aren't waiting).
+  const { data: mailCounts } = useQuery<{ needs: number }>({
+    queryKey: ["/api/admin/mail/counts"],
+    queryFn: () => adminGet<{ needs: number }>("/api/admin/mail/counts"),
     refetchInterval: 60_000,
   });
-  const repliesWaiting = inboundRows.filter((r) => r.status === "new" || r.status === "drafted").length;
+  const repliesWaiting = mailCounts?.needs ?? 0;
 
   const { data: contactList = [], isLoading: loadingContacts } = useQuery<ContactRow[]>({
     queryKey: ["/api/admin/contacts"],

@@ -167,7 +167,7 @@ import { registerHealth, beat, addHealthCheck } from "./health.js";
 import { registerNotices } from "./notices.js";
 import { outOfCredits, setExtrasRoom } from "./creditsAlert.js";
 import { registerGreenRoomChat, logWatchChat } from "./greenRoomChat.js";
-import { draftReply, matchBroadcast, isKnownSender, looksAutomatic, composeAck, firstNameFor, stripQuoted, alexSignatureHtml, threadKey } from "./inbox.js";
+import { draftReply, matchBroadcast, isKnownSender, looksAutomatic, isAutomaticMail, composeAck, firstNameFor, stripQuoted, alexSignatureHtml, threadKey } from "./inbox.js";
 import { adminChat, type ChatTurn } from "./adminChat.js";
 import { waitUntil } from "@vercel/functions";
 import { notify, pushPublicKey, type PushMessage } from "./push.js";
@@ -9386,6 +9386,7 @@ export function registerRoutes(app: Express): void {
       // part at all.
       let bodyHtml = "";
       let messageId = "";
+      let mailHeaders: unknown = null;
       if (emailId && process.env.RESEND_API_KEY) {
         try {
           const r = await fetch(`https://api.resend.com/emails/receiving/${emailId}`, {
@@ -9394,6 +9395,7 @@ export function registerRoutes(app: Express): void {
           if (r.ok) {
             const full = (await r.json()) as any;
             messageId = String(full.message_id ?? full.headers?.["message-id"] ?? full.headers?.["Message-ID"] ?? "");
+            mailHeaders = full.headers ?? null;
             bodyHtml = String(full.html ?? "");
             body = String(full.text ?? "") || bodyHtml
               .replace(/<style[\s\S]*?<\/style>/gi, "")
@@ -9446,6 +9448,7 @@ export function registerRoutes(app: Express): void {
         const fm = fromRaw.match(/^\s*"?([^"<]*?)"?\s*<([^>]+)>\s*$/);
         const fromEmail = (fm ? fm[2] : fromRaw).trim().toLowerCase();
         const fromName = (fm ? fm[1] : "").trim();
+        const automatic = isAutomaticMail({ subject, fromEmail, bodyText: body }, mailHeaders);
         const row = await storage.createInbound({
           resendId: String(emailId),
           messageId,
@@ -9461,7 +9464,9 @@ export function registerRoutes(app: Express): void {
           draftFrom: "team",
           draftSubject: "",
           draftText: "",
-          status: "new",
+          // Automatic mail (no-reply, codes, notices, newsletters) arrives as "No reply needed" (Andrew, 24 Nov).
+          status: automatic ? "ignored" : "new",
+          ...(automatic ? { readAt: new Date().toISOString() } : {}),
           repliedAt: null,
           replyResendId: "",
           replyFrom: "",
@@ -9470,6 +9475,7 @@ export function registerRoutes(app: Express): void {
           ackResendId: "",
           ackText: "",
         });
+        if (automatic) { console.log(`Inbound from ${fromEmail} is automatic: filed as No reply needed.`); return; }
         await draftLater(row.id, { ack: true });
       } catch (err) {
         console.error("Inbound filing failed:", err);
@@ -9584,7 +9590,8 @@ export function registerRoutes(app: Express): void {
         // said a person will follow up, Slack still hears it (tellSlack below).
         const settled = draft && draft.ack && !draft.needsPerson && !heldAnswer;
         alex = followUp ? "followup" : settled ? "answered" : "person";
-        await storage.updateInbound(row.id, { ackAt: now, ackResendId: id, ackText: text, status: "sent", readAt: now, repliedAt: now, replyResendId: id, replyFrom: "alex", replyText: text });
+        // Answered: archived (Andrew, 24 Nov). When he told them a person will follow up, it stays in the Inbox for that person.
+        await storage.updateInbound(row.id, { ackAt: now, ackResendId: id, ackText: text, status: "sent", archived: alex !== "person", readAt: now, repliedAt: now, replyResendId: id, replyFrom: "alex", replyText: text });
         const featured = await storage.getFeaturedEvent();
         await storage.recordOneOffSend({ eventId: featured?.id ?? null, subject, bodyText: text, sender: "team", banner: "podcasters", email: row.fromEmail, resendId: id });
         console.log(`Auto-acknowledged ${row.fromEmail}: ${subject}`);
@@ -9754,7 +9761,7 @@ export function registerRoutes(app: Express): void {
     const id = await sendOneOffEmail({ kind: "reply", to: row.fromEmail, subject, html, text, headers, bcc, recipientName: row.fromName });
     if (!id) return res.status(502).json({ message: "The mail provider didn't accept it." });
     const now = new Date().toISOString();
-    await storage.updateInbound(row.id, { status: "sent", repliedAt: now, replyResendId: id, replyFrom: from, replyText: text });
+    await storage.updateInbound(row.id, { status: "sent", archived: true, repliedAt: now, replyResendId: id, replyFrom: from, replyText: text });
     try {
       const featured = await storage.getFeaturedEvent();
       await storage.recordOneOffSend({ eventId: featured?.id ?? null, subject, bodyText: text, sender: from === "riccoh" ? "member:1" : "team", banner: "podcasters", email: row.fromEmail, resendId: id });
@@ -12703,7 +12710,7 @@ The ${eventName} team`;
       .map((a: { filename?: unknown; url?: unknown }) => ({ filename: String(a?.filename ?? "").replace(/[^\w .-]/g, "").slice(0, 120), path: String(a?.url ?? "") }))
       .filter((a: { filename: string; path: string }) => a.filename && /^https:\/\/(www\.militaryvoices\.ai|npprvgnojjgfrvsbedkc\.supabase\.co)\//.test(a.path))
       .slice(0, 3);
-    const id = await sendOneOffEmail({ kind: "chat-send", to, subject, html, text, headers, ...named, bcc: req.body?.copy === false ? undefined : bccFor(from, to), ...(attachments.length ? { attachments } : {}) });
+    const id = await sendOneOffEmail({ kind: req.body?.standalone ? "chat-copy" : "chat-send", to, subject, html, text, headers, ...named, bcc: req.body?.copy === false ? undefined : bccFor(from, to), ...(attachments.length ? { attachments } : {}) });
     if (!id) return res.status(502).json({ message: "The mail provider didn't accept it." });
     const featured = await storage.getFeaturedEvent();
     const team = await storage.listEventTeam(featured.id);
@@ -12711,7 +12718,7 @@ The ${eventName} team`;
     try { await storage.recordOneOffSend({ eventId: featured.id, subject, bodyText: text, sender, banner: "podcasters", email: to, resendId: id }); } catch (err) { console.error("Chat send not logged:", err); }
     // If they were waiting on a person, they are not any more.
     if (latest && (latest.status === "new" || latest.status === "drafted")) {
-      await storage.updateInbound(latest.id, { status: "sent", repliedAt: new Date().toISOString(), replyResendId: id, replyFrom: from, replyText: text });
+      await storage.updateInbound(latest.id, { status: "sent", archived: true, repliedAt: new Date().toISOString(), replyResendId: id, replyFrom: from, replyText: text });
     }
     res.json({ ok: true, id });
   });
