@@ -69,7 +69,7 @@ export function ZoomConnect({ row = false }: { row?: boolean } = {}) {
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold text-foreground">Zoom</p>
           <p className="text-sm text-muted-foreground">
-            {z.connected ? <>Connected as <span className="font-medium text-foreground">{z.zoomEmail || "your Zoom"}</span></> : "Your cloud recordings, into your Library, ready for Pōstify."}
+            {z.connected ? <>Connected as <span className="font-medium text-foreground">{z.zoomEmail || "your Zoom"}</span></> : "Your cloud recordings come in by themselves."}
             {" · "}
             <Link href="/help/zoom" className="font-medium text-primary hover:underline" data-testid="zoom-help-link">How it works</Link>
           </p>

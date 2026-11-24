@@ -1,20 +1,21 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, ExternalLink, Loader2, Trash2 } from "lucide-react";
+import { Check, Copy, ExternalLink, Globe, Loader2, Trash2 } from "lucide-react";
+import { IconTile } from "@/components/ui/icon-tile";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { BrandMark, BrandGroup } from "@/components/BrandMark";
 import { ConnectYoutube } from "@/components/ConnectYoutube";
 import { InfoTip } from "@/components/InfoTip";
-import { ShowCorner } from "@/components/StageView";
 
 /**
- * Integrations → Live, all of it in one place (Andrew, 22 Nov 2026: the one-place Live mockup, "Yes, build it").
- * 1. Where it goes: their MilitaryVoices live page (a switch), YouTube (their stream key), Facebook and any other key.
- * 2. Stream in from their own software: StreamYard, Restream or OBS send to us; it records to the Library and, unless
- *    they untick it, goes live on their page and on to the places above.
- * 3. How it looks: their show logo, small in the top-right corner while they're live (23 Nov).
+ * Integrations → Live streaming (Andrew, 22 Nov 2026: the one-place Live mockup; regrouped 24 Nov into going out and
+ * coming in, mockup approved "Yes, build it").
+ * - Where it goes: their MilitaryVoices live page (a switch), YouTube (their stream key), Facebook, LinkedIn and
+ *   Instagram (each its own row) and any other site's key. Under it, one line on the logo in the corner (23 Nov).
+ * - StreamInBlock (exported, shown under Integrations → Recordings): StreamYard, Restream or OBS send to us; it records
+ *   to the Library and, unless they untick it, goes live on their page and on to the places above.
  * Posting episodes and clips to YouTube is Upload-Post, under Social media; it can't go live, hence a key here.
  */
 
@@ -47,7 +48,7 @@ function LiveRow({ icon, name, line, right, children, testId }: { icon: ReactNod
         <span className="flex w-12 shrink-0 justify-center">{icon}</span>
         <div className="min-w-0 flex-1 basis-[200px]">
           <p className="text-sm font-semibold text-foreground">{name}</p>
-          <p className="text-[13px] leading-snug text-muted-foreground">{line}</p>
+          <p className="text-sm leading-snug text-muted-foreground">{line}</p>
         </div>
         {right && <div className="flex shrink-0 items-center gap-1.5 max-sm:pl-[62px]">{right}</div>}
       </div>
@@ -104,7 +105,7 @@ function KeysRows() {
   const input = "h-10 w-full min-w-0 rounded-lg border border-[#d0d5dd] bg-white px-3 text-sm outline-none focus:border-[#053877] focus:ring-2 focus:ring-[#053877]/15 dark:bg-transparent";
   const formBox = (
     <form className="mt-3 space-y-2" onSubmit={(e) => { e.preventDefault(); if (form.url.trim()) save(); }} data-testid="live-key-form">
-      {adding === "other" && <input className={input} placeholder="Name, e.g. LinkedIn" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} aria-label="Name" />}
+      {adding === "other" && <input className={input} placeholder="Name, e.g. Twitch" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} aria-label="Name" />}
       <input className={input} placeholder="Server address (rtmp:// or rtmps://)" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} aria-label="Server address" spellCheck={false} />
       <input className={input} placeholder="Stream key" type="password" autoComplete="off" value={form.key} onChange={(e) => setForm({ ...form, key: e.target.value })} aria-label="Stream key" spellCheck={false} data-testid="live-key-input" />
       <div className="flex items-center gap-2">
@@ -122,8 +123,14 @@ function KeysRows() {
         right={adding !== "facebook" ? <button type="button" onClick={() => open("facebook")} className={ghost} data-testid="live-add-facebook">Add a key</button> : undefined}>
         {adding === "facebook" && formBox}
       </LiveRow>
-      <LiveRow testId="row-live-other" icon={<BrandGroup brands={["linkedin", "instagram"]} />} name="LinkedIn, Instagram or another site"
-        line="LinkedIn and Instagram make a new key for each live: paste it in Go live on the day. A site with a lasting key can be saved here."
+      {/* Each on its own row (Andrew, 24 Nov: "LinkedIn and Instagram: why are they together?"). Neither keeps a key, so
+          there's nothing to save here: the line says where it goes on the day. */}
+      <LiveRow testId="row-live-linkedin" icon={<BrandMark brand="linkedin" tile />} name="LinkedIn Live"
+        line="LinkedIn makes a new key for each live. Paste it in Go live on the day." />
+      <LiveRow testId="row-live-instagram" icon={<BrandMark brand="instagram" tile />} name="Instagram Live"
+        line="Instagram makes a new key for each live. Paste it in Go live on the day." />
+      <LiveRow testId="row-live-other" icon={<IconTile icon={Globe} />} name="Another site"
+        line="Any site that gives you a lasting stream key."
         right={adding !== "other" ? <button type="button" onClick={() => open("other")} className={ghost} data-testid="live-add-other">Add a key</button> : undefined}>
         {adding === "other" && formBox}
       </LiveRow>
@@ -169,8 +176,9 @@ function StreamInPill({ state }: { state: StreamInState }) {
 /** "Sun, Nov 22, 5:31 PM EST", in their own time zone. */
 const whenLocal = (iso: string) => new Date(iso).toLocaleString(undefined, { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" });
 
-/** 2. Stream in: their StreamYard, Restream or OBS sends to us. */
-function StreamInBlock() {
+/** Stream in: their StreamYard, Restream or OBS sends to us. It's a recording coming in, so it sits in Integrations →
+    Recordings beside Zoom and Zapier (Andrew, 24 Nov: "that's coming in. The other ones are going out"). */
+export function StreamInBlock() {
   const qc = useQueryClient();
   const { toast } = useToast();
   // Every 3 seconds while a test waits or a stream is coming in, so the pill flips within seconds; else every 30.
@@ -258,9 +266,8 @@ function StreamInBlock() {
 }
 
 /**
- * 3. Their show logo (Andrew, 23 Nov 2026: "let's get that logo up in the right-hand corner … It can be small"). It goes
+ * Their show logo (Andrew, 23 Nov 2026: "let's get that logo up in the right-hand corner … It can be small"). It goes
  * top-right on Radio, events and their own Studio while they're on, and on Social's thumbnails; server/showLogo.ts.
- * The preview is a 16:9 frame with the logo drawn by the same ShowCorner the broadcast uses, so its size is the real one.
  */
 type ShowLogo = { logo: string; plate: "light" | "dark" | "none"; cover: string };
 const SHOW_LOGO = ["/api/host/show-logo"];
@@ -291,50 +298,37 @@ function ShowLogoRow() {
   };
   if (!data) return null;
   const has = !!data.logo;
-  const tile = has
-    ? <span className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-black/10 p-1" style={{ background: data.plate === "dark" ? "#0b1530" : "#fff" }}><img src={data.logo} alt="" className="max-h-full max-w-full object-contain" data-testid="show-logo-tile" /></span>
-    : <span className="h-10 w-10 shrink-0 rounded-xl border-2 border-dashed border-[#d0d5dd] dark:border-white/20" />;
-  const hint = "A PNG with a clear background, square or wide. It goes small in the top corner when you're live.";
+  const link = "font-semibold text-[#053877] hover:underline disabled:opacity-50 dark:text-white";
+  // One line under the Live list (Andrew, 24 Nov: "Should we default it to the show logo?"): it already falls back to
+  // their podcast cover, so the line says what shows now and offers a different logo, rather than a whole section.
   return (
-    <LiveRow testId="row-show-logo" icon={tile} name="Your show logo"
-      line={has ? hint : <>{hint} <span className="font-medium text-foreground/80">{data.cover ? "No logo yet: your cover art shows." : "No logo yet: the MilitaryVoices mark shows."}</span></>}
-      right={<>
-        <input ref={file} type="file" accept={LOGO_TYPES.join(",")} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; pick(f); }} data-testid="show-logo-input" />
-        <button type="button" onClick={() => file.current?.click()} disabled={send.isPending} className={has ? `${ghost} flex items-center gap-1.5` : "flex h-8 items-center gap-1.5 rounded-full px-4 text-xs font-bold text-white disabled:opacity-60"} style={has ? undefined : { background: NAVY }} data-testid="show-logo-upload">
-          {send.isPending && send.variables && <Loader2 className="h-3.5 w-3.5 animate-spin" />} {has ? "Replace" : "Upload"}
-        </button>
-        {has && <button type="button" onClick={() => send.mutate(null)} disabled={send.isPending} className={ghost} data-testid="show-logo-remove">Remove</button>}
-      </>}>
+    <div className="mt-2.5 flex flex-wrap items-center gap-x-2 gap-y-1.5 text-[13px] text-muted-foreground" data-testid="row-show-logo">
+      <input ref={file} type="file" accept={LOGO_TYPES.join(",")} className="hidden" onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ""; pick(f); }} data-testid="show-logo-input" />
       {has && (
-        // How it sits on a live frame: the broadcast's own corner, at its real share of the picture.
-        <div className="relative mt-3 aspect-video w-full max-w-[240px] overflow-hidden rounded-lg bg-gradient-to-br from-[#1b2a4a] via-[#0b1530] to-[#3a4a6b] [container-type:size]" data-testid="show-logo-preview">
-          <div className="absolute inset-[4%] grid grid-cols-2 gap-[3%]"><div className="rounded bg-white/10" /><div className="rounded bg-white/15" /></div>
-          <ShowCorner url={data.logo} plate={data.plate} />
-        </div>
+        // The logo itself, on the plate it wears live.
+        <span className="flex h-8 w-8 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-black/10 p-0.5" style={{ background: data.plate === "dark" ? "#0b1530" : "#fff" }} data-testid="show-logo-preview">
+          <img src={data.logo} alt="" className="max-h-full max-w-full object-contain" data-testid="show-logo-tile" />
+        </span>
       )}
-    </LiveRow>
+      <span>{has ? "Your logo shows in the corner when you're live." : data.cover ? "Your podcast cover shows in the corner when you're live." : "The MilitaryVoices mark shows in the corner when you're live."}</span>
+      <button type="button" onClick={() => file.current?.click()} disabled={send.isPending} className={`${link} inline-flex items-center gap-1`} data-testid="show-logo-upload">
+        {send.isPending && send.variables && <Loader2 className="h-3.5 w-3.5 animate-spin" />} {has ? "Replace" : "Use a different logo"}
+      </button>
+      {has && <button type="button" onClick={() => send.mutate(null)} disabled={send.isPending} className={link} data-testid="show-logo-remove">Remove</button>}
+    </div>
   );
 }
 
-/** Integrations → Live. */
+/** Integrations → Live streaming: where a live show goes, and the logo it wears. Stream in is under Recordings. */
 export function LiveSettings() {
   return (
     <div data-testid="live-settings">
-      <div className="mb-2.5"><p className="text-[13px] font-bold uppercase tracking-wide text-muted-foreground">1 · Where it goes</p><p className="text-[13px] text-muted-foreground">Your studio's Go live sends to these (pick them per show), and your Radio slot goes to your YouTube too.</p></div>
       <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
         <LivePageRow />
         <ConnectYoutube row />
         <KeysRows />
       </div>
-      <div className="mb-2.5 mt-6"><p className="text-[13px] font-bold uppercase tracking-wide text-muted-foreground">2 · Stream in from your own software</p><p className="text-[13px] text-muted-foreground">Only if you make your show somewhere else.</p></div>
-      <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
-        <StreamInBlock />
-      </div>
-      <div className="mb-2.5 mt-6"><p className="text-[13px] font-bold uppercase tracking-wide text-muted-foreground">3 · How it looks</p><p className="text-[13px] text-muted-foreground">Your logo sits in the corner of every live show.</p></div>
-      <div className="divide-y divide-border overflow-hidden rounded-2xl border border-border bg-card">
-        <ShowLogoRow />
-      </div>
-      <p className="mt-3 text-[13px] text-muted-foreground">Posting episodes and clips to YouTube stays under <b>Social media</b> (Upload-Post). That one can't go live, so live has its own key here.</p>
+      <ShowLogoRow />
     </div>
   );
 }

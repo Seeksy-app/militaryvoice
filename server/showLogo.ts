@@ -3,7 +3,7 @@
 //   - the live corner on Radio (/dx/program), event studios (/studio/composite) and their own Studio room;
 //   - Social's custom video thumbnails.
 // The corner's order: their show logo, else their podcast's cover art, else our gold mark (drawn by the page).
-// Set in Integrations → Live → 3 · How it looks (LiveSettings.tsx). Stored as a setting (show-logo:<email>): JSON { url, plate }, so no table change.
+// Set in Integrations → Live streaming, the logo line under the list (LiveSettings.tsx). Stored as a setting (show-logo:<email>): JSON { url, plate }, so no table change.
 import type { Express, RequestHandler } from "express";
 import crypto from "node:crypto";
 import multer from "multer";

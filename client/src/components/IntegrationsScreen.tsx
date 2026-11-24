@@ -1,12 +1,12 @@
 import { useState, type ReactNode } from "react";
 import { Button } from "@/components/ui/button";
 import { ZoomConnect, ImportLink } from "@/components/ZoomConnect";
-import { LiveSettings } from "@/components/LiveSettings";
+import { LiveSettings, StreamInBlock } from "@/components/LiveSettings";
 import { PodcastStatsRows, useHostedHere } from "@/components/PodcastStats";
 import { platformLabel, formatFollowers, ALL_PLATFORMS } from "@/components/SocialIcons";
 import { BrandMark, BrandGroup } from "@/components/BrandMark";
 import type { ProfileRow, SocialAccount } from "@shared/schema";
-import { Check, ChevronDown, Headphones, Link2, Radio, RefreshCw, Share2, Upload, Video, Webhook } from "lucide-react";
+import { Check, ChevronDown, Headphones, Link2, Radio, RefreshCw, Share2, Video, Webhook } from "lucide-react";
 import { IconTile } from "@/components/ui/icon-tile";
 
 /**
@@ -21,7 +21,6 @@ export function IntegrationsScreen({
   connecting,
   onRefreshSocial,
   refreshing,
-  onOpenLibrary,
   onOpenPodcastStats,
   youtubeLocked,
 }: {
@@ -46,12 +45,14 @@ export function IntegrationsScreen({
       </h2>
       <p className="mb-6 max-w-2xl text-sm text-muted-foreground">Everything MilitaryVoices.ai connects to, in one list. Connect once; disconnect any time.</p>
 
+      {/* Two halves by direction (Andrew, 24 Nov: "that's coming in. The other ones are going out"). */}
+      <Overline>Going out</Overline>
       {social?.configured && (
         <Group
           id="section-social-accounts"
           icon={<Share2 className="h-4 w-4" />}
           title="Social media"
-          line="Where your clips post, and the follow buttons on your card in the lineup."
+          line="Where your clips and episodes post, and the follow buttons on your card in the lineup."
           action={
             <div className="flex items-center gap-1">
               {accounts.length > 0 && (
@@ -102,29 +103,32 @@ export function IntegrationsScreen({
         </Group>
       )}
 
-      {/* Right under social media: going live on YouTube is the same kind of thing, their own channel. */}
-      {/* Live, all in one place (Andrew, 22 Nov: the one-place Live mockup, "Yes, build it"): where it goes, and stream in. */}
+      {/* Live streaming, under social media: both go out (Andrew, 24 Nov, regroup mockup "Yes, build it"). */}
       <div id="section-going-out-live" className="mb-8 scroll-mt-24" data-testid="section-going-out-live">
-        <div className="mb-3">
-          <h3 className="flex items-center gap-2 text-base font-bold text-foreground"><Radio className="h-4 w-4" /> Live</h3>
-          <p className="mt-0.5 max-w-2xl text-sm text-muted-foreground">Where your live shows go, and how to send one in from StreamYard or OBS. All in one place.</p>
+        <div className="mb-2.5">
+          <h3 className="flex items-center gap-2 text-base font-bold text-foreground"><Radio className="h-4 w-4" /> Live streaming</h3>
+          <p className="mt-0.5 max-w-2xl text-sm text-muted-foreground">Where your live shows go. Pick them per show when you go live; your Radio slot goes to your YouTube too.</p>
         </div>
         <LiveSettings />
       </div>
 
+      <Overline>Coming in</Overline>
+      {/* Every way a show made somewhere else lands in the Library, together: Zoom, StreamYard/Restream/OBS, Zapier.
+          Upload a video left this page: it's the Upload button in the Library (Andrew, 24 Nov: "not an integration"). */}
       <Group
         id="section-content"
         icon={<Video className="h-4 w-4" />}
-        title="Content"
-        line="Where your episodes come from. Everything lands in your Library, ready for Pōstify."
+        title="Recordings"
+        line="Shows you make somewhere else land in your Library, ready for Pōstify."
       >
         <ZoomConnect row />
+        <StreamInBlock />
         <div id="import-link" className="scroll-mt-24">
           <Row
             testId="row-import-link"
             icon={<IconTile icon={Webhook} />}
-            name="Import link"
-            line="For Zapier or any app that can send a video's link. Each one comes into your Library."
+            name="Zapier"
+            line="Or any app that can send a video's link. Each one comes into your Library."
             right={
               <Button variant="outline" size="sm" className="h-8 gap-1 rounded-full px-3.5 text-xs" onClick={() => setLinkOpen((v) => !v)} aria-expanded={linkOpen} data-testid="button-import-link-toggle">
                 {linkOpen ? "Hide" : "Set up"} <ChevronDown className={`h-3.5 w-3.5 transition-transform ${linkOpen ? "rotate-180" : ""}`} />
@@ -134,13 +138,6 @@ export function IntegrationsScreen({
             {linkOpen && <div className="mt-4"><ImportLink bare /></div>}
           </Row>
         </div>
-        <Row
-          testId="row-upload"
-          icon={<IconTile icon={Upload} />}
-          name="Upload a video"
-          line="MP4, MOV or WebM, up to 2GB, straight into your Library."
-          right={<Button variant="outline" size="sm" className="h-8 rounded-full px-3.5 text-xs" onClick={onOpenLibrary}>Open Library</Button>}
-        />
       </Group>
 
       {/* Only for shows hosted somewhere else (20 Nov 2026). Once a show is hosted with us its numbers are
@@ -167,6 +164,11 @@ export function IntegrationsScreen({
 function followersText(n?: number): string {
   const f = formatFollowers(n);
   return f ? `${f} follower${n === 1 ? "" : "s"}` : "";
+}
+
+/** "Going out" / "Coming in": the page's two halves. */
+function Overline({ children }: { children: ReactNode }) {
+  return <p className="mb-2 mt-2 text-[12px] font-bold uppercase tracking-[0.08em] text-muted-foreground">{children}</p>;
 }
 
 function Group({ id, icon, title, line, after, action, children }: { id?: string; icon: ReactNode; title: string; line: string; /** A link under the intro line. */ after?: ReactNode; action?: ReactNode; children: ReactNode }) {
