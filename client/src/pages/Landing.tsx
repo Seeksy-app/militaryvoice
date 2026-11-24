@@ -224,6 +224,7 @@ export default function Landing({ slug }: Props) {
 
   const start = event ? new Date(event.startAtUtc) : null;
   const end = event && start ? new Date(start.getTime() + event.durationHours * 3600000) : null;
+  const ended = !!end && Date.now() >= end.getTime();
   const slotCount = event ? totalSlots(event.durationHours, event.slotMinutes) : 0;
   const booked = useMemo(() => (signups ?? []).filter((s) => s.status !== "cancelled"), [signups]);
   const openCount = Math.max(slotCount - booked.length, 0);
@@ -412,11 +413,20 @@ export default function Landing({ slug }: Props) {
                         <Mic2 className="h-4 w-4" /> Meet the lineup
                       </Button>
                     </Link>
-                    <Link href="/watch">
-                      <Button size="lg" variant="outline" className="h-14 gap-2 rounded-full border-white/30 bg-white/5 px-8 text-lg text-white backdrop-blur hover:bg-white/15 hover:text-white" data-testid="button-landing-watch">
-                        Watch live, free <ArrowRight className="h-4 w-4" />
-                      </Button>
-                    </Link>
+                    {/* Grayed out once it's over (Andrew, 24 Nov: "'watch live free,' gray that out"); the lineup stays. */}
+                    {ended ? (
+                      <span title="This event has ended" className="cursor-not-allowed">
+                        <Button size="lg" variant="outline" disabled className="h-14 gap-2 rounded-full border-white/20 bg-white/5 px-8 text-lg text-white/45 disabled:opacity-100" data-testid="button-landing-watch">
+                          Watch live, free <ArrowRight className="h-4 w-4" />
+                        </Button>
+                      </span>
+                    ) : (
+                      <Link href="/watch">
+                        <Button size="lg" variant="outline" className="h-14 gap-2 rounded-full border-white/30 bg-white/5 px-8 text-lg text-white backdrop-blur hover:bg-white/15 hover:text-white" data-testid="button-landing-watch">
+                          Watch live, free <ArrowRight className="h-4 w-4" />
+                        </Button>
+                      </Link>
+                    )}
                   </>
                 ) : (
                   <>

@@ -111,6 +111,12 @@ export default function RadioPage() {
     ...(data?.open ?? []).map((o) => ({ kind: "open" as const, at: Date.parse(o.startAtUtc), o })),
   ].sort((a, b) => a.at - b.at) as Array<{ kind: "show"; at: number; b: Booking; o?: never } | { kind: "open"; at: number; o: OpenSlot; b?: never }>, [data]); // eslint-disable-line react-hooks/exhaustive-deps
   const upNext = list.find((b) => Date.parse(b.startAtUtc) > now);
+  // The day the API gives is over and no new one is set: it "aired".
+  const aired = !!day && now >= Date.parse(day.endAtUtc);
+  // Everyone who aired that day: booked shows and the encores in open time.
+  const onDay = [...list.map((b) => ({ show: b.show, photo: b.photo })), ...(data?.open ?? []).flatMap((o) => (o.encore ? [o.encore] : []))];
+  const faces = Array.from(new Set(onDay.map((a) => a.photo).filter(Boolean))).slice(0, 6);
+  const shows = new Set(onDay.map((a) => a.show)).size;
 
   return (
     <div className="min-h-screen bg-background">
@@ -124,7 +130,7 @@ export default function RadioPage() {
             <p className="mt-5 max-w-lg text-xl font-bold leading-snug [text-wrap:pretty]">The live station for military and veteran voices, weekdays 7 am – 10 pm ET.</p>
             {live && current ? (
               <p className="mt-5 text-base text-white/85" data-testid="radio-now"><span className="font-bold text-[#F0A71F]">On air now:</span> {current.show}, with {current.host}</p>
-            ) : day ? (
+            ) : day && !aired ? (
               <p className="mt-5 text-base text-white/85" data-testid="radio-next"><span className="font-bold text-[#F0A71F]">{live ? "On air now" : "Next on air"}:</span> {live ? "Live From Anywhere" : `${dayLabel(day.startAtUtc)} at ${hm(day.startAtUtc)} ET`}</p>
             ) : null}
             {live && upNext && (
@@ -139,7 +145,19 @@ export default function RadioPage() {
               </p>
             )}
           </div>
-          {live ? <Player /> : (
+          {live ? <Player /> : aired && day ? (
+            // The last day has aired and nothing's scheduled yet (Andrew, 24 Nov: "let's put 'aired on' and maybe put an image
+            // there"): the faces of the shows that were on, from their own sign-up photos. Never generated people.
+            <div className="flex aspect-video w-full flex-col items-center justify-center rounded-2xl bg-white/[0.06] p-6 text-center ring-1 ring-white/10 sm:p-8" data-testid="radio-aired">
+              {faces.length > 0 ? (
+                <div className="flex -space-x-3" aria-hidden>
+                  {faces.map((f) => <img key={f} src={f} alt="" className="h-14 w-14 rounded-full object-cover ring-4 ring-[#071a5e] sm:h-[72px] sm:w-[72px]" />)}
+                </div>
+              ) : <RadioIcon className="h-10 w-10 text-[#F0A71F]" />}
+              <p className="mt-5 text-2xl font-black sm:text-3xl">Aired on {dayLabel(day.startAtUtc)}</p>
+              {shows > 0 && <p className="mt-1 text-white/75">{shows} shows on the air</p>}
+            </div>
+          ) : (
             <div className="flex aspect-video w-full flex-col items-center justify-center rounded-2xl bg-white/[0.06] p-8 text-center ring-1 ring-white/10" data-testid="radio-off-air">
               <RadioIcon className="h-10 w-10 text-[#F0A71F]" />
               <p className="mt-4 text-2xl font-black">{day ? `On air ${dayLabel(day.startAtUtc)}` : "Coming soon"}</p>
@@ -161,7 +179,12 @@ export default function RadioPage() {
             <h2 className="text-lg font-bold">{day ? (live ? "Today's lineup" : `Lineup · ${dayLabel(day.startAtUtc)}`) : "Lineup"}</h2>
             <p className="text-sm text-muted-foreground">All times Eastern. Live shows and recorded episodes, with the station's intro and outro around them. Open time plays encores.</p>
           </div>
-          <a href="/radio/book" className="inline-flex h-10 items-center rounded-full bg-[#F0A71F] px-5 text-sm font-bold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="radio-book">Podcasters: book your slot</a>
+          {/* Grayed out between Radio weeks (Andrew, 24 Nov: "'podcaster, book your slot.' You can just gray that out"). */}
+          {aired || !day ? (
+            <span role="link" aria-disabled="true" title="Booking opens when the next Radio week is set" className="inline-flex h-10 cursor-not-allowed items-center rounded-full bg-muted px-5 text-sm font-bold text-muted-foreground" data-testid="radio-book">Podcasters: book your slot</span>
+          ) : (
+            <a href="/radio/book" className="inline-flex h-10 items-center rounded-full bg-[#F0A71F] px-5 text-sm font-bold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="radio-book">Podcasters: book your slot</a>
+          )}
         </div>
         {rows.length === 0 ? (
           <p className="mt-4 rounded-2xl border border-dashed border-border p-8 text-center text-muted-foreground">The lineup is filling up. Check back soon, or book a slot for your own show.</p>
