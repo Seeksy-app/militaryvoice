@@ -4,7 +4,8 @@ import { PLANS, FOUNDING, foundingOpen } from "@shared/tokens";
 
 // The home page hero while Founding Members 2026 runs (Black Friday). It reuses the /black-friday page's own rendered
 // art (public/bf/*.webp, made by the design session) so the home page and the offer page look like one thing.
-// On from Monday 23 Nov 2026, 00:00 ET, until the offer ends (FOUNDING.endsAt); then the normal hero comes back by itself.
+// On from Monday 23 Nov 2026, 00:00 ET, until the offer ends (FOUNDING.endsAt: 11:59 pm ET Sun 29 Nov); then the normal
+// hero comes back by itself.
 // ?hero=bf shows it early (for review); ?hero=default shows the normal hero.
 
 const STARTS_AT = Date.parse("2026-11-23T05:00:00.000Z");
@@ -22,7 +23,7 @@ const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as c
 const GOLD_TEXT = "bg-gradient-to-b from-[#fff4c2] via-[#f7c548] to-[#c98a10] bg-clip-text text-transparent";
 const GOLD_FILL = "bg-gradient-to-b from-[#ffe9a0] via-[#f6b93b] to-[#d28a0c]";
 const price = `$${(PLANS.creator.cents / 100).toFixed(2)}`;
-const endsShort = FOUNDING.endsLabel.replace("December", "Dec");
+const endsShort = FOUNDING.endsShort;
 
 const CSS = `
 .fh-sweep{-webkit-mask:var(--m) center/contain no-repeat;mask:var(--m) center/contain no-repeat;background:linear-gradient(105deg,transparent 38%,rgba(255,255,255,.7) 50%,transparent 62%) -150% 0/250% 100% no-repeat;animation:fh-sweep 5.5s ease-in-out 1.2s infinite}
@@ -61,7 +62,7 @@ export function FoundingHero() {
           </div>
 
           <p className="mx-auto mt-6 max-w-xl text-balance text-center text-lg leading-relaxed text-white/85 lg:mx-0 lg:text-left" style={HEADLINE_FONT}>
-            Military and veteran podcasters who join in 2026 become our Founding Members. Get Scale free for your first 30 days.
+            Military and veteran podcasters who join by {FOUNDING.endsLabel} become our Founding Members. Get Scale free for your first 30 days.
           </p>
 
           {/* The offer bar: the facts, exactly as on /black-friday. */}

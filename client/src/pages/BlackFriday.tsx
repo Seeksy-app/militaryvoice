@@ -9,8 +9,9 @@ import { PLANS, FOUNDING, CLIPS_PER_EPISODE, foundingOpen } from "@shared/tokens
 import { Link } from "wouter";
 import { ArrowRight, CalendarDays, Captions, Gift, Loader2, Lock, Mic, Scissors, Sparkles, Link2, Users, Video, Coins } from "lucide-react";
 
-// Black Friday 2026: Founding Members. Podcasters who join MilitaryVoices.ai in 2026 are its founding group; until the
-// end of December 31, 2026 a first Scale plan comes with 30 days free (Stripe's own trial, card at checkout).
+// Black Friday 2026: Founding Members, our Black Friday offer. Podcasters who join MilitaryVoices.ai by 11:59 pm ET on
+// Sunday 29 Nov 2026 are its founding group, and a first Scale plan comes with 30 days free (Stripe's own trial, card at
+// checkout). Andrew, 24 Nov: "ends midnight the Sunday following BF" (it was Dec 31).
 //
 // One way in: sign in right here (email + 6-digit code, the same as the dashboard), then straight on to Stripe's
 // checkout for the trial. Links in: /go/bf?src=<channel> (counted, server/promo.ts); the page reports its own steps
@@ -22,7 +23,7 @@ import { ArrowRight, CalendarDays, Captions, Gift, Loader2, Lock, Mic, Scissors,
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 const scale = PLANS.creator;
 const price = `$${(scale.cents / 100).toFixed(2)}`;
-const endsShort = FOUNDING.endsLabel.replace("December", "Dec");
+const endsShort = FOUNDING.endsShort;
 
 /** Until one real test checkout has passed: a ribbon, so nobody shares it early. */
 const TRIAL_DRAFT = false;
@@ -76,8 +77,8 @@ export default function BlackFriday() {
   const src = useRef(srcOf()).current;
   const box = useRef<HTMLDivElement>(null);
 
-  // Open to search while the offer runs (Andrew, 20 Nov 2026: "let Google index the Black Friday page until Dec 31").
-  // REMINDER: the offer ends Dec 31, 2026. From then on this page keeps itself out of search (the noindex below),
+  // Open to search while the offer runs (Andrew, 20 Nov 2026: "let Google index the Black Friday page").
+  // REMINDER: the offer ends 11:59 pm ET Sun 29 Nov 2026. From then on this page keeps itself out of search (the noindex below),
   // and it should be retired or redirected; also drop it from the sitemap in server/routes.ts (that's automatic too).
   useEffect(() => {
     const before = document.title;

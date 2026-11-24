@@ -1,5 +1,6 @@
-// Black Friday 2026: Founding Members. Podcasters who join in 2026 are the founding group; until the end of
-// December 31, 2026 (Eastern) a first Scale plan comes with 30 days free (Stripe's own trial, card at checkout).
+// Black Friday 2026: Founding Members, our Black Friday offer. Podcasters who join by 11:59 pm ET on Sunday 29 Nov 2026
+// are the founding group, and a first Scale plan comes with 30 days free (Stripe's own trial, card at checkout).
+// Andrew, 24 Nov: "ends midnight the Sunday following BF" (it was Dec 31).
 //
 // Counted links: every post, email and card links to /go/bf?src=<channel> (counted, then on to /black-friday).
 // The page reports its own steps (join, code, signedin, checkout; free for the Join free button) to POST /api/promo/bf, so each channel has a funnel.

@@ -2108,7 +2108,7 @@ export function registerRoutes(app: Express): void {
 
   app.get("/sitemap.xml", async (req, res) => {
     const origin = `${req.protocol}://${req.get("host")}`;
-    // /black-friday (Founding Members 2026) is listed only while the offer is open: it drops out on its own after Dec 31, 2026.
+    // /black-friday (Founding Members 2026) is listed only while the offer is open: it drops out on its own after 11:59 pm ET Sun 29 Nov 2026 (FOUNDING.endsAt).
     const staticPaths = ["", "/schedule", "/agenda", "/faq", "/prepare", "/platform", "/events", "/policy", "/terms", ...(foundingOpen() ? ["/black-friday"] : [])];
     let events: { slug: string }[] = [];
     try {
