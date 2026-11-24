@@ -55,6 +55,10 @@ export type Scene = {
   look?: SceneLook;
   /** A media scene's picture or video (a background, photo, logo or video upload); also what a layout's media box shows. */
   media?: Asset | null;
+  /** A media scene's video repeats (absent = true). false = plays once, then the host's page goes back to `back`. */
+  loop?: boolean;
+  /** The scene a play-once clip goes back to. */
+  back?: string;
   profile?: Profile;
   /** The scene's own layout (the layout editor, 21 Nov); shape in shared/roomLook.ts RoomBox. Absent = the type's layout. */
   boxes?: RoomBox[];
@@ -278,6 +282,8 @@ export function clean(raw: any, assets: Map<string, Asset>): Look | string {
       ...(boxes.length ? { boxes } : {}),
       ...(type === "media" || boxes.some((b) => b.kind === "media") ? { media: ((a) => (a && ["background", "photo", "logo", "video"].includes(a.kind) ? a : null))(asset(s?.media)) } : {}),
       ...(profile ? { profile } : {}),
+      ...(type === "media" && typeof s?.loop === "boolean" ? { loop: s.loop } : {}),
+      ...(type === "media" && id8(s?.back) ? { back: id8(s.back) } : {}),
     });
   }
   if (!scenes.length) return "Keep at least one scene.";

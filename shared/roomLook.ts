@@ -85,6 +85,13 @@ export interface RoomScene {
   people?: number;
   /** Media scene: the picture or clip that fills the frame. */
   media?: RoomAsset | null;
+  /**
+   * A media scene's video repeats (absent = true, as media scenes always did). Present or invite's
+   * Video file and Media's Play set it false: the clip plays once (Andrew, 24 Nov).
+   */
+  loop?: boolean;
+  /** The scene a play-once clip goes back to when it ends (the one on air before it). */
+  back?: string;
   profile?: RoomProfile | null;
 }
 
@@ -163,6 +170,11 @@ export function musicCreditOf(look: RoomLook | null, live: RoomLive): string {
 
 /** The participant the player bot joins as; never a tile, always heard. */
 export const isPlayer = (identity: string, attrs?: Record<string, string>) => identity.startsWith("player-") || attrs?.role === "player";
+/**
+ * The host page's clip publisher ("player-<id>-clip"): a presented video's sound for the people in the
+ * studio. The recording never plays it, since its own copy of the video already carries that sound in sync.
+ */
+export const isClipSound = (identity: string) => /^player-\d+-clip$/.test(identity);
 
 /** The stage layouts StageView understands: contain, cover, showtime, sidebar, pip. */
 export const ROOM_LAYOUT_TO_STAGE: Record<RoomLayoutKey, string> = {
@@ -222,8 +234,8 @@ export function roomStageMeta(look: RoomLook | null, live: RoomLive, name: strin
     meta.stageMediaPlaying = true;
     meta.stageMediaUrl = abs(scene.media.url, origin);
     meta.stageMediaKind = (scene.media.mime ?? "").startsWith("image") ? "image" : "video";
-    // "(loop)": a presented video loops until the host stops presenting, as in v3.
-    meta.stageMediaLabel = `${scene.name || "Presenting"} (loop)`;
+    // "(loop)" repeats it; a play-once clip (scene.loop false) stops on its last frame, and the host's page goes back.
+    meta.stageMediaLabel = scene.loop === false ? scene.name || "Presenting" : `${scene.name || "Presenting"} (loop)`;
     if (Number(scene.people) > 0) meta.stageMediaPeople = true;
   }
   const show = live.showing;

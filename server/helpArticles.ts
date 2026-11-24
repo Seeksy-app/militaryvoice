@@ -815,6 +815,10 @@ export const QUICK_ANSWERS: { q: string; a: string }[] = [
     "a": "1. Open **SmartLink**.\n2. Pick the name for your link.\n3. Work down the steps. Everything saves as you go.\n[[GO:smartlink]]"
   },
   {
+    "q": "How do I play a video during my show?",
+    "a": "1. In your studio, press **Present or invite**.\n2. Pick **Video file**, tick that you have the rights, and choose your video.\nIt plays once, with its sound, for everyone in the studio and in the recording, then goes back to your scene.\n[[GO:studio]]"
+  },
+  {
     "q": "How do I invite a guest to my show?",
     "a": "1. Open your show, then **Invite a guest**.\n2. Add their name and email, when, and where you'll record.\n3. Press **Send the invitation**.\n[[GO:guest-invite]]"
   }

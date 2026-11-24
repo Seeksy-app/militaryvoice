@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Captions, HiddenVoices, LogoOverlay, NameTagContext, StageGrid, Tile, useStageRoom, type NameTagStyle, type RoomMeta, type StageTile } from "@/components/StageView";
 import { apiRequest } from "@/lib/queryClient";
 import {
-  CARD_TITLE, boxCast, castOf, countdownText, gridColumns, isPlayer, musicCreditOf, roomStageMeta, sceneOf, shownOnStage, studioIdFromRoom,
+  CARD_TITLE, boxCast, castOf, countdownText, gridColumns, isClipSound, isPlayer, musicCreditOf, roomStageMeta, sceneOf, shownOnStage, studioIdFromRoom,
   type RoomBox, type RoomBoxShape, type RoomCardSlot, type RoomCorner, type RoomLive, type RoomLook, type RoomProfile,
 } from "@shared/roomLook";
 
@@ -93,7 +93,8 @@ export function RoomPicture({
   );
 
   // v3: the player bot is heard, never drawn; the scene type decides who is drawn and how.
-  const players = tiles.filter((t) => isPlayer(t.identity));
+  // The host page's clip sound is for the people in the studio; this page plays its own copy of the clip.
+  const players = tiles.filter((t) => isPlayer(t.identity) && !isClipSound(t.identity));
   const people = tiles.filter((t) => !isPlayer(t.identity));
   // Studio v3 drawing only when the server says it's on; otherwise the v2 stage, exactly as before.
   const v3 = live.v3 === true;
@@ -102,9 +103,11 @@ export function RoomPicture({
   const drawn = scene?.type ? cast.drawn.map((id) => people.find((t) => t.identity === id)!).filter(Boolean) : people;
   const heard = scene?.type ? people.filter((t) => !cast.drawn.includes(t.identity)) : [];
   const media = !live.playing && scene?.type === "media" && scene.media?.url ? scene.media : null;
+  // A media scene's video repeats unless it's a play-once clip (Present's Video file, Media's Play).
+  const loop = scene?.loop !== false;
   const stageMeta = media && drawn.length
     // Media with people: the clip or picture big, the people stacked beside it (looping).
-    ? { ...meta, stageMediaPlaying: true, stageMediaUrl: media.url, stageMediaKind: (media.mime ?? "").startsWith("image") ? "image" : "video", stageMediaPeople: true, stageMediaLabel: "Scene (loop)", stageOrder: cast.drawn.join(",") }
+    ? { ...meta, stageMediaPlaying: true, stageMediaUrl: media.url, stageMediaKind: (media.mime ?? "").startsWith("image") ? "image" : "video", stageMediaPeople: true, stageMediaLabel: loop ? "Scene (loop)" : "Scene", stageOrder: cast.drawn.join(",") }
     : scene?.type && cast.layout ? { ...meta, stageLayout: cast.layout, stageOrder: cast.drawn.join(",") } : meta;
   const card = v3 && live.playing && live.playing.slot !== "intro" && live.playing.slot !== "outro" ? live.playing : null;
   const style = v3 && look?.style ? { ...look.style, font: roomFontName(look.style.font) } : undefined;
@@ -128,12 +131,12 @@ export function RoomPicture({
 
   const full = boxed && bc ? (
     <NameTagContext.Provider value={tag}>
-      <BoxStage boxes={scene!.boxes!} byBox={bc.byBox} people={people} media={scene!.media?.url ? scene!.media : null} bg={bg} logo={logo} logoCorner={String((meta as { logoCorner?: string }).logoCorner ?? "")} logoPlate={(meta as { logoPlate?: string }).logoPlate} muted={muted} caption={caption} />
+      <BoxStage boxes={scene!.boxes!} byBox={bc.byBox} people={people} media={scene!.media?.url ? scene!.media : null} loop={loop} bg={bg} logo={logo} logoCorner={String((meta as { logoCorner?: string }).logoCorner ?? "")} logoPlate={(meta as { logoPlate?: string }).logoPlate} muted={muted} caption={caption} />
     </NameTagContext.Provider>
   ) : card ? (
     <RoomCard slot={card.slot as RoomCardSlot} text={card.slot === "countdown" ? countdownText(card, now) : ""} name={name || (raw as RoomMeta).studioName || ""} bg={bg} logo={logo} color={style?.brandColor} font={style?.font} />
   ) : media && !drawn.length ? (
-    <SceneMedia url={media.url} image={(media.mime ?? "").startsWith("image")} muted={muted} />
+    <SceneMedia url={media.url} image={(media.mime ?? "").startsWith("image")} muted={muted} loop={loop} />
   ) : !live.playing && scene?.type === "profile" ? (
     <ProfileCard p={scene.profile ?? {}} people={people} bg={bg} logo={logo} color={style?.brandColor} font={style?.font} />
   ) : null;
@@ -141,6 +144,8 @@ export function RoomPicture({
   return (
     <div className="relative h-full w-full" style={{ containerType: "inline-size" }} data-stage-root>
       {players.map((t) => <PlayerAudio key={t.identity} tile={t} muted={muted} />)}
+      {/* A shared browser tab's own sound (Share tab audio), beside the sharer's voice, for whoever is shown. */}
+      {people.filter((t) => t.shareAudio).map((t) => <PlayerAudio key={`${t.identity}-share`} tile={{ ...t, audio: t.shareAudio ?? null }} muted={muted} />)}
       {full ? (
         <>
           {full}
@@ -245,8 +250,8 @@ function RoomCard({ slot, text, name, bg, logo, color, font }: { slot: RoomCardS
  * top. A box with nobody (or no media) for it isn't drawn. Same tiles, name tags and talking ring
  * as every other layout, so the recording and the stream look like the rest of the show.
  */
-function BoxStage({ boxes, byBox, people, media, bg, logo, logoCorner, logoPlate, muted, caption }: {
-  boxes: RoomBox[]; byBox: Record<string, string[]>; people: StageTile[]; media: { url: string; mime?: string } | null;
+function BoxStage({ boxes, byBox, people, media, loop = true, bg, logo, logoCorner, logoPlate, muted, caption }: {
+  boxes: RoomBox[]; byBox: Record<string, string[]>; people: StageTile[]; media: { url: string; mime?: string } | null; loop?: boolean;
   bg: string; logo: string; logoCorner: string; logoPlate?: string; muted: boolean; caption?: { speaker: string; text: string } | null;
 }) {
   const tileOf = (id: string) => people.find((t) => t.identity === id);
@@ -263,7 +268,7 @@ function BoxStage({ boxes, byBox, people, media, bg, logo, logoCorner, logoPlate
               <Shaped shape={b.shape}>
                 {(media.mime ?? "").startsWith("image")
                   ? <img src={media.url} alt="" className={`h-full w-full ${b.fit === "cover" ? "object-cover" : "object-contain"}`} />
-                  : <video key={media.url} src={media.url} autoPlay playsInline loop muted={muted} className={`h-full w-full ${b.fit === "cover" ? "object-cover" : "object-contain"}`} />}
+                  : <video key={media.url} src={media.url} autoPlay playsInline loop={loop} muted={muted} className={`h-full w-full ${b.fit === "cover" ? "object-cover" : "object-contain"}`} />}
               </Shaped>
             ) : b.kind === "camera" ? (
               <Shaped shape={b.shape}>{tileOf(ids[0]) && <Tile tile={tileOf(ids[0])!} muted={muted} fit="full" flat contain={b.fit === "contain"} />}</Shaped>
@@ -310,11 +315,11 @@ function BoxGrid({ ids, box, tileOf, muted }: { ids: string[]; box: RoomBox; til
   );
 }
 
-/** A Video or picture scene: the clip (looping, with its sound) or the picture fills the frame. */
-function SceneMedia({ url, image, muted }: { url: string; image: boolean; muted: boolean }) {
+/** A Video or picture scene: the clip (with its sound; looping unless it plays once) or the picture fills the frame. */
+function SceneMedia({ url, image, muted, loop }: { url: string; image: boolean; muted: boolean; loop: boolean }) {
   return (
     <div className="absolute inset-0 bg-black" data-testid="room-scene-media">
-      {image ? <img src={url} alt="" className="h-full w-full object-contain" /> : <video key={url} src={url} autoPlay playsInline loop muted={muted} className="h-full w-full object-contain" />}
+      {image ? <img src={url} alt="" className="h-full w-full object-contain" /> : <video key={url} src={url} autoPlay playsInline loop={loop} muted={muted} className="h-full w-full object-contain" />}
     </div>
   );
 }

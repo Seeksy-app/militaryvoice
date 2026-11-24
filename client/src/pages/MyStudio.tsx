@@ -12,7 +12,8 @@ import {
   ChevronLeft, ChevronRight, Palette, Plus, Settings, Square, UserPlus, UserRound, Users, Video, VideoOff, X, } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { BACKGROUNDS, LIMITS, bgCss, newId, sceneLive, useRoomKit, type Asset, type Playing, type RoomKit, type Scene } from "@/components/room/look";
+import { BACKGROUNDS, LIMITS, PRESENT_NAME, bgCss, isPresenting, sceneLive, useRoomKit, type Asset, type Playing, type RoomKit, type Scene } from "@/components/room/look";
+import { closeClipSound, useClipSound, warmClipSound, type StageClip } from "@/components/room/clipSound";
 import { LayoutPicker, ScenesPanel } from "@/components/room/ScenesPanel";
 import { LookPanel } from "@/components/room/LookPanel";
 import { MediaPanel } from "@/components/room/MediaPanel";
@@ -400,7 +401,10 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
   };
   const share = async () => {
     try {
-      await localParticipant.setScreenShareEnabled(!isScreenShareEnabled);
+      // With its sound: a shared browser tab can carry its audio (Chrome's "Share tab audio"), so a
+      // video played in a tab is heard in the studio and the recording (Andrew, 24 Nov).
+      if (!isScreenShareEnabled) toast({ title: "Sharing a video?", description: "Pick the browser tab and turn on Share tab audio." });
+      await localParticipant.setScreenShareEnabled(!isScreenShareEnabled, isScreenShareEnabled ? undefined : { audio: true });
       // Starting a share puts the screen-share scene on air, if there is one.
       const s = !isScreenShareEnabled && editing ? look?.scenes.find((x) => x.layout === "screen") : undefined;
       if (s) kit.toScene(s.id);
@@ -416,6 +420,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
   const exitTo = useRef<string | null>(null);
   const go = async () => {
     await stopAllExtraCameras();
+    await closeClipSound();
     await room.disconnect();
     if (exitTo.current) window.location.assign(exitTo.current);
   };
@@ -435,6 +440,8 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
 
   return (
     <div className="flex h-[100dvh] flex-col bg-[#f3f4f7] text-[#101828]" data-testid="my-studio" style={{ fontFamily: INTER }}>
+      {/* A video on stage, heard by everyone in the studio (whatever panel or editor is open). */}
+      {editing && <StageClipSound kit={kit} />}
       {/* Top bar */}
       <header className="flex h-16 shrink-0 items-center gap-3 border-b border-[#e4e7ec] bg-white px-4 lg:gap-3.5 lg:px-5" data-testid="my-studio-bar">
         <button type="button" onClick={exit} className="hidden shrink-0 sm:block" aria-label={owner ? "MilitaryVoices.ai, back to your dashboard" : "MilitaryVoices.ai, exit the studio"}><Logo className="h-[38px]" /></button>
@@ -493,7 +500,7 @@ function StudioFrame({ owner, roomName, studio, title }: { owner: boolean; roomN
           {owner ? (
             // The host sees exactly what's recorded and streamed (Engineering's RoomStage); guests keep the plain grid.
             <div className="relative shrink-0 rounded-2xl shadow-[0_12px_32px_rgba(16,24,40,0.22)]" style={{ width: STAGE_W }}>
-              <RoomStage muted onMediaEnded={() => kit.play(null)} />
+              <RoomStage muted onMediaEnded={() => { if (kit.live.playing) kit.play(null); }} />
               {/* The teleprompter: on this screen only, over the preview; the program is drawn elsewhere. */}
               <PrompterOverlay roomKey={noteKey} text={notes} />
               <SlidesBar kit={kit} />
@@ -839,8 +846,32 @@ function PersonTile({ t, kit, owner, scenes }: { t: TrackReferenceOrPlaceholder;
   );
 }
 
-/** The scene StreamYard calls the media slot: one "Presenting" scene, reused for each file shown. */
-const PRESENT_NAME = "Presenting";
+/**
+ * The video on stage, heard in the studio (clipSound.ts): the intro or outro while it plays, or a
+ * media scene's video. A play-once clip goes back to the scene before it when it ends. That's the
+ * clip's own end, never a clock on someone talking, so the live-switching rule holds.
+ */
+function StageClipSound({ kit }: { kit: RoomKit }) {
+  const look = kit.look;
+  const p = kit.live.playing;
+  const scene = look ? sceneLive(look, kit.live) : undefined;
+  const heard = (a?: Asset | null) => !!a?.url && !(a.mime ?? "").startsWith("image");
+  let clip: StageClip | null = null;
+  if (look && p && (p.slot === "intro" || p.slot === "outro")) {
+    const a = look[p.slot];
+    if (heard(a)) clip = { key: `${p.slot}:${a!.id}`, url: a!.url, loop: false, sec: a!.sec };
+  } else if (!p && scene && heard(scene.media) && (scene.type === "media" || scene.boxes?.some((b) => b.kind === "media"))) {
+    const loop = scene.loop !== false;
+    clip = { key: `${scene.id}:${scene.media!.id}:${loop}`, url: scene.media!.url, loop, sec: scene.media!.sec };
+  }
+  const sceneId = scene?.id;
+  // The intro and outro end through the preview (kit.play(null)); a play-once scene goes back here.
+  useClipSound(clip, clip && !clip.loop && !p ? () => {
+    const now = kit.look ? sceneLive(kit.look, kit.live) : undefined;
+    if (now?.id === sceneId && !kit.live.playing) kit.stopPresenting();
+  } : undefined);
+  return null;
+}
 
 /**
  * Slides on air: ‹ Slide 3 of 12 › over the host's own preview (never in the program), and the ← →
@@ -896,27 +927,18 @@ function PresentButton({ kit, owner, sharing, canPresent, onShare, onInvite }: {
   const video = useRef<HTMLInputElement | null>(null);
   const image = useRef<HTMLInputElement | null>(null);
   const pdf = useRef<HTMLInputElement | null>(null);
-  const before = useRef<string | null>(null);
+  // Off by default (Andrew, 24 Nov): a video plays once, then the stage goes back to the scene before it.
+  const [loop, setLoop] = useState(false);
   const { localParticipant } = useLocalParticipant();
   const { deck, save: saveDeck } = useDeck(owner);
   const extra = useExtraCams();
   const look = kit.look;
   const onAir = look ? sceneLive(look, kit.live) : undefined;
-  const presenting = !!onAir && onAir.type === "media" && onAir.name === PRESENT_NAME && !!onAir.media;
+  const presenting = isPresenting(onAir) && !!onAir!.media;
 
-  /** Puts a picture or video on the one Presenting scene and that scene on air. */
-  const onPresenting = (asset: Asset) => {
-    const reuse = kit.look?.scenes.find((x) => x.type === "media" && x.name === PRESENT_NAME);
-    const id = reuse?.id ?? newId();
-    kit.change((l) => reuse
-      ? { ...l, scenes: l.scenes.map((x) => (x.id === id ? { ...x, media: asset } : x)) }
-      : { ...l, scenes: [...l.scenes, { id, n: Math.max(0, ...l.scenes.map((x) => x.n)) + 1, name: PRESENT_NAME, layout: "screen", stage: [], type: "media", people: 0, media: asset, look: { background: l.background } }] });
-    if (onAir && onAir.id !== id) before.current = onAir.id;
-    kit.toScene(id);
-  };
   const roomForScene = () => {
     if (!look) return false;
-    const reuse = look.scenes.find((x) => x.type === "media" && x.name === PRESENT_NAME);
+    const reuse = look.scenes.find((x) => isPresenting(x));
     if (!reuse && look.scenes.length >= LIMITS.scenes) { toast({ title: `You have ${LIMITS.scenes} scenes`, description: "Delete one, then present your file.", variant: "destructive" }); return false; }
     return true;
   };
@@ -925,7 +947,8 @@ function PresentButton({ kit, owner, sharing, canPresent, onShare, onInvite }: {
     if (!f || !roomForScene()) return;
     setBusy("Uploading 0%");
     try {
-      onPresenting(await kit.addAsset(kind, f, (p) => setBusy(`Uploading ${p}%`), kind === "video" ? true : undefined));
+      if (kind === "video") void warmClipSound().catch(() => {}); // the room's sound connection, ready before the clip starts
+      kit.present(await kit.addAsset(kind, f, (p) => setBusy(`Uploading ${p}%`), kind === "video" ? true : undefined), kind === "video" && loop);
     } catch (e) { toast({ title: kind === "video" ? "Couldn't present that video" : "Couldn't present that picture", description: say(e), variant: "destructive" }); }
     finally { setBusy(null); if (video.current) video.current.value = ""; if (image.current) image.current.value = ""; }
   };
@@ -940,7 +963,7 @@ function PresentButton({ kit, owner, sharing, canPresent, onShare, onInvite }: {
       const pages: Asset[] = [];
       for (let i = 0; i < pictures.length; i++) pages.push(await kit.addAsset("photo", pictures[i], () => setBusy(`Uploading ${i + 1} of ${pictures.length}`)));
       await saveDeck(f.name.replace(/\.pdf$/i, ""), pages);
-      onPresenting(pages[0]);
+      kit.present(pages[0]);
       for (const a of old) void apiRequest("DELETE", `/api/host/room/assets/${encodeURIComponent(a.id)}`).catch(() => {});
     } catch (e) { toast({ title: "Couldn't present those slides", description: say(e), variant: "destructive" }); }
     finally { setBusy(null); if (pdf.current) pdf.current.value = ""; }
@@ -957,10 +980,7 @@ function PresentButton({ kit, owner, sharing, canPresent, onShare, onInvite }: {
     catch (e) { toast({ title: "Couldn't add that camera", description: say(e), variant: "destructive" }); }
     finally { setBusy(null); }
   };
-  const stop = () => {
-    const back = look?.scenes.find((x) => x.id === before.current) ?? [...(look?.scenes ?? [])].filter((x) => x.name !== PRESENT_NAME).sort((a, b) => a.n - b.n)[0];
-    if (back) kit.toScene(back.id);
-  };
+  const stop = () => kit.stopPresenting();
 
   const item = "flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left text-[15px] font-medium text-[#101828] hover:bg-[#f2f4f7]";
   const pick = (fn: () => void) => () => { setMenu(""); fn(); };
@@ -990,8 +1010,9 @@ function PresentButton({ kit, owner, sharing, canPresent, onShare, onInvite }: {
             ) : menu === "rights" ? (
               <div className="p-2.5">
                 <p className="text-sm font-semibold">Present a video</p>
-                <p className="mt-1 text-[13px] text-[#667085]">It fills the stage, with its sound, in the recording and the live show.</p>
-                <label className="mt-3 flex items-start gap-2 text-[13px] font-medium"><input type="checkbox" className="mt-0.5" onChange={(e) => { if (e.target.checked) { setMenu(""); video.current?.click(); } }} data-testid="present-rights" /> I have the rights to use this video</label>
+                <p className="mt-1 text-[13px] text-[#667085]">It fills the stage and plays once, with its sound, for everyone in your studio and in the recording and live show. Then the stage goes back to the scene before it.</p>
+                <label className="mt-3 flex items-start gap-2 text-[13px] font-medium"><input type="checkbox" className="mt-0.5" checked={loop} onChange={(e) => setLoop(e.target.checked)} data-testid="present-loop" /> Loop it until I stop presenting</label>
+                <label className="mt-2 flex items-start gap-2 text-[13px] font-medium"><input type="checkbox" className="mt-0.5" onChange={(e) => { if (e.target.checked) { setMenu(""); video.current?.click(); } }} data-testid="present-rights" /> I have the rights to use this video</label>
               </div>
             ) : <>
               {canPresent && presenting && <><button type="button" onClick={pick(stop)} className={item} data-testid="present-stop"><Square className="h-[18px] w-[18px] fill-current text-[#b42318]" /> Stop presenting</button><div className="my-1 h-px bg-[#eaecf0]" /></>}

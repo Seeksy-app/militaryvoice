@@ -236,6 +236,25 @@ export function registerRoomStage(app: Express, requireHostSession: RequestHandl
     res.json({ url: publicLiveKitUrl(), token: await at.toJwt(), studioId: got.row.id, name: got.row.name, lookKey: kit?.roomLookKey(got.row.id) ?? "" });
   });
 
+  /**
+   * A presented video's sound for the people in the studio (Andrew, 24 Nov: "If someone's going to
+   * play a video clip during a recording…"). The host's page plays the clip and publishes its sound
+   * as "player-<id>-clip", so the host, guests and backstage hear it as an ordinary remote track:
+   * their echo cancellation takes it out of their mics, and nothing on the stream box is needed.
+   * Publish only (it hears nothing); the recording ignores it (isClipSound), since its own copy of
+   * the video carries the sound in sync. The owner only.
+   */
+  app.post("/api/host/my-studio/clip-token", requireHostSession, async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const got = await studioOf(req);
+    if (!got) return res.status(404).json({ message: "Open your studio first." });
+    if (!isLiveKitConfigured()) return res.status(503).json({ message: "The studio isn't switched on yet." });
+    const at = new AccessToken(process.env.LIVEKIT_API_KEY ?? "", process.env.LIVEKIT_API_SECRET ?? "", { identity: `player-${got.row.id}-clip`, name: "Studio sound", ttl: "6h" });
+    at.addGrant({ room: roomOf(got.row), roomJoin: true, canPublish: true, canPublishSources: [TrackSource.MICROPHONE], canPublishData: false, canSubscribe: false });
+    at.attributes = { role: "player", stage: "on" };
+    res.json({ url: publicLiveKitUrl(), token: await at.toJwt() });
+  });
+
   /** Bring a guest on stage, or send them backstage. Only guests move; the host is always on stage. */
   app.post("/api/host/my-studio/backstage", requireHostSession, async (req, res) => {
     const got = await studioOf(req);

@@ -44,6 +44,7 @@ const QUICK = [
   { q: "How do I connect Zoom?", a: "1. Open **Integrations**.\n2. Press **Connect Zoom** and sign in to Zoom.\n3. Switch on **Auto-import new**.\nYour cloud recordings then come into your Library by themselves.\n[[GO:zoom]]" },
   { q: "How do I add a new episode?", a: "1. Open your show and press **New episode**.\n2. Pick a recording from your Library, or drop in a file.\n3. Add a title, then publish it now or schedule it.\n[[GO:new-episode]]" },
   { q: "How do I set up my SmartLink?", a: "1. Open **SmartLink**.\n2. Pick the name for your link.\n3. Work down the steps. Everything saves as you go.\n[[GO:smartlink]]" },
+  { q: "How do I play a video during my show?", a: "1. In your studio, press **Present or invite**.\n2. Pick **Video file**, tick that you have the rights, and choose your video.\nIt plays once, with its sound, for everyone in the studio and in the recording, then goes back to your scene.\n[[GO:studio]]" },
   { q: "How do I invite a guest to my show?", a: "1. Open your show, then **Invite a guest**.\n2. Add their name and email, when, and where you'll record.\n3. Press **Send the invitation**.\n[[GO:guest-invite]]" },
 ];
 

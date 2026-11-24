@@ -94,6 +94,8 @@ export interface StageTile {
   /** A remote participant's track, or the producer's own local one when they're on camera. */
   video: Track | null;
   audio: Track | null;
+  /** A shared screen's or tab's own sound (Share tab audio), kept apart so it never replaces their voice. */
+  shareAudio?: Track | null;
   speaking: boolean;
   /** An avatar, whose feed arrives on a chroma-key green background. */
   keyed?: boolean;
@@ -168,11 +170,13 @@ export function useStageRoom(
         if (pickRef.current ? !pickRef.current(p.attributes ?? {}) : (p.attributes?.state ?? "") !== "On stage") return;
         let video: RemoteTrack | null = null;
         let audio: RemoteTrack | null = null;
+        let shareAudio: RemoteTrack | null = null;
         p.trackPublications.forEach((pub: RemoteTrackPublication) => {
           if (!pub.track) return;
           // A camera switched off still has a track; it just sends black.
           if (pub.kind === Track.Kind.Video && !pub.isMuted) video = pub.track;
-          if (pub.kind === Track.Kind.Audio) audio = pub.track;
+          // Their mic is their voice; a shared tab's sound is its own track, so it can't take the voice's place.
+          if (pub.kind === Track.Kind.Audio) { if (pub.source === Track.Source.ScreenShareAudio) shareAudio = pub.track; else audio = pub.track; }
         });
         next.push({
           identity: p.identity,
@@ -180,7 +184,7 @@ export function useStageRoom(
           displayTitle: p.attributes?.displayTitle || "",
           photoUrl: p.attributes?.photoUrl || "",
           host: p.attributes?.role === "studio-host",
-          video, audio, speaking: p.isSpeaking,
+          video, audio, shareAudio, speaking: p.isSpeaking,
           // The avatar renders on green — that is the right output for a
           // source meant to be composited, not a shortcoming. It gets keyed
           // here so she sits on our stage instead of a wall of green.

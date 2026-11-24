@@ -32,7 +32,14 @@ export type Scene = {
   /** v3: the scene's own layout; absent or empty = the type's layout. */
   boxes?: Box[];
   look?: { background?: Background; logo?: Logo; banner?: string };
+  /** A media scene's video repeats (absent = yes). false = it plays once and the stage goes back to `back`. */
+  loop?: boolean;
+  /** The scene a play-once clip goes back to (the one on air before it). */
+  back?: string;
 };
+/** The scene StreamYard calls the media slot: one "Presenting" scene, reused for each file shown. */
+export const PRESENT_NAME = "Presenting";
+export const isPresenting = (s?: Scene | null) => !!s && s.type === "media" && s.name === PRESENT_NAME;
 export const FONTS = ["Inter", "Montserrat", "Oswald", "Bebas Neue", "Source Sans 3", "Merriweather", "Playfair Display", "Zilla Slab"] as const;
 export type Style = { preset: string; brandColor: string; nameTag: "bar" | "pill" | "block" | "plain"; showNames: boolean; textSize: "s" | "m" | "l"; font: (typeof FONTS)[number] };
 export const STYLE_DEFAULT: Style = { preset: "classic", brandColor: "#F0A71F", nameTag: "bar", showNames: true, textSize: "m", font: "Inter" };
@@ -264,6 +271,34 @@ export function useRoomKit(owner: boolean, meta: string | undefined) {
     void optimistic({ music: id ? { id, at: Date.now() } : null }, async () => { await post("/api/host/my-studio/music", { id }); }, id ? "Couldn't start the music" : "Couldn't stop the music");
   };
 
+  /**
+   * Put a picture, slide or video on the one Presenting scene and that scene on air. A video plays
+   * once unless `loop` (Andrew, 24 Nov), then the host's page goes back to the scene that was on
+   * before (stopPresenting). False when there's no room for the scene.
+   */
+  const present = (asset: Asset, loop = false): boolean => {
+    const l = get();
+    if (!l) return false;
+    const reuse = l.scenes.find((x) => isPresenting(x));
+    if (!reuse && l.scenes.length >= LIMITS.scenes) { toast({ title: `You have ${LIMITS.scenes} scenes`, description: "Delete one, then present your file.", variant: "destructive" }); return false; }
+    const id = reuse?.id ?? newId();
+    const onAir = sceneLive(l, live);
+    const back = onAir && onAir.id !== id ? onAir.id : reuse?.back;
+    change((x) => reuse
+      ? { ...x, scenes: x.scenes.map((s) => (s.id === id ? { ...s, media: asset, loop, back } : s)) }
+      : { ...x, scenes: [...x.scenes, { id, n: Math.max(0, ...x.scenes.map((s) => s.n)) + 1, name: PRESENT_NAME, layout: "screen", stage: [], type: "media", people: 0, media: asset, loop, back, look: { background: x.background } }] });
+    toScene(id);
+    return true;
+  };
+  /** Stop presenting: back to the scene before it (or the first other scene). */
+  const stopPresenting = () => {
+    const l = get();
+    if (!l) return;
+    const pres = l.scenes.find((x) => isPresenting(x));
+    const back = l.scenes.find((x) => x.id === pres?.back && !isPresenting(x)) ?? [...l.scenes].filter((x) => !isPresenting(x)).sort((a, b) => a.n - b.n)[0];
+    if (back) toScene(back.id);
+  };
+
   /** Bring a guest on stage, or send them backstage. */
   const [stageOver, setStageOver] = useState<Record<string, boolean>>({});
   const backstage = async (identity: string, on: boolean) => {
@@ -275,7 +310,7 @@ export function useRoomKit(owner: boolean, meta: string | undefined) {
   /** On stage? The host always is; guests by their stage attribute (or the click that's on its way). */
   const isOnStage = (identity: string, attr?: string) => (identity in stageOver ? stageOver[identity] : attr !== "off");
 
-  return { look, loading: owner && q.isLoading, live, change, addAsset, removeAsset, toScene, showBanner, play, playSound, playMusic, backstage, isOnStage };
+  return { look, loading: owner && q.isLoading, live, change, addAsset, removeAsset, toScene, showBanner, play, playSound, playMusic, present, stopPresenting, backstage, isOnStage };
 }
 
 export type RoomKit = ReturnType<typeof useRoomKit>;

@@ -3,7 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Clapperboard, Loader2, Music2, Play, Plus, Repeat, Square, Trash2, Volume2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
-import { BACKGROUNDS, LIMITS, backgroundShelf, sceneLive, type AssetKind, type Background, type LibraryItem, type LibrarySource, type MusicItem, type PlaySlot, type RoomKit, type SoundItem, type VideoClip } from "./look";
+import { warmClipSound } from "./clipSound";
+import { BACKGROUNDS, LIMITS, backgroundShelf, isPresenting, sceneLive, type AssetKind, type Background, type LibraryItem, type LibrarySource, type MusicItem, type PlaySlot, type RoomKit, type SoundItem, type VideoClip } from "./look";
 import { AddFile, Banners, LogoSection, Removable, Swatch } from "./LookPanel";
 
 /**
@@ -61,6 +62,9 @@ function Clips({ kit }: { kit: RoomKit }) {
   const look = kit.look!;
   const videos = look.videos ?? [];
   const playing = kit.live.playing;
+  // A plain clip plays on the Presenting scene, once unless its Loop is on, like Present's Video file (Andrew, 24 Nov).
+  const onAir = sceneLive(look, kit.live);
+  const presented = !playing && isPresenting(onAir) ? onAir?.media?.id : undefined;
   const setClip = (id: string, p: Partial<VideoClip>) => kit.change((l) => {
     let vs = (l.videos ?? []).map((v) => (v.asset.id === id ? { ...v, ...p } : v));
     // One intro and one outro: tagging a clip untags the old one.
@@ -72,7 +76,7 @@ function Clips({ kit }: { kit: RoomKit }) {
     <div className="mt-2.5 flex flex-col gap-2" data-testid="media-clips">
       {videos.map((v) => {
         const slot = v.role || null;
-        const on = !!slot && playing?.slot === slot;
+        const on = slot ? playing?.slot === slot : presented === v.asset.id;
         return (
           <div key={v.asset.id} className={`group flex items-center gap-2 rounded-xl border px-2 py-2 ${on ? "border-[#053877] bg-[#f5f8fd]" : "border-[#e4e7ec]"}`} data-testid="clip-row">
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] bg-[#101828] text-white"><Clapperboard className="h-3.5 w-3.5" /></div>
@@ -87,7 +91,12 @@ function Clips({ kit }: { kit: RoomKit }) {
             </div>
             <button type="button" onClick={() => { if (window.confirm("Delete this clip?")) void kit.removeAsset("video", v.asset.id); }} aria-label="Delete clip" className="hidden shrink-0 text-[#98a2b3] hover:text-[#b42318] group-focus-within:block group-hover:block"><Trash2 className="h-4 w-4" /></button>
             <LoopButton on={v.loop} onClick={() => setClip(v.asset.id, { loop: !v.loop })} />
-            {slot && <PlayButton on={on} label={slot} onClick={() => kit.play(on ? null : slot)} />}
+            <PlayButton on={on} label={slot ?? (v.asset.name || "this clip")} onClick={() => {
+              if (slot) { kit.play(on ? null : slot); return; }
+              if (on) { kit.stopPresenting(); return; }
+              void warmClipSound().catch(() => {});
+              kit.present(v.asset, v.loop);
+            }} />
           </div>
         );
       })}
