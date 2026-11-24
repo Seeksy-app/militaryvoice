@@ -8,6 +8,7 @@ import { and, asc, desc, eq, gte, inArray, lte, sql } from "drizzle-orm";
 import { db, schemaIsReady, storage } from "./storage.js";
 import { getAdminEmail } from "./session.js";
 import { sendBroadcastEmail } from "./email.js";
+import { isInternalAddress } from "./mailGuard.js";
 import {
   automations, automationSteps, automationRuns, automationSends, bioPages, broadcastEvents, contacts, discoveryMembers,
   hostedShows, inboundEmails, loginTokens, podcasterProfiles, signups,
@@ -20,6 +21,8 @@ const now = () => new Date().toISOString();
 const inHours = (h: number, from = Date.now()) => new Date(from + Math.max(0, h) * 3600_000).toISOString();
 const firstWord = (s: string | null | undefined) => (s ?? "").trim().split(/\s+/)[0] ?? "";
 const norm = (e: string) => e.trim().toLowerCase();
+/** Someone we may mail: a plain address (not an "admin:" sign-in key), and not Andrew or one of our own mailboxes. */
+const isCustomerAddress = (e: string) => /^[^@\s:<>,;]+@[^@\s:<>,;]+\.[^@\s:<>,;]+$/.test(e) && !HOUSE.has(e) && !isInternalAddress(e);
 
 type Deps = {
   unsubscribeUrl: (req: Request, email: string) => string;
@@ -156,7 +159,7 @@ async function enroll(a: AutomationRow, people: { email: string; firstName: stri
   const rows = [];
   for (const p of people) {
     const email = norm(p.email);
-    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email) || HOUSE.has(email) || seen.has(email)) continue;
+    if (!isCustomerAddress(email) || seen.has(email)) continue;
     seen.add(email);
     rows.push({ automationId: a.id, email, firstName: (p.firstName ?? "").trim().slice(0, 60), enrolledAt: t, nextAt: inHours(steps[0].delayHours) });
   }
@@ -222,6 +225,8 @@ async function runOnce(req: Request, deps: Deps): Promise<{ enrolled: number; se
     if (!mine) continue;
     const a = byId.get(run.automationId)!;
     const end = async (reason: string) => { await db.update(automationRuns).set({ status: reason === "finished" ? "done" : "stopped", endReason: reason, endedAt: now(), nextAt: "" }).where(eq(automationRuns.id, run.id)); };
+    // Not someone to mail (an admin sign-in key, Andrew, our own inbox): a skip, never a retry.
+    if (!isCustomerAddress(norm(run.email))) { await end("skipped: not a customer address"); stopped++; continue; }
     if (await isUnsubscribed(run.email)) { await end("unsubscribed"); stopped++; continue; }
     if (a.stopOnReply && (await repliedSince(run.email, run.enrolledAt))) { await end("replied"); stopped++; continue; }
     // "Finish setting up" stops the moment they do.

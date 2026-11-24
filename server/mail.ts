@@ -22,6 +22,10 @@ const BULK_KINDS = ["sendBroadcastEmail", "campaign", "cadence"];
 const REPLY_KINDS = new Set(["reply", "chat-send", "admin-send", "one-off"]);
 
 const now = () => new Date().toISOString();
+// Didn't send shows real failures only (24 Nov): never a row whose "to" was no address at all (an "admin:" sign-in
+// key the old Finish-setting-up automation tried hourly), and never one that went through on a later try.
+const realTo = sql`${mailLog.toEmail} ~ ${"^[^@\\s:<>,;]+@[^@\\s:<>,;]+\\.[^@\\s:<>,;]+$"}`;
+const notSentLater = sql`not exists (select 1 from mail_log m2 where m2.ok and lower(m2.to_email) = lower(${mailLog.toEmail}) and m2.subject = ${mailLog.subject} and m2.sent_at > ${mailLog.sentAt})`;
 const noStore = (res: Response) => res.setHeader("Cache-Control", "no-store");
 const snippet = (t: string, n = 160) => { const s = (t || "").replace(/\s+/g, " ").trim(); return s.length > n ? `${s.slice(0, n - 1)}…` : s; };
 /** Their words without the quoted history below them. */
@@ -118,7 +122,7 @@ export function registerMail(app: Express, requireAdmin: RequestHandler) {
     const offset = Math.max(0, Math.min(5000, Number(req.query.offset) || 0));
     const like = `%${q}%`;
     const inWhere = (extra?: ReturnType<typeof and>) => and(extra, q ? or(ilike(inboundEmails.fromEmail, like), ilike(inboundEmails.fromName, like), ilike(inboundEmails.subject, like), ilike(inboundEmails.bodyText, like)) : undefined);
-    const outWhere = (extra?: ReturnType<typeof and>) => and(extra, q ? or(ilike(mailLog.toEmail, like), ilike(mailLog.subject, like), ilike(mailLog.bodyText, like)) : undefined);
+    const outWhere = (extra?: ReturnType<typeof and>) => and(extra, realTo, q ? or(ilike(mailLog.toEmail, like), ilike(mailLog.subject, like), ilike(mailLog.bodyText, like)) : undefined);
     let items: Item[] = [];
     if (folder === "needs" || folder === "inbox" || folder === "archive") {
       const rows = await db.select().from(inboundEmails).where(inWhere(
@@ -128,7 +132,7 @@ export function registerMail(app: Express, requireAdmin: RequestHandler) {
       )).orderBy(desc(inboundEmails.receivedAt)).limit(limit).offset(offset);
       items = rows.map(inItem);
     } else if (folder === "sent" || folder === "failed") {
-      const rows = await db.select().from(mailLog).where(outWhere(folder === "failed" ? and(eq(mailLog.ok, false)) : and(notInArray(mailLog.kind, BULK_KINDS)))).orderBy(desc(mailLog.sentAt)).limit(limit).offset(offset);
+      const rows = await db.select().from(mailLog).where(outWhere(folder === "failed" ? and(eq(mailLog.ok, false), notSentLater) : and(notInArray(mailLog.kind, BULK_KINDS)))).orderBy(desc(mailLog.sentAt)).limit(limit).offset(offset);
       const ev = await eventsFor(rows.map((r) => r.resendId));
       items = rows.map((r) => outItem(r, ev));
     } else if (folder === "campaigns") {
@@ -166,7 +170,7 @@ export function registerMail(app: Express, requireAdmin: RequestHandler) {
     const [needs] = await db.select({ n: sql<number>`count(*)::int` }).from(inboundEmails).where(and(inArray(inboundEmails.status, ["new", "drafted"]), eq(inboundEmails.archived, false)));
     const [unread] = await db.select({ n: sql<number>`count(*)::int` }).from(inboundEmails).where(and(eq(inboundEmails.readAt, ""), eq(inboundEmails.archived, false)));
     const [today] = await db.select({ n: sql<number>`count(*)::int` }).from(mailLog).where(and(sql`${mailLog.sentAt} >= ${since}`, notInArray(mailLog.kind, BULK_KINDS)));
-    const [failed] = await db.select({ n: sql<number>`count(*)::int` }).from(mailLog).where(and(eq(mailLog.ok, false), sql`${mailLog.sentAt} >= ${new Date(Date.now() - 7 * 86400_000).toISOString()}`));
+    const [failed] = await db.select({ n: sql<number>`count(*)::int` }).from(mailLog).where(and(eq(mailLog.ok, false), realTo, notSentLater, sql`${mailLog.sentAt} >= ${new Date(Date.now() - 7 * 86400_000).toISOString()}`));
     res.json({ needs: needs?.n ?? 0, unread: unread?.n ?? 0, sentToday: today?.n ?? 0, failedWeek: failed?.n ?? 0 });
   });
 
