@@ -1,4 +1,4 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useSyncExternalStore } from "react";
 import { AudioPresets, Room, Track, type LocalAudioTrack } from "livekit-client";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -45,15 +45,39 @@ export async function closeClipSound(): Promise<void> {
 }
 
 export type StageClip = { key: string; url: string; loop: boolean; sec?: number };
+/** The host's Pause / Play / From the start (RoomLive.clip). */
+export type ClipControl = { scene: string; rev: number; pos: number; paused: boolean };
+
+/** Bring a copy of the clip to the host's latest Pause / Play / From the start (once per press). */
+export function applyClip(v: HTMLVideoElement, c: ClipControl) {
+  const tag = `${c.scene}:${c.rev}`;
+  if (v.dataset.clipRev === tag || v.dataset.clipWait === tag) return;
+  const go = () => {
+    v.dataset.clipRev = tag;
+    try { v.currentTime = c.pos; } catch { /* not seekable yet */ }
+    if (c.paused) v.pause(); else void v.play().catch(() => {});
+  };
+  if (v.readyState >= 1) go();
+  else { v.dataset.clipWait = tag; v.addEventListener("loadedmetadata", go, { once: true }); }
+}
+
+/** The host's own copy of the clip on air, for the player bar's clock. */
+let current: HTMLVideoElement | null = null;
+const subs = new Set<() => void>();
+const tell = () => subs.forEach((f) => f());
+export function useStageClipElement(): HTMLVideoElement | null {
+  return useSyncExternalStore((f) => { subs.add(f); return () => { subs.delete(f); }; }, () => current, () => null);
+}
 
 /**
  * Plays `clip` (hidden, not out loud) from the moment it's on stage, and publishes its sound while it
  * plays. A play-once clip calls `onEnded` when it finishes (a moment after, so the filmed copy, which
  * started a moment later, has finished too).
  */
-export function useClipSound(clip: StageClip | null, onEnded?: () => void) {
+export function useClipSound(clip: StageClip | null, onEnded?: () => void, control?: ClipControl | null) {
   const ended = useRef(onEnded);
   ended.current = onEnded;
+  const elRef = useRef<HTMLVideoElement | null>(null);
   useEffect(() => {
     if (!clip) return;
     let alive = true;
@@ -81,7 +105,19 @@ export function useClipSound(clip: StageClip | null, onEnded?: () => void) {
     };
     el.addEventListener("ended", finish);
     // A backstop when the file won't play here (it still ends on the filmed page): its length, if we know it.
-    const backstop = !clip.loop && clip.sec ? window.setTimeout(finish, (clip.sec + 1.5) * 1000) : 0;
+    // Paused, it waits; playing again, it counts down what's left.
+    let backstop = !clip.loop && clip.sec ? window.setTimeout(finish, (clip.sec + 1.5) * 1000) : 0;
+    const held = () => { window.clearTimeout(backstop); backstop = 0; };
+    const resumed = () => {
+      window.clearTimeout(backstop);
+      const len = el.duration || clip.sec || 0;
+      backstop = !clip.loop && len ? window.setTimeout(finish, (Math.max(0, len - el.currentTime) + 1.5) * 1000) : 0;
+    };
+    el.addEventListener("pause", held);
+    el.addEventListener("play", resumed);
+    elRef.current = el;
+    current = el;
+    tell();
 
     void ctx.resume().catch(() => {});
     void el.play().catch(() => {});
@@ -101,6 +137,10 @@ export function useClipSound(clip: StageClip | null, onEnded?: () => void) {
       alive = false;
       window.clearTimeout(backstop);
       el.removeEventListener("ended", finish);
+      el.removeEventListener("pause", held);
+      el.removeEventListener("play", resumed);
+      elRef.current = null;
+      if (current === el) { current = null; tell(); }
       el.pause();
       el.removeAttribute("src");
       el.load();
@@ -110,4 +150,17 @@ export function useClipSound(clip: StageClip | null, onEnded?: () => void) {
       void ctx.close().catch(() => {});
     };
   }, [clip?.key]); // eslint-disable-line react-hooks/exhaustive-deps
+  // The host's Pause / Play / From the start reach this copy too.
+  useEffect(() => { if (elRef.current && control) applyClip(elRef.current, control); }, [clip?.key, control?.rev]); // eslint-disable-line react-hooks/exhaustive-deps
+}
+
+/** Every copy of the clip drawn under `root` (the filmed page, the host's preview) follows the host's presses. */
+export function useClipSync(root: { current: HTMLElement | null }, control: ClipControl | null | undefined, activeScene: string | null | undefined, playing: boolean) {
+  useEffect(() => {
+    if (!control || playing || control.scene !== activeScene) return;
+    const run = () => root.current?.querySelectorAll<HTMLVideoElement>("video[src]").forEach((v) => applyClip(v, control));
+    run();
+    const t = window.setInterval(run, 500); // a copy drawn a moment later (a scene re-laid out) catches up too
+    return () => window.clearInterval(t);
+  }, [control?.rev, control?.scene, activeScene, playing]); // eslint-disable-line react-hooks/exhaustive-deps
 }

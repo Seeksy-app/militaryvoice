@@ -86,8 +86,8 @@ export interface RoomScene {
   /** Media scene: the picture or clip that fills the frame. */
   media?: RoomAsset | null;
   /**
-   * A media scene's video repeats (absent = true, as media scenes always did). Present or invite's
-   * Video file and Media's Play set it false: the clip plays once (Andrew, 24 Nov).
+   * A media scene's video repeats only when this is true (Andrew, 24 Nov: "Hey, watch this"… "then he puts it
+   * back on"): a clip plays once and the studio goes back to the scene before it. Absent = plays once.
    */
   loop?: boolean;
   /** The scene a play-once clip goes back to when it ends (the one on air before it). */
@@ -141,6 +141,12 @@ export interface RoomLive {
   /** v3: a sound pad pressed (plays once per `at`), and the music bed on air. The player bot plays both. */
   sound?: { id: string; at: number } | null;
   music?: { id: string; at: number } | null;
+  /**
+   * The host's Pause / Play / From the start on a scene's clip. Every copy of the clip (the filmed page, the
+   * host's preview, the room's sound) seeks to `pos` and pauses or plays when `rev` changes. Cleared on every
+   * scene switch, so a clip always starts from 0:00 when its scene goes on air.
+   */
+  clip?: { scene: string; rev: number; pos: number; paused: boolean } | null;
   /** Studio v3 is switched on (the server's STUDIO_V3, written with every live-state change). Off or missing = the v2 stage. */
   v3?: boolean;
 }
@@ -237,7 +243,7 @@ export function roomStageMeta(look: RoomLook | null, live: RoomLive, name: strin
     meta.stageMediaUrl = abs(scene.media.url, origin);
     meta.stageMediaKind = (scene.media.mime ?? "").startsWith("image") ? "image" : "video";
     // "(loop)" repeats it; a play-once clip (scene.loop false) stops on its last frame, and the host's page goes back.
-    meta.stageMediaLabel = scene.loop === false ? scene.name || "Presenting" : `${scene.name || "Presenting"} (loop)`;
+    meta.stageMediaLabel = scene.loop !== true ? scene.name || "Presenting" : `${scene.name || "Presenting"} (loop)`;
     if (Number(scene.people) > 0) meta.stageMediaPeople = true;
   }
   const show = live.showing;

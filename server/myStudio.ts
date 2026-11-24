@@ -15,7 +15,7 @@ import { createBroadcast } from "./youtube.js";
 import { getYoutubeKey, youtubeKeyHint, youtubePushUrl, YOUTUBE_OAUTH } from "./youtubeKey.js";
 import { onLookSaved, roomLookKey } from "./roomKit.js";
 import { liveHandleOf, livePageOn, liveUrlOf } from "./livePage.js";
-import { bumpLookRev, noteMusicOnAir, registerRoomStage, roomTemplateUrl, STUDIO_V3, useRoomKit } from "./roomStage.js";
+import { bumpLookRev, noteMusicOnAir, registerRoomStage, roomTemplateUrl, useRoomKit, v3For } from "./roomStage.js";
 import { personalStudios, type PersonalStudioRow } from "../shared/schema.js";
 import { inviteShow } from "./hostShows.js";
 
@@ -150,7 +150,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     ready: isLiveKitConfigured(),
     canRecord: isRecordingConfigured(),
     // Studio v3 (scene types, cards, sounds and music): the UI switches to it only when this is true.
-    v3: STUDIO_V3,
+    v3: v3For(s.id),
   });
 
   // The leave-live safety net, every minute (vercel.json).
@@ -258,7 +258,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     const name = String(req.body?.name ?? "").trim().slice(0, 60) || profile?.hostName || email.split("@")[0];
     const identity = `owner-${s.id}-${crypto.randomBytes(3).toString("hex")}`;
     const token = await studioToken({ room: room(s), identity, name, canPublish: true, admin: true, attributes: { role: "host", stage: "on", who: identity, ...titleOf(req) } });
-    res.json({ url: publicLiveKitUrl(), token, name: s.name, v3: STUDIO_V3 });
+    res.json({ url: publicLiveKitUrl(), token, name: s.name, v3: v3For(s.id) });
   });
 
   /** A guest on the invite link: no account, just a name. */
@@ -268,7 +268,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     if (!s) return res.status(404).json({ message: "This invite link has expired. Ask the host for a new one." });
     // An invitation for one of the host's shows (?show=11) greets the guest with that show's name.
     const show = req.query.show ? await inviteShow(s.ownerEmail.trim().toLowerCase(), req.query.show).catch(() => null) : null;
-    res.json({ name: show?.title || s.name, v3: STUDIO_V3 });
+    res.json({ name: show?.title || s.name, v3: v3For(s.id) });
   });
   app.post("/api/my-studio/invite/:token/token", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
@@ -280,7 +280,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     if (!name) return res.status(400).json({ message: "Your name, please." });
     const identity = `guest-${crypto.randomBytes(5).toString("hex")}`;
     const token = await studioToken({ room: room(s), identity, name, canPublish: true, attributes: { role: "guest", stage: GUEST_STAGE, who: identity, ...titleOf(req) } });
-    res.json({ url: publicLiveKitUrl(), token, name: s.name, v3: STUDIO_V3 });
+    res.json({ url: publicLiveKitUrl(), token, name: s.name, v3: v3For(s.id) });
   });
 
   /** Record: the whole room, to an MP4 in their Library. */

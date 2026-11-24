@@ -9,11 +9,11 @@ import {
 import { ConnectionState, DisconnectReason, Track, type Participant } from "livekit-client";
 import {
   ArrowLeft, Check, Circle, Clapperboard, Copy, ExternalLink, Image as ImageIcon, Loader2, LogOut, MessageSquare, Mic, MicOff, MonitorUp, MoreHorizontal, NotebookPen, Presentation,
-  ChevronLeft, ChevronRight, Palette, Plus, Settings, Square, UserPlus, UserRound, Users, Video, VideoOff, X, } from "lucide-react";
+  ChevronLeft, ChevronRight, Palette, Pause, Play, Plus, RotateCcw, Settings, Square, UserPlus, UserRound, Users, Video, VideoOff, X, } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
-import { BACKGROUNDS, LIMITS, PRESENT_NAME, bgCss, isPresenting, sceneLive, useRoomKit, type Asset, type Playing, type RoomKit, type Scene } from "@/components/room/look";
-import { closeClipSound, useClipSound, warmClipSound, type StageClip } from "@/components/room/clipSound";
+import { BACKGROUNDS, LIMITS, PRESENT_NAME, bgCss, isClipScene, isPresenting, sceneLive, useRoomKit, type Asset, type Playing, type RoomKit, type Scene } from "@/components/room/look";
+import { closeClipSound, useClipSound, useStageClipElement, warmClipSound, type StageClip } from "@/components/room/clipSound";
 import { LayoutPicker, ScenesPanel } from "@/components/room/ScenesPanel";
 import { LookPanel } from "@/components/room/LookPanel";
 import { MediaPanel } from "@/components/room/MediaPanel";
@@ -528,6 +528,7 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
           ) : (
             <Stage kit={kit} scene={scene} fallbackLogo={look ? undefined : logo} />
           )}
+          {owner && <ClipBar kit={kit} />}
           {editing && !v3 && scene && (
             <div className="mt-3 shrink-0" title={`Layout for ${scene.name}`}>
               <LayoutPicker value={scene.layout} onPick={(layout) => kit.change((l) => ({ ...l, scenes: l.scenes.map((s) => (s.id === scene.id ? { ...s, layout } : s)) }))} />
@@ -882,16 +883,67 @@ function StageClipSound({ kit }: { kit: RoomKit }) {
     const a = look[p.slot];
     if (heard(a)) clip = { key: `${p.slot}:${a!.id}`, url: a!.url, loop: false, sec: a!.sec };
   } else if (!p && scene && heard(scene.media) && (scene.type === "media" || scene.boxes?.some((b) => b.kind === "media"))) {
-    const loop = scene.loop !== false;
+    const loop = scene.loop === true;
     clip = { key: `${scene.id}:${scene.media!.id}:${loop}`, url: scene.media!.url, loop, sec: scene.media!.sec };
   }
   const sceneId = scene?.id;
   // The intro and outro end through the preview (kit.play(null)); a play-once scene goes back here.
   useClipSound(clip, clip && !clip.loop && !p ? () => {
     const now = kit.look ? sceneLive(kit.look, kit.live) : undefined;
-    if (now?.id === sceneId && !kit.live.playing) kit.stopPresenting();
-  } : undefined);
+    if (now?.id === sceneId && !kit.live.playing) kit.stopPresenting(sceneId);
+  } : undefined, !p && kit.live.clip?.scene === sceneId ? kit.live.clip : null);
   return null;
+}
+
+const mmss = (t: number) => (Number.isFinite(t) && t > 0 ? `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}` : "0:00");
+
+/**
+ * The clip on air, for the host only (never filmed): Pause / Play, From the start, Stop, and where it is
+ * (Andrew, 24 Nov: "I don't see a stop and play"). Everyone's copy follows. The space bar pauses too,
+ * unless they're typing. Under it, what happens next: back to the scene before it, or it loops.
+ */
+function ClipBar({ kit }: { kit: RoomKit }) {
+  const el = useStageClipElement();
+  const scene = kit.look ? sceneLive(kit.look, kit.live) : undefined;
+  const on = !!el && !kit.live.playing && isClipScene(scene);
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!on || !el) return;
+    const t = window.setInterval(() => tick((x) => x + 1), 250);
+    return () => window.clearInterval(t);
+  }, [on, el]);
+  const paused = kit.live.clip?.scene === scene?.id ? kit.live.clip!.paused : false;
+  const toggle = () => { if (el) void kit.clipAct(paused ? "play" : "pause", el.currentTime); };
+  const toggleRef = useRef(toggle);
+  toggleRef.current = toggle;
+  useEffect(() => {
+    if (!on) return;
+    const k = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement | null;
+      if (e.code !== "Space" || e.repeat || e.metaKey || e.ctrlKey || e.altKey || (t && (t.isContentEditable || /^(INPUT|TEXTAREA|SELECT|BUTTON)$/.test(t.tagName)))) return;
+      e.preventDefault();
+      toggleRef.current();
+    };
+    window.addEventListener("keydown", k);
+    return () => window.removeEventListener("keydown", k);
+  }, [on]);
+  if (!on || !el || !scene) return null;
+  const len = el.duration || scene.media?.sec || 0;
+  const at = Math.min(el.currentTime, len || el.currentTime);
+  const back = kit.backOf(scene.id);
+  const btn = "flex h-8 w-8 items-center justify-center rounded-lg text-[#344054] hover:bg-[#f2f4f7]";
+  return (
+    <div className="mt-3 w-full max-w-[560px] shrink-0" data-testid="clip-bar">
+      <div className="flex items-center gap-1.5 rounded-xl border border-[#e4e7ec] bg-white px-2 py-1.5 shadow-[0_2px_8px_rgba(16,24,40,0.06)]">
+        <button type="button" onClick={toggle} className={btn} aria-label={paused ? "Play" : "Pause"} title={paused ? "Play (space)" : "Pause (space)"} data-testid="clip-toggle">{paused ? <Play className="h-4 w-4 fill-current" /> : <Pause className="h-4 w-4 fill-current" />}</button>
+        <button type="button" onClick={() => void kit.clipAct("restart", 0)} className={btn} aria-label="From the start" title="From the start" data-testid="clip-restart"><RotateCcw className="h-4 w-4" /></button>
+        <button type="button" onClick={() => kit.stopPresenting(scene.id)} className={btn} aria-label="Stop" title={back ? `Stop: back to ${back.name}` : "Stop"} data-testid="clip-stop"><Square className="h-3.5 w-3.5 fill-current" /></button>
+        <div className="mx-1.5 h-1.5 min-w-0 flex-1 overflow-hidden rounded-full bg-[#eaecf0]"><div className="h-full rounded-full bg-[#053877]" style={{ width: `${len ? Math.min(100, (at / len) * 100) : 0}%` }} /></div>
+        <span className="shrink-0 pr-1 text-[12px] font-semibold tabular-nums text-[#475467]" data-testid="clip-time">{mmss(at)} / {mmss(len)}</span>
+      </div>
+      <p className="mt-1 px-1 text-[11.5px] text-[#667085]" data-testid="clip-next">{scene.loop === true ? "It loops until you pick another scene." : back ? `Back to ${back.name} when it ends.` : "It plays once."}</p>
+    </div>
+  );
 }
 
 /**

@@ -22,6 +22,13 @@ import { clipOf, ROOM_CARD_SLOTS, type RoomCardSlot, type RoomLook, type RoomLiv
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 /** Studio v3 (scene types, ready-made cards, sounds and music through the player bot). Off until all three teams are in. */
 export const STUDIO_V3 = process.env.STUDIO_V3 === "1";
+/**
+ * Or just some studios (STUDIO_V3_STUDIOS=12,13), so one host can rehearse it before everyone gets it
+ * (Andrew via PM, 24 Nov). Every v3 check asks this, never the flag alone.
+ */
+const V3_STUDIOS = new Set((process.env.STUDIO_V3_STUDIOS ?? "").split(",").map((x) => Number(x.trim())).filter((n) => Number.isInteger(n) && n > 0));
+export const v3For = (studioId: number) => STUDIO_V3 || V3_STUDIOS.has(studioId);
+export const anyV3 = () => STUDIO_V3 || V3_STUDIOS.size > 0;
 
 /** Podcasting's roomKit plugs in here (see myStudio.ts): the key that lets a page read a room's look without a login. */
 let kit: { roomLookKey: (studioId: number) => string } | null = null;
@@ -60,7 +67,7 @@ export async function mergeRoomMeta(room: string, patch: Partial<RoomLive>): Pro
     let cur: Record<string, unknown> = {};
     try { cur = JSON.parse(r.metadata || "{}") as Record<string, unknown>; } catch { cur = {}; }
     // Every view reads the flag from here, so the recording page needs no setting of its own.
-    await rooms().updateRoomMetadata(room, JSON.stringify({ ...cur, ...patch, v3: STUDIO_V3 }));
+    await rooms().updateRoomMetadata(room, JSON.stringify({ ...cur, ...patch, v3: v3For(Number(room.replace(/^my-/, ""))) }));
     return true;
   } catch (err) {
     console.error("Room metadata failed:", (err as Error).message);
@@ -70,7 +77,7 @@ export async function mergeRoomMeta(room: string, patch: Partial<RoomLive>): Pro
 
 /** The music on air when a recording starts gets its credit noted too (it may have started first). */
 export async function noteMusicOnAir(studioId: number): Promise<void> {
-  if (!STUDIO_V3 || !isLiveKitConfigured()) return;
+  if (!v3For(studioId) || !isLiveKitConfigured()) return;
   try {
     const [r] = await rooms().listRooms([`my-${studioId}`]);
     const id = (JSON.parse(r?.metadata || "{}") as RoomLive).music?.id;
@@ -114,7 +121,7 @@ export function registerRoomStage(app: Express, requireHostSession: RequestHandl
    */
   app.get("/api/ingest/players", bearer, async (_req, res) => {
     res.setHeader("Cache-Control", "no-store");
-    if (!STUDIO_V3 || !isLiveKitConfigured()) return res.json({ rooms: [] });
+    if (!anyV3() || !isLiveKitConfigured()) return res.json({ rooms: [] });
     try {
       const all = (await rooms().listRooms()).filter((r) => /^my-\d+$/.test(r.name) && r.numParticipants > 0);
       const out: { studioId: number; room: string; url: string; token: string; lookKey: string }[] = [];
@@ -122,6 +129,7 @@ export function registerRoomStage(app: Express, requireHostSession: RequestHandl
         const people = await rooms().listParticipants(r.name);
         if (!people.some((p) => isPerson(p.identity))) continue;
         const studioId = Number(r.name.slice(3));
+        if (!v3For(studioId)) continue;
         const at = new AccessToken(process.env.LIVEKIT_API_KEY ?? "", process.env.LIVEKIT_API_SECRET ?? "", { identity: `player-${studioId}`, name: "Studio sound", ttl: "2h" });
         at.addGrant({ room: r.name, roomJoin: true, canPublish: true, canPublishSources: [TrackSource.MICROPHONE], canPublishData: false, canSubscribe: true });
         at.attributes = { role: "player", stage: "on" };
@@ -141,9 +149,27 @@ export function registerRoomStage(app: Express, requireHostSession: RequestHandl
     if (!want) return res.status(400).json({ message: "Which scene?" });
     const look = await readLook(got.row.id);
     if (look && !look.scenes.some((s) => s.id === want)) return res.status(400).json({ message: "That scene isn't in your studio." });
-    const ok = await mergeRoomMeta(roomOf(got.row), { activeScene: want });
+    // A new scene starts its clip from 0:00: the last scene's Pause / From the start goes with it.
+    const ok = await mergeRoomMeta(roomOf(got.row), { activeScene: want, clip: null });
     if (!ok) return res.status(409).json({ message: "Join your studio first." });
     res.json({ ok: true, scene: want });
+  });
+
+  /**
+   * Pause, play or start again the clip of the scene on air (the host's player bar). Every copy of the clip
+   * follows: the filmed page, the host's preview and the room's sound.
+   */
+  app.post("/api/host/my-studio/clip", requireHostSession, async (req, res) => {
+    const got = await studioOf(req);
+    if (!got) return res.status(404).json({ message: "Open your studio first." });
+    const scene = String(req.body?.scene ?? "").slice(0, 40);
+    const action = String(req.body?.action ?? "");
+    if (!scene || !["pause", "play", "restart"].includes(action)) return res.status(400).json({ message: "Pause, play or start again?" });
+    const pos = action === "restart" ? 0 : Math.max(0, Math.min(6 * 3600, Number(req.body?.pos) || 0));
+    const clip = { scene, rev: Date.now(), pos: Math.round(pos * 100) / 100, paused: action === "pause" };
+    const ok = await mergeRoomMeta(roomOf(got.row), { clip });
+    if (!ok) return res.status(409).json({ message: "Join your studio first." });
+    res.json({ ok, clip });
   });
 
   /** Show a banner on the stage for its own number of seconds, or take it off (bannerId null). */
@@ -172,7 +198,7 @@ export function registerRoomStage(app: Express, requireHostSession: RequestHandl
     const room = roomOf(got.row);
     if (action === "stop") return res.json({ ok: await mergeRoomMeta(room, { playing: null }), playing: false });
     // The ready-made cards are drawn live in the owner's look, so there is no file to check.
-    if (STUDIO_V3 && (ROOM_CARD_SLOTS as string[]).includes(action)) {
+    if (v3For(got.row.id) && (ROOM_CARD_SLOTS as string[]).includes(action)) {
       const minutes = action === "countdown" ? Math.max(1, Math.min(60, Math.round(Number(req.body?.minutes) || 5))) : undefined;
       const next = action === "countdown" && req.body?.next ? String(req.body.next).slice(0, 40) : undefined;
       const playing = { slot: action as RoomCardSlot, at: Date.now(), ...(minutes ? { minutes } : {}), ...(next ? { next } : {}) };
@@ -191,9 +217,9 @@ export function registerRoomStage(app: Express, requireHostSession: RequestHandl
 
   /** Play a sound pad once. Everyone in the studio hears it, and so do the recording and the stream (the player bot). */
   app.post("/api/host/my-studio/sound", requireHostSession, async (req, res) => {
-    if (!STUDIO_V3) return res.status(404).json({ message: "Sounds aren't switched on yet." });
     const got = await studioOf(req);
     if (!got) return res.status(404).json({ message: "Open your studio first." });
+    if (!v3For(got.row.id)) return res.status(404).json({ message: "Sounds aren't switched on yet." });
     const id = String(req.body?.id ?? "");
     const look = await readLook(got.row.id);
     if (!look?.sounds?.some((s) => s.id === id)) return res.status(404).json({ message: "That sound isn't in your studio." });
@@ -205,9 +231,9 @@ export function registerRoomStage(app: Express, requireHostSession: RequestHandl
 
   /** Start a music bed (it loops under the voices) or stop it (id null). */
   app.post("/api/host/my-studio/music", requireHostSession, async (req, res) => {
-    if (!STUDIO_V3) return res.status(404).json({ message: "Music isn't switched on yet." });
     const got = await studioOf(req);
     if (!got) return res.status(404).json({ message: "Open your studio first." });
+    if (!v3For(got.row.id)) return res.status(404).json({ message: "Music isn't switched on yet." });
     const id = req.body?.id == null ? "" : String(req.body.id);
     if (!id) return res.json({ ok: await mergeRoomMeta(roomOf(got.row), { music: null }), music: null });
     const look = await readLook(got.row.id);

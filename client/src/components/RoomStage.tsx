@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Captions, HiddenVoices, LogoOverlay, NameTagContext, StageGrid, Tile, useStageRoom, type NameTagStyle, type RoomMeta, type StageTile } from "@/components/StageView";
 import { apiRequest } from "@/lib/queryClient";
+import { useClipSync } from "@/components/room/clipSound";
 import {
   CARD_TITLE, boxCast, castOf, countdownText, gridColumns, isClipSound, isPlayer, musicCreditOf, roomStageMeta, sceneOf, shownOnStage, studioIdFromRoom,
   type RoomBox, type RoomBoxShape, type RoomCardSlot, type RoomCorner, type RoomLive, type RoomLook, type RoomProfile,
@@ -65,6 +66,9 @@ export function RoomPicture({
   useEffect(() => { setPickKey(sceneKey); }, [sceneKey]);
 
   useEffect(() => { onState?.({ connected, failed }); }, [connected, failed, onState]);
+  // The host's Pause / Play / From the start: this page's copy of the clip follows (the recording and the stream).
+  const root = useRef<HTMLDivElement>(null);
+  useClipSync(root, live.clip, live.activeScene, !!live.playing);
 
   // The look, again whenever Podcasting saves (lookRev changes on the room).
   useEffect(() => {
@@ -104,7 +108,7 @@ export function RoomPicture({
   const heard = scene?.type ? people.filter((t) => !cast.drawn.includes(t.identity)) : [];
   const media = !live.playing && scene?.type === "media" && scene.media?.url ? scene.media : null;
   // A media scene's video repeats unless it's a play-once clip (Present's Video file, Media's Play).
-  const loop = scene?.loop !== false;
+  const loop = scene?.loop === true;
   const stageMeta = media && drawn.length
     // Media with people: the clip or picture big, the people stacked beside it (looping).
     ? { ...meta, stageMediaPlaying: true, stageMediaUrl: media.url, stageMediaKind: (media.mime ?? "").startsWith("image") ? "image" : "video", stageMediaPeople: true, stageMediaLabel: loop ? "Scene (loop)" : "Scene", stageOrder: cast.drawn.join(",") }
@@ -142,7 +146,7 @@ export function RoomPicture({
   ) : null;
 
   return (
-    <div className="relative h-full w-full" style={{ containerType: "inline-size" }} data-stage-root>
+    <div ref={root} className="relative h-full w-full" style={{ containerType: "inline-size" }} data-stage-root>
       {players.map((t) => <PlayerAudio key={t.identity} tile={t} muted={muted} />)}
       {/* A shared browser tab's own sound (Share tab audio), beside the sharer's voice, for whoever is shown. */}
       {people.filter((t) => t.shareAudio).map((t) => <PlayerAudio key={`${t.identity}-share`} tile={{ ...t, audio: t.shareAudio ?? null }} muted={muted} />)}

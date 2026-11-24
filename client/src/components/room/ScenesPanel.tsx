@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
 import { useParticipants } from "@livekit/components-react";
 import { RoomEvent } from "livekit-client";
-import { Check, Clapperboard, Copy, Image as ImageIcon, LayoutDashboard, Loader2, Lock, MonitorUp, MoreHorizontal, Pencil, Play, Plus, Square, Trash2, Users, X } from "lucide-react";
+import { Check, Clapperboard, Copy, GripVertical, Image as ImageIcon, LayoutDashboard, Loader2, Lock, MonitorUp, MoreHorizontal, Pencil, Play, Plus, Square, Trash2, Users, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { isPlayer, type RoomBoxKind, type RoomBoxShape } from "@shared/roomLook";
 import { LIMITS, PEOPLE_DEFAULT, bgCss, newId, type Asset, type Layout, type RoomKit, type Scene, type SceneType, type Slot } from "./look";
@@ -237,13 +237,30 @@ export function ScenesPanel({ kit, v3 = false, sheet = false, onEditLayout }: { 
 
   // A new scene goes last, or right below one (`below`), moving the later ones (and their keys) down one.
   const [below, setBelow] = useState<number | null>(null);
+  // The server numbers scenes by their place in the list (Andrew, 24 Nov: "when I try to add a scene under my
+  // first one, the video scene moves up"), so the list always goes out in order, numbered 1, 2, 3…
+  const inOrder = (xs: Scene[]) => [...xs].sort((a, b) => a.n - b.n).map((x, i) => ({ ...x, n: i + 1 }));
   const place = (l: typeof look, s: Scene, after: number | null) => {
-    if (after === null) return { ...l, scenes: [...l.scenes, s] };
-    return { ...l, scenes: [...l.scenes.map((x) => (x.n > after ? { ...x, n: x.n + 1 } : x)), { ...s, n: after + 1 }] };
+    if (after === null) return { ...l, scenes: inOrder([...l.scenes, { ...s, n: 99 }]) };
+    return { ...l, scenes: inOrder([...l.scenes.map((x) => (x.n > after ? { ...x, n: x.n + 1 } : x)), { ...s, n: after + 1 }]) };
   };
+  /** Drag a card by its grip onto another: it takes that one's place. */
+  const move = (fromId: string, toId: string) => {
+    if (fromId === toId) return;
+    kit.change((l) => {
+      const xs = [...l.scenes].sort((a, b) => a.n - b.n);
+      const from = xs.findIndex((x) => x.id === fromId), to = xs.findIndex((x) => x.id === toId);
+      if (from < 0 || to < 0) return l;
+      const [it] = xs.splice(from, 1);
+      xs.splice(to, 0, it);
+      return { ...l, scenes: xs.map((x, i) => ({ ...x, n: i + 1 })) };
+    });
+  };
+  const [dragging, setDragging] = useState<string | null>(null);
+  const [over, setOver] = useState<string | null>(null);
   const add = (type?: SceneType, people?: number, media?: Asset | null, edit = true) => {
-    const n = below !== null ? below + 1 : [1, 2, 3, 4, 5, 6, 7, 8, 9].find((x) => !look.scenes.some((s) => s.n === x));
-    if (!n || look.scenes.length >= LIMITS.scenes) return;
+    const n = below !== null ? below + 1 : last + 1;
+    if (look.scenes.length >= LIMITS.scenes) return;
     const t = type && TYPES.find((x) => x.id === type)!;
     // v3: a new scene starts with the studio's starting background (look.background).
     const s: Scene = t
@@ -264,7 +281,7 @@ export function ScenesPanel({ kit, v3 = false, sheet = false, onEditLayout }: { 
   const remove = (s: Scene) => {
     if (!window.confirm(`Delete ${s.name}?`)) return;
     const next = scenes.find((x) => x.id !== s.id);
-    kit.change((l) => ({ ...l, scenes: l.scenes.filter((x) => x.id !== s.id) }));
+    kit.change((l) => ({ ...l, scenes: inOrder(l.scenes.filter((x) => x.id !== s.id)) }));
     if (onAir === s.id && next) kit.toScene(next.id, true);
     setEditing(null);
   };
@@ -276,8 +293,11 @@ export function ScenesPanel({ kit, v3 = false, sheet = false, onEditLayout }: { 
       <p className="rounded-lg bg-[#f5f8fd] px-2.5 py-2 text-[11.5px] leading-snug text-[#344054]" data-testid="scenes-vs-people">Scenes = what viewers see. People = who's in the room.</p>
       {!v3 && <VideoSlot slot="intro" kit={kit} />}
       {scenes.map((s) => (
-        <div key={s.id}>
-          <SceneCard s={s} kit={kit} v3={v3} cast={castOf(s)} onChooseMedia={() => setEditing(s.id)} on={onAir === s.id} next={kit.live.playing?.slot === "countdown" && kit.live.playing.next === s.id} onPick={() => kit.toScene(s.id)}
+        <div key={s.id} className={over === s.id && dragging && dragging !== s.id ? "rounded-[14px] outline outline-2 outline-offset-2 outline-[#053877]" : ""}
+          onDragOver={(e) => { if (dragging && Array.from(e.dataTransfer.types).includes(SCENE_DRAG)) { e.preventDefault(); setOver(s.id); } }}
+          onDragLeave={() => setOver((o) => (o === s.id ? null : o))}
+          onDrop={(e) => { if (!dragging || !Array.from(e.dataTransfer.types).includes(SCENE_DRAG)) return; e.preventDefault(); e.stopPropagation(); move(dragging, s.id); setDragging(null); setOver(null); }}>
+          <SceneCard s={s} kit={kit} v3={v3} cast={castOf(s)} onGrip={(e) => { e.dataTransfer.setData(SCENE_DRAG, s.id); e.dataTransfer.effectAllowed = "move"; const card = (e.currentTarget as HTMLElement).closest("[data-scene-card]"); if (card) e.dataTransfer.setDragImage(card, 20, 40); setDragging(s.id); }} onGripEnd={() => { setDragging(null); setOver(null); }} onChooseMedia={() => setEditing(s.id)} on={onAir === s.id} next={kit.live.playing?.slot === "countdown" && kit.live.playing.next === s.id} onPick={() => kit.toScene(s.id)}
             full={look.scenes.length >= LIMITS.scenes}
             onRename={() => setEditing(editing === s.id ? null : s.id)} onEditLayout={onEditLayout ? () => { setEditing(null); onEditLayout(s.id); } : undefined} onDuplicate={() => duplicate(s)} onAddBelow={() => addBelow(s)} onDelete={look.scenes.length > 1 ? () => remove(s) : undefined} />
           {editing === s.id && <SceneEditor s={s} kit={kit} v3={v3} onDelete={look.scenes.length > 1 ? () => remove(s) : undefined} onClose={() => setEditing(null)} />}
@@ -331,7 +351,9 @@ function TypePicker({ kit, onPick, onClose }: { kit: RoomKit; onPick: (t: SceneT
   );
 }
 
-function SceneCard({ s, kit, v3, cast, on, next, full, onPick, onChooseMedia, onRename, onEditLayout, onDuplicate, onAddBelow, onDelete }: { s: Scene; kit: RoomKit; v3: boolean; cast: string[]; on: boolean; next: boolean; full: boolean; onPick: () => void; onChooseMedia: () => void; onRename: () => void; onEditLayout?: () => void; onDuplicate: () => void; onAddBelow: () => void; onDelete?: () => void }) {
+const SCENE_DRAG = "application/x-mv-scene";
+
+function SceneCard({ s, kit, v3, cast, on, next, full, onPick, onGrip, onGripEnd, onChooseMedia, onRename, onEditLayout, onDuplicate, onAddBelow, onDelete }: { s: Scene; kit: RoomKit; v3: boolean; cast: string[]; on: boolean; next: boolean; full: boolean; onPick: () => void; onGrip: (e: DragEvent) => void; onGripEnd: () => void; onChooseMedia: () => void; onRename: () => void; onEditLayout?: () => void; onDuplicate: () => void; onAddBelow: () => void; onDelete?: () => void }) {
   const look = kit.look!;
   const [menu, setMenu] = useState(false);
   const media = isMediaScene(s);
@@ -351,7 +373,7 @@ function SceneCard({ s, kit, v3, cast, on, next, full, onPick, onChooseMedia, on
   const cardBg = s.look?.background ?? look.background;
   const lightBg = cardBg.kind === "color" && cardBg.value === "light";
   return (
-    <div {...drop} className={`group relative shrink-0 rounded-[14px] ${drag ? "border-2 border-dashed border-[#053877] bg-[#eef3fb]" : on ? "border-2 border-[#053877] shadow-[0_6px_16px_rgba(5,56,119,0.16)]" : next ? "border-2 border-[#F0A71F] shadow-[0_0_0_4px_rgba(240,167,31,0.2)]" : "border border-[#e4e7ec]"}`} data-testid={`scene-${s.n}`}>
+    <div {...drop} data-scene-card className={`group relative shrink-0 rounded-[14px] ${drag ? "border-2 border-dashed border-[#053877] bg-[#eef3fb]" : on ? "border-2 border-[#053877] shadow-[0_6px_16px_rgba(5,56,119,0.16)]" : next ? "border-2 border-[#F0A71F] shadow-[0_0_0_4px_rgba(240,167,31,0.2)]" : "border border-[#e4e7ec]"}`} data-testid={`scene-${s.n}`}>
       {add.el}
       {/* The clip is on the button, not the card, so the ⋯ menu isn't cut off. */}
       <button type="button" onClick={onPick} className="block w-full overflow-hidden rounded-[12px] text-left" aria-label={`Put ${s.name} on air (key ${s.n})`} aria-pressed={on}>
@@ -367,6 +389,8 @@ function SceneCard({ s, kit, v3, cast, on, next, full, onPick, onChooseMedia, on
           <span className="rounded-md bg-[#f2f4f7] px-[7px] py-px text-xs font-semibold text-[#667085]">{s.n}</span>
         </div>
       </button>
+      {/* Drag to reorder (StreamYard's grip, Andrew via PM, 24 Nov). */}
+      <span draggable onDragStart={onGrip} onDragEnd={onGripEnd} title="Drag to move" aria-label={`Move ${s.name}`} className={`absolute left-1 top-[44px] flex h-8 w-5 -translate-y-1/2 cursor-grab items-center justify-center rounded-md bg-white/90 text-[#475467] opacity-0 shadow transition-opacity focus:opacity-100 group-hover:opacity-100 active:cursor-grabbing`} data-testid={`scene-grip-${s.n}`}><GripVertical className="h-4 w-4" /></span>
       {/* Nothing picked yet: add it right here (a sibling of the card's button, so pressing it never puts the scene on air). */}
       {media && !s.media && !add.busy && (
         <button type="button" onClick={add.choose} className="absolute left-1/2 top-[44px] flex h-7 -translate-x-1/2 -translate-y-1/2 items-center gap-1 whitespace-nowrap rounded-full bg-white px-2.5 text-[11px] font-bold text-[#053877] shadow-[0_2px_8px_rgba(16,24,40,0.25)] hover:bg-[#eef3fb]" data-testid="scene-card-add-media">
@@ -484,6 +508,8 @@ function MediaPick({ s, kit, set, upload = false }: { s: Scene; kit: RoomKit; se
         })}
       </div>
       {!upload && !all.length && <p className="mt-1 text-[11px] text-[#98a2b3]">Add clips or pictures in Media to show one here.</p>}
+      {/* A clip plays once, then the studio goes back to the scene before it; ticked, it loops instead. */}
+      {isVideo(s.media) && <label className="mt-2 flex items-start gap-2 text-[12px] font-semibold text-[#344054]"><input type="checkbox" checked={s.loop === true} onChange={(e) => set({ loop: e.target.checked })} className="mt-0.5" data-testid="scene-media-loop" /> Loop it until I pick another scene</label>}
       {upload && !s.media && <p className="mt-1.5 text-[11px] leading-snug text-[#667085]">A shared screen: press Present or invite, then Share screen.</p>}
     </>
   );

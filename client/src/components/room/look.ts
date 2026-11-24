@@ -81,7 +81,11 @@ export type Playing = { slot: PlaySlot; at: number; minutes?: number; next?: str
 export type Live = {
   activeScene: string | null; showing: { bannerId: string; until: number } | null; playing: Playing | null; lookRev: number | null;
   sound?: { id: string; at: number } | null; music?: { id: string; at: number } | null;
+  /** The host's Pause / Play / From the start on the clip on air (shared/roomLook.ts RoomLive.clip). */
+  clip?: { scene: string; rev: number; pos: number; paused: boolean } | null;
 };
+/** A scene whose video plays when it's on air (a picture or a shared screen doesn't). */
+export const isClipScene = (s?: Scene | null) => !!s?.media?.url && !(s.media.mime ?? "").startsWith("image") && (s.type === "media" || !!s.boxes?.some((b) => b.kind === "media"));
 
 export const BACKGROUNDS: Record<Color, string> = {
   blue: "linear-gradient(135deg, #0b1f4a 0%, #0a3a8f 55%, #3b6fd6 100%)",
@@ -112,6 +116,7 @@ export function parseLive(meta: string | undefined): Live {
     return {
       activeScene: typeof j.activeScene === "string" ? j.activeScene : null, showing: j.showing?.bannerId ? j.showing : null, playing: j.playing?.slot ? j.playing : null, lookRev: typeof j.lookRev === "number" ? j.lookRev : null,
       sound: j.sound?.id ? j.sound : null, music: j.music?.id ? j.music : null,
+      clip: j.clip?.scene && typeof j.clip.rev === "number" ? j.clip : null,
     };
   } catch { return none; }
 }
@@ -247,7 +252,7 @@ export function useRoomKit(owner: boolean, meta: string | undefined) {
   /** Put a scene on air (the cards, the 1–9 keys). `force` re-sends it, e.g. right after joining. */
   const toScene = (sceneId: string, force = false) => {
     if (!force && live.activeScene === sceneId) return;
-    void optimistic({ activeScene: sceneId }, async () => { await settle(); await post("/api/host/my-studio/scene", { sceneId }); }, "Couldn't switch scenes");
+    void optimistic({ activeScene: sceneId, clip: null }, async () => { await settle(); await post("/api/host/my-studio/scene", { sceneId }); }, "Couldn't switch scenes");
   };
 
   /** Show a banner for its own seconds, or take it down (null). */
@@ -292,13 +297,38 @@ export function useRoomKit(owner: boolean, meta: string | undefined) {
     toScene(id);
     return true;
   };
-  /** Stop presenting: back to the scene before it (or the first other scene). */
-  const stopPresenting = () => {
+  // The scenes on air before this one, newest last: a clip goes back to the last of them that isn't a clip.
+  const trail = useRef<string[]>([]);
+  const lastOn = useRef<string | null>(null);
+  useEffect(() => {
+    const now = live.activeScene;
+    if (lastOn.current && lastOn.current !== now) trail.current = [...trail.current.filter((x) => x !== lastOn.current), lastOn.current].slice(-12);
+    lastOn.current = now;
+  }, [live.activeScene]);
+  /** Where a clip goes when it ends or the host presses Stop: the scene they were on before it (Andrew, 24 Nov: "then he puts it back on"). */
+  const backOf = (sceneId: string | null | undefined): Scene | undefined => {
+    const l = get();
+    if (!l) return undefined;
+    const ok = (x?: Scene): x is Scene => !!x && x.id !== sceneId && !isClipScene(x) && !isPresenting(x);
+    const own = l.scenes.find((x) => x.id === l.scenes.find((y) => y.id === sceneId)?.back);
+    if (ok(own)) return own;
+    for (let i = trail.current.length - 1; i >= 0; i--) { const x = l.scenes.find((y) => y.id === trail.current[i]); if (ok(x)) return x; }
+    return [...l.scenes].sort((a, b) => a.n - b.n).find(ok);
+  };
+  /** A clip is done (or Stop): back to the scene before it. Defaults to the Presenting scene's. */
+  const stopPresenting = (fromId?: string) => {
     const l = get();
     if (!l) return;
-    const pres = l.scenes.find((x) => isPresenting(x));
-    const back = l.scenes.find((x) => x.id === pres?.back && !isPresenting(x)) ?? [...l.scenes].filter((x) => !isPresenting(x)).sort((a, b) => a.n - b.n)[0];
+    const from = fromId ?? l.scenes.find((x) => isPresenting(x))?.id ?? live.activeScene;
+    const back = backOf(from);
     if (back) toScene(back.id);
+  };
+  /** The player bar: pause or play the clip on air at `pos` seconds, or start it again. */
+  const clipAct = async (action: "pause" | "play" | "restart", pos: number) => {
+    const scene = live.activeScene ?? sceneLive(get(), live)?.id;
+    if (!scene) return;
+    try { await post("/api/host/my-studio/clip", { scene, action, pos }); }
+    catch (e) { toast({ title: "Couldn't do that", description: say(e), variant: "destructive" }); }
   };
 
   /** Bring a guest on stage, or send them backstage. */
@@ -312,7 +342,7 @@ export function useRoomKit(owner: boolean, meta: string | undefined) {
   /** On stage? The host always is; guests by their stage attribute (or the click that's on its way). */
   const isOnStage = (identity: string, attr?: string) => (identity in stageOver ? stageOver[identity] : attr !== "off");
 
-  return { look, loading: owner && q.isLoading, live, change, addAsset, removeAsset, toScene, showBanner, play, playSound, playMusic, present, stopPresenting, backstage, isOnStage };
+  return { look, loading: owner && q.isLoading, live, change, addAsset, removeAsset, toScene, showBanner, play, playSound, playMusic, present, stopPresenting, backOf, clipAct, backstage, isOnStage };
 }
 
 export type RoomKit = ReturnType<typeof useRoomKit>;
