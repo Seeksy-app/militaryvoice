@@ -45,9 +45,12 @@ export function KnowYourWorth({ accounts, podcast }: { accounts: (WorthInput & {
 
       <div className={`grid gap-3 ${w.deliverables.length >= 3 ? "sm:grid-cols-3" : w.deliverables.length === 2 ? "sm:grid-cols-2" : "sm:max-w-sm"}`}>
         {w.deliverables.map((d) => (
-          <div key={d.key} className="rounded-2xl border border-border bg-background p-4 text-center" data-testid={`worth-${w.platform}-${d.key}`}>
-            <p className="text-sm font-semibold">{d.label}</p>
-            <p className="text-xs text-muted-foreground">{d.hint}</p>
+          <div key={d.key} className="flex flex-col rounded-2xl border border-border bg-background p-4 text-center" data-testid={`worth-${w.platform}-${d.key}`}>
+            {/* Title and hint take the slack, so every price in a row sits at one height (Andrew, 24 Nov). */}
+            <div className="flex-1">
+              <p className="text-sm font-semibold">{d.label}</p>
+              <p className="text-balance text-xs text-muted-foreground">{d.hint}</p>
+            </div>
             <p className="mt-2 text-3xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{money(d.mid)}</p>
             {d.high > d.low ? (
               <div className="mt-2 flex justify-center gap-6 text-xs">
@@ -111,9 +114,11 @@ function PodcastWorthView({ pw, name, tabs, how, setHow }: { pw: NonNullable<Ret
       </div>
       <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
         {pw.deliverables.map((d) => (
-          <div key={d.key} className="rounded-2xl border border-border bg-background p-4 text-center" data-testid={`worth-podcast-${d.key}`}>
-            <p className="text-sm font-semibold">{d.label}</p>
-            <p className="text-xs text-muted-foreground">{d.hint}</p>
+          <div key={d.key} className="flex flex-col rounded-2xl border border-border bg-background p-4 text-center" data-testid={`worth-podcast-${d.key}`}>
+            <div className="flex-1">
+              <p className="text-sm font-semibold">{d.label}</p>
+              <p className="text-balance text-xs text-muted-foreground">{d.hint}</p>
+            </div>
             <p className="mt-2 text-3xl font-bold tabular-nums text-emerald-600 dark:text-emerald-400">{money(d.mid)}</p>
             {d.high > d.low ? (
               <div className="mt-2 flex justify-center gap-6 text-xs">
