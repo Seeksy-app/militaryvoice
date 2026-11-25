@@ -661,9 +661,10 @@ export async function sendSponsorInquiryEmail(input: {
 }
 
 export interface PlatformInterestInput {
-  intent: "register" | "beta";
+  intent: "register" | "beta" | "enterprise";
   name: string;
   email: string;
+  phone?: string;
   organization: string;
   eventTiming: string;
   notes: string;
@@ -671,14 +672,17 @@ export interface PlatformInterestInput {
 
 /** Internal heads-up when someone asks about the platform. Never throws. */
 export async function sendPlatformInterestEmail(v: PlatformInterestInput): Promise<boolean> {
-  const heading = v.intent === "register" ? "Event registration" : "Beta list sign-up";
-  const rows: [string, string][] = [
-    ["Name", v.name],
-    ["Email", v.email],
-    ["Organization", v.organization || "—"],
-    ["Next event", v.eventTiming || "—"],
-    ["Notes", v.notes || "—"],
-  ];
+  const heading = v.intent === "enterprise" ? "Organizations: Contact us" : v.intent === "register" ? "Event registration" : "Beta list sign-up";
+  // The pricing page's Organizations form asks four things only: who, email, phone, company.
+  const rows: [string, string][] = v.intent === "enterprise"
+    ? [["Point of contact", v.name], ["Email", v.email], ["Phone", v.phone || "—"], ["Company", v.organization || "—"]]
+    : [
+        ["Name", v.name],
+        ["Email", v.email],
+        ["Organization", v.organization || "—"],
+        ["Next event", v.eventTiming || "—"],
+        ["Notes", v.notes || "—"],
+      ];
   const html = `
   <div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;padding:32px 24px;">
     <p style="margin:0 0 4px;color:#053877;font-size:12px;font-weight:700;letter-spacing:0.08em;text-transform:uppercase;">MilitaryVoices.ai platform</p>

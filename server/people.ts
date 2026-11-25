@@ -15,10 +15,10 @@ import { PLANS } from "../shared/tokens.js";
 import { BUILT_IN_AUDIENCES, matchesFilter, type AudienceFilter, type SavedAudience } from "../shared/crm.js";
 import {
   bioPages, contacts, discoveryMembers, eventTeam, events, hostedShows, inboundEmails, mailLog,
-  podcasterProfiles, postifySubscriptions, pathOf, reminders, signups, sponsorInquiries, sponsorLeads,
+  podcasterProfiles, postifySubscriptions, pathOf, platformInterest, reminders, signups, sponsorInquiries, sponsorLeads,
 } from "../shared/schema.js";
 
-export type Role = "Member" | "Podcaster" | "Co-host" | "Discovery" | "Sponsor" | "Team" | "Listener" | "Imported";
+export type Role = "Member" | "Podcaster" | "Co-host" | "Discovery" | "Sponsor" | "Team" | "Listener" | "Imported" | "Organization";
 export type Person = {
   email: string;
   name: string;
@@ -96,6 +96,13 @@ export async function listPeople(eventId: number | null): Promise<Person[]> {
   if (eventId == null) {
     for (const q of await db.select({ email: sponsorInquiries.email, name: sponsorInquiries.name, createdAt: sponsorInquiries.createdAt }).from(sponsorInquiries)) {
       const p = get(q.email, q.name); role(p, "Sponsor"); joined(p, q.createdAt);
+    }
+  }
+  // Organizations who asked to talk (Pricing → Organizations → Contact us), on the platform's CRM.
+  if (eventId == null) {
+    for (const q of await db.select({ email: platformInterest.email, name: platformInterest.name, intent: platformInterest.intent, createdAt: platformInterest.createdAt }).from(platformInterest)) {
+      if (q.intent !== "enterprise") continue;
+      const p = get(q.email, q.name); role(p, "Organization"); joined(p, q.createdAt);
     }
   }
   // Listeners who asked to be reminded of a show.

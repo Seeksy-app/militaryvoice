@@ -501,6 +501,8 @@ async function ensureSchema() {
       created_at TEXT NOT NULL
     );
   `;
+  // Pricing → Organizations → Contact us asks for a phone number (Andrew, 25 Nov 2026).
+  await sql`ALTER TABLE platform_interest ADD COLUMN IF NOT EXISTS phone TEXT NOT NULL DEFAULT ''`;
 
   await sql`
     CREATE TABLE IF NOT EXISTS site_settings (
@@ -813,7 +815,7 @@ export interface IStorage {
   createRunItem(eventId: number, item: RunItemInput, sortIndex: number): Promise<RunItemRow>;
   updateRunItem(id: number, patch: Partial<RunItemInput> & { sortIndex?: number }): Promise<RunItemRow | undefined>;
   deleteRunItem(id: number): Promise<void>;
-  createPlatformInterest(v: Omit<PlatformInterestRow, "id" | "handled" | "createdAt">): Promise<PlatformInterestRow>;
+  createPlatformInterest(v: Omit<PlatformInterestRow, "id" | "handled" | "createdAt" | "phone"> & { phone?: string }): Promise<PlatformInterestRow>;
   listPlatformInterest(): Promise<PlatformInterestRow[]>;
   getOrCreateStudio(eventId: number): Promise<StudioRow>;
   listStudios(eventId: number): Promise<StudioRow[]>;
@@ -1556,7 +1558,7 @@ class DatabaseStorage implements IStorage {
     await db.delete(runOfShow).where(eq(runOfShow.id, id));
   }
 
-  async createPlatformInterest(v: Omit<PlatformInterestRow, "id" | "handled" | "createdAt">): Promise<PlatformInterestRow> {
+  async createPlatformInterest(v: Omit<PlatformInterestRow, "id" | "handled" | "createdAt" | "phone"> & { phone?: string }): Promise<PlatformInterestRow> {
     await ready();
     const [row] = await db
       .insert(platformInterest)

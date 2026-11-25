@@ -1188,9 +1188,10 @@ export type CohostLineRow = typeof cohostLines.$inferSelect;
 
 export const platformInterest = pgTable("platform_interest", {
   id: serial("id").primaryKey(),
-  intent: text("intent").notNull().default("beta"), // register | beta
+  intent: text("intent").notNull().default("beta"), // register | beta | enterprise (Pricing → Organizations → Contact us)
   name: text("name").notNull(),
   email: text("email").notNull(),
+  phone: text("phone").notNull().default(""),
   organization: text("organization").notNull().default(""),
   eventTiming: text("event_timing").notNull().default(""),
   notes: text("notes").notNull().default(""),
@@ -1200,12 +1201,13 @@ export const platformInterest = pgTable("platform_interest", {
 export type PlatformInterestRow = typeof platformInterest.$inferSelect;
 
 export const platformInterestSchema = z.object({
-  intent: z.enum(["register", "beta"]),
+  intent: z.enum(["register", "beta", "enterprise"]),
   name: z.string().trim().min(1, "Your name is required").max(120),
   email: z.string().trim().email("Enter a valid email"),
+  phone: z.string().trim().max(40).default(""),
   organization: z.string().trim().max(160),
-  eventTiming: z.string().trim().max(60),
-  notes: z.string().trim().max(2000),
+  eventTiming: z.string().trim().max(60).default(""),
+  notes: z.string().trim().max(2000).default(""),
 });
 
 // ---------------------------------------------------------------------------

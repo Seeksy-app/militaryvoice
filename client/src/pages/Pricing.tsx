@@ -8,7 +8,13 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { useToast } from "@/hooks/use-toast";
 import { startPlanCheckout, startTokenCheckout, startAddonCheckout } from "@/lib/tokens";
 import { PLANS, ADDONS, QUARTERLY_ONLY, TEST_PACK, cents, episodeCredits } from "@shared/tokens";
-import { Check, Coins, Loader2, Compass, Info, ChevronDown } from "lucide-react";
+import { Check, Coins, Loader2, Compass, Info, ChevronDown, Minus, Building2, Radio, CheckCircle2 } from "lucide-react";
+import { useMutation } from "@tanstack/react-query";
+import { Turnstile, useTurnstileSiteKey } from "@/components/Turnstile";
+import { apiRequest } from "@/lib/queryClient";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 
 const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
@@ -19,7 +25,11 @@ const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as c
 
 type Feature = { t: string; tip: string };
 
+/** Live Studio hours a month on each plan (Andrew, 25 Nov 2026). Engineering's meter holds the limit. */
+const STUDIO_HOURS = { growth: 2, creator: 4, pro: 10 } as const;
+
 const GROWTH: Feature[] = [
+  { t: `Live Studio, ${STUDIO_HOURS.growth} hours a month`, tip: "Go live, record and stream from your browser, with scenes, your logo, banners and guests. Everything it does is listed below." },
   { t: "SmartLink for every bio", tip: "Your page at militaryvoices.ai/you: your show, your links, your latest episodes and a way for listeners to reach you." },
   { t: "Podcast hosting + directory", tip: "We host your show and its feed, and it's listed in the MilitaryVoices directory." },
   { t: "Publish to 10+ podcast apps", tip: "One feed, listed once in each: Apple Podcasts, Spotify, Amazon Music and Audible, iHeartRadio, YouTube Music, Pocket Casts, TuneIn, Deezer, Player FM, Castbox and Podcast Index, which feeds dozens more. We copy your feed and walk you through each one." },
@@ -32,15 +42,16 @@ const GROWTH: Feature[] = [
 
 const PLAN_FEATURES: Record<string, Feature[]> = {
   creator: [
+    { t: `Live Studio, ${STUDIO_HOURS.creator} hours a month`, tip: "More time in the Studio each month. Everything it does is listed below." },
     { t: "30 Pōstify credits a month", tip: "About 3 episodes a month with animated captions, or 6 with Classic." },
     { t: "4 captioned clips an episode", tip: "Picked by SI from your episode, in vertical, square and wide, ready for every platform." },
     { t: "A clean episode, every time", tip: "Ums, false starts and dead air taken out, as MP3 and MP4. Your original is never changed." },
     { t: "Music and title edits included", tip: "Add a track from our library to every clip, and change a title or subtitle, at no extra cost." },
     { t: "Animated captions", tip: "Word-by-word captions, framed on whoever is talking. Or Classic captions for fewer credits." },
-    { t: "Your own Studio", tip: "A full studio for your show: scenes, layouts, lower thirds and a producer console, empty and yours. Room, for a quick jump in and out, is on every plan." },
     { t: "Extra credits 60¢ each, up to a limit you set", tip: "Run out, and Pōstify keeps going. Extras go on your next bill, never past the limit you set." },
   ],
   pro: [
+    { t: `Live Studio, ${STUDIO_HOURS.pro} hours a month`, tip: "The most time in the Studio each month. Everything it does is listed below." },
     { t: "90 Pōstify credits a month", tip: "About 7 episodes a month with animated captions, or 12 with Classic." },
     { t: "6 clips an episode instead of 4", tip: "Two more moments from every episode, in every shape." },
     { t: "Room for a weekly show", tip: "A weekly 60-minute show uses 48 credits a month on Pro, so you have room for more." },
@@ -49,7 +60,6 @@ const PLAN_FEATURES: Record<string, Feature[]> = {
     { t: "Be a guest", tip: "Find shows that take guests in your field, and have SI help write your pitch." },
     { t: "Discovery Pro included", tip: "Search 800M+ creator profiles for military and veteran guests, partners and sponsors: 100 searches, 25 full profiles and 50 contact emails a month. $50 a month on its own." },
     { t: "Verified creators included", tip: "Everyone MilitaryVoices knows, with their pictures and real numbers, ready to invite as guests or collaborators. $10 a month on its own." },
-    { t: "Live Studio hours (soon)", tip: "When the MilitaryVoices Studio opens to every show, Pro includes live studio hours for yours." },
   ],
 };
 
@@ -107,6 +117,197 @@ function Comparison() {
   );
 }
 
+
+/** What the Studio does today, checked against main on 25 Nov 2026. Every plan, Growth included (no plan gate on /my-studio). */
+const STUDIO: Feature[] = [
+  { t: "Go live on YouTube, Facebook and more", tip: "Your MilitaryVoices page and YouTube, plus other sites with a stream key, like Facebook, LinkedIn or Twitch." },
+  { t: "Scenes and layouts", tip: "Up to 9 scenes, each with its own layout. Switch between them with one click while you're live." },
+  { t: "Your logo, your background", tip: "Up to 6 logos in the corner you pick, and a background colour or your own picture." },
+  { t: "Banners on screen", tip: "Up to 10 ready-made banners: show one for as long as you like, or for a set number of seconds." },
+  { t: "Intro and outro videos", tip: "Play your opening and closing videos with one click, in the recording and on the stream." },
+  { t: "Show a video, picture or slides", tip: "Put a video, a picture or a PDF on the stage. Slides go page by page, up to 60 pages." },
+  { t: "Guests join from a link", tip: "Send a link. They open it, allow their camera and microphone, and they're in. No account, no download." },
+  { t: "Backstage", tip: "Send anyone off stage and bring them back when it's their turn. They stay in the room and can hear you." },
+  { t: "Screen share, with sound", tip: "You and your guests can share a screen or a browser tab, with its audio." },
+  { t: "Extra cameras", tip: "Add up to 2 more cameras on the same computer, each its own box on stage." },
+  { t: "Teleprompter", tip: "Your script on your screen only, never in the recording. Save up to 50 scripts." },
+  { t: "Setups you can reuse", tip: "Save your scenes, logo, banners and videos as a setup, up to 24 a show, and start your next show from it." },
+  { t: "Every show recorded to your Library", tip: "The whole studio as an MP4, in your Library the moment you stop, ready for clips." },
+  { t: "Mark a clip", tip: "Tap Mark a clip when something good happens. The marked moments go to Pōstify for your clips." },
+  { t: "Stream in from StreamYard or OBS", tip: "Keep the tool you know: add MilitaryVoices as a Custom RTMP destination and the show records into your Library too. 10 hours a month." },
+];
+const STUDIO_SOON: string[] = ["a scrolling ticker", "sounds and a music bed", "a background for each scene", "Starting soon, Be right back and countdown cards"];
+
+function StudioBand() {
+  return (
+    <section className="mt-14" data-testid="pricing-studio">
+      <div className="rounded-3xl border border-border bg-card p-6 sm:p-8">
+        <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+          <h2 className="flex items-start gap-2 text-2xl font-bold tracking-tight text-foreground" style={HEADLINE_FONT}><Radio className="mt-1.5 h-5 w-5 shrink-0 text-[#053877]" /> <span className="text-balance">Live Studio, on every plan</span></h2>
+          <p className="text-sm font-semibold text-emerald-700">{STUDIO_HOURS.growth} hours a month free on Growth</p>
+        </div>
+        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">Go live, record and stream your show from the browser. Hover any line for the detail.</p>
+        <ul className="mt-5 grid gap-x-6 gap-y-2 text-sm text-foreground/85 sm:grid-cols-2 lg:grid-cols-3">{STUDIO.map((f) => <Line key={f.t} f={f} />)}</ul>
+        <p className="mt-5 border-t border-border pt-4 text-sm text-muted-foreground"><span className="font-semibold text-foreground">Coming soon:</span> {STUDIO_SOON.join(", ")}.</p>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * MilitaryVoices vs StreamYard. Theirs as listed on streamyard.com/pricing on 25 Nov 2026, billed monthly
+ * (Essential $18.99, Core $44.99, Advanced $88.99). Only what their page lists; nothing claimed they lack.
+ */
+type Cell = { v: "yes" | "no" | "soon" | string; note?: string };
+const VS: { row: string; ours: Cell; theirs: Cell }[] = [
+  { row: "Your own live studio", ours: { v: "yes", note: "Every plan, free included" }, theirs: { v: "yes", note: "Free, with their logo" } },
+  { row: "Stream to several places at once", ours: { v: "yes", note: "YouTube, Facebook and more" }, theirs: { v: "2, 3 or 8", note: "By plan" } },
+  { row: "Custom RTMP", ours: { v: "yes" }, theirs: { v: "yes", note: "Core and up" } },
+  { row: "Logos and backgrounds", ours: { v: "yes" }, theirs: { v: "yes", note: "Core and up" } },
+  { row: "Video clips, intro and outro", ours: { v: "yes" }, theirs: { v: "yes", note: "Core and up" } },
+  { row: "Live streams recorded", ours: { v: "yes", note: "To your Library" }, theirs: { v: "yes", note: "Core and up" } },
+  { row: "Backstage", ours: { v: "yes" }, theirs: { v: "yes", note: "Advanced" } },
+  { row: "Extra cameras", ours: { v: "yes" }, theirs: { v: "yes", note: "Advanced" } },
+  { row: "Teleprompter", ours: { v: "yes" }, theirs: { v: "yes" } },
+  { row: "Reusable setups", ours: { v: "yes" }, theirs: { v: "yes" } },
+  { row: "On-screen guests", ours: { v: "Up to 9" }, theirs: { v: "6 to 10", note: "By plan" } },
+  { row: "AI clips", ours: { v: "yes", note: "Pōstify, Scale and Pro" }, theirs: { v: "yes", note: "Core and up" } },
+  { row: "Transcripts", ours: { v: "Captions per clip" }, theirs: { v: "yes", note: "Advanced" } },
+  { row: "AI backgrounds", ours: { v: "no" }, theirs: { v: "yes", note: "Core and up" } },
+  { row: "Viewer chat on screen", ours: { v: "no" }, theirs: { v: "yes", note: "Core and up" } },
+];
+
+function CellView({ c, ours }: { c: Cell; ours?: boolean }) {
+  const mark = c.v === "yes" ? <Check className={`h-4 w-4 ${ours ? "text-emerald-600" : "text-foreground/70"}`} aria-label="Yes" />
+    : c.v === "no" ? <Minus className="h-4 w-4 text-muted-foreground/60" aria-label="No" />
+    : c.v === "soon" ? <span className="text-xs font-semibold text-[#b36b00]">Soon</span>
+    : <span className="font-semibold tabular-nums">{c.v}</span>;
+  return <div className="flex flex-col items-center gap-0.5 text-center">{mark}{c.note && <span className="text-[11px] leading-tight text-muted-foreground">{c.note}</span>}</div>;
+}
+
+function VsStreamYard() {
+  return (
+    <section className="mt-14" data-testid="pricing-vs">
+      <h2 className="text-center text-2xl font-bold tracking-tight text-foreground" style={HEADLINE_FONT}>MilitaryVoices and StreamYard</h2>
+      <p className="mx-auto mt-1 max-w-xl text-center text-sm text-muted-foreground">The live studio side by side.</p>
+      <div className="mx-auto mt-6 max-w-3xl overflow-hidden rounded-3xl border border-border bg-card">
+        <div className="grid grid-cols-[1fr_6.5rem_6.5rem] items-end gap-2 border-b border-border px-4 py-3 text-sm font-bold sm:grid-cols-[1fr_11rem_11rem] sm:px-6">
+          <span />
+          <span className="text-center text-[#053877] dark:text-[#8fb5e8]">MilitaryVoices</span>
+          <span className="text-center text-foreground/80">StreamYard</span>
+        </div>
+        <div className="grid grid-cols-[1fr_6.5rem_6.5rem] items-center gap-2 border-b border-border bg-[#053877]/[0.04] px-4 py-3 text-sm sm:grid-cols-[1fr_11rem_11rem] sm:px-6">
+          <span className="font-semibold">A month</span>
+          <div className="text-center"><p className="font-bold text-emerald-700">Free</p><p className="text-[11px] leading-tight text-muted-foreground">{STUDIO_HOURS.growth} hours a month; {STUDIO_HOURS.creator} on Scale {cents(PLANS.creator.cents)}, {STUDIO_HOURS.pro} on Pro {cents(PLANS.pro.cents)}</p></div>
+          <div className="text-center"><p className="font-bold tabular-nums">$18.99 to $88.99</p><p className="text-[11px] leading-tight text-muted-foreground">Essential, Core, Advanced</p></div>
+        </div>
+        <ul className="divide-y divide-border">
+          {VS.map((r) => (
+            <li key={r.row} className="grid grid-cols-[1fr_6.5rem_6.5rem] items-center gap-2 px-4 py-2.5 text-sm sm:grid-cols-[1fr_11rem_11rem] sm:px-6">
+              <span className="text-foreground/85">{r.row}</span>
+              <CellView c={r.ours} ours />
+              <CellView c={r.theirs} />
+            </li>
+          ))}
+        </ul>
+      </div>
+      <p className="mx-auto mt-3 max-w-3xl text-center text-[11px] text-muted-foreground">StreamYard prices as listed on streamyard.com on 25 November 2026, billed monthly; features as listed on that page. StreamYard is a trademark of its owner.</p>
+    </section>
+  );
+}
+
+/** Organizations: no price, "Contact us" opens a short form (the pick) rather than a mailto. */
+function Enterprise({ onContact }: { onContact: () => void }) {
+  const lines: Feature[] = [
+    { t: "Your event or convention, produced and streamed", tip: "We run the show: the studio, the stream and the hand-offs, live to your audience wherever they watch." },
+    { t: "An on-site camera crew", tip: "Our crew films on the floor and streams straight through MilitaryVoices." },
+    { t: "The platform, licensed to you", tip: "Live streaming, podcast distribution, social posting and creators, under one agreement." },
+    { t: "Creators and influencers for your event", tip: "Military and veteran creators who host, cover and share your event." },
+  ];
+  return (
+    <section className="mt-5" data-testid="plan-card-enterprise">
+      <div className="flex flex-col gap-5 rounded-3xl bg-[#000741] p-6 text-white sm:p-8 md:flex-row md:items-center">
+        <div className="min-w-0 md:w-64 md:shrink-0">
+          <p className="flex items-center gap-2 text-sm font-semibold text-white/70"><Building2 className="h-4 w-4 text-[#F0A71F]" /> Organizations</p>
+          <p className="mt-2 text-3xl font-bold tracking-tight" style={HEADLINE_FONT}>Let's talk</p>
+          <p className="mt-1 text-sm text-white/70">For events, conventions and organizations.</p>
+        </div>
+        <ul className="grid flex-1 gap-x-6 gap-y-2 text-sm text-white/90 sm:grid-cols-2">
+          {lines.map((f) => (
+            <li key={f.t} className="flex items-start gap-2">
+              <Check className="mt-0.5 h-4 w-4 shrink-0 text-[#F0A71F]" />
+              <Tooltip delayDuration={150}>
+                <TooltipTrigger asChild><span className="cursor-help underline decoration-dotted decoration-white/30 underline-offset-4">{f.t}</span></TooltipTrigger>
+                <TooltipContent className="max-w-[260px] text-xs leading-relaxed">{f.tip}</TooltipContent>
+              </Tooltip>
+            </li>
+          ))}
+        </ul>
+        <Button onClick={onContact} className="shrink-0 rounded-full bg-[#F0A71F] px-6 text-[#000741] hover:bg-[#f5b947]" data-testid="plan-enterprise-contact">Contact us</Button>
+      </div>
+    </section>
+  );
+}
+
+/**
+ * Organizations → Contact us: four fields only (Andrew, 25 Nov 2026: "poc, email, phone, company").
+ * Saved as platform_interest (intent "enterprise"), so it shows in the CRM as an Organization, and
+ * hello@ gets an internal notice. Nothing is emailed to the person who fills it in.
+ */
+function ContactDialog({ open, setOpen }: { open: boolean; setOpen: (v: boolean) => void }) {
+  const { toast } = useToast();
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [phone, setPhone] = useState("");
+  const [company, setCompany] = useState("");
+  const [sent, setSent] = useState(false);
+  const siteKey = useTurnstileSiteKey();
+  const [human, setHuman] = useState<string | null>(null);
+  const [humanReset, setHumanReset] = useState(0);
+  const send = useMutation({
+    mutationFn: async () => apiRequest("POST", "/api/platform-interest", {
+      intent: "enterprise", name: name.trim(), email: email.trim(), phone: phone.trim(), organization: company.trim(), turnstileToken: human,
+    }),
+    onSettled: () => setHumanReset((n) => n + 1),
+    onSuccess: () => setSent(true),
+    onError: (e: Error) => toast({ title: "Couldn't send that", description: e.message, variant: "destructive" }),
+  });
+  const ready = !!name.trim() && /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email.trim()) && !!phone.trim() && !!company.trim() && (!siteKey || !!human);
+  return (
+    <Dialog open={open} onOpenChange={(v) => { setOpen(v); if (!v && sent) { setSent(false); setName(""); setEmail(""); setPhone(""); setCompany(""); } }}>
+      <DialogContent className="w-[calc(100%-2rem)] max-w-md rounded-2xl">
+        {sent ? (
+          <div className="flex flex-col items-center gap-3 py-4 text-center" data-testid="enterprise-sent">
+            <CheckCircle2 className="h-10 w-10 text-emerald-600" />
+            <DialogTitle>Thanks, {name.trim().split(/\s+/)[0]}</DialogTitle>
+            <DialogDescription>We'll get back to you as soon as possible.</DialogDescription>
+            <Button onClick={() => setOpen(false)} className="mt-2 rounded-full px-6">Close</Button>
+          </div>
+        ) : (
+          <>
+            <DialogHeader>
+              <DialogTitle>Let's talk</DialogTitle>
+              <DialogDescription>Leave your details and we'll get back to you as soon as possible.</DialogDescription>
+            </DialogHeader>
+            <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); if (ready && !send.isPending) send.mutate(); }}>
+              <div className="flex flex-col gap-1.5"><Label htmlFor="ent-name">Your name</Label><Input id="ent-name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} data-testid="enterprise-name" /></div>
+              <div className="grid gap-3 sm:grid-cols-2">
+                <div className="flex flex-col gap-1.5"><Label htmlFor="ent-email">Email</Label><Input id="ent-email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} data-testid="enterprise-email" /></div>
+                <div className="flex flex-col gap-1.5"><Label htmlFor="ent-phone">Phone</Label><Input id="ent-phone" type="tel" autoComplete="tel" value={phone} onChange={(e) => setPhone(e.target.value)} data-testid="enterprise-phone" /></div>
+              </div>
+              <div className="flex flex-col gap-1.5"><Label htmlFor="ent-company">Company</Label><Input id="ent-company" autoComplete="organization" value={company} onChange={(e) => setCompany(e.target.value)} data-testid="enterprise-company" /></div>
+              {siteKey && <Turnstile siteKey={siteKey} onToken={setHuman} resetSignal={humanReset} />}
+              <Button type="submit" disabled={!ready || send.isPending} className="w-full rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="enterprise-send">
+                {send.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : "Send"}
+              </Button>
+            </form>
+          </>
+        )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 const EXAMPLES = [
   { label: "An episode, animated captions (4 clips)", credits: episodeCredits({ captions: "animated" }) },
   { label: "An episode, Classic captions (4 clips)", credits: episodeCredits({ captions: "classic" }) },
@@ -123,6 +324,7 @@ export default function Pricing() {
   const testing = typeof window !== "undefined" && new URLSearchParams(window.location.search).has("test");
   const disc = ADDONS.discovery;
   const prod = ADDONS.production;
+  const [contact, setContact] = useState(typeof window !== "undefined" && new URLSearchParams(window.location.search).has("contact"));
 
   async function go(key: string, fn: () => Promise<void>) {
     setBusy(key);
@@ -232,6 +434,11 @@ export default function Pricing() {
             );
           })}
         </div>
+
+        <Enterprise onContact={() => setContact(true)} />
+        <ContactDialog open={contact} setOpen={setContact} />
+        <StudioBand />
+        <VsStreamYard />
 
         {testing && (
           <div className="mx-auto mt-6 flex max-w-md items-center justify-between gap-4 rounded-2xl border border-dashed border-[#F0A71F] bg-[#F0A71F]/10 px-5 py-4">

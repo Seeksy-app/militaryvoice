@@ -19,7 +19,7 @@ export type Person = {
 export type Audience = { key: string; label: string; count: number; reachable: number };
 type Data = { people: Person[]; audiences: Audience[]; saved: SavedAudience[] };
 
-const ROLES = ["Member", "Podcaster", "Co-host", "Discovery", "Sponsor", "Team", "Listener", "Imported"];
+const ROLES = ["Member", "Podcaster", "Co-host", "Discovery", "Sponsor", "Team", "Listener", "Imported", "Organization"];
 const PLAN_NAMES = ["Growth", "Scale", "Pro"];
 
 /** One row of the filter: a label and its choices, any of which can be on. */
@@ -47,6 +47,7 @@ const ROLE_TONE: Record<string, string> = {
   Team: "bg-slate-200 text-slate-800 dark:bg-white/10 dark:text-white/80",
   Listener: "bg-sky-100 text-sky-800 dark:bg-sky-500/15 dark:text-sky-300",
   Imported: "bg-muted text-muted-foreground",
+  Organization: "bg-rose-100 text-rose-800 dark:bg-rose-500/15 dark:text-rose-300",
 };
 
 function ago(iso: string): string {
