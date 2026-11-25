@@ -3167,6 +3167,19 @@ export const bioPages = pgTable("bio_pages", {
 }, (t) => [uniqueIndex("bio_pages_handle").on(t.handle), uniqueIndex("bio_pages_email").on(t.email)]);
 export type BioPageRow = typeof bioPages.$inferSelect;
 
+/**
+ * A watch address for someone with no SmartLink (Andrew, 25 Nov 2026: "We should automatically have a web page,
+ * regardless of whether they have a podcast or not"). militaryvoices.ai/<handle>/live plays their show; nothing at
+ * /<handle> until they make a SmartLink, which then starts with this handle. Kept apart from bio_pages so no SmartLink
+ * is made, published or counted. Handles share one namespace with bio_pages.
+ */
+export const watchPages = pgTable("watch_pages", {
+  id: serial("id").primaryKey(),
+  email: text("email").notNull(),
+  handle: text("handle").notNull(),
+  createdAt: text("created_at").notNull(),
+}, (t) => [uniqueIndex("watch_pages_handle").on(t.handle), uniqueIndex("watch_pages_email").on(t.email)]);
+
 /** Views, link taps, plays and shares on a bio page, a row each. */
 export const bioEvents = pgTable("bio_events", {
   id: serial("id").primaryKey(),

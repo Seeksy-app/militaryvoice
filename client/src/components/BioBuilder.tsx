@@ -387,7 +387,7 @@ export function BioBuilder() {
           {tab === "design" && <DesignTab d={draft} change={change} view={view} cutting={cutting} cutError={cutError} living={living} startLiving={startLiving} pro={!!q.data?.pro} />}
           {tab === "content" && <ContentTab d={draft} change={change} view={view} knowledge={q.data?.knowledge} onPeek={setPopPeek} />}
           {tab === "social" && <SocialTab d={draft} change={change} />}
-          {tab === "share" && <ShareTab url={url} />}
+          {tab === "share" && <ShareTab url={url} published={draft.published} setPublished={(on) => change({ published: on }, true)} />}
           {tab === "brands" && <BrandsTab d={draft} change={change} url={url} kit={kitView} episodes={q.data?.familyPreview?.podcast?.episodes ?? []} />}
           {tab === "family" && <FamilyTab d={draft} change={change} flush={flush} url={url} famPreview={famView} />}
           {tab === "questions" && <QuestionsTab items={q.data?.questions ?? []} onChange={() => void qc.invalidateQueries({ queryKey: KEY })} />}
@@ -2112,7 +2112,23 @@ function WebsiteCard() {
   );
 }
 
-function ShareTab({ url }: { url: string }) {
+/** On or off (25 Nov 2026: the watch page for everyone): until now nothing in the editor could switch a page back on.
+    It switches the SmartLink only; their watch page at /<handle>/live keeps its own switch in Integrations, Live. */
+function PageOnOff({ url, published, setPublished }: { url: string; published: boolean; setPublished: (on: boolean) => void }) {
+  const { toast } = useToast();
+  return (
+    <div className={`flex items-center gap-3 rounded-2xl border bg-card p-4 ${published ? "border-2 border-[#12b76a] p-[15px]" : "border-border"}`} data-testid="bio-onoff">
+      <div className="min-w-0 flex-1">
+        <p className="font-bold">{published ? "Your page is on" : "Your page is off"}</p>
+        <p className="mt-0.5 text-[13px] text-muted-foreground">{published ? <>{url.replace(/^https?:\/\/(www\.)?/, "")} · anyone with the link can see it</> : "Visitors can't see it yet. Switch it on when you're ready."}</p>
+      </div>
+      {published && <Button variant="outline" size="sm" onClick={() => void navigator.clipboard.writeText(url).then(() => toast({ title: "Link copied", description: "Paste it in your bio, your show notes, anywhere." }))} className="h-9 shrink-0 gap-1.5 rounded-full" data-testid="bio-onoff-copy"><Copy className="h-3.5 w-3.5" /> Copy link</Button>}
+      <Switch checked={published} onCheckedChange={setPublished} aria-label={published ? "Your page is on" : "Your page is off"} className="shrink-0 data-[state=checked]:bg-[#12b76a]" data-testid="bio-onoff-switch" />
+    </div>
+  );
+}
+
+function ShareTab({ url, published, setPublished }: { url: string; published: boolean; setPublished: (on: boolean) => void }) {
   const { toast } = useToast();
   const [qr, setQr] = useState("");
   useEffect(() => { QRCode.toDataURL(url, { margin: 1, width: 480, color: { dark: "#000741", light: "#ffffff" } }).then(setQr).catch(() => setQr("")); }, [url]);
@@ -2129,6 +2145,7 @@ function ShareTab({ url }: { url: string }) {
   ];
   return (
     <div className="space-y-4">
+      <PageOnOff url={url} published={published} setPublished={setPublished} />
       <Card icon={Share2} tone="gold" title="Send your page">
         <p className="-mt-1 text-xs text-muted-foreground">Or put your link in your Instagram and TikTok bio, your show notes and your email signature.</p>
         <div className="grid grid-cols-4 gap-2">

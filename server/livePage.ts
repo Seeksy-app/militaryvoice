@@ -8,10 +8,11 @@ import crypto from "node:crypto";
 import { AccessToken } from "livekit-server-sdk";
 import { eq } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
+import { freeHandle, slugify, podcastFor } from "./bioPage.js";
 import { getSessionEmail } from "./session.js";
 import { isLiveKitConfigured, publicLiveKitUrl } from "./livekit.js";
 import { roomLookKey } from "./roomKit.js";
-import { bioPages, personalStudios, streamKeys } from "../shared/schema.js";
+import { bioPages, personalStudios, streamKeys, watchPages, type BioPageRow } from "../shared/schema.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 const norm = (e: string) => e.trim().toLowerCase();
@@ -25,16 +26,34 @@ export async function streamInOutOn(email: string): Promise<boolean> {
   return (await storage.getSetting(`streamin:out:${norm(email)}`).catch(() => null)) !== "0";
 }
 
-/** Their published SmartLink's handle: the live page lives under it. */
-export async function liveHandleOf(email: string): Promise<string> {
-  const [row] = await db.select({ handle: bioPages.handle, published: bioPages.published }).from(bioPages).where(eq(bioPages.email, norm(email))).limit(1);
-  return row?.published ? row.handle : "";
+/**
+ * Where their live page lives: their SmartLink's handle (on or off: the handle is theirs either way), else their own
+ * watch address, made here the first time it's asked for (Andrew, 25 Nov 2026: "We should automatically have a web
+ * page, regardless of whether they have a podcast or not"). Making one never makes a SmartLink.
+ */
+export async function liveHandleOf(email: string, make = true): Promise<string> {
+  const e = norm(email);
+  if (!e) return "";
+  await schemaIsReady();
+  const [bio] = await db.select({ handle: bioPages.handle }).from(bioPages).where(eq(bioPages.email, e)).limit(1);
+  if (bio?.handle) return bio.handle;
+  const [w] = await db.select({ handle: watchPages.handle }).from(watchPages).where(eq(watchPages.email, e)).limit(1);
+  if (w?.handle || !make) return w?.handle ?? "";
+  const p = await storage.getProfileByEmail(e).catch(() => undefined);
+  for (let i = 0; i < 3; i++) {
+    const handle = await freeHandle(slugify(p?.hostName || p?.podcastName || e.split("@")[0]));
+    const [made] = await db.insert(watchPages).values({ email: e, handle, createdAt: new Date().toISOString() }).onConflictDoNothing().returning();
+    if (made) return made.handle;
+    const [again] = await db.select({ handle: watchPages.handle }).from(watchPages).where(eq(watchPages.email, e)).limit(1);
+    if (again) return again.handle; // a second request made it first
+  }
+  return "";
 }
-/** Their SmartLink picture, the one their live page shows: the Live settings row wears it (Andrew, 23 Nov: "Please make
-    ICON for MilitaryVoices the Profile image"). Empty when there's none, and the row keeps the MV tile. */
+/** Their picture for the live page: their SmartLink's, else their profile photo. Empty when there's none. */
 export async function livePhotoOf(email: string): Promise<string> {
   const [row] = await db.select({ avatarUrl: bioPages.avatarUrl }).from(bioPages).where(eq(bioPages.email, norm(email))).limit(1);
-  return row?.avatarUrl || "";
+  if (row?.avatarUrl) return row.avatarUrl;
+  return (await storage.getProfileByEmail(norm(email)).catch(() => undefined))?.photoUrl || "";
 }
 export const liveUrlOf = (handle: string) => (handle ? `${ORIGIN}/${handle}/live` : "");
 
@@ -67,6 +86,37 @@ async function liveNowFor(email: string, withToken: boolean): Promise<LiveNow | 
   return null;
 }
 
+type PageAt = { email: string; handle: string; name: string; photo: string; bio: BioPageRow | null; moved?: string };
+
+/** Whose live page a handle is: a SmartLink's (on or off), else a watch address. */
+async function pageAt(h: string): Promise<PageAt | null> {
+  const [row] = await db.select().from(bioPages).where(eq(bioPages.handle, h)).limit(1);
+  if (row) {
+    const email = norm(row.email);
+    const p = row.displayName && row.avatarUrl ? undefined : await storage.getProfileByEmail(email).catch(() => undefined);
+    return { email, handle: row.handle, name: row.displayName || p?.hostName || p?.podcastName || row.handle, photo: row.avatarUrl || p?.photoUrl || "", bio: row };
+  }
+  const [w] = await db.select().from(watchPages).where(eq(watchPages.handle, h)).limit(1);
+  if (!w) return null;
+  const email = norm(w.email);
+  const [bio] = await db.select().from(bioPages).where(eq(bioPages.email, email)).limit(1);
+  if (bio && bio.handle !== w.handle) return { email, handle: w.handle, name: "", photo: "", bio, moved: bio.handle };
+  const p = await storage.getProfileByEmail(email).catch(() => undefined);
+  return { email, handle: w.handle, name: p?.hostName || p?.podcastName || w.handle, photo: p?.photoUrl || "", bio: null };
+}
+
+/** Their podcast for the card under the player: the SmartLink's pick, else the first show hosted here, else their feed. */
+async function showCardOf(email: string, bio: BioPageRow | null): Promise<{ title: string; artworkUrl: string; url: string; latest: string } | null> {
+  let row = bio;
+  if (!row) {
+    const p = await storage.getProfileByEmail(email).catch(() => undefined);
+    row = { email, theme: "", rssUrl: p?.rssUrl || "" } as BioPageRow;
+  }
+  const pod = await podcastFor(row);
+  if (!pod) return null;
+  return { title: pod.title, artworkUrl: pod.artworkUrl, url: (bio?.published ? `${ORIGIN}/${bio.handle}` : "") || pod.pageUrl || "", latest: pod.episodes[0]?.title ?? "" };
+}
+
 export function registerLivePage(app: Express, requireHostSession: RequestHandler): void {
   /** The public page's data: who it is, and their show if it's live (with a watch-only seat). Polled every 20 s. */
   app.get("/api/live/:handle", async (req, res) => {
@@ -74,12 +124,19 @@ export function registerLivePage(app: Express, requireHostSession: RequestHandle
     await schemaIsReady();
     const h = String(req.params.handle ?? "").toLowerCase();
     if (!/^[a-z0-9][a-z0-9._-]{0,60}$/.test(h)) return res.status(404).json({ message: "No such page." });
-    const [row] = await db.select().from(bioPages).where(eq(bioPages.handle, h)).limit(1);
-    if (!row || !row.published) return res.status(404).json({ message: "No such page." });
-    const email = norm(row.email);
+    const page = await pageAt(h);
+    if (!page) return res.status(404).json({ message: "No such page." });
+    // An old watch address whose owner has since made a SmartLink under another handle: send them on.
+    if (page.moved) return res.json({ moved: page.moved });
+    const email = page.email;
     const on = await livePageOn(email);
     const live = on ? await liveNowFor(email, true).catch(() => null) : null;
-    res.json({ handle: row.handle, name: row.displayName || row.handle, photo: row.avatarUrl || "", on, live });
+    res.json({
+      handle: page.handle, name: page.name, photo: page.photo, on, live,
+      /** Their SmartLink, when it's on: the live page links back to it. */
+      smartLink: page.bio?.published ? page.bio.handle : "",
+      podcast: on ? await showCardOf(email, page.bio).catch(() => null) : null,
+    });
   });
 
   /** Their switch, and where the page is. */

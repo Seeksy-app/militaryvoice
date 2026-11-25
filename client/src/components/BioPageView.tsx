@@ -28,7 +28,9 @@ export type AiAnswer = { answer: string; sources: { n: number; title: string; st
 export type ChatMsg = { token: string; question: string; reply: string; repliedAt: string; createdAt: string };
 type AskInput = { name: string; email: string; question: string; episode: string; website: string };
 
-export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, onLoadMessages, onSubscribe, shareBase, popupPeek = false, onPopupClose, onAddSocials }: {
+export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, onLoadMessages, onSubscribe, shareBase, popupPeek = false, onPopupClose, onAddSocials, live }: {
+  /** While they're live: the LIVE card, first on the page (the public page only; 25 Nov, the watch page for everyone). */
+  live?: React.ReactNode;
   /** In the builder, when no social accounts are added yet: shows a nudge to add them, and this opens where. */
   onAddSocials?: () => void;
   data: BioPublic;
@@ -148,6 +150,7 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
       <PageTop t={t} avatar={data.avatarUrl} hero={data.heroUrl} cutoutUrl={data.cutoutUrl} living={LIVING_ON && t.living ? data.livingUrl : ""} name={noName ? "" : data.displayName || "Your name"} handle={data.handle} latest={data.podcast?.episodes[0]?.title}>{who}</PageTop>
 
       <div className="mx-auto mt-6 flex max-w-[560px] flex-col gap-4 px-4">
+        {live}
         {/* Their blocks in their order; the podcast is one of them (they add it from Content). */}
         {data.sections.map((s) => s.type === "podcast" ? (data.podcast ? <PodcastCard key={s.id} p={data.podcast} siteUrl={data.siteUrl} onAsk={data.ai?.enabled ? setAskEp : undefined} opts={{ ...DEFAULT_PODCAST, ...(t.podcast ?? {}) }} style={t.podcastStyle ?? "spotlight"} full={(t.podcastFrame ?? "full") === "full"} fallbackArt={data.avatarUrl} accent={accent} ink={ink} sub={sub} card={card} line={line} radius={radius} preview={preview} ev={ev} share={share} copied={copied} /> : null) : <Section key={s.id} s={s} btn={btn} ink={ink} sub={sub} card={card} line={line} accent={accent} preview={preview} ev={ev} handle={data.handle} onSubscribe={onSubscribe} />)}
         {BRANDS_LIVE && data.brandsOn && <p className="mt-2 text-center text-xs" style={{ color: sub }}><a href={preview ? undefined : `/${data.handle}/brands`} className="font-semibold hover:underline" data-testid="bio-for-brands">For brands: sponsor this show</a></p>}

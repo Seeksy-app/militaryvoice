@@ -79,7 +79,7 @@ export function DestinationBar({ studio, live, onAdd }: { studio: DestStudio; li
     <div role="group" aria-label="Where the show goes" className="hidden h-[42px] items-center gap-2.5 rounded-xl border border-[#e4e7ec] bg-white pl-1.5 pr-1.5 lg:flex xl:pl-3" title={live ? "You're live. Change these after the show." : undefined} data-testid="dest-bar">
       <span className="hidden text-xs font-bold text-[#475467] xl:inline">{live ? "Live on" : "Going to"}</span>
       {studio.livePage?.url && (
-        <Circle label="Your MilitaryVoices page" on={!!studio.livePage.on} disabled={lock} onClick={() => void page(!studio.livePage!.on)} testId="dest-page">
+        <Circle label="Your watch page" on={!!studio.livePage.on} disabled={lock} onClick={() => void page(!studio.livePage!.on)} testId="dest-page">
           <span className="flex h-full w-full items-center justify-center rounded-full text-[10px] font-extrabold tracking-tight text-white" style={{ background: NAVY }}>MV</span>
         </Circle>
       )}
@@ -181,7 +181,7 @@ function Grid({ studio, onPick }: { studio: DestStudio; onPick: (s: KeySite | "y
         {studio.livePage?.url && (
           <button type="button" onClick={() => void page(!pageOn)} disabled={busy !== ""} aria-pressed={pageOn} className={`${tile} ${pageOn ? "border-2 border-[#053877] bg-[#f5f8fd]" : "border border-[#e4e7ec] hover:bg-[#f9fafb]"}`} data-testid="dest-tile-page">
             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[13px] font-extrabold text-white" style={{ background: NAVY }}>MV</span>
-            <span className="min-w-0 flex-1"><span className="block text-[15px] font-bold">Your MilitaryVoices page</span><span className="block text-xs text-[#475467]">Nothing to set up. Click to switch it {pageOn ? "off" : "on"}.</span></span>
+            <span className="min-w-0 flex-1"><span className="block text-[15px] font-bold">Your watch page</span><span className="block text-xs text-[#475467]">Nothing to set up. Click to switch it {pageOn ? "off" : "on"}.</span></span>
             {busy === "page" ? <Loader2 className="h-4 w-4 animate-spin" /> : onTag(pageOn)}
           </button>
         )}

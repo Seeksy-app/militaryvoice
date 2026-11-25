@@ -26,6 +26,7 @@ import { PhoneStudio } from "@/components/room/PhoneStudio";
 import { LayoutEditor } from "@/components/room/LayoutEditor";
 import { MarkClip } from "@/components/room/MarkClip";
 import { AddDestinationSheet, DestinationBar, anyDestinationOn } from "@/components/room/Destinations";
+import { CopyLinkButton } from "@/components/WatchLink";
 import { RoomStage } from "@/components/RoomStage";
 import { YoutubeKeyForm, useYoutubeKey, useYoutubeConnectResult, youtubeConnectHref } from "@/components/ConnectYoutube";
 import { PrompterNews, PrompterOverlay, PrompterSwitch, ScriptsBar, usePrompter, useStudioNotes, type NotesSync } from "@/components/room/Teleprompter";
@@ -1483,11 +1484,13 @@ function GoLiveSheet({ studio, onClose, onAdd }: { studio: Studio; onClose: () =
       <h2 className="text-[22px] font-bold tracking-tight">Go live</h2>
       <p className="mt-1 text-[15px] text-[#475467]">Pick where the show goes.</p>
       <div className="mt-5 space-y-2.5">
-        {/* Their MilitaryVoices live page (22 Nov: the one-place Live mockup): on by default once their SmartLink is published. */}
+        {/* Their watch page (25 Nov: "Yes, build it", the watch page for everyone): every account has one, SmartLink or not.
+            Copy link sits beside it so they can send it before the show. */}
         {studio.livePage?.url && (
-          <div className={`flex items-center gap-4 rounded-2xl border p-4 ${pageOn ? "border-2 border-[#053877] bg-[#f5f8fd] p-[15px]" : "border-[#e4e7ec]"}`} data-testid="golive-page-row">
+          <div className={`flex items-center gap-3 rounded-2xl border p-4 sm:gap-4 ${pageOn ? "border-2 border-[#053877] bg-[#f5f8fd] p-[15px]" : "border-[#e4e7ec]"}`} data-testid="golive-page-row">
             <div className={`${icon} text-[13px] font-extrabold tracking-tight text-white`} style={{ background: NAVY }}>MV</div>
-            <div className="min-w-0 flex-1"><p className="font-semibold">Your MilitaryVoices page</p><p className="truncate text-[13px] text-[#475467]">{studio.livePage.url.replace(/^https?:\/\/(www\.)?/, "")}</p></div>
+            <div className="min-w-0 flex-1"><p className="font-semibold">Your watch page</p><p className="truncate text-[13px] text-[#475467]">{studio.livePage.url.replace(/^https?:\/\/(www\.)?/, "")}</p></div>
+            <CopyLinkButton url={studio.livePage.url} testId="golive-page-copy" />
             <button type="button" onClick={() => void togglePage()} disabled={busy !== ""} aria-pressed={pageOn} className={`h-9 rounded-xl px-4 text-sm font-bold disabled:opacity-60 ${pageOn ? "text-white" : "border border-[#d0d5dd] bg-white text-[#344054]"}`} style={pageOn ? { background: NAVY } : undefined} data-testid="golive-page-toggle">{pageOn ? "Selected" : "Select"}</button>
           </div>
         )}

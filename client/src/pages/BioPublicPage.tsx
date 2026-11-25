@@ -2,6 +2,7 @@ import { useEffect } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { BioPageView, type ChatMsg } from "@/components/BioPageView";
 import NotFound from "@/pages/not-found";
+import { SmartLinkLive } from "@/components/SmartLinkLive";
 import { bioPalette, type BioPublic } from "@shared/bio";
 
 /** militaryvoices.ai/<handle>: a podcaster's page, as the builder previews it. */
@@ -29,6 +30,7 @@ export default function BioPublicPage({ handle }: { handle: string }) {
       <BioPageView
         data={q.data}
         shareBase={`${window.location.origin}/${q.data.handle}`}
+        live={<SmartLinkLive handle={q.data.handle} />}
         onEvent={event}
         onAskAi={async (question, history, episode) => {
           const r = await fetch(`/api/public/bio/${encodeURIComponent(h)}/ask-ai`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ question, history, episode }) });

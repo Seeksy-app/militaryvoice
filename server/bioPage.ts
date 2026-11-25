@@ -15,7 +15,7 @@ import { readFeed, hostedAsStats } from "./hosting.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
 import { noteFalRefused } from "./health.js";
 import { aiFor, knowledgeOf, syncKnowledge } from "./askShow.js";
-import { bioPages, bioEvents, bioSubscribers, listenerQuestions, hostedShows, hostedEpisodes, type BioPageRow } from "../shared/schema.js";
+import { bioPages, bioEvents, bioSubscribers, listenerQuestions, hostedShows, hostedEpisodes, watchPages, type BioPageRow } from "../shared/schema.js";
 import { DEFAULT_PODCAST, parseTheme, parseSections, parseSocials, parseBrands, parseFamily, type BioFamily, type BioFamilyPublic, handleOk, TEMPLATES, type BioPublic, type BioSection, type BioSocial, type BioTheme, type BioBrands, type BioBrandsPublic, type BioViewMedia, type BioLayout, BRANDS_SECTIONS, FAMILY_SECTIONS, INTRO_VOICES } from "../shared/bio.js";
 import type { PodcastStatsData } from "../shared/schema.js";
 
@@ -47,7 +47,9 @@ export async function freeHandle(base: string): Promise<string> {
     const h = i ? `${b}${i + 1}` : b;
     if (!handleOk(h)) continue;
     const [hit] = await db.select({ id: bioPages.id }).from(bioPages).where(eq(bioPages.handle, h)).limit(1);
-    if (!hit) return h;
+    // Watch addresses (people with no SmartLink yet) share the namespace.
+    const [watch] = hit ? [] : await db.select({ id: watchPages.id }).from(watchPages).where(eq(watchPages.handle, h)).limit(1);
+    if (!hit && !watch) return h;
   }
   return `${b}${crypto.randomBytes(2).toString("hex")}`;
 }
@@ -58,7 +60,9 @@ async function pageFor(email: string, draft = false): Promise<BioPageRow> {
   const [row] = await db.select().from(bioPages).where(eq(bioPages.email, email)).limit(1);
   if (row) return row;
   const p = await storage.getProfileByEmail(email).catch(() => undefined);
-  const handle = await freeHandle(slugify(p?.podcastName || p?.hostName || email.split("@")[0]));
+  // Their watch address, if they have one, becomes the SmartLink's handle, so the link they've shared keeps working.
+  const [watch] = await db.select({ handle: watchPages.handle }).from(watchPages).where(eq(watchPages.email, email)).limit(1);
+  const handle = watch?.handle || await freeHandle(slugify(p?.podcastName || p?.hostName || email.split("@")[0]));
   const [made] = await db.insert(bioPages).values({
     email, handle,
     displayName: p?.podcastName || p?.hostName || "",
@@ -85,7 +89,7 @@ export async function publishedBioUrl(email: string): Promise<string> {
 const feedCache = new Map<string, { at: number; data: BioPublic["podcast"] }>();
 
 /** The show for the page: hosted here first; otherwise their feed. */
-async function podcastFor(row: BioPageRow): Promise<BioPublic["podcast"]> {
+export async function podcastFor(row: BioPageRow): Promise<BioPublic["podcast"]> {
   // Their pick: a show hosted here (the first by default), or a feed from another host.
   const source = parseTheme(row.theme).podcast?.source ?? "";
   const shows = source === "rss" ? [] : await db.select().from(hostedShows).where(eq(hostedShows.email, row.email)).orderBy(hostedShows.archivedAt, hostedShows.id); // archived last: the default is a show in use
@@ -534,7 +538,8 @@ export function registerBioPage(app: Express) {
       const h = b.handle.trim().toLowerCase();
       if (!handleOk(h)) return res.status(400).json({ message: "3 to 30 letters, numbers, dots, dashes or underscores, and not a word the site already uses." });
       const [taken] = await db.select({ id: bioPages.id }).from(bioPages).where(eq(bioPages.handle, h)).limit(1);
-      if (taken && taken.id !== row.id) return res.status(409).json({ message: `militaryvoices.ai/${h} is taken. Try another.` });
+      const [watch] = await db.select({ email: watchPages.email }).from(watchPages).where(eq(watchPages.handle, h)).limit(1);
+      if ((taken && taken.id !== row.id) || (watch && watch.email.toLowerCase() !== row.email.toLowerCase())) return res.status(409).json({ message: `militaryvoices.ai/${h} is taken. Try another.` });
       patch.handle = h;
     }
     if (typeof b.displayName === "string") patch.displayName = b.displayName.slice(0, 80);

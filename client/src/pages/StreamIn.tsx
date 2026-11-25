@@ -4,6 +4,7 @@ import { ArrowLeft, Cable, RefreshCw } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { BrandMark, BrandStack, type Brand } from "@/components/BrandMark";
 import { CopyField } from "@/components/OwnEncoder";
+import { StreamInWatchCard } from "@/components/WatchLink";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
@@ -16,6 +17,7 @@ type Payload = {
   configured: boolean;
   key: { url: string; streamKey: string; status: "idle" | "live" | "paused"; arriving: boolean; liveSince: string; pausedWhy: string; problem: string } | null;
   usage: { usedMin: number; capMin: number };
+  playsOnPage?: boolean;
 };
 
 const hours = (min: number) => (min >= 60 ? `${Math.round((min / 60) * 10) / 10} hours` : `${min} minutes`);
@@ -84,6 +86,8 @@ export default function StreamIn() {
             </Button>
           </div>
         )}
+
+        {!signedOut && data?.configured && <StreamInWatchCard plays={data.playsOnPage !== false} />}
 
         {!signedOut && k && (
           <>

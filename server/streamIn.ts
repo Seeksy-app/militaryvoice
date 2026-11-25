@@ -318,7 +318,14 @@ async function view(c: StreamKeyRow | undefined) {
         }
       : null,
     usage: { usedMin: Math.round(used / 60), capMin: Math.round(cap / 60) },
+    /** Whether what they send in plays on their watch page: LiveKit keys do; our own box's once its watch relay is on. */
+    playsOnPage: (c ? c.engine !== "own" : (await pickEngine()) !== "own") || (await ownWatchOn()),
   };
+}
+
+/** Our own box re-shares each stream for the watch page and sends it on (the box's watch relay, 25 Nov 2026). Off until the box has it. */
+export async function ownWatchOn(): Promise<boolean> {
+  return (await storage.getSetting("streamin:own-watch").catch(() => null)) === "1";
 }
 
 /**

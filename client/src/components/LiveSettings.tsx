@@ -70,7 +70,7 @@ function useSetLivePage() {
   });
 }
 
-/** 1. Their MilitaryVoices page: on unless they switch it off; needs a published SmartLink for its address. */
+/** 1. Their MilitaryVoices page: on unless they switch it off; every account has an address (their SmartLink's, else a watch address). */
 function LivePageRow() {
   const { data } = useLivePage();
   const set = useSetLivePage();
@@ -82,8 +82,8 @@ function LivePageRow() {
         {data.live ? " · live now" : ": every live show plays there."}
       </>;
   return (
-    <LiveRow testId="row-live-page" icon={<PageTile photo={data.photo} />} name="Your MilitaryVoices page" line={line}
-      right={data.handle ? <Switch checked={data.on} onCheckedChange={(on) => set.mutate({ on })} disabled={set.isPending} aria-label="Live on your MilitaryVoices page" data-testid="live-page-switch" /> : undefined} />
+    <LiveRow testId="row-live-page" icon={<PageTile photo={data.photo} />} name="Your watch page" line={line}
+      right={data.handle ? <Switch checked={data.on} onCheckedChange={(on) => set.mutate({ on })} disabled={set.isPending} aria-label="Live on your watch page" data-testid="live-page-switch" /> : undefined} />
   );
 }
 
@@ -249,7 +249,7 @@ export function StreamInBlock() {
         <p className="mb-2 text-[13px] font-bold text-foreground">When you stream in</p>
         <label className="flex cursor-pointer items-start gap-3">
           <input type="checkbox" checked={out} onChange={(e) => set.mutate({ streamInOut: e.target.checked })} disabled={set.isPending} className="mt-0.5 h-5 w-5 shrink-0 accent-[#067647]" data-testid="stream-in-out" />
-          <span className="text-sm">Live on your MilitaryVoices page
+          <span className="text-sm">Live on your watch page
             <span className="block text-[13px] text-muted-foreground">And on to YouTube and the others above, if they're on.</span>
           </span>
         </label>

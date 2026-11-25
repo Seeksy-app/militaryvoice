@@ -10,6 +10,7 @@ import { Select } from "@/components/room/Select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { CopyField } from "@/components/OwnEncoder";
+import { WatchLinkCard } from "@/components/WatchLink";
 
 type Invite = { id: number; guestName: string; guestEmail: string; whenText: string; zoomLink: string; note: string; status: "invited" | "answered"; answers: Record<string, string> & { custom?: { q: string; a: string }[] }; hasPhoto: boolean; whenIso?: string; linkedinUrl?: string; invitedAt: string; answeredAt: string; usedRec: number; link: string };
 const say = (e: unknown) => ((e as Error).message ?? "").replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, "") || "Try again in a moment.";
@@ -278,6 +279,8 @@ export function GuestInvites({ prefill, shows = [], showId }: { prefill?: { name
             ))}
             {questions.length < 10 && <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={() => setQuestions((qs) => [...qs, ""])} data-testid="guest-invite-add-question">+ Add a question</Button>}
           </div>
+          {/* Where people watch the show (25 Nov: "Yes, build it", the watch page for everyone): a studio or stream-in show plays there. */}
+          {(where === "studio" || isOutside(where)) && <div className="sm:col-span-2"><WatchLinkCard note="send it to your guest so they can share it" testId="invite-watch" /></div>}
           <div className="sm:col-span-2"><Button type="submit" disabled={send.isPending || !f.guestName.trim() || !f.guestEmail.trim()} className="rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="guest-invite-submit">{send.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}Send the invitation</Button></div>
           <div className="space-y-1 sm:col-span-2 text-xs text-muted-foreground" data-testid="invite-sender">
             {editSlug === null ? (
