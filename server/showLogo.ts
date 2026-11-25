@@ -43,7 +43,7 @@ export async function showLogoOf(email: string): Promise<string> {
  * Their podcast's cover art, or "". With `room` (their studio's name, and ?show= when there is one), the cover of that
  * room's show (showFor: the picked show, else the title that matches the room, else their profile's podcast, else their
  * only show), and "" when it can't tell, so the page draws our mark rather than another show's cover (Riccoh, 24 Nov).
- * Without it, as before: the first show they host with us.
+ * Without it: the show their profile's podcast names, else the first show they host with us.
  */
 export async function showCoverOf(email: string, room?: { name?: string | null; show?: unknown }): Promise<string> {
   if (!norm(email)) return "";
@@ -54,7 +54,13 @@ export async function showCoverOf(email: string, room?: { name?: string | null; 
     const [hit] = await db.select({ art: hostedShows.artworkUrl }).from(hostedShows).where(eq(hostedShows.id, show.id)).limit(1).catch(() => []);
     return hit?.art || "";
   }
-  const [row] = await db.select({ art: hostedShows.artworkUrl }).from(hostedShows).where(eq(hostedShows.email, norm(email))).orderBy(asc(hostedShows.archivedAt), asc(hostedShows.id)).limit(1).catch(() => []);
+  // No room: the show their profile names (Riccoh, 24 Nov: Warriors' Voice thumbnails and corners showed his older
+  // Devil Dawg cover), else their only one, else the first they host with us.
+  const profile = await storage.getProfileByEmail(norm(email)).catch(() => undefined);
+  const named = profile?.podcastName ? await showFor(norm(email), "", profile.podcastName).catch(() => null) : null;
+  const [row] = await db.select({ art: hostedShows.artworkUrl }).from(hostedShows)
+    .where(named ? eq(hostedShows.id, named.id) : eq(hostedShows.email, norm(email)))
+    .orderBy(asc(hostedShows.archivedAt), asc(hostedShows.id)).limit(1).catch(() => []);
   return row?.art || "";
 }
 
