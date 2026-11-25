@@ -86,7 +86,7 @@ export function ChooseSetup({ roomName, shows, showId, onShow, v3, onDone, logo 
         ) : <>
           {q.data?.current && (
             <div className="flex flex-col gap-4 rounded-[18px] border-2 border-[#053877] bg-white p-4 shadow-[0_8px_24px_rgba(16,24,40,0.06)] sm:flex-row sm:items-center sm:gap-5" data-testid="setup-continue">
-              <div className="aspect-video w-full shrink-0 overflow-hidden rounded-[10px] sm:w-[192px]"><ScenePicture s={q.data.current.first} /></div>
+              <div className="aspect-video w-full shrink-0 overflow-hidden rounded-[10px] sm:w-[192px]"><ScenePicture s={q.data.current.first} scale={1.35} /></div>
               <div className="min-w-0 flex-1">
                 <p className="text-xs font-bold uppercase tracking-[0.08em] text-[#053877]">Pick up where you left off</p>
                 <p className="mt-1 truncate text-lg font-bold">{q.data.current.name}</p>
@@ -101,7 +101,7 @@ export function ChooseSetup({ roomName, shows, showId, onShow, v3, onDone, logo 
             <div className="grid grid-cols-1 gap-3.5 sm:grid-cols-2 lg:grid-cols-4">
               {saved.map((c) => (
                 <div key={c.id} className="relative flex flex-col gap-2 rounded-[14px] border border-[#e4e7ec] bg-white p-2.5" data-testid="setup-card">
-                  <div className="aspect-video overflow-hidden rounded-lg"><ScenePicture s={c.first} /></div>
+                  <div className="aspect-video overflow-hidden rounded-lg"><ScenePicture s={c.first} scale={1.35} /></div>
                   <div className="min-w-0">
                     <p className="truncate text-sm font-bold">{c.name}</p>
                     <p className="mt-0.5 text-xs text-[#667085]">{[c.usedAt && `Last used ${day(c.usedAt)}`, plural(c.scenes, "scene")].filter(Boolean).join(" · ")}</p>
@@ -135,7 +135,7 @@ export function ChooseSetup({ roomName, shows, showId, onShow, v3, onDone, logo 
                 const scenes = t.scenes(v3);
                 return (
                   <button key={t.id} type="button" onClick={() => void fresh(t.id, t.name)} disabled={!!busy} className="flex h-16 items-center gap-3 rounded-[14px] border border-[#e4e7ec] bg-white px-3.5 text-left hover:border-[#98a2b3] disabled:opacity-60" data-testid={`setup-template-${t.id}`}>
-                    <span className="h-8 w-12 shrink-0 overflow-hidden rounded"><ScenePicture s={scenes[0]} /></span>
+                    <span className="h-8 w-12 shrink-0 overflow-hidden rounded"><ScenePicture s={scenes[0]} scale={0.34} /></span>
                     <span className="min-w-0">
                       <span className="block text-sm font-bold">{t.name}</span>
                       <span className="block text-xs text-[#667085]">Template · {plural(scenes.length, "scene")}</span>
@@ -238,7 +238,7 @@ export function TemplatesDialog({ kit, v3, onClose }: { kit: RoomKit; v3: boolea
           const scenes = t.scenes(v3);
           return (
             <button key={t.id} type="button" onClick={() => add(t.id)} disabled={room <= 0} className="flex items-center gap-3 rounded-xl border border-[#e4e7ec] bg-white p-2.5 text-left hover:border-[#98a2b3] disabled:opacity-50" data-testid={`template-${t.id}`}>
-              <span className="h-[54px] w-24 shrink-0 overflow-hidden rounded-md"><ScenePicture s={scenes[0]} /></span>
+              <span className="h-[54px] w-24 shrink-0 overflow-hidden rounded-md"><ScenePicture s={scenes[0]} scale={0.7} /></span>
               <span className="min-w-0">
                 <span className="block text-sm font-bold">{t.name} <span className="font-normal text-[#667085]">· {plural(scenes.length, "scene")}</span></span>
                 <span className="block text-[13px] text-[#475467]">{t.line}</span>

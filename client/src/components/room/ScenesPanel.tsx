@@ -99,11 +99,11 @@ function MiniScene({ s, cast, light }: { s: Scene; cast: string[]; light: boolea
 }
 
 /** A small picture of a scene's layout without the room (a saved setup's first scene, a template's scenes). */
-export function ScenePicture({ s }: { s: Partial<Scene> | null }) {
+export function ScenePicture({ s, scale = 1 }: { s: Partial<Scene> | null; scale?: number }) {
   const scene = { id: "x", n: 1, name: "", layout: "grid", stage: [], ...(s ?? {}) } as Scene;
   return (
     <span className="flex h-full w-full items-center justify-center bg-[#0b3a8a]" data-testid="scene-picture">
-      {scene.boxes?.length ? <BoxThumb boxes={scene.boxes} className="!w-[78%] !bg-transparent" /> : <span className="origin-center scale-[0.9]"><MiniScene s={scene} cast={["You", "Guest", "Guest", "Guest", "Guest", "Guest"]} light={false} /></span>}
+      {scene.boxes?.length ? <BoxThumb boxes={scene.boxes} className="!w-[78%] !bg-transparent" /> : <span className="shrink-0 origin-center" style={{ transform: `scale(${scale})` }}><MiniScene s={scene} cast={["You", "Guest", "Guest", "Guest", "Guest", "Guest"]} light={false} /></span>}
     </span>
   );
 }
