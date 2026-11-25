@@ -30,7 +30,7 @@ function scrollToAnchor(e: React.MouseEvent<HTMLAnchorElement>, href: string) {
 // answers questions, Events, then Brands, then About Us). Discovery is still reached from Brands and the dashboard;
 // FAQ stays in the footer.
 const LINKS: { href: string; label: string; anchor?: boolean; also?: string[] }[] = [
-  { href: "/directory", label: "Creator directory" },
+  { href: "/directory", label: "Creator Directory" },
   { href: "/events", label: "Events" },
   { href: "/for-brands", label: "Brands", also: ["/sponsor"] },
   { href: "/pricing", label: "Pricing" },
