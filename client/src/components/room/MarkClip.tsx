@@ -28,9 +28,14 @@ export function MarkClip({ recording }: { recording: boolean }) {
       toast({ title: (e as Error).message, variant: "destructive" });
     } finally { setBusy(false); }
   };
+  // Always there (Andrew, 24 Nov: he never noticed it while it hid until recording). Before recording it says how
+  // it works, on hover and on a tap (phones have no hover); icon-only below lg so it fits the phone's top bar.
+  const hint = "Start recording to mark clips";
   return (
-    <button type="button" onClick={() => void mark()} disabled={busy || !recording} title={recording ? "Mark this moment for a clip" : "Start recording first, then mark a clip."} className="hidden h-[42px] items-center gap-2 rounded-xl border border-[#f0d28a] bg-[#fff8e6] px-4 text-sm font-bold text-[#7a4e00] hover:bg-[#fff1cc] disabled:opacity-50 lg:flex" data-testid="mark-clip">
-      {busy ? <Loader2 className="h-[18px] w-[18px] animate-spin" /> : <Bookmark className="h-[18px] w-[18px]" />}Mark a clip
+    <button type="button" onClick={() => { if (!recording) { toast({ title: `${hint}.`, description: "Press it while you record and we'll have that moment waiting as a clip." }); return; } void mark(); }}
+      disabled={busy} title={recording ? "Mark this moment for a clip" : hint} aria-label={recording ? "Mark a clip" : `Mark a clip. ${hint}`}
+      className={`flex h-[42px] shrink-0 items-center gap-2 rounded-xl border border-[#f0d28a] bg-[#fff8e6] px-3 text-sm font-bold text-[#7a4e00] hover:bg-[#fff1cc] disabled:opacity-50 lg:px-4 ${recording ? "" : "opacity-75"}`} data-testid="mark-clip">
+      {busy ? <Loader2 className="h-[18px] w-[18px] animate-spin" /> : <Bookmark className="h-[18px] w-[18px]" />}<span className="hidden lg:inline">Mark a clip</span>
     </button>
   );
 }
