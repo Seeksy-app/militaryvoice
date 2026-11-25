@@ -26,7 +26,7 @@ export function LivePicture({ seat, name, muted }: { seat: LiveNow; name: string
 }
 
 /**
- * HLS from our box. Safari plays it natively; elsewhere hls.js, loaded only when a box stream is on screen. The box
+ * HLS from our box: hls.js wherever it runs (loaded only when a box stream is on screen), native only on iPhone. The box
  * starts packaging when the first viewer asks, so the first seconds can 404: it keeps trying until the picture comes.
  */
 function HlsPicture({ src, muted }: { src: string; muted: boolean }) {
@@ -42,15 +42,28 @@ function HlsPicture({ src, muted }: { src: string; muted: boolean }) {
     const onPlaying = () => setWaiting(false);
     video.addEventListener("playing", onPlaying);
 
+    // Native HLS only where hls.js can't run (iPhone Safari, no MediaSource). Newer Chrome also says it plays HLS
+    // natively, but its player failed on the box's stream (DEMUXER_ERROR_COULD_NOT_PARSE, 25 Nov), so hls.js comes first.
+    const onNativeError = () => {
+      if (stopped) return;
+      setWaiting(true);
+      clearTimeout(retry);
+      retry = setTimeout(() => { if (!stopped) { video.src = src; play(); } }, 4000);
+    };
+    const native = () => {
+      video.addEventListener("error", onNativeError);
+      video.src = src;
+      play();
+    };
+
     const start = async () => {
       if (stopped) return;
-      if (video.canPlayType("application/vnd.apple.mpegurl")) {
-        video.src = src;
-        play();
+      const Hls = await import("hls.js").then((m) => m.default).catch(() => null);
+      if (stopped) return;
+      if (!Hls || !Hls.isSupported()) {
+        if (video.canPlayType("application/vnd.apple.mpegurl")) native();
         return;
       }
-      const Hls = (await import("hls.js")).default;
-      if (stopped || !Hls.isSupported()) return;
       const h = new Hls({ liveSyncDurationCount: 3, manifestLoadingMaxRetry: 6, manifestLoadingRetryDelay: 1000 });
       hls = h;
       h.on(Hls.Events.MANIFEST_PARSED, play);
@@ -71,6 +84,7 @@ function HlsPicture({ src, muted }: { src: string; muted: boolean }) {
       stopped = true;
       clearTimeout(retry);
       video.removeEventListener("playing", onPlaying);
+      video.removeEventListener("error", onNativeError);
       hls?.destroy();
       video.removeAttribute("src");
       video.load();
