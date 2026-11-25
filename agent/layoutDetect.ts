@@ -60,3 +60,59 @@ export function analyzeFrame(gray: Uint8Array, w: number, h: number): FrameAnaly
   if (Math.min(lw, rw) / Math.max(lw, rw) < 0.82) return { ok: false, why: "panels are unequal" };
   return { ok: true, left, right, top, bottom, divider };
 }
+
+// ── Our own studio's picture (24 Nov 2026, Riccoh's recording 474) ──
+// A MilitaryVoices studio room records two framed tiles on a flat background (the room's colour), each with the person's
+// name card in its lower corner. analyzeFrame looks for two panels filling the frame with a dark divider, so it never saw
+// these, and the vertical clips cropped to one face. findTiles finds the two tiles themselves, whole, name cards included.
+export type Tile = { x: number; y: number; w: number; h: number };
+export type TileAnalysis = { ok: true; left: Tile; right: Tile } | { ok: false; why: string };
+
+/** Two framed tiles side by side on a flat background, from one RGB frame (3 bytes a pixel). Boxes are in frame pixels. */
+export function findTiles(rgb: Uint8Array, w: number, h: number): TileAnalysis {
+  const at = (x: number, y: number) => (y * w + x) * 3;
+  // The background: the top band of the frame, which must be one flat colour.
+  const top: number[][] = [[], [], []];
+  for (let y = 0; y < Math.max(2, Math.round(h * 0.05)); y++) for (let x = 0; x < w; x += 2) for (let c = 0; c < 3; c++) top[c].push(rgb[at(x, y) + c]);
+  const bg = top.map((v) => mean(v));
+  const flat = top.every((v, c) => Math.sqrt(mean(v.map((p) => (p - bg[c]) ** 2))) < 10);
+  if (!flat) return { ok: false, why: "no flat background" };
+  const off = (x: number, y: number) => { const i = at(x, y); return Math.max(Math.abs(rgb[i] - bg[0]), Math.abs(rgb[i + 1] - bg[1]), Math.abs(rgb[i + 2] - bg[2])) > 24; };
+  // Columns that are picture across the middle of the frame.
+  const y0 = Math.round(h * 0.42), y1 = Math.round(h * 0.58);
+  const isPic = Array.from({ length: w }, (_, x) => { let n = 0; for (let y = y0; y <= y1; y++) if (off(x, y)) n++; return n / (y1 - y0 + 1) >= 0.9; });
+  const runs: [number, number][] = [];
+  for (let x = 0; x < w; x++) {
+    if (!isPic[x]) continue;
+    const last = runs[runs.length - 1];
+    if (last && x - last[1] <= 2) last[1] = x; else runs.push([x, x]);
+  }
+  const wide = runs.filter(([a, b]) => b - a + 1 >= w * 0.2);
+  if (wide.length !== 2) return { ok: false, why: `${wide.length} tiles across the middle` };
+  const [[la, lb], [ra, rb]] = wide;
+  const lw = lb - la + 1, rw = rb - ra + 1;
+  if (Math.min(lw, rw) / Math.max(lw, rw) < 0.82) return { ok: false, why: "tiles are unequal" };
+  if (ra - lb > w * 0.12) return { ok: false, why: "tiles too far apart" };
+  // Each tile's height: the rows (around the middle) where nearly all of its inner columns are picture.
+  const rowsOf = (a: number, b: number): [number, number] | null => {
+    const ia = a + Math.round((b - a) * 0.1), ib = b - Math.round((b - a) * 0.1);
+    const full = (y: number) => { let n = 0, t = 0; for (let x = ia; x <= ib; x += 2) { t++; if (off(x, y)) n++; } return n / t >= 0.9; };
+    const mid = Math.round(h / 2);
+    if (!full(mid)) return null;
+    let t = mid, bt = mid;
+    while (t > 0 && full(t - 1)) t--;
+    while (bt < h - 1 && full(bt + 1)) bt++;
+    return bt - t + 1 >= h * 0.25 ? [t, bt] : null;
+  };
+  const lr = rowsOf(la, lb), rr = rowsOf(ra, rb);
+  if (!lr || !rr) return { ok: false, why: "a tile has no height" };
+  // Both people there: a live picture in each tile, not a flat card.
+  const alive = (a: number, b: number, [t, bt]: [number, number]) => {
+    const v: number[] = [];
+    for (let y = t; y <= bt; y += 3) for (let x = a; x <= b; x += 3) { const i = at(x, y); v.push(0.299 * rgb[i] + 0.587 * rgb[i + 1] + 0.114 * rgb[i + 2]); }
+    const m = mean(v);
+    return Math.sqrt(mean(v.map((p) => (p - m) ** 2))) > 18;
+  };
+  if (!alive(la, lb, lr) || !alive(ra, rb, rr)) return { ok: false, why: "a tile is flat" };
+  return { ok: true, left: { x: la, y: lr[0], w: lw, h: lr[1] - lr[0] + 1 }, right: { x: ra, y: rr[0], w: rw, h: rr[1] - rr[0] + 1 } };
+}

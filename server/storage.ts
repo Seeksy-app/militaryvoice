@@ -2279,7 +2279,7 @@ class DatabaseStorage implements IStorage {
         sqlExpr`${recordings.id} = (
           SELECT id FROM recordings
           WHERE status = 'Ready' AND url <> '' AND duration_sec >= 30 AND started_at > ${week}
-            AND clip_status IN ('none', '') AND clip_options NOT LIKE '%"radio"%' AND email <> ''
+            AND clip_status IN ('none', '', 'queued') AND clip_options NOT LIKE '%"radio"%' AND email <> ''
             AND egress_id NOT LIKE 'CLEAN\_%'
             AND (layout_suggestion = '' OR (layout_suggestion LIKE '%"status":"running"%' AND layout_suggestion LIKE '%"at":"%' AND substring(layout_suggestion from '"at":"([^"]+)"') < ${stale}))
           ORDER BY id DESC
@@ -2691,6 +2691,9 @@ class DatabaseStorage implements IStorage {
     // hour of a recording sitting untouched because someone pressed Ctrl-C is
     // a long time to look like nothing is happening.
     const stale = new Date(Date.now() - 10 * 60 * 1000).toISOString();
+    // A recording that just finished waits (up to 20 minutes) for its two-people look first, so its clips start on Stacked
+    // and Pōstify offers the Two people choice (Riccoh's 474, 24 Nov 2026: clips auto-started before the look ever ran).
+    const probeWindow = new Date(Date.now() - 20 * 60 * 1000).toISOString();
     const [row] = await db
       .update(recordings)
       .set({ clipStatus: "running", clipClaimedAt: new Date().toISOString(), clipProgress: "" })
@@ -2698,6 +2701,9 @@ class DatabaseStorage implements IStorage {
         sqlExpr`${recordings.id} = (
           SELECT id FROM recordings
           WHERE status = 'Ready'
+            AND NOT (clip_status = 'queued' AND duration_sec >= 30 AND ended_at > ${probeWindow}
+                     AND clip_options NOT LIKE '%"radio"%' AND egress_id NOT LIKE 'CLEAN\_%'
+                     AND (layout_suggestion = '' OR layout_suggestion LIKE '%"status":"running"%'))
             AND (clip_status = 'queued'
                  OR (clip_status = 'running' AND clip_claimed_at < ${stale}))
           -- A podcaster's own file (no event) before the studio's whole-day

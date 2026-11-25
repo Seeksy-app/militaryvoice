@@ -57,7 +57,7 @@ import { textPath, fitSize, textWidth } from "../server/textPath.js";
 import { cutList, snapToAudio, keepRanges, selectGraph, envelope, type Word } from "./refine.js";
 import { captionTrack, type CaptionStyle, type TimedWord } from "./wordCaptions.js";
 import { glimpseLane } from "./glimpse.js";
-import { analyzeFrame, type FrameAnalysis } from "./layoutDetect.js";
+import { analyzeFrame, findTiles, type FrameAnalysis } from "./layoutDetect.js";
 
 const API_BASE = (process.env.API_BASE || "http://localhost:3000").replace(/\/+$/, "");
 const AGENT_TOKEN = process.env.AGENT_TOKEN || "";
@@ -679,7 +679,17 @@ export async function render(
     const box = (b: { w: number; h: number; x: number; y: number }) =>
       `crop=${even(b.w)}:${even(b.h)}:${b.x}:${b.y},scale=${W}:${panel}:force_original_aspect_ratio=increase,crop=${W}:${panel},setsar=1`;
     chain.length = 0;
-    chain.push(
+    if ((geo as { wholeTiles?: boolean }).wholeTiles) {
+      // Our studio's tiles: each shown whole (its name card is in its lower corner, and a fill-crop cut it in half), over a
+      // soft blur of itself where the half is taller than the tile.
+      const whole = (b: { w: number; h: number; x: number; y: number }, i: string, o: string) => [
+        `[${i}]crop=${even(b.w)}:${even(b.h)}:${b.x}:${b.y},split=2[${i}a][${i}b]`,
+        `[${i}a]scale=${W}:${panel}:force_original_aspect_ratio=increase,crop=${W}:${panel},scale=${even(W / 8)}:${even(panel / 8)},boxblur=4:2,scale=${W}:${panel},setsar=1[${i}bg]`,
+        `[${i}b]scale=${W}:${panel}:force_original_aspect_ratio=decrease,setsar=1[${i}fg]`,
+        `[${i}bg][${i}fg]overlay=(W-w)/2:(H-h)/2[${o}]`,
+      ];
+      chain.push(`[0:v]split=2[l][rr]`, ...whole(geo.left, "l", "top"), ...whole(geo.right, "rr", "bot"), `[top][bot]vstack=inputs=2[stage]`);
+    } else chain.push(
       `[0:v]split=2[l][rr]`,
       `[l]${box(geo.left)}[top]`,
       `[rr]${box(geo.right)}[bot]`,
@@ -1574,10 +1584,36 @@ export async function isRadioPage(source: string, atSec: number): Promise<boolea
   }
 }
 
-/** Two people on screen at this moment: the Radio program page with both tiles lit, or exactly two equal panels side by side. */
+/**
+ * The two tiles of our own studio's picture (a MilitaryVoices studio room: framed tiles on the room's flat colour, each
+ * person's name card in its lower corner), in source pixels. Null when it isn't two tiles at this moment (one person, a
+ * clip or slides on screen). wholeTiles: each tile is shown whole in its half of a stacked clip, so no name card is cut.
+ */
+async function studioTiles(source: string, atSec: number) {
+  try {
+    const dims = (await run("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", source])).trim().split(",").map(Number);
+    const [fw, fh] = dims;
+    if (!fw || !fh) return null;
+    const f = path.join(os.tmpdir(), `tiles-${process.pid}-${Date.now()}-${Math.round(atSec)}.png`);
+    try {
+      await ffmpeg(["-ss", String(atSec + 1), "-i", source, "-frames:v", "1", "-vf", "scale=480:-2", f]);
+      const { data, info } = await sharp(f).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+      const t = findTiles(new Uint8Array(data), info.width, info.height);
+      if (!t.ok) return null;
+      const kx = fw / info.width, ky = fh / info.height;
+      const box = (b: { x: number; y: number; w: number; h: number }) => ({ x: even(b.x * kx), y: even(b.y * ky), w: even(b.w * kx), h: even(b.h * ky) });
+      return { whole: { x: 0, y: 0, w: fw, h: fh }, left: box(t.left), right: box(t.right), stack: true as const, wholeTiles: true };
+    } finally { await fs.rm(f, { force: true }).catch(() => {}); }
+  } catch {
+    return null;
+  }
+}
+
+/** Two people on screen at this moment: the Radio program page with both tiles lit, our studio's two tiles, or exactly two equal panels side by side. */
 async function twoPeopleAt(source: string, atSec: number): Promise<boolean> {
   try {
     if (await isRadioPage(source, atSec)) return !!(await radioTiles(source, atSec).catch(() => null));
+    if (await studioTiles(source, atSec)) return true;
     const f = path.join(os.tmpdir(), `two-${process.pid}-${Date.now()}.png`);
     try {
       await ffmpeg(["-ss", String(atSec + 1), "-i", source, "-frames:v", "1", "-vf", "scale=480:-2", f]);
@@ -1625,6 +1661,11 @@ export async function framingFor(job: Job, source: string, m: Moment, within: Li
   if (layout === "stacked" && (await isRadioPage(source, m.startSec))) {
     const t = await radioTiles(source, m.startSec).catch(() => null);
     if (t) { console.log(`[${job.recordingId}]   Radio show: the two tiles stacked`); return { ...t, focus: null as Box | null, focusShots: null as { from: number; to: number; focus: Box | null }[] | null }; }
+  }
+  // Stacked on our own studio's picture: each person's whole tile, name card and all (Riccoh's 474 lost half of Scott's card).
+  if (layout === "stacked") {
+    const st = await studioTiles(source, m.startSec);
+    if (st) { console.log(`[${job.recordingId}]   studio: the two tiles stacked, whole`); return { ...st, focus: null as Box | null, focusShots: null as { from: number; to: number; focus: Box | null }[] | null }; }
   }
   let measured = await frameGeometry(source, m.startSec);
   // Chosen by the person: two panels stacked even when the picture isn't wider than 2 to 1 (a Zoom gallery of two), or never.
@@ -1711,7 +1752,13 @@ async function handleLayoutProbe(job: Job): Promise<void> {
       const file = path.join(dir, `f${t}.png`);
       try { await ffmpeg(["-ss", String(t), "-i", job.downloadUrl, "-frames:v", "1", "-vf", "scale=480:-2", file]); } catch { continue; }
       const { data, info } = await sharp(file).greyscale().raw().toBuffer({ resolveWithObject: true });
-      const a = analyzeFrame(new Uint8Array(data), info.width, info.height);
+      let a = analyzeFrame(new Uint8Array(data), info.width, info.height);
+      // Our own studio's two tiles on the room's colour: the same two people, seen as tiles (Riccoh's 474, 24 Nov).
+      if (!a.ok) {
+        const c = await sharp(file).removeAlpha().raw().toBuffer({ resolveWithObject: true });
+        const st = findTiles(new Uint8Array(c.data), c.info.width, c.info.height);
+        if (st.ok) a = { ok: true, left: st.left.x, right: st.right.x + st.right.w - 1, top: Math.min(st.left.y, st.right.y), bottom: Math.max(st.left.y + st.left.h, st.right.y + st.right.h) - 1, divider: Math.round((st.left.x + st.left.w + st.right.x) / 2) };
+      }
       if (a.ok) seen.push({ t, a, data: new Uint8Array(data), width: info.width });
     }
     const confidence = seen.length / stamps.length;
@@ -1731,8 +1778,12 @@ async function handleLayoutProbe(job: Job): Promise<void> {
     const out = (name: string) => path.join(dir, `layout-${job.recordingId}-${name}.jpg`);
     const still = (name: string, graph: string) => ffmpeg(["-i", big, "-filter_complex", graph, "-frames:v", "1", "-q:v", "3", out(name)]);
     const previews: Record<string, string> = {};
-    // Stacked: each person's own panel, one over the other.
-    await still("stacked", `[0:v]split=2[a][b];[a]crop=${pw}:${ph}:${L}:${T},scale=480:426:force_original_aspect_ratio=increase,crop=480:426[l];[b]crop=${pw}:${ph}:${D + 8}:${T},scale=480:426:force_original_aspect_ratio=increase,crop=480:426[r];[l][r]vstack=2`);
+    // Stacked: each person's own panel, one over the other. Studio tiles (no dark divider) show whole, as the clips will.
+    const asTiles = !analyzeFrame(pick.data, pick.width, Math.round(pick.data.length / pick.width)).ok;
+    const half = (x: number, n: string) => asTiles
+      ? `[${n}]crop=${pw}:${ph}:${x}:${T},split=2[${n}1][${n}2];[${n}1]scale=480:426:force_original_aspect_ratio=increase,crop=480:426,boxblur=8:2[${n}bg];[${n}2]scale=480:426:force_original_aspect_ratio=decrease[${n}fg];[${n}bg][${n}fg]overlay=(W-w)/2:(H-h)/2[${n}o]`
+      : `[${n}]crop=${pw}:${ph}:${x}:${T},scale=480:426:force_original_aspect_ratio=increase,crop=480:426[${n}o]`;
+    await still("stacked", `[0:v]split=2[a][b];${half(L, "a")};${half(asTiles ? D + 2 : D + 8, "b")};[ao][bo]vstack=2`);
     // Side by side: the whole picture over a blurred copy of itself.
     await still("side", `[0:v]crop=${cw}:${ph}:${L}:${T},split=2[a][b];[a]scale=480:852:force_original_aspect_ratio=increase,crop=480:852,scale=60:106,boxblur=2:1,scale=480:852[bg];[b]scale=480:-2[fg];[bg][fg]overlay=(W-w)/2:(H-h)/2`);
     // Follow the speaker, as an example: the panel with the most movement, cropped to the vertical frame.
@@ -1754,7 +1805,7 @@ async function handleLayoutProbe(job: Job): Promise<void> {
       try { await fs.access(out(name)); previews[name] = await uploadFile(out(name), "image/jpeg"); } catch { /* optional */ }
     }
     await api("POST", `/api/agent/layout-suggest/${job.recordingId}/done`, {
-      suggested: "stacked", people: 2, confidence, reason: "Two equal panels side by side", previews,
+      suggested: "stacked", people: 2, confidence, reason: "Two people side by side", previews,
     });
     console.log(`${tag}: suggested stacked (${Math.round(confidence * 100)}%)`);
   } catch (err) {
