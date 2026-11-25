@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Check, Copy, Volume2, VolumeX } from "lucide-react";
 import NotFound from "@/pages/not-found";
-import { LivePicture, type LiveNow } from "@/components/LivePicture";
+import { LivePicture, Reconnecting, type LiveNow } from "@/components/LivePicture";
 
 /**
  * militaryvoices.ai/<handle>/live (Andrew, 22 Nov 2026: "Going live on their MilitaryVoices web page"). Whatever the
@@ -88,6 +88,7 @@ export default function LivePage({ handle }: { handle: string }) {
           {seat ? (
             <>
               <LivePicture seat={seat} name={d.name} muted={muted} />
+              {live && "reconnecting" in live && live.reconnecting && <Reconnecting big />}
               <button type="button" onClick={() => setMuted((m) => !m)} className="absolute bottom-3 left-3 z-30 flex items-center gap-2 rounded-full bg-black/65 px-3.5 py-2 text-sm font-semibold backdrop-blur hover:bg-black/80" data-testid="live-page-sound">
                 {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />} {muted ? "Turn sound on" : "Sound on"}
               </button>

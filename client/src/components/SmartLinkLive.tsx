@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Volume2, VolumeX } from "lucide-react";
-import { LivePicture, type LiveNow } from "@/components/LivePicture";
+import { LivePicture, Reconnecting, type LiveNow } from "@/components/LivePicture";
 
 /**
  * The LIVE card on a SmartLink (Andrew, 25 Nov 2026: "Yes, build it", the watch page for everyone; option 1: nothing to
@@ -55,6 +55,9 @@ export function SmartLinkLive({ handle }: { handle: string }) {
       <div ref={box} className="relative aspect-video w-full bg-[#0b1630]">
         {seen && (
           <LivePicture seat={seat} name={q.data.name} muted={muted} />
+        )}
+        {live && "reconnecting" in live && live.reconnecting && (
+          <Reconnecting />
         )}
         <button type="button" onClick={() => setMuted((m) => !m)} className="absolute bottom-2.5 left-2.5 z-30 flex items-center gap-1.5 rounded-full bg-black/65 px-3 py-1.5 text-[13px] font-semibold backdrop-blur hover:bg-black/80" data-testid="bio-live-sound">
           {muted ? <VolumeX className="h-4 w-4" aria-hidden /> : <Volume2 className="h-4 w-4" aria-hidden />}{muted ? "Tap for sound" : "Sound on"}

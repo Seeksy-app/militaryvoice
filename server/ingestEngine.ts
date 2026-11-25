@@ -148,9 +148,20 @@ export function registerIngest(app: Express, requireAdmin: RequestHandler): void
     await beat("ingest");
     const live: unknown[] = Array.isArray(req.body?.live) ? req.body.live.slice(0, 200) : [];
     const kick: string[] = [];
+    const coming = new Set<number>();
     for (const raw of live) {
       const c = await keyRow(raw);
+      if (c) coming.add(c.id);
       if (!c || !(await mayStream(c)).ok) kick.push(String(raw));
+    }
+    // A box stream whose encoder has gone, inside the box's 3-minute wait for it to come back: lostAt makes the watch
+    // page say "Reconnecting…" (Andrew, 25 Nov: "Yes, add it"). It clears when the encoder is back; finish clears it too.
+    const open = await db.select().from(streamKeys).where(and(eq(streamKeys.engine, "own"), eq(streamKeys.status, "live"), eq(streamKeys.egressId, "own")));
+    for (const k of open) {
+      const here = coming.has(k.id);
+      const settled = Date.now() - Date.parse(k.liveSince || "") > 45_000; // a stream that just started may miss its first beat
+      if (!here && !k.lostAt && settled) await db.update(streamKeys).set({ lostAt: now() }).where(eq(streamKeys.id, k.id));
+      else if (here && k.lostAt) await db.update(streamKeys).set({ lostAt: "" }).where(eq(streamKeys.id, k.id));
     }
     res.json({ kick });
   });

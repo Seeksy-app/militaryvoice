@@ -71,20 +71,20 @@ async function viewerToken(room: string): Promise<string> {
 
 export type LiveNow =
   | { kind: "studio"; since: string; url: string; token: string; lookKey: string; studioId: number }
-  | { kind: "stream"; since: string; url: string; token: string }
+  | { kind: "stream"; since: string; url: string; token: string; reconnecting?: boolean }
   /** A stream sent in to our own box: its watch relay, played as HLS (no LiveKit seat). */
-  | { kind: "hls"; since: string; src: string };
+  | { kind: "hls"; since: string; src: string; reconnecting?: boolean };
 
 /** What's live for this person right now, if anything (stream in first: it's what they're sending us this minute). */
 async function liveNowFor(email: string, withToken: boolean): Promise<LiveNow | null> {
   if (!isLiveKitConfigured()) return null;
   const [k] = await db.select().from(streamKeys).where(eq(streamKeys.ownerEmail, email)).limit(1);
   if (k && k.engine === "livekit" && k.room && k.status === "live" && k.egressId && k.egressId !== "pending" && (await streamInOutOn(email))) {
-    return { kind: "stream", since: k.liveSince, url: publicLiveKitUrl(), token: withToken ? await viewerToken(k.room) : "" };
+    return { kind: "stream", since: k.liveSince, url: publicLiveKitUrl(), token: withToken ? await viewerToken(k.room) : "", reconnecting: !!k.lostAt };
   }
   if (k && k.engine === "own" && k.status === "live" && (await ownWatchOn()) && (await streamInOutOn(email))) {
     const id = await storage.getSetting(watchIdKey(k.id)).catch(() => null);
-    if (id) return { kind: "hls", since: k.liveSince, src: `${await ownHlsBase()}/w/${id}/index.m3u8` };
+    if (id) return { kind: "hls", since: k.liveSince, src: `${await ownHlsBase()}/w/${id}/index.m3u8`, reconnecting: !!k.lostAt };
   }
   const [s] = await db.select().from(personalStudios).where(eq(personalStudios.ownerEmail, email)).limit(1);
   if (s?.liveEgressId) {

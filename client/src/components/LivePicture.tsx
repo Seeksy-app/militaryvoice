@@ -7,8 +7,19 @@ import { RoomPicture } from "@/components/RoomStage";
  */
 export type LiveNow =
   | { kind: "studio"; since: string; url: string; token: string; lookKey: string; studioId: number }
-  | { kind: "stream"; since: string; url: string; token: string }
-  | { kind: "hls"; since: string; src: string };
+  | { kind: "stream"; since: string; url: string; token: string; reconnecting?: boolean }
+  | { kind: "hls"; since: string; src: string; reconnecting?: boolean };
+
+/** "Reconnecting…" over the picture while their encoder has dropped and we're waiting for it to come back. */
+export function Reconnecting({ big = false }: { big?: boolean }) {
+  return (
+    <div className="absolute inset-0 z-20 flex flex-col items-center justify-center gap-1.5 bg-black/70 px-6 text-center text-white" data-testid="live-reconnecting">
+      <span className={`animate-spin rounded-full border-2 border-white/30 border-t-white ${big ? "h-8 w-8" : "h-6 w-6"}`} aria-hidden />
+      <p className={`font-bold ${big ? "text-xl sm:text-2xl" : "text-base"}`}>Reconnecting…</p>
+      <p className={`text-balance text-white/70 ${big ? "text-sm" : "text-xs"}`}>The picture comes back by itself when the stream does.</p>
+    </div>
+  );
+}
 
 export function LivePicture({ seat, name, muted }: { seat: LiveNow; name: string; muted: boolean }) {
   if (seat.kind === "hls") return <HlsPicture key={seat.src} src={seat.src} muted={muted} />;
@@ -32,6 +43,8 @@ export function LivePicture({ seat, name, muted }: { seat: LiveNow; name: string
 function HlsPicture({ src, muted }: { src: string; muted: boolean }) {
   const ref = useRef<HTMLVideoElement>(null);
   const [waiting, setWaiting] = useState(true);
+  // Once a picture has played, losing it means their stream dropped: say Reconnecting, not Starting.
+  const [played, setPlayed] = useState(false);
   useEffect(() => {
     const video = ref.current;
     if (!video) return;
@@ -39,7 +52,11 @@ function HlsPicture({ src, muted }: { src: string; muted: boolean }) {
     let hls: { destroy(): void } | null = null;
     let retry: ReturnType<typeof setTimeout> | undefined;
     const play = () => void video.play().catch(() => {});
-    const onPlaying = () => setWaiting(false);
+    let stall: ReturnType<typeof setTimeout> | undefined;
+    const onPlaying = () => { clearTimeout(stall); setWaiting(false); setPlayed(true); };
+    // A live stream that stops moving for 4 seconds has dropped (a short rebuffer doesn't count).
+    const onStall = () => { clearTimeout(stall); stall = setTimeout(() => setWaiting(true), 4000); };
+    video.addEventListener("waiting", onStall);
     video.addEventListener("playing", onPlaying);
 
     // Native HLS only where hls.js can't run (iPhone Safari, no MediaSource). Newer Chrome also says it plays HLS
@@ -83,7 +100,9 @@ function HlsPicture({ src, muted }: { src: string; muted: boolean }) {
     return () => {
       stopped = true;
       clearTimeout(retry);
+      clearTimeout(stall);
       video.removeEventListener("playing", onPlaying);
+      video.removeEventListener("waiting", onStall);
       video.removeEventListener("error", onNativeError);
       hls?.destroy();
       video.removeAttribute("src");
@@ -100,7 +119,7 @@ function HlsPicture({ src, muted }: { src: string; muted: boolean }) {
   return (
     <div className="relative h-full w-full bg-black">
       <video ref={ref} className="h-full w-full object-contain" autoPlay playsInline muted={muted} data-testid="live-hls" />
-      {waiting && <p className="absolute inset-0 flex items-center justify-center text-sm font-semibold text-white/70">Starting the picture…</p>}
+      {waiting && (played ? <Reconnecting /> : <p className="absolute inset-0 flex items-center justify-center text-sm font-semibold text-white/70">Starting the picture…</p>)}
     </div>
   );
 }
