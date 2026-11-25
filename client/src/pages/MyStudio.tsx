@@ -45,7 +45,7 @@ const Logo = ({ className }: { className: string }) => <img src="/logo-lockup.pn
  * API); until then the room stays phase 1, a plain grid like the recording, with no layout picker
  * (Andrew: "go, hide layouts").
  */
-type Studio = { you?: string; id: number; name: string; inviteLink: string; recording: { since: string } | null; live: { since: string; watchUrl: string } | null; youtube: boolean; youtubeOn: boolean; youtubeKey?: string; youtubeLegacy?: boolean; livePage?: { on: boolean; url: string }; streams: { id: string; name: string; on: boolean }[]; ready: boolean; canRecord: boolean; v3?: boolean };
+type Studio = { you?: string; shows?: { id: number; title: string }[]; showId?: number | null; id: number; name: string; inviteLink: string; recording: { since: string } | null; live: { since: string; watchUrl: string } | null; youtube: boolean; youtubeOn: boolean; youtubeKey?: string; youtubeLegacy?: boolean; livePage?: { on: boolean; url: string }; streams: { id: string; name: string; on: boolean }[]; ready: boolean; canRecord: boolean; v3?: boolean };
 type Conn = { url: string; token: string; name: string };
 type Setup = { name: string; title: string; mic: boolean; cam: boolean; micId?: string; camId?: string };
 type Tab = "look" | "media" | "style" | "people" | "notes" | "recording" | "chat";
@@ -97,9 +97,11 @@ export default function MyStudio({ invite }: { invite?: string }) {
   const [removed, setRemoved] = useState(false);
   // An invitation for one of the host's shows carries ?show=<id>: the room greets the guest with that show's name.
   const forShow = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("show") ?? "" : "";
+  // The host's show pick (?show=, or the entry screen's Show picker); the server remembers it.
+  const pick = useRef(forShow);
   const guestInfo = useQuery<{ name: string }>({ queryKey: ["/api/my-studio/invite", invite, forShow], enabled: !owner, queryFn: async () => (await apiRequest("GET", `/api/my-studio/invite/${invite}${/^\d+$/.test(forShow) ? `?show=${forShow}` : ""}`)).json(), retry: false });
   // The host's studio opened for one of their shows (?show=<id>) takes that show's name, icon and recording title.
-  const studio = useQuery<Studio>({ queryKey: ["/api/host/my-studio"], enabled: owner, queryFn: async () => (await apiRequest("GET", `/api/host/my-studio${/^\d+$/.test(forShow) ? `?show=${forShow}` : ""}`)).json(), retry: false, refetchInterval: conn ? 8000 : false });
+  const studio = useQuery<Studio>({ queryKey: ["/api/host/my-studio"], enabled: owner, queryFn: async () => (await apiRequest("GET", `/api/host/my-studio${/^\d+$/.test(pick.current) ? `?show=${pick.current}` : ""}`)).json(), retry: false, refetchInterval: conn ? 8000 : false });
   const roomName = (owner ? studio.data?.name : guestInfo.data?.name) || "";
 
   if (left) {
@@ -137,6 +139,13 @@ export default function MyStudio({ invite }: { invite?: string }) {
         roomName={roomName}
         blocked={blocked}
         defaultName={readMe(meKeyOf(invite)).name || (owner ? studio.data?.you ?? "" : "")}
+        shows={owner ? studio.data?.shows : undefined}
+        showId={owner ? studio.data?.showId ?? null : null}
+        onShow={(id) => {
+          pick.current = String(id);
+          try { const u = new URL(window.location.href); u.searchParams.set("show", String(id)); window.history.replaceState(null, "", u); } catch { /* fine */ }
+          void studio.refetch();
+        }}
         onEnter={async (s) => {
           if (s.name.trim()) saveMe(meKeyOf(invite), { name: s.name.trim().slice(0, 60) });
           const r = owner
@@ -167,7 +176,7 @@ export default function MyStudio({ invite }: { invite?: string }) {
 
 /* ───────────────────────── Set up ───────────────────────── */
 
-function SetupScreen({ owner, roomName, blocked, defaultName, onEnter }: { owner: boolean; roomName: string; blocked: string; defaultName: string; onEnter: (s: Setup) => Promise<void> }) {
+function SetupScreen({ owner, roomName, blocked, defaultName, shows, showId, onShow, onEnter }: { owner: boolean; roomName: string; blocked: string; defaultName: string; shows?: { id: number; title: string }[]; showId?: number | null; onShow?: (id: number) => void; onEnter: (s: Setup) => Promise<void> }) {
   const [name, setName] = useState(defaultName);
   const [title, setTitle] = useState("");
   const [mic, setMic] = useState(true);
@@ -281,6 +290,15 @@ function SetupScreen({ owner, roomName, blocked, defaultName, onEnter }: { owner
             <p className="text-sm font-semibold uppercase tracking-[0.08em] text-[#667085]">{owner ? roomName || "Your studio" : `You're invited to ${roomName || "a show"}`}</p>
             <h1 className="mt-1 text-balance text-[28px] font-bold leading-tight tracking-tight">{owner ? "Set up your studio" : "Get ready to join"}</h1>
             <p className="mt-2 text-[15px] leading-relaxed text-[#475467]">{owner ? "Check your picture and sound. Going in doesn't start anything; you choose when to record and when to go live." : "Check your picture and sound. The host brings you in when you join."}</p>
+            {/* Hosts with 2 or more shows (Andrew, 24 Nov): the show sets the title, the show icon and the recording's name. */}
+            {owner && shows && shows.length > 1 && onShow && <>
+              <label className="mt-6 block text-sm font-semibold" htmlFor="studio-show">Show</label>
+              <select id="studio-show" value={showId ?? ""} onChange={(e) => { const id = Number(e.target.value); if (id) onShow(id); }} className="mt-1.5 h-12 w-full rounded-xl border border-[#d0d5dd] bg-white px-3.5 text-[15px] outline-none focus:border-[#053877] focus:ring-2 focus:ring-[#053877]/15" data-testid="studio-show">
+                {showId == null && <option value="">Pick a show</option>}
+                {shows.map((x) => <option key={x.id} value={x.id}>{x.title}</option>)}
+              </select>
+              <p className="mt-1.5 text-[13px] text-[#667085]">Sets the title, the show icon and your recording's name.</p>
+            </>}
             <label className="mt-6 block text-sm font-semibold" htmlFor="studio-name">Your name on screen</label>
             <input id="studio-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder="Your name" className="mt-1.5 h-12 w-full rounded-xl border border-[#d0d5dd] bg-white px-4 text-[15px] outline-none focus:border-[#053877] focus:ring-2 focus:ring-[#053877]/15" data-testid="studio-name" />
             <label className="mt-4 block text-sm font-semibold" htmlFor="studio-title">Your title <span className="font-normal text-[#667085]">(optional)</span></label>

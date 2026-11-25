@@ -17,7 +17,7 @@ import { onLookSaved, roomLookKey } from "./roomKit.js";
 import { liveHandleOf, livePageOn, liveUrlOf } from "./livePage.js";
 import { bumpLookRev, noteMusicOnAir, registerRoomStage, roomTemplateUrl, useRoomKit, v3For } from "./roomStage.js";
 import { personalStudios, type PersonalStudioRow } from "../shared/schema.js";
-import { inviteShow, studioShowKey, studioTitle } from "./hostShows.js";
+import { inviteShow, ownerShows, studioShow, studioShowKey, studioTitle } from "./hostShows.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 const now = () => new Date().toISOString();
@@ -172,8 +172,11 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     // Opened for one of their shows (?show=<id>, hosts with 2 or more): that show from now on, until they pick another.
     const picked = req.query.show ? await inviteShow(email, req.query.show).catch(() => null) : null;
     if (picked && (await storage.getSetting(studioShowKey(s.id)).catch(() => null)) !== String(picked.id)) await storage.setSetting(studioShowKey(s.id), String(picked.id)).catch(() => {});
+    // Hosts with 2 or more shows pick one on the entry screen; it names the studio, the icon and the recording.
+    const list = await ownerShows(email);
+    const shows = list.length > 1 ? { shows: list.map(({ id, title }) => ({ id, title })), showId: (await studioShow(email, s.id, s.name, picked?.id).catch(() => null))?.id ?? null } : {};
     // Their own name, for the camera check's name box.
-    res.json({ ...view(await titled(s, picked?.id), await yt(email)), you: profile?.hostName?.trim() || "" });
+    res.json({ ...view(await titled(s, picked?.id), await yt(email)), you: profile?.hostName?.trim() || "", ...shows });
   });
 
   app.patch("/api/host/my-studio", requireHostSession, async (req, res) => {
