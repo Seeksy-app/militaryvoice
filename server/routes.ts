@@ -7476,8 +7476,11 @@ export function registerRoutes(app: Express): void {
         } else {
           return res.json({
             job: {
-              recordingId: ed.id, title: ed.title, durationSec: ed.durationSec, downloadUrl: src, show: "", host: "", transcript: [],
+              recordingId: ed.id, title: ed.title, durationSec: ed.durationSec, downloadUrl: src, show: "", host: "",
+              // Who talks when, for "focus on the speaker": the stored transcript, moved onto the clean version's timeline when that's the source.
+              transcript: !e.focus ? [] : storedTranscript(ed.transcriptJson).map((l) => (e!.source === "clean" && clean ? { ...l, startSec: toCleanTime(l.startSec, clean), endSec: toCleanTime(l.endSec, clean) } : l)),
               episodeEdit: {
+                focus: !!e.focus,
                 trimStart: e.trimStart, trimEnd: e.trimEnd, cuts: e.cuts ?? [], introUrl: await sign(e.introKey), outroUrl: await sign(e.outroKey), introTransition: e.introTransition ?? "fade", outroTransition: e.outroTransition ?? "fade",
                 cardSec: e.cardSec, cardMusicUrl: e.cardMusicKey ? await sign((await storage.getMusic(e.cardMusicKey))?.url) : "",
                 // Music under parts of it: each track's file, signed, with where it goes in the episode.
@@ -8335,6 +8338,7 @@ export function registerRoutes(app: Express): void {
         }
         return out.length ? out : undefined;
       })(),
+      focus: b.focus === true || undefined,
       status: "queued", at: new Date().toISOString(),
     };
     if ((e.introKey && /\.png$/i.test(e.introKey)) || (e.outroKey && /\.png$/i.test(e.outroKey))) {
@@ -8342,7 +8346,7 @@ export function registerRoutes(app: Express): void {
       e.cardMusicKey = gc.musicKey || undefined;
       e.cardSec = gc.sec;
     }
-    if (!e.trimStart && !e.trimEnd && !e.cuts && !e.introKey && !e.outroKey && !e.music) return res.status(400).json({ message: "Trim it, cut a section, add music, or add an intro or outro, first." });
+    if (!e.trimStart && !e.trimEnd && !e.cuts && !e.introKey && !e.outroKey && !e.music && !e.focus) return res.status(400).json({ message: "Trim it, cut a section, add music, or add an intro or outro, first." });
     await storage.setEpisodeEdit(rec.id, JSON.stringify(e));
     res.json(e);
   });

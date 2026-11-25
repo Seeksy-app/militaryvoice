@@ -1767,6 +1767,8 @@ export interface EpisodeEdit {
   outroTransition?: EditTransition;
   /** Music under parts of the episode: [from, to] in the episode's own seconds (before cuts), a track from the library. */
   music?: EpisodeMusic[];
+  /** "Focus on whoever's talking" (24 Nov 2026): two people, cut in to the speaker's tile on long turns; one person, a gentle reframe. */
+  focus?: boolean;
   status: "queued" | "running" | "done" | "failed";
   error?: string;
   resultId?: number;

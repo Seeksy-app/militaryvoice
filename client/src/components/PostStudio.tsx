@@ -964,13 +964,17 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
   let ed: EpisodeEdit | null = null;
   try { ed = rec.episodeEdit ? (JSON.parse(rec.episodeEdit) as EpisodeEdit) : null; } catch { ed = null; }
   const busy = ed?.status === "queued" || ed?.status === "running";
+  // Asked once, as they save (Andrew, 24 Nov): move in on whoever's talking, or keep the full picture.
+  const [askFocus, setAskFocus] = useState(false);
   const makeEdit = useMutation({
-    mutationFn: async () => (await apiRequest("POST", `/api/host/recordings/${rec.id}/episode-edit`, {
+    mutationFn: async (focus: boolean) => (await apiRequest("POST", `/api/host/recordings/${rec.id}/episode-edit`, {
       source, trimStart: trim.start, trimEnd: trim.end, cuts, introKey: intro?.key, introName: intro?.name, outroKey: outro?.key, outroName: outro?.name,
       introTransition: intro ? introT : undefined, outroTransition: outro ? outroT : undefined,
       music: music.length ? music : undefined,
+      focus: focus || undefined,
     })).json(),
     onSuccess: () => {
+      setAskFocus(false);
       void qc.invalidateQueries({ queryKey: ["/api/host/recordings"] });
       toast({ title: "Saving to your Library", description: "It takes a few minutes, and you can close this page. It lands next to your original as a new copy; to put it in your podcast, choose Add as an episode there." });
     },
@@ -1143,12 +1147,28 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
           </Button>
         )) : tab === "edit" && tip(nothingToSave ?"Make a change first: trim, split, or add an intro or outro" : "Saves the edited episode to your Library as a new copy. Your original stays, and nothing goes to your podcast until you add it there.", (
           <span className="inline-flex">
-            <Button type="button" onClick={() => { if (shortKeep && !window.confirm(`This keeps only ${hms(keepLen)} of ${hms(pos.d)}. Save it anyway?`)) return; makeEdit.mutate(); }} disabled={busy || makeEdit.isPending || nothingToSave} className="h-10 shrink-0 gap-2 rounded-lg bg-[#053877] px-5 text-white hover:bg-[#0a4a99] disabled:pointer-events-none" data-testid="edit-make">
+            <Button type="button" onClick={() => { if (shortKeep && !window.confirm(`This keeps only ${hms(keepLen)} of ${hms(pos.d)}. Save it anyway?`)) return; setAskFocus(true); }} disabled={busy || makeEdit.isPending || nothingToSave} className="h-10 shrink-0 gap-2 rounded-lg bg-[#053877] px-5 text-white hover:bg-[#0a4a99] disabled:pointer-events-none" data-testid="edit-make">
               {busy || makeEdit.isPending ? <><Loader2 className="h-4 w-4 animate-spin" /> Saving…</> : <><Library className="h-4 w-4" /> Save to Library</>}
             </Button>
           </span>
         ))}
       </div>
+      <Dialog open={askFocus} onOpenChange={(o) => { if (!makeEdit.isPending) setAskFocus(o); }}>
+        <DialogContent className="max-w-md" data-testid="focus-ask">
+          <DialogHeader>
+            <DialogTitle className="text-balance">Want us to find spots where we focus on the speaker?</DialogTitle>
+            <DialogDescription>
+              When someone talks for a while, the picture moves in on them, then back out to everyone for the back-and-forth. With one person on camera, it frames them a little closer.
+            </DialogDescription>
+          </DialogHeader>
+          <DialogFooter className="gap-2 sm:gap-2">
+            <Button type="button" variant="outline" onClick={() => makeEdit.mutate(false)} disabled={makeEdit.isPending} data-testid="focus-no">No, keep the full picture</Button>
+            <Button type="button" autoFocus onClick={() => makeEdit.mutate(true)} disabled={makeEdit.isPending} className="gap-2 bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="focus-yes">
+              {makeEdit.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Yes, focus on the speaker
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
   // The toolbar only says where the work is: marking, naming and making all happen on the timeline, in order.

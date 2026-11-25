@@ -137,7 +137,9 @@ interface Job {
   episodeVideo?: { episodeId: number; artUrl: string };
   /** A SmartLink's living photo (downloadUrl) made small enough for phones. */
   livingSqueeze?: { pageId: number; kind?: "living" | "intro" };
-  episodeEdit?: { trimStart: number; trimEnd: number; cuts?: [number, number][]; cardSec?: number; cardMusicUrl?: string; introUrl?: string; outroUrl?: string; introTransition?: "fade" | "black" | "cut"; outroTransition?: "fade" | "black" | "cut"; music?: { url: string; from: number; to: number; level: "under" | "full" }[] };
+  episodeEdit?: { trimStart: number; trimEnd: number; cuts?: [number, number][]; cardSec?: number; cardMusicUrl?: string; introUrl?: string; outroUrl?: string; introTransition?: "fade" | "black" | "cut"; outroTransition?: "fade" | "black" | "cut"; music?: { url: string; from: number; to: number; level: "under" | "full" }[];
+    /** "Focus on whoever's talking" (24 Nov 2026): two tiles → the speaker's tile in long stretches; one person → a gentle reframe. The transcript comes in job.transcript (in this video's own seconds) or is made here. */
+    focus?: boolean };
   /** Bring a recording in from elsewhere (Zoom): fetch downloadUrl with these headers, store it, report. */
   importFrom?: { headers: Record<string, string> };
   /** Clips to make from this episode (Pro: 6). Absent = CLIP_COUNT. */
@@ -1961,6 +1963,159 @@ ${transcriptText(lines)}`;
   }
 }
 
+// ---------------------------------------------------------------------------
+// Focus on the speaker, for a whole episode (Andrew via PM, 24 Nov 2026)
+// ---------------------------------------------------------------------------
+// Two people side by side in our studio: during a long stretch where one of
+// them talks (20 s or more), the picture moves in to that person's tile, and
+// back out to both for the back-and-forth. Hard cuts, the way a director
+// would. One person: a slow drift toward their face, a fifth closer, never a
+// jump. Everything here can give up: then the episode is made as it was.
+
+type FocusPlan =
+  | { kind: "two"; fw: number; fh: number; tiles: { left: Box; right: Box }; wins: { from: number; to: number; side: "left" | "right" }[] }
+  | { kind: "one"; fw: number; fh: number; pts: { at: number; x: number; y: number }[] };
+
+const FOCUS_MIN_RUN = 20;
+
+/** Talking turns: one speaker's lines run together, a short "mm-hmm" from the other doesn't break the turn. */
+export function speakerRuns(lines: Line[]): { speaker: string; from: number; to: number }[] {
+  const ls = lines.filter((l) => l.speaker && l.endSec > l.startSec).sort((a, b) => a.startSec - b.startSec);
+  const runs: { speaker: string; from: number; to: number }[] = [];
+  for (const l of ls) {
+    const cur = runs[runs.length - 1];
+    const short = l.endSec - l.startSec < 2.5 && l.text.split(/\s+/).length <= 6;
+    if (cur && cur.speaker === l.speaker && l.startSec - cur.to < 2.5) cur.to = Math.max(cur.to, l.endSec);
+    else if (cur && cur.speaker !== l.speaker && short && l.startSec - cur.to < 2.5) continue; // an interjection: stay on the speaker
+    else runs.push({ speaker: l.speaker, from: l.startSec, to: l.endSec });
+  }
+  return runs;
+}
+
+/**
+ * The stretches to move in on: each long turn, from 3 s in (the listener hears who's talking first) until it ends.
+ * A long turn goes back to both for 6 s every minute (never leaving a stub under 20 s), so the other person is seen listening.
+ */
+export function focusWindows(runs: { speaker: string; from: number; to: number }[], sideOf: Record<string, "left" | "right">) {
+  const out: { from: number; to: number; side: "left" | "right" }[] = [];
+  for (const r of runs) {
+    if (!sideOf[r.speaker] || r.to - r.from < FOCUS_MIN_RUN) continue;
+    const side = sideOf[r.speaker], end = r.to + 0.2;
+    let at = r.from + 3;
+    while (end - at > 80) { out.push({ from: at, to: at + 54, side }); at += 60; }
+    out.push({ from: at, to: end, side });
+  }
+  return out;
+}
+
+export async function episodeFocusPlan(job: Job, source: string, dir: string, tag: string, from: number, to: number): Promise<FocusPlan | null> {
+  try {
+    const dims = (await run("ffprobe", ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", source])).trim().split(",").map(Number);
+    const [fw, fh] = dims;
+    if (!fw || !fh || fw / fh < 1.5) { console.log(`${tag}: focus skipped (not a wide picture)`); return null; }
+    let lines: Line[] = (job.transcript ?? []).filter((l) => l.endSec > from && l.startSec < to);
+    if (!lines.length) lines = (await transcribeWithDeepgram(source, dir).catch(() => [] as Line[])).filter((l) => l.endSec > from && l.startSec < to);
+    const whole: Box = { x: 0, y: 0, w: fw, h: fh };
+    const len = to - from;
+    // Two tiles at two of three looks: our studio's picture.
+    const looks = await Promise.all([0.25, 0.5, 0.75].map((f) => studioTiles(source, from + len * f)));
+    const tiles = looks.find(Boolean) ?? null;
+    if (tiles && looks.filter(Boolean).length >= 2) {
+      const talk = new Map<string, number>();
+      for (const l of lines) if (l.speaker) talk.set(l.speaker, (talk.get(l.speaker) ?? 0) + (l.endSec - l.startSec));
+      const top = [...talk.entries()].sort((a, b) => b[1] - a[1]).slice(0, 2).map(([k]) => k);
+      if (top.length < 2) { console.log(`${tag}: focus skipped (two tiles, but one voice in the transcript)`); return null; }
+      const mid = (tiles.left.x + tiles.left.w + tiles.right.x) / 2;
+      const sideOf: Record<string, "left" | "right"> = {};
+      for (const spk of top) {
+        const picks = lines.filter((l) => l.speaker === spk && l.endSec - l.startSec >= 3).sort((a, b) => (b.endSec - b.startSec) - (a.endSec - a.startSec)).slice(0, 3);
+        const votes = { left: 0, right: 0 };
+        for (const l of picks) {
+          const at = (l.startSec + l.endSec) / 2;
+          const b = await speakerFocus(source, { title: "", caption: "", reason: "", startSec: l.startSec, endSec: l.endSec }, l.text, whole, dir, at);
+          if (b) votes[b.x + b.w / 2 < mid ? "left" : "right"]++;
+        }
+        if (votes.left !== votes.right && Math.max(votes.left, votes.right) >= 2) sideOf[spk] = votes.left > votes.right ? "left" : "right";
+      }
+      if (!sideOf[top[0]] || !sideOf[top[1]] || sideOf[top[0]] === sideOf[top[1]]) { console.log(`${tag}: focus skipped (couldn't tell who sits where)`); return null; }
+      const wins = focusWindows(speakerRuns(lines), sideOf).map((w) => ({ ...w, from: Math.max(from, w.from), to: Math.min(to, w.to) })).filter((w) => w.to - w.from >= 10);
+      console.log(`${tag}: focus: ${wins.length} long turn${wins.length === 1 ? "" : "s"} (${Math.round(wins.reduce((n, w) => n + w.to - w.from, 0))}s on one speaker)`);
+      return wins.length ? { kind: "two", fw, fh, tiles: { left: tiles.left, right: tiles.right }, wins } : null;
+    }
+    // One person: look every so often and drift toward them. Two or more voices in one picture (not our tiles) stay as they are,
+    // so nobody is pushed to the edge.
+    const share = new Map<string, number>();
+    for (const l of lines) if (l.speaker) share.set(l.speaker, (share.get(l.speaker) ?? 0) + (l.endSec - l.startSec));
+    const total = [...share.values()].reduce((n, v) => n + v, 0);
+    if (total && [...share.values()].filter((v) => v / total >= 0.15).length > 1) { console.log(`${tag}: focus skipped (more than one voice, one picture)`); return null; }
+    const step = Math.min(90, Math.max(20, len / 30));
+    const ats: number[] = [];
+    for (let t = from + Math.min(5, len / 4); t < to - 2; t += step) ats.push(t);
+    const said = (t: number) => lines.filter((l) => l.endSec > t - 8 && l.startSec < t + 8).map((l) => l.text).join(" ");
+    const found: ({ at: number; x: number; y: number } | null)[] = new Array(ats.length).fill(null);
+    let next = 0;
+    await Promise.all(Array.from({ length: Math.min(4, ats.length) }, async () => {
+      for (let k = next++; k < ats.length; k = next++) {
+        const at = ats[k];
+        const b = await speakerFocus(source, { title: "", caption: "", reason: "", startSec: at - 4, endSec: at + 4 }, said(at) || "(one person talking to camera)", whole, dir, at);
+        found[k] = b ? { at, x: b.x + b.w / 2, y: b.y + b.h * 0.45 } : null;
+      }
+    }));
+    const pts = found.filter((p): p is { at: number; x: number; y: number } => !!p);
+    if (pts.length < Math.max(2, ats.length * 0.6)) { console.log(`${tag}: focus skipped (found the person in ${pts.length} of ${ats.length} looks)`); return null; }
+    console.log(`${tag}: gentle reframe from ${pts.length} looks`);
+    return { kind: "one", fw, fh, pts };
+  } catch (err) {
+    console.warn(`${tag}: focus skipped: ${(err as Error).message}`);
+    return null;
+  }
+}
+
+/** The filters that take the joined episode [inL] (1280x720) to [outL] with the focus on. `toOut` maps source seconds into it. */
+export function focusFilters(plan: FocusPlan, toOut: (t: number) => number, inL: string, outL: string): string[] {
+  const OW = 1280, OH = 720;
+  const s = Math.min(OW / plan.fw, OH / plan.fh), ox = (OW - plan.fw * s) / 2, oy = (OH - plan.fh * s) / 2;
+  const ev = (n: number) => Math.max(2, Math.round(n / 2) * 2);
+  if (plan.kind === "two") {
+    // Each tile as a 16:9 region of the joined picture, a little room around it.
+    const region = (b: Box) => {
+      const bx = ox + b.x * s, by = oy + b.y * s, bw = b.w * s, bh = b.h * s;
+      let w = bw / bh > 16 / 9 ? bw : bh * 16 / 9; let h = w * 9 / 16;
+      w *= 1.04; h *= 1.04;
+      if (w > OW) { w = OW; h = w * 9 / 16; }
+      if (h > OH) { h = OH; w = h * 16 / 9; }
+      const x = Math.min(OW - w, Math.max(0, bx + bw / 2 - w / 2)), y = Math.min(OH - h, Math.max(0, by + bh / 2 - h / 2));
+      return { w: ev(w), h: ev(h), x: ev(x), y: ev(y) };
+    };
+    const out: string[] = [];
+    const sides = (["left", "right"] as const).filter((sd) => plan.wins.some((w) => w.side === sd));
+    const when = (sd: "left" | "right") => plan.wins.filter((w) => w.side === sd).map((w) => [toOut(w.from), toOut(w.to)]).filter(([a, b]) => b - a >= 5).map(([a, b]) => `between(t,${a.toFixed(2)},${b.toFixed(2)})`).join("+") || "0";
+    out.push(`[${inL}]split=${sides.length + 1}[fw0]${sides.map((sd) => `[f${sd}0]`).join("")}`);
+    let base = "fw0";
+    sides.forEach((sd, k) => {
+      const r = region(plan.tiles[sd]);
+      out.push(`[f${sd}0]crop=${r.w}:${r.h}:${r.x}:${r.y},scale=${OW}:${OH},setsar=1[f${sd}1]`);
+      const o = k === sides.length - 1 ? outL : `fw${k + 1}`;
+      out.push(`[${base}][f${sd}1]overlay=0:0:enable='${when(sd)}'${o === outL ? ",format=yuv420p" : ""}[${o}]`);
+      base = o;
+    });
+    return out;
+  }
+  // One person: a fifth closer, the centre easing from look to look.
+  const z = 1.2, cw = ev(OW / z), ch = ev(OH / z);
+  const pts = plan.pts.map((p) => ({ t: toOut(p.at), x: Math.min(OW - cw, Math.max(0, ox + p.x * s - cw / 2)), y: Math.min(OH - ch, Math.max(0, oy + p.y * s - ch / 2)) }))
+    .filter((p, i, a) => i === 0 || p.t - a[i - 1].t >= 1);
+  const track = (k: "x" | "y") => {
+    let e = pts[pts.length - 1][k].toFixed(1);
+    for (let i = pts.length - 2; i >= 0; i--) {
+      const a = pts[i], b = pts[i + 1];
+      e = `if(lt(t,${b.t.toFixed(2)}),${a[k].toFixed(1)}+(${(b[k] - a[k]).toFixed(1)})*(t-${a.t.toFixed(2)})/${(b.t - a.t).toFixed(2)},${e})`;
+    }
+    return `if(lt(t,${pts[0].t.toFixed(2)}),${pts[0][k].toFixed(1)},${e})`;
+  };
+  return [`[${inL}]crop=${cw}:${ch}:'${track("x")}':'${track("y")}',scale=${OW}:${OH},setsar=1,format=yuv420p[${outL}]`];
+}
+
 async function handleEpisodeEdit(job: Job): Promise<void> {
   const e = job.episodeEdit!;
   const tag = `[${job.recordingId}] edit`;
@@ -2055,7 +2210,9 @@ async function handleEpisodeEdit(job: Job): Promise<void> {
     };
     // Labels as <name>v / <name>a, so each join can take any two.
     const lbl = (i: number) => { graph.push(`[v${i}]null[p${i}v]`, `[a${i}]anull[p${i}a]`); return `p${i}`; };
-    graph.push(`[mv]null[mainv]`, `[ma]anull[maina]`);
+    const plan = e.focus ? await episodeFocusPlan(job, job.downloadUrl, dir, tag, e.trimStart || 0, epEnd) : null;
+    if (plan) graph.push(...focusFilters(plan, toOut, "mv", "mainv"), `[ma]anull[maina]`);
+    else graph.push(`[mv]null[mainv]`, `[ma]anull[maina]`);
     cur = "main";
     if (e.introUrl) { total = join(lbl(0), cur, durs[0], total, e.introTransition, "j1"); cur = "j1"; }
     const bodyLen = ep.reduce((n, i) => n + durs[i], 0);
