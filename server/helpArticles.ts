@@ -822,11 +822,19 @@ export const QUICK_ANSWERS: { q: string; a: string }[] = [
   },
   {
     "q": "How do I hide or change my name on screen?",
-    "a": "1. In your studio, open **People**.\n2. On your own row, change **Your name on screen**, or switch **Show my name** off.\nIt changes on stage straight away. To hide the show's logo, the host opens **Media** and picks **None** under Logo.\n[[GO:studio]]"
+    "a": "1. In your studio, open **People**.\n2. On your own row, change **Your name on screen**, or switch **Show my name** off.\nIt changes on stage straight away. To hide your show's logo, the host picks **None** under **Media**, then **Logo**.\n[[GO:studio]]"
   },
   {
     "q": "What's the difference between scenes and people?",
     "a": "**Scenes** are what viewers see. **People** are who's in the room.\n1. Click a scene on the left to put it on stage.\n2. Each scene card says who's on it.\n3. Under the stage, send a guest backstage to keep them off every scene.\n[[GO:studio]]"
+  },
+  {
+    "q": "How do I stream to Facebook, Twitch or another site?",
+    "a": "1. In your studio, press the **+** beside **Record**.\n2. Pick the site, paste its **Stream key**, and press **Add**.\n3. Its circle lights up. Press **Go live** and your show goes there.\nClick a circle to turn that site off for this show.\n[[GO:studio]]"
+  },
+  {
+    "q": "How do I add a scrolling banner to my show?",
+    "a": "1. In your studio, open **Media**.\n2. Under **Scrolling banner**, write your line.\n3. Press **Start it**. It runs along the bottom, in the recording and the live show, until you press **Stop**.\n[[GO:studio]]"
   },
   {
     "q": "How do I invite a guest to my show?",
