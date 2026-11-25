@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Loader2, Music2, Play, Plus, Repeat, Square, Trash2, Volume2 } from "lucide-react";
@@ -42,6 +42,7 @@ export function MediaPanel({ kit }: { kit: RoomKit }) {
         </summary>
         <Banners kit={kit} />
       </details>
+      <ScrollingBanner kit={kit} />
 
       <p className={label}>Video clips</p>
       <Clips kit={kit} />
@@ -54,6 +55,42 @@ export function MediaPanel({ kit }: { kit: RoomKit }) {
 
       <p className={label}>Background music</p>
       <MusicList kit={kit} />
+    </div>
+  );
+}
+
+/**
+ * The scrolling banner (mockup approved 25 Nov, "Go, build both"): one line that crawls along the bottom of the
+ * stage, in the recording and the live show, through every scene change until it's stopped. The timed banners
+ * above stay as they are.
+ */
+function ScrollingBanner({ kit }: { kit: RoomKit }) {
+  const t = kit.live.ticker;
+  const on = !!t?.on;
+  const [text, setText] = useState(t?.text ?? "");
+  // The words already on the room (a reload, another window) fill an empty box.
+  useEffect(() => { if (t?.text && !text) setText(t.text); }, [t?.text]); // eslint-disable-line react-hooks/exhaustive-deps
+  const clean = text.replace(/\s+/g, " ").trim();
+  const changed = clean !== (t?.text ?? "");
+  return (
+    <div className={`mt-3 flex flex-col gap-2.5 rounded-2xl p-3.5 ${on ? "border-2 border-[#053877] bg-[#f5f8fd]" : "border border-[#e4e7ec]"}`} data-testid="ticker-card">
+      <div className="flex items-center gap-2">
+        <p className="flex-1 text-sm font-bold">Scrolling banner</p>
+        {on && <span className="flex h-6 items-center gap-1.5 rounded-full bg-[#d1fadf] px-2.5 text-xs font-bold text-[#067647]" data-testid="ticker-on"><span className="h-[7px] w-[7px] rounded-full bg-[#12b76a]" />On the stage</span>}
+      </div>
+      {!on && <p className="text-[13px] leading-relaxed text-[#475467]">A line that crawls along the bottom of the stage, through every scene, until you stop it. Good for your next episode, a sponsor or where to follow you.</p>}
+      <label htmlFor="ticker-text" className="text-xs font-semibold text-[#475467]">What it says</label>
+      <textarea id="ticker-text" value={text} onChange={(e) => setText(e.target.value)} maxLength={200} rows={3} placeholder="e.g. New episode every Tuesday · Follow @yourshow everywhere"
+        className="resize-none rounded-[10px] border border-[#d0d5dd] bg-white px-2.5 py-2 text-[13px] font-medium text-[#101828] outline-none focus:border-[#053877] focus:ring-2 focus:ring-[#053877]/15" data-testid="ticker-text" />
+      {on ? (
+        <div className="flex gap-2">
+          <button type="button" onClick={() => kit.setTicker(clean, true)} disabled={!clean || !changed} className="h-10 flex-1 rounded-[10px] bg-[#053877] text-[13px] font-bold text-white disabled:opacity-50" data-testid="ticker-update">Update it</button>
+          <button type="button" onClick={() => kit.setTicker(t?.text ?? clean, false)} className="h-10 rounded-[10px] border border-[#d0d5dd] bg-white px-[18px] text-[13px] font-bold text-[#344054] hover:bg-[#f9fafb]" data-testid="ticker-stop">Stop</button>
+        </div>
+      ) : (
+        <button type="button" onClick={() => kit.setTicker(clean, true)} disabled={!clean} className="h-10 rounded-[10px] bg-[#053877] text-[13px] font-bold text-white disabled:opacity-50" data-testid="ticker-start">Start it</button>
+      )}
+      {on && <p className="text-xs text-[#667085]">Keeps running through every scene until you stop it.</p>}
     </div>
   );
 }

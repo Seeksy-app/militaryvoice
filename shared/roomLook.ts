@@ -149,6 +149,11 @@ export interface RoomLive {
   clip?: { scene: string; rev: number; pos: number; paused: boolean } | null;
   /** Studio v3 is switched on (the server's STUDIO_V3, written with every live-state change). Off or missing = the v2 stage. */
   v3?: boolean;
+  /**
+   * The scrolling banner (Andrew, 25 Nov: "Go, build both"): one line crawling along the bottom of the picture through
+   * every scene until it's stopped. `on` false keeps the words for next time.
+   */
+  ticker?: { text: string; on: boolean } | null;
 }
 
 /** Intro or outro: the slot first, then the v3 video shelf. */
@@ -230,6 +235,8 @@ export function roomStageMeta(look: RoomLook | null, live: RoomLive, name: strin
     backgroundUrl: backgroundOf(style.background, origin),
     stageLayout: ROOM_LAYOUT_TO_STAGE[scene?.layout ?? "side"],
   };
+  // The scrolling banner crawls along the bottom through every scene, until it's stopped.
+  if (live.ticker?.on && live.ticker.text) meta.tickerText = live.ticker.text;
   const playing = live.playing;
   const clip = playing && (playing.slot === "intro" || playing.slot === "outro") ? clipOf(l, playing.slot) : null;
   if (playing && clip?.url) {

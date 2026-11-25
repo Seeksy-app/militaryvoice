@@ -1056,7 +1056,7 @@ function BannerOverlay({ title, subtitle, lifted }: { title: string; subtitle: s
  * speed either way. It stops moving entirely under prefers-reduced-motion,
  * where it simply sits and is still readable.
  */
-function TickerOverlay({ text }: { text: string }) {
+export function TickerOverlay({ text }: { text: string }) {
   if (!text) return null;
   const seconds = Math.max(14, Math.round(text.length * 0.42));
   return (

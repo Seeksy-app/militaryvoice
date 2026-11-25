@@ -199,6 +199,19 @@ export function registerRoomStage(app: Express, requireHostSession: RequestHandl
     res.json({ ok, showing: { bannerId: id, until } });
   });
 
+  /** The scrolling banner: on with its words, or off (the words kept for next time). The filmed page draws it through every scene. */
+  app.post("/api/host/my-studio/ticker", requireHostSession, async (req, res) => {
+    const got = await studioOf(req);
+    if (!got) return res.status(404).json({ message: "Open your studio first." });
+    const text = String(req.body?.text ?? "").replace(/\s+/g, " ").trim().slice(0, 200);
+    const on = req.body?.on === true;
+    if (on && !text) return res.status(400).json({ message: "Write what it says first." });
+    const ticker = text ? { text, on } : null;
+    const ok = await mergeRoomMeta(roomOf(got.row), { ticker });
+    if (!ok) return res.status(409).json({ message: "Join your studio first." });
+    res.json({ ok, ticker });
+  });
+
   /** Play the room's intro or outro on the stage (so the recording and the stream carry it), or stop. */
   app.post("/api/host/my-studio/media", requireHostSession, async (req, res) => {
     const got = await studioOf(req);

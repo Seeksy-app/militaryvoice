@@ -84,6 +84,8 @@ export type Live = {
   sound?: { id: string; at: number } | null; music?: { id: string; at: number } | null;
   /** The host's Pause / Play / From the start on the clip on air (shared/roomLook.ts RoomLive.clip). */
   clip?: { scene: string; rev: number; pos: number; paused: boolean } | null;
+  /** The scrolling banner (shared/roomLook.ts RoomLive.ticker). */
+  ticker?: { text: string; on: boolean } | null;
 };
 /** A scene whose video plays when it's on air (a picture or a shared screen doesn't). */
 export const isClipScene = (s?: Scene | null) => !!s?.media?.url && !(s.media.mime ?? "").startsWith("image") && (s.type === "media" || !!s.boxes?.some((b) => b.kind === "media"));
@@ -118,6 +120,7 @@ export function parseLive(meta: string | undefined): Live {
       activeScene: typeof j.activeScene === "string" ? j.activeScene : null, showing: j.showing?.bannerId ? j.showing : null, playing: j.playing?.slot ? j.playing : null, lookRev: typeof j.lookRev === "number" ? j.lookRev : null,
       sound: j.sound?.id ? j.sound : null, music: j.music?.id ? j.music : null,
       clip: j.clip?.scene && typeof j.clip.rev === "number" ? j.clip : null,
+      ticker: typeof j.ticker?.text === "string" && j.ticker.text ? { text: j.ticker.text, on: j.ticker.on === true } : null,
     };
   } catch { return none; }
 }
@@ -266,6 +269,15 @@ export function useRoomKit(owner: boolean, meta: string | undefined) {
     }, bannerId ? "Couldn't show the banner" : "Couldn't take the banner down");
   };
 
+  /** The scrolling banner: start or update it with its words, or stop it (the words stay for next time). */
+  const setTicker = (text: string, on: boolean) => {
+    const t = text.replace(/\s+/g, " ").trim().slice(0, 200);
+    void optimistic({ ticker: t ? { text: t, on } : null }, async () => {
+      const j = await post<{ ticker?: Live["ticker"] }>("/api/host/my-studio/ticker", { text: t, on });
+      return j.ticker !== undefined ? { ticker: j.ticker } : undefined;
+    }, on ? "Couldn't start the scrolling banner" : "Couldn't stop the scrolling banner");
+  };
+
   /** Play the intro, outro or a ready-made card full screen, or stop it (null; also when it ends). */
   const play = (slot: PlaySlot | null, extra?: { minutes?: number; next?: string }) => {
     void optimistic({ playing: slot ? { slot, at: Date.now(), ...extra } : null }, async () => { await post("/api/host/my-studio/media", { action: slot ?? "stop", ...extra }); }, slot ? "Couldn't play that" : "Couldn't stop it");
@@ -343,7 +355,7 @@ export function useRoomKit(owner: boolean, meta: string | undefined) {
   /** On stage? The host always is; guests by their stage attribute (or the click that's on its way). */
   const isOnStage = (identity: string, attr?: string) => (identity in stageOver ? stageOver[identity] : attr !== "off");
 
-  return { look, loading: owner && q.isLoading, live, change, addAsset, removeAsset, toScene, showBanner, play, playSound, playMusic, present, stopPresenting, backOf, clipAct, backstage, isOnStage };
+  return { look, loading: owner && q.isLoading, live, change, addAsset, removeAsset, toScene, showBanner, setTicker, play, playSound, playMusic, present, stopPresenting, backOf, clipAct, backstage, isOnStage };
 }
 
 export type RoomKit = ReturnType<typeof useRoomKit>;

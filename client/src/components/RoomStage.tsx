@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Captions, HiddenVoices, LogoOverlay, NameTagContext, StageGrid, Tile, useStageRoom, type NameTagStyle, type RoomMeta, type StageTile } from "@/components/StageView";
+import { Captions, HiddenVoices, LogoOverlay, NameTagContext, StageGrid, Tile, TickerOverlay, useStageRoom, type NameTagStyle, type RoomMeta, type StageTile } from "@/components/StageView";
 import { apiRequest } from "@/lib/queryClient";
 import { useClipSync } from "@/components/room/clipSound";
 import { useReadyScene } from "@/components/room/mediaReady";
@@ -101,7 +101,7 @@ export function RoomPicture({
 
   const { meta, banner } = useMemo(
     () => roomStageMeta(look, live, name || (raw as RoomMeta).studioName || "", window.location.origin, now, corner),
-    [look, corner, live.activeScene, live.showing, live.playing, name, now], // eslint-disable-line react-hooks/exhaustive-deps
+    [look, corner, live.activeScene, live.showing, live.playing, live.ticker?.on, live.ticker?.text, name, now], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
   // v3: the player bot is heard, never drawn; the scene type decides who is drawn and how.
@@ -126,6 +126,7 @@ export function RoomPicture({
   const credit = v3 ? musicCreditOf(look, live) : "";
   useRoomFont(style?.font);
   const tag: NameTagStyle | null = style ? { style: style.nameTag, show: style.showNames, size: style.textSize, font: style.font, color: style.brandColor } : null;
+  const ticker = String((meta as { tickerText?: string }).tickerText ?? "");
   const bg = String((meta as { backgroundUrl?: string }).backgroundUrl ?? "");
   const logo = String((meta as { logoUrl?: string }).logoUrl ?? "");
 
@@ -161,6 +162,8 @@ export function RoomPicture({
       {full ? (
         <>
           {full}
+          {/* The scrolling banner over boxed scenes, cards and profiles too (StageGrid draws its own). */}
+          <TickerOverlay text={ticker} />
           <HiddenVoices tiles={bc ? people.filter((t) => !bc.drawn.includes(t.identity)) : people} muted={muted} />
         </>
       ) : (
@@ -171,7 +174,7 @@ export function RoomPicture({
       )}
       {credit && (
         // CC BY music: the credit is on the picture while the track plays, opposite the logo's corner.
-        <div className="pointer-events-none absolute z-40" style={{ bottom: "2.2%", ...(String((stageMeta as { logoCorner?: string }).logoCorner ?? "").endsWith("right") && String((stageMeta as { logoCorner?: string }).logoCorner).startsWith("bottom") ? { left: "2.2%" } : { right: "2.2%" }) }} data-testid="room-music-credit">
+        <div className="pointer-events-none absolute z-40" style={{ bottom: ticker ? "7.5%" : "2.2%", ...(String((stageMeta as { logoCorner?: string }).logoCorner ?? "").endsWith("right") && String((stageMeta as { logoCorner?: string }).logoCorner).startsWith("bottom") ? { left: "2.2%" } : { right: "2.2%" }) }} data-testid="room-music-credit">
           <p className="rounded-[0.6cqw] text-white/90" style={{ ...fontOf(style?.font), background: "rgba(4,16,43,0.55)", padding: "0.35cqw 0.9cqw", fontSize: "1.25cqw", fontWeight: 500, lineHeight: 1.2, borderLeft: `0.3cqw solid ${style?.brandColor || "#F0A71F"}` }}>{credit}</p>
         </div>
       )}
