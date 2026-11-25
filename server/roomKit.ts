@@ -17,6 +17,7 @@ import { and, asc, eq } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { getSessionEmail } from "./session.js";
 import { cornerLogoOf } from "./showLogo.js";
+import { studioShowKey } from "./hostShows.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
 import { libraryAsset, libraryReady, registerStudioLibrary, type LibraryItem, type LibrarySource } from "./studioLibrary.js";
 import { personalStudios, recordings, roomAssets, roomLooks, roomMarks, type PersonalStudioRow, type RoomAssetRow } from "../shared/schema.js";
@@ -447,7 +448,7 @@ export function registerRoomKit(app: Express, requireHostSession: RequestHandler
     // Their show logo (else their cover) for the corner when they haven't picked a logo in Media (Andrew, 23 Nov).
     // The room's own show, not just their first (Riccoh's Warriors' Voice studio showed his Devil Dawg cover, 24 Nov).
     const [owner] = await db.select({ email: personalStudios.ownerEmail, name: personalStudios.name }).from(personalStudios).where(eq(personalStudios.id, id)).limit(1).catch(() => []);
-    const corner = owner?.email ? await cornerLogoOf(owner.email, { name: owner.name, show: req.query.show }).catch(() => null) : null;
+    const corner = owner?.email ? await cornerLogoOf(owner.email, { name: owner.name, show: req.query.show ?? (await storage.getSetting(studioShowKey(id)).catch(() => null)) ?? "" }).catch(() => null) : null;
     res.json({ look, corner });
   });
 

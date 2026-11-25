@@ -17,6 +17,7 @@ import { db, schemaIsReady, storage } from "./storage.js";
 import { getSessionEmail } from "./session.js";
 import { isLiveKitConfigured, publicLiveKitUrl, rooms } from "./livekit.js";
 import { personalStudios, roomAssets, type PersonalStudioRow } from "../shared/schema.js";
+import { studioTitle } from "./hostShows.js";
 import { clipOf, ROOM_CARD_SLOTS, type RoomCardSlot, type RoomLook, type RoomLive } from "../shared/roomLook.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
@@ -267,7 +268,7 @@ export function registerRoomStage(app: Express, requireHostSession: RequestHandl
     if (!isLiveKitConfigured()) return res.status(503).json({ message: "The studio isn't switched on yet." });
     const at = new AccessToken(process.env.LIVEKIT_API_KEY ?? "", process.env.LIVEKIT_API_SECRET ?? "", { identity: `view-${got.row.id}-${crypto.randomBytes(3).toString("hex")}`, name: "Stage view", ttl: "6h" });
     at.addGrant({ room: roomOf(got.row), roomJoin: true, canPublish: false, canPublishData: false, canSubscribe: true, hidden: true });
-    res.json({ url: publicLiveKitUrl(), token: await at.toJwt(), studioId: got.row.id, name: got.row.name, lookKey: kit?.roomLookKey(got.row.id) ?? "" });
+    res.json({ url: publicLiveKitUrl(), token: await at.toJwt(), studioId: got.row.id, name: await studioTitle(got.row.ownerEmail, got.row.id, got.row.name), lookKey: kit?.roomLookKey(got.row.id) ?? "" });
   });
 
   /**

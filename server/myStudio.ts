@@ -17,7 +17,7 @@ import { onLookSaved, roomLookKey } from "./roomKit.js";
 import { liveHandleOf, livePageOn, liveUrlOf } from "./livePage.js";
 import { bumpLookRev, noteMusicOnAir, registerRoomStage, roomTemplateUrl, useRoomKit, v3For } from "./roomStage.js";
 import { personalStudios, type PersonalStudioRow } from "../shared/schema.js";
-import { inviteShow } from "./hostShows.js";
+import { inviteShow, studioShowKey, studioTitle } from "./hostShows.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 const now = () => new Date().toISOString();
@@ -52,6 +52,8 @@ async function mine(email: string): Promise<PersonalStudioRow> {
   return again;
 }
 const room = (s: PersonalStudioRow) => `my-${s.id}`;
+/** The studio with its show's name (studioTitle), for everything that shows or files it under a name. */
+const titled = async (s: PersonalStudioRow, picked?: unknown): Promise<PersonalStudioRow> => ({ ...s, name: await studioTitle(s.ownerEmail, s.id, s.name, picked) });
 /** liveEgressId when the show is live on their MilitaryVoices page only (no YouTube or other key on). */
 const PAGE_ONLY = "page";
 // Guests wait backstage (stage = "off") until the host brings them on, once the room UI has the
@@ -112,7 +114,7 @@ export async function runStudioEmptyPass(nowMs = Date.now()): Promise<{ running:
     await db.update(personalStudios).set({ ...(live ? { liveEgressId: "", liveSince: "", liveWatchUrl: "" } : {}), ...(recorded ? { recordingEgressId: "", recordingSince: "" } : {}) }).where(eq(personalStudios.id, s.id));
     await storage.setSetting(key, "");
     console.log(`My studio ${s.id}: ${live ? `live show ended${recorded ? " and recording stopped" : ""}` : "recording stopped"} after 2 minutes with nobody in the studio.`);
-    await sendStudioLeftLiveEmail({ to: s.ownerEmail, studioName: s.name, live, recorded }).catch((err) => console.error("Left-studio email failed:", (err as Error).message));
+    await sendStudioLeftLiveEmail({ to: s.ownerEmail, studioName: await studioTitle(s.ownerEmail, s.id, s.name), live, recorded }).catch((err) => console.error("Left-studio email failed:", (err as Error).message));
     ended.push(s.id);
   }
   return { running: rows.length, waiting, ended };
@@ -167,8 +169,11 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     const email = me(req);
     const s = await settle(await mine(email));
     const profile = await storage.getProfileByEmail(email).catch(() => undefined);
+    // Opened for one of their shows (?show=<id>, hosts with 2 or more): that show from now on, until they pick another.
+    const picked = req.query.show ? await inviteShow(email, req.query.show).catch(() => null) : null;
+    if (picked && (await storage.getSetting(studioShowKey(s.id)).catch(() => null)) !== String(picked.id)) await storage.setSetting(studioShowKey(s.id), String(picked.id)).catch(() => {});
     // Their own name, for the camera check's name box.
-    res.json({ ...view(s, await yt(email)), you: profile?.hostName?.trim() || "" });
+    res.json({ ...view(await titled(s, picked?.id), await yt(email)), you: profile?.hostName?.trim() || "" });
   });
 
   app.patch("/api/host/my-studio", requireHostSession, async (req, res) => {
@@ -190,7 +195,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     patch.streams = JSON.stringify(streams);
     if (b.newInvite === true) patch.inviteToken = newToken();
     const [out] = await db.update(personalStudios).set(patch).where(eq(personalStudios.id, s.id)).returning();
-    res.json(view(out, await yt(email)));
+    res.json(view(await titled(out), await yt(email)));
   });
 
   /**
@@ -258,7 +263,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     const name = String(req.body?.name ?? "").trim().slice(0, 60) || profile?.hostName || email.split("@")[0];
     const identity = `owner-${s.id}-${crypto.randomBytes(3).toString("hex")}`;
     const token = await studioToken({ room: room(s), identity, name, canPublish: true, admin: true, attributes: { role: "host", stage: "on", who: identity, ...titleOf(req) } });
-    res.json({ url: publicLiveKitUrl(), token, name: s.name, v3: v3For(s.id) });
+    res.json({ url: publicLiveKitUrl(), token, name: await studioTitle(s.ownerEmail, s.id, s.name), v3: v3For(s.id) });
   });
 
   /** A guest on the invite link: no account, just a name. */
@@ -268,7 +273,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     if (!s) return res.status(404).json({ message: "This invite link has expired. Ask the host for a new one." });
     // An invitation for one of the host's shows (?show=11) greets the guest with that show's name.
     const show = req.query.show ? await inviteShow(s.ownerEmail.trim().toLowerCase(), req.query.show).catch(() => null) : null;
-    res.json({ name: show?.title || s.name, v3: v3For(s.id) });
+    res.json({ name: show?.title || (await studioTitle(s.ownerEmail, s.id, s.name)), v3: v3For(s.id) });
   });
   app.post("/api/my-studio/invite/:token/token", async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
@@ -280,7 +285,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     if (!name) return res.status(400).json({ message: "Your name, please." });
     const identity = `guest-${crypto.randomBytes(5).toString("hex")}`;
     const token = await studioToken({ room: room(s), identity, name, canPublish: true, attributes: { role: "guest", stage: GUEST_STAGE, who: identity, ...titleOf(req) } });
-    res.json({ url: publicLiveKitUrl(), token, name: s.name, v3: v3For(s.id) });
+    res.json({ url: publicLiveKitUrl(), token, name: await studioTitle(s.ownerEmail, s.id, s.name), v3: v3For(s.id) });
   });
 
   /** Record: the whole room, to an MP4 in their Library. */
@@ -296,7 +301,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
         const filepath = `personal/${s.id}/${stamp}.mp4`;
         // Film our own page (the room's look, scene and clips); the stock grid if it can't be reached.
         const egressId = await startSegmentRecording(room(s), filepath, await roomTemplateUrl(s.id));
-        const title = `${s.name} · ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York" })}`;
+        const title = `${await studioTitle(email, s.id, s.name)} · ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York" })}`;
         // A Library recording like an upload's: no event, no studio row, theirs by email.
         await storage.createRecording({ eventId: 0, studioId: 0, signupId: null, email, title, egressId, filepath });
         [s] = await db.update(personalStudios).set({ recordingEgressId: egressId, recordingSince: now() }).where(eq(personalStudios.id, s.id)).returning();
@@ -305,7 +310,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
         await stopEgressById(s.recordingEgressId).catch(() => {});
         [s] = await db.update(personalStudios).set({ recordingEgressId: "", recordingSince: "" }).where(eq(personalStudios.id, s.id)).returning();
       }
-      res.json(view(s, await yt(email)));
+      res.json(view(await titled(s), await yt(email)));
     } catch (err) {
       console.error("My studio record failed:", err);
       res.status(502).json({ message: "The recorder didn't start. Make sure someone's camera is on, then try again." });
@@ -328,7 +333,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
         } else if (s.youtubeOn && YOUTUBE_OAUTH) {
           const token = await deps.youtubeToken(email);
           if (token) {
-            const title = String(req.body?.title ?? "").trim().slice(0, 100) || s.name;
+            const title = String(req.body?.title ?? "").trim().slice(0, 100) || (await studioTitle(email, s.id, s.name));
             const b = await createBroadcast(token, { title, startAtIso: now(), privacy: req.body?.privacy === "unlisted" ? "unlisted" : "public" });
             targets.push({ url: `${b.ingestAddress.replace(/\/+$/, "")}/${b.streamName}` });
             watchUrl = b.watchUrl;
@@ -343,7 +348,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
         if (s.liveEgressId !== PAGE_ONLY) await stopEgressById(s.liveEgressId).catch(() => {});
         [s] = await db.update(personalStudios).set({ liveEgressId: "", liveSince: "", liveWatchUrl: "" }).where(eq(personalStudios.id, s.id)).returning();
       }
-      res.json(view(s, await yt(email)));
+      res.json(view(await titled(s), await yt(email)));
     } catch (err) {
       console.error("My studio live failed:", err);
       const msg = (err as Error).message ?? "";

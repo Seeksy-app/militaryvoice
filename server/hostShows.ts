@@ -1,6 +1,6 @@
 // A host's own shows (hosted_shows), for the places that need to know which one something is for.
 import { sql } from "drizzle-orm";
-import { db } from "./storage.js";
+import { db, storage } from "./storage.js";
 
 const rows = (r: unknown) => ((r as { rows?: Record<string, unknown>[] }).rows ?? (r as Record<string, unknown>[]));
 
@@ -37,4 +37,24 @@ export async function showFor(email: string, picked: unknown, ...names: (string 
     if (hit) return hit;
   }
   return list.length === 1 ? list[0] : null;
+}
+
+/** The show a host picked for their studio (only kept for hosts with 2 or more shows). */
+export const studioShowKey = (studioId: number) => `studio-show:${studioId}`;
+/**
+ * Which show a host's own studio is for (Andrew, 24 Nov: his studio said "Veteran Benefits Podcast", the name it was made
+ * with, while he was under Next Mile): the one picked now (?show=), else the one picked last time, else showFor's
+ * usual order (the studio's name, their profile's podcast, their only show). Null when it can't tell.
+ */
+export async function studioShow(email: string, studioId: number, studioName: string, picked?: unknown): Promise<Show | null> {
+  const em = String(email ?? "").trim().toLowerCase();
+  const now = await inviteShow(em, picked);
+  if (now) return now;
+  const saved = await storage.getSetting(studioShowKey(studioId)).catch(() => null);
+  const profile = await storage.getProfileByEmail(em).catch(() => undefined);
+  return showFor(em, saved ?? "", studioName, profile?.podcastName);
+}
+/** The studio's title: its show's name, else the name it was made with. */
+export async function studioTitle(email: string, studioId: number, studioName: string, picked?: unknown): Promise<string> {
+  return (await studioShow(email, studioId, studioName, picked).catch(() => null))?.title || studioName;
 }
