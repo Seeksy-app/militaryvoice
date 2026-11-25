@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { startScreenShare } from "@/components/room/screenShare";
 import { BrandMark } from "@/components/BrandMark";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -421,8 +422,14 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
     try {
       // With its sound: a shared browser tab can carry its audio (Chrome's "Share tab audio"), so a
       // video played in a tab is heard in the studio and the recording (Andrew, 24 Nov).
-      if (!isScreenShareEnabled) toast({ title: "Sharing a video?", description: "Pick the browser tab and turn on Share tab audio." });
-      await localParticipant.setScreenShareEnabled(!isScreenShareEnabled, isScreenShareEnabled ? undefined : { audio: true });
+      if (isScreenShareEnabled) await localParticipant.setScreenShareEnabled(false);
+      else {
+        toast({ title: "Sharing a video?", description: "Pick the browser tab and turn on Share tab audio." });
+        // Stays in the studio while sharing (Andrew, 24 Nov): Chrome keeps this tab in front; where a browser
+        // still switches, say how to come back.
+        const { stays } = await startScreenShare(localParticipant);
+        if (!stays) toast({ title: "Come back to this tab to see your studio", description: "Your share stays on air until you press Stop share." });
+      }
       // Starting a share puts the screen-share scene on air, if there is one.
       const s = !isScreenShareEnabled && editing ? look?.scenes.find((x) => x.layout === "screen") : undefined;
       if (s) kit.toScene(s.id);
