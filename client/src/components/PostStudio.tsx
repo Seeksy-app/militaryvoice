@@ -23,7 +23,7 @@ import { useToast } from "@/hooks/use-toast";
 import { API_BASE, apiRequest } from "@/lib/queryClient";
 import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/schema";
 import { Slider } from "@/components/ui/slider";
-import { Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2, Clapperboard, Plus, ArrowLeftToLine, ArrowRightToLine, MoreHorizontal, Blend, Brackets, Library, ArrowLeft, CalendarClock } from "lucide-react";
+import { Bookmark, Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2, Clapperboard, Plus, ArrowLeftToLine, ArrowRightToLine, MoreHorizontal, Blend, Brackets, Library, ArrowLeft, CalendarClock } from "lucide-react";
 import { IconTile } from "@/components/ui/icon-tile";
 import { seesTwoPeople, twoUpLayout, twoUpOf, type TwoUp } from "@/components/LayoutPicker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -1825,6 +1825,8 @@ export function ClipCard({ c, onPreview, menuExtra }: { c: ClipRow; onPreview: (
       </button>
       <div className="flex flex-1 flex-col p-2">
         {/* Which sizes this clip has: only what was made, never a size that isn't there. */}
+        {/* "Mark a clip" in the Studio: the moment they pressed it for (25 Nov). */}
+        {c.markSec >= 0 && <p className="mb-1 inline-flex w-fit items-center gap-1 rounded-full bg-[#F0A71F]/15 px-1.5 py-0.5 text-[10px] font-semibold text-[#8a5a00] dark:text-[#F0A71F]" data-testid={`clip-marked-${c.id}`}><Bookmark className="h-3 w-3" /> You marked this at {stamp(c.markSec)}</p>}
         {files.length > 0 && <p className="mb-1 flex flex-wrap gap-1">{files.map((f) => <span key={f.label} className="rounded bg-muted px-1 py-px text-[10px] font-semibold tabular-nums text-muted-foreground">{f.label === "Vertical" ? "9:16" : f.label === "Square" ? "1:1" : "16:9"}</span>)}</p>}
         <p className="mb-0.5 inline-flex items-center gap-1 text-[10px] font-medium tabular-nums text-muted-foreground"><Clock3 className="h-3 w-3" /> {stamp(c.startSec)}–{stamp(c.endSec)}</p>
         <p className="line-clamp-2 text-xs font-semibold leading-snug text-foreground" title={c.reason || undefined}>{updating && c.editTitle ? c.editTitle : c.title}</p>
@@ -2073,7 +2075,7 @@ export function PostStudio() {
   const p = progressOf(rec);
   const clean = cleanOf(rec);
   const savedCopy = rec ? (recs.data ?? []).find((r) => r.egressId === `CLEAN_${rec.id}`) ?? null : null;
-  const mine = useMemo(() => (clips.data ?? []).filter((c) => c.recordingId === rec?.id).sort((a, b) => a.startSec - b.startSec), [clips.data, rec?.id]);
+  const mine = useMemo(() => (clips.data ?? []).filter((c) => c.recordingId === rec?.id).sort((a, b) => ((a.markSec ?? -1) >= 0) === ((b.markSec ?? -1) >= 0) ? a.startSec - b.startSec : (a.markSec ?? -1) >= 0 ? -1 : 1), [clips.data, rec?.id]);
 
   useEffect(() => { setPreview(null); setMusicOpen(false); }, [rec?.id]);
 

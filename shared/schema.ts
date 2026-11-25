@@ -1643,6 +1643,8 @@ export const clips = pgTable(
     verticalUrl: text("vertical_url").notNull().default(""),
     squareUrl: text("square_url").notNull().default(""),
     subtitlesUrl: text("subtitles_url").notNull().default(""),
+    /** "Mark a clip" (25 Nov 2026): the second of the recording the host pressed it, when this clip is that moment; -1 otherwise. */
+    markSec: integer("mark_sec").notNull().default(-1),
     /** For clips cut from a sent-in episode: the library file it came from, and its broadcast cut. */
     sourceAssetId: integer("source_asset_id").notNull().default(0),
     cutAssetId: integer("cut_asset_id").notNull().default(0),
@@ -1815,6 +1817,7 @@ export const clipResultSchema = z.object({
   verticalUrl: z.string().trim().max(600).default(""),
   squareUrl: z.string().trim().max(600).default(""),
   subtitlesUrl: z.string().trim().max(600).default(""),
+  markSec: z.number().min(0).transform((n) => Math.round(n)).optional(),
 });
 export type ClipResult = z.infer<typeof clipResultSchema>;
 

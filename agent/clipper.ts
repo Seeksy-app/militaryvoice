@@ -166,6 +166,8 @@ interface Moment {
   reason: string;
   startSec: number;
   endSec: number;
+  /** "Mark a clip": the second the host pressed it, when this clip is that marked moment. */
+  markSec?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -1137,7 +1139,7 @@ export async function pickMoments(job: Job, lines: Line[]): Promise<Moment[]> {
   const marks = more ? [] : (job.options?.marks ?? []).filter((s) => Number.isFinite(s) && s >= 0 && s <= job.durationSec + 5).sort((a, b) => a - b);
   if (!key) {
     console.warn("   ANTHROPIC_API_KEY isn't set on this worker: rough cuts by speech density, with first-words titles");
-    return densestStretches(lines, n, "no-key");
+    return withMarks(null, job, lines, densestStretches(lines, n, "no-key"), marks, n);
   }
 
   const client = new Anthropic({ apiKey: key, timeout: 5 * 60_000, maxRetries: 1 });
@@ -1160,10 +1162,10 @@ This community's stories carry real weight. Do not pick a moment because it soun
 
 If the segment genuinely has fewer than ${n} moments that stand alone, return fewer. Returning two good ones is better than four with filler.${marks.length ? `
 
-The host pressed "Mark a clip" while recording at these times. They press it just after something they want to keep, so the moment usually ends at the mark or up to about 30 seconds before it:
+The host pressed "Mark a clip" while recording at these times, when something worth keeping was happening:
 ${marks.map((s) => `- ${Math.round(s)}s`).join("\n")}
 
-For each mark, include the clip of the complete thought that ends at or just before it, following the same rules (first word to last, ${MIN_SEC} to ${MAX_SEC} seconds). Marks close together may share one clip. These come first: if there are more marks than ${n}, pick the ${n} strongest marked moments; if there are fewer, fill the rest with the strongest other moments. Only skip a mark when nothing near it stands on its own.` : ""}${avoid.length ? `
+For each mark, include the clip of the complete thought around it: usually from about 20 seconds before the mark to about 40 seconds after, following the same rules (first word to last, ${MIN_SEC} to ${MAX_SEC} seconds, the mark inside the clip). Marks close together may share one clip. Marked moments are on top of the ${n}: pick the ${n} strongest other moments as well.` : ""}${avoid.length ? `
 
 These moments already have clips. Pick different ones that do not overlap them:
 ${avoid.map(([a, b]) => `- ${Math.round(a)}s to ${Math.round(b)}s`).join("\n")}` : ""}
@@ -1209,7 +1211,7 @@ Answer with the pick_moments tool.` }],
     if ((raw as unknown[]).length) break;
     console.warn(`   the pick came back empty (stop: ${res.stop_reason})${attempt < 3 ? " — asking again" : ""}`);
   }
-  if (!(raw as unknown[]).length) return more ? [] : await titled(client, job, lines, densestStretches(lines, n, "no-answer"));
+  if (!(raw as unknown[]).length) return more ? [] : withMarks(client, job, lines, await titled(client, job, lines, densestStretches(lines, n, "no-answer")), marks, n);
   const moments = (raw as Moment[]).map((m) => ({
     // A quote the model wrapped twice (""You think you have nothing to give"", 8 Oct) keeps one pair:
     // a quoted line is often the point of the title ("My only skill is killing people").
@@ -1219,7 +1221,71 @@ Answer with the pick_moments tool.` }],
     startSec: Math.max(0, Math.floor(Number(m.startSec))),
     endSec: Math.ceil(Number(m.endSec)),
   }));
-  return sane(moments.filter(clear), job.durationSec, n);
+  return marks.length ? withMarks(client, job, lines, moments.filter(clear), marks, n) : sane(moments.filter(clear), job.durationSec, n);
+}
+
+/** Marks pressed within 30 s of each other are one moment (the first press). */
+export function markGroups(marks: number[]): number[] {
+  const out: number[] = [];
+  for (const m of [...marks].filter((x) => Number.isFinite(x) && x >= 0).sort((a, b) => a - b)) if (!out.length || m - out[out.length - 1] >= 30) out.push(m);
+  return out;
+}
+
+/**
+ * A marked moment cut from the transcript: about 20 s before the press to 40 s after (PM for Andrew, 25 Nov), each end on
+ * a sentence edge: it starts where the line in progress then starts, ends where the last line begun by then ends.
+ */
+export function markWindow(mark: number, lines: Line[], durationSec: number): { startSec: number; endSec: number } {
+  const ls = lines.filter((l) => l.endSec > l.startSec).sort((a, b) => a.startSec - b.startSec);
+  const want0 = Math.max(0, mark - 20), want1 = mark + 40;
+  const first = ls.find((l) => l.endSec > want0 && l.startSec < mark + 5);
+  let start = first ? Math.min(first.startSec, mark) : want0;
+  // A long line already under way well before: start on the next one instead, if that's still before the press.
+  if (first && want0 - first.startSec > 10) { const nx = ls.find((l) => l.startSec >= want0 && l.startSec <= mark); if (nx) start = nx.startSec; }
+  const ending = ls.filter((l) => l.startSec < want1 && l.endSec > start);
+  let end = ending.length ? ending[ending.length - 1].endSec : want1;
+  // Too long: end on an earlier sentence, never before the press.
+  while (end - start > MAX_SEC) {
+    const earlier = ending.filter((l) => l.endSec < end && l.endSec >= Math.max(mark + 5, start + MIN_SEC)).pop();
+    if (!earlier) { end = start + MAX_SEC; break; }
+    end = earlier.endSec;
+  }
+  const cap = durationSec > 0 ? durationSec : end;
+  if (end - start < MIN_SEC) end = start + MIN_SEC;
+  if (end > cap) { end = cap; start = Math.max(0, Math.min(start, end - MIN_SEC)); }
+  return { startSec: Math.max(0, Math.floor(start)), endSec: Math.ceil(end) };
+}
+
+/**
+ * Every mark gets its clip, labelled with it, on top of the usual ones (PM for Andrew, 25 Nov): a picked moment that holds
+ * the press becomes it, else one is cut from the transcript around it. Marked first, then the rest, up to 12.
+ */
+export async function withMarks(client: Anthropic | null, job: Job, lines: Line[], picked: Moment[], marks: number[], n: number): Promise<Moment[]> {
+  const groups = markGroups(marks);
+  const rest = sane([...picked], job.durationSec, 12);
+  if (!groups.length) return rest.slice(0, n);
+  const over = (a: { startSec: number; endSec: number }, b: { startSec: number; endSec: number }) => a.startSec < b.endSec && a.endSec > b.startSec;
+  const off = (m: Moment, g: number) => (g < m.startSec ? m.startSec - g : g > m.endSec ? g - m.endSec : 0);
+  const used = new Set<Moment>();
+  const marked: Moment[] = [];
+  const built: Moment[] = [];
+  for (const g of groups) {
+    const hit = rest.filter((m) => !used.has(m) && g >= m.startSec - 5 && g <= m.endSec + 20).sort((a, b) => off(a, g) - off(b, g))[0];
+    if (hit) { used.add(hit); marked.push({ ...hit, markSec: g }); continue; }
+    const w = markWindow(g, lines, job.durationSec);
+    if (marked.some((k) => over(w, k))) continue; // a press right after another's clip: that clip already holds it
+    const said = lines.filter((l) => l.endSec > w.startSec && l.startSec < w.endSec).map((l) => l.text).join(" ");
+    const m: Moment = { title: roughTitle(said), caption: "", reason: "You marked this moment while recording.", ...w, markSec: g };
+    built.push(m);
+    marked.push(m);
+  }
+  if (built.length && client) {
+    const named = await titled(client, job, lines, built);
+    built.forEach((m, i) => { m.title = named[i]?.title || m.title; });
+  }
+  const others = rest.filter((m) => !used.has(m) && !marked.some((k) => over(m, k)));
+  console.log(`   marks: ${groups.length} → ${marked.length} marked clip${marked.length === 1 ? "" : "s"} (${built.length} cut around the press)`);
+  return [...marked, ...others.slice(0, n)].slice(0, 12);
 }
 
 /**
@@ -2989,6 +3055,7 @@ async function handle(job: Job): Promise<void> {
         reason: m.reason,
         startSec: m.startSec,
         endSec: m.endSec,
+        ...(typeof m.markSec === "number" ? { markSec: Math.round(m.markSec) } : {}),
         transcript: within.map((l) => l.text).join(" ").slice(0, 8000),
         url: want.has("wide") ? await uploadFile(wide, "video/mp4") : "",
         verticalUrl: want.has("vertical") ? await uploadFile(vertical, "video/mp4") : "",

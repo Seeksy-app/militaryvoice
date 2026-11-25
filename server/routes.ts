@@ -7689,7 +7689,7 @@ export function registerRoutes(app: Express): void {
     const row = {
       eventId: rec.eventId, signupId: rec.signupId ?? null, email: rec.email,
       title: c.title, caption: await withCredits(c.caption, rec.id), reason: c.reason, startSec: c.startSec, endSec: c.endSec, transcript: c.transcript,
-      url: c.url, verticalUrl: c.verticalUrl, squareUrl: c.squareUrl, subtitlesUrl: c.subtitlesUrl,
+      url: c.url, verticalUrl: c.verticalUrl, squareUrl: c.squareUrl, subtitlesUrl: c.subtitlesUrl, markSec: c.markSec ?? -1,
       sourceAssetId: 0, cutAssetId: 0, subtitle: await showNameFor(rec),
     };
     const opts = parseClipOptions(rec.clipOptions);
@@ -7736,6 +7736,7 @@ export function registerRoutes(app: Express): void {
         verticalUrl: c.verticalUrl,
         squareUrl: c.squareUrl,
         subtitlesUrl: c.subtitlesUrl,
+        markSec: c.markSec ?? -1,
         sourceAssetId: 0,
         cutAssetId: 0,
         subtitle: show,
