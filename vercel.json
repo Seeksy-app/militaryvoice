@@ -51,6 +51,26 @@
       "destination": "/api"
     },
     {
+      "source": "/black-friday",
+      "has": [{ "type": "header", "key": "user-agent", "value": "(?i).*(facebookexternalhit|facebot|twitterbot|slackbot|linkedinbot|whatsapp|telegrambot|discordbot|applebot|redditbot|pinterest|embedly|skypeuripreview|mastodon|bluesky|iframely|vkshare|quora link preview).*" }],
+      "destination": "/api"
+    },
+    {
+      "source": "/podcast/:slug",
+      "has": [{ "type": "header", "key": "user-agent", "value": "(?i).*(facebookexternalhit|facebot|twitterbot|slackbot|linkedinbot|whatsapp|telegrambot|discordbot|applebot|redditbot|pinterest|embedly|skypeuripreview|mastodon|bluesky|iframely|vkshare|quora link preview).*" }],
+      "destination": "/api"
+    },
+    {
+      "source": "/:handle/show",
+      "has": [{ "type": "header", "key": "user-agent", "value": "(?i).*(facebookexternalhit|facebot|twitterbot|slackbot|linkedinbot|whatsapp|telegrambot|discordbot|applebot|redditbot|pinterest|embedly|skypeuripreview|mastodon|bluesky|iframely|vkshare|quora link preview).*" }],
+      "destination": "/api"
+    },
+    {
+      "source": "/:handle/show/:slug",
+      "has": [{ "type": "header", "key": "user-agent", "value": "(?i).*(facebookexternalhit|facebot|twitterbot|slackbot|linkedinbot|whatsapp|telegrambot|discordbot|applebot|redditbot|pinterest|embedly|skypeuripreview|mastodon|bluesky|iframely|vkshare|quora link preview).*" }],
+      "destination": "/api"
+    },
+    {
       "source": "/radio/book",
       "has": [{ "type": "header", "key": "user-agent", "value": "(?i).*(facebookexternalhit|facebot|twitterbot|slackbot|linkedinbot|whatsapp|telegrambot|discordbot|applebot|redditbot|pinterest|embedly|skypeuripreview|mastodon|bluesky|iframely|vkshare|quora link preview).*" }],
       "destination": "/api"

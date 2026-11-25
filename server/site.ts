@@ -16,6 +16,7 @@ import { bioPages, bioEvents, clips, siteSettings, hostedEpisodes, hostedShows, 
 import { parseBrands, parseSocials, parseTheme } from "../shared/bio.js";
 import type { SiteEpisode, SiteEpisodeFull, SitePublic } from "../shared/site.js";
 import { REVIEW_EMAIL } from "../shared/review.js";
+import { buildShareCard } from "./shareCard.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 const now = () => new Date().toISOString();
@@ -200,6 +201,112 @@ export function registerSite(app: Express): void {
     await db.insert(bioEvents).values({ pageId: row.id, kind: "ask", label: "Be a guest", day: now().slice(0, 10), createdAt: now() }).catch(() => {});
     void sendListenerQuestionEmail({ to: row.email, show: row.displayName, name, fromEmail, question, episode: "Be a guest", dashboardUrl: `${ORIGIN}/host/dashboard/page?tab=messages` }).catch(() => {});
     res.json({ ok: true });
+  });
+
+  // ── Link previews (Andrew, 24 Nov: "It's showing up the marathon by default, so we need to have a master fix") ──
+  // A show website, an episode page, a hosted show's page or the Black Friday page pasted into a message shows its own
+  // title and picture. Only the preview robots get these pages (vercel.json routes their user agents here); people get the app.
+  const PREVIEW_BOT = /facebookexternalhit|facebot|twitterbot|slackbot|linkedinbot|whatsapp|telegrambot|discordbot|applebot|redditbot|pinterest|embedly|skypeuripreview|mastodon|bluesky|iframely|vkshare|quora link preview/i;
+  const bot = (req: { get(h: string): string | undefined }) => PREVIEW_BOT.test(String(req.get("user-agent") ?? ""));
+  const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
+  const oneLine = (v: string, n = 280) => v.replace(/\s+/g, " ").replace(/\*\*|__|\*/g, "").trim().slice(0, n);
+  const previewHtml = (o: { title: string; desc: string; url: string; img: string; type?: string; alt?: string }) =>
+    `<!doctype html><html lang="en"><head><meta charset="utf-8" /><title>${esc(o.title)}</title><meta name="description" content="${esc(o.desc)}" /><meta property="og:type" content="${o.type ?? "website"}" /><meta property="og:site_name" content="MilitaryVoices.ai" /><meta property="og:title" content="${esc(o.title)}" /><meta property="og:description" content="${esc(o.desc)}" /><meta property="og:url" content="${esc(o.url)}" /><meta property="og:image" content="${esc(o.img)}" /><meta property="og:image:secure_url" content="${esc(o.img)}" /><meta property="og:image:type" content="image/jpeg" /><meta property="og:image:width" content="1200" /><meta property="og:image:height" content="630" /><meta property="og:image:alt" content="${esc(o.alt ?? o.title)}" /><meta name="twitter:card" content="summary_large_image" /><meta name="twitter:title" content="${esc(o.title)}" /><meta name="twitter:description" content="${esc(o.desc)}" /><meta name="twitter:image" content="${esc(o.img)}" /><link rel="canonical" href="${esc(o.url)}" /></head><body><h1>${esc(o.title)}</h1><p>${esc(o.desc)}</p></body></html>`;
+  const sendPreview = (res: import("express").Response, html: string) => {
+    res.setHeader("Content-Type", "text/html; charset=utf-8");
+    res.setHeader("Cache-Control", "public, max-age=300, s-maxage=600");
+    res.end(html);
+  };
+  const episodeIn = (show: Show | null, slug: string) => {
+    const key = /-(h\d+|r[0-9a-f]{8})$/.exec(slug)?.[1] ?? slug;
+    return show?.episodes.find((e) => e.key === key) ?? null;
+  };
+  const sitePreview = async (req: import("express").Request, res: import("express").Response, next: import("express").NextFunction) => {
+    if (!bot(req)) return next();
+    const row = await pageFor(String(req.params.handle)).catch(() => null);
+    if (!row) return next();
+    const show = await showFor(row).catch(() => null);
+    const slug = req.params.slug ? String(req.params.slug) : "";
+    const e = slug ? episodeIn(show, slug) : null;
+    if (slug && !e) return next();
+    const name = row.displayName || row.handle;
+    const showTitle = show?.title || name;
+    const title = e ? `${e.title} · ${showTitle}` : showTitle;
+    const desc = oneLine(e ? (e.summary || `A new episode of ${showTitle}. Listen now.`) : (show?.description || row.bio || `Listen to ${showTitle}: every episode, with transcripts and clips.`));
+    const url = `${ORIGIN}/${row.handle}/show${e ? `/${e.slug}` : ""}`;
+    const img = `${ORIGIN}/og/site/${row.handle}.jpg?${e ? `e=${encodeURIComponent(e.key)}&` : ""}v=${encodeURIComponent((row.updatedAt || row.createdAt).slice(0, 16))}`;
+    sendPreview(res, previewHtml({ title, desc, url, img, type: e ? "article" : "website", alt: `${showTitle} cover` }));
+  };
+  app.get("/:handle/show", sitePreview);
+  app.get("/:handle/show/:slug", sitePreview);
+  /** An episode title as the card can draw it: a long one loses its " - Guest name" tail, and symbols the card's font lacks
+   *  become words (Frank's "Visibility ≠ Vanity" drew a gap). */
+  const cardTitle = (t: string) => {
+    let v = t.replace(/≠/g, "isn't").replace(/[→⇒]/g, "to").replace(/[“”]/g, '"').replace(/[‘’]/g, "'").replace(/[^\x20-\x7E\u00A0-\u017F—–…]/g, "").replace(/\s+/g, " ").trim();
+    if (v.length > 48) { const cut = v.split(/\s+[-|–—]\s+/)[0]; if (cut.length >= 12) v = cut; }
+    if (v.length > 48) { const head = v.split(/:\s/)[0]; if (head.length >= 12 && head.length < v.length) v = head; }
+    return v;
+  };
+  /** The picture for a show website or one of its episodes: the cover on our navy, the title, the host. */
+  app.get("/og/site/:handle.jpg", async (req, res) => {
+    const row = await pageFor(String(req.params.handle)).catch(() => null);
+    if (!row) return res.status(404).end();
+    const show = await showFor(row).catch(() => null);
+    const e = req.query.e ? show?.episodes.find((x) => x.key === String(req.query.e)) ?? null : null;
+    const profile = await storage.getProfileByEmail(row.email).catch(() => undefined);
+    const host = profile?.hostName?.trim() || row.displayName || "";
+    const showTitle = show?.title || row.displayName || row.handle;
+    const photo = e?.artworkUrl || show?.artworkUrl || row.avatarUrl || "";
+    const jpg = await buildShareCard({
+      podcastName: e ? cardTitle(e.title) : showTitle,
+      hostName: host,
+      subline: e ? showTitle : host ? `with ${host}` : "Listen, follow, ask a question",
+      whenLabel: "Listen now",
+      photoUrl: photo || undefined,
+      photoShape: show?.artworkUrl || e?.artworkUrl ? "art" : "circle",
+      eyebrow: e ? "Episode" : "Podcast",
+      footer: `militaryvoices.ai/${row.handle}/show`,
+    }, "wide");
+    res.setHeader("Content-Type", "image/jpeg");
+    res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=3600");
+    res.end(jpg);
+  });
+  /** A show hosted here (/podcast/<slug>): its own cover and name, archived or not (its listeners still follow it). */
+  app.get("/podcast/:slug", async (req, res, next) => {
+    if (!bot(req)) return next();
+    const [s] = await db.select().from(hostedShows).where(eq(hostedShows.slug, String(req.params.slug))).limit(1).catch(() => []);
+    if (!s || s.newFeedUrl) return next();
+    const url = `${ORIGIN}/podcast/${s.slug}`;
+    const img = `${ORIGIN}/og/podcast/${s.slug}.jpg?v=${encodeURIComponent((s.updatedAt || s.createdAt).slice(0, 16))}`;
+    sendPreview(res, previewHtml({ title: decode(s.title) || "A MilitaryVoices.ai podcast", desc: oneLine(plain(s.description) || `Listen to ${decode(s.title)} on Apple Podcasts, Spotify or any podcast app.`), url, img, alt: `${decode(s.title)} cover` }));
+  });
+  app.get("/og/podcast/:slug.jpg", async (req, res) => {
+    const [s] = await db.select().from(hostedShows).where(eq(hostedShows.slug, String(req.params.slug))).limit(1).catch(() => []);
+    if (!s) return res.status(404).end();
+    const host = decode(s.author) || (await storage.getProfileByEmail(s.email).catch(() => undefined))?.hostName || "";
+    const jpg = await buildShareCard({
+      podcastName: decode(s.title) || "MilitaryVoices.ai",
+      hostName: host,
+      subline: host ? `with ${host}` : "Listen on any podcast app",
+      whenLabel: "Listen now",
+      photoUrl: s.artworkUrl || undefined,
+      photoShape: "art",
+      eyebrow: "Podcast",
+      footer: `militaryvoices.ai/podcast/${s.slug}`,
+    }, "wide");
+    res.setHeader("Content-Type", "image/jpeg");
+    res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=3600");
+    res.end(jpg);
+  });
+  /** Founding Members 2026 (the Black Friday offer): its own card, never the Marathon's. */
+  app.get("/black-friday", (req, res, next) => {
+    if (!bot(req)) return next();
+    sendPreview(res, previewHtml({
+      title: "Founding Members 2026 · MilitaryVoices.ai",
+      // The page's own words (its h1 and title), not new copy: Social owns Black Friday.
+      desc: "Black Friday Special: Founding Members 2026. 30 days free.",
+      url: `${ORIGIN}/black-friday`, img: `${ORIGIN}/og-black-friday.jpg?v=1`, alt: "Black Friday special: 30 days free, Founding Member 2026",
+    }));
   });
 
   /**
