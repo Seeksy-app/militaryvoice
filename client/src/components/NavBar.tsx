@@ -8,7 +8,6 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
-  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { useTheme } from "@/lib/theme";
@@ -27,13 +26,15 @@ function scrollToAnchor(e: React.MouseEvent<HTMLAnchorElement>, href: string) {
   // else: fall through to native navigation (different page)
 }
 
-// The platform's front door; the Marathon has its own page now (/marathon).
-const LINKS: { href: string; label: string; anchor?: boolean }[] = [
+// The platform's front door (Andrew, 25 Nov: Creator directory first, Discovery and FAQ off the bar since Ask Alex
+// answers questions, Events, then Brands, then About Us). Discovery is still reached from Brands and the dashboard;
+// FAQ stays in the footer.
+const LINKS: { href: string; label: string; anchor?: boolean; also?: string[] }[] = [
+  { href: "/directory", label: "Creator directory" },
   { href: "/events", label: "Events" },
-  { href: "/discover", label: "Discovery" },
-  { href: "/directory", label: "Directory" },
+  { href: "/for-brands", label: "Brands", also: ["/sponsor"] },
   { href: "/pricing", label: "Pricing" },
-  { href: "/faq", label: "FAQ" },
+  { href: "/radio", label: "Radio" },
   { href: "/about-us", label: "About Us" },
 ];
 
@@ -102,24 +103,18 @@ export function NavBar({ product, account, tone = "light", bare = false }: { pro
         {/* Desktop links */}
         <nav className={`hidden items-center gap-3 lg:flex xl:gap-5 ${bare ? "-ml-2.5" : ""}`} aria-label="Primary">
           {links.map((link) => {
-            const active = !link.anchor && (location === link.href || (location.startsWith("/event/") && location.endsWith(link.href)));
+            const active = !link.anchor && (location === link.href || location.startsWith(`${link.href}/`) || !!link.also?.includes(location) || (location.startsWith("/event/") && location.endsWith(link.href)));
+            const testid = `link-nav-${link.label.toLowerCase().replace(/\s+/g, "-")}`;
             return link.anchor ? (
-              <a key={link.href} href={link.href} onClick={(e) => scrollToAnchor(e, link.href)} className={linkCls(false)} data-testid={`link-nav-${link.label.toLowerCase()}`}>
+              <a key={link.href} href={link.href} onClick={(e) => scrollToAnchor(e, link.href)} className={linkCls(false)} data-testid={testid}>
                 {link.label}
               </a>
             ) : (
-              <Link key={link.href} href={link.href} className={linkCls(active)} data-testid={`link-nav-${link.label.toLowerCase()}`}>
+              <Link key={link.href} href={link.href} className={linkCls(active)} data-testid={testid}>
                 {link.label}
               </Link>
             );
           })}
-          {/* Brands and sponsors (7 Oct): one door, which also leads to event sponsorship. */}
-          <Link href="/for-brands" className={linkCls(location === "/for-brands" || location === "/sponsor")} data-testid="link-nav-sponsors">
-            For brands
-          </Link>
-          <Link href="/radio" className={linkCls(location === "/radio" || location.startsWith("/radio/"))} data-testid="link-nav-radio">
-            Radio
-          </Link>
         </nav>
 
         <div className="flex items-center gap-1.5">
@@ -181,13 +176,6 @@ export function NavBar({ product, account, tone = "light", bare = false }: { pro
                   </DropdownMenuItem>
                 ),
               )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem asChild>
-                <Link href="/for-brands">For brands</Link>
-              </DropdownMenuItem>
-              <DropdownMenuItem asChild>
-                <Link href="/radio">Radio</Link>
-              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
