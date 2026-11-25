@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { warmClipSound } from "./clipSound";
 import { BACKGROUNDS, LIMITS, backgroundShelf, isPresenting, sceneLive, type AssetKind, type Background, type LibraryItem, type LibrarySource, type MusicItem, type PlaySlot, type RoomKit, type SoundItem, type VideoClip } from "./look";
 import { AddFile, Banners, LogoSection, Removable, Swatch } from "./LookPanel";
+import { Select } from "./Select";
 
 /**
  * Media (Studio phase 3, mockup approved 21 Nov; replaces "Your look" when STUDIO_V3 is on):
@@ -87,9 +88,9 @@ function Clips({ kit }: { kit: RoomKit }) {
                 <span className={`shrink-0 whitespace-nowrap text-[11px] tabular-nums ${on ? "font-semibold text-[#053877]" : "text-[#667085]"}`}>{on ? "Playing" : mmss(v.asset.sec)}</span>
               </div>
               <div className="mt-0.5 flex min-w-0 items-center text-xs text-[#667085]">
-                <select value={v.role} onChange={(e) => setClip(v.asset.id, { role: e.target.value as VideoClip["role"] })} aria-label="Use as" className="h-6 shrink-0 rounded-md border border-[#e4e7ec] bg-white px-1 text-[11px]">
+                <Select value={v.role} onChange={(e) => setClip(v.asset.id, { role: e.target.value as VideoClip["role"] })} aria-label="Use as" small wrap="shrink-0" className="h-6 rounded-md border border-[#e4e7ec] bg-white pl-2 text-[11px]">
                   <option value="">Clip</option><option value="intro">Intro</option><option value="outro">Outro</option>
-                </select>
+                </Select>
               </div>
             </div>
             <button type="button" onClick={() => { if (window.confirm("Delete this clip?")) void kit.removeAsset("video", v.asset.id); }} aria-label="Delete clip" className="hidden shrink-0 text-[#98a2b3] hover:text-[#b42318] group-focus-within:block group-hover:block"><Trash2 className="h-4 w-4" /></button>
@@ -138,9 +139,9 @@ function Countdown({ kit }: { kit: RoomKit }) {
       <p className="text-[13px] font-semibold">Countdown</p>
       <div className="mt-1.5 flex items-center gap-2">
         {!on && (
-          <select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} aria-label="Minutes" className="h-8 min-w-0 flex-1 rounded-lg border border-[#d0d5dd] bg-white px-1.5 text-[12px]">
+          <Select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} aria-label="Minutes" wrap="flex-1" className="h-8 rounded-lg border border-[#d0d5dd] bg-white pl-2.5 text-[12px]">
             {[1, 2, 3, 5, 10, 15].map((m) => <option key={m} value={m}>{m} minute{m > 1 ? "s" : ""}</option>)}
-          </select>
+          </Select>
         )}
         <button type="button" onClick={() => kit.play(on ? null : "countdown", on ? undefined : { minutes, next: next?.id })} className={`h-8 shrink-0 rounded-lg px-3 text-[12px] font-bold ${on ? "ml-auto bg-[#053877] text-white" : "border border-[#053877] text-[#053877] hover:bg-[#eef3fb]"}`} data-testid="countdown-start">{on ? "Stop" : "Start"}</button>
       </div>

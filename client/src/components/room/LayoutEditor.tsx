@@ -4,6 +4,7 @@ import { Grid2x2, ImageIcon, Redo2, Undo2, Video, X } from "lucide-react";
 import { BOX_LIMIT, BOX_MIN, BOX_PRESETS, boxCast, gridColumns, isPlayer } from "@shared/roomLook";
 import { bgCss, newId, type Asset, type Box, type RoomKit, type Scene } from "./look";
 import { BoxThumb, typeOf, peopleOf, TYPES } from "./ScenesPanel";
+import { Select } from "./Select";
 
 /**
  * The layout editor (StreamYard's, Andrew 21 Nov: "Yes" to the mockup). A scene's ⋯ → Edit layout
@@ -382,22 +383,22 @@ function BoxPanel({ box, people, media, kit, onSet, onMedia, onFront, onBack, on
       {box.kind === "camera" && (
         <>
           <label className={label} htmlFor="box-who">Who shows here</label>
-          <select id="box-who" value={who} onChange={(e) => onSet({ who: e.target.value })} className="mt-1.5 h-10 w-full rounded-lg border border-[#d0d5dd] bg-white px-2.5 text-sm" data-testid="layout-who">
+          <Select id="box-who" value={who} onChange={(e) => onSet({ who: e.target.value })} wrap="mt-1.5 w-full" className="h-10 rounded-lg border border-[#d0d5dd] bg-white pl-3 text-sm" data-testid="layout-who">
             <option value="host">You (host)</option>
             <option value="next">Next guest</option>
             {guests.map((g) => <option key={g.identity} value={g.identity}>{g.name}</option>)}
             {who !== "host" && who !== "next" && !guests.some((g) => g.identity === who) && <option value={who}>Someone not here now</option>}
-          </select>
+          </Select>
           <p className="mt-1.5 text-[12px] leading-snug text-[#667085]">Next guest: whoever is on stage and not shown in another box.</p>
         </>
       )}
       {box.kind === "media" && (
         <>
           <label className={label} htmlFor="box-media">Shows</label>
-          <select id="box-media" value={media?.id ?? ""} onChange={(e) => onMedia(all.find((a) => a.id === e.target.value) ?? null)} className="mt-1.5 h-10 w-full rounded-lg border border-[#d0d5dd] bg-white px-2.5 text-sm" data-testid="layout-media">
+          <Select id="box-media" value={media?.id ?? ""} onChange={(e) => onMedia(all.find((a) => a.id === e.target.value) ?? null)} wrap="mt-1.5 w-full" className="h-10 rounded-lg border border-[#d0d5dd] bg-white pl-3 text-sm" data-testid="layout-media">
             <option value="">Nothing yet</option>
             {all.map((a) => <option key={a.id} value={a.id}>{a.name || (a.kind === "video" ? "Video" : "Picture")}</option>)}
-          </select>
+          </Select>
           <p className="mt-1.5 text-[12px] leading-snug text-[#667085]">Slides you present in this scene show here too. Empty, it's left out of the recording.</p>
         </>
       )}

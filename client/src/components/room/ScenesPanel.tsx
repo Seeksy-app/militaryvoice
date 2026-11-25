@@ -7,6 +7,7 @@ import { isPlayer, type RoomBoxKind, type RoomBoxShape } from "@shared/roomLook"
 import { LIMITS, PEOPLE_DEFAULT, bgCss, newId, type Asset, type Layout, type RoomKit, type Scene, type SceneType, type Slot } from "./look";
 import { isVideo, mmss, useThumb } from "./thumbs";
 import { PRACTICE_ID, PRACTICE_NAME, usePractice } from "./practiceGuest";
+import { Select } from "./Select";
 
 /**
  * What a media scene shows, as a small picture (Andrew, 24 Nov: "we need to be able to see the video
@@ -22,7 +23,7 @@ function MediaTile({ a, className = "", style }: { a: Asset | null | undefined; 
       {!a ? <span className="flex h-full w-full items-center justify-center text-white/90"><MonitorUp className="h-4 w-4" aria-label="A shared screen" /></span>
         : t ? <img src={t.src} alt="" className="h-full w-full object-cover" draggable={false} />
         : <span className="flex h-full w-full items-center justify-center text-white/70">{vid ? <Clapperboard className="h-4 w-4" aria-hidden /> : <ImageIcon className="h-4 w-4" aria-hidden />}</span>}
-      {vid && <span className="absolute bottom-0.5 left-0.5 flex items-center gap-0.5 rounded-[3px] bg-black/75 px-1 text-[9px] font-bold leading-[13px] text-white tabular-nums"><Play className="h-2 w-2 fill-current" aria-label="Video" />{len}</span>}
+      {vid && <span className="absolute bottom-1 left-1 flex items-center gap-0.5 rounded-[3px] bg-black/75 px-1 text-[9px] font-bold leading-[13px] text-white tabular-nums"><Play className="h-2 w-2 fill-current" aria-label="Video" />{len}</span>}
     </span>
   );
 }
@@ -488,9 +489,9 @@ function SceneCard({ s, kit, v3, cast, on, next, full, onPick, onDragStart, onCh
       <button type="button" onClick={onPick} onPointerDown={(e) => onDragStart(e, false)} onDragStart={(e) => e.preventDefault()} className="block w-full select-none overflow-hidden rounded-[12px] text-left [-webkit-user-drag:none]" aria-label={`Put ${s.name} on air (key ${s.n})`} aria-pressed={on}>
         <div className="relative flex h-[88px] items-center justify-center" style={{ background: bgCss(cardBg) }}>
           {v3 && s.boxes?.length ? <BoxThumb boxes={s.boxes} light={lightBg} className="!w-[104px] !bg-transparent" /> : <MiniScene s={s} cast={cast} light={lightBg} />}
-          {logo && <img src={logo.asset.url} alt="" className={`absolute top-1 h-4 w-auto rounded-sm ${logo.corner === "tl" ? "left-1.5" : "right-1.5"}`} />}
-          {on && <span className="absolute left-2 top-2 rounded-full bg-[#12b76a] px-[7px] py-0.5 text-[10px] font-bold tracking-[0.02em] text-white">ON STAGE</span>}
-          {!on && next && <span className="absolute left-2 top-2 rounded-full bg-[#F0A71F] px-[7px] py-0.5 text-[10px] font-bold tracking-[0.02em] text-[#101828]">TAKE ME NEXT</span>}
+          {logo && <img src={logo.asset.url} alt="" className={`absolute top-2 h-4 w-auto rounded-sm ${logo.corner === "tl" ? "left-2.5" : "right-2.5"}`} />}
+          {on && <span className="absolute left-2.5 top-2.5 rounded-full bg-[#12b76a] px-[7px] py-0.5 text-[10px] font-bold tracking-[0.02em] text-white">ON STAGE</span>}
+          {!on && next && <span className="absolute left-2.5 top-2.5 rounded-full bg-[#F0A71F] px-[7px] py-0.5 text-[10px] font-bold tracking-[0.02em] text-[#101828]">TAKE ME NEXT</span>}
         </div>
         <div className="flex items-center justify-between gap-2 bg-white px-3 py-2">
           <span className="min-w-0"><span className="block truncate text-[13px] font-bold">{s.name}</span>{v3 ? (s.boxes?.length ? <span className="block text-[11px] text-[#667085]">Your own layout</span> : <span className="flex items-center gap-1 text-[11px] text-[#667085]">{typeLabel(typeOf(s))} · <Users className="h-3 w-3" aria-label="People on stage" />{peopleOf(s)}</span>)
@@ -500,7 +501,7 @@ function SceneCard({ s, kit, v3, cast, on, next, full, onPick, onDragStart, onCh
       </button>
       {/* Drag to reorder (StreamYard's grip, Andrew 24 Nov: he couldn't find the hidden one). Always there, stronger on
           hover; the only way a finger drags, so it's touch-sized and the browser doesn't scroll from it. */}
-      <span onPointerDown={(e) => onDragStart(e, true)} title="Drag to reorder" aria-label={`Drag to reorder ${s.name}`} className="absolute left-1 top-[44px] flex h-9 w-6 -translate-y-1/2 cursor-grab touch-none select-none items-center justify-center rounded-md bg-white/90 text-[#475467] opacity-70 shadow transition-opacity group-hover:opacity-100 active:cursor-grabbing [@media(pointer:coarse)]:opacity-100" data-testid={`scene-grip-${s.n}`}><GripVertical className="h-4 w-4" /></span>
+      <span onPointerDown={(e) => onDragStart(e, true)} title="Drag to reorder" aria-label={`Drag to reorder ${s.name}`} className="absolute left-2 top-[44px] flex h-9 w-6 -translate-y-1/2 cursor-grab touch-none select-none items-center justify-center rounded-md bg-white/90 text-[#475467] opacity-70 shadow transition-opacity group-hover:opacity-100 active:cursor-grabbing [@media(pointer:coarse)]:opacity-100" data-testid={`scene-grip-${s.n}`}><GripVertical className="h-4 w-4" /></span>
       {/* Nothing picked yet: add it right here (a sibling of the card's button, so pressing it never puts the scene on air). */}
       {media && !s.media && !add.busy && (
         <button type="button" onClick={add.choose} className="absolute left-1/2 top-[44px] flex h-7 -translate-x-1/2 -translate-y-1/2 items-center gap-1 whitespace-nowrap rounded-full bg-white px-2.5 text-[11px] font-bold text-[#053877] shadow-[0_2px_8px_rgba(16,24,40,0.25)] hover:bg-[#eef3fb]" data-testid="scene-card-add-media">
@@ -508,7 +509,7 @@ function SceneCard({ s, kit, v3, cast, on, next, full, onPick, onDragStart, onCh
         </button>
       )}
       {add.panel && <div className="border-t border-[#e4e7ec] p-1.5">{add.panel}</div>}
-      <button type="button" onClick={() => setMenu(!menu)} aria-label={`${s.name}: more`} aria-expanded={menu} title="Scene options" className={`absolute right-1.5 top-1.5 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-[#344054] shadow transition-opacity focus:opacity-100 group-hover:opacity-100 ${menu ? "opacity-100" : "opacity-0"}`} data-testid={`scene-menu-${s.n}`}><MoreHorizontal className="h-4 w-4" /></button>
+      <button type="button" onClick={() => setMenu(!menu)} aria-label={`${s.name}: more`} aria-expanded={menu} title="Scene options" className={`absolute right-2.5 top-2.5 flex h-7 w-7 items-center justify-center rounded-full bg-white/90 text-[#344054] shadow transition-opacity focus:opacity-100 group-hover:opacity-100 ${menu ? "opacity-100" : "opacity-0"}`} data-testid={`scene-menu-${s.n}`}><MoreHorizontal className="h-4 w-4" /></button>
       {menu && (
         <>
           <button type="button" aria-label="Close" className="fixed inset-0 z-10 cursor-default" onClick={() => setMenu(false)} />
@@ -541,9 +542,9 @@ function SceneEditor({ s, kit, v3, onDelete, onClose }: { s: Scene; kit: RoomKit
       {v3 ? (
         <>
           <label className="mt-3 block text-xs font-semibold text-[#475467]" htmlFor={`type-${s.id}`}>Scene type</label>
-          <select id={`type-${s.id}`} value={type} onChange={(e) => { const t = TYPES.find((x) => x.id === e.target.value)!; set({ type: t.id, layout: t.layout, people: PEOPLE_DEFAULT[t.id], ...(t.id === "profile" && !s.profile ? { profile: { photo: null, name: "", title: "", line: "", links: [] } } : {}) }); }} className="mt-1.5 h-9 w-full rounded-lg border border-[#d0d5dd] bg-white px-2 text-sm" data-testid="scene-type">
+          <Select id={`type-${s.id}`} value={type} onChange={(e) => { const t = TYPES.find((x) => x.id === e.target.value)!; set({ type: t.id, layout: t.layout, people: PEOPLE_DEFAULT[t.id], ...(t.id === "profile" && !s.profile ? { profile: { photo: null, name: "", title: "", line: "", links: [] } } : {}) }); }} wrap="mt-1.5 w-full" className="h-9 rounded-lg border border-[#d0d5dd] bg-white pl-3 text-sm" data-testid="scene-type">
             {TYPES.map((t) => <option key={t.id} value={t.id}>{t.label}</option>)}
-          </select>
+          </Select>
           {s.boxes?.length ? <p className="mt-3 rounded-lg bg-[#eef3fb] px-2.5 py-2 text-[11px] leading-snug text-[#344054]" data-testid="scene-own-layout">This scene has its own layout. Use ⋯ → Edit layout to change who shows and where.</p> : <>
           <p className="mt-3 text-xs font-semibold text-[#475467]">People on stage</p>
           <div className="mt-1.5 flex items-center gap-2" data-testid="scene-people">

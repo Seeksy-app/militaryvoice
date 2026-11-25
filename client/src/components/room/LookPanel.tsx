@@ -2,6 +2,7 @@ import { useRef, useState } from "react";
 import { Loader2, Plus, Trash2, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { BACKGROUNDS, LIMITS, backgroundShelf, newId, type Asset, type AssetKind, type RoomKit } from "./look";
+import { Select } from "./Select";
 
 /**
  * "Your look" (mockup v8): the logo and its corner, banners to show on air, and the
@@ -135,9 +136,9 @@ export function Banners({ kit }: { kit: RoomKit }) {
         <form onSubmit={(e) => { e.preventDefault(); save(); }} className="rounded-xl border border-[#e4e7ec] bg-[#fcfcfd] p-3">
           <input autoFocus value={text} onChange={(e) => setText(e.target.value.slice(0, LIMITS.bannerText))} placeholder="e.g. Follow us everywhere: @yourshow" className="h-10 w-full rounded-lg border border-[#d0d5dd] bg-white px-3 text-sm outline-none focus:border-[#053877]" aria-label="Banner text" />
           <div className="mt-2 flex items-center gap-2">
-            <select value={seconds} onChange={(e) => setSeconds(Number(e.target.value))} aria-label="How long it shows" className="h-9 flex-1 rounded-lg border border-[#d0d5dd] bg-white px-2 text-[13px]">
+            <Select value={seconds} onChange={(e) => setSeconds(Number(e.target.value))} aria-label="How long it shows" wrap="flex-1" className="h-9 rounded-lg border border-[#d0d5dd] bg-white pl-3 text-[13px]">
               {SECONDS.map((s) => <option key={s} value={s}>{s === 60 ? "1 minute" : `${s} seconds`}</option>)}
-            </select>
+            </Select>
             <button type="submit" disabled={!text.trim()} className="h-9 rounded-lg bg-[#053877] px-3.5 text-[13px] font-bold text-white disabled:opacity-50">Add</button>
             <button type="button" onClick={() => setAdding(false)} className="h-9 px-2 text-[13px] font-semibold text-[#475467]">Cancel</button>
           </div>

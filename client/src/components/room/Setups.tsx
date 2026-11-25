@@ -9,6 +9,7 @@ import { useToast } from "@/hooks/use-toast";
 import { TEMPLATES, freeName, type TemplateId } from "@shared/studioTemplates";
 import { LIMITS, newId, type RoomKit, type Scene } from "./look";
 import { ScenePicture } from "./ScenesPanel";
+import { Select } from "./Select";
 
 const NAVY = "#053877";
 const LOOK_KEY = ["/api/host/room/look"];
@@ -71,10 +72,10 @@ export function ChooseSetup({ roomName, shows, showId, onShow, v3, onDone, logo 
           {shows && shows.length > 1 && onShow && (
             <div className="flex w-full flex-col gap-1 sm:w-[280px]">
               <label htmlFor="setup-show" className="text-[13px] font-semibold">Show</label>
-              <select id="setup-show" value={showId ?? ""} onChange={(e) => { const id = Number(e.target.value); if (id) onShow(id); }} className="h-11 rounded-xl border border-[#d0d5dd] bg-white px-3 text-[15px] outline-none focus:border-[#053877] focus:ring-2 focus:ring-[#053877]/15" data-testid="studio-show">
+              <Select wrap="w-full" id="setup-show" value={showId ?? ""} onChange={(e) => { const id = Number(e.target.value); if (id) onShow(id); }} className="h-11 rounded-xl border border-[#d0d5dd] bg-white pl-3 text-[15px] outline-none focus:border-[#053877] focus:ring-2 focus:ring-[#053877]/15" data-testid="studio-show">
                 {showId == null && <option value="">Pick a show</option>}
                 {shows.map((x) => <option key={x.id} value={x.id}>{x.title}</option>)}
-              </select>
+              </Select>
             </div>
           )}
         </div>

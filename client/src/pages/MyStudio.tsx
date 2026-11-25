@@ -31,6 +31,7 @@ import { PrompterNews, PrompterOverlay, PrompterSwitch, ScriptsBar, usePrompter,
 import { pdfToPictures, useDeck } from "@/components/room/slides";
 import { NewVersionBar } from "@/components/NewVersionBar";
 import { EXTRA_CAMS, addExtraCamera, freeCameras, isExtraCam, stopAllExtraCameras, stopExtraCamera, useExtraCams } from "@/components/room/extraCamera";
+import { Select } from "@/components/room/Select";
 
 /** The room is light in both themes, so always the light logo file. */
 const DASHBOARD = "/host/dashboard";
@@ -255,7 +256,7 @@ function SetupScreen({ owner, roomName, blocked, defaultName, setupName, onChang
     try { await onEnter({ name: name.trim(), title: title.trim(), mic, cam, micId, camId }); }
     catch (e) { setError((e as { status?: number }).status === 401 ? "Sign in to open your studio." : say(e)); setBusy(false); }
   };
-  const select = "h-9 min-w-0 flex-1 truncate rounded-lg border border-[#d0d5dd] bg-white px-2 text-[13px] text-[#344054]";
+  const select = "h-10 rounded-lg border border-[#d0d5dd] bg-white pl-3 text-[13px] text-[#344054]";
   // Look your best (Andrew, 24 Nov): tips about the picture, worked out in the browser. Never blocks going in.
   const look = useLookCheck(video, cam && !problem);
   const framed = look.status === "ok" && !look.tips.length;
@@ -278,11 +279,12 @@ function SetupScreen({ owner, roomName, blocked, defaultName, setupName, onChang
               <video ref={video} autoPlay muted playsInline className={`h-full w-full -scale-x-100 object-cover ${cam && !problem ? "" : "invisible"}`} />
               {/* A faint framing guide: eyes about a third of the way down, a little room above the head. Fades once they're framed well. */}
               {cam && !problem && (
-                <div aria-hidden className={`pointer-events-none absolute inset-0 transition-opacity duration-500 ${framed ? "opacity-30" : "opacity-100"}`} data-testid="framing-guide">
-                  <div className="absolute inset-x-0 top-[9%] border-t border-white/25" />
-                  <span className="absolute left-3 top-[calc(9%+4px)] text-[11px] font-semibold text-white/70 [text-shadow:0_1px_2px_rgba(0,0,0,0.5)]">A little room above your head</span>
-                  <div className="absolute inset-x-0 top-[33%] border-t border-dashed border-white/55" />
-                  <span className="absolute right-3 top-[calc(33%-20px)] text-[11px] font-semibold text-white/85 [text-shadow:0_1px_2px_rgba(0,0,0,0.5)]">Eyes about here</span>
+                // Andrew, 24 Nov: stronger lines that show on a light wall and a dark room alike (a soft dark shadow under each).
+                <div aria-hidden className={`pointer-events-none absolute inset-0 transition-opacity duration-500 ${framed ? "opacity-60" : "opacity-100"}`} data-testid="framing-guide">
+                  <div className="absolute inset-x-0 top-[9%] border-t-2 border-white/80 [filter:drop-shadow(0_1px_1.5px_rgba(0,0,0,0.55))]" />
+                  <span className="absolute left-4 top-[calc(9%+6px)] text-[13px] font-semibold text-white/95 [text-shadow:0_1px_3px_rgba(0,0,0,0.85),0_0_8px_rgba(0,0,0,0.45)]">A little room above your head</span>
+                  <div className="absolute inset-x-0 top-[33%] border-t-2 border-dashed border-white/90 [filter:drop-shadow(0_1px_1.5px_rgba(0,0,0,0.55))]" />
+                  <span className="absolute right-4 top-[calc(33%-24px)] text-[13px] font-semibold text-white/95 [text-shadow:0_1px_3px_rgba(0,0,0,0.85),0_0_8px_rgba(0,0,0,0.45)]">Eyes about here</span>
                 </div>
               )}
               {(!cam || problem) && (
@@ -290,8 +292,8 @@ function SetupScreen({ owner, roomName, blocked, defaultName, setupName, onChang
                   <div className="flex h-28 w-28 items-center justify-center rounded-full bg-[#3a4f80] text-4xl font-bold text-white">{initials(name || "You")}</div>
                 </div>
               )}
-              <div className="absolute bottom-3 left-3 rounded-full bg-[rgba(5,18,48,0.78)] px-3 py-1.5 text-[13px] font-semibold text-white">{name || "Your name"}{title && <span className="font-medium text-[#9bb6e8]"> · {title}</span>}</div>
-              <div className="absolute bottom-3 right-3 flex gap-2">
+              <div className="absolute bottom-4 left-4 rounded-full bg-[rgba(5,18,48,0.78)] px-3 py-1.5 text-[13px] font-semibold text-white">{name || "Your name"}{title && <span className="font-medium text-[#9bb6e8]"> · {title}</span>}</div>
+              <div className="absolute bottom-4 right-4 flex gap-2">
                 <PreviewToggle on={mic} onClick={() => setMic(!mic)} label={mic ? "Turn mic off" : "Turn mic on"}>{mic ? <Mic className="h-5 w-5" /> : <MicOff className="h-5 w-5" />}</PreviewToggle>
                 <PreviewToggle on={cam} onClick={() => setCam(!cam)} label={cam ? "Turn camera off" : "Turn camera on"}>{cam ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}</PreviewToggle>
               </div>
@@ -307,8 +309,8 @@ function SetupScreen({ owner, roomName, blocked, defaultName, setupName, onChang
             </div>
             {(cams.length > 1 || mics.length > 1) && (
               <div className="mt-3 flex flex-col gap-2 px-1 sm:flex-row">
-                {cams.length > 1 && <select aria-label="Camera" className={select} value={camId ?? ""} onChange={(e) => setCamId(e.target.value || undefined)}><option value="">Camera: default</option>{cams.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Camera"}</option>)}</select>}
-                {mics.length > 1 && <select aria-label="Microphone" className={select} value={micId ?? ""} onChange={(e) => setMicId(e.target.value || undefined)}><option value="">Mic: default</option>{mics.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Microphone"}</option>)}</select>}
+                {cams.length > 1 && <Select wrap="flex-1" aria-label="Camera" className={select} value={camId ?? ""} onChange={(e) => setCamId(e.target.value || undefined)}><option value="">Camera: default</option>{cams.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Camera"}</option>)}</Select>}
+                {mics.length > 1 && <Select wrap="flex-1" aria-label="Microphone" className={select} value={micId ?? ""} onChange={(e) => setMicId(e.target.value || undefined)}><option value="">Mic: default</option>{mics.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Microphone"}</option>)}</Select>}
               </div>
             )}
             {problem && <p className="mt-3 px-1 text-sm font-medium text-[#b42318]">{problem}</p>}
@@ -819,7 +821,7 @@ function Tile({ t, big, small }: { t: TrackReferenceOrPlaceholder; big?: boolean
       {shows && isTrackReference(t) ? <VideoTrack trackRef={t} className={`h-full w-full ${screen ? "object-contain" : "object-cover"} ${t.participant.isLocal && !screen ? "-scale-x-100" : ""}`} />
         : <div className={`flex items-center justify-center rounded-full bg-[#3a4f80] font-bold text-white ${small ? "h-10 w-10 text-sm" : big ? "h-28 w-28 text-4xl" : "h-24 w-24 text-3xl"}`}>{initials(name)}</div>}
       {!small && !(nameOff && !screen) && <div className="absolute bottom-3 left-3 max-w-[85%] truncate rounded-full bg-[rgba(5,18,48,0.78)] px-3 py-1.5 text-[13px] font-semibold text-white">{screen ? `${name}'s screen` : name}{!screen && <span className="font-medium text-[#9bb6e8]"> · {roleOf(t.participant)}</span>}</div>}
-      {small && !nameOff && <div className="absolute bottom-1 left-1.5 max-w-[90%] truncate rounded-full bg-[rgba(5,18,48,0.78)] px-2 py-0.5 text-[11px] font-semibold text-white">{name}</div>}
+      {small && !nameOff && <div className="absolute bottom-1.5 left-2 max-w-[85%] truncate rounded-full bg-[rgba(5,18,48,0.78)] px-2 py-0.5 text-[11px] font-semibold text-white">{name}</div>}
       {speaking && !screen && !small && <Meter p={t.participant} />}
     </div>
   );
@@ -864,8 +866,8 @@ function PeopleStrip({ kit, owner, sharing, onShare, onInvite }: { kit: RoomKit;
       {cams.map((t) => <PersonTile key={key(t)} t={t} kit={kit} owner={owner} scenes={scenes} />)}
       {owner && <PracticeTile scenes={scenes} />}
     </div>
-      {more.left && <button type="button" onClick={() => nudge(-1)} aria-label="Show earlier people" className="absolute left-0 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[#d0d5dd] bg-white text-[#344054] shadow-[0_1px_3px_rgba(16,24,40,0.18)] hover:bg-[#f9fafb]" data-testid="strip-scroll-left"><ChevronLeft className="h-4 w-4" /></button>}
-      {more.right && <button type="button" onClick={() => nudge(1)} aria-label="Show more people" className="absolute right-0 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[#d0d5dd] bg-white text-[#344054] shadow-[0_1px_3px_rgba(16,24,40,0.18)] hover:bg-[#f9fafb]" data-testid="strip-scroll-right"><ChevronRight className="h-4 w-4" /></button>}
+      {more.left && <button type="button" onClick={() => nudge(-1)} aria-label="Show earlier people" className="absolute left-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[#d0d5dd] bg-white text-[#344054] shadow-[0_1px_3px_rgba(16,24,40,0.18)] hover:bg-[#f9fafb]" data-testid="strip-scroll-left"><ChevronLeft className="h-4 w-4" /></button>}
+      {more.right && <button type="button" onClick={() => nudge(1)} aria-label="Show more people" className="absolute right-2 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[#d0d5dd] bg-white text-[#344054] shadow-[0_1px_3px_rgba(16,24,40,0.18)] hover:bg-[#f9fafb]" data-testid="strip-scroll-right"><ChevronRight className="h-4 w-4" /></button>}
     </div>
       <PresentButton kit={kit} owner={owner} sharing={sharing} canPresent={scenes && owner} onShare={onShare} onInvite={onInvite} />
     </div>
@@ -879,7 +881,7 @@ function PracticeTile({ scenes }: { scenes: boolean }) {
   return (
     <div className={`relative w-44 shrink-0 overflow-hidden rounded-xl border-2 border-dashed bg-white ${scenes ? "border-[#F0A71F]" : "border-[#d0d5dd]"}`} data-testid="strip-practice">
       <div className="relative aspect-video w-full bg-[#e4e7ec]"><img src={pg.face} alt="" className="h-full w-full object-cover" /></div>
-      <button type="button" onClick={() => practice.set(false)} className="absolute right-1.5 top-1.5 flex h-7 items-center gap-1 rounded-full bg-white px-2.5 text-xs font-bold text-[#344054] shadow-[0_1px_3px_rgba(16,24,40,0.25)] hover:bg-[#f2f4f7]" data-testid="practice-remove"><X className="h-3.5 w-3.5" /> Remove</button>
+      <button type="button" onClick={() => practice.set(false)} className="absolute right-2.5 top-2.5 flex h-7 items-center gap-1 rounded-full bg-white px-2.5 text-xs font-bold text-[#344054] shadow-[0_1px_3px_rgba(16,24,40,0.25)] hover:bg-[#f2f4f7]" data-testid="practice-remove"><X className="h-3.5 w-3.5" /> Remove</button>
       <div className="flex h-8 items-center gap-1.5 px-2 text-left text-xs font-semibold">
         <UserRound className="h-3.5 w-3.5 shrink-0 text-[#667085]" />
         <span className="min-w-0 flex-1 truncate">{PRACTICE_NAME}</span>
@@ -934,7 +936,7 @@ function PersonTile({ t, kit, owner, scenes }: { t: TrackReferenceOrPlaceholder;
     // in one pill over it, the name underneath. On stage shows as a gold edge, talking as a green ring.
     <div className={`relative w-44 shrink-0 overflow-hidden rounded-xl border-2 bg-white ${scenes && on ? "border-[#F0A71F]" : "border-[#e4e7ec]"} ${speaking && !muted ? "ring-2 ring-[#12b76a] ring-offset-1" : ""} ${on ? "" : "opacity-70"}`} data-testid="strip-person" data-on-stage={on ? "yes" : "no"}>
       <div className="relative aspect-video w-full bg-[#e4e7ec]"><MiniFace t={t} /></div>
-      <div className="absolute right-1.5 top-1.5 flex h-7 items-center gap-0.5 rounded-full bg-white px-1 shadow-[0_1px_3px_rgba(16,24,40,0.25)]">
+      <div className="absolute right-2.5 top-2.5 flex h-7 items-center gap-0.5 rounded-full bg-white px-1 shadow-[0_1px_3px_rgba(16,24,40,0.25)]">
         {cam ? <span className="flex h-6 w-6 items-center justify-center text-[#475467]" aria-label="Extra camera"><Video className="h-4 w-4" /></span>
           : <span className={`flex h-6 w-6 items-center justify-center rounded-full ${muted ? "text-[#d92d20]" : speaking ? "text-[#067647]" : "text-[#475467]"}`} data-testid="strip-mic" aria-label={muted ? "Mic off" : "Mic on"}>{muted ? <MicOff className="h-4 w-4" /> : <Mic className="h-4 w-4" />}</span>}
         {owner && (guest || cam) && (
@@ -1123,7 +1125,7 @@ function SlidesBar({ kit }: { kit: RoomKit }) {
   if (!show) return null;
   const btn = "flex h-9 w-9 items-center justify-center rounded-full text-white hover:bg-white/15 disabled:opacity-35";
   return (
-    <div className="absolute bottom-3 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-full bg-[rgba(4,12,32,0.82)] px-1.5 py-1 text-white shadow-lg" data-testid="slides-bar">
+    <div className="absolute bottom-4 left-1/2 z-20 flex -translate-x-1/2 items-center gap-1 rounded-full bg-[rgba(4,12,32,0.82)] px-1.5 py-1 text-white shadow-lg" data-testid="slides-bar">
       <button type="button" onClick={() => turn(i - 1)} disabled={i === 0} className={btn} aria-label="Previous slide" data-testid="slides-prev"><ChevronLeft className="h-5 w-5" /></button>
       <span className="min-w-[96px] text-center text-[13px] font-semibold tabular-nums" data-testid="slides-count">Slide {i + 1} of {pages.length}</span>
       <button type="button" onClick={() => turn(i + 1)} disabled={i === pages.length - 1} className={btn} aria-label="Next slide" data-testid="slides-next"><ChevronRight className="h-5 w-5" /></button>
@@ -1584,9 +1586,9 @@ function DevicePick({ kind, label }: { kind: MediaDeviceKind; label: string }) {
   return (
     <label className="block">
       <span className="text-sm font-semibold">{label}</span>
-      <select value={activeDeviceId} onChange={(e) => void setActiveMediaDevice(e.target.value)} className="mt-1.5 h-11 w-full rounded-xl border border-[#d0d5dd] bg-white px-3 text-sm">
+      <Select wrap="mt-1.5 w-full" value={activeDeviceId} onChange={(e) => void setActiveMediaDevice(e.target.value)} className="h-11 rounded-xl border border-[#d0d5dd] bg-white pl-3 text-sm">
         {list.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || label}</option>)}
-      </select>
+      </Select>
     </label>
   );
 }
