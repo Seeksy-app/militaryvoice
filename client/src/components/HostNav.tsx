@@ -177,21 +177,20 @@ export function HostNav({
         { key: "page", label: "SmartLink", hint: "Your SmartLink at militaryvoices.ai/you: your podcast, links, messages from listeners, and a media kit for brands", icon: Globe },
         ...(nextBooth ? [{ key: "dashboard" as const, label: "Radio", hint: "Your MilitaryVoices Radio show: it opens an hour before your time", icon: Radio, href: `/booth/${nextBooth.id}`, status: boothStatus }] : []),
         ...(cohostHours > 0 ? [{ key: "cohost" as const, label: "Co-host dashboard", hint: `The ${cohostHours} ${cohostHours === 1 ? "hour" : "hours"} you're co-hosting at the desk, and who's on with you`, icon: Mic2 }] : []),
+        { key: "podcast", label: "Podcast", hint: "Host your show: your RSS feed for Apple and Spotify, episodes, and downloads sponsors trust", icon: Podcast },
+        { key: "podcaststats", label: "Analytics", hint: "Your downloads and listens, from every place your podcast is heard", icon: BarChart3, sub: true },
+        { key: "recordings", label: "Library", hint: "Every episode in one place: studio recordings, uploads, Zoom calls and cleaned-up versions", icon: Library },
       ],
     },
-    // Two short groups instead of one long one: where you make the show, and
-    // where its clips go out. "Content" with six items read as a wall.
+    // Option 1 (Andrew, 25 Nov 2026): the show's own things above; where you go live and the events you're in here.
     {
-      title: "Record & host",
+      title: "Studio & events",
       items: [
         // Studio is the Room for every creator (20 Nov 2026, Andrew): the one we're making StreamYard-like, on every plan.
         { key: "pro", feature: "room", label: "Studio", hint: "Your studio: check your camera and mic, invite guests, record or go live. It all lands in your Library.", icon: MonitorPlay, tag: "Beta" },
         // The producer console (Radio and events) only for the people who run it: admins and studio hosts on a real event.
         ...(consoleOn ? [{ key: "pro" as const, feature: "studio", label: "Studio console", hint: "The producer console for Radio and events: scenes, run of show and lower thirds", icon: SlidersHorizontal }] : []),
-        { key: "podcast", label: "Podcast", hint: "Host your show: your RSS feed for Apple and Spotify, episodes, and downloads sponsors trust", icon: Podcast },
-        { key: "podcaststats", label: "Analytics", hint: "Your downloads and listens, from every place your podcast is heard", icon: BarChart3, sub: true },
         ...(path !== "planner" ? [{ key: "myevents" as const, label: "Events", hint: "The events you're in, and your own: create one, build your page and lineup, and run it from our studio", icon: CalendarDays, badge: eventsCount || undefined }] : []),
-        { key: "recordings", label: "Library", hint: "Every episode in one place: studio recordings, uploads, Zoom calls and cleaned-up versions", icon: Library },
       ],
     },
     {
