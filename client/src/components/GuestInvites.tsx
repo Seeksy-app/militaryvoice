@@ -6,10 +6,11 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select } from "@/components/room/Select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 
-type Invite = { id: number; guestName: string; guestEmail: string; whenText: string; zoomLink: string; note: string; status: "invited" | "answered"; answers: Record<string, string> & { custom?: { q: string; a: string }[] }; hasPhoto: boolean; invitedAt: string; answeredAt: string; usedRec: number; link: string };
+type Invite = { id: number; guestName: string; guestEmail: string; whenText: string; zoomLink: string; note: string; status: "invited" | "answered"; answers: Record<string, string> & { custom?: { q: string; a: string }[] }; hasPhoto: boolean; whenIso?: string; linkedinUrl?: string; invitedAt: string; answeredAt: string; usedRec: number; link: string };
 const say = (e: unknown) => ((e as Error).message ?? "").replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, "") || "Try again in a moment.";
 
 /** "name@gmail.om" and the like: a big mail provider with the wrong ending. Returns the fixed address, or "". */
@@ -17,6 +18,15 @@ const typoFix = (email: string) => {
   const m = email.trim().toLowerCase().match(/^([^@\s]+)@(gmail|yahoo|hotmail|outlook|icloud|aol|live|msn)\.([a-z]+)$/);
   return m && m[3] !== "com" ? `${m[1]}@${m[2]}.com` : "";
 };
+
+/** Where an invitation stands. Once its day has passed (or its photo is on a recording) it's Done, answered or not. */
+type State = "waiting" | "answered" | "done";
+const stateOf = (g: Invite): State => (g.usedRec > 0 || (g.whenIso && Date.parse(g.whenIso) < Date.now()) ? "done" : g.status === "answered" ? "answered" : "waiting");
+const initials = (name: string) => name.trim().split(/\s+/).filter(Boolean).map((w) => w[0]).slice(0, 2).join("").toUpperCase() || "?";
+/** "Wed, Dec 2 · 6:30 PM": short enough to never be cut off. */
+const shortWhen = (g: Invite) => (g.whenIso ? new Date(g.whenIso).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).replace(/, (\d+:\d+)/, " · $1").replace(/^(\w+), /, "$1, ") : g.whenText);
+const tabCls = (on: boolean) => `border-b-2 px-0.5 pb-2 text-sm font-medium transition-colors ${on ? "border-[#053877] font-semibold text-[#053877] dark:border-[#8fb5e8] dark:text-[#8fb5e8]" : "border-transparent text-muted-foreground hover:text-foreground"}`;
+const selCls = "h-10 w-full rounded-md border border-input bg-background pl-3 text-sm";
 
 /** The guest's name for the card is theirs to type: an invitation from the host asks them, with the photo they want shown. */
 export function GuestInvites({ prefill, shows = [], showId }: { prefill?: { name: string; email: string; n: number }; /** All their shows: two or more and the form asks which one it's for. */ shows?: { id: number; title: string }[]; /** The show they're working in, the picker's default. */ showId?: number } = {}) {
@@ -30,7 +40,13 @@ export function GuestInvites({ prefill, shows = [], showId }: { prefill?: { name
   // People saved from the browser extension ("Add to my show"): one tap starts an invitation with their name filled in.
   const saved = useQuery<{ id: string; name: string; title: string; org: string; photoUrl: string; url: string }[]>({ queryKey: ["/api/host/captures"], queryFn: async () => (await apiRequest("GET", "/api/host/captures")).json() });
   const unsave = useMutation({ mutationFn: async (id: string) => apiRequest("DELETE", `/api/host/captures/${id}`), onSuccess: () => void qc.invalidateQueries({ queryKey: ["/api/host/captures"] }) });
-  const [f, setF] = useState({ guestName: "", guestEmail: "", when: "", zoomLink: "", note: "" });
+  const [f, setF] = useState({ guestName: "", guestEmail: "", linkedin: "", when: "", zoomLink: "", note: "" });
+  // Two sub-tabs (Andrew, 24 Nov): the form first, so a long list never buries it; the list with its own filter.
+  const [sub, setSub] = useState<"new" | "list">("new");
+  const [filter, setFilter] = useState<"all" | State>("all");
+  const all = list.data ?? [];
+  const count = (k: "all" | State) => (k === "all" ? all.length : all.filter((g) => stateOf(g) === k).length);
+  const shown = filter === "all" ? all : all.filter((g) => stateOf(g) === filter);
   // On Zoom the guest needs the link from somewhere: pasted here, or the host sends it in an email of their own.
   const [linkLater, setLinkLater] = useState(false);
   const [needLink, setNeedLink] = useState(false);
@@ -67,9 +83,9 @@ export function GuestInvites({ prefill, shows = [], showId }: { prefill?: { name
     mutationFn: async () => {
       const whenIso = f.when ? new Date(f.when).toISOString() : "";
       const whenText = f.when ? new Date(f.when).toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }) : "";
-      return (await apiRequest("POST", "/api/host/guest-invites", { guestName: f.guestName, guestEmail: f.guestEmail, whenText, whenIso, zoomLink: where === "zoom" && !linkLater ? f.zoomLink.trim() : "", linkLater: where === "zoom" && linkLater, note: f.note, ...(where === "booth" ? { where: "booth", bookingId: pickedBooking } : where === "studio" ? { where: "studio" } : {}), questions: questions.map((q) => q.trim()).filter(Boolean), ...(pickedShow ? { showId: pickedShow } : {}) })).json();
+      return (await apiRequest("POST", "/api/host/guest-invites", { guestName: f.guestName, guestEmail: f.guestEmail, linkedin: f.linkedin.trim(), whenText, whenIso, zoomLink: where === "zoom" && !linkLater ? f.zoomLink.trim() : "", linkLater: where === "zoom" && linkLater, note: f.note, ...(where === "booth" ? { where: "booth", bookingId: pickedBooking } : where === "studio" ? { where: "studio" } : {}), questions: questions.map((q) => q.trim()).filter(Boolean), ...(pickedShow ? { showId: pickedShow } : {}) })).json();
     },
-    onSuccess: () => { setF({ guestName: "", guestEmail: "", when: "", zoomLink: "", note: "" }); setQuestions([]); setWhere("zoom"); setLinkLater(false); setNeedLink(false); void qc.invalidateQueries({ queryKey: ["/api/host/guest-invites"] }); toast({ title: "Invitation sent", description: "They'll get an email from you through MilitaryVoices.ai, and you'll hear when they answer." }); },
+    onSuccess: () => { setF({ guestName: "", guestEmail: "", linkedin: "", when: "", zoomLink: "", note: "" }); setQuestions([]); setWhere("zoom"); setLinkLater(false); setNeedLink(false); void qc.invalidateQueries({ queryKey: ["/api/host/guest-invites"] }); toast({ title: "Invitation sent", description: "They'll get an email from you through MilitaryVoices.ai, and you'll hear when they answer." }); },
     onError: (e) => toast({ title: "Couldn't send that", description: say(e), variant: "destructive" }),
   });
   const del = useMutation({ mutationFn: async (id: number) => apiRequest("DELETE", `/api/host/guest-invites/${id}`), onSuccess: () => void qc.invalidateQueries({ queryKey: ["/api/host/guest-invites"] }) });
@@ -77,6 +93,10 @@ export function GuestInvites({ prefill, shows = [], showId }: { prefill?: { name
 
   return (
     <div className="space-y-6" data-testid="guest-invites">
+      <div className="-mt-1 flex gap-5 overflow-x-auto whitespace-nowrap border-b border-border [scrollbar-width:none]" role="tablist">
+        <button type="button" role="tab" aria-selected={sub === "new"} onClick={() => setSub("new")} className={tabCls(sub === "new")} data-testid="invite-sub-new">Invite a guest</button>
+        <button type="button" role="tab" aria-selected={sub === "list"} onClick={() => setSub("list")} className={tabCls(sub === "list")} data-testid="invite-sub-list">Invitations <span className="tabular-nums text-muted-foreground">{all.length || ""}</span></button>
+      </div>
       {(saved.data?.length ?? 0) > 0 && (
         <div data-testid="guest-saved">
           <h3 className="text-lg font-semibold">Saved from your browser</h3>
@@ -96,26 +116,36 @@ export function GuestInvites({ prefill, shows = [], showId }: { prefill?: { name
           </ul>
         </div>
       )}
-      {(list.data?.length ?? 0) > 0 && (
+      {sub === "list" && (
       <div data-testid="guest-invites-list">
-        <h3 className="text-lg font-semibold">Your invitations</h3>
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Show">
+          {([["all", "All"], ["waiting", "Waiting"], ["answered", "Answered"], ["done", "Done"]] as const).map(([k, l]) => (
+            <button key={k} type="button" onClick={() => setFilter(k)} aria-pressed={filter === k} className={`inline-flex h-8 items-center gap-1.5 rounded-full border px-3.5 text-sm font-semibold ${filter === k ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:bg-muted"}`} data-testid={`invite-filter-${k}`}>{l} <span className={`tabular-nums ${filter === k ? "text-white/75" : "text-muted-foreground"}`}>{count(k)}</span></button>
+          ))}
+        </div>
+        {!all.length && <p className="mt-6 text-sm text-muted-foreground">No invitations yet. <button type="button" onClick={() => setSub("new")} className="font-semibold text-[#053877] underline underline-offset-2 dark:text-[#8fb5e8]">Invite a guest</button></p>}
         {(
-          <ul className="mt-3 space-y-3">
-            {(list.data ?? []).map((g) => (
+          <ul className="mt-4 space-y-3">
+            {shown.map((g) => { const st = stateOf(g); return (
               <li key={g.id} className="rounded-xl border border-border bg-card p-4" data-testid={`guest-invite-${g.id}`}>
                 <div className="flex flex-wrap items-center gap-3">
-                  {g.hasPhoto ? <img src={`/api/host/guest-invites/${g.id}/photo`} alt="" className="h-12 w-12 rounded-full object-cover" /> : <div className="h-12 w-12 rounded-full bg-muted" />}
+                  {g.hasPhoto ? <img src={`/api/host/guest-invites/${g.id}/photo`} alt="" className="h-12 w-12 rounded-full object-cover" /> : <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#053877]/10 text-sm font-bold text-[#053877] dark:bg-white/10 dark:text-white" aria-hidden>{initials(g.guestName)}</div>}
                   <div className="min-w-0 flex-1">
                     <p className="font-semibold">{g.guestName}</p>
-                    <p className="truncate text-xs text-muted-foreground">{g.guestEmail}{g.whenText ? ` · ${g.whenText}` : ""}</p>
+                    <p className="flex flex-wrap gap-x-1 text-xs text-muted-foreground"><span className="max-w-full truncate" title={g.guestEmail}>{g.guestEmail}</span>{g.whenIso || g.whenText ? <span className="whitespace-nowrap">· {st === "done" ? `Was on ${shortWhen(g)}` : shortWhen(g)}</span> : null}</p>
                   </div>
-                  {g.status === "answered"
+                  {/* On a phone the status and buttons take their own line under the name (24 Nov). */}
+                  <div className="flex w-full flex-wrap items-center gap-2 pl-[3.75rem] sm:w-auto sm:pl-0">
+                  {st === "done"
+                    ? <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-800"><Check className="h-3.5 w-3.5" /> Done</span>
+                    : st === "answered"
                     ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800"><Check className="h-3.5 w-3.5" /> Answered</span>
                     : <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">Waiting for them</span>}
-                  {g.status !== "answered" && <Button type="button" variant="outline" size="sm" onClick={() => setFixing(fixing?.id === g.id ? null : { id: g.id, email: g.guestEmail })} data-testid={`guest-invite-resend-${g.id}`}>Fix email or resend</Button>}
-                  <Button type="button" variant="ghost" size="sm" onClick={() => void copy(g.link)} aria-label="Copy their link"><Copy className="h-4 w-4" /></Button>
+                  {st === "waiting" && <Button type="button" variant="outline" size="sm" onClick={() => setFixing(fixing?.id === g.id ? null : { id: g.id, email: g.guestEmail })} data-testid={`guest-invite-resend-${g.id}`}>Fix email or resend</Button>}
+                  {st !== "done" && <Button type="button" variant="ghost" size="sm" onClick={() => void copy(g.link)} aria-label="Copy their link"><Copy className="h-4 w-4" /></Button>}
                   {g.status === "answered" && <Button type="button" variant="outline" size="sm" onClick={() => setOpen(open === g.id ? null : g.id)}>{open === g.id ? "Hide answers" : "See answers"}</Button>}
                   <Button type="button" variant="ghost" size="sm" onClick={() => del.mutate(g.id)} aria-label="Delete this invitation"><Trash2 className="h-4 w-4" /></Button>
+                  </div>
                 </div>
                 {fixing?.id === g.id && (
                   <form className="mt-3 flex flex-wrap items-center gap-2 border-t border-border pt-3" onSubmit={(e) => { e.preventDefault(); resend.mutate(fixing); }}>
@@ -135,26 +165,28 @@ export function GuestInvites({ prefill, shows = [], showId }: { prefill?: { name
                   </dl>
                 )}
               </li>
-            ))}
+            ); })}
           </ul>
         )}
       </div>
       )}
 
+      {sub === "new" && <>
+
       <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-        <h3 className="text-lg font-semibold">Invite a guest</h3>
-        <p className="mt-1 text-sm text-muted-foreground [text-wrap:pretty]">We email your guest from you. They answer a few questions and add the photo they want shown, and you get it all before the interview. Their name and photo go on your episode's guest card.</p>
+        <p className="text-sm text-muted-foreground [text-wrap:pretty]">We email your guest from you. They answer a few questions and add the photo they want shown, and you get it all before the interview. Their name and photo go on your episode's guest card.</p>
         <form data-testid="guest-invite-form" className="mt-5 grid gap-5 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); const fix = typoFix(f.guestEmail); if (fix && window.confirm(`Is ${f.guestEmail} right? It looks like it should end in .com (${fix}).\n\nOK sends it to ${f.guestEmail}. Cancel lets you fix it.`) === false) return; if (where === "zoom" && !f.zoomLink.trim() && !linkLater) { setNeedLink(true); document.getElementById("gi-f-zoom")?.focus(); return; } send.mutate(); }}>
           {many && (
-            <div className="space-y-1.5 sm:col-span-2" data-testid="invite-show">
+            <div className="grid gap-2 sm:col-span-2" data-testid="invite-show">
               <Label htmlFor="gi-f-show">For which show?</Label>
-              <select id="gi-f-show" value={pickedShow ?? ""} onChange={(e) => setForShow(Number(e.target.value))} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm sm:max-w-sm" data-testid="invite-show-select">
+              <Select id="gi-f-show" wrap="w-full sm:max-w-sm" value={pickedShow ?? ""} onChange={(e) => setForShow(Number(e.target.value))} className={selCls} data-testid="invite-show-select">
                 {shows.map((x) => <option key={x.id} value={x.id}>{x.title || "Untitled show"}</option>)}
-              </select>
+              </Select>
             </div>
           )}
           <div className="space-y-1.5"><Label htmlFor="gi-f-name">Guest's name</Label><Input id="gi-f-name" value={f.guestName} onChange={set("guestName")} maxLength={80} required /></div>
           <div className="space-y-1.5"><Label htmlFor="gi-f-email">Guest's email</Label><Input id="gi-f-email" type="email" value={f.guestEmail} onChange={set("guestEmail")} required />{typoFix(f.guestEmail) && <p className="text-xs text-amber-800">Did you mean <button type="button" onClick={() => setF((x) => ({ ...x, guestEmail: typoFix(x.guestEmail) }))} className="font-semibold underline">{typoFix(f.guestEmail)}</button>?</p>}</div>
+          <div className="space-y-1.5" data-testid="invite-linkedin"><Label htmlFor="gi-f-li">Guest's LinkedIn (optional)</Label><Input id="gi-f-li" value={f.linkedin} onChange={set("linkedin")} placeholder="linkedin.com/in/their-name" inputMode="url" /><p className="text-xs text-muted-foreground [text-wrap:pretty]">We read it to get your prep ready: who they are and questions worth asking. Their photo stays the one they send you.</p></div>
           <div className="space-y-1.5 sm:col-span-2" data-testid="invite-where">
             <Label>Where will you talk?</Label>
             <div className="flex flex-wrap gap-2">
@@ -166,9 +198,9 @@ export function GuestInvites({ prefill, shows = [], showId }: { prefill?: { name
           {where === "booth" && coming.length > 0 ? (
             <div className="space-y-1.5 sm:col-span-2" data-testid="invite-booth">
               <Label htmlFor="gi-f-booking">Which show?</Label>
-              <select id="gi-f-booking" value={pickedBooking ?? ""} onChange={(e) => setBookingId(Number(e.target.value))} className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm">
+              <Select id="gi-f-booking" wrap="w-full" value={pickedBooking ?? ""} onChange={(e) => setBookingId(Number(e.target.value))} className={selCls}>
                 {coming.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
-              </select>
+              </Select>
               <p className="text-xs text-muted-foreground">Your guest gets a private link into your Radio show, with the time filled in. They open it on the day, allow their camera and microphone, and they're in. No account needed.</p>
             </div>
           ) : (
@@ -218,7 +250,7 @@ export function GuestInvites({ prefill, shows = [], showId }: { prefill?: { name
           </div>
         </form>
       </div>
-
+      </>}
     </div>
   );
 }

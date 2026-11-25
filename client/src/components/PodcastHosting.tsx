@@ -1,5 +1,6 @@
 import { shrinkImage } from "@/lib/shrinkImage";
 import { GuestInvites } from "@/components/GuestInvites";
+import { Select } from "@/components/room/Select";
 import type { IconType } from "react-icons";
 import { SiApplepodcasts, SiCastbox, SiDeezer, SiIheartradio, SiPlayerfm, SiPocketcasts, SiPodcastindex, SiSpotify, SiYoutube, SiYoutubemusic } from "react-icons/si";
 import { PhotoCropDialog } from "@/components/PhotoCropDialog";
@@ -703,7 +704,7 @@ function YouTubeEpisodes({ h, ready, onDone, embedded = false }: { h: Hosted; re
       toast({ title: /Social screen/.test(msg) ? "Connect YouTube first" : "Not posted", description: msg, variant: /Social screen/.test(msg) ? undefined : "destructive" });
     } finally { setBusy(null); }
   };
-  const sel = "h-9 rounded-md border border-input bg-background px-2 text-sm";
+  const sel = "h-9 rounded-md border border-input bg-background pl-2.5 text-sm";
   return (
     <div className={embedded ? "mt-3 border-t border-border pt-3" : "rounded-2xl border border-border bg-card p-4 shadow-sm"} data-testid="hosting-youtube">
       <h2 className="text-sm font-semibold">Your episodes with video</h2>
@@ -711,14 +712,14 @@ function YouTubeEpisodes({ h, ready, onDone, embedded = false }: { h: Hosted; re
       {/* Standalone only: embedded in Directories, the choice is the tick in each episode's publish box. */}
       <div className={`mt-3 flex-wrap items-center gap-2 text-sm ${embedded ? "hidden" : "flex"}`}>
         <span className="text-muted-foreground">When I publish an episode with video:</span>
-        <select value={s.youtubeMode} onChange={(e) => void setShow({ youtubeMode: e.target.value })} className={sel} aria-label="When I publish" data-testid="hosting-yt-mode">
+        <Select value={s.youtubeMode} onChange={(e) => void setShow({ youtubeMode: e.target.value })} className={sel} aria-label="When I publish" data-testid="hosting-yt-mode">
           <option value="ask">Ask me each time</option>
           <option value="always">Always post it to YouTube</option>
-        </select>
-        <select value={s.youtubePrivacy} onChange={(e) => void setShow({ youtubePrivacy: e.target.value })} className={sel} aria-label="Who can see it">
+        </Select>
+        <Select value={s.youtubePrivacy} onChange={(e) => void setShow({ youtubePrivacy: e.target.value })} className={sel} aria-label="Who can see it">
           <option value="public">Public</option>
           <option value="unlisted">Unlisted (only with the link)</option>
-        </select>
+        </Select>
       </div>
       {videos.length ? (
         <ul className="mt-2 divide-y divide-border">
@@ -1028,15 +1029,15 @@ function ShowForm({ show, categories, onSaved, focus = "" }: { show: HostedShowR
           <label className={label}>Host or author<Input value={v.author} onChange={(e) => set("author", e.target.value)} className="mt-1 font-normal text-foreground" /></label>
           <label className={label}>Owner email<Input autoFocus={focus === "ownerEmail"} type="email" value={v.ownerEmail} onChange={(e) => set("ownerEmail", e.target.value)} className="mt-1 font-normal text-foreground" /></label>
           <label className={label}>Category
-            <select value={v.category} onChange={(e) => { set("category", e.target.value); set("subcategory", ""); }} className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2 text-sm font-normal text-foreground">
+            <Select wrap="mt-1 w-full" value={v.category} onChange={(e) => { set("category", e.target.value); set("subcategory", ""); }} className="h-9 rounded-md border border-input bg-background pl-2.5 text-sm font-normal text-foreground">
               {Object.keys(categories).map((c) => <option key={c}>{c}</option>)}
-            </select>
+            </Select>
           </label>
           <label className={label}>Subcategory
-            <select value={v.subcategory} onChange={(e) => set("subcategory", e.target.value)} disabled={!(categories[v.category] ?? []).length} className="mt-1 h-9 w-full rounded-md border border-input bg-background px-2 text-sm font-normal text-foreground disabled:opacity-50">
+            <Select wrap="mt-1 w-full" value={v.subcategory} onChange={(e) => set("subcategory", e.target.value)} disabled={!(categories[v.category] ?? []).length} className="h-9 rounded-md border border-input bg-background pl-2.5 text-sm font-normal text-foreground disabled:opacity-50">
               <option value="">None</option>
               {(categories[v.category] ?? []).map((c) => <option key={c}>{c}</option>)}
-            </select>
+            </Select>
           </label>
           <label className={label}>Website (optional)<Input value={v.website} onChange={(e) => set("website", e.target.value)} className="mt-1 font-normal text-foreground" placeholder="https://" /></label>
           <label className={label}>Copyright (optional)<Input value={v.copyright} onChange={(e) => set("copyright", e.target.value)} className="mt-1 font-normal text-foreground" placeholder={`© ${new Date().getFullYear()} ${v.author || v.title}`} /></label>
@@ -1446,9 +1447,9 @@ function EpisodePage({ ep, show, shows, onMoved, youtubeReady, production, onDir
               <label className={label}>Episode<Input type="number" min={0} value={v.episodeNumber ?? ""} onChange={(e) => set("episodeNumber", e.target.value === "" ? null : Number(e.target.value))} className="mt-1 w-24" /></label>
               <label className={label}>Season<Input type="number" min={0} value={v.season ?? ""} onChange={(e) => set("season", e.target.value === "" ? null : Number(e.target.value))} className="mt-1 w-24" /></label>
               <label className={label}>Type
-                <select value={v.episodeType} onChange={(e) => set("episodeType", e.target.value)} className="mt-1 block h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground">
+                <Select wrap="mt-1" value={v.episodeType} onChange={(e) => set("episodeType", e.target.value)} className="h-9 rounded-md border border-input bg-background pl-2.5 text-sm text-foreground">
                   <option value="full">Full episode</option><option value="trailer">Trailer</option><option value="bonus">Bonus</option>
-                </select>
+                </Select>
               </label>
               <label className="flex items-center gap-2 pb-2 text-sm"><input type="checkbox" checked={v.explicit} onChange={(e) => set("explicit", e.target.checked)} /> Explicit</label>
             </div>
@@ -1561,11 +1562,11 @@ function EpisodePage({ ep, show, shows, onMoved, youtubeReady, production, onDir
                       {offerYt && (youtubeReady ? (
                         <li className="flex flex-wrap items-center gap-2">
                           <label className="flex items-center gap-2"><input type="checkbox" checked={ytOn} onChange={(e) => setYt(e.target.checked)} className="h-4 w-4" data-testid="hosting-publish-yt" /> Your YouTube channel</label>
-                          <select value={privacy} disabled={!ytOn} onChange={(e) => setPrivacy(e.target.value)} aria-label="Who can see it on YouTube" className="ml-auto h-8 rounded-md border border-input bg-background px-1.5 text-xs disabled:opacity-50" data-testid="hosting-publish-yt-privacy">
+                          <Select small wrap="ml-auto" value={privacy} disabled={!ytOn} onChange={(e) => setPrivacy(e.target.value)} aria-label="Who can see it on YouTube" className="h-8 rounded-md border border-input bg-background pl-2 text-xs disabled:opacity-50" data-testid="hosting-publish-yt-privacy">
                             <option value="public">Public</option>
                             <option value="unlisted">Unlisted</option>
                             <option value="private">Private</option>
-                          </select>
+                          </Select>
                         </li>
                       ) : (
                         <li className="text-xs text-muted-foreground">Your YouTube channel too? <a href="/host/dashboard/social" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">Connect YouTube</a> first.</li>
@@ -1761,12 +1762,12 @@ function SponsorsPanel({ h, onSaved, preset = null, onPresetUsed }: { h: Hosted;
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <label className={label}>On which episodes
-              <select value={f.target} onChange={(e) => set("target", e.target.value)} className="mt-1 block h-9 w-full rounded-md border border-input bg-background px-2 text-sm text-foreground" data-testid="spot-target">
+              <Select wrap="mt-1 w-full" value={f.target} onChange={(e) => set("target", e.target.value)} className="h-9 rounded-md border border-input bg-background pl-2.5 text-sm text-foreground" data-testid="spot-target">
                 {f.kind !== "mid" && <><option value="future">New episodes from now on</option><option value="all">Every episode</option><option value="full">Every full episode (no trailers or bonuses)</option></>}
                 <optgroup label="Just one episode">
                   {eps.map((e) => <option key={e.id} value={`ep:${e.id}`}>{e.episodeNumber != null ? `${e.episodeNumber}. ` : ""}{e.title.slice(0, 70)}</option>)}
                 </optgroup>
-              </select>
+              </Select>
             </label>
             {f.kind === "mid" && (
               <label className={label}>At this point in the episode
@@ -1795,9 +1796,9 @@ function SponsorsPanel({ h, onSaved, preset = null, onPresetUsed }: { h: Hosted;
                 <Textarea value={f.script} onChange={(e) => { set("script", e.target.value); setRec(null); }} rows={4} maxLength={1500} placeholder="This episode is brought to you by… Say what they do and where to go. About 60 words is 30 seconds." data-testid="spot-script" />
                 <div className="flex flex-wrap items-end gap-3">
                   <label className={label}>Voice
-                    <select value={f.voice} onChange={(e) => { set("voice", e.target.value); setRec(null); }} className="mt-1 block h-9 rounded-md border border-input bg-background px-2 text-sm text-foreground" data-testid="spot-voice">
+                    <Select wrap="mt-1" value={f.voice} onChange={(e) => { set("voice", e.target.value); setRec(null); }} className="h-9 rounded-md border border-input bg-background pl-2.5 text-sm text-foreground" data-testid="spot-voice">
                       {(q.data?.voices ?? [{ key: "brian", name: "Brian" }]).map((v) => <option key={v.key} value={v.key}>{v.name}</option>)}
-                    </select>
+                    </Select>
                   </label>
                   <Button variant="outline" className="h-9 rounded-full" disabled={!canRecord || busy === "record"} onClick={() => void record()} data-testid="spot-record">{busy === "record" ? <><Loader2 className="mr-1.5 h-4 w-4 animate-spin" /> Recording…</> : rec ? "Record it again" : "Hear it"}</Button>
                 </div>
