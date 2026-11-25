@@ -399,7 +399,11 @@ async function saveLook(studioId: number, rev: number, look: Look): Promise<Look
     const [out] = await db.update(roomLooks).set({ look: body, rev: rev + 1, updatedAt: now() }).where(and(eq(roomLooks.studioId, studioId), eq(roomLooks.rev, rev))).returning();
     if (!out) return null;
   }
-  for (const fn of listeners) Promise.resolve().then(() => fn(studioId, next)).catch((e) => console.warn("onLookSaved:", (e as Error).message));
+  // Awaited (at most 3 s), so the room hears about this save before the client's next call, e.g. the scene switch
+  // right after Present: unawaited, the two wrote the room's metadata at once and the switch could drop lookRev,
+  // leaving the filmed page on the scene's old picture for a whole clip (studio 13, 24 Nov).
+  const told = Promise.allSettled(listeners.map((fn) => Promise.resolve().then(() => fn(studioId, next)).catch((e) => console.warn("onLookSaved:", (e as Error).message))));
+  await Promise.race([told, new Promise((r) => setTimeout(r, 3000))]);
   return next;
 }
 

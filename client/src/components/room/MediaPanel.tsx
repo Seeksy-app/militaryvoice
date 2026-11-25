@@ -82,11 +82,11 @@ function Clips({ kit }: { kit: RoomKit }) {
             <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] bg-[#101828] text-white"><Clapperboard className="h-3.5 w-3.5" /></div>
             <div className="min-w-0 flex-1">
               <p className="truncate text-[13px] font-semibold">{v.asset.name || "Video"}</p>
-              <div className="flex items-center gap-1.5 text-xs text-[#667085]">
-                <select value={v.role} onChange={(e) => setClip(v.asset.id, { role: e.target.value as VideoClip["role"] })} aria-label="Use as" className="h-6 rounded-md border border-[#e4e7ec] bg-white px-1 text-[11px]">
+              <div className="flex min-w-0 items-center gap-1.5 overflow-hidden text-xs text-[#667085]">
+                <select value={v.role} onChange={(e) => setClip(v.asset.id, { role: e.target.value as VideoClip["role"] })} aria-label="Use as" className="h-6 shrink-0 rounded-md border border-[#e4e7ec] bg-white px-1 text-[11px]">
                   <option value="">Clip</option><option value="intro">Intro</option><option value="outro">Outro</option>
                 </select>
-                {on ? "Playing now" : mmss(v.asset.sec)}
+                <span className="min-w-0 truncate whitespace-nowrap">{on ? "Playing" : mmss(v.asset.sec)}</span>
               </div>
             </div>
             <button type="button" onClick={() => { if (window.confirm("Delete this clip?")) void kit.removeAsset("video", v.asset.id); }} aria-label="Delete clip" className="hidden shrink-0 text-[#98a2b3] hover:text-[#b42318] group-focus-within:block group-hover:block"><Trash2 className="h-4 w-4" /></button>
@@ -107,7 +107,7 @@ function Clips({ kit }: { kit: RoomKit }) {
         {CARDS.map((c) => {
           const on = playing?.slot === c.slot;
           return (
-            <button key={c.slot} type="button" onClick={() => kit.play(on ? null : c.slot)} aria-pressed={on} aria-label={on ? `Stop ${c.title}` : `Show ${c.title}`} className={`flex h-[52px] flex-col items-center justify-center gap-1 whitespace-nowrap rounded-xl border px-1 text-center text-[11.5px] font-bold leading-tight ${on ? "border-[#053877] bg-[#053877] text-white" : "border-[#e4e7ec] bg-white text-[#344054] hover:border-[#98a2b3]"}`} data-testid={`card-${c.slot}`}>
+            <button key={c.slot} type="button" onClick={() => kit.play(on ? null : c.slot)} aria-pressed={on} aria-label={on ? `Stop ${c.title}` : `Show ${c.title}`} className={`flex min-h-[52px] min-w-0 flex-col items-center justify-center gap-1 rounded-xl border px-1 py-1.5 text-center text-[11.5px] font-bold leading-tight ${on ? "border-[#053877] bg-[#053877] text-white" : "border-[#e4e7ec] bg-white text-[#344054] hover:border-[#98a2b3]"}`} data-testid={`card-${c.slot}`}>
               {on ? <Square className="h-3 w-3 fill-current" /> : <Play className="h-3 w-3 fill-current text-[#053877]" />}
               {c.short}
             </button>
@@ -132,9 +132,9 @@ function Countdown({ kit }: { kit: RoomKit }) {
   return (
     <div className={`rounded-xl border px-3 py-2.5 ${on ? "border-[#053877] bg-[#f5f8fd]" : "border-[#e4e7ec]"}`} data-testid="card-countdown">
       <div className="flex items-center gap-2">
-        <p className="min-w-0 flex-1 text-[13px] font-semibold">Countdown</p>
+        <p className="min-w-0 flex-1 truncate text-[13px] font-semibold">Countdown</p>
         {!on && (
-          <select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} aria-label="Minutes" className="h-8 rounded-lg border border-[#d0d5dd] bg-white px-1.5 text-[12px]">
+          <select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} aria-label="Minutes" className="h-8 shrink-0 rounded-lg border border-[#d0d5dd] bg-white px-1.5 text-[12px]">
             {[1, 2, 3, 5, 10, 15].map((m) => <option key={m} value={m}>{m} minute{m > 1 ? "s" : ""}</option>)}
           </select>
         )}

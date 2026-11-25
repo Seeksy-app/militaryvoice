@@ -59,7 +59,15 @@ async function readLook(studioId: number): Promise<RoomLook | null> {
 }
 
 /** Merge into the room's metadata (LiveKit replaces it whole). False when the room doesn't exist yet. */
+// One read-and-write of a room's metadata at a time (in this instance), so two changes can't drop each other's keys.
+const metaQueue = new Map<string, Promise<unknown>>();
 export async function mergeRoomMeta(room: string, patch: Partial<RoomLive>): Promise<boolean> {
+  const prev = metaQueue.get(room) ?? Promise.resolve();
+  const run = prev.catch(() => {}).then(() => mergeNow(room, patch));
+  metaQueue.set(room, run);
+  try { return await run; } finally { if (metaQueue.get(room) === run) metaQueue.delete(room); }
+}
+async function mergeNow(room: string, patch: Partial<RoomLive>): Promise<boolean> {
   if (!isLiveKitConfigured()) return false;
   try {
     const [r] = await rooms().listRooms([room]);

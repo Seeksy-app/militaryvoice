@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Captions, HiddenVoices, LogoOverlay, NameTagContext, StageGrid, Tile, useStageRoom, type NameTagStyle, type RoomMeta, type StageTile } from "@/components/StageView";
 import { apiRequest } from "@/lib/queryClient";
 import { useClipSync } from "@/components/room/clipSound";
+import { useReadyScene } from "@/components/room/mediaReady";
 import {
   CARD_TITLE, boxCast, castOf, countdownText, gridColumns, isClipSound, isPlayer, musicCreditOf, roomStageMeta, sceneOf, shownOnStage, studioIdFromRoom,
   type RoomBox, type RoomBoxShape, type RoomCardSlot, type RoomCorner, type RoomLive, type RoomLook, type RoomProfile,
@@ -59,7 +60,10 @@ export function RoomPicture({
     (a) => shownOnStage(a, lookRef.current, liveRef.current),
     pickKey,
   );
-  const live = raw as unknown as RoomLive;
+  const onAir = raw as unknown as RoomLive;
+  // What's drawn: the scene on air, held on the one before while a clip's first frame loads (no black between).
+  const held = useReadyScene(look, onAir);
+  const live: RoomLive = held === onAir.activeScene ? onAir : { ...onAir, activeScene: held ?? undefined };
   liveRef.current = live;
   lookRef.current = look;
   const sceneKey = `${live.activeScene ?? ""}:${look?.rev ?? 0}`;
@@ -68,7 +72,7 @@ export function RoomPicture({
   useEffect(() => { onState?.({ connected, failed }); }, [connected, failed, onState]);
   // The host's Pause / Play / From the start: this page's copy of the clip follows (the recording and the stream).
   const root = useRef<HTMLDivElement>(null);
-  useClipSync(root, live.clip, live.activeScene, !!live.playing);
+  useClipSync(root, onAir.clip, onAir.activeScene, !!onAir.playing);
 
   // The look, again whenever Podcasting saves (lookRev changes on the room).
   useEffect(() => {
@@ -79,7 +83,7 @@ export function RoomPicture({
       .then((j: { look?: RoomLook; corner?: RoomCorner | null } | null) => { if (alive && j?.look) { setLook(j.look); setCorner(j.corner ?? null); } })
       .catch(() => {});
     return () => { alive = false; };
-  }, [id, lookKey, live.lookRev]);
+  }, [id, lookKey, onAir.lookRev]);
 
   // A banner shows for its own seconds, so re-read the clock when it is due to go.
   const [now, setNow] = useState(() => Date.now());
