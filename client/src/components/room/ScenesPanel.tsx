@@ -6,6 +6,7 @@ import { useToast } from "@/hooks/use-toast";
 import { isPlayer, type RoomBoxKind, type RoomBoxShape } from "@shared/roomLook";
 import { LIMITS, PEOPLE_DEFAULT, bgCss, newId, type Asset, type Layout, type RoomKit, type Scene, type SceneType, type Slot } from "./look";
 import { isVideo, mmss, useThumb } from "./thumbs";
+import { PRACTICE_ID, PRACTICE_NAME, usePractice } from "./practiceGuest";
 
 /**
  * What a media scene shows, as a small picture (Andrew, 24 Nov: "we need to be able to see the video
@@ -35,6 +36,8 @@ function useCast(kit: RoomKit): (s: Scene) => string[] {
     .filter((p) => !isPlayer(p.identity, p.attributes) && p.attributes?.role !== "listener" && kit.isOnStage(p.identity, p.attributes?.stage))
     .map((p) => ({ name: p.name || p.identity, host: p.attributes?.role === "host", who: p.attributes?.who ?? p.identity }))
     .sort((a, b) => Number(b.host) - Number(a.host));
+  // The practice guest counts in the scene pictures, as it does on the host's stage.
+  if (usePractice().on) roster.push({ name: PRACTICE_NAME, host: false, who: PRACTICE_ID });
   return (s) => roster.filter((p) => p.host || !s.stage?.length || s.stage.includes(p.who)).map((p) => p.name);
 }
 const initials = (name: string) => name.trim().split(/\s+/).map((w) => w[0] ?? "").slice(0, 2).join("").toUpperCase();

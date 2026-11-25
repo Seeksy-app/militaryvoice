@@ -3,6 +3,7 @@ import { Captions, HiddenVoices, LogoOverlay, NameTagContext, StageGrid, Tile, u
 import { apiRequest } from "@/lib/queryClient";
 import { useClipSync } from "@/components/room/clipSound";
 import { useReadyScene } from "@/components/room/mediaReady";
+import { practiceTile, usePractice } from "@/components/room/practiceGuest";
 import {
   CARD_TITLE, boxCast, castOf, countdownText, gridColumns, isClipSound, isPlayer, musicCreditOf, roomStageMeta, sceneOf, shownOnStage, studioIdFromRoom,
   type RoomBox, type RoomBoxShape, type RoomCardSlot, type RoomCorner, type RoomLive, type RoomLook, type RoomProfile,
@@ -36,6 +37,7 @@ export function RoomPicture({
   forRecording = false,
   onMediaEnded,
   onState,
+  extra,
 }: {
   url: string | null;
   token: string | null;
@@ -47,6 +49,8 @@ export function RoomPicture({
   forRecording?: boolean;
   onMediaEnded?: () => void;
   onState?: (s: { connected: boolean; failed: boolean }) => void;
+  /** People drawn on this page only, never in the room (the host's practice guest). The recorder's and viewers' pages never pass any. */
+  extra?: StageTile[];
 }) {
   const id = studioId ?? studioIdFromRoom(roomOfToken(token));
   const [look, setLook] = useState<RoomLook | null>(null);
@@ -103,7 +107,7 @@ export function RoomPicture({
   // v3: the player bot is heard, never drawn; the scene type decides who is drawn and how.
   // The host page's clip sound is for the people in the studio; this page plays its own copy of the clip.
   const players = tiles.filter((t) => isPlayer(t.identity) && !isClipSound(t.identity));
-  const people = tiles.filter((t) => !isPlayer(t.identity));
+  const people = [...tiles.filter((t) => !isPlayer(t.identity)), ...(extra ?? [])];
   // Studio v3 drawing only when the server says it's on; otherwise the v2 stage, exactly as before.
   const v3 = live.v3 === true;
   const scene = v3 ? sceneOf(look, live) : undefined;
@@ -368,6 +372,9 @@ function ProfileCard({ p, people, bg, logo, color, font }: { p: RoomProfile; peo
  * POST /api/host/my-studio/media {action: "stop"} so the stage returns to the people.
  */
 export function RoomStage({ muted = true, onMediaEnded, className = "" }: { muted?: boolean; onMediaEnded?: () => void; className?: string }) {
+  // The host's practice guest, on this view only (it's never in the room).
+  const pg = usePractice();
+  const guest = useMemo(() => (pg.on ? [practiceTile(pg.face)] : undefined), [pg.on, pg.face]);
   const [conn, setConn] = useState<{ url: string; token: string; studioId: number; name: string; lookKey: string } | null>(null);
   useEffect(() => {
     let alive = true;
@@ -380,7 +387,7 @@ export function RoomStage({ muted = true, onMediaEnded, className = "" }: { mute
 
   return (
     <div className={`relative aspect-video w-full overflow-hidden rounded-2xl bg-[#04102b] ${className}`} data-testid="room-stage">
-      <RoomPicture url={conn?.url ?? null} token={conn?.token ?? null} studioId={conn?.studioId} lookKey={conn?.lookKey ?? null} name={conn?.name} muted={muted} onMediaEnded={onMediaEnded} />
+      <RoomPicture url={conn?.url ?? null} token={conn?.token ?? null} studioId={conn?.studioId} lookKey={conn?.lookKey ?? null} name={conn?.name} muted={muted} onMediaEnded={onMediaEnded} extra={guest} />
     </div>
   );
 }

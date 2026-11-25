@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { TIP_TEXT, useLookCheck } from "@/components/room/lookCheck";
+import { PRACTICE_NAME, practice, usePractice } from "@/components/room/practiceGuest";
 import { startScreenShare } from "@/components/room/screenShare";
 import { BrandMark } from "@/components/BrandMark";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -451,6 +452,11 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
     } catch (e) { toast({ title: on ? "Couldn't start recording" : "Couldn't stop recording", description: say(e), variant: "destructive" }); }
     finally { setBusy(""); }
   };
+  // The practice guest is never recorded or streamed: Record and Go live ask to take it off first (Andrew, 24 Nov).
+  const [askPractice, setAskPractice] = useState<null | "record" | "live">(null);
+  useEffect(() => () => practice.set(false), []);
+  const startRecord = () => { if (practice.isOn()) setAskPractice("record"); else void record(true); };
+  const openLive = () => { if (practice.isOn()) setAskPractice("live"); else setSheet(true); };
   const endLive = async () => {
     if (!window.confirm("End the live show? The recording keeps going until you stop it.")) return;
     setBusy("live");
@@ -545,7 +551,7 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
                 )}
               </div>
             ) : studio.canRecord ? (
-              <button type="button" onClick={() => void record(true)} disabled={busy !== ""} className="flex h-[42px] items-center gap-2 rounded-xl border border-[#fda29b] bg-white px-4 text-sm font-bold text-[#b42318] hover:bg-[#fef3f2] disabled:opacity-60" data-testid="my-studio-record">
+              <button type="button" onClick={startRecord} disabled={busy !== ""} className="flex h-[42px] items-center gap-2 rounded-xl border border-[#fda29b] bg-white px-4 text-sm font-bold text-[#b42318] hover:bg-[#fef3f2] disabled:opacity-60" data-testid="my-studio-record">
                 {busy === "rec" ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Circle className="h-2.5 w-2.5 fill-current" />} Record
               </button>
             ) : null}
@@ -557,7 +563,7 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
                 </button>
               </div>
             ) : (
-              <button type="button" onClick={() => setSheet(true)} className="h-[42px] rounded-xl px-5 text-sm font-bold text-white shadow-[0_4px_12px_rgba(5,56,119,0.28)] sm:px-6" style={{ background: NAVY }} data-testid="my-studio-live">Go live</button>
+              <button type="button" onClick={openLive} className="h-[42px] rounded-xl px-5 text-sm font-bold text-white shadow-[0_4px_12px_rgba(5,56,119,0.28)] sm:px-6" style={{ background: NAVY }} data-testid="my-studio-live">Go live</button>
             )}
           </div>
         )}
@@ -612,7 +618,7 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
             {tab === "style" && v3 && <StylePanel kit={kit} />}
             {tab === "people" && <PeoplePanel owner={owner} studio={studio} onCopy={copyInvite} kit={kit} meKey={meKey} showArt={!!logo} />}
             {tab === "notes" && <NotesPanel roomKey={noteKey} text={notes} setText={setNotes} prompter={owner} sync={owner ? notesSync : undefined} />}
-            {tab === "recording" && owner && <RecordingPanel studio={studio} now={now} busy={busy} onRecord={(on) => void record(on)} onGoLive={() => setSheet(true)} onEndLive={() => void endLive()} />}
+            {tab === "recording" && owner && <RecordingPanel studio={studio} now={now} busy={busy} onRecord={(on) => { if (on) startRecord(); else void record(false); }} onGoLive={openLive} onEndLive={() => void endLive()} />}
             {tab === "chat" && <ChatPanel />}
           </div>
           <nav className="flex w-[84px] shrink-0 flex-col items-center gap-1 border-l border-[#eef0f4] pt-3" aria-label="Panels">
@@ -629,8 +635,30 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
       </div>
 
       {sheet && owner && studio && <GoLiveSheet studio={studio} onClose={() => setSheet(false)} />}
+      {askPractice && <PracticeAsk what={askPractice} onCancel={() => setAskPractice(null)} onGo={() => { const what = askPractice; setAskPractice(null); practice.set(false); if (what === "record") void record(true); else setSheet(true); }} />}
       {settings && <SettingsSheet onClose={() => setSettings(false)} />}
       {leaving && <LeaveDialog live={!!live} onEnd={() => void endAndLeave()} onKeep={() => { setLeaving(false); void go(); }} onCancel={() => { exitTo.current = null; setLeaving(false); }} />}
+    </div>
+  );
+}
+
+/** Record or Go live with the practice guest in: take it off first, so what the host sees is what goes out. */
+function PracticeAsk({ what, onGo, onCancel }: { what: "record" | "live"; onGo: () => void; onCancel: () => void }) {
+  const pg = usePractice();
+  useEffect(() => { const k = (e: KeyboardEvent) => { if (e.key === "Escape") onCancel(); }; window.addEventListener("keydown", k); return () => window.removeEventListener("keydown", k); }, [onCancel]);
+  return (
+    <div className="fixed inset-0 z-[70] flex items-center justify-center bg-[rgba(16,24,40,0.45)] p-4" onClick={onCancel}>
+      <div role="dialog" aria-labelledby="practice-ask" className="w-full max-w-[420px] rounded-2xl bg-white p-6 shadow-[0_24px_48px_rgba(16,24,40,0.25)]" onClick={(e) => e.stopPropagation()} data-testid="practice-ask">
+        <div className="flex items-center gap-3">
+          <img src={pg.face} alt="" className="h-10 w-10 rounded-full object-cover" />
+          <h2 id="practice-ask" className="text-balance text-lg font-bold">Remove the practice guest?</h2>
+        </div>
+        <p className="mt-2.5 text-sm leading-relaxed text-[#475467]">{pg.name} is only for trying out your scenes, and is never in a recording or a live show.</p>
+        <div className="mt-5 flex justify-end gap-2.5">
+          <button type="button" onClick={onCancel} className="h-[42px] rounded-xl border border-[#d0d5dd] bg-white px-4 text-sm font-semibold">Cancel</button>
+          <button type="button" onClick={onGo} className="h-[42px] rounded-xl px-[18px] text-sm font-bold text-white" style={{ background: NAVY }} data-testid="practice-ask-go">{what === "record" ? "Remove and record" : "Remove and go live"}</button>
+        </div>
+      </div>
     </div>
   );
 }
@@ -822,11 +850,29 @@ function PeopleStrip({ kit, owner, sharing, onShare, onInvite }: { kit: RoomKit;
     <div className="relative flex min-w-0">
     <div ref={row} onScroll={measure} className="flex min-w-0 gap-3 overflow-x-auto p-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden" data-testid="my-studio-strip">
       {cams.map((t) => <PersonTile key={key(t)} t={t} kit={kit} owner={owner} scenes={scenes} />)}
+      {owner && <PracticeTile scenes={scenes} />}
     </div>
       {more.left && <button type="button" onClick={() => nudge(-1)} aria-label="Show earlier people" className="absolute left-0 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[#d0d5dd] bg-white text-[#344054] shadow-[0_1px_3px_rgba(16,24,40,0.18)] hover:bg-[#f9fafb]" data-testid="strip-scroll-left"><ChevronLeft className="h-4 w-4" /></button>}
       {more.right && <button type="button" onClick={() => nudge(1)} aria-label="Show more people" className="absolute right-0 top-1/2 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full border border-[#d0d5dd] bg-white text-[#344054] shadow-[0_1px_3px_rgba(16,24,40,0.18)] hover:bg-[#f9fafb]" data-testid="strip-scroll-right"><ChevronRight className="h-4 w-4" /></button>}
     </div>
       <PresentButton kit={kit} owner={owner} sharing={sharing} canPresent={scenes && owner} onShare={onShare} onInvite={onInvite} />
+    </div>
+  );
+}
+
+/** The practice guest's card in the row: their guide's picture, the name tag, and one click to remove it. */
+function PracticeTile({ scenes }: { scenes: boolean }) {
+  const pg = usePractice();
+  if (!pg.on) return null;
+  return (
+    <div className={`relative w-44 shrink-0 overflow-hidden rounded-xl border-2 border-dashed bg-white ${scenes ? "border-[#F0A71F]" : "border-[#d0d5dd]"}`} data-testid="strip-practice">
+      <div className="relative aspect-video w-full bg-[#e4e7ec]"><img src={pg.face} alt="" className="h-full w-full object-cover" /></div>
+      <button type="button" onClick={() => practice.set(false)} className="absolute right-1.5 top-1.5 flex h-7 items-center gap-1 rounded-full bg-white px-2.5 text-xs font-bold text-[#344054] shadow-[0_1px_3px_rgba(16,24,40,0.25)] hover:bg-[#f2f4f7]" data-testid="practice-remove"><X className="h-3.5 w-3.5" /> Remove</button>
+      <div className="flex h-8 items-center gap-1.5 px-2 text-left text-xs font-semibold">
+        <UserRound className="h-3.5 w-3.5 shrink-0 text-[#667085]" />
+        <span className="min-w-0 flex-1 truncate">{PRACTICE_NAME}</span>
+        <span className="shrink-0 text-[11px] font-semibold text-[#667085]">Not recorded</span>
+      </div>
     </div>
   );
 }
@@ -1094,6 +1140,7 @@ function PresentButton({ kit, owner, sharing, canPresent, onShare, onInvite }: {
   const look = kit.look;
   const onAir = look ? sceneLive(look, kit.live) : undefined;
   const presenting = isPresenting(onAir) && !!onAir!.media;
+  const practiceOn = usePractice().on;
 
   const roomForScene = () => {
     if (!look) return false;
@@ -1184,6 +1231,7 @@ function PresentButton({ kit, owner, sharing, canPresent, onShare, onInvite }: {
               <button type="button" onClick={pick(onShare)} className={item} data-testid="strip-add-screen"><MonitorUp className="h-[18px] w-[18px]" /> {sharing ? "Stop sharing screen" : "Share screen"}</button>
               {owner && extra.length < EXTRA_CAMS && <button type="button" onClick={() => void openCams()} className={item} data-testid="present-camera"><Video className="h-[18px] w-[18px]" /> Extra camera</button>}
               {owner && <><div className="my-1 h-px bg-[#eaecf0]" /><button type="button" onClick={pick(onInvite)} className={item} data-testid="strip-add-invite"><UserPlus className="h-[18px] w-[18px]" /> Invite guest</button></>}
+              {owner && !practiceOn && <button type="button" onClick={pick(() => practice.set(true))} className={item} data-testid="present-practice"><UserRound className="h-[18px] w-[18px]" /> <span>Add a practice guest <span className="block text-[12px] font-normal text-[#667085]">Try your scenes. Never recorded.</span></span></button>}
             </>}
           </div>
         </>
