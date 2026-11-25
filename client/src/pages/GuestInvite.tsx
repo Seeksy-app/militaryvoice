@@ -5,8 +5,9 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { guestWhere, otherLinkCopy } from "@shared/guestWhere";
 
-type Invite = { questions?: string[]; hostName: string; hostPhoto: string; show: string; guestName: string; whenText: string; zoomLink: string; linkLater?: boolean; note: string; answered: boolean };
+type Invite = { questions?: string[]; hostName: string; hostPhoto: string; show: string; guestName: string; whenText: string; zoomLink: string; linkLater?: boolean; where?: string; note: string; answered: boolean };
 
 /**
  * The guest's side of an interview invitation: a few questions before the interview and the photo they want shown with their name.
@@ -45,6 +46,8 @@ export default function GuestInvite({ token }: { token: string }) {
   if (q.isLoading) return <div className={shell}><div className="mx-auto max-w-xl pt-20 text-center"><Loader2 className="mx-auto h-6 w-6 animate-spin" /></div></div>;
   if (q.error || !q.data) return <div className={shell}><div className="mx-auto max-w-xl pt-20 text-center"><p className="text-xl font-bold">This link isn't working</p><p className="mt-2 text-muted-foreground">{(q.error as Error)?.message || "Ask your host to send it again."}</p></div></div>;
   const d = q.data;
+  // StreamYard, Restream or OBS: their own label, never "Zoom" (Andrew, 25 Nov).
+  const other = otherLinkCopy(guestWhere(d.zoomLink, d.where), d.hostName || "Your host");
 
   const submit = async () => {
     setError(""); setBusy(true);
@@ -80,7 +83,11 @@ export default function GuestInvite({ token }: { token: string }) {
           {(d.whenText || d.zoomLink || d.linkLater || d.note) && (
             <div className="mt-4 space-y-1 rounded-xl bg-[#f5f7fb] p-4 text-sm">
               {d.whenText && <p><b>When:</b> {d.whenText}</p>}
-              {d.zoomLink
+              {other
+                ? (d.zoomLink
+                  ? <><p className="break-all"><b>{other.label}:</b> <a className="text-[#053877] underline" href={d.zoomLink}>{d.zoomLink}</a></p>{other.help && <p>{other.help}</p>}</>
+                  : d.linkLater && <p><b>{other.label}:</b> {other.later}</p>)
+                : d.zoomLink
                 ? <p className="break-all"><b>{/\/(my-studio|room)\/join\/|\/booth\//.test(d.zoomLink) ? "Your link to join" : "Zoom"}:</b> <a className="text-[#053877] underline" href={d.zoomLink}>{d.zoomLink}</a></p>
                 : d.linkLater && <p><b>Zoom:</b> {d.hostName || "Your host"} will send you the link in a separate email.</p>}
               {d.note && <p className="whitespace-pre-line">{d.note}</p>}

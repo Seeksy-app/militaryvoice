@@ -1,4 +1,5 @@
 import { mailGuard } from "./mailGuard.js";
+import { guestWhere, otherLinkCopy } from "../shared/guestWhere.js";
 // Confirmation emails via Resend. Works two ways:
 //  - Vercel/production: set RESEND_API_KEY to a real Resend API key. Requests hit
 //    api.resend.com directly with the standard `Authorization: Bearer` header.
@@ -1494,16 +1495,22 @@ export async function sendOpportunityEmail(input: { to: string; name: string; br
  * A podcaster invites a guest to their interview (17 Nov 2026): from us on the host's behalf, "Frank Zaccari via MilitaryVoices.ai",
  * with the host's own address as the reply-to, so the guest writes back to the host. The link is the guest's private questionnaire.
  */
-export async function sendInterviewInvite(input: { fromLocal?: string; to: string; guestName: string; hostName: string; hostEmail: string; show: string; whenText: string; zoomLink: string; linkLater?: boolean; note: string; link: string }): Promise<boolean> {
+export async function sendInterviewInvite(input: { fromLocal?: string; to: string; guestName: string; hostName: string; hostEmail: string; show: string; whenText: string; zoomLink: string; linkLater?: boolean; note: string; link: string; where?: string }): Promise<boolean> {
   const first = input.guestName.trim().split(/\s+/)[0] || "there";
   const who = input.hostName || input.show || "Your host";
+  // StreamYard, Restream or OBS (the host's pick, else the link's address): their own label, never "Zoom" (Andrew's words, 25 Nov).
+  const other = otherLinkCopy(guestWhere(input.zoomLink, input.where), who);
   // Our own links (the host's studio, /my-studio/join or the old /room/join, or a Radio booth) are "your link to join"; anything else is the host's Zoom.
   const studioLink = /\/(my-studio|room)\/join\//.test(input.zoomLink);
   const ours = studioLink || /\/booth\//.test(input.zoomLink);
   const later = !input.zoomLink && input.linkLater ? `${who} will send you the Zoom link in a separate email.` : "";
+  const otherHtml = !other ? "" : input.zoomLink
+    ? `<p style="margin:0 0 6px;"><b>${escapeHtml(other.label)}:</b> <a href="${escapeHtml(input.zoomLink)}">${escapeHtml(input.zoomLink)}</a></p>${other.help ? `<p style="margin:0 0 6px;color:#374151;">${escapeHtml(other.help)}</p>` : ""}`
+    : input.linkLater ? `<p style="margin:0 0 6px;"><b>${escapeHtml(other.label)}:</b> ${escapeHtml(other.later)}</p>` : "";
+  const otherText = !other ? "" : input.zoomLink ? `\n${other.label}: ${input.zoomLink}${other.help ? `\n${other.help}` : ""}` : input.linkLater ? `\n${other.label}: ${other.later}` : "";
   const details = [
     input.whenText ? `<p style="margin:0 0 6px;"><b>When:</b> ${escapeHtml(input.whenText)}</p>` : "",
-    input.zoomLink ? (studioLink
+    other ? otherHtml : input.zoomLink ? (studioLink
       ? `<p style="margin:0 0 6px;"><b>Your link to join:</b> <a href="${escapeHtml(input.zoomLink)}">${escapeHtml(input.zoomLink)}</a></p><p style="margin:0 0 6px;color:#374151;">Open it at the time, allow your camera and microphone, and you're in the studio with ${escapeHtml(who)}. No account needed.</p>`
       : /\/booth\//.test(input.zoomLink)
       ? `<p style="margin:0 0 6px;"><b>Your link to join:</b> <a href="${escapeHtml(input.zoomLink)}">${escapeHtml(input.zoomLink)}</a></p><p style="margin:0 0 6px;color:#374151;">Open it on the day, allow your camera and microphone, and you're on the Radio with ${escapeHtml(who)}. No account needed. It's live on MilitaryVoices Radio.</p>`
@@ -1521,7 +1528,7 @@ export async function sendInterviewInvite(input: { fromLocal?: string; to: strin
       cta: { href: input.link, label: "Answer a few questions" },
       footerNote: `Sent for ${escapeHtml(who)} through MilitaryVoices.ai. Reply to this email to reach them.`,
     }),
-    text: `Hi ${first},\n\n${who} would like you as a guest on ${input.show || "their podcast"}.${input.whenText ? `\nWhen: ${input.whenText}` : ""}${input.zoomLink ? `\n${ours ? "Your link to join" : "Zoom"}: ${input.zoomLink}` : later ? `\nZoom: ${later}` : ""}${input.note ? `\n\n${input.note}` : ""}\n\nTo get ready, please answer a few quick questions and add the photo you'd like shown with your name (about five minutes):\n${input.link}\n\nReply to this email to reach ${who}.\n\nSent for ${who} through MilitaryVoices.ai`,
+    text: `Hi ${first},\n\n${who} would like you as a guest on ${input.show || "their podcast"}.${input.whenText ? `\nWhen: ${input.whenText}` : ""}${other ? otherText : input.zoomLink ? `\n${ours ? "Your link to join" : "Zoom"}: ${input.zoomLink}` : later ? `\nZoom: ${later}` : ""}${input.note ? `\n\n${input.note}` : ""}\n\nTo get ready, please answer a few quick questions and add the photo you'd like shown with your name (about five minutes):\n${input.link}\n\nReply to this email to reach ${who}.\n\nSent for ${who} through MilitaryVoices.ai`,
   }).then((id) => Boolean(id));
 }
 
