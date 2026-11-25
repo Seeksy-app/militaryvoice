@@ -895,11 +895,46 @@ function StageClipSound({ kit }: { kit: RoomKit }) {
   }
   const sceneId = scene?.id;
   // The intro and outro end through the preview (kit.play(null)); a play-once scene goes back here.
+  // Back to the scene before it when the STAGE's copy ends, not this sound: the stage (like the filmed page) starts
+  // the clip at its first frame, up to a few seconds after Play, so going back on this sound would cut its end.
+  const waiting = useRef<() => void>();
+  useEffect(() => () => waiting.current?.(), [clip?.key]);
+  const held = useRef(false);
+  held.current = !!sceneId && kit.live.clip?.scene === sceneId && kit.live.clip.paused === true;
   useClipSound(clip, clip && !clip.loop && !p ? () => {
-    const now = kit.look ? sceneLive(kit.look, kit.live) : undefined;
-    if (now?.id === sceneId && !kit.live.playing) kit.stopPresenting(sceneId);
+    waiting.current?.();
+    waiting.current = whenStageCopyEnds(clip.url, () => held.current, () => {
+      const now = kit.look ? sceneLive(kit.look, kit.live) : undefined;
+      if (now?.id === sceneId && !kit.live.playing) kit.stopPresenting(sceneId);
+    });
   } : undefined, !p && sceneId && kit.live.clip?.scene === sceneId ? kit.live.clip : null);
   return null;
+}
+
+/**
+ * Calls `done` once the stage's own copy of the clip (`url`, in [data-stage-root]) has ended. While it plays, the
+ * deadline follows what's left of it (plus 1.5 s); while the host has it paused (the player bar), it waits; a copy
+ * the browser stalled (a hidden tab pauses muted video) lets go when its time is up; when the stage never draws it
+ * (4 s), it's done at once. Returns a cancel.
+ */
+function whenStageCopyEnds(url: string, hostPaused: () => boolean, done: () => void): () => void {
+  const start = Date.now();
+  let deadline = 0;
+  let over = false;
+  const finish = () => { if (over) return; over = true; window.clearInterval(t); done(); };
+  const t = window.setInterval(() => {
+    const v = Array.from(document.querySelectorAll<HTMLVideoElement>("[data-stage-root] video")).find((x) => (x.currentSrc || x.src).endsWith(url) || x.src === new URL(url, window.location.href).href);
+    if (!v) { if (Date.now() - start > 4000) finish(); return; }
+    if (v.ended) { finish(); return; }
+    if (hostPaused()) { deadline = 0; return; }
+    // Not loaded yet: count the clip's whole length from now.
+    const left = Number.isFinite(v.duration) && v.duration > 0 ? Math.max(0, v.duration - v.currentTime) : 30;
+    if (!v.paused || !deadline) deadline = Date.now() + left * 1000 + 1500;
+    if (Number.isFinite(v.duration) && v.duration > 0 && left <= 0.05) finish();
+  }, 200);
+  // A copy that stops updating (a frozen tab) still lets go once its time is up.
+  const guard = window.setInterval(() => { if (deadline && Date.now() > deadline) { window.clearInterval(guard); finish(); } if (over) window.clearInterval(guard); }, 500);
+  return () => { over = true; window.clearInterval(t); window.clearInterval(guard); };
 }
 
 const mmss = (t: number) => (Number.isFinite(t) && t > 0 ? `${Math.floor(t / 60)}:${String(Math.floor(t % 60)).padStart(2, "0")}` : "0:00");
