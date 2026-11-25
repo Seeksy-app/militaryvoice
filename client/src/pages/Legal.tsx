@@ -382,7 +382,7 @@ export function TermsOfService() {
         <p>
           The service is provided as it is, without warranty. To the extent the law allows, our liability to you is
           limited to what you have paid us, which for podcasters is currently nothing. These terms are governed by the
-          law of the State of Ohio.
+          law of the State of Texas.
         </p>
       </Section>
     </Shell>
