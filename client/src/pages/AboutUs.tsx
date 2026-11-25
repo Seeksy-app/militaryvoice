@@ -62,7 +62,7 @@ export default function AboutUs() {
             Basketball Association since 2023.
           </p>
           <p className="text-pretty">
-            He founded National Military Podcast Day, held every October 5, just before the anniversary of the start
+            Riccoh was a founding partner of National Military Podcast Day, held every October 5, just before the anniversary of the start
             of Operation Enduring Freedom. In 2026 he hosted the first Military Podcast Marathon: sixteen hours,
             thirty-two military and veteran podcasters, handed off live every thirty minutes on MilitaryVoices.ai. The
             same year he brought PodcastOne on as a multi-year distribution, content and marketing partner.
