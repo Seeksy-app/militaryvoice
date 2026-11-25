@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { TIP_TEXT, useLookCheck } from "@/components/room/lookCheck";
 import { startScreenShare } from "@/components/room/screenShare";
 import { BrandMark } from "@/components/BrandMark";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -240,6 +241,9 @@ function SetupScreen({ owner, roomName, blocked, defaultName, shows, showId, onS
     catch (e) { setError((e as { status?: number }).status === 401 ? "Sign in to open your studio." : say(e)); setBusy(false); }
   };
   const select = "h-9 min-w-0 flex-1 truncate rounded-lg border border-[#d0d5dd] bg-white px-2 text-[13px] text-[#344054]";
+  // Look your best (Andrew, 24 Nov): tips about the picture, worked out in the browser. Never blocks going in.
+  const look = useLookCheck(video, cam && !problem);
+  const framed = look.status === "ok" && !look.tips.length;
 
   return (
     <div className="min-h-screen bg-[#f3f4f7] text-[#101828]" data-testid="my-studio-setup" style={{ fontFamily: INTER }}>
@@ -257,6 +261,15 @@ function SetupScreen({ owner, roomName, blocked, defaultName, shows, showId, onS
           <section className="w-full rounded-2xl bg-white p-4 shadow-[0_8px_24px_rgba(16,24,40,0.08)] lg:w-[680px] lg:shrink-0">
             <div className="relative aspect-video overflow-hidden rounded-xl bg-[#0b1f4a]">
               <video ref={video} autoPlay muted playsInline className={`h-full w-full -scale-x-100 object-cover ${cam && !problem ? "" : "invisible"}`} />
+              {/* A faint framing guide: eyes about a third of the way down, a little room above the head. Fades once they're framed well. */}
+              {cam && !problem && (
+                <div aria-hidden className={`pointer-events-none absolute inset-0 transition-opacity duration-500 ${framed ? "opacity-30" : "opacity-100"}`} data-testid="framing-guide">
+                  <div className="absolute inset-x-0 top-[9%] border-t border-white/25" />
+                  <span className="absolute left-3 top-[calc(9%+4px)] text-[11px] font-semibold text-white/70 [text-shadow:0_1px_2px_rgba(0,0,0,0.5)]">A little room above your head</span>
+                  <div className="absolute inset-x-0 top-[33%] border-t border-dashed border-white/55" />
+                  <span className="absolute right-3 top-[calc(33%-20px)] text-[11px] font-semibold text-white/85 [text-shadow:0_1px_2px_rgba(0,0,0,0.5)]">Eyes about here</span>
+                </div>
+              )}
               {(!cam || problem) && (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="flex h-28 w-28 items-center justify-center rounded-full bg-[#3a4f80] text-4xl font-bold text-white">{initials(name || "You")}</div>
@@ -284,6 +297,17 @@ function SetupScreen({ owner, roomName, blocked, defaultName, shows, showId, onS
               </div>
             )}
             {problem && <p className="mt-3 px-1 text-sm font-medium text-[#b42318]">{problem}</p>}
+            {look.status === "ok" && (look.tips.length ? (
+              <div className="mt-3 rounded-xl border border-[#fedf89] bg-[#fffaeb] px-3.5 py-3" data-testid="look-tips">
+                <p className="text-[13px] font-bold text-[#93370d]">Look your best</p>
+                <ul className="mt-1.5 space-y-1">{look.tips.map((k) => <li key={k} className="text-sm text-[#344054]">{TIP_TEXT[k]}</li>)}</ul>
+              </div>
+            ) : (
+              <div className="mt-3 flex items-center gap-2.5 rounded-xl border border-[#abefc6] bg-[#ecfdf3] px-3.5 py-3" data-testid="look-great">
+                <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-[#12b76a] text-white"><Check className="h-3.5 w-3.5" /></span>
+                <p className="text-sm font-semibold text-[#067647]">You look great. Good light, good framing.</p>
+              </div>
+            ))}
           </section>
 
           <section className="w-full lg:max-w-[420px] lg:pt-2">
@@ -306,6 +330,7 @@ function SetupScreen({ owner, roomName, blocked, defaultName, shows, showId, onS
             <button type="button" onClick={() => void enter()} disabled={busy} className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-xl text-[16px] font-bold text-white shadow-[0_4px_12px_rgba(5,56,119,0.28)] disabled:opacity-70" style={{ background: NAVY }} data-testid="studio-enter">
               {busy && <Loader2 className="h-4 w-4 animate-spin" />}{owner ? "Enter studio" : "Join"}
             </button>
+            {look.status === "ok" && look.tips.length > 0 && <p className="mt-2 text-center text-[13px] text-[#667085]">The tips are only suggestions. You can go in any time.</p>}
             {error && <p className="mt-3 text-sm font-medium text-[#b42318]">{error}</p>}
           </section>
         </main>
