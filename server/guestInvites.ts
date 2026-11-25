@@ -79,6 +79,8 @@ function ensure(): Promise<void> {
     await db.execute(sql`ALTER TABLE guest_invites ADD COLUMN IF NOT EXISTS show_id INTEGER NOT NULL DEFAULT 0`);
     // The guest's LinkedIn, if the host has it (Andrew, 24 Nov): for show prep (who they are, questions to ask). Never their photo.
     await db.execute(sql`ALTER TABLE guest_invites ADD COLUMN IF NOT EXISTS linkedin_url TEXT NOT NULL DEFAULT ''`);
+    // Where it's recorded when it's the host's own tool (streamyard | restream | obs; '' = Zoom or ours), so the email names the link right.
+    await db.execute(sql`ALTER TABLE guest_invites ADD COLUMN IF NOT EXISTS link_kind TEXT NOT NULL DEFAULT ''`);
   })());
 }
 
@@ -141,6 +143,7 @@ export function registerGuestInvites(app: Express, requireHostSession: RequestHa
     const linkedinUrl = liRaw ? (/^https?:\/\//i.test(liRaw) ? liRaw : `https://${liRaw.replace(/^\/+/, "")}`) : "";
     if (linkedinUrl && !/^https?:\/\/([a-z0-9-]+\.)?linkedin\.com\/\S+$/i.test(linkedinUrl)) return res.status(400).json({ message: "That doesn't look like a LinkedIn link. It should look like linkedin.com/in/their-name." });
     let zoomLink = str(req.body?.zoomLink, 500);
+    const linkKind = ["streamyard", "restream", "obs"].includes(String(req.body?.where)) ? String(req.body.where) : "";
     // "In my Radio booth": the guest's private link into that booking (made here, with our own key), and its time.
     let boothShow = "";
     // "In my studio room": the guest joins the host's own room by its link; the time is the one they typed.
@@ -160,10 +163,10 @@ export function registerGuestInvites(app: Express, requireHostSession: RequestHa
     if (!guestName) return res.status(400).json({ message: "Add the guest's name." });
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(guestEmail)) return res.status(400).json({ message: "Add the guest's email address." });
     const whenText = str(req.body?.whenText, 120), whenIso = str(req.body?.whenIso, 40);
-    if (zoomLink && !/^https?:\/\/\S+$/i.test(zoomLink)) return res.status(400).json({ message: "The Zoom link should start with https://" });
+    if (zoomLink && !/^https?:\/\/\S+$/i.test(zoomLink)) return res.status(400).json({ message: `The ${linkKind ? "link" : "Zoom link"} should start with https://` });
     // On Zoom, the guest needs the link from somewhere: pasted here, or the host's word that they'll send it themselves.
     const linkLater = !zoomLink && req.body?.linkLater === true;
-    if (!zoomLink && !linkLater) return res.status(400).json({ message: "Paste your Zoom link, or tick \"I'll send the Zoom link in a separate email\"." });
+    if (!zoomLink && !linkLater) return res.status(400).json({ message: linkKind ? "Paste the link your guest opens, or tick \"I'll send the link in a separate email\"." : "Paste your Zoom link, or tick \"I'll send the Zoom link in a separate email\"." });
     const count = Number(rows(await db.execute(sql`select count(*)::int n from guest_invites where owner_email=${owner} and created_at > ${new Date(Date.now() - 24 * 3600_000).toISOString()}`))[0]?.n ?? 0);
     if (count >= 20) return res.status(429).json({ message: "That's a lot of invitations today. Try again tomorrow." });
     const profile = await storage.getProfileByEmail(owner);
@@ -172,7 +175,8 @@ export function registerGuestInvites(app: Express, requireHostSession: RequestHa
     const [r] = rows(await db.execute(sql`insert into guest_invites (token, owner_email, guest_email, guest_name, when_text, when_iso, zoom_link, link_later, note, questions, created_at, invited_at) values (${token}, ${owner}, ${guestEmail}, ${guestName}, ${whenText}, ${whenIso}, ${zoomLink}, ${linkLater ? 1 : 0}, ${note}, ${JSON.stringify(questions)}, ${now}, ${now}) returning *`));
     if (show) { await db.execute(sql`update guest_invites set show_id=${show.id} where id=${Number(r.id)}`); r.show_id = show.id; }
     if (linkedinUrl) { await db.execute(sql`update guest_invites set linkedin_url=${linkedinUrl} where id=${Number(r.id)}`); r.linkedin_url = linkedinUrl; }
-    const ok = await sendInterviewInvite({ fromLocal: await senderFor(owner, show), to: guestEmail, guestName, hostName: profile?.hostName ?? "", hostEmail: owner, show: boothShow || show?.title || (profile?.podcastName ?? ""), whenText, zoomLink, linkLater, note, link: `${ORIGIN}/guest-invite/${token}` });
+    if (linkKind) { await db.execute(sql`update guest_invites set link_kind=${linkKind} where id=${Number(r.id)}`); r.link_kind = linkKind; }
+    const ok = await sendInterviewInvite({ fromLocal: await senderFor(owner, show), to: guestEmail, guestName, hostName: profile?.hostName ?? "", hostEmail: owner, show: boothShow || show?.title || (profile?.podcastName ?? ""), whenText, zoomLink, linkLater, where: linkKind, note, link: `${ORIGIN}/guest-invite/${token}` });
     if (!ok) return res.status(502).json({ message: "The email didn't go. Try again in a moment.", invite: view(r) });
     res.status(201).json(view(r));
   });
@@ -192,7 +196,7 @@ export function registerGuestInvites(app: Express, requireHostSession: RequestHa
     const [u] = rows(await db.execute(sql`update guest_invites set guest_email=${to}, invited_at=${now} where id=${Number(r.id)} returning *`));
     const profile = await storage.getProfileByEmail(owner);
     const show = await inviteShow(owner, u.show_id);
-    const ok = await sendInterviewInvite({ fromLocal: await senderFor(owner, show), to, guestName: String(u.guest_name), hostName: profile?.hostName ?? "", hostEmail: owner, show: show?.title || (profile?.podcastName ?? ""), whenText: String(u.when_text), zoomLink: String(u.zoom_link), linkLater: Number(u.link_later ?? 0) === 1, note: String(u.note), link: `${ORIGIN}/guest-invite/${u.token}` });
+    const ok = await sendInterviewInvite({ fromLocal: await senderFor(owner, show), to, guestName: String(u.guest_name), hostName: profile?.hostName ?? "", hostEmail: owner, show: show?.title || (profile?.podcastName ?? ""), whenText: String(u.when_text), zoomLink: String(u.zoom_link), linkLater: Number(u.link_later ?? 0) === 1, where: String(u.link_kind ?? ""), note: String(u.note), link: `${ORIGIN}/guest-invite/${u.token}` });
     if (!ok) return res.status(502).json({ message: "The email didn't go. Try again in a moment." });
     res.json(view(u));
   });
@@ -292,7 +296,7 @@ export function registerGuestInvites(app: Express, requireHostSession: RequestHa
     const profile = await storage.getProfileByEmail(String(r.owner_email));
     let questions: string[] = []; try { questions = JSON.parse(String(r.questions || "[]")); } catch { questions = []; }
     const show = await inviteShow(String(r.owner_email), r.show_id);
-    res.json({ questions, hostName: profile?.hostName ?? "", hostPhoto: profile?.photoUrl ?? "", show: show?.title || (profile?.podcastName ?? ""), guestName: r.guest_name, whenText: r.when_text, zoomLink: r.zoom_link, linkLater: Number(r.link_later ?? 0) === 1, note: r.note, answered: r.status === "answered" });
+    res.json({ questions, hostName: profile?.hostName ?? "", hostPhoto: profile?.photoUrl ?? "", show: show?.title || (profile?.podcastName ?? ""), guestName: r.guest_name, whenText: r.when_text, zoomLink: r.zoom_link, linkLater: Number(r.link_later ?? 0) === 1, where: String(r.link_kind ?? ""), note: r.note, answered: r.status === "answered" });
   });
 
   app.post("/api/public/guest-invite/:token", photos.single("photo"), async (req, res) => {

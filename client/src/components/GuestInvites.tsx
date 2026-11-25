@@ -9,6 +9,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { Select } from "@/components/room/Select";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
+import { CopyField } from "@/components/OwnEncoder";
 
 type Invite = { id: number; guestName: string; guestEmail: string; whenText: string; zoomLink: string; note: string; status: "invited" | "answered"; answers: Record<string, string> & { custom?: { q: string; a: string }[] }; hasPhoto: boolean; whenIso?: string; linkedinUrl?: string; invitedAt: string; answeredAt: string; usedRec: number; link: string };
 const say = (e: unknown) => ((e as Error).message ?? "").replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, "") || "Try again in a moment.";
@@ -26,7 +27,26 @@ const initials = (name: string) => name.trim().split(/\s+/).filter(Boolean).map(
 /** "Wed, Dec 2 · 6:30 PM": short enough to never be cut off. */
 const shortWhen = (g: Invite) => (g.whenIso ? new Date(g.whenIso).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).replace(/, (\d+:\d+)/, " · $1").replace(/^(\w+), /, "$1, ") : g.whenText);
 const tabCls = (on: boolean) => `border-b-2 px-0.5 pb-2 text-sm font-medium transition-colors ${on ? "border-[#053877] font-semibold text-[#053877] dark:border-[#8fb5e8] dark:text-[#8fb5e8]" : "border-transparent text-muted-foreground hover:text-foreground"}`;
-const selCls = "h-10 w-full rounded-md border border-input bg-background pl-3 text-sm";
+/** Where the interview is recorded or goes out live (Andrew, 25 Nov): our studio first, then Zoom, then the tools that stream in. */
+type Where = "studio" | "zoom" | "streamyard" | "restream" | "obs" | "booth";
+const OUTSIDE: Record<"streamyard" | "restream" | "obs", { name: string; link: string; steps: string }> = {
+  streamyard: { name: "StreamYard", link: "StreamYard guest link", steps: "In StreamYard, open your broadcast, then Destinations → Add a destination → Custom RTMP. Paste these two and save." },
+  restream: { name: "Restream", link: "Restream guest link", steps: "In Restream, open Channels → Add Channel → Custom RTMP. Paste these two and save." },
+  obs: { name: "OBS", link: "Link your guest joins with", steps: "In OBS, open Settings → Stream and set Service to Custom. Paste these two." },
+};
+const isOutside = (w: Where): w is keyof typeof OUTSIDE => w in OUTSIDE;
+const selCls = "h-9 w-full rounded-md border border-input bg-background pl-3 text-sm";
+
+const STATUS: Record<State, { label: string; dot: string }> = {
+  waiting: { label: "Waiting for them", dot: "bg-amber-500" },
+  answered: { label: "Answered", dot: "bg-emerald-500" },
+  done: { label: "Done", dot: "bg-slate-400" },
+};
+function StatusTag({ st }: { st: State }) {
+  // A dot and plain words, no pastel fill (Andrew, 25 Nov: picked A).
+  const s = STATUS[st];
+  return <span className="inline-flex basis-full items-center gap-2 text-sm font-medium text-foreground/80 sm:basis-auto sm:pr-1"><span className={`h-2 w-2 rounded-full ${s.dot}`} />{s.label}</span>;
+}
 
 /** The guest's name for the card is theirs to type: an invitation from the host asks them, with the photo they want shown. */
 export function GuestInvites({ prefill, shows = [], showId }: { prefill?: { name: string; email: string; n: number }; /** All their shows: two or more and the form asks which one it's for. */ shows?: { id: number; title: string }[]; /** The show they're working in, the picker's default. */ showId?: number } = {}) {
@@ -51,7 +71,12 @@ export function GuestInvites({ prefill, shows = [], showId }: { prefill?: { name
   const [linkLater, setLinkLater] = useState(false);
   const [needLink, setNeedLink] = useState(false);
   // Where it happens: on Zoom (paste a link), or in the host's own MilitaryVoices Radio booth (we make the guest's link).
-  const [where, setWhere] = useState<"zoom" | "studio" | "booth">("zoom");
+  const [where, setWhere] = useState<Where>("studio");
+  // Zoom and the host's own tools: the guest joins by a link the host pastes (or sends themselves).
+  const byLink = where === "zoom" || isOutside(where);
+  // Streaming in from StreamYard, Restream or OBS: the host's one stream key, from the same place as /stream-in.
+  const streamIn = useQuery<{ configured: boolean; key: { url: string; streamKey: string } | null }>({ queryKey: ["/api/host/stream-in"], queryFn: async () => (await apiRequest("GET", "/api/host/stream-in")).json(), enabled: isOutside(where) });
+  const getKey = useMutation({ mutationFn: async () => (await apiRequest("POST", "/api/host/stream-in")).json(), onSuccess: (j) => qc.setQueryData(["/api/host/stream-in"], j), onError: (e) => toast({ title: "Couldn't get your key", description: say(e), variant: "destructive" }) });
   const [bookingId, setBookingId] = useState<number | null>(null);
   const bookings = useQuery<{ id: number; show: string; startAtUtc: string; label: string }[]>({ queryKey: ["/api/host/guest-invites/bookings"], queryFn: async () => (await apiRequest("GET", "/api/host/guest-invites/bookings")).json() });
   const coming = bookings.data ?? [];
@@ -83,9 +108,9 @@ export function GuestInvites({ prefill, shows = [], showId }: { prefill?: { name
     mutationFn: async () => {
       const whenIso = f.when ? new Date(f.when).toISOString() : "";
       const whenText = f.when ? new Date(f.when).toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }) : "";
-      return (await apiRequest("POST", "/api/host/guest-invites", { guestName: f.guestName, guestEmail: f.guestEmail, linkedin: f.linkedin.trim(), whenText, whenIso, zoomLink: where === "zoom" && !linkLater ? f.zoomLink.trim() : "", linkLater: where === "zoom" && linkLater, note: f.note, ...(where === "booth" ? { where: "booth", bookingId: pickedBooking } : where === "studio" ? { where: "studio" } : {}), questions: questions.map((q) => q.trim()).filter(Boolean), ...(pickedShow ? { showId: pickedShow } : {}) })).json();
+      return (await apiRequest("POST", "/api/host/guest-invites", { guestName: f.guestName, guestEmail: f.guestEmail, linkedin: f.linkedin.trim(), whenText, whenIso, zoomLink: byLink && !linkLater ? f.zoomLink.trim() : "", linkLater: byLink && linkLater, note: f.note, ...(where === "booth" ? { where: "booth", bookingId: pickedBooking } : where === "studio" ? { where: "studio" } : isOutside(where) ? { where } : {}), questions: questions.map((q) => q.trim()).filter(Boolean), ...(pickedShow ? { showId: pickedShow } : {}) })).json();
     },
-    onSuccess: () => { setF({ guestName: "", guestEmail: "", linkedin: "", when: "", zoomLink: "", note: "" }); setQuestions([]); setWhere("zoom"); setLinkLater(false); setNeedLink(false); void qc.invalidateQueries({ queryKey: ["/api/host/guest-invites"] }); toast({ title: "Invitation sent", description: "They'll get an email from you through MilitaryVoices.ai, and you'll hear when they answer." }); },
+    onSuccess: () => { setF({ guestName: "", guestEmail: "", linkedin: "", when: "", zoomLink: "", note: "" }); setQuestions([]); setWhere("studio"); setLinkLater(false); setNeedLink(false); void qc.invalidateQueries({ queryKey: ["/api/host/guest-invites"] }); toast({ title: "Invitation sent", description: "They'll get an email from you through MilitaryVoices.ai, and you'll hear when they answer." }); },
     onError: (e) => toast({ title: "Couldn't send that", description: say(e), variant: "destructive" }),
   });
   const del = useMutation({ mutationFn: async (id: number) => apiRequest("DELETE", `/api/host/guest-invites/${id}`), onSuccess: () => void qc.invalidateQueries({ queryKey: ["/api/host/guest-invites"] }) });
@@ -136,15 +161,11 @@ export function GuestInvites({ prefill, shows = [], showId }: { prefill?: { name
                   </div>
                   {/* On a phone the status and buttons take their own line under the name (24 Nov). */}
                   <div className="flex w-full flex-wrap items-center gap-2 pl-[3.75rem] sm:w-auto sm:pl-0">
-                  {st === "done"
-                    ? <span className="inline-flex items-center gap-1 rounded-full bg-slate-200 px-3 py-1 text-xs font-semibold text-slate-800"><Check className="h-3.5 w-3.5" /> Done</span>
-                    : st === "answered"
-                    ? <span className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-xs font-semibold text-emerald-800"><Check className="h-3.5 w-3.5" /> Answered</span>
-                    : <span className="rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900">Waiting for them</span>}
+                  <StatusTag st={st} />
                   {st === "waiting" && <Button type="button" variant="outline" size="sm" onClick={() => setFixing(fixing?.id === g.id ? null : { id: g.id, email: g.guestEmail })} data-testid={`guest-invite-resend-${g.id}`}>Fix email or resend</Button>}
-                  {st !== "done" && <Button type="button" variant="ghost" size="sm" onClick={() => void copy(g.link)} aria-label="Copy their link"><Copy className="h-4 w-4" /></Button>}
+                  {st !== "done" && <Button type="button" variant="ghost" size="sm" className="h-9 w-9 p-0" onClick={() => void copy(g.link)} aria-label="Copy their link"><Copy className="h-4 w-4" /></Button>}
                   {g.status === "answered" && <Button type="button" variant="outline" size="sm" onClick={() => setOpen(open === g.id ? null : g.id)}>{open === g.id ? "Hide answers" : "See answers"}</Button>}
-                  <Button type="button" variant="ghost" size="sm" onClick={() => del.mutate(g.id)} aria-label="Delete this invitation"><Trash2 className="h-4 w-4" /></Button>
+                  <Button type="button" variant="ghost" size="sm" className="h-9 w-9 p-0" onClick={() => del.mutate(g.id)} aria-label="Delete this invitation"><Trash2 className="h-4 w-4" /></Button>
                   </div>
                 </div>
                 {fixing?.id === g.id && (
@@ -175,9 +196,9 @@ export function GuestInvites({ prefill, shows = [], showId }: { prefill?: { name
 
       <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
         <p className="text-sm text-muted-foreground [text-wrap:pretty]">We email your guest from you. They answer a few questions and add the photo they want shown, and you get it all before the interview. Their name and photo go on your episode's guest card.</p>
-        <form data-testid="guest-invite-form" className="mt-5 grid gap-5 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); const fix = typoFix(f.guestEmail); if (fix && window.confirm(`Is ${f.guestEmail} right? It looks like it should end in .com (${fix}).\n\nOK sends it to ${f.guestEmail}. Cancel lets you fix it.`) === false) return; if (where === "zoom" && !f.zoomLink.trim() && !linkLater) { setNeedLink(true); document.getElementById("gi-f-zoom")?.focus(); return; } send.mutate(); }}>
+        <form data-testid="guest-invite-form" className="mt-5 grid gap-5 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); const fix = typoFix(f.guestEmail); if (fix && window.confirm(`Is ${f.guestEmail} right? It looks like it should end in .com (${fix}).\n\nOK sends it to ${f.guestEmail}. Cancel lets you fix it.`) === false) return; if (byLink && !f.zoomLink.trim() && !linkLater) { setNeedLink(true); document.getElementById("gi-f-zoom")?.focus(); return; } send.mutate(); }}>
           {many && (
-            <div className="grid gap-2 sm:col-span-2" data-testid="invite-show">
+            <div className="flex flex-col gap-1.5 sm:col-span-2" data-testid="invite-show">
               <Label htmlFor="gi-f-show">For which show?</Label>
               <Select id="gi-f-show" wrap="w-full sm:max-w-sm" value={pickedShow ?? ""} onChange={(e) => setForShow(Number(e.target.value))} className={selCls} data-testid="invite-show-select">
                 {shows.map((x) => <option key={x.id} value={x.id}>{x.title || "Untitled show"}</option>)}
@@ -186,14 +207,17 @@ export function GuestInvites({ prefill, shows = [], showId }: { prefill?: { name
           )}
           <div className="space-y-1.5"><Label htmlFor="gi-f-name">Guest's name</Label><Input id="gi-f-name" value={f.guestName} onChange={set("guestName")} maxLength={80} required /></div>
           <div className="space-y-1.5"><Label htmlFor="gi-f-email">Guest's email</Label><Input id="gi-f-email" type="email" value={f.guestEmail} onChange={set("guestEmail")} required />{typoFix(f.guestEmail) && <p className="text-xs text-amber-800">Did you mean <button type="button" onClick={() => setF((x) => ({ ...x, guestEmail: typoFix(x.guestEmail) }))} className="font-semibold underline">{typoFix(f.guestEmail)}</button>?</p>}</div>
-          <div className="space-y-1.5" data-testid="invite-linkedin"><Label htmlFor="gi-f-li">Guest's LinkedIn (optional)</Label><Input id="gi-f-li" value={f.linkedin} onChange={set("linkedin")} placeholder="linkedin.com/in/their-name" inputMode="url" /><p className="text-xs text-muted-foreground [text-wrap:pretty]">We read it to get your prep ready: who they are and questions worth asking. Their photo stays the one they send you.</p></div>
-          <div className="space-y-1.5 sm:col-span-2" data-testid="invite-where">
-            <Label>Where will you talk?</Label>
-            <div className="flex flex-wrap gap-2">
-              {([["zoom", "On Zoom"], ["studio", "In my studio"], ...(coming.length > 0 ? [["booth", "On my Radio show"]] : [])] as [("zoom" | "studio" | "booth"), string][]).map(([v, label]) => (
-                <button key={v} type="button" onClick={() => setWhere(v)} aria-pressed={where === v} className={`rounded-full border px-4 py-1.5 text-sm font-semibold ${where === v ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:bg-muted"}`} data-testid={`invite-where-${v}`}>{label}</button>
-              ))}
-            </div>
+          <div className="space-y-1.5 sm:col-span-2 sm:pr-[calc(50%+0.625rem)]" data-testid="invite-linkedin"><Label htmlFor="gi-f-li">Guest's LinkedIn (optional)</Label><Input id="gi-f-li" value={f.linkedin} onChange={set("linkedin")} placeholder="linkedin.com/in/their-name" inputMode="url" /><p className="text-xs text-muted-foreground [text-wrap:pretty]">We read it to get your prep ready: who they are and questions worth asking. Their photo stays the one they send you.</p></div>
+          <div className="flex flex-col gap-1.5" data-testid="invite-where">
+            <Label htmlFor="gi-f-where">Where will you record or go live?</Label>
+            <Select id="gi-f-where" wrap="w-full" value={where} onChange={(e) => { setWhere(e.target.value as Where); setNeedLink(false); }} className={selCls} data-testid="invite-where-select">
+              <option value="studio">My MilitaryVoices studio</option>
+              <option value="zoom">Zoom</option>
+              <option value="streamyard">StreamYard</option>
+              <option value="restream">Restream</option>
+              <option value="obs">OBS or another encoder</option>
+              {coming.length > 0 && <option value="booth">My Radio show</option>}
+            </Select>
           </div>
           {where === "booth" && coming.length > 0 ? (
             <div className="space-y-1.5 sm:col-span-2" data-testid="invite-booth">
@@ -205,19 +229,39 @@ export function GuestInvites({ prefill, shows = [], showId }: { prefill?: { name
             </div>
           ) : (
             <>
-          <div className="space-y-1.5"><Label htmlFor="gi-f-when">When is the interview?</Label><Input id="gi-f-when" type="datetime-local" value={f.when} onChange={set("when")} />{where === "zoom" && !f.when && <p className="text-xs text-amber-800" data-testid="invite-when-nudge">Add the day and time so your guest knows when to join.</p>}</div>
-          {where === "studio" && <p className="self-end pb-2 text-xs text-muted-foreground" data-testid="invite-studio-note">Your guest gets the link to your own studio, the one under Studio in your menu. They open it at that time, allow their camera and microphone, and they're in. No account needed.</p>}
-          {where === "zoom" && (
+          <div className="flex flex-col gap-1.5"><Label htmlFor="gi-f-when">When is the interview?</Label><Input id="gi-f-when" type="datetime-local" value={f.when} onChange={set("when")} />{byLink && !f.when && <p className="text-xs text-amber-800" data-testid="invite-when-nudge">Add the day and time so your guest knows when to join.</p>}</div>
+          {where === "studio" && <p className="-mt-2 text-xs text-muted-foreground sm:col-span-2 [text-wrap:pretty]" data-testid="invite-studio-note">Your guest gets the link to your own studio, the one under Studio in your menu. They open it at that time, allow their camera and microphone, and they're in. No account needed.</p>}
+          {(where === "zoom" || isOutside(where)) && (
             <div className="space-y-1.5">
-              <Label htmlFor="gi-f-zoom">Zoom link</Label>
-              <Input id="gi-f-zoom" value={linkLater ? "" : f.zoomLink} onChange={(e) => { set("zoomLink")(e); setNeedLink(false); }} placeholder={linkLater ? "You'll send it yourself" : "Paste the link from Zoom"} disabled={linkLater} aria-invalid={needLink} data-testid="invite-zoom-link" />
+              <Label htmlFor="gi-f-zoom">{where === "zoom" ? "Zoom link" : OUTSIDE[where as keyof typeof OUTSIDE].link}</Label>
+              <Input id="gi-f-zoom" value={linkLater ? "" : f.zoomLink} onChange={(e) => { set("zoomLink")(e); setNeedLink(false); }} placeholder={linkLater ? "You'll send it yourself" : where === "zoom" ? "Paste the link from Zoom" : "Paste the link your guest opens"} disabled={linkLater} aria-invalid={needLink} data-testid="invite-zoom-link" />
               <label htmlFor="gi-f-later" className="flex items-center gap-2 pt-1 text-sm" data-testid="invite-link-later">
                 <Checkbox id="gi-f-later" checked={linkLater} onCheckedChange={(v) => { setLinkLater(v === true); setNeedLink(false); }} />
-                I'll send the Zoom link in a separate email
+                I'll send {where === "zoom" ? "the Zoom link" : "the link"} in a separate email
               </label>
               {needLink
-                ? <p className="text-xs font-medium text-red-700" role="alert" data-testid="invite-need-link">Paste your Zoom link, or tick the box if you'll send it yourself.</p>
-                : <p className="text-xs text-muted-foreground">{linkLater ? "We'll tell your guest the Zoom link is coming from you." : "Make the meeting in Zoom and paste its link here."}</p>}
+                ? <p className="text-xs font-medium text-red-700" role="alert" data-testid="invite-need-link">{where === "zoom" ? "Paste your Zoom link" : "Paste the link your guest opens"}, or tick the box if you'll send it yourself.</p>
+                : <p className="text-xs text-muted-foreground">{linkLater ? "We'll tell your guest the link is coming from you." : where === "zoom" ? "Make the meeting in Zoom and paste its link here." : `Your guest joins you in ${OUTSIDE[where as keyof typeof OUTSIDE].name} with this link.`}</p>}
+            </div>
+          )}
+          {isOutside(where) && (
+            <div className="space-y-3 rounded-xl border border-border/70 p-4 sm:col-span-2 [&>*]:max-w-2xl" data-testid="invite-stream-in">
+              <div>
+                <p className="text-sm font-semibold">Send it to your Library too</p>
+                <p className="mt-0.5 text-xs text-muted-foreground [text-wrap:pretty]">Add MilitaryVoices to {OUTSIDE[where].name} once, and every show you make there also records into your Library, ready for clips.</p>
+              </div>
+              <p className="text-sm [text-wrap:pretty]">{OUTSIDE[where].steps}</p>
+              {streamIn.data?.key ? (
+                <div className="grid gap-4 sm:grid-cols-2">
+                  <CopyField label="Server URL" value={streamIn.data.key.url} />
+                  <CopyField label="Stream key" value={streamIn.data.key.streamKey} secret />
+                </div>
+              ) : streamIn.data && !streamIn.data.configured ? (
+                <p className="text-sm text-muted-foreground">Streaming in isn't switched on yet. Your invitation still goes out.</p>
+              ) : (
+                <Button type="button" variant="outline" size="sm" className="rounded-full" disabled={getKey.isPending || streamIn.isLoading} onClick={() => getKey.mutate()} data-testid="invite-get-key">{getKey.isPending ? "Setting up…" : "Get my stream key"}</Button>
+              )}
+              <p className="text-xs text-muted-foreground">Already added it? You're set: the same key works every time. {where === "streamyard" && "StreamYard lists Custom RTMP on its paid plans. "}<a href="/stream-in" target="_blank" rel="noreferrer" className="font-semibold text-[#053877] underline underline-offset-2 dark:text-[#8fb5e8]">Your stream key page</a></p>
             </div>
           )}
             </>
