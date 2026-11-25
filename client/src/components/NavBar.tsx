@@ -34,7 +34,7 @@ const LINKS: { href: string; label: string; anchor?: boolean }[] = [
   { href: "/directory", label: "Directory" },
   { href: "/pricing", label: "Pricing" },
   { href: "/faq", label: "FAQ" },
-  { href: "/platform", label: "About Us" },
+  { href: "/about-us", label: "About Us" },
 ];
 
 

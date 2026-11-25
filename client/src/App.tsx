@@ -52,6 +52,7 @@ import BioFamilyPage from "@/pages/BioFamilyPage";
 import PromoDiscovery from "@/pages/PromoDiscovery";
 import Prepare from "@/pages/Prepare";
 import Platform from "@/pages/Platform";
+import AboutUs from "@/pages/AboutUs";
 import Headshot from "@/pages/Headshot";
 import Keepsake from "@/pages/Keepsake";
 import TextAlerts from "@/pages/TextAlerts";
@@ -157,6 +158,7 @@ function AppRouter() {
       <Route path="/terms">{() => <TermsOfService />}</Route>
       <Route path="/prepare">{() => <Prepare />}</Route>
       <Route path="/platform">{() => <Platform />}</Route>
+      <Route path="/about-us">{() => <AboutUs />}</Route>
       <Route path="/podcast-one-pitch">{() => <Platform pitch />}</Route>
       <Route path="/headshot/:token">{(p) => <Headshot token={p.token} />}</Route>
       <Route path="/watchfloor">{() => <Watchfloor />}</Route>
