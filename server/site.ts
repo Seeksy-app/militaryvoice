@@ -204,8 +204,8 @@ export function registerSite(app: Express): void {
   });
 
   // ── Link previews (Andrew, 24 Nov: "It's showing up the marathon by default, so we need to have a master fix") ──
-  // A show website, an episode page, a hosted show's page or the Black Friday page pasted into a message shows its own
-  // title and picture. Only the preview robots get these pages (vercel.json routes their user agents here); people get the app.
+  // A show website, an episode page or a hosted show's page pasted into a message shows its own title and picture
+  // (/black-friday and /podcast-one-pitch have theirs in middleware.ts). Only the preview robots get these pages (vercel.json routes their user agents here); people get the app.
   const PREVIEW_BOT = /facebookexternalhit|facebot|twitterbot|slackbot|linkedinbot|whatsapp|telegrambot|discordbot|applebot|redditbot|pinterest|embedly|skypeuripreview|mastodon|bluesky|iframely|vkshare|quora link preview/i;
   const bot = (req: { get(h: string): string | undefined }) => PREVIEW_BOT.test(String(req.get("user-agent") ?? ""));
   const esc = (v: string) => v.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
@@ -297,16 +297,6 @@ export function registerSite(app: Express): void {
     res.setHeader("Content-Type", "image/jpeg");
     res.setHeader("Cache-Control", "public, max-age=3600, s-maxage=3600");
     res.end(jpg);
-  });
-  /** Founding Members 2026 (the Black Friday offer): its own card, never the Marathon's. */
-  app.get("/black-friday", (req, res, next) => {
-    if (!bot(req)) return next();
-    sendPreview(res, previewHtml({
-      title: "Founding Members 2026 · MilitaryVoices.ai",
-      // The page's own words (its h1 and title), not new copy: Social owns Black Friday.
-      desc: "Black Friday Special: Founding Members 2026. 30 days free.",
-      url: `${ORIGIN}/black-friday`, img: `${ORIGIN}/og-black-friday.jpg?v=1`, alt: "Black Friday special: 30 days free, Founding Member 2026",
-    }));
   });
 
   /**
