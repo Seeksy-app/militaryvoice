@@ -351,7 +351,7 @@ export function clean(raw: any, assets: Map<string, Asset>): Look | string {
   };
 }
 
-async function assetsOf(studioId: number): Promise<Map<string, Asset>> {
+export async function assetsOf(studioId: number): Promise<Map<string, Asset>> {
   const rows = await db.select().from(roomAssets).where(eq(roomAssets.studioId, studioId)).orderBy(asc(roomAssets.createdAt));
   return new Map(rows.map((a) => [a.id, toAsset(a)]));
 }
@@ -390,7 +390,7 @@ const listeners: LookListener[] = [];
 export function onLookSaved(fn: LookListener): void { listeners.push(fn); }
 
 /** Saves the look if rev matches; null when someone saved first. */
-async function saveLook(studioId: number, rev: number, look: Look): Promise<Look | null> {
+export async function saveLook(studioId: number, rev: number, look: Look): Promise<Look | null> {
   const next = { ...look, rev: rev + 1 };
   const body = JSON.stringify({ ...next, rev: undefined });
   if (rev === 0) {

@@ -98,6 +98,16 @@ function MiniScene({ s, cast, light }: { s: Scene; cast: string[]; light: boolea
   );
 }
 
+/** A small picture of a scene's layout without the room (a saved setup's first scene, a template's scenes). */
+export function ScenePicture({ s }: { s: Partial<Scene> | null }) {
+  const scene = { id: "x", n: 1, name: "", layout: "grid", stage: [], ...(s ?? {}) } as Scene;
+  return (
+    <span className="flex h-full w-full items-center justify-center bg-[#0b3a8a]" data-testid="scene-picture">
+      {scene.boxes?.length ? <BoxThumb boxes={scene.boxes} className="!w-[78%] !bg-transparent" /> : <span className="origin-center scale-[0.9]"><MiniScene s={scene} cast={["You", "Guest", "Guest", "Guest", "Guest", "Guest"]} light={false} /></span>}
+    </span>
+  );
+}
+
 const ACCEPT = "video/mp4,video/quicktime,video/webm,image/png,image/jpeg,image/webp";
 /**
  * Add a video or picture from right where the scene is (Andrew, 24 Nov: "you would think the uploads would be with
@@ -255,7 +265,7 @@ export function BoxThumb({ boxes, light = false, className = "" }: { boxes: { ki
   );
 }
 
-export function ScenesPanel({ kit, v3 = false, sheet = false, onEditLayout }: { kit: RoomKit; v3?: boolean; sheet?: boolean; onEditLayout?: (sceneId: string) => void }) {
+export function ScenesPanel({ kit, v3 = false, sheet = false, onEditLayout, menu }: { kit: RoomKit; v3?: boolean; sheet?: boolean; onEditLayout?: (sceneId: string) => void; menu?: ReactNode }) {
   const look = kit.look!;
   const [editing, setEditing] = useState<string | null>(null);
   const [picking, setPicking] = useState(false);
@@ -383,7 +393,8 @@ export function ScenesPanel({ kit, v3 = false, sheet = false, onEditLayout }: { 
 
   return (
     <aside ref={root} className={sheet ? "flex flex-col gap-3 px-4 pb-6 pt-2" : "hidden w-[208px] shrink-0 flex-col gap-3 overflow-y-auto border-r border-[#e4e7ec] bg-white px-3.5 pb-4 pt-[18px] lg:flex 2xl:w-[232px]"} data-testid={sheet ? "scenes-sheet" : "scenes-panel"}>
-      {!sheet && <div><p className="text-[15px] font-bold">Scenes</p>{last > 1 && <p className="text-xs text-[#667085]">Press 1–{last} to switch. Drag to reorder.</p>}</div>}
+      {!sheet && <div className="flex items-start gap-2"><div className="min-w-0 flex-1"><p className="text-[15px] font-bold">Scenes</p>{last > 1 && <p className="text-xs text-[#667085]">Press 1–{last} to switch. Drag to reorder.</p>}</div>{menu}</div>}
+      {sheet && menu && <div className="flex items-center justify-between"><p className="text-xs text-[#667085]">Templates and saved setups</p>{menu}</div>}
       {/* Scenes vs People (Andrew, 24 Nov). */}
       <p className="rounded-lg bg-[#f5f8fd] px-2.5 py-2 text-[11.5px] leading-snug text-[#344054]" data-testid="scenes-vs-people">Scenes = what viewers see. People = who's in the room.</p>
       {!v3 && <VideoSlot slot="intro" kit={kit} />}

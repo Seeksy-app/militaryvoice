@@ -18,6 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { BACKGROUNDS, LIMITS, PRESENT_NAME, bgCss, isClipScene, isPresenting, sceneLive, useRoomKit, type Asset, type Playing, type RoomKit, type Scene } from "@/components/room/look";
 import { closeClipSound, useClipSound, useStageClipElement, warmClipSound, type StageClip } from "@/components/room/clipSound";
 import { LayoutPicker, ScenesPanel } from "@/components/room/ScenesPanel";
+import { ChooseSetup, SaveSetupDialog, SetupLine, SetupMenuButton, TemplatesDialog } from "@/components/room/Setups";
 import { LookPanel } from "@/components/room/LookPanel";
 import { MediaPanel } from "@/components/room/MediaPanel";
 import { StylePanel } from "@/components/room/StylePanel";
@@ -97,6 +98,8 @@ export default function MyStudio({ invite }: { invite?: string }) {
   const [setup, setSetup] = useState<Setup | null>(null);
   const [left, setLeft] = useState(false);
   const [removed, setRemoved] = useState(false);
+  // Choose a setup (Andrew, 24 Nov): the host picks one before the camera check; null until they do.
+  const [chosen, setChosen] = useState<string | null>(null);
   // An invitation for one of the host's shows carries ?show=<id>: the room greets the guest with that show's name.
   const forShow = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("show") ?? "" : "";
   // The host's show pick (?show=, or the entry screen's Show picker); the server remembers it.
@@ -133,6 +136,22 @@ export default function MyStudio({ invite }: { invite?: string }) {
     );
   }
 
+  const onShow = (id: number) => {
+    pick.current = String(id);
+    try { const u = new URL(window.location.href); u.searchParams.set("show", String(id)); window.history.replaceState(null, "", u); } catch { /* fine */ }
+    void studio.refetch();
+  };
+  // Skipped while live or recording: the look can't change mid-show, so they go straight back in.
+  const choosing = owner && !!studio.data && !studio.data.live && !studio.data.recording && chosen === null;
+  if ((!conn || !setup) && choosing) {
+    return (
+      <div style={{ fontFamily: INTER }}>
+        <ChooseSetup roomName={roomName} shows={studio.data?.shows} showId={studio.data?.showId ?? null} onShow={onShow} v3={studio.data?.v3 === true} onDone={setChosen}
+          logo={<a href={DASHBOARD} aria-label="MilitaryVoices.ai, back to your dashboard"><Logo className="h-10" /></a>} />
+      </div>
+    );
+  }
+
   if (!conn || !setup) {
     const blocked = owner ? (studio.error ? "Sign in to open your studio." : "") : guestInfo.error ? say(guestInfo.error) : "";
     return (
@@ -141,13 +160,8 @@ export default function MyStudio({ invite }: { invite?: string }) {
         roomName={roomName}
         blocked={blocked}
         defaultName={readMe(meKeyOf(invite)).name || (owner ? studio.data?.you ?? "" : "")}
-        shows={owner ? studio.data?.shows : undefined}
-        showId={owner ? studio.data?.showId ?? null : null}
-        onShow={(id) => {
-          pick.current = String(id);
-          try { const u = new URL(window.location.href); u.searchParams.set("show", String(id)); window.history.replaceState(null, "", u); } catch { /* fine */ }
-          void studio.refetch();
-        }}
+        setupName={owner ? chosen : null}
+        onChangeSetup={() => setChosen(null)}
         onEnter={async (s) => {
           if (s.name.trim()) saveMe(meKeyOf(invite), { name: s.name.trim().slice(0, 60) });
           const r = owner
@@ -178,7 +192,7 @@ export default function MyStudio({ invite }: { invite?: string }) {
 
 /* ───────────────────────── Set up ───────────────────────── */
 
-function SetupScreen({ owner, roomName, blocked, defaultName, shows, showId, onShow, onEnter }: { owner: boolean; roomName: string; blocked: string; defaultName: string; shows?: { id: number; title: string }[]; showId?: number | null; onShow?: (id: number) => void; onEnter: (s: Setup) => Promise<void> }) {
+function SetupScreen({ owner, roomName, blocked, defaultName, setupName, onChangeSetup, onEnter }: { owner: boolean; roomName: string; blocked: string; defaultName: string; setupName: string | null; onChangeSetup: () => void; onEnter: (s: Setup) => Promise<void> }) {
   const [name, setName] = useState(defaultName);
   const [title, setTitle] = useState("");
   const [mic, setMic] = useState(true);
@@ -315,15 +329,8 @@ function SetupScreen({ owner, roomName, blocked, defaultName, shows, showId, onS
             <p className="text-sm font-semibold uppercase tracking-[0.08em] text-[#667085]">{owner ? roomName || "Your studio" : `You're invited to ${roomName || "a show"}`}</p>
             <h1 className="mt-1 text-balance text-[28px] font-bold leading-tight tracking-tight">{owner ? "Set up your studio" : "Get ready to join"}</h1>
             <p className="mt-2 text-[15px] leading-relaxed text-[#475467]">{owner ? "Check your picture and sound. Going in doesn't start anything; you choose when to record and when to go live." : "Check your picture and sound. The host brings you in when you join."}</p>
-            {/* Hosts with 2 or more shows (Andrew, 24 Nov): the show sets the title, the show icon and the recording's name. */}
-            {owner && shows && shows.length > 1 && onShow && <>
-              <label className="mt-6 block text-sm font-semibold" htmlFor="studio-show">Show</label>
-              <select id="studio-show" value={showId ?? ""} onChange={(e) => { const id = Number(e.target.value); if (id) onShow(id); }} className="mt-1.5 h-12 w-full rounded-xl border border-[#d0d5dd] bg-white px-3.5 text-[15px] outline-none focus:border-[#053877] focus:ring-2 focus:ring-[#053877]/15" data-testid="studio-show">
-                {showId == null && <option value="">Pick a show</option>}
-                {shows.map((x) => <option key={x.id} value={x.id}>{x.title}</option>)}
-              </select>
-              <p className="mt-1.5 text-[13px] text-[#667085]">Sets the title, the show icon and your recording's name.</p>
-            </>}
+            {/* The setup they picked on Choose a setup (the show picker lives there too). */}
+            {owner && setupName && <SetupLine name={setupName} onChange={onChangeSetup} />}
             <label className="mt-6 block text-sm font-semibold" htmlFor="studio-name">Your name on screen</label>
             <input id="studio-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder="Your name" className="mt-1.5 h-12 w-full rounded-xl border border-[#d0d5dd] bg-white px-4 text-[15px] outline-none focus:border-[#053877] focus:ring-2 focus:ring-[#053877]/15" data-testid="studio-name" />
             <label className="mt-4 block text-sm font-semibold" htmlFor="studio-title">Your title <span className="font-normal text-[#667085]">(optional)</span></label>
@@ -424,6 +431,9 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
   // The layout editor (21 Nov): a scene's ⋯ → Edit layout. It takes the stage column and the right panel until Done or Cancel.
   const [layoutFor, setLayoutFor] = useState<string | null>(null);
   const layoutScene = v3 && layoutFor ? look?.scenes.find((s) => s.id === layoutFor) : undefined;
+  // Scenes ⋯ (Andrew, 24 Nov): Start from a template… and Save this setup as….
+  const [setupDialog, setSetupDialog] = useState<"" | "template" | "save">("");
+  const setupMenu = editing ? <SetupMenuButton onTemplate={() => setSetupDialog("template")} onSave={() => setSetupDialog("save")} /> : null;
   const tab: Tab = picked && (v3 ? picked !== "look" : picked !== "media" && picked !== "style") ? picked : editing ? (v3 ? "media" : "look") : "people";
 
   // Once connected, put the scene on air again so the room carries it (Engineering: call /scene after joining).
@@ -570,7 +580,9 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
       </header>
 
       <div className="flex min-h-0 flex-1">
-        {editing && <ScenesPanel kit={kit} v3={v3} onEditLayout={v3 ? setLayoutFor : undefined} />}
+        {editing && <ScenesPanel kit={kit} v3={v3} onEditLayout={v3 ? setLayoutFor : undefined} menu={setupMenu} />}
+        {setupDialog === "template" && <TemplatesDialog kit={kit} v3={v3} onClose={() => setSetupDialog("")} />}
+        {setupDialog === "save" && <SaveSetupDialog show={studio?.name ?? ""} showId={studio?.showId ?? null} onClose={() => setSetupDialog("")} />}
         {layoutScene ? <LayoutEditor kit={kit} sceneId={layoutScene.id} onClose={() => setLayoutFor(null)} /> : <>
         {/* Stage column */}
         <div className="flex min-w-0 flex-1 flex-col items-center px-4 pt-5 lg:px-6">
@@ -591,7 +603,7 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
               <LayoutPicker value={scene.layout} onPick={(layout) => kit.change((l) => ({ ...l, scenes: l.scenes.map((s) => (s.id === scene.id ? { ...s, layout } : s)) }))} />
             </div>
           )}
-          {v3 && <PhoneStudio kit={kit} onEditLayout={setLayoutFor} />}
+          {v3 && <PhoneStudio kit={kit} onEditLayout={setLayoutFor} menu={setupMenu} />}
           <Backstage kit={kit} />
           {owner && <PrompterNews onOpen={() => setTab("notes")} />}
           <PeopleStrip kit={kit} owner={owner} sharing={isScreenShareEnabled} onShare={() => void share()} onInvite={copyInvite} />

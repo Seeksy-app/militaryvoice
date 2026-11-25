@@ -18,6 +18,7 @@ import { liveHandleOf, livePageOn, liveUrlOf } from "./livePage.js";
 import { bumpLookRev, noteMusicOnAir, registerRoomStage, roomTemplateUrl, useRoomKit, v3For } from "./roomStage.js";
 import { personalStudios, type PersonalStudioRow } from "../shared/schema.js";
 import { inviteShow, ownerShows, studioShow, studioShowKey, studioTitle } from "./hostShows.js";
+import { registerStudioSetups } from "./studioSetups.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 const now = () => new Date().toISOString();
@@ -128,6 +129,7 @@ export async function roomInviteLink(email: string): Promise<string> {
 
 export function registerMyStudio(app: Express, requireHostSession: RequestHandler, deps: { youtubeToken: (email: string) => Promise<string | null> }) {
   registerRoomStage(app, requireHostSession);
+  registerStudioSetups(app, requireHostSession);
   // Podcasting's saved look is read through its key, and a save refreshes any room that is live.
   useRoomKit({ roomLookKey });
   onLookSaved((studioId, look) => bumpLookRev(studioId, look.rev));
