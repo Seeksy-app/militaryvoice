@@ -53,7 +53,9 @@ export default function AboutUs() {
             When he took off the uniform, he kept the mission: telling the stories of the people he served with. An
             Ithaca College alumnus, he is a 2019 Emmy Award winner, a Gold Telly Award winner and a documentary
             filmmaker. Over the past three years he has been deeply involved in podcasting, TV management, and content
-            aggregation and distribution.
+            aggregation and distribution. He served as Dr. Phil&rsquo;s Chief of Staff at Merit Street Media from 2024
+            to 2025. Today he is Chief of Staff at Envoy Media, and he has been a brand ambassador for the Military
+            Basketball Association since 2023.
           </p>
           <p className="text-pretty">
             He founded National Military Podcast Day, held every October 5, just before the anniversary of the start
