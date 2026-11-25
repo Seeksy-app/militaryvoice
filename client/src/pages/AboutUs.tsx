@@ -26,8 +26,8 @@ export default function AboutUs() {
               Founding &amp; Operating Partner of MilitaryVoices.ai
             </h1>
             <p className="mt-4 max-w-xl text-pretty text-lg leading-relaxed text-white/80">
-              <span className="font-semibold text-white">Riccoh Player</span>, Marine Corps Colonel (retired), founder of
-              OHIOWA Management Group LLC.
+              <span className="font-semibold text-white">Riccoh Player</span>, Col, USMC (ret), founder of OHIOWA
+              Management Group LLC.
             </p>
           </div>
           <div className="overflow-hidden rounded-3xl border border-white/10 shadow-2xl">
@@ -46,7 +46,7 @@ export default function AboutUs() {
             Founding &amp; Operating Partner of MilitaryVoices.ai
           </h2>
           <p className="text-pretty text-xl font-semibold leading-snug" style={HEADLINE_FONT}>
-            Riccoh Player, Marine Corps Colonel (retired), founder of OHIOWA Management Group LLC.
+            Riccoh Player, Col, USMC (ret), founder of OHIOWA Management Group LLC.
           </p>
           <p className="text-pretty">
             Riccoh served thirty-three years in the United States Marine Corps, with five combat tours across
