@@ -19,6 +19,7 @@ import { bumpLookRev, noteMusicOnAir, registerRoomStage, roomTemplateUrl, useRoo
 import { personalStudios, type PersonalStudioRow } from "../shared/schema.js";
 import { inviteShow, ownerShows, studioShow, studioShowKey, studioTitle } from "./hostShows.js";
 import { registerStudioSetups } from "./studioSetups.js";
+import { closeStrayStudioSessions, studioHours, studioMayStart, syncStudioMeter } from "./studioHours.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 const now = () => new Date().toISOString();
@@ -78,6 +79,7 @@ async function settle(s: PersonalStudioRow): Promise<PersonalStudioRow> {
   if (s.liveEgressId && s.liveEgressId !== PAGE_ONLY && !running.has(s.liveEgressId)) Object.assign(patch, { liveEgressId: "", liveSince: "", liveWatchUrl: "" });
   if (!Object.keys(patch).length) return s;
   const [out] = await db.update(personalStudios).set(patch).where(eq(personalStudios.id, s.id)).returning();
+  await syncStudioMeter(out);
   return out;
 }
 
@@ -112,12 +114,17 @@ export async function runStudioEmptyPass(nowMs = Date.now()): Promise<{ running:
     const recorded = !!s.recordingEgressId;
     if (live) await stopEgressById(s.liveEgressId).catch(() => {});
     if (recorded) await stopEgressById(s.recordingEgressId).catch(() => {});
-    await db.update(personalStudios).set({ ...(live ? { liveEgressId: "", liveSince: "", liveWatchUrl: "" } : {}), ...(recorded ? { recordingEgressId: "", recordingSince: "" } : {}) }).where(eq(personalStudios.id, s.id));
+    const [after] = await db.update(personalStudios).set({ ...(live ? { liveEgressId: "", liveSince: "", liveWatchUrl: "" } : {}), ...(recorded ? { recordingEgressId: "", recordingSince: "" } : {}) }).where(eq(personalStudios.id, s.id)).returning();
+    if (after) await syncStudioMeter(after);
     await storage.setSetting(key, "");
     console.log(`My studio ${s.id}: ${live ? `live show ended${recorded ? " and recording stopped" : ""}` : "recording stopped"} after 2 minutes with nobody in the studio.`);
     await sendStudioLeftLiveEmail({ to: s.ownerEmail, studioName: await studioTitle(s.ownerEmail, s.id, s.name), live, recorded }).catch((err) => console.error("Left-studio email failed:", (err as Error).message));
     ended.push(s.id);
   }
+  // Studio hours: open a session for anything on that has none, close any left open by a studio that's off.
+  const still = await db.select().from(personalStudios).where(or(ne(personalStudios.liveEgressId, ""), ne(personalStudios.recordingEgressId, "")));
+  for (const s of still) await syncStudioMeter(s);
+  await closeStrayStudioSessions(new Map(still.map((s) => [s.id, true]))).catch((err) => console.error("Studio hours sweep:", (err as Error).message));
   return { running: rows.length, waiting, ended };
 }
 
@@ -165,6 +172,12 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
   };
   app.get("/api/cron/studio-empty", emptyCron);
   app.post("/api/cron/studio-empty", emptyCron);
+
+  /** Studio hours this month: the Studio's notice and the plan page's line. */
+  app.get("/api/host/studio-hours", requireHostSession, async (req, res) => {
+    res.set("Cache-Control", "no-store");
+    res.json(await studioHours(me(req)));
+  });
 
   app.get("/api/host/my-studio", requireHostSession, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
@@ -301,6 +314,8 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     try {
       if (on && !s.recordingEgressId) {
         if (!isRecordingConfigured()) return res.status(503).json({ message: "Recording isn't switched on yet." });
+        const may = await studioMayStart(email, !!s.liveEgressId);
+        if (!may.ok) return res.status(402).json({ message: may.message, studioHours: may.hours });
         await ensureRecordingsBucket();
         const stamp = new Date().toISOString().replace(/[:.]/g, "-");
         const filepath = `personal/${s.id}/${stamp}.mp4`;
@@ -311,9 +326,11 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
         await storage.createRecording({ eventId: 0, studioId: 0, signupId: null, email, title, egressId, filepath });
         [s] = await db.update(personalStudios).set({ recordingEgressId: egressId, recordingSince: now() }).where(eq(personalStudios.id, s.id)).returning();
         void noteMusicOnAir(s.id);
+        await syncStudioMeter(s);
       } else if (!on && s.recordingEgressId) {
         await stopEgressById(s.recordingEgressId).catch(() => {});
         [s] = await db.update(personalStudios).set({ recordingEgressId: "", recordingSince: "" }).where(eq(personalStudios.id, s.id)).returning();
+        await syncStudioMeter(s);
       }
       res.json(view(await titled(s), await yt(email)));
     } catch (err) {
@@ -329,6 +346,8 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     const on = req.body?.on === true;
     try {
       if (on && !s.liveEgressId) {
+        const may = await studioMayStart(email, !!s.recordingEgressId);
+        if (!may.ok) return res.status(402).json({ message: may.message, studioHours: may.hours });
         const targets: { url: string }[] = streamsOf(s).filter((x) => x.on).map((x) => ({ url: pushUrl(x) }));
         let watchUrl = "";
         const ytKey = s.youtubeOn ? await getYoutubeKey(email) : "";
@@ -349,9 +368,11 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
         // Only their MilitaryVoices page: viewers watch the room itself, so there's nothing to start.
         const egressId = targets.length ? await startBroadcast(room(s), targets as never, await roomTemplateUrl(s.id)) : PAGE_ONLY;
         [s] = await db.update(personalStudios).set({ liveEgressId: egressId, liveSince: now(), liveWatchUrl: watchUrl }).where(eq(personalStudios.id, s.id)).returning();
+        await syncStudioMeter(s);
       } else if (!on && s.liveEgressId) {
         if (s.liveEgressId !== PAGE_ONLY) await stopEgressById(s.liveEgressId).catch(() => {});
         [s] = await db.update(personalStudios).set({ liveEgressId: "", liveSince: "", liveWatchUrl: "" }).where(eq(personalStudios.id, s.id)).returning();
+        await syncStudioMeter(s);
       }
       res.json(view(await titled(s), await yt(email)));
     } catch (err) {

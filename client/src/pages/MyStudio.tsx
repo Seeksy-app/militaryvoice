@@ -32,6 +32,7 @@ import { YoutubeKeyForm, useYoutubeKey, useYoutubeConnectResult, youtubeConnectH
 import { PrompterNews, PrompterOverlay, PrompterSwitch, ScriptsBar, usePrompter, useStudioNotes, type NotesSync } from "@/components/room/Teleprompter";
 import { pdfToPictures, useDeck } from "@/components/room/slides";
 import { NewVersionBar } from "@/components/NewVersionBar";
+import { STUDIO_HOURS_KEY, StudioHoursBar } from "@/components/StudioHoursBar";
 import { EXTRA_CAMS, addExtraCamera, freeCameras, isExtraCam, stopAllExtraCameras, stopExtraCamera, useExtraCams } from "@/components/room/extraCamera";
 import { Select } from "@/components/room/Select";
 
@@ -453,7 +454,7 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
       set((await (await apiRequest("POST", "/api/host/my-studio/record", { on })).json()) as Studio);
       toast(on ? { title: "Recording to your Library" } : { title: "Recording saved", description: "It's in your Library in a minute or two, ready for clips." });
     } catch (e) { toast({ title: on ? "Couldn't start recording" : "Couldn't stop recording", description: say(e), variant: "destructive" }); }
-    finally { setBusy(""); }
+    finally { setBusy(""); void qc.invalidateQueries({ queryKey: STUDIO_HOURS_KEY }); }
   };
   // The practice guest is never recorded or streamed: Record and Go live ask to take it off first (Andrew, 24 Nov).
   const [askPractice, setAskPractice] = useState<null | "record" | "live">(null);
@@ -524,6 +525,8 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
       {editing && <StageClipSound kit={kit} />}
       {/* Guests can't see whether the host is recording, so they're told it loads next time they join. */}
       <NewVersionBar busy={owner ? !!(rec || live) : true} afterLine={owner ? "Reload after your show." : "It loads next time you join."} />
+      {/* Studio hours: the owner's own, never a guest's. */}
+      {owner && <StudioHoursBar busy={!!(rec || live)} />}
       {/* Top bar */}
       <header className="flex h-16 shrink-0 items-center gap-3 border-b border-[#e4e7ec] bg-white px-4 lg:gap-3.5 lg:px-5" data-testid="my-studio-bar">
         <button type="button" onClick={exit} className="hidden shrink-0 sm:block" aria-label={owner ? "MilitaryVoices.ai, back to your dashboard" : "MilitaryVoices.ai, exit the studio"}><Logo className="h-[38px]" /></button>
@@ -1476,6 +1479,7 @@ function GoLiveSheet({ studio, onClose, onAdd }: { studio: Studio; onClose: () =
       toast(recordToo ? { title: "You're live", description: "It's recording to your Library too." } : { title: "You're live", description: "Not recording. Press Record at the top any time." });
       onClose();
     } catch (e) { setError(say(e)); setBusy(""); }
+    void qc.invalidateQueries({ queryKey: STUDIO_HOURS_KEY });
   };
   const row = "flex items-center gap-4 rounded-2xl border p-4";
   const icon = "flex h-11 w-11 shrink-0 items-center justify-center rounded-xl";

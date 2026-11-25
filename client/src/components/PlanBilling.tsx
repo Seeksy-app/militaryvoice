@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Check, CreditCard, Loader2, Sparkles, Search, Coins, BadgeCheck } from "lucide-react";
+import { Check, CreditCard, Loader2, Sparkles, Search, Coins, BadgeCheck, Clock } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
-import { PLANS, ADDONS, FREE_DISCOVERY, CREDIT_PACKS, cents } from "@shared/tokens";
+import { PLANS, ADDONS, FREE_DISCOVERY, CREDIT_PACKS, STUDIO_HOURS, cents } from "@shared/tokens";
+import { hm, hoursWord, resetDay, useStudioHours } from "@/components/StudioHoursBar";
 import { startPlanCheckout, startAddonCheckout, startTokenCheckout, openBillingPortal } from "@/lib/tokens";
 import { IconTile } from "@/components/ui/icon-tile";
 import { CreditsInfo } from "@/components/CreditsInfo";
@@ -75,6 +76,7 @@ export function PlanBilling() {
                 <ul className="mt-2 flex-1 space-y-1 text-sm text-muted-foreground">
                   <li className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />{p.credits} credits a month for clips and clean episodes</li>
                   <li className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />{p.clipsPerEpisode} clips an episode</li>
+                  <li className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />{hoursWord(STUDIO_HOURS[p.key])} a month to record or go live</li>
                   <li className="flex gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-emerald-600" />Take the MilitaryVoices.ai bar off your SmartLink</li>
                 </ul>
                 <Button onClick={() => void go(p.key, () => startPlanCheckout(p.key))} disabled={busy !== null} className="mt-4 gap-2 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid={`billing-upgrade-${p.key}`}>
@@ -99,6 +101,8 @@ export function PlanBilling() {
           {spin("pack")} Buy 50 credits · $35
         </Button>
       </section>
+
+      <StudioHoursCard />
 
       {/* Discovery Pro: its own monthly add-on, or included with the Pro plan. */}
       <section className="flex flex-wrap items-center justify-between gap-4 rounded-2xl border border-border bg-card p-5 shadow-sm">
@@ -141,5 +145,36 @@ export function PlanBilling() {
 
       <p className="text-center text-sm text-muted-foreground">Compare everything on the <a href="/pricing" className="font-medium text-[#053877] hover:underline dark:text-white">pricing page</a>.</p>
     </div>
+  );
+}
+
+/** Studio hours this month (25 Nov 2026): recording or live in their own Studio. */
+function StudioHoursCard() {
+  const { data: h } = useStudioHours();
+  if (!h) return null;
+  const pct = h.capMin ? Math.min(100, Math.round((h.usedMin / h.capMin) * 100)) : 0;
+  const tone = h.over ? "bg-[#d92d20]" : h.near ? "bg-[#f79009]" : "bg-[#053877]";
+  return (
+    <section className="rounded-2xl border border-border bg-card p-5 shadow-sm" data-testid="billing-studio-hours">
+      <div className="flex min-w-0 items-center gap-3">
+        <IconTile icon={Clock} />
+        <div className="min-w-0 flex-1">
+          <p className="font-semibold">Studio hours</p>
+          <p className="text-sm text-muted-foreground">
+            {h.capMin === null
+              ? `${hm(h.usedMin)} this month. Unlimited for your account.`
+              : `${hm(h.usedMin)} of ${hm(h.capMin)} used this month. ${h.over ? "Used up" : `${hm(h.leftMin ?? 0)} left`}; they come back on ${resetDay(h.resetsAt)}.`}
+          </p>
+        </div>
+      </div>
+      {h.capMin !== null && (
+        <>
+          <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-muted" aria-hidden><div className={`h-full rounded-full ${tone}`} style={{ width: `${pct}%` }} /></div>
+          <p className="mt-2 text-xs text-muted-foreground">
+            Counted while your Studio records or is live (both at once count once).{h.upgradeTo ? ` ${h.upgradeTo.name} has ${hoursWord(h.upgradeTo.hours)} a month.` : ""}
+          </p>
+        </>
+      )}
+    </section>
   );
 }

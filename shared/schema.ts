@@ -819,6 +819,25 @@ export const streamSessions = pgTable(
 export type StreamSessionRow = typeof streamSessions.$inferSelect;
 
 /**
+ * Studio hours (Andrew, 25 Nov 2026: Growth 2, Scale 4, Pro 10 a month): one row per stretch of time a creator's own
+ * Studio is recording or live (both at once count once). Radio, the producer console and Stream in aren't counted here.
+ */
+export const studioSessions = pgTable(
+  "studio_sessions",
+  {
+    id: serial("id").primaryKey(),
+    studioId: integer("studio_id").notNull(),
+    ownerEmail: text("owner_email").notNull().default(""),
+    startedAt: text("started_at").notNull(),
+    /** Empty while it is still running. */
+    endedAt: text("ended_at").notNull().default(""),
+    seconds: integer("seconds").notNull().default(0),
+  },
+  (t) => ({ byOwner: index("studio_sessions_owner_idx").on(t.ownerEmail, t.startedAt), byStudio: index("studio_sessions_studio_idx").on(t.studioId, t.endedAt) }),
+);
+export type StudioSessionRow = typeof studioSessions.$inferSelect;
+
+/**
  * A Radio booking's own stream key ("I'll stream in" in the booth): an RTMP
  * ingress into that day's Radio room, whose participant carries the booking's
  * signupId, so the program page puts it on air on the clock like a booth

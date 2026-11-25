@@ -24,6 +24,8 @@ export type PlanInterval = "month" | "year" | "quarter";
 /** Pro is paid every three months, no other way (Andrew, 17 Nov 2026): $49 a month, $147 a quarter, and its credits (90 a month) arrive three months at a time. */
 export const QUARTERLY_ONLY: readonly string[] = ["pro"];
 export type PlanKey = keyof typeof PLANS;
+/** Studio hours a month (Andrew, 25 Nov 2026: "1. Agree"): recording or live in a creator's own Studio. */
+export const STUDIO_HOURS = { growth: 2, creator: 4, pro: 10 } as const;
 export const planOf = (key: string) => (key in PLANS ? PLANS[key as PlanKey] : undefined);
 
 /**
