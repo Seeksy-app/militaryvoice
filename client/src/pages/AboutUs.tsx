@@ -23,11 +23,13 @@ export default function AboutUs() {
           <div>
             <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#F0A71F]">About us</p>
             <h1 className="mt-4 text-balance text-4xl font-bold leading-[1.05] tracking-tight sm:text-5xl" style={HEADLINE_FONT}>
-              Founding &amp; Operating Partner of MilitaryVoices.ai
+              Riccoh Player
             </h1>
-            <p className="mt-4 max-w-xl text-pretty text-lg leading-relaxed text-white/80">
-              <span className="font-semibold text-white">Riccoh Player</span>, Col, USMC (ret), founder of OHIOWA
-              Management Group LLC.
+            <p className="mt-4 max-w-xl text-balance text-xl font-semibold leading-snug text-white sm:text-2xl" style={HEADLINE_FONT}>
+              Founding &amp; Operating Partner of MilitaryVoices.ai
+            </p>
+            <p className="mt-3 max-w-xl text-pretty text-lg leading-relaxed text-white/80">
+              Col, USMC (ret), founder of OHIOWA Management Group LLC.
             </p>
           </div>
           <div className="overflow-hidden rounded-3xl border border-white/10 shadow-2xl">
@@ -42,12 +44,17 @@ export default function AboutUs() {
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-14 sm:px-6" data-testid="about-us">
         <article className="flex flex-col gap-6 text-[17px] leading-relaxed text-foreground">
-          <h2 className="text-balance text-2xl font-bold leading-snug tracking-tight sm:text-3xl" style={HEADLINE_FONT}>
-            Founding &amp; Operating Partner of MilitaryVoices.ai
-          </h2>
-          <p className="text-pretty text-xl font-semibold leading-snug" style={HEADLINE_FONT}>
-            Riccoh Player, Col, USMC (ret), founder of OHIOWA Management Group LLC.
-          </p>
+          <div>
+            <h2 className="text-balance text-3xl font-bold leading-tight tracking-tight sm:text-4xl" style={HEADLINE_FONT}>
+              Riccoh Player
+            </h2>
+            <p className="mt-2 text-balance text-xl font-semibold leading-snug sm:text-2xl" style={HEADLINE_FONT}>
+              Founding &amp; Operating Partner of MilitaryVoices.ai
+            </p>
+            <p className="mt-2 text-pretty text-lg font-medium text-muted-foreground">
+              Col, USMC (ret), founder of OHIOWA Management Group LLC.
+            </p>
+          </div>
           <p className="text-pretty">
             Riccoh served thirty-three years in the United States Marine Corps, with five combat tours across
             Operations Desert Shield, Desert Storm, Shining Hope, Iraqi Freedom and Enduring Freedom. An East
@@ -57,7 +64,10 @@ export default function AboutUs() {
             When he took off the uniform, he kept the mission: telling the stories of the people he served with. An
             Ithaca College alumnus, he is a 2019 Emmy Award winner, a Gold Telly Award winner and a documentary
             filmmaker. Over the past three years he has been deeply involved in podcasting, TV management, and content
-            aggregation and distribution. He served as Dr. Phil&rsquo;s Chief of Staff at Merit Street Media from 2024
+            aggregation and distribution.
+          </p>
+          <p className="text-pretty">
+            He served as Dr. Phil&rsquo;s Chief of Staff at Merit Street Media from 2024
             to 2025. Today he is Chief of Staff at Envoy Media, and he has been a brand ambassador for the Military
             Basketball Association since 2023.
           </p>
