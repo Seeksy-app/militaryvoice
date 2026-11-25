@@ -7359,7 +7359,10 @@ export function registerRoutes(app: Express): void {
             clipEdit: {
               clipId: edit.id, title: edit.editTitle, subtitle: edit.editSubtitle, startSec: edit.startSec, endSec: edit.endSec,
               // Remake only the shapes this clip has.
-              shapes: edit.verticalUrl || edit.squareUrl || edit.url
+              // "only:vertical": a remake of just those shapes (Andrew, 24 Nov: Riccoh's 474 verticals as Stacked, the rest kept).
+              shapes: edit.editShapes.startsWith("only:")
+                ? edit.editShapes.slice(5).split(",").filter((x) => ["vertical", "square", "wide"].includes(x))
+                : edit.verticalUrl || edit.squareUrl || edit.url
                 ? [edit.verticalUrl && "vertical", edit.squareUrl && "square", edit.url && "wide"].filter(Boolean)
                 : edit.editShapes.split(",").filter(Boolean),
               style: (() => { try { return edit.captionStyle ? JSON.parse(edit.captionStyle) : null; } catch { return null; } })(),
@@ -8421,6 +8424,8 @@ export function registerRoutes(app: Express): void {
       squareUrl: ok(b.squareUrl) ? b.squareUrl : clip.squareUrl,
       editStatus: "",
       editError: "",
+      // A one-off "only these shapes" remake is done: the next edit remakes every shape again.
+      ...(clip.editShapes.startsWith("only:") ? { editShapes: "" } : {}),
     });
     // It had music: the remake came back without it, so mix it again (from these new files).
     const rec = await storage.getRecording(clip.recordingId);
@@ -8435,7 +8440,7 @@ export function registerRoutes(app: Express): void {
   app.post("/api/agent/clip-edits/:id/failed", requireAgent, async (req, res) => {
     const clip = await storage.getClip(Number(req.params.id));
     if (!clip) return res.status(404).json({ message: "No such clip." });
-    await storage.updateClip(clip.id, { editStatus: "failed", editError: String(req.body?.error ?? "").slice(0, 300) });
+    await storage.updateClip(clip.id, { editStatus: "failed", editError: String(req.body?.error ?? "").slice(0, 300), ...(clip.editShapes.startsWith("only:") ? { editShapes: "" } : {}) });
     res.json({ ok: true });
   });
 
