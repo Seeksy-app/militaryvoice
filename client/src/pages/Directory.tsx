@@ -87,7 +87,7 @@ export default function Directory({ embedded = false }: { embedded?: boolean } =
                 Get your card in the directory
               </Button>
             </Link>
-            <Link href="/platform">
+            <Link href="/events">
               <Button variant="outline" className="rounded-full border-white/25 bg-white/10 text-white hover:bg-white/20 hover:text-white">
                 Organizing an event?
               </Button>
@@ -276,7 +276,7 @@ function CardDialog({ card: c, onClose, canInvite }: { card: Card | null; onClos
           )
         ) : (
           <p className="text-center text-xs text-muted-foreground">
-            Organizing an event? <Link href="/platform" className="font-medium text-[#053877] hover:underline dark:text-[#8ab4f8]">Plan it with us</Link> and invite anyone here.
+            Organizing an event? <Link href="/events" className="font-medium text-[#053877] hover:underline dark:text-[#8ab4f8]">Plan it with us</Link> and invite anyone here.
           </p>
         )}
       </DialogContent>
