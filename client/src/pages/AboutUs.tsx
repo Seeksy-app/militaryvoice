@@ -23,10 +23,11 @@ export default function AboutUs() {
           <div>
             <p className="text-sm font-bold uppercase tracking-[0.18em] text-[#F0A71F]">About us</p>
             <h1 className="mt-4 text-balance text-4xl font-bold leading-[1.05] tracking-tight sm:text-5xl" style={HEADLINE_FONT}>
-              Riccoh Player
+              Founding &amp; Operating Partner of MilitaryVoices.ai
             </h1>
             <p className="mt-4 max-w-xl text-pretty text-lg leading-relaxed text-white/80">
-              Marine Corps Colonel (retired), founder of OHIOWA Management Group LLC.
+              <span className="font-semibold text-white">Riccoh Player</span>, Marine Corps Colonel (retired), founder of
+              OHIOWA Management Group LLC.
             </p>
           </div>
           <div className="overflow-hidden rounded-3xl border border-white/10 shadow-2xl">
@@ -41,6 +42,9 @@ export default function AboutUs() {
 
       <main className="mx-auto w-full max-w-3xl flex-1 px-4 py-14 sm:px-6" data-testid="about-us">
         <article className="flex flex-col gap-6 text-[17px] leading-relaxed text-foreground">
+          <h2 className="text-balance text-2xl font-bold leading-snug tracking-tight sm:text-3xl" style={HEADLINE_FONT}>
+            Founding &amp; Operating Partner of MilitaryVoices.ai
+          </h2>
           <p className="text-pretty text-xl font-semibold leading-snug" style={HEADLINE_FONT}>
             Riccoh Player, Marine Corps Colonel (retired), founder of OHIOWA Management Group LLC.
           </p>
