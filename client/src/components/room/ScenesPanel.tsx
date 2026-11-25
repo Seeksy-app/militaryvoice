@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from "react";
+import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { useParticipants } from "@livekit/components-react";
 import { RoomEvent } from "livekit-client";
 import { Check, Clapperboard, Copy, GripVertical, Image as ImageIcon, LayoutDashboard, Loader2, Lock, MonitorUp, MoreHorizontal, Pencil, Play, Plus, Square, Trash2, Users, X } from "lucide-react";
@@ -244,20 +244,62 @@ export function ScenesPanel({ kit, v3 = false, sheet = false, onEditLayout }: { 
     if (after === null) return { ...l, scenes: inOrder([...l.scenes, { ...s, n: 99 }]) };
     return { ...l, scenes: inOrder([...l.scenes.map((x) => (x.n > after ? { ...x, n: x.n + 1 } : x)), { ...s, n: after + 1 }]) };
   };
-  /** Drag a card by its grip onto another: it takes that one's place. */
-  const move = (fromId: string, toId: string) => {
-    if (fromId === toId) return;
-    kit.change((l) => {
-      const xs = [...l.scenes].sort((a, b) => a.n - b.n);
-      const from = xs.findIndex((x) => x.id === fromId), to = xs.findIndex((x) => x.id === toId);
-      if (from < 0 || to < 0) return l;
-      const [it] = xs.splice(from, 1);
-      xs.splice(to, 0, it);
-      return { ...l, scenes: xs.map((x, i) => ({ ...x, n: i + 1 })) };
-    });
+  /**
+   * Drag to reorder (Andrew, 24 Nov: "I kept wanting to do that tonight"): a mouse drags the card itself or its grip, a
+   * finger drags the grip (so the list still scrolls). A line shows where it lands; the numbers (and keys 1–9) follow the
+   * new order. Nothing goes on air: the scene on air stays on air, and a drag never counts as a click.
+   */
+  const root = useRef<HTMLElement>(null);
+  const [drag, setDrag] = useState<{ id: string; to: number } | null>(null);
+  const dragged = useRef(0);
+  const slotAt = (y: number) => {
+    let i = 0;
+    for (const r of Array.from(root.current?.querySelectorAll<HTMLElement>("[data-scene-row]") ?? [])) { const b = r.getBoundingClientRect(); if (y > b.top + b.height / 2) i++; }
+    return i;
   };
-  const [dragging, setDragging] = useState<string | null>(null);
-  const [over, setOver] = useState<string | null>(null);
+  const moveTo = (id: string, slot: number) => kit.change((l) => {
+    const xs = [...l.scenes].sort((a, b) => a.n - b.n);
+    const from = xs.findIndex((x) => x.id === id);
+    if (from < 0) return l;
+    const to = slot > from ? slot - 1 : slot;
+    if (to === from) return l;
+    const [it] = xs.splice(from, 1);
+    xs.splice(to, 0, it);
+    return { ...l, scenes: xs.map((x, i) => ({ ...x, n: i + 1 })) };
+  });
+  const beginDrag = (id: string, e: ReactPointerEvent, grip: boolean) => {
+    if (e.pointerType === "mouse" ? e.button !== 0 : !grip) return;
+    if (grip) e.preventDefault();
+    const x0 = e.clientX, y0 = e.clientY, pid = e.pointerId;
+    let on = false;
+    const scroller = root.current;
+    const move = (ev: PointerEvent) => {
+      if (ev.pointerId !== pid) return;
+      if (!on && Math.hypot(ev.clientX - x0, ev.clientY - y0) < 6) return;
+      if (!on) { on = true; document.body.style.userSelect = "none"; }
+      ev.preventDefault();
+      if (scroller) { const r = scroller.getBoundingClientRect(); if (ev.clientY < r.top + 48) scroller.scrollBy(0, -14); else if (ev.clientY > r.bottom - 48) scroller.scrollBy(0, 14); }
+      setDrag({ id, to: slotAt(ev.clientY) });
+    };
+    const end = (ev: PointerEvent, drop: boolean) => {
+      if (ev.pointerId !== pid) return;
+      window.removeEventListener("pointermove", move);
+      window.removeEventListener("pointerup", up);
+      window.removeEventListener("pointercancel", cancel);
+      if (!on) return;
+      document.body.style.userSelect = "";
+      dragged.current = Date.now();
+      if (drop) moveTo(id, slotAt(ev.clientY));
+      setDrag(null);
+    };
+    const up = (ev: PointerEvent) => end(ev, true);
+    const cancel = (ev: PointerEvent) => end(ev, false);
+    window.addEventListener("pointermove", move, { passive: false });
+    window.addEventListener("pointerup", up);
+    window.addEventListener("pointercancel", cancel);
+  };
+  // The click that ends a drag never puts the scene on air.
+  const pickScene = (id: string) => { if (Date.now() - dragged.current > 400) kit.toScene(id); };
   const add = (type?: SceneType, people?: number, media?: Asset | null, edit = true) => {
     const n = below !== null ? below + 1 : last + 1;
     if (look.scenes.length >= LIMITS.scenes) return;
@@ -287,17 +329,16 @@ export function ScenesPanel({ kit, v3 = false, sheet = false, onEditLayout }: { 
   };
 
   return (
-    <aside className={sheet ? "flex flex-col gap-3 px-4 pb-6 pt-2" : "hidden w-[208px] shrink-0 flex-col gap-3 overflow-y-auto border-r border-[#e4e7ec] bg-white px-3.5 pb-4 pt-[18px] lg:flex 2xl:w-[232px]"} data-testid={sheet ? "scenes-sheet" : "scenes-panel"}>
-      {!sheet && <div><p className="text-[15px] font-bold">Scenes</p>{last > 1 && <p className="text-xs text-[#667085]">Press 1–{last} to switch</p>}</div>}
+    <aside ref={root} className={sheet ? "flex flex-col gap-3 px-4 pb-6 pt-2" : "hidden w-[208px] shrink-0 flex-col gap-3 overflow-y-auto border-r border-[#e4e7ec] bg-white px-3.5 pb-4 pt-[18px] lg:flex 2xl:w-[232px]"} data-testid={sheet ? "scenes-sheet" : "scenes-panel"}>
+      {!sheet && <div><p className="text-[15px] font-bold">Scenes</p>{last > 1 && <p className="text-xs text-[#667085]">Press 1–{last} to switch. Drag to reorder.</p>}</div>}
       {/* Scenes vs People (Andrew, 24 Nov). */}
       <p className="rounded-lg bg-[#f5f8fd] px-2.5 py-2 text-[11.5px] leading-snug text-[#344054]" data-testid="scenes-vs-people">Scenes = what viewers see. People = who's in the room.</p>
       {!v3 && <VideoSlot slot="intro" kit={kit} />}
-      {scenes.map((s) => (
-        <div key={s.id} className={over === s.id && dragging && dragging !== s.id ? "rounded-[14px] outline outline-2 outline-offset-2 outline-[#053877]" : ""}
-          onDragOver={(e) => { if (dragging && Array.from(e.dataTransfer.types).includes(SCENE_DRAG)) { e.preventDefault(); setOver(s.id); } }}
-          onDragLeave={() => setOver((o) => (o === s.id ? null : o))}
-          onDrop={(e) => { if (!dragging || !Array.from(e.dataTransfer.types).includes(SCENE_DRAG)) return; e.preventDefault(); e.stopPropagation(); move(dragging, s.id); setDragging(null); setOver(null); }}>
-          <SceneCard s={s} kit={kit} v3={v3} cast={castOf(s)} onGrip={(e) => { e.dataTransfer.setData(SCENE_DRAG, s.id); e.dataTransfer.effectAllowed = "move"; const card = (e.currentTarget as HTMLElement).closest("[data-scene-card]"); if (card) e.dataTransfer.setDragImage(card, 20, 40); setDragging(s.id); }} onGripEnd={() => { setDragging(null); setOver(null); }} onChooseMedia={() => setEditing(s.id)} on={onAir === s.id} next={kit.live.playing?.slot === "countdown" && kit.live.playing.next === s.id} onPick={() => kit.toScene(s.id)}
+      {scenes.map((s, i) => (
+        <div key={s.id} data-scene-row className={`relative ${drag?.id === s.id ? "opacity-50" : ""}`}>
+          {drag && drag.to === i && <DropLine top />}
+          {drag && drag.to === scenes.length && i === scenes.length - 1 && <DropLine />}
+          <SceneCard s={s} kit={kit} v3={v3} cast={castOf(s)} onDragStart={(e, grip) => beginDrag(s.id, e, grip)} onChooseMedia={() => setEditing(s.id)} on={onAir === s.id} next={kit.live.playing?.slot === "countdown" && kit.live.playing.next === s.id} onPick={() => pickScene(s.id)}
             full={look.scenes.length >= LIMITS.scenes}
             onRename={() => setEditing(editing === s.id ? null : s.id)} onEditLayout={onEditLayout ? () => { setEditing(null); onEditLayout(s.id); } : undefined} onDuplicate={() => duplicate(s)} onAddBelow={() => addBelow(s)} onDelete={look.scenes.length > 1 ? () => remove(s) : undefined} />
           {editing === s.id && <SceneEditor s={s} kit={kit} v3={v3} onDelete={look.scenes.length > 1 ? () => remove(s) : undefined} onClose={() => setEditing(null)} />}
@@ -351,9 +392,12 @@ function TypePicker({ kit, onPick, onClose }: { kit: RoomKit; onPick: (t: SceneT
   );
 }
 
-const SCENE_DRAG = "application/x-mv-scene";
+/** Where a dragged scene lands. */
+function DropLine({ top = false }: { top?: boolean }) {
+  return <span aria-hidden className={`pointer-events-none absolute inset-x-0 z-30 h-[3px] rounded-full bg-[#053877] ${top ? "-top-[7.5px]" : "-bottom-[7.5px]"}`} data-testid="scene-drop-line" />;
+}
 
-function SceneCard({ s, kit, v3, cast, on, next, full, onPick, onGrip, onGripEnd, onChooseMedia, onRename, onEditLayout, onDuplicate, onAddBelow, onDelete }: { s: Scene; kit: RoomKit; v3: boolean; cast: string[]; on: boolean; next: boolean; full: boolean; onPick: () => void; onGrip: (e: DragEvent) => void; onGripEnd: () => void; onChooseMedia: () => void; onRename: () => void; onEditLayout?: () => void; onDuplicate: () => void; onAddBelow: () => void; onDelete?: () => void }) {
+function SceneCard({ s, kit, v3, cast, on, next, full, onPick, onDragStart, onChooseMedia, onRename, onEditLayout, onDuplicate, onAddBelow, onDelete }: { s: Scene; kit: RoomKit; v3: boolean; cast: string[]; on: boolean; next: boolean; full: boolean; onPick: () => void; onDragStart: (e: ReactPointerEvent, grip: boolean) => void; onChooseMedia: () => void; onRename: () => void; onEditLayout?: () => void; onDuplicate: () => void; onAddBelow: () => void; onDelete?: () => void }) {
   const look = kit.look!;
   const [menu, setMenu] = useState(false);
   const media = isMediaScene(s);
@@ -376,7 +420,7 @@ function SceneCard({ s, kit, v3, cast, on, next, full, onPick, onGrip, onGripEnd
     <div {...drop} data-scene-card className={`group relative shrink-0 rounded-[14px] ${drag ? "border-2 border-dashed border-[#053877] bg-[#eef3fb]" : on ? "border-2 border-[#053877] shadow-[0_6px_16px_rgba(5,56,119,0.16)]" : next ? "border-2 border-[#F0A71F] shadow-[0_0_0_4px_rgba(240,167,31,0.2)]" : "border border-[#e4e7ec]"}`} data-testid={`scene-${s.n}`}>
       {add.el}
       {/* The clip is on the button, not the card, so the ⋯ menu isn't cut off. */}
-      <button type="button" onClick={onPick} className="block w-full overflow-hidden rounded-[12px] text-left" aria-label={`Put ${s.name} on air (key ${s.n})`} aria-pressed={on}>
+      <button type="button" onClick={onPick} onPointerDown={(e) => onDragStart(e, false)} onDragStart={(e) => e.preventDefault()} className="block w-full select-none overflow-hidden rounded-[12px] text-left [-webkit-user-drag:none]" aria-label={`Put ${s.name} on air (key ${s.n})`} aria-pressed={on}>
         <div className="relative flex h-[88px] items-center justify-center" style={{ background: bgCss(cardBg) }}>
           {v3 && s.boxes?.length ? <BoxThumb boxes={s.boxes} light={lightBg} className="!w-[104px] !bg-transparent" /> : <MiniScene s={s} cast={cast} light={lightBg} />}
           {logo && <img src={logo.asset.url} alt="" className={`absolute top-1 h-4 w-auto rounded-sm ${logo.corner === "tl" ? "left-1.5" : "right-1.5"}`} />}
@@ -389,8 +433,9 @@ function SceneCard({ s, kit, v3, cast, on, next, full, onPick, onGrip, onGripEnd
           <span className="rounded-md bg-[#f2f4f7] px-[7px] py-px text-xs font-semibold text-[#667085]">{s.n}</span>
         </div>
       </button>
-      {/* Drag to reorder (StreamYard's grip, Andrew via PM, 24 Nov). */}
-      <span draggable onDragStart={onGrip} onDragEnd={onGripEnd} title="Drag to move" aria-label={`Move ${s.name}`} className={`absolute left-1 top-[44px] flex h-8 w-5 -translate-y-1/2 cursor-grab items-center justify-center rounded-md bg-white/90 text-[#475467] opacity-0 shadow transition-opacity focus:opacity-100 group-hover:opacity-100 active:cursor-grabbing`} data-testid={`scene-grip-${s.n}`}><GripVertical className="h-4 w-4" /></span>
+      {/* Drag to reorder (StreamYard's grip, Andrew 24 Nov: he couldn't find the hidden one). Always there, stronger on
+          hover; the only way a finger drags, so it's touch-sized and the browser doesn't scroll from it. */}
+      <span onPointerDown={(e) => onDragStart(e, true)} title="Drag to reorder" aria-label={`Drag to reorder ${s.name}`} className="absolute left-1 top-[44px] flex h-9 w-6 -translate-y-1/2 cursor-grab touch-none select-none items-center justify-center rounded-md bg-white/90 text-[#475467] opacity-70 shadow transition-opacity group-hover:opacity-100 active:cursor-grabbing [@media(pointer:coarse)]:opacity-100" data-testid={`scene-grip-${s.n}`}><GripVertical className="h-4 w-4" /></span>
       {/* Nothing picked yet: add it right here (a sibling of the card's button, so pressing it never puts the scene on air). */}
       {media && !s.media && !add.busy && (
         <button type="button" onClick={add.choose} className="absolute left-1/2 top-[44px] flex h-7 -translate-x-1/2 -translate-y-1/2 items-center gap-1 whitespace-nowrap rounded-full bg-white px-2.5 text-[11px] font-bold text-[#053877] shadow-[0_2px_8px_rgba(16,24,40,0.25)] hover:bg-[#eef3fb]" data-testid="scene-card-add-media">
