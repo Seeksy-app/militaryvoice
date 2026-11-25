@@ -85,7 +85,9 @@ export function SocialScreen({ view = "social" }: { view?: "social" | "calendar"
   const connected = Array.from(new Set(accounts.map((a) => a.platform)));
   const clipList = useMemo(() => [...(clips.data ?? [])].filter((c) => c.verticalUrl || c.squareUrl || c.url).sort((a, b) => b.id - a.id), [clips.data]);
   const episodes = (recs.data ?? []).filter((r) => r.status === "Ready");
-  const posts: Post[] = useMemo(() => (postsQ.data ?? []).map((p) => {
+  // A cancelled post isn't anywhere: not Up next, not Recently posted (it showed as "Posted" on its old, later date:
+  // Riccoh's Social Home, 24 Nov 2026), not the calendar, and its clip is free to post again.
+  const posts: Post[] = useMemo(() => (postsQ.data ?? []).filter((p) => p.status !== "cancelled").map((p) => {
     const clip = p.kind === "clip" ? clipList.find((c) => c.id === p.refId) : undefined;
     let results_: PostResult[] = [];
     try { results_ = p.results ? JSON.parse(p.results) : []; } catch { results_ = []; }
@@ -93,7 +95,7 @@ export function SocialScreen({ view = "social" }: { view?: "social" | "calendar"
       ...p,
       at: Date.parse(p.scheduledAt || p.createdAt),
       results_,
-      thumb: p.kind === "photo" ? `/api/host/posts/${p.id}/media` : clip ? (p.shape === "square" ? clip.squareUrl : p.shape === "wide" ? clip.url : clip.verticalUrl) || clip.verticalUrl || clip.squareUrl || clip.url : p.kind === "recording" ? `/api/host/recordings/${p.refId}/video` : "",
+      thumb: postThumb(p, clip),
       wide: p.kind === "recording" || p.shape === "wide",
     };
   }), [postsQ.data, clipList]);
@@ -340,10 +342,24 @@ function Card({ title, icon: I, note, children }: { title: string; icon: typeof 
   );
 }
 
+/**
+ * What a post's little picture is: the photo, the clip in the shape posted, the episode's video, or the file a
+ * go-to-market post (one we post for them) carries in media_key. Those had none and drew a black square (24 Nov 2026).
+ */
+function postThumb(p: { id: number; kind: string; refId: number; shape: string; mediaKey?: string }, clip?: { url: string; verticalUrl: string; squareUrl: string }): string {
+  if (p.kind === "photo") return `/api/host/posts/${p.id}/media`;
+  if (clip) return (p.shape === "square" ? clip.squareUrl : p.shape === "wide" ? clip.url : clip.verticalUrl) || clip.verticalUrl || clip.squareUrl || clip.url;
+  if (p.kind === "recording") return `/api/host/recordings/${p.refId}/video`;
+  if (p.kind === "gtm" && p.mediaKey && /^https:\/\//.test(p.mediaKey)) return p.mediaKey;
+  return "";
+}
+/** A still picture (a photo post, or a go-to-market image) rather than a video. */
+const isStill = (p: { kind: string; shape: string }) => p.kind === "photo" || (p.kind === "gtm" && p.shape === "image");
+
 function Thumb({ p, className = "h-12 w-9" }: { p: Post; className?: string }) {
   return (
     <span className={`relative block shrink-0 overflow-hidden rounded-md bg-black ${p.wide ? "w-16" : ""} ${className}`}>
-      {p.thumb && (p.kind === "photo" ? <img src={p.thumb} alt="" className="h-full w-full object-cover" /> : <video src={`${p.thumb}#t=1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />)}
+      {p.thumb && (isStill(p) ? <img src={p.thumb} alt="" className="h-full w-full object-cover" /> : <video src={`${p.thumb}#t=1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />)}
     </span>
   );
 }
@@ -728,7 +744,7 @@ function Analytics({ clips, onOpen }: { clips: ClipRow[]; onOpen: (id: number) =
     try { m = p.metrics ? JSON.parse(p.metrics) : {}; } catch { m = {}; }
     const sum = (k: "views" | "likes" | "comments" | "shares") => Object.values(m).reduce((n, v) => n + (v[k] ?? 0), 0);
     const clip = p.kind === "clip" ? clips.find((c) => c.id === p.refId) : undefined;
-    return { ...p, m, views: sum("views"), likes: sum("likes"), comments: sum("comments"), shares: sum("shares"), measured: Object.keys(m).length > 0, len: clip ? clip.endSec - clip.startSec : 0, thumb: p.kind === "photo" ? `/api/host/posts/${p.id}/media` : clip ? clip.verticalUrl || clip.squareUrl || clip.url : p.kind === "recording" ? `/api/host/recordings/${p.refId}/video` : "" };
+    return { ...p, m, views: sum("views"), likes: sum("likes"), comments: sum("comments"), shares: sum("shares"), measured: Object.keys(m).length > 0, len: clip ? clip.endSec - clip.startSec : 0, thumb: postThumb({ ...p, shape: clip ? "vertical" : p.shape }, clip) };
   }).sort((x, y) => y.views - x.views || y.likes - x.likes);
   const measured = posts.filter((p) => p.measured);
 
@@ -840,7 +856,7 @@ function Analytics({ clips, onOpen }: { clips: ClipRow[]; onOpen: (id: number) =
                   <tr key={p.id} onClick={() => onOpen(p.id)} className="cursor-pointer hover:bg-muted/40" data-testid={`analytics-post-${p.id}`}>
                     <td className="py-2 pr-3">
                       <span className="flex items-center gap-3">
-                        <span className="block h-11 w-8 shrink-0 overflow-hidden rounded bg-black">{p.thumb && (p.kind === "photo" ? <img src={p.thumb} alt="" className="h-full w-full object-cover" /> : <video src={`${p.thumb}#t=1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />)}</span>
+                        <span className="block h-11 w-8 shrink-0 overflow-hidden rounded bg-black">{p.thumb && (isStill(p) ? <img src={p.thumb} alt="" className="h-full w-full object-cover" /> : <video src={`${p.thumb}#t=1`} preload="metadata" muted playsInline className="h-full w-full object-cover" />)}</span>
                         <span className="min-w-0">
                           <span className="block max-w-[22rem] truncate font-medium">{p.title || "Untitled"}</span>
                           <span className="flex items-center gap-1.5 text-xs text-muted-foreground">{fmtWhen(Date.parse(p.at))} {(p.platforms.split(",").filter(Boolean) as SocialPlatform[]).map((pl) => <PlatformIcon key={pl} platform={pl} className="h-3 w-3" />)}</span>
