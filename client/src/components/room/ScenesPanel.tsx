@@ -14,7 +14,7 @@ import { Select } from "./Select";
  * thumbnail in the scene"): the clip's frame or the picture; ▶ and the length on a video; a screen
  * icon for a shared screen. A picture that won't load shows a plain clapperboard or picture icon.
  */
-function MediaTile({ a, className = "", style }: { a: Asset | null | undefined; className?: string; style?: CSSProperties }) {
+export function MediaTile({ a, className = "", style }: { a: Asset | null | undefined; className?: string; style?: CSSProperties }) {
   const t = useThumb(a);
   const vid = isVideo(a);
   const len = mmss(a?.sec || t?.sec);
@@ -489,7 +489,7 @@ function SceneCard({ s, kit, v3, cast, on, next, full, onPick, onDragStart, onCh
       <button type="button" onClick={onPick} onPointerDown={(e) => onDragStart(e, false)} onDragStart={(e) => e.preventDefault()} className="block w-full select-none overflow-hidden rounded-[12px] text-left [-webkit-user-drag:none]" aria-label={`Put ${s.name} on air (key ${s.n})`} aria-pressed={on}>
         <div className="relative flex h-[88px] items-center justify-center" style={{ background: bgCss(cardBg) }}>
           {v3 && s.boxes?.length ? <BoxThumb boxes={s.boxes} light={lightBg} className="!w-[104px] !bg-transparent" /> : <MiniScene s={s} cast={cast} light={lightBg} />}
-          {logo && <img src={logo.asset.url} alt="" className={`absolute top-2 h-4 w-auto rounded-sm ${logo.corner === "tl" ? "left-2.5" : "right-2.5"}`} />}
+          {logo && <img src={logo.asset.url} alt="" className={`absolute h-4 w-auto rounded-sm ${logo.corner.startsWith("b") ? "bottom-2" : "top-2"} ${logo.corner.endsWith("l") ? "left-2.5" : "right-2.5"}`} />}
           {on && <span className="absolute left-2.5 top-2.5 rounded-full bg-[#12b76a] px-[7px] py-0.5 text-[10px] font-bold tracking-[0.02em] text-white">ON STAGE</span>}
           {!on && next && <span className="absolute left-2.5 top-2.5 rounded-full bg-[#F0A71F] px-[7px] py-0.5 text-[10px] font-bold tracking-[0.02em] text-[#101828]">TAKE ME NEXT</span>}
         </div>

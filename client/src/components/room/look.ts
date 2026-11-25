@@ -14,7 +14,8 @@ import type { RoomBox } from "@shared/roomLook";
  * The owner's clicks show at once; the server's answer (or the room catching up) settles it.
  */
 export type Layout = "solo" | "side" | "grid" | "speaker" | "screen" | "pip";
-export type Corner = "tl" | "tr";
+/** Bottom left / Bottom right are the choices in Media since 24 Nov; tl and tr stay for older looks. */
+export type Corner = "tl" | "tr" | "bl" | "br";
 export type AssetKind = "logo" | "background" | "intro" | "outro" | "video" | "sound" | "music" | "photo";
 export type Asset = { id: string; kind: AssetKind; name: string; mime: string; sec: number; url: string };
 export type Color = "blue" | "dark" | "light";
@@ -190,7 +191,7 @@ export function useRoomKit(owner: boolean, meta: string | undefined) {
     const storageKey = await uploadToStorage(file, onProgress);
     const { asset } = await post<{ asset: Asset }>("/api/host/room/assets", { storageKey, kind, name: file.name, sec, ...(rights ? { rights: true } : {}) });
     change((l) => {
-      if (kind === "logo") return { ...l, logos: [...l.logos.filter((x) => x.id !== asset.id), asset].slice(-LIMITS.logos), logo: { asset, corner: l.logo?.corner ?? "tr" } };
+      if (kind === "logo") return { ...l, logos: [...l.logos.filter((x) => x.id !== asset.id), asset].slice(-LIMITS.logos), logo: { asset, corner: l.logo?.corner ?? "bl" } };
       if (kind === "background") return { ...l, backgrounds: [...backgroundShelf(l).filter((x) => x.id !== asset.id), asset].slice(-LIMITS.backgrounds), background: { kind: "image", asset } };
       if (kind === "video") return { ...l, videos: [...(l.videos ?? []), { asset, role: "", loop: false }] };
       if (kind === "sound" || kind === "music") {

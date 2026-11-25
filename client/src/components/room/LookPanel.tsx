@@ -40,32 +40,39 @@ export function LookPanel({ kit }: { kit: RoomKit }) {
   );
 }
 
-/** The logo and its corner (Your look, and Media in v3). */
+/** The logo and where it shows (Andrew, 24 Nov: in Media, "Bottom left", "Bottom right" or "None"). None also hides
+ *  the show's own logo, which otherwise sits bottom left when no logo is picked. */
 export function LogoSection({ kit }: { kit: RoomKit }) {
   const look = kit.look!;
+  const showOwn = look.showIcon !== false;
+  const latest = look.logos[look.logos.length - 1];
+  const where = look.logo ? (look.logo.corner === "br" ? "br" : look.logo.corner === "bl" ? "bl" : "") : showOwn ? "bl" : "none";
+  const place = (c: "bl" | "br" | "none") => kit.change((l) => {
+    if (c === "none") return { ...l, logo: null, showIcon: false };
+    const asset = l.logo?.asset ?? (c === "br" || l.logos.length ? l.logos[l.logos.length - 1] : undefined);
+    return { ...l, showIcon: true, logo: asset ? { asset, corner: c } : null };
+  });
+  const opt = (c: "bl" | "br" | "none", text: string, disabled = false) => (
+    <button key={c} type="button" onClick={() => place(c)} disabled={disabled} aria-pressed={where === c} title={disabled ? "Add a logo first" : undefined}
+      className={`h-9 flex-1 rounded-lg text-[13px] font-semibold disabled:cursor-not-allowed disabled:opacity-45 ${where === c ? "border-2 border-[#053877] bg-[#eef3fb] text-[#053877]" : "border border-[#d0d5dd] bg-white text-[#344054] hover:bg-[#f9fafb]"}`} data-testid={`logo-place-${c}`}>{text}</button>
+  );
   return (
     <>
       <div className="mt-2.5 flex flex-wrap gap-2">
-        <Swatch on={!look.logo} onClick={() => kit.change((l) => ({ ...l, logo: null }))} label="No logo" className="bg-[#f5f6fa] text-xs font-semibold text-[#667085]">None</Swatch>
         {look.logos.map((a) => (
           <Removable key={a.id} onRemove={() => { if (window.confirm("Delete this logo?")) void kit.removeAsset("logo", a.id); }}>
-            <Swatch on={look.logo?.asset.id === a.id} onClick={() => kit.change((l) => ({ ...l, logo: { asset: a, corner: l.logo?.corner ?? "tr" } }))} label={`Use ${a.name || "this logo"}`} className="bg-[#0b1f4a]">
+            <Swatch on={look.logo?.asset.id === a.id} onClick={() => kit.change((l) => ({ ...l, showIcon: true, logo: { asset: a, corner: l.logo?.corner === "br" ? "br" : "bl" } }))} label={`Use ${a.name || "this logo"}`} className="bg-[#0b1f4a]">
               <img src={a.url} alt="" className="max-h-[42px] max-w-[60px] object-contain" />
             </Swatch>
           </Removable>
         ))}
         {look.logos.length < LIMITS.logos && <AddFile kind="logo" accept="image/png,image/svg+xml,image/jpeg,image/webp" kit={kit} label="Add a logo" className="h-14 w-14" />}
       </div>
-      {look.logo && (
-        <div className="mt-3 flex items-center gap-2.5 text-[13px] text-[#475467]">
-          Corner
-          {(["tl", "tr"] as const).map((c) => (
-            <button key={c} type="button" aria-label={c === "tl" ? "Top left" : "Top right"} title={c === "tl" ? "Top left" : "Top right"} aria-pressed={look.logo?.corner === c} onClick={() => kit.change((l) => ({ ...l, logo: l.logo ? { ...l.logo, corner: c } : null }))} className={`relative h-7 w-[38px] rounded-[7px] ${look.logo?.corner === c ? "border-2 border-[#053877] bg-[#eef3fb]" : "border border-[#d0d5dd] bg-white"}`}>
-              <span className={`absolute top-1 h-1.5 w-2.5 rounded-sm ${look.logo?.corner === c ? "bg-[#053877]" : "bg-[#98a2b3]"} ${c === "tl" ? "left-1" : "right-1"}`} />
-            </button>
-          ))}
-        </div>
-      )}
+      <p className="mt-3 text-[13px] font-semibold text-[#344054]">Where it shows</p>
+      <div className="mt-1.5 flex gap-2" role="group" aria-label="Where the logo shows">
+        {opt("bl", "Bottom left")}{opt("br", "Bottom right", !latest && !look.logo)}{opt("none", "None")}
+      </div>
+      {!look.logo && showOwn && <p className="mt-1.5 text-xs text-[#667085]">Your show's logo shows until you pick one here.</p>}
     </>
   );
 }

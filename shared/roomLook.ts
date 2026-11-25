@@ -225,7 +225,8 @@ export function roomStageMeta(look: RoomLook | null, live: RoomLive, name: strin
     logoUrl,
     logoCorner: own ? "bottom-left" : CORNERS[style.logo?.corner ?? "tr"] ?? "top-right",
     logoSize: 150,
-    ...(own ? { logoPlate: own.plate || "none" } : {}),
+    // A bottom corner goes through the same placement as the show logo, so it steps up over name tags and banners.
+    ...(own ? { logoPlate: own.plate || "none" } : picked && String(style.logo?.corner ?? "").startsWith("b") ? { logoPlate: "none" } : {}),
     backgroundUrl: backgroundOf(style.background, origin),
     stageLayout: ROOM_LAYOUT_TO_STAGE[scene?.layout ?? "side"],
   };

@@ -762,7 +762,7 @@ function Stage({ kit, scene, fallbackLogo }: { kit: RoomKit; scene?: Scene; fall
   return (
     <div className="relative shrink-0 overflow-hidden rounded-2xl shadow-[0_12px_32px_rgba(16,24,40,0.22)]" style={{ width: STAGE_W, aspectRatio: "16 / 9", background }} data-testid="my-studio-stage">
       <div className={`absolute inset-x-[4.5%] top-[12.5%] transition-[bottom] duration-300 ${banner ? "bottom-[17%]" : "bottom-[8%]"}`}>{body}</div>
-      {logo && <img src={logo} alt="Your show's logo" className={`absolute top-2 h-[11%] max-h-[50px] w-auto rounded-md object-contain ${corner === "tl" ? "left-4" : "right-4"}`} />}
+      {logo && <img src={logo} alt="Your show's logo" className={`absolute h-[11%] max-h-[50px] w-auto rounded-md object-contain ${corner.startsWith("b") ? (banner ? "bottom-[17%]" : "bottom-4") : "top-2"} ${corner.endsWith("l") ? "left-4" : "right-4"}`} />}
       {banner && <div className="absolute bottom-[3%] left-[4.5%] max-w-[80%] truncate rounded-lg bg-[#053877] px-4 py-2 text-[15px] font-bold text-white shadow-[0_6px_18px_rgba(0,0,0,0.3)]" data-testid="stage-banner">{banner.text}</div>}
       {card && <LiveCard p={card} />}
       {clip && <video key={clip.id} src={clip.url} autoPlay muted playsInline onEnded={() => kit.play(null)} onError={() => kit.play(null)} className="absolute inset-0 h-full w-full bg-black object-contain" data-testid="stage-clip" />}

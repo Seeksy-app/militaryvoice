@@ -36,7 +36,8 @@ export type AssetKind = "logo" | "background" | "intro" | "outro" | "video" | "s
 const KINDS: AssetKind[] = ["logo", "background", "intro", "outro", "video", "sound", "music", "photo"];
 export type Asset = { id: string; kind: AssetKind; name: string; mime: string; sec: number; url: string };
 type Background = { kind: "color"; value: "blue" | "dark" | "light" } | { kind: "image"; asset: Asset };
-type SceneLook = { background?: Background; logo?: { asset: Asset; corner: "tl" | "tr" } | null; banner?: string };
+type LogoCorner = "tl" | "tr" | "bl" | "br";
+type SceneLook = { background?: Background; logo?: { asset: Asset; corner: LogoCorner } | null; banner?: string };
 
 /**
  * v3 scene type and people on stage (Andrew, 21 Nov: "people per scene", on every scene, editable; never a
@@ -122,7 +123,7 @@ export type Look = {
   rev: number;
   /** v3: the background a NEW scene starts with (and the fallback); each scene carries its own. */
   background: Background;
-  logo: { asset: Asset; corner: "tl" | "tr" } | null;
+  logo: { asset: Asset; corner: LogoCorner } | null;
   /** Their show's icon in the bottom-left when no logo is picked (default on). The host's row in People switches it (Andrew, 24 Nov). */
   showIcon?: boolean;
   logos: Asset[];
@@ -244,7 +245,7 @@ export function clean(raw: any, assets: Map<string, Asset>): Look | string {
   const logo = (v: any) => {
     if (v === null) return null;
     const a = asset(v?.asset, "logo");
-    return a ? { asset: a, corner: v.corner === "tl" ? "tl" as const : "tr" as const } : undefined;
+    return a ? { asset: a, corner: (["tl", "tr", "bl", "br"].includes(v.corner) ? v.corner : "tr") as LogoCorner } : undefined;
   };
   const banners = (Array.isArray(raw.banners) ? raw.banners : []).slice(0, 10)
     .map((b: any) => ({ id: id8(b?.id) || crypto.randomBytes(4).toString("hex"), text: str(b?.text, 80), seconds: Math.max(2, Math.min(60, Math.round(Number(b?.seconds) || 6))) }))

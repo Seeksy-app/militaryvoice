@@ -1,12 +1,13 @@
 import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
-import { Clapperboard, Loader2, Music2, Play, Plus, Repeat, Square, Trash2, Volume2 } from "lucide-react";
+import { Loader2, Music2, Play, Plus, Repeat, Square, Trash2, Volume2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { warmClipSound } from "./clipSound";
 import { BACKGROUNDS, LIMITS, backgroundShelf, isPresenting, sceneLive, type AssetKind, type Background, type LibraryItem, type LibrarySource, type MusicItem, type PlaySlot, type RoomKit, type SoundItem, type VideoClip } from "./look";
 import { AddFile, Banners, LogoSection, Removable, Swatch } from "./LookPanel";
 import { Select } from "./Select";
+import { MediaTile } from "./ScenesPanel";
 
 /**
  * Media (Studio phase 3, mockup approved 21 Nov; replaces "Your look" when STUDIO_V3 is on):
@@ -80,12 +81,13 @@ function Clips({ kit }: { kit: RoomKit }) {
         const on = slot ? playing?.slot === slot : presented === v.asset.id;
         return (
           <div key={v.asset.id} className={`group flex items-center gap-2 rounded-xl border px-2 py-2 ${on ? "border-[#053877] bg-[#f5f8fd]" : "border-[#e4e7ec]"}`} data-testid="clip-row">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[7px] bg-[#101828] text-white"><Clapperboard className="h-3.5 w-3.5" /></div>
+            {/* The clip's own frame with its length on it, like a clip tile (Andrew, 24 Nov). */}
+            <MediaTile a={v.asset} className="!rounded-[7px] h-[45px] w-20 shrink-0" />
             <div className="min-w-0 flex-1">
-              {/* Name and length (or "Playing") on one line, the name giving way; the Clip/Intro/Outro pick below. */}
+              {/* The name (and "Playing") on one line, the name giving way; the length is on the picture; the Clip/Intro/Outro pick below. */}
               <div className="flex min-w-0 items-baseline gap-1.5">
                 <p className="min-w-0 flex-1 truncate text-[13px] font-semibold">{v.asset.name || "Video"}</p>
-                <span className={`shrink-0 whitespace-nowrap text-[11px] tabular-nums ${on ? "font-semibold text-[#053877]" : "text-[#667085]"}`}>{on ? "Playing" : mmss(v.asset.sec)}</span>
+                {on && <span className="shrink-0 whitespace-nowrap text-[11px] font-semibold text-[#053877]">Playing</span>}
               </div>
               <div className="mt-0.5 flex min-w-0 items-center text-xs text-[#667085]">
                 <Select value={v.role} onChange={(e) => setClip(v.asset.id, { role: e.target.value as VideoClip["role"] })} aria-label="Use as" small wrap="shrink-0" className="h-6 rounded-md border border-[#e4e7ec] bg-white pl-2 text-[11px]">
