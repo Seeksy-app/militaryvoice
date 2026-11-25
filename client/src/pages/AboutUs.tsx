@@ -25,12 +25,9 @@ export default function AboutUs() {
             <h1 className="mt-4 text-balance text-4xl font-bold leading-[1.05] tracking-tight sm:text-5xl" style={HEADLINE_FONT}>
               Riccoh Player
             </h1>
-            <p className="mt-4 max-w-xl text-balance text-xl font-semibold leading-snug text-white sm:text-2xl" style={HEADLINE_FONT}>
+            <h2 className="mt-4 max-w-xl text-balance text-xl font-semibold leading-snug text-white sm:text-2xl" style={HEADLINE_FONT}>
               Founding &amp; Operating Partner of MilitaryVoices.ai
-            </p>
-            <p className="mt-3 max-w-xl text-pretty text-lg leading-relaxed text-white/80">
-              Col, USMC (ret), founder of OHIOWA Management Group LLC.
-            </p>
+            </h2>
           </div>
           <div className="overflow-hidden rounded-3xl border border-white/10 shadow-2xl">
             <img
