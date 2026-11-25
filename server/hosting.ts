@@ -6,6 +6,7 @@ import sharp from "sharp";
 import { and, desc, eq, gte, inArray, ne, sql } from "drizzle-orm";
 import { db, storage, schemaIsReady, inTransaction } from "./storage.js";
 import { withCredits } from "./roomKit.js";
+import { showFor } from "./hostShows.js";
 import { fillFooter } from "../shared/footer.js";
 import { hostedSpots, type HostedSpotRow } from "../shared/schema.js";
 import { requireHostSession, getSessionEmail } from "./session.js";
@@ -701,13 +702,22 @@ export async function moveEpisodes(email: string, ids: number[], toShowId: numbe
   return { moved };
 }
 
-/** A new recording from their Zoom (a package account): the episode appears in their Episodes at once, in post-production. */
-export async function startEpisodeFromRecording(email: string, rec: { id: number; title: string; durationSec: number; url: string }): Promise<void> {
+/**
+ * A new recording from their Zoom or their studio (a package account): the episode appears in their Episodes at once, in
+ * post-production. Into the show it's for (showFor: the first of `names` that is one of their show titles, e.g. the
+ * studio's name, then their profile's podcast, else their only show), never just the oldest: Riccoh's Warriors' Voice
+ * studio recording would have gone to his Devil Dawg show (24 Nov 2026). "no-show" when it can't tell which.
+ */
+export async function startEpisodeFromRecording(email: string, rec: { id: number; title: string; durationSec: number; url: string }, names: (string | null | undefined)[] = []): Promise<"made" | "had" | "no-show" | "no-file"> {
   await schemaIsReady();
-  const [show] = await showsOf(email.trim().toLowerCase());
-  if (!show || !rec.url) return;
+  if (!rec.url) return "no-file";
   const have = await db.select({ id: hostedEpisodes.id }).from(hostedEpisodes).where(eq(hostedEpisodes.recordingId, rec.id)).limit(1);
-  if (have.length) return;
+  if (have.length) return "had";
+  const e = email.trim().toLowerCase();
+  const profile = await storage.getProfileByEmail(e).catch(() => undefined);
+  const pick = await showFor(e, null, ...names, profile?.podcastName);
+  const [show] = pick ? await db.select().from(hostedShows).where(eq(hostedShows.id, pick.id)).limit(1) : [];
+  if (!show) return "no-show";
   const eps = await episodesOf(show.id);
   await db.insert(hostedEpisodes).values({
     showId: show.id, title: (rec.title || "New episode").slice(0, 300), recordingId: rec.id, durationSec: Math.round(rec.durationSec || 0),
@@ -715,6 +725,7 @@ export async function startEpisodeFromRecording(email: string, rec: { id: number
     episodeNumber: show.showType === "serial" ? null : nextEpisodeNumber(eps),
     guid: crypto.randomUUID(), status: "draft", stage: "post", createdAt: now(), audioJob: "queued", audioJobAt: now(), bookends: "off",
   });
+  return "made";
 }
 
 /** The worker's next episode to turn from video into audio (a stuck one is taken back after 30 minutes). */

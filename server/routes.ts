@@ -8159,8 +8159,11 @@ export function registerRoutes(app: Express): void {
     await storage.setSetting(`pkgwait:${rec.id}`, "");
   }
 
-  /** A new recording on a package account: clips now, the guest card as soon as there is a guest. */
-  async function startPackage(rec: NonNullable<Awaited<ReturnType<typeof storage.getRecording>>>): Promise<void> {
+  /**
+   * A new recording on a package account (from Zoom, or their own studio since 24 Nov 2026): clips now, the guest card as
+   * soon as there is a guest. `names` say which of their shows it's for (the studio's name; see startEpisodeFromRecording).
+   */
+  async function startPackage(rec: NonNullable<Awaited<ReturnType<typeof storage.getRecording>>>, names: (string | null | undefined)[] = []): Promise<void> {
     const email = rec.email.trim().toLowerCase();
     if (!(await packageOn(email)) || rec.status !== "Ready") return;
     // The package covers up to two episodes a week, up to 60 minutes each. Past that we hold it for the team to look at,
@@ -8178,7 +8181,9 @@ export function registerRoutes(app: Express): void {
     used.push({ id: rec.id, at: new Date().toISOString() });
     await storage.setSetting(`pkgused:${email}`, JSON.stringify(used.slice(-20)));
     // The episode shows up in their Episodes straight away, "In post-production", at the top.
-    await startEpisodeFromRecording(email, { id: rec.id, title: rec.title, durationSec: rec.durationSec, url: rec.url }).catch((err) => console.error("Episode from recording failed:", (err as Error).message));
+    const made = await startEpisodeFromRecording(email, { id: rec.id, title: rec.title, durationSec: rec.durationSec, url: rec.url }, names).catch((err) => { console.error("Episode from recording failed:", (err as Error).message); return "failed" as const; });
+    // Two or more shows and nothing says which: the team files it (never into the oldest by guess).
+    if (made === "no-show" || made === "failed") await slackNote(`:inbox_tray: ${email}'s new recording "${rec.title || rec.id}" (Library #${rec.id}) is in post-production, but ${made === "no-show" ? "we couldn't tell which of their shows it's for" : "its episode couldn't be made"}. Clips are starting; add the episode to the right show by hand.`).catch(() => undefined);
     if (rec.clipStatus === "none" || !rec.clipStatus) {
       await storage.markPostifyBeta(rec.id); // covered by the package: no credits taken
       await storage.setClipOptions(rec.id, JSON.stringify(allShapes(parseClipOptions(rec.clipOptions))));
@@ -8218,8 +8223,12 @@ export function registerRoutes(app: Express): void {
     await putRecordingObject(photoKey, body, "image/jpeg");
     await storage.setSetting(`nextguest:${email}`, JSON.stringify({ name: guestName, photoKey }));
     // An episode already waiting for its guest starts now.
-    const waiting = (await storage.listRecordingsByEmail(email)).find((r) => r.status === "Ready" && !r.episodeEdit && r.egressId.startsWith("ZOOM_"));
-    if (waiting && (await storage.getSetting(`pkgwait:${waiting.id}`))) {
+    // From Zoom or their studio (or a show they streamed in): whichever is waiting for its guest.
+    let waiting: Awaited<ReturnType<typeof storage.listRecordingsByEmail>>[number] | undefined;
+    for (const r of (await storage.listRecordingsByEmail(email)).filter((r) => r.status === "Ready" && !r.episodeEdit && (r.egressId.startsWith("ZOOM_") || /^(personal|streams)\//.test(r.url)))) {
+      if (await storage.getSetting(`pkgwait:${r.id}`)) { waiting = r; break; }
+    }
+    if (waiting) {
       try { await attachGuest(waiting, guestName, body); await storage.setSetting(`nextguest:${email}`, ""); return res.json({ ok: true, started: waiting.title }); } catch (err) { return res.status(409).json({ message: (err as Error).message }); }
     }
     res.json({ ok: true });
@@ -9835,8 +9844,21 @@ export function registerRoutes(app: Express): void {
       // work needs ffmpeg and minutes, neither of which a serverless function
       // has, so the worker picks it up.
       // A stream-in test, or one under two minutes, is kept in the Library but makes no clips.
-      if (ok && finished?.id && agentToken() && !(await streamInSkipsClips({ id: finished.id, durationSec: finished.durationSec ?? 0 }).catch(() => false))) {
+      const skips = ok && finished?.id ? await streamInSkipsClips({ id: finished.id, durationSec: finished.durationSec ?? 0 }).catch(() => false) : true;
+      if (ok && finished?.id && agentToken() && !skips) {
         await storage.setClipStatus(finished.id, "queued", "");
+      }
+      // Their own studio, or a show they streamed in: on a Production package account it goes to post-production by itself,
+      // like a Zoom recording (Andrew, 24 Nov 2026: "Yes, build it", after Riccoh's show went through by hand). Not a test,
+      // not under two minutes; into the show the studio is named for.
+      const rec = ok && finished?.id && !skips ? await storage.getRecording(finished.id) : undefined;
+      if (rec && /^(personal|streams)\//.test(rec.url) && (rec.durationSec ?? 0) >= 120) {
+        const owner = rec.email.trim().toLowerCase();
+        const found = rec.url.startsWith("personal/") ? await db.execute(sql`select name from personal_studios where owner_email = ${owner} limit 1`) : [];
+        const studioName = String((((found as { rows?: { name?: string }[] }).rows ?? (found as { name?: string }[]))[0]?.name) ?? "");
+        const pkg = startPackage(rec, [studioName, rec.title]).catch((err) => console.error("Package start failed:", (err as Error).message));
+        try { waitUntil(pkg); } catch { /* not on Vercel */ }
+        await pkg;
       }
     } catch (err) {
       console.error("Couldn't record the end of egress", info.egressId, err);
