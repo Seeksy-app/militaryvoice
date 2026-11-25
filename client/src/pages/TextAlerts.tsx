@@ -79,7 +79,7 @@ export default function TextAlerts() {
               {busy ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null} Sign me up for text alerts
             </Button>
             <p className="text-xs text-muted-foreground">
-              We never sell or share your mobile number. Texts come from MilitaryVoices.ai, operated by Applied Growth Technologies LLC.
+              We never sell or share your mobile number. Texts come from MilitaryVoices.ai, operated by OHIOWA Management Group LLC.
               Help: hello@militaryvoices.ai.
             </p>
           </form>
