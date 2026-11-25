@@ -13,6 +13,7 @@ import { getSessionEmail } from "./session.js";
 import { isLiveKitConfigured, publicLiveKitUrl } from "./livekit.js";
 import { roomLookKey } from "./roomKit.js";
 import { bioPages, personalStudios, streamKeys, watchPages, type BioPageRow } from "../shared/schema.js";
+import { ownHlsBase, ownWatchOn, watchIdKey } from "./streamIn.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 const norm = (e: string) => e.trim().toLowerCase();
@@ -70,7 +71,9 @@ async function viewerToken(room: string): Promise<string> {
 
 export type LiveNow =
   | { kind: "studio"; since: string; url: string; token: string; lookKey: string; studioId: number }
-  | { kind: "stream"; since: string; url: string; token: string };
+  | { kind: "stream"; since: string; url: string; token: string }
+  /** A stream sent in to our own box: its watch relay, played as HLS (no LiveKit seat). */
+  | { kind: "hls"; since: string; src: string };
 
 /** What's live for this person right now, if anything (stream in first: it's what they're sending us this minute). */
 async function liveNowFor(email: string, withToken: boolean): Promise<LiveNow | null> {
@@ -78,6 +81,10 @@ async function liveNowFor(email: string, withToken: boolean): Promise<LiveNow | 
   const [k] = await db.select().from(streamKeys).where(eq(streamKeys.ownerEmail, email)).limit(1);
   if (k && k.engine === "livekit" && k.room && k.status === "live" && k.egressId && k.egressId !== "pending" && (await streamInOutOn(email))) {
     return { kind: "stream", since: k.liveSince, url: publicLiveKitUrl(), token: withToken ? await viewerToken(k.room) : "" };
+  }
+  if (k && k.engine === "own" && k.status === "live" && (await ownWatchOn()) && (await streamInOutOn(email))) {
+    const id = await storage.getSetting(watchIdKey(k.id)).catch(() => null);
+    if (id) return { kind: "hls", since: k.liveSince, src: `${await ownHlsBase()}/w/${id}/index.m3u8` };
   }
   const [s] = await db.select().from(personalStudios).where(eq(personalStudios.ownerEmail, email)).limit(1);
   if (s?.liveEgressId) {

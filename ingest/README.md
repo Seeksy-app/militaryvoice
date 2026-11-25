@@ -40,6 +40,32 @@ The site side is `server/ingestEngine.ts` (routes) and `server/streamIn.ts` (eng
   A key is 144 random bits; the agent refuses every read; revoking a key (new key or off) kicks its stream within 30 seconds.
 - At 2 am: systemd restarts both services if they die; the System health check pages Slack if the box is silent.
 
+## The watch relay (watch page for everyone, 25 Nov 2026)
+
+What the box takes in also plays on the podcaster's watch page (`militaryvoices.ai/<handle>/live`, and the LIVE card
+on their SmartLink) and goes on to their YouTube and other stream keys, the way their studio's Go live does.
+
+- When a stream starts, the site's `started` answer carries `watchId` (random, new each show) and `forward` (their
+  push URLs; none for Test it or when "Send what I stream in" is off). The agent runs one `ffmpeg -c copy` per stream
+  into a tee: `w/<watchId>` on this box plus each forward. No re-encoding; the recording is MediaMTX's own on
+  `live/<key>` and never depends on the relay.
+- MediaMTX serves HLS on :8443 (same certificate) for `w/<id>` only. The page plays
+  `https://stream.militaryvoices.ai:8443/w/<id>/index.m3u8` (setting `streamin:own-hls` overrides the base).
+- Auth: `live/<key>` can be read only by the agent's relay (localhost plus a secret made fresh each start);
+  `w/<id>` can be published only by the relay and read by anyone (the id is the secret). The forward list stays in
+  memory, never in the state files.
+- Switch on, after the box has the new `mediamtx.yml` and `agent.mjs` and port 8443 is open: set
+  `streamin:own-watch` to `1`. Until then the site sends no `watchId`, the agent records only, and the Stream in
+  page promises the studio only.
+- Rehearse anywhere with MediaMTX and ffmpeg: `MEDIAMTX=/path/to/mediamtx node ingest/relay-test.mjs` (prints PASS).
+
+Roll back, quickest first:
+1. Set `streamin:own-watch` to `""`. The next stream records only, as before; the watch page stops offering box
+   streams. A stream already running keeps its relay until it ends.
+2. If the box itself misbehaves: put back the previous `/etc/mvingest/mediamtx.yml` and `/opt/mvingest/agent.mjs`
+   (setup keeps them as `*.bak-<date-time>`) and `systemctl restart mediamtx mv-ingest-agent`, between shows.
+3. Last resort for Stream in as a whole: the engine roll back above (`{"engine":"livekit"}`).
+
 ## The studio player (Studio v3)
 `player.mjs` runs as its own service, `mv-player`, so a fault there never touches Stream in. It plays the studio's
 sounds and music into each live creator studio, where everyone hears them: the people in the studio, the recording and

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Volume2, VolumeX } from "lucide-react";
-import { RoomPicture } from "@/components/RoomStage";
+import { LivePicture, type LiveNow } from "@/components/LivePicture";
 
 /**
  * The LIVE card on a SmartLink (Andrew, 25 Nov 2026: "Yes, build it", the watch page for everyone; option 1: nothing to
@@ -9,9 +9,6 @@ import { RoomPicture } from "@/components/RoomStage";
  * screen to /<handle>/live. When they stop it goes away. The player only joins while the card is on screen, so a
  * visitor who never scrolls to it costs nothing.
  */
-type LiveNow =
-  | { kind: "studio"; since: string; url: string; token: string; lookKey: string; studioId: number }
-  | { kind: "stream"; since: string; url: string; token: string };
 type LiveData = { handle: string; name: string; on: boolean; live: LiveNow | null };
 
 const at = (iso: string) => {
@@ -57,15 +54,7 @@ export function SmartLinkLive({ handle }: { handle: string }) {
       </div>
       <div ref={box} className="relative aspect-video w-full bg-[#0b1630]">
         {seen && (
-          <RoomPicture
-            key={`${seat.kind}:${seat.since}`}
-            url={seat.url}
-            token={seat.token}
-            studioId={seat.kind === "studio" ? seat.studioId : null}
-            lookKey={seat.kind === "studio" ? seat.lookKey : null}
-            name={q.data.name}
-            muted={muted}
-          />
+          <LivePicture seat={seat} name={q.data.name} muted={muted} />
         )}
         <button type="button" onClick={() => setMuted((m) => !m)} className="absolute bottom-2.5 left-2.5 z-30 flex items-center gap-1.5 rounded-full bg-black/65 px-3 py-1.5 text-[13px] font-semibold backdrop-blur hover:bg-black/80" data-testid="bio-live-sound">
           {muted ? <VolumeX className="h-4 w-4" aria-hidden /> : <Volume2 className="h-4 w-4" aria-hidden />}{muted ? "Tap for sound" : "Sound on"}

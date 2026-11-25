@@ -208,7 +208,7 @@ const TEST_WINDOW_MS = 15 * 60_000;
 const SHORT_SEC = 120;
 const testArmKey = (id: number) => `streamin:test:${id}`;
 const testRecKey = (recId: number) => `streamin:testrec:${recId}`;
-async function testArmed(c: StreamKeyRow): Promise<boolean> {
+export async function testArmed(c: StreamKeyRow): Promise<boolean> {
   const at = await storage.getSetting(testArmKey(c.id)).catch(() => null);
   return !!at && Date.now() - Date.parse(at) < TEST_WINDOW_MS;
 }
@@ -323,9 +323,21 @@ async function view(c: StreamKeyRow | undefined) {
   };
 }
 
-/** Our own box re-shares each stream for the watch page and sends it on (the box's watch relay, 25 Nov 2026). Off until the box has it. */
+/**
+ * Our own box's watch relay (25 Nov 2026, the watch page for everyone): each stream it takes in is copied, as sent, to a
+ * path under a random watch id that the watch page plays as HLS, and on to their YouTube and other keys. Off until the
+ * box has it; switching streamin:own-watch back off is the rollback (the box then only records, as before).
+ */
 export async function ownWatchOn(): Promise<boolean> {
   return (await storage.getSetting("streamin:own-watch").catch(() => null)) === "1";
+}
+export const watchIdKey = (keyId: number) => `streamin:watch:${keyId}`;
+/** Where the box serves HLS: streamin:own-hls, else the stream address's host on port 8443. */
+export async function ownHlsBase(): Promise<string> {
+  const set = (await storage.getSetting("streamin:own-hls").catch(() => null)) || "";
+  if (set) return set.replace(/\/+$/, "");
+  const host = /^rtmps?:\/\/([^/:]+)/.exec(await ownUrl())?.[1] ?? "stream.militaryvoices.ai";
+  return `https://${host}:8443`;
 }
 
 /**

@@ -46,6 +46,9 @@ install -m 755 "$TMP/mediamtx" "$APP/mediamtx"
 echo "MediaMTX $VER installed"
 
 echo "== Agent and config"
+# Keep the running copies for a quick roll back (README: The watch relay).
+BAK="bak-$(date +%Y%m%d-%H%M%S)"
+for f in "$APP/agent.mjs" "$APP/player.mjs" /etc/mvingest/mediamtx.yml; do [ -f "$f" ] && cp -p "$f" "$f.$BAK"; done
 install -m 644 "$SRC/agent.mjs" "$APP/agent.mjs"
 install -m 644 "$SRC/player.mjs" "$APP/player.mjs"
 install -m 644 "$SRC/package.json" "$APP/package.json"
@@ -118,7 +121,7 @@ systemctl daemon-reload
 systemctl enable mediamtx mv-ingest-agent mv-player >/dev/null
 
 echo "== Firewall, fail2ban, automatic security updates"
-ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 1935/tcp
+ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp; ufw allow 1935/tcp; ufw allow 8443/tcp
 ufw --force enable
 systemctl enable --now fail2ban
 dpkg-reconfigure -f noninteractive unattended-upgrades || true

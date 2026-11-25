@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { Check, Copy, Volume2, VolumeX } from "lucide-react";
 import NotFound from "@/pages/not-found";
-import { RoomPicture } from "@/components/RoomStage";
+import { LivePicture, type LiveNow } from "@/components/LivePicture";
 
 /**
  * militaryvoices.ai/<handle>/live (Andrew, 22 Nov 2026: "Going live on their MilitaryVoices web page"). Whatever the
@@ -10,9 +10,6 @@ import { RoomPicture } from "@/components/RoomStage";
  * watch from a hidden, watch-only seat, so nothing they do reaches the show. Checked every 20 seconds, so the page
  * goes live by itself when they do.
  */
-type LiveNow =
-  | { kind: "studio"; since: string; url: string; token: string; lookKey: string; studioId: number }
-  | { kind: "stream"; since: string; url: string; token: string };
 type LiveData = {
   handle: string; name: string; photo: string; on: boolean; live: LiveNow | null;
   /** Their SmartLink's handle when it's on (else ""): the name links back to it. */
@@ -90,15 +87,7 @@ export default function LivePage({ handle }: { handle: string }) {
         <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-black shadow-[0_24px_48px_rgba(0,0,0,0.4)]" data-testid="live-page-player">
           {seat ? (
             <>
-              <RoomPicture
-                key={`${seat.kind}:${seat.since}`}
-                url={seat.url}
-                token={seat.token}
-                studioId={seat.kind === "studio" ? seat.studioId : null}
-                lookKey={seat.kind === "studio" ? seat.lookKey : null}
-                name={d.name}
-                muted={muted}
-              />
+              <LivePicture seat={seat} name={d.name} muted={muted} />
               <button type="button" onClick={() => setMuted((m) => !m)} className="absolute bottom-3 left-3 z-30 flex items-center gap-2 rounded-full bg-black/65 px-3.5 py-2 text-sm font-semibold backdrop-blur hover:bg-black/80" data-testid="live-page-sound">
                 {muted ? <VolumeX className="h-4 w-4" /> : <Volume2 className="h-4 w-4" />} {muted ? "Turn sound on" : "Sound on"}
               </button>

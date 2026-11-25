@@ -4,7 +4,9 @@ import { and, eq } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { beat } from "./health.js";
 import { slackNote } from "./slack.js";
-import { capSeconds, keyHash, ownBoxAlive, ownUrl, showName, usedSeconds } from "./streamIn.js";
+import { capSeconds, keyHash, ownBoxAlive, ownUrl, ownWatchOn, showName, testArmed, usedSeconds, watchIdKey } from "./streamIn.js";
+import { streamInOutOn } from "./livePage.js";
+import { liveTargetsOf } from "./myStudio.js";
 import { streamKeys, streamSessions, type StreamKeyRow } from "../shared/schema.js";
 
 /**
@@ -49,6 +51,26 @@ async function mayStream(c: StreamKeyRow): Promise<{ ok: true } | { ok: false; r
   return { ok: true };
 }
 
+/**
+ * What the box does with a live stream besides recording it (the watch relay, when streamin:own-watch is on): copy it,
+ * as sent, to w/<watchId> for the watch page, and to each place in `forward` (their YouTube and other keys, as their
+ * studio's Go live would). A test (Test it) gets neither. A reconnect keeps its watch id, so the page carries on.
+ */
+async function relayFor(c: StreamKeyRow, fresh: boolean): Promise<{ watchId?: string; forward?: string[] }> {
+  if (!(await ownWatchOn())) return {};
+  if (await testArmed(c)) {
+    await storage.setSetting(watchIdKey(c.id), "");
+    return { watchId: "", forward: [] };
+  }
+  let watchId = (await storage.getSetting(watchIdKey(c.id)).catch(() => null)) || "";
+  if (fresh || !watchId) {
+    watchId = crypto.randomBytes(12).toString("hex");
+    await storage.setSetting(watchIdKey(c.id), watchId);
+  }
+  const forward = (await streamInOutOn(c.ownerEmail)) ? await liveTargetsOf(c.ownerEmail).catch(() => []) : [];
+  return { watchId, forward };
+}
+
 export function registerIngest(app: Express, requireAdmin: RequestHandler): void {
   /** The box asks before it lets anyone publish. */
   app.post("/api/ingest/authorize", bearer, async (req, res) => {
@@ -67,10 +89,10 @@ export function registerIngest(app: Express, requireAdmin: RequestHandler): void
     const [claimed] = await db.update(streamKeys).set({ egressId: "own", status: "live", liveSince: now(), lostAt: "", problem: "" }).where(and(eq(streamKeys.id, c.id), eq(streamKeys.egressId, ""))).returning();
     if (claimed) {
       const [s] = await db.insert(streamSessions).values({ keyId: c.id, ownerEmail: c.ownerEmail, egressId: "own", startedAt: now() }).returning();
-      return res.status(201).json({ sessionId: s.id, startedAt: s.startedAt });
+      return res.status(201).json({ sessionId: s.id, startedAt: s.startedAt, ...(await relayFor(claimed, true).catch(() => ({}))) });
     }
     const [open] = await db.select().from(streamSessions).where(and(eq(streamSessions.keyId, c.id), eq(streamSessions.endedAt, ""))).limit(1);
-    res.json({ sessionId: open?.id ?? 0, startedAt: open?.startedAt ?? now() });
+    res.json({ sessionId: open?.id ?? 0, startedAt: open?.startedAt ?? now(), ...(await relayFor(c, false).catch(() => ({}))) });
   });
 
   /**

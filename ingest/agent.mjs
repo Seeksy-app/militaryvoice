@@ -13,6 +13,7 @@ import http from "node:http";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { spawn } from "node:child_process";
+import crypto from "node:crypto";
 
 const env = (k, d = "") => (process.env[k] ?? d).trim();
 export const cfg = {
@@ -31,12 +32,17 @@ export const cfg = {
   localStore: env("LOCAL_STORE", "/var/lib/mvingest/store"),
   r2: { accountId: env("R2_ACCOUNT_ID"), accessKeyId: env("R2_ACCESS_KEY_ID"), secretAccessKey: env("R2_SECRET_ACCESS_KEY"), bucket: env("R2_BUCKET", "militaryvoice-recordings") },
   keepDoneDays: Number(env("KEEP_DONE_DAYS", "3")),
-  version: "1",
+  rtmpLocal: env("RTMP_LOCAL", "rtmp://127.0.0.1:1935"),
+  version: "2",
 };
 
 const KEY_RE = /^[A-Za-z0-9_-]{20,80}$/;
 const log = (...a) => console.log(new Date().toISOString(), ...a.map((x) => (typeof x === "string" ? x.replace(/live\/[A-Za-z0-9_-]{20,80}/g, "live/<key>") : x)));
 const keyOfPath = (p) => (/^live\/([A-Za-z0-9_-]{20,80})$/.exec(String(p ?? "")) ?? [])[1] ?? "";
+const WATCH_RE = /^w\/[a-f0-9]{24}$/;
+const LOCAL_IPS = new Set(["127.0.0.1", "::1", "::ffff:127.0.0.1"]);
+/** Proves a read of live/<key> or a publish to w/<id> is our own relay: made fresh each start, never leaves this box. */
+const relaySecret = crypto.randomBytes(18).toString("hex");
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 /** A short, key-free name for a key's files on disk and in state. */
 const tag = (key) => key.slice(-8);
@@ -59,13 +65,14 @@ async function api(route, body, { retries = 0 } = {}) {
 }
 
 // ---- sessions (one per key) ------------------------------------------------
-/** @type {Map<string, {key:string, sessionId:number, startedAt:string, live:boolean, timer:any, finalizing:boolean, uploaded:null|{objectKey:string,sizeBytes:number,durationSec:number}}>} */
+/** @type {Map<string, {key:string, sessionId:number, startedAt:string, live:boolean, timer:any, finalizing:boolean, uploaded:null|{objectKey:string,sizeBytes:number,durationSec:number}, watchId?:string, forward?:string[], relay?:any}>} */
 const sessions = new Map();
 const lastOk = new Map(); // key -> ms a publish was last allowed: lets a stream start if the site is briefly unreachable
 
 const stateFile = (key) => path.join(cfg.stateDir, `${tag(key)}.json`);
 async function save(s) {
-  const { timer, ...rest } = s;
+  // The forward list holds other sites' stream keys: memory only, asked for again after a restart.
+  const { timer, relay, forward, ...rest } = s;
   await fs.writeFile(stateFile(s.key), JSON.stringify(rest), { mode: 0o600 });
 }
 const segDir = (key) => path.join(cfg.recDir, "live", key);
@@ -75,35 +82,85 @@ function armGrace(s) {
   s.timer = setTimeout(() => void finalize(s), cfg.graceMs);
 }
 
+async function started(key) {
+  try {
+    return await api("started", { key }, { retries: 3 });
+  } catch (e) {
+    log("started call failed", e.message);
+    return { status: 0, json: {} };
+  }
+}
+
+/** What the site said to do besides recording (the watch relay). Absent: the site hasn't switched it on. */
+function takeRelay(s, json) {
+  if (typeof json.watchId === "string") s.watchId = /^[a-f0-9]{24}$/.test(json.watchId) ? json.watchId : "";
+  if (Array.isArray(json.forward)) s.forward = json.forward.filter((u) => typeof u === "string" && /^rtmps?:\/\//.test(u));
+}
+
 async function onReady(key) {
   let s = sessions.get(key);
   if (s) {
-    // A reconnect inside the grace period: the same session carries on.
+    // A reconnect inside the grace period: the same session carries on, and so does its watch page.
     clearTimeout(s.timer);
     s.live = true;
+    takeRelay(s, (await started(key)).json);
     await save(s);
+    startRelay(s);
     return;
   }
-  let r;
-  try {
-    r = await api("started", { key }, { retries: 3 });
-  } catch (e) {
-    log("started call failed", e.message);
-    r = { status: 0, json: {} };
-  }
+  const r = await started(key);
   s = { key, sessionId: Number(r.json.sessionId) || 0, startedAt: r.json.startedAt || new Date().toISOString(), live: true, timer: null, finalizing: false, uploaded: null };
+  takeRelay(s, r.json);
   sessions.set(key, s);
   await save(s);
-  log("live", tag(key), "session", s.sessionId);
+  log("live", tag(key), "session", s.sessionId, s.watchId ? `watch + ${s.forward?.length ?? 0} out` : "record only");
+  startRelay(s);
 }
 
 async function onNotReady(key) {
   const s = sessions.get(key);
   if (!s) return;
   s.live = false;
+  stopRelay(s);
   await save(s);
   armGrace(s);
   log("stream gone", tag(key), `grace ${Math.round(cfg.graceMs / 1000)}s`);
+}
+
+// ---- the watch relay -------------------------------------------------------
+// One ffmpeg per live stream copies it, untouched (-c copy, no re-encoding), to
+// w/<watch id> on this box, which MediaMTX serves as HLS for the watch page, and
+// to each forward target (their YouTube and other keys). A target that fails is
+// dropped without stopping the others (onfail=ignore). The recording never
+// depends on this: it is MediaMTX's own, on live/<key>.
+const teeSafe = (u) => !/[|\[\]\\']/.test(u);
+
+function relayArgs(s) {
+  const outs = [`[f=flv:onfail=ignore]${cfg.rtmpLocal}/w/${s.watchId}?relay=${relaySecret}`];
+  for (const u of s.forward ?? []) if (teeSafe(u)) outs.push(`[f=flv:onfail=ignore]${u}`);
+  return ["-hide_banner", "-loglevel", "error", "-rw_timeout", "15000000", "-i", `${cfg.rtmpLocal}/live/${s.key}?relay=${relaySecret}`, "-map", "0:v?", "-map", "0:a?", "-c", "copy", "-f", "tee", outs.join("|")];
+}
+
+function startRelay(s) {
+  if (!s.watchId || !s.live || s.relay) return;
+  const p = spawn("ffmpeg", relayArgs(s), { stdio: ["ignore", "ignore", "pipe"] });
+  s.relay = p;
+  let err = "";
+  p.stderr.on("data", (d) => (err = (err + d).slice(-400)));
+  p.on("error", (e) => log("relay failed to start", tag(s.key), e.message));
+  p.on("close", (code) => {
+    if (s.relay === p) s.relay = null;
+    if (!s.live) return;
+    // The stream is still in but the relay stopped: start it again in a moment.
+    log("relay stopped", tag(s.key), code, err.replace(/live\/[A-Za-z0-9_-]{20,80}/g, "live/<key>").replace(/\/\/[^\s]+/g, "//…").trim().slice(-160));
+    setTimeout(() => startRelay(s), 3000);
+  });
+}
+
+function stopRelay(s) {
+  const p = s.relay;
+  s.relay = null;
+  if (p && p.exitCode === null) p.kill("SIGTERM");
 }
 
 // ---- finishing -------------------------------------------------------------
@@ -269,6 +326,11 @@ export function server() {
       if (req.url === "/auth") {
         let q = {};
         try { q = JSON.parse(raw || "{}"); } catch { return send(400); }
+        const ours = LOCAL_IPS.has(String(q.ip ?? "")) && new URLSearchParams(String(q.query ?? "")).get("relay") === relaySecret;
+        // The watch relay: our ffmpeg reads live/<key> and publishes w/<id>, from this machine, with this run's secret.
+        if (ours && ((q.action === "read" && keyOfPath(q.path)) || (q.action === "publish" && WATCH_RE.test(String(q.path ?? ""))))) return send(200);
+        // Watching: anyone may read w/<id> (the id is the secret, and it changes every show). Nothing else is readable.
+        if (q.action === "read") return send(WATCH_RE.test(String(q.path ?? "")) ? 200 : 401);
         const key = q.action === "publish" ? keyOfPath(q.path) : "";
         if (!key) return send(401);
         try {

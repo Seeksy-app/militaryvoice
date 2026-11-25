@@ -17,9 +17,9 @@ metrics: no
 pprof: no
 playback: no
 
-# Only RTMP/RTMPS come in. Nothing is served out.
+# Only RTMP/RTMPS come in. The one thing served out is HLS for the watch page, and only
+# for the watch relay's own paths (w/<watch id>), never a stream key's path.
 rtsp: no
-hls: no
 webrtc: no
 srt: no
 moq: no
@@ -30,8 +30,25 @@ rtmpsAddress: :443
 rtmpServerKey: /etc/mvingest/tls/privkey.pem
 rtmpServerCert: /etc/mvingest/tls/fullchain.pem
 
-# Every publish is checked with the site, through the agent. Reading (watching)
-# is never allowed; the management API on localhost is the one exception.
+# The watch page (militaryvoices.ai/<handle>/live) plays w/<watch id> from here:
+# https://stream.militaryvoices.ai:8443/w/<watch id>/index.m3u8. Same certificate as RTMPS.
+# Plain HLS in 2-second fMP4 segments: works in every browser through hls.js and Safari.
+hls: yes
+hlsAddress: :8443
+hlsEncryption: yes
+hlsServerKey: /etc/mvingest/tls/privkey.pem
+hlsServerCert: /etc/mvingest/tls/fullchain.pem
+hlsAllowOrigins: ["*"]
+hlsAlwaysRemux: no
+hlsVariant: fmp4
+hlsSegmentCount: 7
+hlsSegmentDuration: 2s
+hlsMuxerCloseAfter: 60s
+
+# Every publish is checked with the site, through the agent. Reading a stream
+# key's path is never allowed (only the agent's own relay, from this machine);
+# watching is allowed on w/<watch id> only. The management API on localhost is
+# not checked.
 authMethod: http
 authHTTPAddress: http://127.0.0.1:8088/auth
 authHTTPExclude:
@@ -50,5 +67,12 @@ pathDefaults:
   runOnRecordSegmentComplete: curl -s -m 10 -X POST --data-urlencode "path=$MTX_PATH" --data-urlencode "file=$MTX_SEGMENT_PATH" http://127.0.0.1:8088/event/segment
 
 paths:
+  # The watch relay: the agent copies each live stream, as sent, to w/<watch id>
+  # for the watch page. Not recorded (live/<key> already is) and no events.
+  "~^w/[a-f0-9]{24}$":
+    record: no
+    runOnAvailable: ""
+    runOnUnavailable: ""
+    runOnRecordSegmentComplete: ""
   # rtmp://stream.militaryvoices.ai/live/<stream key>: the path is "live/<key>".
   all_others:
