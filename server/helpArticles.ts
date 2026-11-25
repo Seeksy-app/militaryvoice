@@ -23,7 +23,7 @@ On a computer, your scenes are on the left and Your look is on the right. What y
 a Scenes are what viewers see. People are who's in the room. Click a scene card, or press its number key (1 to 9), to put it on stage. The one on stage says ON STAGE, and each card says who's on it. Press + New scene and pick its type. A Media presentation asks what it shows: a clip, a picture or a shared screen.
 b Intro and outro video: add them at the top and bottom of the scenes, then press play to show one. The stage goes back to your people when it ends.
 c Play a video: press Present or invite, then Video file. It plays once, with its sound, for everyone in your studio and in the recording, then the stage goes back to your scene. Tick Loop it to keep it going until you stop presenting.
-d Your name on screen: open People and use your own row. Change the name, or switch Show my name off. The host can switch Show my show's icon off there too.
+d Your name on screen: open People and use your own row. Change the name, or switch Show my name off. To hide the show's logo, the host opens Media and picks None under Logo.
 e Your look: pick your logo and its corner, a background colour or picture, and banners. Press Show on a banner to put it on screen; it goes away by itself after its time.
 4 On stage and backstage
 Everyone in your studio shows on the stage unless you send them backstage. Under the stage, each guest has Send backstage and Bring on stage.
@@ -822,7 +822,7 @@ export const QUICK_ANSWERS: { q: string; a: string }[] = [
   },
   {
     "q": "How do I hide or change my name on screen?",
-    "a": "1. In your studio, open **People**.\n2. On your own row, change **Your name on screen**, or switch **Show my name** off.\nThe host can also switch **Show my show's icon** off there. It changes on stage straight away.\n[[GO:studio]]"
+    "a": "1. In your studio, open **People**.\n2. On your own row, change **Your name on screen**, or switch **Show my name** off.\nIt changes on stage straight away. To hide the show's logo, the host opens **Media** and picks **None** under Logo.\n[[GO:studio]]"
   },
   {
     "q": "What's the difference between scenes and people?",

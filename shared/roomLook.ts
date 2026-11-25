@@ -109,7 +109,7 @@ export interface RoomStyle {
 
 export interface RoomLook extends RoomLookStyle {
   scenes: RoomScene[];
-  /** The show's icon in the bottom-left when no logo is picked (absent = on). Off from the host's row in People. */
+  /** The show's icon in the bottom-left when no logo is picked (absent = on). Media > Logo > None turns it off. */
   showIcon?: boolean;
   logos?: RoomAsset[];
   banners?: { id: string; text: string; seconds: number }[];

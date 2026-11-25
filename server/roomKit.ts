@@ -124,7 +124,7 @@ export type Look = {
   /** v3: the background a NEW scene starts with (and the fallback); each scene carries its own. */
   background: Background;
   logo: { asset: Asset; corner: LogoCorner } | null;
-  /** Their show's icon in the bottom-left when no logo is picked (default on). The host's row in People switches it (Andrew, 24 Nov). */
+  /** Their show's icon in the bottom-left when no logo is picked (default on). Media > Logo > None turns it off (PM, 25 Nov). */
   showIcon?: boolean;
   logos: Asset[];
   /** Uploaded background pictures to pick from. */

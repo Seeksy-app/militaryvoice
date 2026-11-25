@@ -1277,7 +1277,7 @@ function PeoplePanel({ owner, studio, onCopy, kit, meKey, showArt }: { owner: bo
             <div className="min-w-0 flex-1"><p className="truncate text-sm font-semibold">{p.name || p.identity}{p.isLocal ? " (you)" : ""}</p><p className="truncate text-xs text-[#667085]">{roleOf(p)}</p></div>
             {p.isMicrophoneEnabled ? <Mic className="h-4 w-4 text-[#475467]" aria-label="Mic on" /> : <MicOff className="h-4 w-4 text-[#b42318]" aria-label="Muted" />}
             {p.isCameraEnabled ? <Video className="h-4 w-4 text-[#475467]" aria-label="Camera on" /> : <VideoOff className="h-4 w-4 text-[#98a2b3]" aria-label="Camera off" />}
-            {p.isLocal && <div className="basis-full"><MyStageRow kit={kit} meKey={meKey} icon={owner && showArt && !!kit.look && !kit.look.logo} /></div>}
+            {p.isLocal && <div className="basis-full"><MyStageRow meKey={meKey} /></div>}
           </li>
         ))}
       </ul>
@@ -1296,11 +1296,11 @@ function PeoplePanel({ owner, studio, onCopy, kit, meKey, showArt }: { owner: bo
 }
 
 /**
- * Your own row in People: the name on stage, and whether it shows; for the host, their show's icon too
- * (Andrew, 24 Nov). Saved at once, remembered for this studio, and the stage, recording and live
- * show change straight away. The logo picked in Look is separate (its own None).
+ * Your own row in People: the name on stage, and whether it shows (Andrew, 24 Nov). Saved at once,
+ * remembered for this studio, and the stage, recording and live show change straight away. The show's
+ * own logo is set in Media > Logo (Bottom left / Bottom right / None), the one place for it (PM, 25 Nov).
  */
-function MyStageRow({ kit, meKey, icon }: { kit: RoomKit; meKey: string; icon: boolean }) {
+function MyStageRow({ meKey }: { meKey: string }) {
   const { localParticipant } = useLocalParticipant();
   const { toast } = useToast();
   const shown = useParticipantAttribute("showName", { participant: localParticipant }) !== "0";
@@ -1317,7 +1317,6 @@ function MyStageRow({ kit, meKey, icon }: { kit: RoomKit; meKey: string; icon: b
     saveMe(meKey, { showName: on });
     void localParticipant.setAttributes({ showName: on ? "1" : "0" }).catch((e) => toast({ title: "Couldn't change that", description: say(e), variant: "destructive" }));
   };
-  const iconOn = kit.look?.showIcon !== false;
   return (
     <div className="mt-1 space-y-2.5 pl-12 pb-1">
       <label className="block text-xs font-semibold text-[#475467]">
@@ -1326,7 +1325,6 @@ function MyStageRow({ kit, meKey, icon }: { kit: RoomKit; meKey: string; icon: b
           className="mt-1 block h-9 w-full rounded-lg border border-[#d0d5dd] bg-white px-2.5 text-sm font-semibold text-[#101828]" data-testid="me-name" />
       </label>
       <Switch on={shown} onChange={setShown} label="Show my name" testId="me-show-name" />
-      {icon && <Switch on={iconOn} onChange={(on) => kit.change((l) => ({ ...l, showIcon: on }))} label="Show my show's icon" testId="me-show-icon" />}
     </div>
   );
 }
