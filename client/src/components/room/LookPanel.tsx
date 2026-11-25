@@ -54,7 +54,7 @@ export function LogoSection({ kit }: { kit: RoomKit }) {
   });
   const opt = (c: "bl" | "br" | "none", text: string, disabled = false) => (
     <button key={c} type="button" onClick={() => place(c)} disabled={disabled} aria-pressed={where === c} title={disabled ? "Add a logo first" : undefined}
-      className={`h-9 flex-1 rounded-lg text-[13px] font-semibold disabled:cursor-not-allowed disabled:opacity-45 ${where === c ? "border-2 border-[#053877] bg-[#eef3fb] text-[#053877]" : "border border-[#d0d5dd] bg-white text-[#344054] hover:bg-[#f9fafb]"}`} data-testid={`logo-place-${c}`}>{text}</button>
+      className={`h-9 whitespace-nowrap rounded-lg px-2 text-[13px] font-semibold disabled:cursor-not-allowed disabled:opacity-45 ${c === "none" ? "flex-none px-4" : "flex-1"} ${where === c ? "border-2 border-[#053877] bg-[#eef3fb] text-[#053877]" : "border border-[#d0d5dd] bg-white text-[#344054] hover:bg-[#f9fafb]"}`} data-testid={`logo-place-${c}`}>{text}</button>
   );
   return (
     <>

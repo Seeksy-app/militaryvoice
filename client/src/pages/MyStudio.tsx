@@ -527,13 +527,13 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
         </button>
         <div className="min-w-0">
           <p className="truncate text-[15px] font-bold tracking-tight">{roomName}</p>
-          <p className="text-xs text-[#667085]">{today()} · {owner ? "Your studio" : "You're a guest"}</p>
+          <p className="hidden truncate text-xs text-[#667085] sm:block">{today()} · {owner ? "Your studio" : "You're a guest"}</p>
         </div>
         {owner && studio && (
           // Two starts, one way per job (Andrew, 22 Nov: "you want to go live, or you want just to record, record and go
           // live"): Record, and Go live (its sheet ticks "Also record to my Library"). Each turns into its own state with its
           // own Stop or End; the old "Record to your Library" pill and "Not live yet" chip are gone.
-          <div className="ml-auto flex shrink-0 items-center gap-2.5 whitespace-nowrap">
+          <div className="ml-auto flex shrink-0 items-center gap-2 whitespace-nowrap sm:gap-2.5">
             {MARK_CLIP && <MarkClip recording={!!rec} />}
             {live?.watchUrl && <a href={live.watchUrl} target="_blank" rel="noreferrer" className="hidden items-center gap-1 text-[13px] font-semibold text-[#053877] underline-offset-2 hover:underline lg:flex">Watch <ExternalLink className="h-3.5 w-3.5" /></a>}
             <button type="button" onClick={copyInvite} className="hidden h-[42px] items-center gap-2 rounded-xl border border-[#d0d5dd] bg-white px-4 text-sm font-semibold hover:bg-[#f9fafb] lg:flex" data-testid="my-studio-invite"><UserPlus className="h-[18px] w-[18px]" /> Invite guests</button>
