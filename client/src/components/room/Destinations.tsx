@@ -76,8 +76,8 @@ export function DestinationBar({ studio, live, onAdd }: { studio: DestStudio; li
   const lock = live || busy !== "";
   const ytOn = studio.youtube && studio.youtubeOn;
   return (
-    <div role="group" aria-label="Where the show goes" className="hidden h-[42px] items-center gap-2.5 rounded-xl border border-[#e4e7ec] bg-white pl-3 pr-1.5 lg:flex" title={live ? "You're live. Change these after the show." : undefined} data-testid="dest-bar">
-      <span className="text-xs font-bold text-[#475467]">{live ? "Live on" : "Going to"}</span>
+    <div role="group" aria-label="Where the show goes" className="hidden h-[42px] items-center gap-2.5 rounded-xl border border-[#e4e7ec] bg-white pl-1.5 pr-1.5 lg:flex xl:pl-3" title={live ? "You're live. Change these after the show." : undefined} data-testid="dest-bar">
+      <span className="hidden text-xs font-bold text-[#475467] xl:inline">{live ? "Live on" : "Going to"}</span>
       {studio.livePage?.url && (
         <Circle label="Your MilitaryVoices page" on={!!studio.livePage.on} disabled={lock} onClick={() => void page(!studio.livePage!.on)} testId="dest-page">
           <span className="flex h-full w-full items-center justify-center rounded-full text-[10px] font-extrabold tracking-tight text-white" style={{ background: NAVY }}>MV</span>
@@ -85,14 +85,14 @@ export function DestinationBar({ studio, live, onAdd }: { studio: DestStudio; li
       )}
       {studio.youtube && (
         <Circle label="YouTube" on={ytOn} disabled={lock} onClick={() => void patch("yt", { youtubeOn: !studio.youtubeOn })} testId="dest-youtube">
-          <BrandMark brand="youtube" className="h-4 w-4" title="" />
+          <BrandMark brand="youtube" tile className="h-4 w-4" tileClassName="h-8 w-8 rounded-full" title="" />
         </Circle>
       )}
       {studio.streams.map((s) => {
         const b = brandOf(s.name);
         return (
           <Circle key={s.id} label={s.name} on={s.on} disabled={lock} onClick={() => void patch(s.id, { toggleStream: s.id })} testId={`dest-stream-${s.id}`}>
-            {b ? <BrandMark brand={b} className="h-4 w-4" title="" /> : <Radio className="h-4 w-4 text-[#344054]" aria-hidden />}
+            {b ? <BrandMark brand={b} tile className="h-4 w-4" tileClassName="h-8 w-8 rounded-full" title="" /> : <Radio className="h-4 w-4 text-[#344054]" aria-hidden />}
           </Circle>
         );
       })}
@@ -151,11 +151,10 @@ function Dialog({ onClose, children, testId }: { onClose: () => void; children: 
 
 const tile = "flex min-h-[76px] items-center gap-3 rounded-2xl px-3.5 py-3 text-left";
 const tag = <span className="whitespace-nowrap rounded-full bg-[#f2f4f7] px-2 py-1 text-[11px] font-bold text-[#475467]">Stream key</span>;
-const mark = (b: Brand | null) => (
-  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-white">
-    {b ? <BrandMark brand={b} className="h-5 w-5" title="" /> : <Radio className="h-5 w-5 text-[#344054]" aria-hidden />}
-  </span>
-);
+// The brand's tile keeps black marks (X) black on white in dark mode too.
+const mark = (b: Brand | null) => (b ? <BrandMark brand={b} tile className="h-5 w-5" tileClassName="h-10 w-10 rounded-full" title="" /> : (
+  <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full border border-black/10 bg-white"><Radio className="h-5 w-5 text-[#344054]" aria-hidden /></span>
+));
 
 /** Add a destination: the grid, then one site's plain steps. */
 export function AddDestinationSheet({ studio, onClose }: { studio: DestStudio; onClose: () => void }) {

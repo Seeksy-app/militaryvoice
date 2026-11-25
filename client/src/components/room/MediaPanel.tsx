@@ -75,8 +75,8 @@ function ScrollingBanner({ kit }: { kit: RoomKit }) {
   return (
     <div className={`mt-3 flex flex-col gap-2.5 rounded-2xl p-3.5 ${on ? "border-2 border-[#053877] bg-[#f5f8fd]" : "border border-[#e4e7ec]"}`} data-testid="ticker-card">
       <div className="flex items-center gap-2">
-        <p className="flex-1 text-sm font-bold">Scrolling banner</p>
-        {on && <span className="flex h-6 items-center gap-1.5 rounded-full bg-[#d1fadf] px-2.5 text-xs font-bold text-[#067647]" data-testid="ticker-on"><span className="h-[7px] w-[7px] rounded-full bg-[#12b76a]" />On the stage</span>}
+        <p className="min-w-0 flex-1 whitespace-nowrap text-sm font-bold">Scrolling banner</p>
+        {on && <span className="flex h-6 shrink-0 items-center whitespace-nowrap gap-1.5 rounded-full bg-[#d1fadf] px-2.5 text-xs font-bold text-[#067647]" data-testid="ticker-on"><span className="h-[7px] w-[7px] rounded-full bg-[#12b76a]" />On the stage</span>}
       </div>
       {!on && <p className="text-[13px] leading-relaxed text-[#475467]">A line that crawls along the bottom of the stage, through every scene, until you stop it. Good for your next episode, a sponsor or where to follow you.</p>}
       <label htmlFor="ticker-text" className="text-xs font-semibold text-[#475467]">What it says</label>

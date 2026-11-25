@@ -541,7 +541,7 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
           <div className="ml-auto flex shrink-0 items-center gap-2 whitespace-nowrap sm:gap-2.5">
             {MARK_CLIP && <MarkClip recording={!!rec} />}
             {live?.watchUrl && <a href={live.watchUrl} target="_blank" rel="noreferrer" className="hidden items-center gap-1 text-[13px] font-semibold text-[#053877] underline-offset-2 hover:underline lg:flex">Watch <ExternalLink className="h-3.5 w-3.5" /></a>}
-            <button type="button" onClick={copyInvite} className="hidden h-[42px] items-center gap-2 rounded-xl border border-[#d0d5dd] bg-white px-4 text-sm font-semibold hover:bg-[#f9fafb] lg:flex" data-testid="my-studio-invite"><UserPlus className="h-[18px] w-[18px]" /> Invite guests</button>
+            <button type="button" onClick={copyInvite} aria-label="Invite guests" title="Invite guests" className="hidden h-[42px] items-center gap-2 rounded-xl border border-[#d0d5dd] bg-white px-3 text-sm font-semibold hover:bg-[#f9fafb] lg:flex xl:px-4" data-testid="my-studio-invite"><UserPlus className="h-[18px] w-[18px]" /><span className="hidden xl:inline">Invite guests</span></button>
             {/* Where the show goes, beside Record: each circle one click on or off (25 Nov). */}
             <DestinationBar studio={studio} live={!!live} onAdd={() => setAddDest(true)} />
             {rec ? (
