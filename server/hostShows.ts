@@ -56,5 +56,19 @@ export async function studioShow(email: string, studioId: number, studioName: st
 }
 /** The studio's title: its show's name, else the name it was made with. */
 export async function studioTitle(email: string, studioId: number, studioName: string, picked?: unknown): Promise<string> {
-  return (await studioShow(email, studioId, studioName, picked).catch(() => null))?.title || studioName;
+  const show = (await studioShow(email, studioId, studioName, picked).catch(() => null))?.title || "";
+  return fuller(show, studioName);
+}
+
+/**
+ * The show's title, unless one name begins with the other: then the longer, fuller one (PM, 24 Nov: a room named
+ * "Bounce Back in Business & Life" for the show "Bounce Back" shouldn't shorten itself).
+ */
+export function fuller(show: string, studioName: string): string {
+  const a = show.trim(), b = studioName.trim();
+  if (!a) return b;
+  if (!b) return a;
+  const x = a.toLowerCase(), y = b.toLowerCase();
+  if (x.startsWith(y) || y.startsWith(x)) return a.length >= b.length ? a : b;
+  return a;
 }
