@@ -361,41 +361,26 @@ function PreviewToggle({ on, onClick, label, children }: { on: boolean; onClick:
  */
 const STAGE_W = "min(100%, calc((100dvh - 375px) * 16 / 9))";
 
-/** The right panel's width, dragged from its left edge (Andrew, 22 Nov: "can we make that expandable"); kept per computer. */
-const RAIL = { min: 340, max: 600, def: 372, key: "mv-studio-rail" };
+/** The right panel (Andrew, 24 Nov: "I like the hide panel better", no dragging): a fixed width, a wider icon rail so
+ *  every label fits whole, and a "Hide panel" tab on its edge that folds it down to the rail. Kept per computer. */
+const RAIL = { min: 352, max: 600, def: 384, nav: 96, key: "mv-studio-rail", hidden: "mv-studio-panel-hidden" };
 function useRailWidth() {
-  const [w, setW] = useState(() => { try { const n = Number(localStorage.getItem(RAIL.key)); return n >= RAIL.min && n <= RAIL.max ? n : RAIL.def; } catch { return RAIL.def; } });
+  const w = (() => { try { const n = Number(localStorage.getItem(RAIL.key)); return n >= RAIL.min && n <= RAIL.max ? n : RAIL.def; } catch { return RAIL.def; } })();
   // Never so wide that the stage column gets squeezed: leave it at least 480px beside the Scenes column.
   const [vw, setVw] = useState(() => window.innerWidth);
   useEffect(() => { const r = () => setVw(window.innerWidth); window.addEventListener("resize", r); return () => window.removeEventListener("resize", r); }, []);
-  const cap = Math.max(RAIL.min, Math.min(RAIL.max, vw - 232 - 480));
-  const save = useCallback((n: number) => { const v = Math.round(Math.max(RAIL.min, Math.min(RAIL.max, n))); setW(v); try { localStorage.setItem(RAIL.key, String(v)); } catch { /* private window */ } }, []);
-  return { width: Math.min(w, cap), cap, save };
+  const [hidden, setHiddenState] = useState(() => { try { return localStorage.getItem(RAIL.hidden) === "1"; } catch { return false; } });
+  const setHidden = useCallback((h: boolean) => { setHiddenState(h); try { localStorage.setItem(RAIL.hidden, h ? "1" : "0"); } catch { /* private window */ } }, []);
+  return { width: hidden ? RAIL.nav : Math.max(RAIL.min, Math.min(w, RAIL.max, vw - 232 - 480)), hidden, setHidden };
 }
 
-function RailHandle({ width, cap, save }: { width: number; cap: number; save: (n: number) => void }) {
-  const [dragging, setDragging] = useState(false);
-  const down = (e: React.PointerEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    const x0 = e.clientX, w0 = width;
-    setDragging(true);
-    const move = (ev: PointerEvent) => save(Math.min(cap, w0 + (x0 - ev.clientX)));
-    const up = () => { setDragging(false); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); document.body.style.cursor = ""; document.body.style.userSelect = ""; };
-    document.body.style.cursor = "col-resize"; document.body.style.userSelect = "none";
-    window.addEventListener("pointermove", move);
-    window.addEventListener("pointerup", up);
-  };
-  const key = (e: React.KeyboardEvent<HTMLDivElement>) => {
-    if (e.key === "ArrowLeft") { e.preventDefault(); save(Math.min(cap, width + 24)); }
-    if (e.key === "ArrowRight") { e.preventDefault(); save(width - 24); }
-  };
+function HidePanelTab({ hidden, onToggle }: { hidden: boolean; onToggle: () => void }) {
+  const label = hidden ? "Show panel" : "Hide panel";
   return (
-    <div role="separator" aria-orientation="vertical" aria-label="Resize the side panel" aria-valuemin={RAIL.min} aria-valuemax={cap} aria-valuenow={width} tabIndex={0}
-      onPointerDown={down} onKeyDown={key} onDoubleClick={() => save(RAIL.def)} title="Drag to resize · double-click to reset"
-      className="group absolute -left-[6px] top-0 z-20 flex h-full w-3 cursor-col-resize touch-none items-center justify-center outline-none" data-testid="rail-resize">
-      <span className={`h-full w-px transition-colors ${dragging ? "bg-[#84adff]" : "bg-transparent group-hover:bg-[#b2ccff] group-focus-visible:bg-[#84adff]"}`} />
-      <span className={`absolute h-14 w-[6px] rounded-full ring-4 ring-[#f3f4f7] transition-colors ${dragging ? "bg-[#528bff]" : "bg-[#d0d5dd] group-hover:bg-[#84adff] group-focus-visible:bg-[#528bff]"}`} />
-    </div>
+    <button type="button" onClick={onToggle} aria-label={label} title={label} aria-expanded={!hidden}
+      className="absolute -left-[26px] top-1/2 z-20 flex h-16 w-[26px] -translate-y-1/2 items-center justify-center rounded-l-xl border border-r-0 border-[#e4e7ec] bg-white text-[#475467] shadow-[-4px_0_12px_rgba(16,24,40,0.06)] hover:bg-[#f9fafb] hover:text-[#101828]" data-testid="rail-hide">
+      {hidden ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
+    </button>
   );
 }
 
@@ -406,7 +391,7 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
   const state = useConnectionState();
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } = useLocalParticipant();
   const now = useNow();
-  const [picked, setTab] = useState<Tab | null>(null);
+  const [picked, setPicked] = useState<Tab | null>(null);
   const noteKey = owner ? String(studio?.id ?? "mine") : roomName;
   const [notes, setNotes, notesSync] = useStudioNotes(noteKey, owner && !!studio?.id);
   // One name for it (Andrew, 22 Nov: "just put teleprompter on there on the sidebar, and if it's turned on,
@@ -417,6 +402,8 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
   const [sheet, setSheet] = useState(false);
   const [settings, setSettings] = useState(false);
   const rail = useRailWidth();
+  // Picking a panel always shows it, so a hidden panel never leaves a click doing nothing.
+  const setTab = (t: Tab) => { setPicked(t); rail.setHidden(false); };
   const [busy, setBusy] = useState<"" | "rec" | "live">("");
   const hosting = useQuery<{ shows: { show: { artworkUrl?: string } }[] }>({ queryKey: ["/api/host/hosting"], enabled: owner, queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json(), staleTime: 60_000, retry: false });
   const logo = hosting.data?.shows?.find((s) => s.show.artworkUrl)?.show.artworkUrl;
@@ -609,14 +596,15 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
           <Backstage kit={kit} />
           {owner && <PrompterNews onOpen={() => setTab("notes")} />}
           <PeopleStrip kit={kit} owner={owner} sharing={isScreenShareEnabled} onShare={() => void share()} onInvite={copyInvite} />
-          {/* Below lg the bar sits above Ask Alex (bottom right on every page) so nothing is covered. */}
-          <div className="mb-[84px] mt-auto flex items-center gap-0.5 rounded-[18px] border border-[#e4e7ec] bg-white px-1.5 py-2 shadow-[0_8px_24px_rgba(16,24,40,0.1)] sm:gap-1.5 sm:px-3 lg:mb-3" data-testid="my-studio-controls">
+          {/* Below lg the bar sits above Ask Alex (bottom right on every page) so nothing is covered. At lg it stands 40px up
+              (Andrew, 24 Nov: his dictation bar sits at the bottom of the screen and covered it). */}
+          <div className="mb-[84px] mt-auto flex items-center gap-0.5 rounded-[18px] border border-[#e4e7ec] bg-white px-1.5 py-2 shadow-[0_8px_24px_rgba(16,24,40,0.1)] sm:gap-1.5 sm:px-3 lg:mb-10" data-testid="my-studio-controls">
             <BarButton label={isMicrophoneEnabled ? "Mic" : "Muted"} off={!isMicrophoneEnabled} onClick={() => void localParticipant.setMicrophoneEnabled(!isMicrophoneEnabled)}>{isMicrophoneEnabled ? <Mic className="h-[22px] w-[22px]" /> : <MicOff className="h-[22px] w-[22px]" />}</BarButton>
             <BarButton label={isCameraEnabled ? "Camera" : "Camera off"} off={!isCameraEnabled} onClick={() => void localParticipant.setCameraEnabled(!isCameraEnabled)}>{isCameraEnabled ? <Video className="h-[22px] w-[22px]" /> : <VideoOff className="h-[22px] w-[22px]" />}</BarButton>
             <BarButton label={isScreenShareEnabled ? "Stop share" : "Share"} active={isScreenShareEnabled} onClick={() => void share()}><MonitorUp className="h-[22px] w-[22px]" /></BarButton>
             {owner && <BarButton label="Invite" onClick={copyInvite}><UserPlus className="h-[22px] w-[22px]" /></BarButton>}
             {/* Notes opens a side panel, which only shows at lg and up. */}
-            <BarButton label={notesLabel} wide={owner ? "w-[92px]" : true} active={tab === "notes"} green={prompterOn} onClick={() => setTab("notes")}><NotebookPen className="h-[22px] w-[22px]" /></BarButton>
+            <BarButton label={notesLabel} wide={owner ? "w-[92px]" : true} active={!rail.hidden && tab === "notes"} green={prompterOn} onClick={() => setTab("notes")}><NotebookPen className="h-[22px] w-[22px]" /></BarButton>
             <BarButton label="Settings" onClick={() => setSettings(true)}><Settings className="h-[22px] w-[22px]" /></BarButton>
             <div className="mx-1 h-9 w-px bg-[#e4e7ec]" />
             <button type="button" onClick={() => leave()} className="flex h-[58px] w-[54px] flex-col items-center justify-center gap-1 rounded-xl bg-[#fef3f2] text-[11px] font-bold text-[#b42318] hover:bg-[#fee4e2] sm:w-[76px] sm:text-xs" data-testid="my-studio-leave"><LogOut className="h-[22px] w-[22px]" />Leave</button>
@@ -625,8 +613,8 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
 
         {/* Right panel */}
         <aside className="relative hidden shrink-0 border-l border-[#e4e7ec] bg-white lg:flex" style={{ width: rail.width }} data-testid="my-studio-rail">
-          <RailHandle width={rail.width} cap={rail.cap} save={rail.save} />
-          <div className="flex min-w-0 flex-1 flex-col">
+          <HidePanelTab hidden={rail.hidden} onToggle={() => rail.setHidden(!rail.hidden)} />
+          <div className={`min-w-0 flex-1 flex-col ${rail.hidden ? "hidden" : "flex"}`}>
             {tab === "look" && editing && <LookPanel kit={kit} />}
             {tab === "media" && v3 && <MediaPanel kit={kit} />}
             {tab === "style" && v3 && <StylePanel kit={kit} />}
@@ -635,14 +623,14 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
             {tab === "recording" && owner && <RecordingPanel studio={studio} now={now} busy={busy} onRecord={(on) => { if (on) startRecord(); else void record(false); }} onGoLive={openLive} onEndLive={() => void endLive()} />}
             {tab === "chat" && <ChatPanel />}
           </div>
-          <nav className="flex w-[84px] shrink-0 flex-col items-center gap-1 border-l border-[#eef0f4] pt-3" aria-label="Panels">
-            {editing && !v3 && <RailButton on={tab === "look"} onClick={() => setTab("look")} icon={<Palette className="h-[22px] w-[22px]" />} label="Look" />}
-            {v3 && <RailButton on={tab === "media"} onClick={() => setTab("media")} icon={<Clapperboard className="h-[22px] w-[22px]" />} label="Media" />}
-            {v3 && <RailButton on={tab === "style"} onClick={() => setTab("style")} icon={<Palette className="h-[22px] w-[22px]" />} label="Style" />}
-            <RailButton on={tab === "people"} onClick={() => setTab("people")} icon={<Users className="h-[22px] w-[22px]" />} label="People" />
-            <RailButton on={tab === "notes"} green={prompterOn} onClick={() => setTab("notes")} icon={<NotebookPen className="h-[22px] w-[22px]" />} label={notesLabel} testId="rail-notes" />
-            {owner && <RailButton on={tab === "recording"} onClick={() => setTab("recording")} icon={<Circle className={`h-[22px] w-[22px] ${rec ? "fill-[#d92d20] text-[#d92d20]" : ""}`} />} label="Recording" />}
-            <RailButton on={tab === "chat"} onClick={() => setTab("chat")} icon={<MessageSquare className="h-[22px] w-[22px]" />} label="Chat" />
+          <nav className={`flex w-[96px] shrink-0 flex-col items-center gap-1 pt-3 ${rail.hidden ? "" : "border-l border-[#eef0f4]"}`} aria-label="Panels">
+            {editing && !v3 && <RailButton on={!rail.hidden && tab === "look"} onClick={() => setTab("look")} icon={<Palette className="h-[22px] w-[22px]" />} label="Look" />}
+            {v3 && <RailButton on={!rail.hidden && tab === "media"} onClick={() => setTab("media")} icon={<Clapperboard className="h-[22px] w-[22px]" />} label="Media" />}
+            {v3 && <RailButton on={!rail.hidden && tab === "style"} onClick={() => setTab("style")} icon={<Palette className="h-[22px] w-[22px]" />} label="Style" />}
+            <RailButton on={!rail.hidden && tab === "people"} onClick={() => setTab("people")} icon={<Users className="h-[22px] w-[22px]" />} label="People" />
+            <RailButton on={!rail.hidden && tab === "notes"} green={prompterOn} onClick={() => setTab("notes")} icon={<NotebookPen className="h-[22px] w-[22px]" />} label={notesLabel} testId="rail-notes" />
+            {owner && <RailButton on={!rail.hidden && tab === "recording"} onClick={() => setTab("recording")} icon={<Circle className={`h-[22px] w-[22px] ${rec ? "fill-[#d92d20] text-[#d92d20]" : ""}`} />} label="Recording" />}
+            <RailButton on={!rail.hidden && tab === "chat"} onClick={() => setTab("chat")} icon={<MessageSquare className="h-[22px] w-[22px]" />} label="Chat" />
           </nav>
         </aside>
         </>}
@@ -708,7 +696,7 @@ function BarButton({ label, onClick, off, active, wide, green, children }: { lab
 /** `green`: what it opens is on (the teleprompter), with a dot, whether or not its panel is open. */
 function RailButton({ on, onClick, icon, label, green, testId }: { on: boolean; onClick: () => void; icon: ReactNode; label: string; green?: boolean; testId?: string }) {
   return (
-    <button type="button" onClick={onClick} aria-current={on ? "page" : undefined} className={`relative flex w-[78px] flex-col items-center gap-1 rounded-xl pb-[7px] pt-[9px] text-[11px] ${green ? `bg-[#ecfdf3] text-[#067647] ${on ? "font-bold ring-1 ring-inset ring-[#abefc6]" : "font-semibold hover:bg-[#dcfae6]"}` : on ? "bg-[#eef3fb] font-bold text-[#053877]" : "font-semibold text-[#667085] hover:bg-[#f9fafb]"}`} data-testid={testId} data-on={green ? "yes" : undefined}>
+    <button type="button" onClick={onClick} aria-current={on ? "page" : undefined} className={`relative flex w-[88px] flex-col items-center gap-1 rounded-xl pb-[7px] pt-[9px] text-[11px] ${green ? `bg-[#ecfdf3] text-[#067647] ${on ? "font-bold ring-1 ring-inset ring-[#abefc6]" : "font-semibold hover:bg-[#dcfae6]"}` : on ? "bg-[#eef3fb] font-bold text-[#053877]" : "font-semibold text-[#667085] hover:bg-[#f9fafb]"}`} data-testid={testId} data-on={green ? "yes" : undefined}>
       {green && <span className="absolute right-3 top-2 h-2 w-2 rounded-full bg-[#17b26a]" aria-hidden="true" />}
       {icon}{label}{green && <span className="sr-only"> (on)</span>}
     </button>
