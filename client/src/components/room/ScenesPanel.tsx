@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type DragEvent, type PointerEvent as ReactPointerEvent, type ReactNode } from "react";
 import { useParticipants } from "@livekit/components-react";
 import { RoomEvent } from "livekit-client";
-import { Check, Clapperboard, Copy, GripVertical, Image as ImageIcon, LayoutDashboard, Loader2, Lock, MonitorUp, MoreHorizontal, Pencil, Play, Plus, Square, Trash2, Users, X } from "lucide-react";
+import { Check, ChevronDown, Clapperboard, Copy, GripVertical, Image as ImageIcon, LayoutDashboard, Loader2, Lock, MonitorUp, MoreHorizontal, Pencil, Play, Plus, Square, Trash2, Users, X } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { isPlayer, type RoomBoxKind, type RoomBoxShape } from "@shared/roomLook";
 import { LIMITS, PEOPLE_DEFAULT, bgCss, newId, type Asset, type Layout, type RoomKit, type Scene, type SceneType, type Slot } from "./look";
@@ -182,6 +182,47 @@ export const LAYOUTS: { id: Layout; label: string; icon: ReactNode }[] = [
   { id: "pip", label: "Picture in picture", icon: <><rect x="1" y="1" width="20" height="14" rx="1.5" /><rect x="13" y="8" width="7" height="6" rx="1" opacity="0.55" /></> },
 ];
 
+/**
+ * Instant scenes (Andrew, 24 Nov: "just do a dropdown… When you click it, it adds it to the bottom of the scene rack,
+ * and not live"): the common layouts, one click each. Over/under needs a scene's own layout, so it's v3 only.
+ */
+type Instant = { id: string; label: string; icon: ReactNode; v3?: true; media?: true; scene: Pick<Scene, "type" | "layout" | "people"> & { boxes?: Scene["boxes"] } };
+export const INSTANT: Instant[] = [
+  { id: "me", label: "Just me", icon: <rect x="5" y="1" width="12" height="14" rx="2" />, scene: { type: "single", layout: "solo", people: 1 } },
+  { id: "side", label: "Side by side", icon: <><rect x="1" y="2" width="9" height="12" rx="2" /><rect x="12" y="2" width="9" height="12" rx="2" /></>, scene: { type: "two", layout: "side", people: 2 } },
+  { id: "stack", label: "Over/under", v3: true, icon: <><rect x="5" y="0.5" width="12" height="7" rx="1.5" /><rect x="5" y="8.5" width="12" height="7" rx="1.5" /></>,
+    scene: { type: "two", layout: "side", people: 2, boxes: [
+      { id: "top", kind: "camera", who: "host", x: 0.27, y: 0.03, w: 0.46, h: 0.46, shape: "rounded", fit: "cover" },
+      { id: "bottom", kind: "camera", who: "next", x: 0.27, y: 0.51, w: 0.46, h: 0.46, shape: "rounded", fit: "cover" },
+    ] } },
+  { id: "corner", label: "Media + me in the corner", media: true, icon: <><rect x="1" y="1" width="20" height="14" rx="1.5" opacity="0.55" /><rect x="14" y="9" width="6" height="5" rx="1" /></>, scene: { type: "media", layout: "screen", people: 1 } },
+  { id: "full", label: "Media full screen", media: true, icon: <rect x="1" y="1" width="20" height="14" rx="1.5" opacity="0.55" />, scene: { type: "media", layout: "screen", people: 0 } },
+  { id: "group", label: "Group", icon: <><rect x="1" y="1" width="9" height="6" rx="1.5" /><rect x="12" y="1" width="9" height="6" rx="1.5" /><rect x="1" y="9" width="9" height="6" rx="1.5" /><rect x="12" y="9" width="9" height="6" rx="1.5" /></>, scene: { type: "group", layout: "grid", people: 3 } },
+];
+
+function InstantMenu({ v3, onPick }: { v3: boolean; onPick: (x: Instant) => void }) {
+  const [open, setOpen] = useState(false);
+  const box = useRef<HTMLDivElement>(null);
+  useEffect(() => { if (open) reveal(box.current); }, [open]);
+  return (
+    <div ref={box} className="shrink-0" data-testid="instant-scene">
+      <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="flex h-[42px] w-full items-center justify-center gap-1.5 rounded-xl border border-[#d0d5dd] bg-white text-sm font-semibold text-[#344054] hover:bg-[#f9fafb]" data-testid="instant-scene-open">
+        Instant scene <ChevronDown className={`h-4 w-4 transition-transform ${open ? "rotate-180" : ""}`} />
+      </button>
+      {open && (
+        <div role="menu" className="mt-1.5 rounded-xl border border-[#e4e7ec] bg-white p-1 shadow-[0_12px_32px_rgba(16,24,40,0.14)]" data-testid="instant-scene-menu">
+          {INSTANT.filter((x) => v3 || !x.v3).map((x) => (
+            <button key={x.id} type="button" role="menuitem" onClick={() => { setOpen(false); onPick(x); }} className="flex w-full items-center gap-2.5 rounded-lg px-2 py-2 text-left text-[13px] font-semibold text-[#101828] hover:bg-[#f5f8fd]" data-testid={`instant-${x.id}`}>
+              <svg width="22" height="16" viewBox="0 0 22 16" fill="#053877" className="shrink-0" aria-hidden>{x.icon}</svg>{x.label}
+            </button>
+          ))}
+          <p className="px-2 pb-1 pt-0.5 text-[11px] leading-snug text-[#667085]">Adds it to the end of your list. Nothing goes on air.</p>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export function LayoutPicker({ value, onPick, size = "md" }: { value: Layout; onPick: (l: Layout) => void; size?: "sm" | "md" }) {
   const sm = size === "sm";
   return (
@@ -314,6 +355,15 @@ export function ScenesPanel({ kit, v3 = false, sheet = false, onEditLayout }: { 
     setBelow(null);
     setEditing(edit ? s.id : null);
   };
+  /** An instant scene: last in the list, named for its layout, never on air; a media one opens its editor to pick what it shows. */
+  const addInstant = (x: Instant) => {
+    if (look.scenes.length >= LIMITS.scenes) return;
+    const s: Scene = { id: newId(), n: last + 1, name: x.label, stage: [], ...x.scene, ...(x.scene.boxes ? { boxes: x.scene.boxes.map((b) => ({ ...b })) } : {}), ...(x.media ? { media: null } : {}), look: { background: look.background } };
+    kit.change((l) => place(l, s, null));
+    setPicking(false);
+    setBelow(null);
+    setEditing(x.media ? s.id : null);
+  };
   const duplicate = (s: Scene) => {
     if (look.scenes.length >= LIMITS.scenes) return;
     const copy: Scene = { ...JSON.parse(JSON.stringify(s)) as Scene, id: newId(), name: `${s.name} copy`.slice(0, LIMITS.sceneName) };
@@ -345,6 +395,7 @@ export function ScenesPanel({ kit, v3 = false, sheet = false, onEditLayout }: { 
           {picking && below === s.n && <div className="mt-3"><TypePicker kit={kit} onPick={add} onClose={() => { setPicking(false); setBelow(null); }} /></div>}
         </div>
       ))}
+      {look.scenes.length < LIMITS.scenes && <InstantMenu v3={v3} onPick={addInstant} />}
       {look.scenes.length < LIMITS.scenes && (picking && below === null
         ? <TypePicker kit={kit} onPick={add} onClose={() => setPicking(false)} />
         : <button type="button" onClick={() => { setBelow(null); setPicking(true); }} className="h-[42px] shrink-0 rounded-xl border border-dashed border-[#98a2b3] bg-white text-sm font-semibold text-[#344054] hover:bg-[#f9fafb]" data-testid="scene-add">+ New scene</button>)}
