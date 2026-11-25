@@ -50,9 +50,10 @@ export default function AboutUs() {
             Cleveland, Ohio native, he retired as a Colonel.
           </p>
           <p className="text-pretty">
-            When he took off the uniform, he kept the mission: telling the stories of the people he served with. He is
-            a 2019 Emmy Award winner and documentary filmmaker. Over the past three years he has been deeply involved
-            in podcasting, TV management, and content aggregation and distribution.
+            When he took off the uniform, he kept the mission: telling the stories of the people he served with. An
+            Ithaca College alumnus, he is a 2019 Emmy Award winner, a Gold Telly Award winner and a documentary
+            filmmaker. Over the past three years he has been deeply involved in podcasting, TV management, and content
+            aggregation and distribution.
           </p>
           <p className="text-pretty">
             He founded National Military Podcast Day, held every October 5, just before the anniversary of the start
@@ -71,6 +72,13 @@ export default function AboutUs() {
             </blockquote>
             <figcaption className="mt-4 text-sm font-medium text-[#F0A71F]">Colonel Riccoh Player, USMC (Ret.)</figcaption>
           </figure>
+
+          <p className="text-pretty">In his own words:</p>
+          <blockquote className="border-l-0 text-pretty text-lg italic leading-relaxed text-foreground/85">
+            &ldquo;I want to win! I want to professionally and personally champion a team of growth-minded and
+            innovative content creators who are inspired by amplifying military content, motivated by innovation and
+            focused on influencing positivity worldwide.&rdquo;
+          </blockquote>
 
           <h2 className="mt-4 text-balance text-2xl font-bold tracking-tight sm:text-3xl" style={HEADLINE_FONT}>
             The company
