@@ -25,6 +25,7 @@ import { StylePanel } from "@/components/room/StylePanel";
 import { PhoneStudio } from "@/components/room/PhoneStudio";
 import { LayoutEditor } from "@/components/room/LayoutEditor";
 import { MarkClip } from "@/components/room/MarkClip";
+import { AddDestinationSheet, DestinationBar, anyDestinationOn } from "@/components/room/Destinations";
 import { RoomStage } from "@/components/RoomStage";
 import { YoutubeKeyForm, useYoutubeKey, useYoutubeConnectResult, youtubeConnectHref } from "@/components/ConnectYoutube";
 import { PrompterNews, PrompterOverlay, PrompterSwitch, ScriptsBar, usePrompter, useStudioNotes, type NotesSync } from "@/components/room/Teleprompter";
@@ -400,6 +401,8 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
   const prompterOn = owner && prompterPrefs.on;
   const notesLabel = owner ? "Teleprompter" : "Notes";
   const [sheet, setSheet] = useState(false);
+  // Add a destination (25 Nov): from the "+" beside Record, Go live with nothing on, or the Go live sheet.
+  const [addDest, setAddDest] = useState(false);
   const [settings, setSettings] = useState(false);
   const rail = useRailWidth();
   // Picking a panel always shows it, so a hidden panel never leaves a click doing nothing.
@@ -455,7 +458,9 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
   const [askPractice, setAskPractice] = useState<null | "record" | "live">(null);
   useEffect(() => () => practice.set(false), []);
   const startRecord = () => { if (practice.isOn()) setAskPractice("record"); else void record(true); };
-  const openLive = () => { if (practice.isOn()) setAskPractice("live"); else setSheet(true); };
+  // Nothing picked to go live to: Go live opens Add a destination instead (the destinations mockup, 25 Nov).
+  const goLive = () => { if (studio && !anyDestinationOn(studio)) setAddDest(true); else setSheet(true); };
+  const openLive = () => { if (practice.isOn()) setAskPractice("live"); else goLive(); };
   const endLive = async () => {
     if (!window.confirm("End the live show? The recording keeps going until you stop it.")) return;
     setBusy("live");
@@ -537,6 +542,8 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
             {MARK_CLIP && <MarkClip recording={!!rec} />}
             {live?.watchUrl && <a href={live.watchUrl} target="_blank" rel="noreferrer" className="hidden items-center gap-1 text-[13px] font-semibold text-[#053877] underline-offset-2 hover:underline lg:flex">Watch <ExternalLink className="h-3.5 w-3.5" /></a>}
             <button type="button" onClick={copyInvite} className="hidden h-[42px] items-center gap-2 rounded-xl border border-[#d0d5dd] bg-white px-4 text-sm font-semibold hover:bg-[#f9fafb] lg:flex" data-testid="my-studio-invite"><UserPlus className="h-[18px] w-[18px]" /> Invite guests</button>
+            {/* Where the show goes, beside Record: each circle one click on or off (25 Nov). */}
+            <DestinationBar studio={studio} live={!!live} onAdd={() => setAddDest(true)} />
             {rec ? (
               <div className="flex h-[42px] items-center overflow-hidden rounded-xl bg-[#fef3f2] ring-1 ring-inset ring-[#fecdca]" data-testid="badge-recording">
                 <button type="button" onClick={() => setTab("recording")} className="flex h-full items-center gap-2 pl-3.5 pr-3 text-sm font-bold tabular-nums text-[#b42318]" aria-label={`Recording, ${clock(rec.since, now)}. Open the recording panel`}>
@@ -636,8 +643,9 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
         </>}
       </div>
 
-      {sheet && owner && studio && <GoLiveSheet studio={studio} onClose={() => setSheet(false)} />}
-      {askPractice && <PracticeAsk what={askPractice} onCancel={() => setAskPractice(null)} onGo={() => { const what = askPractice; setAskPractice(null); practice.set(false); if (what === "record") void record(true); else setSheet(true); }} />}
+      {sheet && owner && studio && <GoLiveSheet studio={studio} onClose={() => setSheet(false)} onAdd={() => { setSheet(false); setAddDest(true); }} />}
+      {addDest && owner && studio && <AddDestinationSheet studio={studio} onClose={() => setAddDest(false)} />}
+      {askPractice && <PracticeAsk what={askPractice} onCancel={() => setAskPractice(null)} onGo={() => { const what = askPractice; setAskPractice(null); practice.set(false); if (what === "record") void record(true); else goLive(); }} />}
       {settings && <SettingsSheet onClose={() => setSettings(false)} />}
       {leaving && <LeaveDialog live={!!live} onEnd={() => void endAndLeave()} onKeep={() => { setLeaving(false); void go(); }} onCancel={() => { exitTo.current = null; setLeaving(false); }} />}
     </div>
@@ -1427,12 +1435,10 @@ function Sheet({ onClose, width = 640, children, testId }: { onClose: () => void
   );
 }
 
-function GoLiveSheet({ studio, onClose }: { studio: Studio; onClose: () => void }) {
+function GoLiveSheet({ studio, onClose, onAdd }: { studio: Studio; onClose: () => void; onAdd: () => void }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [title, setTitle] = useState(`${studio.name} · ${today()}`);
-  const [adding, setAdding] = useState(false);
-  const [add, setAdd] = useState({ name: "", url: "", key: "" });
   const [busy, setBusy] = useState<"" | "patch" | "go">("");
   const [error, setError] = useState("");
   // Connect YouTube as the main way in (Andrew, 22 Nov: "Yes, build it"): admins while Google verifies the app.
@@ -1503,8 +1509,8 @@ function GoLiveSheet({ studio, onClose }: { studio: Studio; onClose: () => void 
         <div className={`rounded-2xl border p-4 ${studio.streams.some((s) => s.on) ? "border-2 border-[#053877] bg-[#f5f8fd] p-[15px]" : "border-[#e4e7ec]"}`}>
           <div className="flex items-center gap-4">
             <div className={`${icon} bg-[#eef3fb] text-[#053877]`}><Plus className="h-5 w-5" /></div>
-            <div className="min-w-0 flex-1"><p className="font-semibold">Facebook, LinkedIn or another site</p><p className="text-[13px] text-[#475467]">Use a streaming key from that site.</p></div>
-            {!adding && <button type="button" onClick={() => setAdding(true)} className="h-9 rounded-xl border border-[#d0d5dd] bg-white px-4 text-sm font-semibold" data-testid="golive-add-key">Add a key</button>}
+            <div className="min-w-0 flex-1"><p className="font-semibold">Facebook, LinkedIn, Twitch and more</p><p className="text-[13px] text-[#475467]">With a stream key from that site.</p></div>
+            <button type="button" onClick={onAdd} className="h-9 rounded-xl border border-[#d0d5dd] bg-white px-4 text-sm font-semibold" data-testid="golive-add-key">Add one</button>
           </div>
           {studio.streams.length > 0 && (
             <ul className="mt-3 space-y-1.5 pl-[60px]">
@@ -1515,14 +1521,6 @@ function GoLiveSheet({ studio, onClose }: { studio: Studio; onClose: () => void 
                 </li>
               ))}
             </ul>
-          )}
-          {adding && (
-            <form className="mt-3 grid gap-2 pl-[60px]" onSubmit={(e) => { e.preventDefault(); void patch({ addStream: add }).then((ok) => { if (ok) { setAdding(false); setAdd({ name: "", url: "", key: "" }); } }); }}>
-              <input value={add.name} onChange={(e) => setAdd({ ...add, name: e.target.value })} placeholder="Which site? e.g. Facebook" className="h-10 rounded-lg border border-[#d0d5dd] px-3 text-sm" />
-              <input value={add.url} onChange={(e) => setAdd({ ...add, url: e.target.value })} placeholder="Server address (starts rtmp://)" className="h-10 rounded-lg border border-[#d0d5dd] px-3 text-sm" required />
-              <input value={add.key} onChange={(e) => setAdd({ ...add, key: e.target.value })} placeholder="Stream key" type="password" autoComplete="off" className="h-10 rounded-lg border border-[#d0d5dd] px-3 text-sm" required />
-              <div className="flex gap-2"><button type="submit" disabled={busy !== ""} className="h-9 rounded-xl px-4 text-sm font-bold text-white disabled:opacity-60" style={{ background: NAVY }}>Save key</button><button type="button" onClick={() => setAdding(false)} className="h-9 rounded-xl px-3 text-sm font-semibold text-[#475467]">Cancel</button></div>
-            </form>
           )}
         </div>
       </div>
