@@ -10,7 +10,7 @@
 //    that page's title, description and image in the share tags.
 import { rewrite, next } from "@vercel/functions";
 
-export const config = { matcher: ["/", "/podcast-one-pitch", "/black-friday"] };
+export const config = { matcher: ["/", "/podcast-one-pitch", "/black-friday", "/about-us"] };
 
 const ORIGIN = "https://www.militaryvoices.ai";
 const SHARE: Record<string, { title: string; description: string; image: string; alt: string }> = {
@@ -26,6 +26,13 @@ const SHARE: Record<string, { title: string; description: string; image: string;
     description: "Join MilitaryVoices.ai as a Founding Member: Scale free for your first 30 days, then $19.95 a month. Card at checkout; cancel before day 30 and pay nothing. Offer ends Dec 31, 2026.",
     image: `${ORIGIN}/og-black-friday.jpg?v=1`,
     alt: "Black Friday Special: 30 days free, then just $19.95 a month. Founding Member 2026, Veteran-Owned. Offer ends Dec 31, 2026.",
+  },
+  // About us (Andrew, 25 Nov: "change the Social share image with his image added").
+  "/about-us": {
+    title: "Riccoh Player, Founding & Operating Partner of MilitaryVoices.ai",
+    description: "Col, USMC (ret), founder of OHIOWA Management Group LLC, Emmy winner and documentary filmmaker. Meet the team behind MilitaryVoices.ai.",
+    image: `${ORIGIN}/og-about-us.jpg?v=1`,
+    alt: "Riccoh Player, Founding & Operating Partner of MilitaryVoices.ai. Col, USMC (ret), founder of OHIOWA Management Group LLC.",
   },
 };
 
