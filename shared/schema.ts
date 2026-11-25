@@ -2977,6 +2977,9 @@ export const hostedShows = pgTable("hosted_shows", {
   bookendsSince: text("bookends_since").notNull().default(""),
   /** Leaving us: the new host's feed. The feed then says so (itunes:new-feed-url) and forwards there (301). */
   newFeedUrl: text("new_feed_url").notNull().default(""),
+  /** Put away (Andrew, 24 Nov 2026: "We don't delete it"): off their dashboard, switcher and pickers; the feed and its
+   *  public pages keep serving, and everything stays. "" = in use; else when it was archived. Unarchive in Podcast Settings. */
+  archivedAt: text("archived_at").notNull().default(""),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull().default(""),
 }, (t) => [uniqueIndex("hosted_shows_slug").on(t.slug), index("hosted_shows_email").on(t.email)]);

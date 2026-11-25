@@ -1,5 +1,5 @@
 import { BonusCreditsButton } from "@/components/BonusCredits";
-import { MoveShowButton } from "@/components/AdminShowMove";
+import { ArchiveShowButton, MoveShowButton } from "@/components/AdminShowMove";
 import { useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowDownLeft, ArrowUpRight, Bell, CalendarDays, CalendarPlus, Check, MessageSquare, Sparkles, ExternalLink, Eye, Globe, Loader2, Mic2, MousePointerClick, PenSquare, Plus, StickyNote, Tag, Trash2, UserPlus, Users, X } from "lucide-react";
@@ -28,7 +28,7 @@ type Profile = {
   stats: { sent: number; received: number; opened: number; clicked: number; bounced: number; lastEmailedAt: string; lastOpenedAt: string; lastWroteAt: string; waiting: number };
   host: { podcast: string; hostName: string; branch: string; serviceStatus: string } | null;
   smartlink: { handle: string; url: string; name: string } | null;
-  shows: { id: number; title: string; url: string; episodes: number }[];
+  shows: { id: number; title: string; url: string; episodes: number; archived?: boolean }[];
   bookings: { id: number; podcast: string; event: string; when: string; status: string; at: string; role: "host" | "cohost" }[];
   timeline: Moment[];
 };
@@ -137,8 +137,9 @@ export function ContactProfile({ email, onClose, moveShowId = 0, moveTo = "" }: 
                   {d.smartlink && <a href={d.smartlink.url} target="_blank" rel="noreferrer" className="flex items-center gap-1 font-medium text-[#053877] hover:underline dark:text-[#8fb5e8]">SmartLink: /{d.smartlink.handle} <ExternalLink className="h-3 w-3" /></a>}
                   {d.shows.map((s) => (
                     <div key={s.id} className="flex items-center gap-2">
-                      <a href={s.url} target="_blank" rel="noreferrer" className="flex min-w-0 flex-1 items-center gap-1 font-medium text-[#053877] hover:underline dark:text-[#8fb5e8]"><span className="truncate">{s.title} · {s.episodes} ep</span> <ExternalLink className="h-3 w-3 shrink-0" /></a>
+                      <a href={s.url} target="_blank" rel="noreferrer" className="flex min-w-0 flex-1 items-center gap-1 font-medium text-[#053877] hover:underline dark:text-[#8fb5e8]"><span className="truncate">{s.title} · {s.episodes} ep{s.archived ? " · archived" : ""}</span> <ExternalLink className="h-3 w-3 shrink-0" /></a>
                       <MoveShowButton showId={s.id} title={s.title} onMoved={refresh} startOpen={s.id === moveShowId} to={s.id === moveShowId ? moveTo : ""} />
+                      <ArchiveShowButton showId={s.id} title={s.title} archived={!!s.archived} onDone={refresh} />
                     </div>
                   ))}
                 </section>

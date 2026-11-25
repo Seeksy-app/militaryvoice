@@ -54,7 +54,7 @@ export async function showCoverOf(email: string, room?: { name?: string | null; 
     const [hit] = await db.select({ art: hostedShows.artworkUrl }).from(hostedShows).where(eq(hostedShows.id, show.id)).limit(1).catch(() => []);
     return hit?.art || "";
   }
-  const [row] = await db.select({ art: hostedShows.artworkUrl }).from(hostedShows).where(eq(hostedShows.email, norm(email))).orderBy(asc(hostedShows.id)).limit(1).catch(() => []);
+  const [row] = await db.select({ art: hostedShows.artworkUrl }).from(hostedShows).where(eq(hostedShows.email, norm(email))).orderBy(asc(hostedShows.archivedAt), asc(hostedShows.id)).limit(1).catch(() => []);
   return row?.art || "";
 }
 

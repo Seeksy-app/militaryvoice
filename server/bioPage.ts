@@ -88,7 +88,7 @@ const feedCache = new Map<string, { at: number; data: BioPublic["podcast"] }>();
 async function podcastFor(row: BioPageRow): Promise<BioPublic["podcast"]> {
   // Their pick: a show hosted here (the first by default), or a feed from another host.
   const source = parseTheme(row.theme).podcast?.source ?? "";
-  const shows = source === "rss" ? [] : await db.select().from(hostedShows).where(eq(hostedShows.email, row.email)).orderBy(hostedShows.id);
+  const shows = source === "rss" ? [] : await db.select().from(hostedShows).where(eq(hostedShows.email, row.email)).orderBy(hostedShows.archivedAt, hostedShows.id); // archived last: the default is a show in use
   const show = source.startsWith("show:") ? shows.find((s) => s.id === Number(source.slice(5))) ?? shows[0] : shows[0];
   if (show && !show.newFeedUrl) {
     const eps = (await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.showId, show.id)).orderBy(desc(hostedEpisodes.publishedAt)))

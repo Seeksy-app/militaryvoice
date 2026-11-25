@@ -127,3 +127,20 @@ export function MoveShow({ showId, title, onClose, onMoved, initialTo = "" }: { 
     </div>
   );
 }
+
+/** Archive / Unarchive beside Move (Admin → contact): the show leaves their dashboard and pickers; nothing is deleted. */
+export function ArchiveShowButton({ showId, title, archived, onDone }: { showId: number; title: string; archived: boolean; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const go = async () => {
+    if (!archived && !window.confirm(`Archive ${title}? It leaves their dashboard and show pickers. Nothing is deleted, the feed keeps playing, and they can unarchive it in Podcast Settings.`)) return;
+    setBusy(true);
+    try { await apiRequest("POST", `/api/admin/shows/${showId}/archive`, { archived: !archived }); onDone(); }
+    catch (e) { window.alert(await msg(e)); }
+    setBusy(false);
+  };
+  return (
+    <button type="button" onClick={go} disabled={busy} className="shrink-0 rounded-full border px-2 py-0.5 text-[11px] font-semibold text-muted-foreground hover:border-[#053877]/40 hover:text-foreground disabled:opacity-50" data-testid={`archive-show-${showId}`}>
+      {busy ? "…" : archived ? "Unarchive" : "Archive"}
+    </button>
+  );
+}

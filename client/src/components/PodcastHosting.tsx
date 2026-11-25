@@ -33,7 +33,8 @@ import { useMoveEpisode } from "@/components/MoveEpisode";
 type Delivery = { apps: { app: string; got: boolean; checked: string }[] };
 type Ep = HostedEpisodeRow & { downloads: number; live: boolean; hasVideo?: boolean; ytLibrary?: string; delivery?: Delivery | null; announcedAt?: string };
 type Hosted = { show: HostedShowRow; feedUrl: string; missing: string[]; ownerConfirmed: boolean; production?: boolean; episodes: Ep[]; stats: { total: number; last30: number; series: { date: string; count: number }[]; apps: Record<string, number> }; reading?: string[] };
-type Resp = { shows: Hosted[]; categories: Record<string, string[]>; youtubeReady?: boolean };
+type Archived = { id: number; title: string; artworkUrl: string; archivedAt: string };
+type Resp = { shows: Hosted[]; archived?: Archived[]; categories: Record<string, string[]>; youtubeReady?: boolean };
 
 const KEY = ["/api/host/hosting"];
 const compact = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e4 ? `${Math.round(n / 1e3)}K` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(n));
@@ -429,6 +430,7 @@ export function PodcastHosting() {
       {tab === "publishing" && <PublishingPanel key={s.id} h={h} youtubeReady={!!q.data?.youtubeReady} onSaved={refresh} />}
       {tab === "move" && <><MoveHost show={s} feedUrl={h.feedUrl} onSaved={refresh} /><DeleteShow show={s} onDeleted={() => { setOpenId(null); refresh(); }} /></>}
       {tab === "sponsors" && <SponsorsPanel key={`${s.id}-${spotFor ?? 0}`} h={h} onSaved={refresh} preset={spotFor} onPresetUsed={() => setSpotFor(null)} />}
+      {inSettings && !!q.data?.archived?.length && <ArchivedShows list={q.data.archived} onBack={(id) => { refresh(); setOpenId(id); go("episodes"); }} />}
 
       {tab === "directories" && (
         <>
@@ -1056,6 +1058,38 @@ function ShowForm({ show, categories, onSaved, focus = "" }: { show: HostedShowR
  * Deleting the show, at the bottom of Settings → Redirect (Andrew, 23 Nov): a pop-up that says what goes and points to
  * moving first. It goes to Recently deleted for 15 days, so it can be put back.
  */
+/** Archived shows (24 Nov 2026): put away by the team, nothing deleted, the feed still plays. One button brings each back. */
+function ArchivedShows({ list, onBack }: { list: Archived[]; onBack: (id: number) => void }) {
+  const { toast } = useToast();
+  const [busy, setBusy] = useState(0);
+  const back = async (a: Archived) => {
+    setBusy(a.id);
+    try {
+      await apiRequest("PUT", `/api/host/hosting/shows/${a.id}/archive`, { archived: false });
+      toast({ title: `${a.title || "Your show"} is back`, description: "It's on your dashboard and in your show lists again." });
+      onBack(a.id);
+    } catch (e) {
+      toast({ title: "Couldn't bring it back", description: (e as Error).message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, ""), variant: "destructive" });
+    }
+    setBusy(0);
+  };
+  return (
+    <div className="mt-8 max-w-2xl rounded-xl border border-border p-4" data-testid="hosting-archived">
+      <h3 className="text-sm font-semibold">Archived shows</h3>
+      <p className="mt-0.5 text-xs text-muted-foreground">Put away, not deleted. Their episodes, clips and stats are kept, and their feeds still play in every app.</p>
+      <ul className="mt-3 space-y-2">
+        {list.map((a) => (
+          <li key={a.id} className="flex items-center gap-3" data-testid={`archived-show-${a.id}`}>
+            {a.artworkUrl ? <img src={a.artworkUrl} alt="" className="h-10 w-10 shrink-0 rounded-md object-cover" /> : <div className="h-10 w-10 shrink-0 rounded-md bg-muted" />}
+            <span className="min-w-0 flex-1 truncate text-sm font-medium">{a.title || "Untitled show"}</span>
+            <Button size="sm" variant="outline" disabled={busy === a.id} onClick={() => void back(a)} data-testid={`unarchive-show-${a.id}`}>{busy === a.id ? <Loader2 className="h-4 w-4 animate-spin" /> : "Unarchive"}</Button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function DeleteShow({ show, onDeleted }: { show: HostedShowRow; onDeleted: () => void }) {
   const { toast } = useToast();
   const [open, setOpen] = useState(false);

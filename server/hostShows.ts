@@ -9,7 +9,7 @@ const rows = (r: unknown) => ((r as { rows?: Record<string, unknown>[] }).rows ?
 export type Show = { id: number; slug: string; title: string };
 export async function ownerShows(email: string): Promise<Show[]> {
   try {
-    return rows(await db.execute(sql`select id, slug, title from hosted_shows where lower(email)=${email} order by id`)).map((r) => ({ id: Number(r.id), slug: String(r.slug ?? ""), title: String(r.title ?? "") }));
+    return rows(await db.execute(sql`select id, slug, title from hosted_shows where lower(email)=${email} and archived_at = '' order by id`)).map((r) => ({ id: Number(r.id), slug: String(r.slug ?? ""), title: String(r.title ?? "") }));
   } catch { return []; }
 }
 /** The show an invitation is for, when the host has more than one and it's one of theirs; otherwise null (today's behaviour). */

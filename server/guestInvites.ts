@@ -34,7 +34,7 @@ async function senderSlug(email: string): Promise<string> {
   const saved = ((await storage.getSetting(`invite-slug:${email}`)) ?? "").trim();
   if (saved && slugOk(saved)) return saved;
   try {
-    const r = (await db.execute(sql`select slug from hosted_shows where lower(email)=${email} order by id limit 1`)) as unknown as { slug: string }[];
+    const r = (await db.execute(sql`select slug from hosted_shows where lower(email)=${email} order by archived_at, id limit 1`)) as unknown as { slug: string }[];
     const s0 = String(r[0]?.slug ?? "");
     if (slugOk(s0)) return s0;
   } catch { /* no show yet */ }

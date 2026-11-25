@@ -250,8 +250,22 @@ export async function readFeed(url: string): Promise<ParsedFeed> {
 
 // ---- Data -----------------------------------------------------------------------
 
+/** The shows they work on: an archived one is left out everywhere they pick a show (it still has its feed and pages). */
 async function showsOf(email: string) {
-  return db.select().from(hostedShows).where(eq(hostedShows.email, email)).orderBy(hostedShows.id);
+  return db.select().from(hostedShows).where(and(eq(hostedShows.email, email), eq(hostedShows.archivedAt, ""))).orderBy(hostedShows.id);
+}
+/** Archive or bring back one show. Never the last one in use: they'd have nothing to work on. */
+export async function setShowArchived(showId: number, on: boolean): Promise<{ error?: string; show?: HostedShowRow }> {
+  await schemaIsReady();
+  const [s] = await db.select().from(hostedShows).where(eq(hostedShows.id, showId)).limit(1);
+  if (!s) return { error: "No such show." };
+  if (on && !s.archivedAt) {
+    const inUse = await showsOf(s.email);
+    if (!inUse.some((x) => x.id !== s.id)) return { error: "That's their only show in use, so it stays. Archive a show when there's another one to work on." };
+  }
+  const t = now();
+  const [out] = await db.update(hostedShows).set({ archivedAt: on ? s.archivedAt || t : "", updatedAt: t }).where(eq(hostedShows.id, s.id)).returning();
+  return { show: out };
 }
 /** Whether this person has the Production plan (the team's post-production), set when it is switched on for them. */
 async function hasProduction(email: string): Promise<boolean> {
@@ -1159,7 +1173,19 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
     // YouTube connected through Upload-Post (the Social screen)?
     const profile = await storage.getProfileByEmail(email);
     const youtubeReady = !!profile?.uploadPostUsername && /youtube/i.test(profile.socialAccounts ?? "");
-    res.json({ shows: out, categories: CATEGORIES, youtubeReady });
+    // Put away, for "Archived shows" in Podcast Settings (one Unarchive each).
+    const archived = await db.select({ id: hostedShows.id, title: hostedShows.title, artworkUrl: hostedShows.artworkUrl, archivedAt: hostedShows.archivedAt })
+      .from(hostedShows).where(and(eq(hostedShows.email, email), ne(hostedShows.archivedAt, ""))).orderBy(hostedShows.id).catch(() => []);
+    res.json({ shows: out, archived, categories: CATEGORIES, youtubeReady });
+  });
+
+  // Archive (24 Nov 2026): the team archives a show for them (Admin → contact); they bring it back here.
+  app.put("/api/host/hosting/shows/:id/archive", requireHostSession, async (req, res) => {
+    const s = await ownShow(emailOf(req), Number(req.params.id));
+    if (!s) return res.status(404).json({ message: "No such show." });
+    const r = await setShowArchived(s.id, req.body?.archived === true);
+    if (r.error) return res.status(400).json({ message: r.error });
+    res.json(r.show);
   });
 
   // ---- Podcast setup (15 Nov 2026): a new show starts from five plain answers ----------------------

@@ -25,6 +25,7 @@ import type { Express, RequestHandler } from "express";
 import { and, eq, inArray, ne, sql } from "drizzle-orm";
 import { db, storage, schemaIsReady, inTransaction } from "./storage.js";
 import { getSessionEmail } from "./session.js";
+import { setShowArchived } from "./hosting.js";
 import { bioPages, hostPosts, hostedDownloads, hostedEpisodes, hostedFeedHits, hostedShows, hostedSpots, listenerQuestions, podcastStats, showTranscripts, transcriptChunks } from "../shared/schema.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
@@ -149,6 +150,13 @@ export function registerShowMove(app: Express, requireAdmin: RequestHandler) {
     const r = await runMove(Number(req.body?.showId), lc(req.body?.to), getSessionEmail(req) ?? "");
     if ("error" in r) return res.status(400).json({ message: r.error });
     res.json({ ok: true, ...r });
+  });
+
+  /** Archive or bring back a show (24 Nov 2026, Riccoh first): off their dashboard and pickers, nothing deleted, the feed keeps serving. */
+  app.post("/api/admin/shows/:id/archive", requireAdmin, async (req, res) => {
+    const r = await setShowArchived(Number(req.params.id), req.body?.archived === true);
+    if (r.error) return res.status(400).json({ message: r.error });
+    res.json({ ok: true, archived: !!r.show?.archivedAt });
   });
 
   /** Every move, newest first. */

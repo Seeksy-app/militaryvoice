@@ -116,7 +116,7 @@ export function registerContactProfile(app: Express, requireAdmin: RequestHandle
       ownEvents: ownEvents.map((e) => ({ id: e.id, name: e.name, startAtUtc: e.startAtUtc, review: e.review || "draft", url: `${ORIGIN}/event/${e.slug}` })),
       host: host ? { podcast: host.podcastName, hostName: host.hostName, branch: host.branch, serviceStatus: host.serviceStatus } : null,
       smartlink: page ? { handle: page.handle, url: `${ORIGIN}/${page.handle}`, name: page.displayName } : null,
-      shows: shows.map((s) => ({ id: s.id, title: s.title, url: `${ORIGIN}/podcast/${s.slug}`, episodes: epCounts.find((c) => c.show === s.id)?.n ?? 0 })),
+      shows: shows.map((s) => ({ id: s.id, title: s.title, url: `${ORIGIN}/podcast/${s.slug}`, episodes: epCounts.find((c) => c.show === s.id)?.n ?? 0, archived: !!s.archivedAt })),
       bookings: [...bookings, ...cohosting],
       timeline: timeline.slice(0, 300),
     });

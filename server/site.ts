@@ -58,7 +58,7 @@ async function showFor(row: BioPageRow): Promise<Show | null> {
 async function buildShow(row: BioPageRow): Promise<Show | null> {
   // Their pick on the SmartLink: a show hosted here (the first by default), or their feed.
   const source = parseTheme(row.theme).podcast?.source ?? "";
-  const shows = source === "rss" ? [] : await db.select().from(hostedShows).where(eq(hostedShows.email, row.email)).orderBy(hostedShows.id);
+  const shows = source === "rss" ? [] : await db.select().from(hostedShows).where(eq(hostedShows.email, row.email)).orderBy(hostedShows.archivedAt, hostedShows.id); // archived last: the default is a show in use
   const hosted = source.startsWith("show:") ? shows.find((s) => s.id === Number(source.slice(5))) ?? shows[0] : shows[0];
   if (hosted && !hosted.newFeedUrl) {
     const eps = (await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.showId, hosted.id)).orderBy(desc(hostedEpisodes.publishedAt)))
