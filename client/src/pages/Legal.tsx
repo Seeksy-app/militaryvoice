@@ -23,7 +23,10 @@ function Shell({ title, children }: { title: string; children: React.ReactNode }
         <h1 className="text-3xl font-bold tracking-tight sm:text-4xl" style={HEADLINE_FONT}>
           {title}
         </h1>
-        <p className="mt-2 text-sm text-muted-foreground">Last updated {UPDATED}</p>
+        <p className="mt-3 text-[15px] text-foreground">
+          Operated by <span className="font-semibold">OHIOWA Management Group LLC</span> · Powered by Applied Growth Technologies
+        </p>
+        <p className="mt-1 text-sm text-muted-foreground">Last updated {UPDATED}</p>
         <div className="mt-10 flex flex-col gap-8 text-[15px] leading-relaxed text-foreground">{children}</div>
         <div className="mt-14 border-t border-border pt-6 text-sm text-muted-foreground">
           Questions about any of this? Write to{" "}
