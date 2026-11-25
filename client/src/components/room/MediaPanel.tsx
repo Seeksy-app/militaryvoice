@@ -134,14 +134,15 @@ function Countdown({ kit }: { kit: RoomKit }) {
   const nextName = look.scenes.find((s) => s.id === (on ? playing?.next : next?.id))?.name;
   return (
     <div className={`rounded-xl border px-3 py-2.5 ${on ? "border-[#053877] bg-[#f5f8fd]" : "border-[#e4e7ec]"}`} data-testid="card-countdown">
-      <div className="flex items-center gap-2">
-        <p className="min-w-0 flex-1 truncate text-[13px] font-semibold">Countdown</p>
+      {/* The name on its own line, so the narrow panel never cuts it to "C…"; the minutes and Start below it. */}
+      <p className="text-[13px] font-semibold">Countdown</p>
+      <div className="mt-1.5 flex items-center gap-2">
         {!on && (
-          <select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} aria-label="Minutes" className="h-8 shrink-0 rounded-lg border border-[#d0d5dd] bg-white px-1.5 text-[12px]">
+          <select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} aria-label="Minutes" className="h-8 min-w-0 flex-1 rounded-lg border border-[#d0d5dd] bg-white px-1.5 text-[12px]">
             {[1, 2, 3, 5, 10, 15].map((m) => <option key={m} value={m}>{m} minute{m > 1 ? "s" : ""}</option>)}
           </select>
         )}
-        <button type="button" onClick={() => kit.play(on ? null : "countdown", on ? undefined : { minutes, next: next?.id })} className={`h-8 rounded-lg px-3 text-[12px] font-bold ${on ? "bg-[#053877] text-white" : "border border-[#053877] text-[#053877] hover:bg-[#eef3fb]"}`} data-testid="countdown-start">{on ? "Stop" : "Start"}</button>
+        <button type="button" onClick={() => kit.play(on ? null : "countdown", on ? undefined : { minutes, next: next?.id })} className={`h-8 shrink-0 rounded-lg px-3 text-[12px] font-bold ${on ? "ml-auto bg-[#053877] text-white" : "border border-[#053877] text-[#053877] hover:bg-[#eef3fb]"}`} data-testid="countdown-start">{on ? "Stop" : "Start"}</button>
       </div>
       <p className="mt-1 text-[11px] leading-snug text-[#667085]">Ends on "We're starting".{nextName ? ` Then take ${nextName} when you're ready.` : ""}</p>
     </div>
