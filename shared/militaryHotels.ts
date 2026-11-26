@@ -1337,6 +1337,8 @@ export function lodgingFor(l: MilitaryLodging, status: TravelerStatus) {
     kind: l.kind,
     rate: l.rate,
     forYou,
+    /** Which veterans can stay: "all", "some" (the expanded-access group) or "retirees" only. */
+    veterans: l.veterans,
     veteransNote: l.veterans_note,
     howToBook: l.how_to_book,
     reservationsPhone: l.reservations_phone || null,
