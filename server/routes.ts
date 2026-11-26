@@ -201,6 +201,7 @@ import { registerTrash, toTrash } from "./trash.js";
 import { registerMyStudio } from "./myStudio.js";
 import { registerCreatorTravel } from "./creatorTravel.js";
 import { registerCreatorHotels } from "./creatorHotels.js";
+import { isCompPlan, nextCreditsAt, registerPostifyCredits } from "./postifyCredits.js";
 import { getYoutubeKey, registerYoutubeKey, setYoutubeKey, YOUTUBE_OAUTH, YOUTUBE_RTMP } from "./youtubeKey.js";
 import { registerLivePage } from "./livePage.js";
 import { registerShowLogo, cornerLogoOf, showCoverOf } from "./showLogo.js";
@@ -7241,6 +7242,7 @@ export function registerRoutes(app: Express): void {
   registerMyStudio(app, requireHostSession, { youtubeToken });
   registerCreatorTravel(app, requireHostSession, requireAdmin);
   registerCreatorHotels(app, requireHostSession);
+  registerPostifyCredits(app, requireHostSession, requireAdmin);
   registerYoutubeKey(app, requireHostSession);
   registerLivePage(app, requireHostSession);
   registerShowLogo(app, requireHostSession);
@@ -8856,10 +8858,16 @@ export function registerRoutes(app: Express): void {
     noStore(res);
     const a = await postifyAllowance(getSessionEmail(req) ?? "");
     const plan = a.sub ? planOf(a.sub.plan) : undefined;
+    const nextCredits = a.sub ? await nextCreditsAt(a.sub) : null;
     res.json({
       post: true,
       beta: { unlimited: a.unlimited, used: a.used, limit: a.limit, left: a.unlimited ? null : a.left, maxMinutes: a.maxMinutes, tokens: a.tokens, payments: stripeReady() },
-      plan: a.sub && plan ? { key: plan.key, name: plan.name, comp: String(a.sub.subscriptionId ?? "").startsWith("comp:"), interval: a.sub.interval, credits: plan.credits, overageCents: plan.overageCents, capCents: a.sub.overageCapCents, extraCents: a.extraCents, periodEnd: a.sub.periodEnd, status: a.sub.status } : null,
+      plan: a.sub && plan ? (() => {
+        const comp = isCompPlan(a.sub);
+        // extras: whether going past the balance can be billed (a monthly paid plan, not a trial); off = hide the limit and "$x of $y".
+        const extras = !comp && a.sub.interval !== "year" && a.sub.status !== "trialing";
+        return { key: plan.key, name: plan.name, comp, extras, interval: a.sub.interval, credits: plan.credits, overageCents: plan.overageCents, capCents: extras ? a.sub.overageCapCents : 0, extraCents: a.extraCents, periodEnd: a.sub.periodEnd, status: a.sub.status, nextCreditsAt: nextCredits };
+      })() : null,
     });
   });
 
@@ -8997,6 +9005,8 @@ export function registerRoutes(app: Express): void {
     if (!(OVERAGE_CAP_CHOICES as readonly number[]).includes(capCents)) return res.status(400).json({ message: "Pick one of the limits." });
     const sub = await storage.getSubscription(email);
     if (!sub) return res.status(404).json({ message: "No plan yet." });
+    // A gifted plan has no card, so extras can't be billed: its limit stays at none (26 Nov, WorkReady360 showed "$0 of $10").
+    if (isCompPlan(sub)) return res.status(400).json({ message: "Your plan is a gift, so there are no extra credits to limit. Add a credit pack if you run out." });
     await storage.upsertSubscription({ email, overageCapCents: capCents });
     res.json({ capCents });
   });
@@ -9018,12 +9028,30 @@ export function registerRoutes(app: Express): void {
 
   // ---- Pōstify tokens: Stripe Checkout ---------------------------------------
 
+  /**
+   * Where Stripe's back arrow should land: the page they bought from (body.returnTo, else the Referer), a path on our
+   * own site only (never another host, never "//"), else the Pōstify page. Andrew, 26 Nov: Back went to /pricing.
+   */
+  const backPathOf = (req: any, origin: string): string => {
+    const pick = (raw: unknown): string => {
+      const v = String(raw ?? "").trim();
+      if (!v) return "";
+      try {
+        const u = new URL(v, origin);
+        if (u.origin !== new URL(origin).origin || u.pathname.startsWith("//") || u.pathname.startsWith("/api/")) return "";
+        u.searchParams.delete("paid");
+        const path = `${u.pathname}${u.search}`;
+        return path.length <= 300 ? path : "";
+      } catch { return ""; }
+    };
+    return pick(req.body?.returnTo) || pick(req.get("referer")) || "/host/dashboard/postify";
+  };
   app.post("/api/host/tokens/checkout", requireHostSession, async (req, res) => {
     const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
     if (!stripeReady()) return res.status(503).json({ message: "Payments aren't switched on yet. Try again soon." });
     const origin = (process.env.PUBLIC_ORIGIN || `${req.protocol}://${req.get("host")}`).replace(/\/+$/, "");
     try {
-      res.json({ url: await createTokenCheckout({ email, pack: String(req.body?.pack ?? ""), origin }) });
+      res.json({ url: await createTokenCheckout({ email, pack: String(req.body?.pack ?? ""), origin, back: backPathOf(req, origin) }) });
     } catch (err: any) {
       console.error("Stripe checkout failed:", err?.message);
       res.status(502).json({ message: "Checkout didn't open. Try again in a moment." });

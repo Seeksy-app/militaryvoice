@@ -26,7 +26,8 @@ async function stripe(method: "GET" | "POST", path: string, form?: Record<string
 
 export interface PaidTokens { sessionId: string; email: string; tokens: number; pack: string }
 
-export async function createTokenCheckout(v: { email: string; pack: string; origin: string }): Promise<string> {
+/** `back`: the path they bought from (the Pōstify panel or an episode); Stripe's back arrow returns there, never /pricing. */
+export async function createTokenCheckout(v: { email: string; pack: string; origin: string; back?: string }): Promise<string> {
   const pack = tokenPack(v.pack);
   if (!pack) throw new Error("Which pack?");
   const s = await stripe("POST", "/checkout/sessions", {
@@ -43,7 +44,7 @@ export async function createTokenCheckout(v: { email: string; pack: string; orig
     "metadata[pack]": pack.key,
     "metadata[tokens]": String(pack.tokens),
     success_url: `${v.origin}/host/dashboard/postify?paid={CHECKOUT_SESSION_ID}`,
-    cancel_url: `${v.origin}/pricing`,
+    cancel_url: `${v.origin}${v.back || "/host/dashboard/postify"}`,
   });
   return String(s.url);
 }
