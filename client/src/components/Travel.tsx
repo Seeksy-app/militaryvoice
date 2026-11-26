@@ -1,6 +1,6 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeftRight, Check, ChevronDown, Clock, ExternalLink, Info, Loader2, Phone, PhoneCall, Plane, X } from "lucide-react";
+import { ArrowLeftRight, Check, ChevronDown, ChevronLeft, ChevronRight, Clock, ExternalLink, Info, Loader2, Phone, PhoneCall, Plane, X } from "lucide-react";
 import type { TravelerStatus } from "@shared/militaryFares";
 import { AIRPORTS, airlineName, airlineSite, airportName, checkedOn, deskOf, membershipLabel, perkTags, truePrice, type Perk } from "@/lib/travelPerks";
 
@@ -343,22 +343,49 @@ function Benefits({ results, perks, status }: { results: Result[]; perks: Perk[]
         <p className="text-[13px] text-muted-foreground text-balance">{status === "active" ? "Military" : "Veteran"} travel benefits vary by airline. Some offer discounted fares, others offer vacation-package savings or free baggage. We'll show what's confirmed and how to claim&nbsp;it.</p>
       </div>
       {here.length + away.length > 0 && (
-        <div className="-mx-3 mt-3 flex gap-2.5 overflow-x-auto px-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:-mx-4 sm:px-4">
+        <BenefitStrip count={here.length + away.length}>
           {[...here.map((p) => ({ p, away: false })), ...away.map((p) => ({ p, away: true }))].map(({ p, away: off }) => {
             const t = perkTags(p, status)!;
             const site = airlineSite(p.iata);
             return (
-              <div key={p.iata} className="flex w-[220px] shrink-0 flex-col rounded-xl border border-border bg-card p-3 sm:w-[232px]" data-testid={`benefit-${p.iata}`}>
-                <div className="flex items-center justify-between gap-2"><p className="truncate text-[15px] font-bold">{airlineName(p.iata, p.airline)}</p>{off && <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">Not on this route</span>}</div>
+              <div key={p.iata} className="flex w-[220px] shrink-0 flex-col rounded-xl border border-border bg-card p-3 sm:w-auto sm:min-w-[210px] sm:flex-1 sm:basis-0" data-testid={`benefit-${p.iata}`}>
+                <div className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1"><p className="text-[15px] font-bold">{airlineName(p.iata, p.airline)}</p>{off && <span className="whitespace-nowrap rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">Not on this route</span>}</div>
                 <p className="mt-1 text-[13px] font-medium text-emerald-700 dark:text-emerald-400 text-balance">{[t.phone ? "Military fare by phone" : t.fare, t.bags].filter(Boolean).join(" · ")}</p>
                 {p.claim?.line && <p className="mt-1 text-[12px] text-foreground/80 text-balance"><span className="font-semibold">How to claim:</span> {p.claim.line}{membershipLabel(p.claim.membership) && <span className="ml-1 inline-block rounded-full bg-[#eef4ff] px-1.5 py-px text-[11px] font-semibold text-[#053877] dark:bg-white/10 dark:text-white">{membershipLabel(p.claim.membership)}</span>}</p>}
                 {p.bookingUrl && <a href={p.bookingUrl} target="_blank" rel="noopener noreferrer" className="mt-auto pt-2 text-[11px] text-muted-foreground underline-offset-2 hover:underline">Checked {checkedOn(p.lastVerified)} · {site ?? "the airline's page"}</a>}
               </div>
             );
           })}
-        </div>
+        </BenefitStrip>
       )}
       {nothing.length > 0 && <p className="mt-2 text-[12px] text-muted-foreground">No {status === "veteran" ? "veteran" : "military"} benefit on {list(nothing)}.</p>}
+    </div>
+  );
+}
+
+/** The benefit cards in one row: they share the width when they fit; otherwise the row scrolls sideways, with a fade and an arrow on whichever side has more. */
+function BenefitStrip({ count, children }: { count: number; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [more, setMore] = useState({ left: false, right: false });
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const check = () => setMore({ left: el.scrollLeft > 4, right: el.scrollLeft + el.clientWidth < el.scrollWidth - 4 });
+    check();
+    el.addEventListener("scroll", check, { passive: true });
+    const ro = new ResizeObserver(check);
+    ro.observe(el);
+    return () => { el.removeEventListener("scroll", check); ro.disconnect(); };
+  }, [count]);
+  const go = (dir: 1 | -1) => ref.current?.scrollBy({ left: dir * 240, behavior: "smooth" });
+  const arrow = "absolute top-1/2 z-10 grid h-8 w-8 -translate-y-1/2 place-items-center rounded-full border border-border bg-card text-[#053877] shadow-sm hover:bg-muted dark:text-white";
+  return (
+    <div className="relative -mx-3 mt-3 sm:-mx-4">
+      <div ref={ref} className="flex gap-2.5 overflow-x-auto px-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:px-4" data-testid="benefit-strip">{children}</div>
+      {more.left && <div className="pointer-events-none absolute inset-y-0 left-0 w-10 bg-gradient-to-r from-[#eef4ff] to-transparent dark:from-[#0b1424]" />}
+      {more.right && <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-card to-transparent" />}
+      {more.left && <button type="button" onClick={() => go(-1)} className={`${arrow} left-1`} aria-label="Show earlier benefits"><ChevronLeft className="h-4 w-4" /></button>}
+      {more.right && <button type="button" onClick={() => go(1)} className={`${arrow} right-1`} aria-label="Show more benefits" data-testid="benefit-more"><ChevronRight className="h-4 w-4" /></button>}
     </div>
   );
 }
