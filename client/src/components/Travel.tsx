@@ -1,8 +1,8 @@
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeftRight, Check, Clock, ExternalLink, Info, Loader2, Phone, PhoneCall, Plane, Sparkles } from "lucide-react";
+import { ArrowLeftRight, Check, ChevronDown, Clock, ExternalLink, Info, Loader2, Phone, PhoneCall, Plane, X } from "lucide-react";
 import type { TravelerStatus } from "@shared/militaryFares";
-import { AIRPORTS, airlineName, airlineSite, airportName, deskOf, perkLine, type Perk } from "@/lib/travelPerks";
+import { AIRPORTS, airlineName, airlineSite, airportName, checkedOn, deskOf, membershipLabel, perkTags, truePrice, type Perk } from "@/lib/travelPerks";
 
 // Travel (Andrew, 26 Nov 2026: "ok. build it", from the mockup in .shots/travel-mock): a trip and the creator's
 // status, flights from the server's Parallel search (server/creatorTravel.ts) with each airline's perk for them, and
@@ -17,7 +17,7 @@ const CALLS_AT_ONCE = 3; // the server's calls a day
 type Leg = { departure_airport: string; departure_time: string; arrival_airport: string; arrival_time: string; duration_minutes: number; stops: number; layovers: { airport: string }[] };
 type Result = { i: number; price: number | null; url: string; iata: string; airline: string; flights: string[]; outbound: Leg; inbound: Leg | null; perk: Perk | null; canCall: boolean };
 type Query = { from: string; to: string; depart: string; return: string; status: TravelerStatus };
-type SearchResponse = { searchId: number; cached: boolean; searchesLeft: number | null; query: Query; results: Result[]; callsLive: boolean };
+type SearchResponse = { searchId: number; cached: boolean; searchesLeft: number | null; query: Query; results: Result[]; perks?: Perk[]; callsLive: boolean };
 type Report = { available: "yes" | "no" | "unknown"; militaryFare: number | null; difference: number | null; conditions: string; summary: string };
 export type CallView = { id: number; iata: string; airline: string; traveler: TravelerStatus; flight: { from: string; to: string; depart: string; return: string; flights: string[] }; webPrice: number | null; status: "waiting" | "calling" | "done" | "failed"; report: Report | null; error: string; createdAt: string; updatedAt: string };
 
@@ -66,10 +66,13 @@ export function Travel({ serviceStatus }: { serviceStatus?: string | null }) {
   const [back, setBack] = useState("");
   const [all, setAll] = useState(false);
   const [editing, setEditing] = useState(true);
+  const [sort, setSort] = useState<"deal" | "price">("deal");
+  const [bags, setBags] = useState(1);
+  const [openRow, setOpenRow] = useState<number | null>(null);
 
   const search = useMutation({
     mutationFn: (q: Query) => call<SearchResponse>("POST", "/api/travel/search", q),
-    onSuccess: () => { setAll(false); setEditing(false); },
+    onSuccess: () => { setAll(false); setEditing(false); setOpenRow(null); },
   });
   const calls = useQuery<{ calls: CallView[]; callsLive: boolean }>({
     queryKey: ["/api/travel/calls"],
@@ -139,33 +142,49 @@ export function Travel({ serviceStatus }: { serviceStatus?: string | null }) {
     search.mutate({ from: f.from, to: f.to, depart: f.depart, return: f.return, status: s });
   };
 
+  // Best deal for you (Andrew, 26 Nov): fare + the bags they'd pay for − the ones they get free. A fee we don't have
+  // keeps a flight out of that order; those come after, by fare, under a line that says why.
+  const priced = useMemo(() => rows.map((x) => ({ ...x, tp: x.r.price != null ? truePrice(x.phone ?? x.r.price, x.r.perk, bags, trip!.status) : null })), [rows, bags]);
+  const known = sort === "deal" ? priced.filter((x) => x.tp?.total != null).sort((a, b) => a.tp!.total! - b.tp!.total!) : priced;
+  const unknown = sort === "deal" ? priced.filter((x) => x.tp?.total == null) : [];
+  const shownKnown = all ? known : known.slice(0, SHOWN);
+  const shownUnknown = all ? unknown : unknown.slice(0, Math.max(0, SHOWN - known.length));
+  const statusPills = (cls: string) => (
+    <div className={cls} role="radiogroup" aria-label="I'm">
+      {(["veteran", "active"] as const).map((s) => (
+        <button key={s} type="button" role="radio" aria-checked={status === s} onClick={() => pickStatus(s)} className={`rounded-lg px-2 py-1.5 text-center text-[13px] font-semibold leading-tight transition-colors sm:whitespace-nowrap sm:rounded-full sm:px-3 sm:py-1 ${status === s ? "bg-[#053877] text-white dark:bg-white dark:text-[#053877]" : "text-foreground/70 hover:bg-muted"}`} data-testid={`travel-status-${s}`}>
+          {s === "veteran" ? "Veteran or retiree" : "Active duty, Guard or Reserve"}
+        </button>
+      ))}
+    </div>
+  );
+  const row = (x: (typeof priced)[number]) => <FlightRow key={x.r.i} r={x.r} searchedFrom={trip!.from} status={trip!.status} phoneFare={x.phone} call={x.call} tp={x.tp} open={openRow === x.r.i} onOpen={() => setOpenRow(openRow === x.r.i ? null : x.r.i)} />;
+
   return (
-    <section className="mx-auto max-w-[920px] pb-16 pt-1" data-testid="travel">
+    <section className="mx-auto max-w-[960px] pb-16 pt-1" data-testid="travel">
       <datalist id="mv-airports">{AIRPORTS.map(([c, n]) => <option key={c} value={`${n} (${c})`} />)}</datalist>
       <div className="mb-4">
         <h1 className="text-[28px] font-semibold tracking-tight" style={HEAD}>Travel</h1>
         <p className="text-[14px] text-muted-foreground text-balance">Your military fares and perks for a trip, airline by&nbsp;airline.</p>
       </div>
 
-      {/* The trip: who you are, then where and when. On a phone, once searched, it folds to one line. */}
+      {/* The trip: who you are, then where and when. Once searched it folds to one line, with who you are beside it. */}
       {!editing && trip ? (
-        <button type="button" onClick={() => setEditing(true)} className="flex w-full items-center gap-3 rounded-2xl border border-border bg-card px-4 py-3 text-left md:hidden" data-testid="travel-trip-folded">
-          <Plane className="h-5 w-5 shrink-0 text-[#053877] dark:text-white" />
-          <span className="min-w-0 flex-1 leading-tight">
-            <span className="block truncate text-[15px] font-semibold">{airportName(trip.from)} → {airportName(trip.to)}</span>
-            <span className="block truncate text-xs text-muted-foreground">{ymdShort(trip.depart)}{trip.return ? ` – ${ymdShort(trip.return)}` : " · one way"} · {trip.status === "active" ? "Active duty" : "Veteran"}</span>
-          </span>
-          <span className="text-sm font-semibold text-[#053877] dark:text-white">Change</span>
-        </button>
-      ) : null}
-      <form onSubmit={(e) => { e.preventDefault(); go(); }} className={`${!editing && trip ? "hidden md:block" : ""} rounded-2xl border border-border bg-card p-2 shadow-sm`} data-testid="travel-trip">
-        <div className="mb-2 grid grid-cols-2 gap-1 rounded-xl bg-muted/60 p-1 sm:flex sm:bg-transparent sm:p-0 sm:px-1 sm:pt-0.5" role="radiogroup" aria-label="I'm">
-          {(["veteran", "active"] as const).map((s) => (
-            <button key={s} type="button" role="radio" aria-checked={status === s} onClick={() => pickStatus(s)} className={`rounded-lg px-2 py-1.5 text-center text-[13px] font-semibold leading-tight transition-colors sm:whitespace-nowrap sm:rounded-full sm:px-3 sm:py-1 ${status === s ? "bg-[#053877] text-white dark:bg-white dark:text-[#053877]" : "text-foreground/70 hover:bg-muted"}`} data-testid={`travel-status-${s}`}>
-              {s === "veteran" ? "Veteran or retiree" : "Active duty, Guard or Reserve"}
+        <>
+          <div className="flex items-center gap-3 rounded-2xl border border-border bg-card px-4 py-2.5" data-testid="travel-trip-folded">
+            <Plane className="h-5 w-5 shrink-0 text-[#053877] dark:text-white" />
+            <button type="button" onClick={() => setEditing(true)} className="min-w-0 flex-1 text-left leading-tight">
+              <span className="block truncate text-[15px] font-semibold">{airportName(trip.from)} ({trip.from}) → {airportName(trip.to)} ({trip.to})</span>
+              <span className="block truncate text-xs text-muted-foreground">{ymdNice(trip.depart)}{trip.return ? ` – ${ymdNice(trip.return)}` : " · one way"} · 1 person</span>
             </button>
-          ))}
-        </div>
+            {statusPills("hidden gap-1 rounded-full bg-muted/60 p-0.5 sm:flex")}
+            <button type="button" onClick={() => setEditing(true)} className="shrink-0 text-sm font-semibold text-[#053877] dark:text-white" data-testid="travel-change">Change</button>
+          </div>
+          {statusPills("mt-2 grid grid-cols-2 gap-1 rounded-xl bg-muted/60 p-1 sm:hidden")}
+        </>
+      ) : null}
+      <form onSubmit={(e) => { e.preventDefault(); go(); }} className={`${!editing && trip ? "hidden" : ""} rounded-2xl border border-border bg-card p-2 shadow-sm`} data-testid="travel-trip">
+        {statusPills("mb-2 grid grid-cols-2 gap-1 rounded-xl bg-muted/60 p-1 sm:flex sm:bg-transparent sm:p-0 sm:px-1 sm:pt-0.5")}
         <div className="grid grid-cols-2 gap-2 md:flex md:items-stretch">
           <Box label="From" className="col-span-2 md:flex-1"><input list="mv-airports" aria-label="From" value={fromText} onChange={(e) => setFromText(e.target.value)} onBlur={() => from && setFromText(label(from))} placeholder="City or airport" className="w-full bg-transparent text-[15px] font-semibold outline-none placeholder:font-normal placeholder:text-muted-foreground" data-testid="travel-from" /></Box>
           <button type="button" aria-label="Swap From and To" onClick={() => { setFromText(toText); setToText(fromText); }} className="hidden items-center px-0.5 text-muted-foreground hover:text-foreground md:flex"><ArrowLeftRight className="h-4 w-4" /></button>
@@ -185,36 +204,59 @@ export function Travel({ serviceStatus }: { serviceStatus?: string | null }) {
         </div>
       )}
 
+      {trip && !search.isPending && results.length > 0 && <Benefits results={results} perks={data?.perks ?? []} status={trip.status} />}
+
       {/* What came back from the calls, or the offer to make them. */}
-      {trip && !search.isPending && results.length > 0 && (
-        <div className="mt-4">
+      {trip && !search.isPending && results.length > 0 && (pending.length > 0 || finished.length > 0 || (trip.status === "active" && toCall.length > 0)) && (
+        <div className="mt-3">
           {pending.length > 0 ? (
             <Waiting calls={pending} live={callsLive} />
           ) : finished.length > 0 ? (
-            <CallReport calls={finished} trip={trip} />
-          ) : trip.status === "active" && toCall.length > 0 ? (
+            <CallReport calls={finished} trip={trip} results={results} />
+          ) : (
             <CallOffer airlines={toCall.map((r) => airlineName(r.iata, r.airline))} live={callsLive} pending={askCalls.isPending} error={askCalls.error ? (askCalls.error as Error).message : ""} onCall={() => askCalls.mutate(toCall.map((r) => ({ searchId: data!.searchId, i: r.i })))} />
-          ) : trip.status === "veteran" ? (
-            <VeteranNote results={results} />
-          ) : null}
+          )}
         </div>
       )}
 
       {trip && !search.isPending && (
-        <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-card" data-testid="travel-results">
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 border-b border-border px-4 py-2 text-[12px] text-muted-foreground">
-            <span><b className="text-foreground">{results.length} {results.length === 1 ? "flight" : "flights"}</b> · cheapest first · {trip.return ? "round trip" : "one way"}, 1 person</span>
-            <span className="hidden sm:inline">Perks checked Nov 25 on each airline's own site</span>
+        <div className="mt-3 rounded-2xl border border-border bg-card" data-testid="travel-results">
+          <div className="flex flex-col gap-2 border-b border-border px-4 py-2.5 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-[13px] text-muted-foreground text-balance">
+              {results.length ? <><b className="text-foreground">{results.length} {results.length === 1 ? "flight" : "flights"} found.</b> Comparing fares and military benefits to find your best travel&nbsp;value.</> : <b className="text-foreground">No flights found.</b>}
+            </p>
+            {results.length > 0 && (
+              <div className="flex shrink-0 flex-wrap items-center gap-2">
+                <div className="flex rounded-full bg-muted/70 p-0.5 text-[12px] font-semibold" role="radiogroup" aria-label="Sort">
+                  {(["deal", "price"] as const).map((s) => (
+                    <button key={s} type="button" role="radio" aria-checked={sort === s} onClick={() => setSort(s)} className={`whitespace-nowrap rounded-full px-3 py-1 ${sort === s ? "bg-card text-foreground shadow-sm" : "text-muted-foreground hover:text-foreground"}`} data-testid={`travel-sort-${s}`}>{s === "deal" ? "Best deal for you" : "Lowest price"}</button>
+                  ))}
+                </div>
+                <label className="relative flex items-center rounded-full border border-border text-[12px] font-semibold">
+                  <span className="sr-only">Checked bags</span>
+                  <select value={bags} onChange={(e) => setBags(Number(e.target.value))} className="appearance-none bg-transparent py-1 pl-3 pr-7 outline-none" data-testid="travel-bags">
+                    <option value={0}>No checked bags</option><option value={1}>1 checked bag</option><option value={2}>2 checked bags</option>
+                  </select>
+                  <ChevronDown className="pointer-events-none absolute right-2.5 h-3 w-3" />
+                </label>
+              </div>
+            )}
           </div>
           {results.length === 0 ? (
             <p className="px-4 py-8 text-center text-sm text-muted-foreground text-balance">No flights came back for those days. Try a day either side, or a nearby&nbsp;airport.</p>
           ) : (
-            <div className="divide-y divide-border">
-              {(all ? rows : rows.slice(0, SHOWN)).map(({ r, phone, call: c }) => <FlightRow key={r.i} r={r} searchedFrom={trip.from} status={trip.status} phoneFare={phone} call={c} />)}
-            </div>
+            <>
+              <div className="divide-y divide-border">{shownKnown.map(row)}</div>
+              {shownUnknown.length > 0 && (
+                <>
+                  <p className={`border-b border-border bg-muted/40 px-4 py-1.5 text-[12px] font-medium text-muted-foreground ${shownKnown.length ? "border-t" : ""}`}>Bag fees aren't listed for these airlines yet, so they're sorted by&nbsp;fare</p>
+                  <div className="divide-y divide-border">{shownUnknown.map(row)}</div>
+                </>
+              )}
+            </>
           )}
           {!all && results.length > SHOWN && (
-            <button type="button" onClick={() => setAll(true)} className="w-full border-t border-border py-2.5 text-[13px] font-semibold text-[#053877] hover:bg-muted dark:text-white">Show all {results.length} flights</button>
+            <button type="button" onClick={() => setAll(true)} className="w-full rounded-b-2xl border-t border-border py-2.5 text-[13px] font-semibold text-[#053877] hover:bg-muted dark:text-white">Show all {results.length} flights</button>
           )}
         </div>
       )}
@@ -275,26 +317,75 @@ export function Tile({ code }: { code: string }) {
   return <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg bg-[#053877] text-[12px] font-bold text-white dark:bg-white/15">{code}</span>;
 }
 
-function FlightRow({ r, searchedFrom, status, phoneFare, call: c }: { r: Result; searchedFrom: string; status: TravelerStatus; phoneFare: number | null; call?: CallView }) {
+function Tag({ tone, children }: { tone: "green" | "grey" | "amber"; children: React.ReactNode }) {
+  const c = tone === "green" ? "bg-emerald-50 text-emerald-800 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/30"
+    : tone === "amber" ? "bg-[#FFF3D6] text-[#7a4f00] ring-[#F0A71F]/50 dark:bg-[#F0A71F]/10 dark:text-[#F0A71F]"
+    : "bg-muted text-muted-foreground ring-border";
+  return <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[12px] font-semibold ring-1 ${c}`}>{children}</span>;
+}
+
+/**
+ * Your benefits (Andrew, 26 Nov): only for the status picked, only airlines in the results (plus up to two standouts
+ * the server sends, Breeze and Avelo, for veterans), each with its benefit, how to claim it and where we checked.
+ */
+function Benefits({ results, perks, status }: { results: Result[]; perks: Perk[]; status: TravelerStatus }) {
+  const seen = new Map<string, Perk>();
+  for (const r of results) if (r.perk && !seen.has(r.iata)) seen.set(r.iata, r.perk);
+  const has = (p: Perk) => { const t = perkTags(p, status); return !!t && (t.phone || !!t.fare || !!t.bags); };
+  const here = Array.from(seen.values()).filter(has);
+  const away = status === "veteran" ? perks.filter((p) => !seen.has(p.iata) && has(p)).slice(0, 2) : [];
+  const nothing = Array.from(seen.values()).filter((p) => p.flying && !has(p)).map((p) => airlineName(p.iata, p.airline));
+  if (!here.length && !away.length && !nothing.length) return null;
+  return (
+    <div className="mt-4 rounded-2xl border border-[#c7d7f2] bg-gradient-to-br from-[#eef4ff] to-card p-3 sm:p-4 dark:border-white/10 dark:from-white/5" data-testid="travel-benefits">
+      <div className="flex flex-col gap-0.5 sm:flex-row sm:items-start sm:gap-2">
+        <h2 className="shrink-0 text-[15px] font-semibold" style={HEAD}>Your benefits</h2>
+        <p className="text-[13px] text-muted-foreground text-balance">{status === "active" ? "Military" : "Veteran"} travel benefits vary by airline. Some offer discounted fares, others offer vacation-package savings or free baggage. We'll show what's confirmed and how to claim&nbsp;it.</p>
+      </div>
+      {here.length + away.length > 0 && (
+        <div className="-mx-3 mt-3 flex gap-2.5 overflow-x-auto px-3 pb-1 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden sm:-mx-4 sm:px-4">
+          {[...here.map((p) => ({ p, away: false })), ...away.map((p) => ({ p, away: true }))].map(({ p, away: off }) => {
+            const t = perkTags(p, status)!;
+            const site = airlineSite(p.iata);
+            return (
+              <div key={p.iata} className="flex w-[220px] shrink-0 flex-col rounded-xl border border-border bg-card p-3 sm:w-[232px]" data-testid={`benefit-${p.iata}`}>
+                <div className="flex items-center justify-between gap-2"><p className="truncate text-[15px] font-bold">{airlineName(p.iata, p.airline)}</p>{off && <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-[11px] font-medium text-muted-foreground">Not on this route</span>}</div>
+                <p className="mt-1 text-[13px] font-medium text-emerald-700 dark:text-emerald-400 text-balance">{[t.phone ? "Military fare by phone" : t.fare, t.bags].filter(Boolean).join(" · ")}</p>
+                {p.claim?.line && <p className="mt-1 text-[12px] text-foreground/80 text-balance"><span className="font-semibold">How to claim:</span> {p.claim.line}{membershipLabel(p.claim.membership) && <span className="ml-1 inline-block rounded-full bg-[#eef4ff] px-1.5 py-px text-[11px] font-semibold text-[#053877] dark:bg-white/10 dark:text-white">{membershipLabel(p.claim.membership)}</span>}</p>}
+                {p.bookingUrl && <a href={p.bookingUrl} target="_blank" rel="noopener noreferrer" className="mt-auto pt-2 text-[11px] text-muted-foreground underline-offset-2 hover:underline">Checked {checkedOn(p.lastVerified)} · {site ?? "the airline's page"}</a>}
+              </div>
+            );
+          })}
+        </div>
+      )}
+      {nothing.length > 0 && <p className="mt-2 text-[12px] text-muted-foreground">No {status === "veteran" ? "veteran" : "military"} benefit on {list(nothing)}.</p>}
+    </div>
+  );
+}
+
+function FlightRow({ r, searchedFrom, status, phoneFare, call: c, tp, open, onOpen }: { r: Result; searchedFrom: string; status: TravelerStatus; phoneFare: number | null; call?: CallView; tp: ReturnType<typeof truePrice> | null; open: boolean; onOpen: () => void }) {
   const name = airlineName(r.iata, r.airline);
   const site = airlineSite(r.iata);
   const desk = deskOf(r.iata);
-  const perk = perkLine(r.perk);
-  const after = perk?.pct && r.price != null ? Math.round(r.price * (1 - perk.pct / 100)) : null;
+  const t = perkTags(r.perk, status);
   const o = r.outbound;
   const stops = o.stops === 0 ? "Nonstop" : `${o.stops} ${o.stops === 1 ? "stop" : "stops"}${o.layovers?.length ? `, ${o.layovers.map((l) => l.airport).join(", ")}` : ""}`;
   const fromOther = o.departure_airport && o.departure_airport !== searchedFrom ? `From ${o.departure_airport} · ` : "";
   const nextDay = o.arrival_time.slice(0, 10) > o.departure_time.slice(0, 10);
-  let note = "";
-  let tone: "win" | "done" | "ask" = "ask";
-  if (c?.status === "done") {
-    tone = phoneFare != null ? "win" : "done";
-    note = phoneFare != null && r.price != null ? `Military fare by phone: ${money(r.price - phoneFare)} less` : c.report?.available === "no" ? "We asked: no military fare here" : c.report?.available === "unknown" ? "We asked: they couldn't say" : "We asked: the web fare is better";
-  } else if (c?.status === "failed") { tone = "done"; note = "We couldn't get an answer"; }
-  else if (c) note = "We're asking about the military fare";
-  else if (r.canCall) note = "Military fare by phone only";
+  const fare = phoneFare ?? r.price;
+  // The fare tag: what we heard on a call, else the phone-only fare, else a real discount, else none. Never a guessed price.
+  const quoted = c?.status === "done" && c.report?.available === "yes" ? c.report.militaryFare : null;
+  const fareTag = c?.status === "done"
+    ? quoted != null ? <Tag tone={phoneFare != null ? "green" : "grey"}>Military fare {money(quoted)} by phone</Tag>
+      : <Tag tone="grey">{c.report?.available === "no" ? "No military fare here" : "Airline couldn't say"}</Tag>
+    : c?.status === "failed" ? <Tag tone="grey">We couldn't get an answer</Tag>
+    : c ? <Tag tone="amber"><Phone className="h-3 w-3" /> We're asking for the military fare</Tag>
+    : t?.phone ? <Tag tone="amber"><Phone className="h-3 w-3" /> Call for military price</Tag>
+    : t?.fare ? <Tag tone="green">{t.fare}</Tag>
+    : <Tag tone="grey">No fare discount</Tag>;
+  const priceLabel = phoneFare != null ? "By phone" : !tp ? "" : tp.total == null ? "Bag fee not listed" : tp.total !== fare ? "With your bags" : tp.lines.some((l) => l.free) && t?.member ? "With paid WeSalute+" : tp.lines.some((l) => l.free) ? "Bags included" : r.inbound ? "Round trip" : "One way";
   return (
-    <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center sm:gap-4" data-testid={`flight-${r.iata}`}>
+    <div className="relative flex flex-col gap-2.5 px-4 py-3 sm:flex-row sm:items-center sm:gap-4" data-testid={`flight-${r.iata}`}>
       <div className="flex min-w-0 flex-1 items-center gap-3">
         <Tile code={r.iata} />
         <div className="min-w-0 leading-tight">
@@ -303,39 +394,55 @@ function FlightRow({ r, searchedFrom, status, phoneFare, call: c }: { r: Result;
           <p className="truncate text-xs text-muted-foreground">{fromOther}{stops}{o.duration_minutes ? ` · ${dur(o.duration_minutes)}` : ""}</p>
         </div>
       </div>
-      <div className="min-w-0 sm:w-[290px] sm:shrink-0">
-        {perk ? (
-          <p className="flex items-start gap-1.5 text-[13px] font-medium text-emerald-700 dark:text-emerald-400"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0" /> <span>{perk.text}{after != null ? <span className="text-muted-foreground">: about {money(after)}</span> : null}</span></p>
-        ) : (
-          <p className="text-[13px] text-muted-foreground">No {status === "active" ? "military" : "veteran"} perk on {name}</p>
-        )}
-        {note && <p className={`mt-0.5 flex items-center gap-1.5 text-[12px] ${tone === "win" ? "font-semibold text-emerald-700 dark:text-emerald-400" : tone === "done" ? "font-semibold text-muted-foreground" : "text-[#8a5a00] dark:text-[#F0A71F]"}`}>{tone === "ask" && <Phone className="h-3 w-3" />}{note}</p>}
+      {/* Two tags, never one mixed line: the fare, then the bags. */}
+      <div className="flex flex-wrap gap-1.5 sm:w-[300px] sm:shrink-0">
+        {t ? <>{fareTag}<Tag tone={t.bags ? "green" : "grey"}>{t.bags ?? "No free bags"}</Tag></> : <Tag tone="grey">{r.perk && !r.perk.flying ? "Not flying" : `${name}'s military rules aren't in our list yet`}</Tag>}
       </div>
-      <div className="flex items-center justify-between gap-4 sm:justify-end">
-        <p className="w-16 text-right leading-tight"><span className="block text-lg font-bold tabular-nums">{phoneFare != null ? money(phoneFare) : r.price != null ? money(r.price) : "—"}</span><span className="text-[11px] text-muted-foreground">{phoneFare != null ? "by phone" : r.inbound ? "round trip" : "one way"}</span></p>
+      <div className="flex items-center justify-between gap-3 sm:justify-end">
+        <button type="button" onClick={onOpen} disabled={!tp} aria-expanded={open} className="min-w-[84px] text-left leading-tight sm:text-right" data-testid={`price-${r.iata}`}>
+          <span className="block whitespace-nowrap text-lg font-bold tabular-nums">{fare == null ? "—" : tp?.total != null ? money(tp.total) : <>{money(fare)}<span className="text-[13px] font-semibold text-muted-foreground"> + bags</span></>}</span>
+          {priceLabel && <span className="inline-flex items-center gap-1 whitespace-nowrap text-[11px] font-medium text-[#053877] underline decoration-dotted underline-offset-2 dark:text-white">{priceLabel} <Info className="h-3 w-3" /></span>}
+        </button>
         {phoneFare != null && desk ? (
-          <a href={`tel:${desk.tel}`} className="inline-flex w-[196px] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-emerald-600 px-3 py-1.5 text-[13px] font-semibold text-white hover:bg-emerald-700"><Phone className="h-3.5 w-3.5" /> {desk.phone}</a>
+          <a href={`tel:${desk.tel}`} className="inline-flex w-[204px] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full bg-emerald-600 px-3 py-1.5 text-[13px] font-semibold text-white hover:bg-emerald-700"><Phone className="h-3.5 w-3.5" /> {desk.phone}</a>
+        ) : r.perk?.phoneOnly && status !== "active" && desk ? (
+          <a href={`tel:${desk.tel}`} className="inline-flex w-[204px] shrink-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full border border-border px-3 py-1.5 text-[13px] font-semibold text-[#053877] hover:bg-muted dark:text-white" data-testid={`book-${r.iata}`}><Phone className="h-3.5 w-3.5" /> Book by phone {desk.phone}</a>
         ) : (
-          <a href={r.url} target="_blank" rel="noopener noreferrer" className="inline-flex w-[196px] shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-full border border-border px-3 py-1.5 text-[13px] font-semibold text-[#053877] hover:bg-muted dark:text-white" data-testid={`book-${r.iata}`}>
+          <a href={r.url} target="_blank" rel="noopener noreferrer" className="inline-flex w-[204px] shrink-0 items-center justify-center gap-1 whitespace-nowrap rounded-full border border-border px-3 py-1.5 text-[13px] font-semibold text-[#053877] hover:bg-muted dark:text-white" data-testid={`book-${r.iata}`}>
             Book on {site ?? "the airline's site"} <ExternalLink className="h-3 w-3" />
           </a>
         )}
       </div>
+      {open && tp && (
+        <div className="z-20 rounded-xl border border-border bg-card p-3 text-[13px] shadow-lg sm:absolute sm:right-[228px] sm:top-[calc(100%-6px)] sm:w-[340px]" role="dialog" aria-label={`${name}: your price`} data-testid={`price-detail-${r.iata}`}>
+          <div className="flex items-start justify-between gap-2"><p className="font-semibold">{name}: your price and benefits</p><button type="button" onClick={onOpen} aria-label="Close"><X className="h-4 w-4 text-muted-foreground" /></button></div>
+          <dl className="mt-2 space-y-1">
+            {tp.lines.map((l) => <div key={l.label} className="flex justify-between gap-3"><dt className="text-muted-foreground">{l.label}{l.label === "Fare" && phoneFare != null ? " (military, by phone)" : ""}</dt><dd className={`font-medium tabular-nums ${l.free ? "text-emerald-700 dark:text-emerald-400" : l.value === "Fee not listed" ? "text-muted-foreground" : ""}`}>{l.value}</dd></div>)}
+            <div className="flex justify-between gap-3 border-t border-border pt-1 font-semibold"><dt>Your price</dt><dd className="tabular-nums">{tp.total != null ? money(tp.total) : `${money(fare!)} + bags`}</dd></div>
+          </dl>
+          {tp.note && <p className="mt-1 text-[11px] text-muted-foreground">{tp.note}</p>}
+          {t && (t.fare || t.bags || t.phone) ? (
+            <p className="mt-2 flex gap-1.5"><Check className="mt-0.5 h-3.5 w-3.5 shrink-0 text-emerald-600" /><span><b>For {status === "veteran" ? "veterans and retirees" : "active duty, Guard and Reserve"}:</b> {[t.phone ? "military fare by phone" : t.fare, t.bags].filter(Boolean).join(" · ")}</span></p>
+          ) : t ? <p className="mt-2 text-muted-foreground">No {status === "veteran" ? "veteran" : "military"} benefit on {name}.</p> : null}
+          {r.perk?.claim?.line && t && (t.fare || t.bags || t.phone) && <p className="mt-1 pl-5"><b>How to claim:</b> {r.perk.claim.line}{membershipLabel(r.perk.claim.membership) ? ` (${membershipLabel(r.perk.claim.membership)})` : ""}</p>}
+          {r.perk?.stacking && !/^Not (stated|applicable)\.?$/i.test(r.perk.stacking.trim()) && (t?.fare || t?.bags) && <p className="mt-1 pl-5 text-muted-foreground"><b className="text-foreground">Combines with:</b> {r.perk.stacking}</p>}
+          {r.perk?.bookingUrl && <a href={r.perk.bookingUrl} target="_blank" rel="noopener noreferrer" className="mt-2 block pl-5 text-[11px] text-muted-foreground underline">Checked {checkedOn(r.perk.lastVerified)} · {site ?? "the airline's page"}</a>}
+        </div>
+      )}
     </div>
   );
 }
 
 function CallOffer({ airlines, live, onCall, pending, error }: { airlines: string[]; live: boolean; onCall: () => void; pending: boolean; error: string }) {
-  const many = airlines.length > 1;
   return (
-    <div className="flex flex-col gap-3 rounded-2xl border border-[#F0A71F]/50 bg-[#FFF8E8] p-4 sm:flex-row sm:items-center dark:bg-[#F0A71F]/10" data-testid="travel-call-offer">
-      <span className="hidden h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[#F0A71F]/25 text-[#8a5a00] sm:flex"><PhoneCall className="h-5 w-5" /></span>
+    <div className="flex flex-col gap-3 rounded-2xl border border-[#F0A71F]/60 bg-[#FFF8E8] p-4 sm:flex-row sm:items-center dark:bg-[#F0A71F]/10" data-testid="travel-call-offer">
+      <span className="hidden h-11 w-11 shrink-0 items-center justify-center rounded-full bg-[#F0A71F] text-[#1a1200] sm:flex"><PhoneCall className="h-5 w-5" /></span>
       <div className="min-w-0 flex-1">
-        <p className="text-[15px] font-semibold text-balance">{list(airlines)} {many ? "have military fares" : "has a military fare"} you can only get by&nbsp;phone</p>
-        <p className="text-[13px] text-muted-foreground text-balance">Our automated caller asks {many ? "each one" : "them"} for your flight's military fare and tells you here if it beats the web price. It never books, pays or gives your details.{live ? "" : " We'll save your trip and call once it's switched on."}</p>
+        <p className="text-[16px] font-semibold text-balance" style={HEAD}>We'll call {list(airlines)} for your military fare and tell you what they&nbsp;quote.</p>
+        <p className="text-[13px] text-muted-foreground text-balance">Their military fares aren't online. Our automated caller asks for your flight and reports back here. It never books, pays or gives your&nbsp;details.{live ? "" : " We'll save your trip and call once it's switched on."}</p>
         {error && <p className="mt-1 text-[13px] font-medium text-[#b42318]">{error}</p>}
       </div>
-      <button type="button" onClick={onCall} disabled={pending} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-[#053877] px-5 py-2.5 text-[14px] font-semibold text-white disabled:opacity-60" data-testid="travel-call">
+      <button type="button" onClick={onCall} disabled={pending} className="inline-flex shrink-0 items-center justify-center gap-2 rounded-full bg-[#053877] px-6 py-3 text-[15px] font-semibold text-white disabled:opacity-60" data-testid="travel-call">
         {pending ? <Loader2 className="h-4 w-4 animate-spin" /> : <PhoneCall className="h-4 w-4" />} Have us call
       </button>
     </div>
@@ -367,41 +474,65 @@ function bestOf(calls: CallView[]): { airline: string; iata: string; fare: numbe
   return best;
 }
 
-function CallReport({ calls, trip }: { calls: CallView[]; trip: Query }) {
+/**
+ * What the calls came back with (Andrew, 26 Nov): once a real quote exists, the online fare beside the military fare,
+ * and an honest verdict. Our first test call quoted $465 against $129 online, so "the online fare is cheaper" is as
+ * likely as a saving.
+ */
+function CallReport({ calls, trip, results }: { calls: CallView[]; trip: Query; results: Result[] }) {
   const best = bestOf(calls);
+  const quoted = calls.filter((c) => c.status === "done" && c.report?.available === "yes" && c.report.militaryFare != null && c.webPrice != null);
+  // The one to show side by side: the saving if there is one, else the closest quote.
+  const shown = best ? calls.find((c) => c.iata === best.iata) : [...quoted].sort((a, b) => (a.report!.militaryFare! - a.webPrice!) - (b.report!.militaryFare! - b.webPrice!))[0];
   const desk = best ? deskOf(best.iata) : null;
-  const bestCall = best ? calls.find((c) => c.iata === best.iata) : undefined;
-  const others = calls.filter((c) => c.iata !== best?.iata);
+  const others = calls.filter((c) => c.id !== shown?.id);
   const last = calls.map((c) => c.updatedAt || c.createdAt).sort().pop() ?? "";
   const when = last ? new Date(last).toLocaleString("en-US", { weekday: "short", hour: "numeric", minute: "2-digit" }) : "";
   const n = calls.length;
+  const name = shown ? airlineName(shown.iata, shown.airline) : "";
+  const flight = shown ? results.find((r) => r.iata === shown.iata && sameFlights(r.flights, shown.flight.flights)) ?? results.find((r) => r.iata === shown.iata) : undefined;
+  const freeBags = !!perkTags(flight?.perk, trip.status)?.bags;
+  const web = shown?.webPrice ?? null;
+  const mil = shown?.report?.militaryFare ?? null;
   return (
-    <div className={`overflow-hidden rounded-2xl border bg-card ${best ? "border-emerald-300 dark:border-emerald-500/40" : "border-border"}`} data-testid="travel-report">
-      <div className={`flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-center ${best ? "bg-emerald-50 dark:bg-emerald-500/10" : "bg-muted/40"}`}>
-        <span className={`hidden h-10 w-10 shrink-0 items-center justify-center rounded-full sm:flex ${best ? "bg-emerald-600 text-white" : "bg-muted text-foreground"}`}>{best ? <Sparkles className="h-5 w-5" /> : <Info className="h-5 w-5" />}</span>
-        <div className="min-w-0 flex-1">
-          <p className={`text-[11px] font-semibold uppercase tracking-wide ${best ? "text-emerald-800 dark:text-emerald-300" : "text-muted-foreground"}`}>We called {n} {n === 1 ? "airline" : "airlines"}{when ? ` · ${when}` : ""}</p>
-          {best ? (
-            <>
-              <p className="text-[17px] font-semibold text-balance" style={HEAD}>{best.airline} military fare {money(best.fare)} vs {money(best.web)} online. You save&nbsp;{money(best.web - best.fare)}.</p>
-              <p className="text-[13px] text-muted-foreground text-balance">
-                Ask for "the military fare for personal travel"{bestCall?.flight.flights.length ? ` on ${list(bestCall.flight.flights)}` : ""}, {ymdNice(trip.depart)}{trip.return ? `, back ${ymdNice(trip.return)}` : ""}.{bestCall?.report?.conditions ? ` ${bestCall.report.conditions}` : " Have your military ID ready."}
-              </p>
-            </>
-          ) : (
-            <p className="text-[17px] font-semibold text-balance" style={HEAD}>The web fare is better. Book&nbsp;online.</p>
-          )}
-        </div>
-        {best && desk && (
-          <div className="flex shrink-0 flex-col items-stretch gap-1 sm:items-end">
-            <a href={`tel:${desk.tel}`} className="inline-flex items-center justify-center gap-2 rounded-full bg-[#053877] px-5 py-2.5 text-[14px] font-semibold text-white"><PhoneCall className="h-4 w-4" /> Call {best.airline}: {desk.phone}</a>
-            <span className="text-center text-[12px] text-muted-foreground sm:text-right">Open {desk.hours}</span>
+    <div className="overflow-hidden rounded-2xl border border-border bg-card" data-testid="travel-report">
+      <p className="px-4 pt-3 text-[11px] font-semibold uppercase tracking-wide text-muted-foreground">We called {n} {n === 1 ? "airline" : "airlines"}{when ? ` · ${when}` : ""}</p>
+      {shown && web != null && mil != null ? (
+        <div className="flex flex-col gap-3 p-4 pt-2 sm:flex-row sm:items-center">
+          <div className="grid flex-1 grid-cols-2 gap-2">
+            {[
+              { k: "web", label: `${name} online`, v: web, win: !best, sub: best ? "Public web fare" : freeBags ? "Cheaper · bags free with your ID" : "Cheaper" },
+              { k: "mil", label: `${name} military fare, by phone`, v: mil, win: !!best, sub: best ? `You save ${money(web - mil)}` : "What the airline quoted" },
+            ].map((x) => (
+              <div key={x.k} className={`rounded-xl px-3 py-2 ${x.win ? "border-2 border-emerald-500 bg-emerald-50 dark:bg-emerald-500/10" : "border border-border bg-muted/40"}`} data-testid={`report-${x.k}`}>
+                <p className={`text-[12px] font-semibold ${x.win ? "text-emerald-800 dark:text-emerald-300" : "text-muted-foreground"}`}>{x.label}</p>
+                <p className={`text-[26px] font-bold leading-tight tabular-nums ${x.win ? "" : "text-foreground/70"}`}>{money(x.v)}</p>
+                <p className={`text-[12px] ${x.win ? "text-emerald-800 dark:text-emerald-300" : "text-muted-foreground"}`}>{x.sub}</p>
+              </div>
+            ))}
           </div>
-        )}
-      </div>
+          <div className="sm:w-[270px]">
+            {best ? (
+              <>
+                <p className="text-[17px] font-semibold text-balance" style={HEAD}>The military fare is cheaper. Call {name} to book&nbsp;it.</p>
+                <p className="mt-0.5 text-[13px] text-muted-foreground text-balance">Ask for "the military fare for personal travel"{shown.flight.flights.length ? ` on ${list(shown.flight.flights)}` : ""}, {ymdNice(trip.depart)}{trip.return ? `, back ${ymdNice(trip.return)}` : ""}.{shown.report?.conditions ? ` ${shown.report.conditions}` : " Have your military ID ready."}</p>
+                {desk && <a href={`tel:${desk.tel}`} className="mt-2 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#053877] px-5 py-2.5 text-[14px] font-semibold text-white"><PhoneCall className="h-4 w-4" /> Call {name}: {desk.phone}</a>}
+                {desk?.hours && <p className="mt-1 text-center text-[12px] text-muted-foreground">Open {desk.hours}</p>}
+              </>
+            ) : (
+              <>
+                <p className="text-[17px] font-semibold text-balance" style={HEAD}>The online fare is cheaper. Book online{freeBags ? " and use your free bags" : ""}.</p>
+                {flight?.url && <a href={flight.url} target="_blank" rel="noopener noreferrer" className="mt-2 inline-flex w-full items-center justify-center gap-1.5 rounded-full bg-[#053877] px-5 py-2.5 text-[14px] font-semibold text-white">Book on {airlineSite(shown.iata) ?? "the airline's site"} <ExternalLink className="h-3.5 w-3.5" /></a>}
+              </>
+            )}
+          </div>
+        </div>
+      ) : (
+        <p className="px-4 pb-3 pt-1 text-[17px] font-semibold text-balance" style={HEAD}>No airline quoted a military fare for these flights. Book the online&nbsp;fare.</p>
+      )}
       {others.length > 0 && (
-        <div className="grid divide-y divide-border text-[13px] sm:grid-cols-2 sm:divide-y-0 [&>*:nth-child(odd)]:sm:border-r [&>*]:border-border">
-          {others.map((c) => <p key={c.id} className="flex items-center gap-2 px-4 py-2.5"><Tile code={c.iata} /><span>{callLine(c)}</span></p>)}
+        <div className="grid divide-y divide-border border-t border-border text-[13px] sm:grid-cols-2 sm:divide-y-0 [&>*:nth-child(odd)]:sm:border-r [&>*]:border-border">
+          {others.map((c) => <p key={c.id} className="px-4 py-2.5">{callLine(c)}</p>)}
         </div>
       )}
     </div>
@@ -423,24 +554,5 @@ export function callLine(c: CallView): React.ReactNode {
         : fare != null && c.webPrice != null ? <>military fare {money(fare)}, online {money(c.webPrice)}. <span className="font-semibold">The web fare is better.</span></>
         : <>they couldn't say.{web}</>}
     </>
-  );
-}
-
-function VeteranNote({ results }: { results: Result[] }) {
-  const byIata = Array.from(new Map(results.map((r) => [r.iata, r])).values());
-  const none = byIata.filter((r) => !perkLine(r.perk)).map((r) => airlineName(r.iata, r.airline));
-  const some = byIata.filter((r) => !!perkLine(r.perk)).map((r) => airlineName(r.iata, r.airline));
-  if (!none.length) return null;
-  return (
-    <div className="flex items-start gap-3 rounded-2xl border border-border bg-muted/40 p-4" data-testid="travel-honest">
-      <Info className="mt-0.5 h-5 w-5 shrink-0 text-[#053877] dark:text-white" />
-      <div className="min-w-0">
-        <p className="text-[15px] font-semibold text-balance">{list(none)} {none.length === 1 ? "doesn't" : "don't"} discount flights for&nbsp;veterans</p>
-        <p className="text-[13px] text-muted-foreground text-balance">
-          So there's nothing for us to call about: book the lowest web fare.
-          {some.length ? ` ${list(some)} ${some.length === 1 ? "has" : "have"} a perk for you, shown on the flight.` : " Avelo takes 15% off with a free WeSalute code, and Allegiant gives 2 free bags for your DD-214, where they fly."}
-        </p>
-      </div>
-    </div>
   );
 }

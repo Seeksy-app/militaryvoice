@@ -3,9 +3,23 @@ import { MILITARY_CALL_DESKS, type TravelerStatus } from "@shared/militaryFares"
 /**
  * The Travel page's helpers (26 Nov 2026). The perk itself comes from the server (perkFor in shared/militaryFares.ts,
  * attached to each result), so the research has one place to update; this only turns its short fields into one line
- * for a flight row, plus the airline's name, its own site and the desk phone.
+ * for a flight row (two tags and the true price), plus the airline's name, its own site and the desk phone.
  */
-export type Perk = { iata: string; airline: string; flying: boolean; fare: string; bags: string; phoneOnly: boolean };
+/** Engineering's perk fields (26 Nov), as perkFor returns them; null = the airline's own page doesn't say. */
+export type BagFees = { first: number | null; second: number | null; note: string; source: string; verified: string };
+export type Claim = { line: string; membership: "none" | "free" | "paid" | "either" };
+export type Perk = {
+  iata: string; airline: string; flying: boolean; fare: string; bags: string; phoneOnly: boolean;
+  bookingUrl?: string; lastVerified?: string;
+  /** Standard 1st/2nd checked-bag fees anyone pays, in USD. */
+  bagFees?: BagFees | null;
+  /** How this traveler claims it, already picked for the status searched. */
+  claim?: Claim | null;
+  /** What it combines with ("Not stated." when the airline doesn't say). */
+  stacking?: string;
+};
+/** The membership badge on a claim: WeSalute is free, WeSalute+ is paid. */
+export const membershipLabel = (m?: Claim["membership"]) => (m === "free" ? "Free WeSalute" : m === "paid" ? "Paid WeSalute+" : m === "either" ? "Free or paid WeSalute" : "");
 const NAMES: Record<string, [string, string]> = {
   DL: ["Delta", "delta.com"], UA: ["United", "united.com"], AA: ["American", "aa.com"], AS: ["Alaska", "alaskaair.com"],
   HA: ["Hawaiian", "hawaiianairlines.com"], B6: ["JetBlue", "jetblue.com"], WN: ["Southwest", "southwest.com"],
@@ -25,19 +39,62 @@ const bagsText = (b: string) => {
   return `Free bags, ${t.charAt(0).toLowerCase()}${t.slice(1)}`;
 };
 /**
- * One line from the server's perk: the fare (left out when it's phone-only, which the row says on its own) and the
- * bags (left out when the fare already speaks of bags). `pct` is the first percentage, for "about $X".
+ * The perk as two separate tags (Andrew, 26 Nov: a fare discount and a perk, never one mixed line). The fare tag is
+ * only a real discount (a percentage); `phone` when the military fare is phone-only; else null = no discount. The
+ * bag tag is the free bags; null = none. `freeBags` counts what the true price can take off (the low end of a range).
  */
-export function perkLine(perk: Perk | null | undefined): { text: string; pct?: number } | null {
+export function perkTags(perk: Perk | null | undefined, status: TravelerStatus): { fare: string | null; phone: boolean; bags: string | null; freeBags: number; member: boolean } | null {
   if (!perk || !perk.flying) return null;
-  const fare = perk.phoneOnly || NONE.test(perk.fare.trim()) || /\(phone\)/i.test(perk.fare) ? "" : perk.fare.trim();
-  const bags = /bag/i.test(fare) ? "" : bagsText(perk.bags);
-  // Notes meant for us, not the traveler, come off.
-  const text = [fare, bags].filter(Boolean).join(" · ").replace(/\s*\((pages conflict|verify once)\)/gi, "");
-  if (!text) return null;
-  const pct = fare ? Number(/(\d+(?:\.\d+)?)%/.exec(fare)?.[1]) || undefined : undefined;
-  return { text: text.charAt(0).toUpperCase() + text.slice(1), pct };
+  const clean = (x: string) => x.replace(/\s*\((pages conflict|verify once)\)/gi, "").trim();
+  const f = clean(perk.fare);
+  const b = clean(perk.bags);
+  const paid = (x: string) => x.replace(/(?<!paid )WeSalute\+/g, "paid WeSalute+");
+  // "Have us call" is for active duty only; a veteran fare that books by phone or chat (JetBlue's WeSalute+) is still shown.
+  const phone = perk.phoneOnly && status === "active";
+  let fare: string | null = null;
+  if (!phone && /\d+%/.test(f)) {
+    const t = f.replace(/\s*\+\s*\d+\s*free bags/i, "").replace(/^(\d+%(?:\s*\/\s*\d+%)?)\s*/, "$1 off ");
+    fare = paid(t.replace(/ off (free WeSalute)/, " off with $1").replace(/ \/ (\d+%) WeSalute\+/, ", $1 with WeSalute+")
+      // "15% / 30% with WeSalute" (Avelo): the two tiers, free and paid.
+      .replace(/^(\d+%)\s*\/\s*(\d+%) off with WeSalute$/, "$1 off with free WeSalute, $2 with WeSalute+")).replace(/\s+/g, " ").trim();
+  }
+  if (fare && perk.phoneOnly && !phone) fare += ", by phone or chat";
+  const fromFare = Number(/(\d+)\s*free bags/i.exec(f)?.[1] ?? 0);
+  let bags: string | null = null;
+  let freeBags = 0;
+  const t = b.replace(/^yes,?\s*/i, "").trim();
+  if (t && !NONE.test(t)) {
+    freeBags = Number(/(\d+)(?:\s*[–-]\s*\d+)?\s*free/i.exec(t)?.[1] ?? 0) || fromFare;
+    let x = bagsText(b).replace("DD-214/VA ID", "DD-214 or VA ID");
+    if (!/\d/.test(x) && freeBags) x = x.replace(/^Free bags,?\s*/i, `${freeBags} free bags `);
+    bags = paid(x.charAt(0).toUpperCase() + x.slice(1)).replace(/\s+/g, " ").trim();
+  }
+  return { fare, phone, bags, freeBags, member: /WeSalute\+/.test(b) };
 }
+
+/**
+ * Fare + the checked bags this traveler would pay for − the ones they get free. `total` is null when a fee they'd pay
+ * isn't listed: the page says so rather than guess.
+ */
+export function truePrice(fare: number, perk: Perk | null | undefined, bags: number, status: TravelerStatus): { total: number | null; lines: { label: string; value: string; free?: boolean }[]; note: string } {
+  const tags = perkTags(perk, status);
+  const free = Math.min(bags, tags?.freeBags ?? 0);
+  const lines: { label: string; value: string; free?: boolean }[] = [{ label: "Fare", value: `$${Math.round(fare).toLocaleString()}` }];
+  if (free) lines.push({ label: free === 1 ? "1 checked bag" : `${free} checked bags`, value: tags?.member ? "Free with paid WeSalute+" : "Free", free: true });
+  let total: number | null = fare;
+  const fees = perk?.bagFees ?? null;
+  for (let n = free + 1; n <= bags; n++) {
+    const fee = n === 1 ? fees?.first : fees?.second;
+    const label = n === 1 ? "1st bag" : "2nd bag";
+    if (fee == null) { lines.push({ label, value: "Fee not listed" }); total = null; }
+    else { lines.push({ label, value: `$${fee}` }); if (total != null) total += fee; }
+  }
+  const note = bags > free && fees ? [fees.note, fees.verified && `Checked ${checkedOn(fees.verified)}`].filter(Boolean).join(" · ") : "";
+  return { total, lines, note };
+}
+
+/** "2026-11-25" → "Nov 25, 2026". */
+export const checkedOn = (d?: string) => (d ? new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : "");
 
 /** The desk a creator rings themselves, as "800-325-1771", with its hours. */
 export function deskOf(iata: string): { phone: string; tel: string; hours: string } | null {
