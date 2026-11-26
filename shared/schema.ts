@@ -3485,7 +3485,7 @@ export const pmNotes = pgTable("pm_notes", {
 export const organizations = pgTable("organizations", {
   id: serial("id").primaryKey(),
   name: text("name").notNull(),
-  /** brand | agency | organizer */
+  /** brand | agency | organizer; Military Voices LIVE (26 Nov): client | vendor (made by LIVE only, never at sign-up) */
   kind: text("kind").notNull().default("brand"),
   website: text("website").notNull().default(""),
   logoUrl: text("logo_url").notNull().default(""),
@@ -3658,3 +3658,135 @@ export const travelCalls = pgTable("travel_calls", {
   updatedAt: text("updated_at").notNull(),
 }, (t) => [index("travel_calls_owner_idx").on(t.ownerEmail, t.createdAt)]);
 export type TravelCallRow = typeof travelCalls.$inferSelect;
+
+/* ── Military Voices LIVE, phase 1 (Packet A, 26 Nov 2026) ──────────────────────────────────────────────────────
+ * Production Command's own tables: everything carries a production_id, so nothing leans on the featured event.
+ * Existing tables are linked, not copied (a stage runs in one studios row). The API contract is shared/live.ts.
+ * Plan: section 3 (data) and 4 (roles). Behind the live:on setting. */
+
+/** One engagement (a client event). status: scoping → planning → rehearsal → live → post → delivered → closed. */
+export const productions = pgTable("productions", {
+  id: serial("id").primaryKey(),
+  /** The client organisation (organizations, kind client); 0 = none yet. */
+  orgId: integer("org_id").notNull().default(0),
+  name: text("name").notNull(),
+  status: text("status").notNull().default("scoping"),
+  startsOn: text("starts_on").notNull().default(""),
+  endsOn: text("ends_on").notNull().default(""),
+  timezone: text("timezone").notNull().default("America/New_York"),
+  scope: text("scope").notNull().default(""),
+  /** Optional public event page (events.id); 0 = none. */
+  eventId: integer("event_id").notNull().default(0),
+  createdBy: text("created_by").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (t) => [index("productions_org_idx").on(t.orgId)]);
+export type ProductionRow = typeof productions.$inferSelect;
+
+/** The permission source: one row per person per production. role: see shared/live.ts MEMBER_ROLES. */
+export const productionMembers = pgTable("production_members", {
+  id: serial("id").primaryKey(),
+  productionId: integer("production_id").notNull(),
+  email: text("email").notNull(),
+  name: text("name").notNull().default(""),
+  /** The client or vendor org they're with; 0 = MV staff. */
+  orgId: integer("org_id").notNull().default(0),
+  role: text("role").notNull(),
+  /** invited | active | removed. Invites are stored only in phase 1 (no email). */
+  status: text("status").notNull().default("invited"),
+  invitedBy: text("invited_by").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  joinedAt: text("joined_at").notNull().default(""),
+}, (t) => [uniqueIndex("production_members_prod_email_idx").on(t.productionId, t.email), index("production_members_email_idx").on(t.email)]);
+export type ProductionMemberRow = typeof productionMembers.$inferSelect;
+
+/** Shared across productions. */
+export const venues = pgTable("venues", {
+  id: serial("id").primaryKey(),
+  name: text("name").notNull(),
+  address: text("address").notNull().default(""),
+  timezone: text("timezone").notNull().default(""),
+  power: text("power").notNull().default(""),
+  /** Network contacts and notes. */
+  network: text("network").notNull().default(""),
+  createdBy: text("created_by").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+});
+export type VenueRow = typeof venues.$inferSelect;
+
+/** A stage of a production at a venue; runs in one existing studios row (0 = not linked yet). */
+export const stages = pgTable("stages", {
+  id: serial("id").primaryKey(),
+  productionId: integer("production_id").notNull(),
+  venueId: integer("venue_id").notNull().default(0),
+  name: text("name").notNull(),
+  studioId: integer("studio_id").notNull().default(0),
+  ingestProfile: text("ingest_profile").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("stages_production_idx").on(t.productionId), index("stages_studio_idx").on(t.studioId)]);
+export type StageRow = typeof stages.$inferSelect;
+
+/** One approvals table for every module. state: pending | approved | changes_requested | withdrawn. */
+export const approvals = pgTable("approvals", {
+  id: serial("id").primaryKey(),
+  productionId: integer("production_id").notNull(),
+  subjectType: text("subject_type").notNull(),
+  subjectId: integer("subject_id").notNull().default(0),
+  version: integer("version").notNull().default(1),
+  summary: text("summary").notNull().default(""),
+  requestedBy: text("requested_by").notNull(),
+  approverRole: text("approver_role").notNull(),
+  state: text("state").notNull().default("pending"),
+  decidedBy: text("decided_by").notNull().default(""),
+  decidedAt: text("decided_at").notNull().default(""),
+  note: text("note").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("approvals_production_idx").on(t.productionId, t.state), index("approvals_subject_idx").on(t.subjectType, t.subjectId)]);
+export type ApprovalRow = typeof approvals.$inferSelect;
+
+/** A frozen copy of something at a version (a run of show, a script, an asset's metadata). data = JSON. */
+export const versions = pgTable("versions", {
+  id: serial("id").primaryKey(),
+  productionId: integer("production_id").notNull(),
+  subjectType: text("subject_type").notNull(),
+  subjectId: integer("subject_id").notNull().default(0),
+  version: integer("version").notNull(),
+  data: text("data").notNull().default("{}"),
+  createdBy: text("created_by").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+}, (t) => [uniqueIndex("versions_subject_idx").on(t.subjectType, t.subjectId, t.version)]);
+export type VersionRow = typeof versions.$inferSelect;
+
+/** Every AI step, kept for the life of the production. state: proposed | approved | rejected | applied. The AI never approves. */
+export const aiActions = pgTable("ai_actions", {
+  id: serial("id").primaryKey(),
+  productionId: integer("production_id").notNull(),
+  agent: text("agent").notNull(),
+  trigger: text("trigger").notNull().default(""),
+  inputSummary: text("input_summary").notNull().default(""),
+  output: text("output").notNull().default(""),
+  /** JSON of the change it proposes. */
+  proposedChange: text("proposed_change").notNull().default(""),
+  state: text("state").notNull().default("proposed"),
+  approvalId: integer("approval_id").notNull().default(0),
+  approvedBy: text("approved_by").notNull().default(""),
+  model: text("model").notNull().default(""),
+  costUsd: text("cost_usd").notNull().default("0"),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (t) => [index("ai_actions_production_idx").on(t.productionId, t.createdAt)]);
+export type AiActionRow = typeof aiActions.$inferSelect;
+
+/** Every human change in Production Command. before / after = JSON. */
+export const auditLog = pgTable("audit_log", {
+  id: serial("id").primaryKey(),
+  productionId: integer("production_id").notNull().default(0),
+  who: text("who").notNull(),
+  what: text("what").notNull(),
+  subjectType: text("subject_type").notNull().default(""),
+  subjectId: integer("subject_id").notNull().default(0),
+  before: text("before").notNull().default(""),
+  after: text("after").notNull().default(""),
+  at: text("at").notNull(),
+}, (t) => [index("audit_log_production_idx").on(t.productionId, t.id)]);
+export type AuditLogRow = typeof auditLog.$inferSelect;

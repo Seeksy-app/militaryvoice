@@ -193,6 +193,7 @@ import { registerBioPage, registerBioAgent, claimLivingSqueeze, subscribersFor, 
 import { registerGuests, guestByToken, markGuestJoined, publicGuestsFor } from "./guests.js";
 import { registerGuestInvites, takeAnsweredInvite } from "./guestInvites.js";
 import { registerGuestBrief } from "./guestBrief.js";
+import { registerLive } from "./live/routes.js";
 import { registerCaptures, onCaptureWebhook } from "./captures.js";
 import { registerStreamIn, onStreamInWebhook, streamInSkipsClips } from "./streamIn.js";
 import { registerIngest } from "./ingestEngine.js";
@@ -7236,6 +7237,8 @@ export function registerRoutes(app: Express): void {
   registerGuests(app, requireAdmin);
   registerGuestInvites(app, requireHostSession);
   registerGuestBrief(app, requireHostSession, requireAdmin);
+  // Military Voices LIVE, phase 1 (Packet A, 26 Nov): /api/live/*, behind live:on (admins and the two test logins until then).
+  registerLive(app);
   registerCaptures(app, requireAdmin, (req) => getAdminEmail(req) ?? "");
   registerStreamIn(app);
   registerIngest(app, requireAdmin);
