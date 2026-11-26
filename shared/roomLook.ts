@@ -111,8 +111,11 @@ export interface RoomLook extends RoomLookStyle {
   scenes: RoomScene[];
   /** The show's icon in the bottom-left when no logo is picked (absent = on). Media > Logo > None turns it off. */
   showIcon?: boolean;
+  /** Where the show's icon sits (Media > Logo > Where it shows, 26 Nov); absent = bottom left. */
+  iconCorner?: "tl" | "tr" | "bl" | "br";
   logos?: RoomAsset[];
-  banners?: { id: string; text: string; seconds: number }[];
+  /** seconds 0 = shows until clicked off; ticker banners scroll (they go on air as `ticker`, never as `showing`). */
+  banners?: { id: string; text: string; seconds: number; ticker?: boolean }[];
   intro?: RoomAsset | null;
   outro?: RoomAsset | null;
   /** v3: the video shelf; intro and outro are also tagged here (look.intro/outro stay equal to them). */
@@ -228,7 +231,7 @@ export function roomStageMeta(look: RoomLook | null, live: RoomLive, name: strin
   const meta: Record<string, unknown> = {
     studioName: name,
     logoUrl,
-    logoCorner: own ? "bottom-left" : CORNERS[style.logo?.corner ?? "tr"] ?? "top-right",
+    logoCorner: own ? CORNERS[l.iconCorner ?? "bl"] ?? "bottom-left" : CORNERS[style.logo?.corner ?? "tr"] ?? "top-right",
     logoSize: 150,
     // A bottom corner goes through the same placement as the show logo, so it steps up over name tags and banners.
     ...(own ? { logoPlate: own.plate || "none" } : picked && String(style.logo?.corner ?? "").startsWith("b") ? { logoPlate: "none" } : {}),
@@ -255,7 +258,7 @@ export function roomStageMeta(look: RoomLook | null, live: RoomLive, name: strin
     if (Number(scene.people) > 0) meta.stageMediaPeople = true;
   }
   const show = live.showing;
-  const banner = show && show.until > now ? (l.banners ?? []).find((b) => b.id === show.bannerId)?.text ?? "" : "";
+  const banner = show && show.until > now ? (l.banners ?? []).find((b) => b.id === show.bannerId && !b.ticker)?.text ?? "" : "";
   return { meta, banner };
 }
 

@@ -9,7 +9,8 @@ import { useToast } from "@/hooks/use-toast";
  * POST /api/host/room/mark {} → { id, atSec, label }, 409 when not recording,
  * DELETE /api/host/room/mark/:id to undo.
  */
-export function MarkClip({ recording }: { recording: boolean }) {
+/** onStage (Studio v2, 26 Nov): the gold button at the bottom right of the host's stage, always with its words. */
+export function MarkClip({ recording, onStage = false }: { recording: boolean; onStage?: boolean }) {
   const { toast } = useToast();
   const [busy, setBusy] = useState(false);
   const mark = async () => {
@@ -34,8 +35,10 @@ export function MarkClip({ recording }: { recording: boolean }) {
   return (
     <button type="button" onClick={() => { if (!recording) { toast({ title: `${hint}.`, description: "Press it while you record and we'll have that moment waiting as a clip." }); return; } void mark(); }}
       disabled={busy} title={recording ? "Mark this moment for a clip" : hint} aria-label={recording ? "Mark a clip" : `Mark a clip. ${hint}`}
-      className={`flex h-[42px] shrink-0 items-center gap-2 rounded-xl border border-[#f0d28a] bg-[#fff8e6] px-3 text-sm font-bold text-[#7a4e00] hover:bg-[#fff1cc] disabled:opacity-50 xl:px-4 ${recording ? "" : "opacity-75"}`} data-testid="mark-clip">
-      {busy ? <Loader2 className="h-[18px] w-[18px] animate-spin" /> : <Bookmark className="h-[18px] w-[18px]" />}<span className="hidden xl:inline">Mark a clip</span>
+      className={onStage
+        ? `flex h-8 shrink-0 items-center gap-1.5 rounded-[10px] bg-[#F0A71F] px-3 text-[13px] font-bold text-[#1a1200] shadow-[0_4px_12px_rgba(0,0,0,0.35)] hover:bg-[#f5b43a] disabled:opacity-60 ${recording ? "" : "opacity-85"}`
+        : `flex h-[42px] shrink-0 items-center gap-2 rounded-xl border border-[#f0d28a] bg-[#fff8e6] px-3 text-sm font-bold text-[#7a4e00] hover:bg-[#fff1cc] disabled:opacity-50 xl:px-4 ${recording ? "" : "opacity-75"}`} data-testid="mark-clip">
+      {busy ? <Loader2 className={onStage ? "h-4 w-4 animate-spin" : "h-[18px] w-[18px] animate-spin"} /> : <Bookmark className={onStage ? "h-4 w-4" : "h-[18px] w-[18px]"} />}<span className={onStage ? "" : "hidden xl:inline"}>Mark a clip</span>
     </button>
   );
 }

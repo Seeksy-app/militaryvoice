@@ -193,7 +193,8 @@ export function registerRoomStage(app: Express, requireHostSession: RequestHandl
     const look = await readLook(got.row.id);
     const banner = look?.banners?.find((b) => b.id === id);
     if (!banner) return res.status(404).json({ message: "That banner isn't in your studio." });
-    const until = Date.now() + Math.max(1, Math.min(120, Number(banner.seconds) || 6)) * 1000;
+    // Timer Off (seconds 0, Studio v2): it stays until it's clicked off, so twelve hours stands in for "until hidden".
+    const until = Date.now() + (Number(banner.seconds) === 0 ? 12 * 3600 : Math.max(1, Math.min(120, Number(banner.seconds) || 6))) * 1000;
     const ok = await mergeRoomMeta(roomOf(got.row), { showing: { bannerId: id, until } });
     if (!ok) return res.status(409).json({ message: "Join your studio first." });
     res.json({ ok, showing: { bannerId: id, until } });

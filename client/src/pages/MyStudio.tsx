@@ -12,7 +12,7 @@ import {
 import { ConnectionState, DisconnectReason, Track, type Participant } from "livekit-client";
 import {
   ArrowLeft, Check, Circle, Clapperboard, Copy, ExternalLink, Image as ImageIcon, Loader2, LogOut, MessageSquare, Mic, MicOff, MonitorUp, MoreHorizontal, NotebookPen, Presentation,
-  ChevronLeft, ChevronRight, Palette, Pause, Play, Plus, RotateCcw, Settings, Square, UserPlus, UserRound, Users, Video, VideoOff, X, } from "lucide-react";
+  ChevronLeft, ChevronRight, Lightbulb, Music, Type, Palette, Pause, Play, Plus, RotateCcw, Settings, Square, UserPlus, UserRound, Users, Video, VideoOff, X, } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { BACKGROUNDS, LIMITS, PRESENT_NAME, bgCss, isClipScene, isPresenting, sceneLive, useRoomKit, type Asset, type Playing, type RoomKit, type Scene } from "@/components/room/look";
@@ -20,7 +20,9 @@ import { closeClipSound, useClipSound, useStageClipElement, warmClipSound, type 
 import { LayoutPicker, ScenesPanel } from "@/components/room/ScenesPanel";
 import { ChooseSetup, SaveSetupDialog, SetupLine, SetupMenuButton, TemplatesDialog } from "@/components/room/Setups";
 import { LookPanel } from "@/components/room/LookPanel";
-import { MediaPanel } from "@/components/room/MediaPanel";
+import { MediaPanel, SoundsPanel } from "@/components/room/MediaPanel";
+import { BannersPanel } from "@/components/room/BannersPanel";
+import { StarterCard, TipsPanel, TipsSwitch } from "@/components/room/TipsPanel";
 import { StylePanel } from "@/components/room/StylePanel";
 import { PhoneStudio } from "@/components/room/PhoneStudio";
 import { LayoutEditor } from "@/components/room/LayoutEditor";
@@ -55,7 +57,9 @@ const Logo = ({ className }: { className: string }) => <img src="/logo-lockup.pn
 type Studio = { you?: string; shows?: { id: number; title: string }[]; showId?: number | null; id: number; name: string; inviteLink: string; recording: { since: string } | null; live: { since: string; watchUrl: string } | null; youtube: boolean; youtubeOn: boolean; youtubeKey?: string; youtubeLegacy?: boolean; livePage?: { on: boolean; url: string }; streams: { id: string; name: string; on: boolean }[]; ready: boolean; canRecord: boolean; v3?: boolean };
 type Conn = { url: string; token: string; name: string };
 type Setup = { name: string; title: string; mic: boolean; cam: boolean; micId?: string; camId?: string };
-type Tab = "look" | "media" | "style" | "people" | "notes" | "recording" | "chat";
+type Tab = "look" | "banners" | "media" | "style" | "sounds" | "tips" | "people" | "notes" | "recording" | "chat";
+/** Studio v2 (26 Nov): the panels that only exist with STUDIO_V3. */
+const V3_TABS: Tab[] = ["banners", "media", "style", "sounds", "tips"];
 
 const NAVY = "#053877";
 /** Mark a clip stays hidden until Podcasting's POST /api/host/my-studio/mark is on main. */
@@ -435,13 +439,16 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
   // Studio phase 3 (scene types, Media and Style) only when the server says STUDIO_V3 is on.
   const v3 = editing && studio?.v3 === true;
   const scene = sceneLive(look, kit.live);
+  // Mark a clip sits above whatever runs along the bottom of the stage: a banner, else the ticker.
+  const bannerUp = !!kit.live.showing && kit.live.showing.until > now && !look?.banners.find((b) => b.id === kit.live.showing?.bannerId)?.ticker;
+  const markBottom = bannerUp ? "21%" : kit.live.ticker?.on ? "9.5%" : "3%";
   // The layout editor (21 Nov): a scene's ⋯ → Edit layout. It takes the stage column and the right panel until Done or Cancel.
   const [layoutFor, setLayoutFor] = useState<string | null>(null);
   const layoutScene = v3 && layoutFor ? look?.scenes.find((s) => s.id === layoutFor) : undefined;
   // Scenes ⋯ (Andrew, 24 Nov): Start from a template… and Save this setup as….
   const [setupDialog, setSetupDialog] = useState<"" | "template" | "save">("");
   const setupMenu = editing ? <SetupMenuButton onTemplate={() => setSetupDialog("template")} onSave={() => setSetupDialog("save")} /> : null;
-  const tab: Tab = picked && (v3 ? picked !== "look" : picked !== "media" && picked !== "style") ? picked : editing ? (v3 ? "media" : "look") : "people";
+  const tab: Tab = picked && (v3 ? picked !== "look" && (picked !== "tips" || owner) : !V3_TABS.includes(picked)) ? picked : editing ? (v3 ? "banners" : "look") : "people";
 
   // Once connected, put the scene on air again so the room carries it (Engineering: call /scene after joining).
   const joined = useRef(false);
@@ -556,7 +563,6 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
           // live"): Record, and Go live (its sheet ticks "Also record to my Library"). Each turns into its own state with its
           // own Stop or End; the old "Record to your Library" pill and "Not live yet" chip are gone.
           <div className="ml-auto flex shrink-0 items-center gap-2 whitespace-nowrap sm:gap-2.5">
-            {MARK_CLIP && <MarkClip recording={!!rec} />}
             {live?.watchUrl && <a href={live.watchUrl} target="_blank" rel="noreferrer" className="hidden items-center gap-1 text-[13px] font-semibold text-[#053877] underline-offset-2 hover:underline lg:flex">Watch <ExternalLink className="h-3.5 w-3.5" /></a>}
             <button type="button" onClick={copyInvite} aria-label="Invite guests" title="Invite guests" className="hidden h-[42px] items-center gap-2 rounded-xl border border-[#d0d5dd] bg-white px-3 text-sm font-semibold hover:bg-[#f9fafb] lg:flex xl:px-4" data-testid="my-studio-invite"><UserPlus className="h-[18px] w-[18px]" /><span className="hidden xl:inline">Invite guests</span></button>
             {/* Where the show goes, beside Record: each circle one click on or off (25 Nov). */}
@@ -606,11 +612,16 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
               {/* The teleprompter: on this screen only, over the preview; the program is drawn elsewhere. */}
               <PrompterOverlay roomKey={noteKey} text={notes} />
               <SlidesBar kit={kit} />
+              {/* Mark a clip on the stage, bottom right (Studio v2, 26 Nov), stepping up over the ticker and a banner.
+                  This is the host's own preview: the recording and the live show never carry it. */}
+              {MARK_CLIP && <div className="absolute right-[1.6%] z-30" style={{ bottom: markBottom }}><MarkClip recording={!!rec} onStage /></div>}
             </div>
           ) : (
             <Stage kit={kit} scene={scene} fallbackLogo={look ? undefined : logo} />
           )}
           {owner && <ClipBar kit={kit} />}
+          {/* Conversation starters: only what the listener sends, only to the owner, never on air (Studio v2). */}
+          {owner && v3 && <div className="w-full shrink-0" style={{ maxWidth: STAGE_W }}><StarterCard /></div>}
           {editing && !v3 && scene && (
             <div className="mt-3 shrink-0" title={`Layout for ${scene.name}`}>
               <LayoutPicker value={scene.layout} onPick={(layout) => kit.change((l) => ({ ...l, scenes: l.scenes.map((s) => (s.id === scene.id ? { ...s, layout } : s)) }))} />
@@ -630,6 +641,7 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
             {/* Notes opens a side panel, which only shows at lg and up. */}
             <BarButton label={notesLabel} wide={owner ? "w-[92px]" : true} active={!rail.hidden && tab === "notes"} green={prompterOn} onClick={() => setTab("notes")}><NotebookPen className="h-[22px] w-[22px]" /></BarButton>
             <BarButton label="Settings" onClick={() => setSettings(true)}><Settings className="h-[22px] w-[22px]" /></BarButton>
+            {owner && v3 && <TipsSwitch onOpen={() => setTab("tips")} />}
             <div className="mx-1 h-9 w-px bg-[#e4e7ec]" />
             <button type="button" onClick={() => leave()} className="flex h-[58px] w-[54px] flex-col items-center justify-center gap-1 rounded-xl bg-[#fef3f2] text-[11px] font-bold text-[#b42318] hover:bg-[#fee4e2] sm:w-[76px] sm:text-xs" data-testid="my-studio-leave"><LogOut className="h-[22px] w-[22px]" />Leave</button>
           </div>
@@ -640,8 +652,11 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
           <HidePanelTab hidden={rail.hidden} onToggle={() => rail.setHidden(!rail.hidden)} />
           <div className={`min-w-0 flex-1 flex-col ${rail.hidden ? "hidden" : "flex"}`}>
             {tab === "look" && editing && <LookPanel kit={kit} />}
-            {tab === "media" && v3 && <MediaPanel kit={kit} />}
+            {tab === "banners" && v3 && <BannersPanel kit={kit} />}
+            {tab === "media" && v3 && <MediaPanel kit={kit} fallback={logo} />}
             {tab === "style" && v3 && <StylePanel kit={kit} />}
+            {tab === "sounds" && v3 && <SoundsPanel kit={kit} />}
+            {tab === "tips" && v3 && owner && <TipsPanel />}
             {tab === "people" && <PeoplePanel owner={owner} studio={studio} onCopy={copyInvite} kit={kit} meKey={meKey} showArt={!!logo} />}
             {tab === "notes" && <NotesPanel roomKey={noteKey} text={notes} setText={setNotes} prompter={owner} sync={owner ? notesSync : undefined} />}
             {tab === "recording" && owner && <RecordingPanel studio={studio} now={now} busy={busy} onRecord={(on) => { if (on) startRecord(); else void record(false); }} onGoLive={openLive} onEndLive={() => void endLive()} />}
@@ -649,8 +664,12 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
           </div>
           <nav className={`flex w-[96px] shrink-0 flex-col items-center gap-1 pt-3 ${rail.hidden ? "" : "border-l border-[#eef0f4]"}`} aria-label="Panels">
             {editing && !v3 && <RailButton on={!rail.hidden && tab === "look"} onClick={() => setTab("look")} icon={<Palette className="h-[22px] w-[22px]" />} label="Look" />}
-            {v3 && <RailButton on={!rail.hidden && tab === "media"} onClick={() => setTab("media")} icon={<Clapperboard className="h-[22px] w-[22px]" />} label="Media" />}
+            {/* Studio v2 (Andrew, 26 Nov: "Let's go back to simplicity. StreamYard has it right"): one place per job. */}
+            {v3 && <RailButton on={!rail.hidden && tab === "banners"} onClick={() => setTab("banners")} icon={<Type className="h-[22px] w-[22px]" />} label="Banners" testId="rail-banners" />}
+            {v3 && <RailButton on={!rail.hidden && tab === "media"} onClick={() => setTab("media")} icon={<ImageIcon className="h-[22px] w-[22px]" />} label="Media" />}
             {v3 && <RailButton on={!rail.hidden && tab === "style"} onClick={() => setTab("style")} icon={<Palette className="h-[22px] w-[22px]" />} label="Style" />}
+            {v3 && <RailButton on={!rail.hidden && tab === "sounds"} onClick={() => setTab("sounds")} icon={<Music className="h-[22px] w-[22px]" />} label="Sounds" testId="rail-sounds" />}
+            {v3 && owner && <RailButton on={!rail.hidden && tab === "tips"} onClick={() => setTab("tips")} icon={<Lightbulb className="h-[22px] w-[22px]" />} label="Tips" testId="rail-tips" />}
             <RailButton on={!rail.hidden && tab === "people"} onClick={() => setTab("people")} icon={<Users className="h-[22px] w-[22px]" />} label="People" />
             <RailButton on={!rail.hidden && tab === "notes"} green={prompterOn} onClick={() => setTab("notes")} icon={<NotebookPen className="h-[22px] w-[22px]" />} label={notesLabel} testId="rail-notes" />
             {owner && <RailButton on={!rail.hidden && tab === "recording"} onClick={() => setTab("recording")} icon={<Circle className={`h-[22px] w-[22px] ${rec ? "fill-[#d92d20] text-[#d92d20]" : ""}`} />} label="Recording" />}

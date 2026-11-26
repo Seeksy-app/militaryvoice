@@ -126,10 +126,13 @@ export type Look = {
   logo: { asset: Asset; corner: LogoCorner } | null;
   /** Their show's icon in the bottom-left when no logo is picked (default on). Media > Logo > None turns it off (PM, 25 Nov). */
   showIcon?: boolean;
+  /** Where that icon sits (Studio v2, 26 Nov: Media > Logo > Where it shows); default bottom left. */
+  iconCorner?: LogoCorner;
   logos: Asset[];
   /** Uploaded background pictures to pick from. */
   backgrounds: Asset[];
-  banners: { id: string; text: string; seconds: number }[];
+  /** seconds 0 = no timer (stays until clicked off); ticker = scrolls across the bottom (Studio v2, 26 Nov). */
+  banners: { id: string; text: string; seconds: number; ticker?: boolean }[];
   /** Kept for the players that know intro/outro: always the videos tagged intro and outro. */
   intro: Asset | null;
   outro: Asset | null;
@@ -248,7 +251,8 @@ export function clean(raw: any, assets: Map<string, Asset>): Look | string {
     return a ? { asset: a, corner: (["tl", "tr", "bl", "br"].includes(v.corner) ? v.corner : "tr") as LogoCorner } : undefined;
   };
   const banners = (Array.isArray(raw.banners) ? raw.banners : []).slice(0, 10)
-    .map((b: any) => ({ id: id8(b?.id) || crypto.randomBytes(4).toString("hex"), text: str(b?.text, 80), seconds: Math.max(2, Math.min(60, Math.round(Number(b?.seconds) || 6))) }))
+    // A ticker line can run to 200 characters (it scrolls); a banner sits still, so 80. Timer 0 = Off.
+    .map((b: any) => ({ id: id8(b?.id) || crypto.randomBytes(4).toString("hex"), text: str(b?.text, b?.ticker === true ? 200 : 80), seconds: b?.ticker === true || Number(b?.seconds) === 0 ? 0 : Math.max(2, Math.min(60, Math.round(Number(b?.seconds) || 6))), ...(b?.ticker === true ? { ticker: true } : {}) }))
     .filter((b: { text: string }) => b.text);
   const fallbackBg: Background = bg(raw.background) ?? { kind: "color", value: "blue" };
   const seen = new Set<string>();
@@ -342,6 +346,7 @@ export function clean(raw: any, assets: Map<string, Asset>): Look | string {
     background: fallbackBg,
     logo: logo(raw.logo) ?? null,
     showIcon: raw.showIcon !== false,
+    ...(["tl", "tr", "bl", "br"].includes(raw.iconCorner) ? { iconCorner: raw.iconCorner as LogoCorner } : {}),
     logos: (Array.isArray(raw.logos) ? raw.logos : []).map((v: any) => asset(v, "logo")).filter(Boolean).slice(0, 6) as Asset[],
     backgrounds: (Array.isArray(raw.backgrounds) ? raw.backgrounds : []).map((v: any) => asset(v, "background")).filter(Boolean).slice(0, 6) as Asset[],
     banners,
@@ -449,7 +454,10 @@ export function registerRoomKit(app: Express, requireHostSession: RequestHandler
     // Their show logo (else their cover) for the corner when they haven't picked a logo in Media (Andrew, 23 Nov).
     // The room's own show, not just their first (Riccoh's Warriors' Voice studio showed his Devil Dawg cover, 24 Nov).
     const [owner] = await db.select({ email: personalStudios.ownerEmail, name: personalStudios.name }).from(personalStudios).where(eq(personalStudios.id, id)).limit(1).catch(() => []);
-    const corner = owner?.email ? await cornerLogoOf(owner.email, { name: owner.name, show: req.query.show ?? (await storage.getSetting(studioShowKey(id)).catch(() => null)) ?? "" }).catch(() => null) : null;
+    const own = owner?.email ? await cornerLogoOf(owner.email, { name: owner.name, show: req.query.show ?? (await storage.getSetting(studioShowKey(id)).catch(() => null)) ?? "" }).catch(() => null) : null;
+    // No show logo or cover: our MilitaryVoices icon tile (Andrew, 26 Nov: "We need a Military Voices icon instead of
+    // just putting up the frequency"), so the corner and the ready-made cards always have a proper mark.
+    const corner = own?.url ? own : { url: `${ORIGIN}/icons/mv-tile.png`, plate: "none" as const };
     res.json({ look, corner });
   });
 

@@ -1,19 +1,19 @@
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { apiRequest } from "@/lib/queryClient";
 import { Loader2, Music2, Play, Plus, Repeat, Square, Trash2, Volume2 } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { warmClipSound } from "./clipSound";
 import { BACKGROUNDS, LIMITS, backgroundShelf, isPresenting, sceneLive, type AssetKind, type Background, type LibraryItem, type LibrarySource, type MusicItem, type PlaySlot, type RoomKit, type SoundItem, type VideoClip } from "./look";
-import { AddFile, Banners, LogoSection, Removable, Swatch } from "./LookPanel";
+import { AddFile, LogoSection, Removable, Swatch } from "./LookPanel";
 import { Select } from "./Select";
 import { MediaTile } from "./ScenesPanel";
 
 /**
- * Media (Studio phase 3, mockup approved 21 Nov; replaces "Your look" when STUDIO_V3 is on):
- * logo, banners, video clips (intro and outro are tagged clips, each with Loop), our ready-made
- * cards and the countdown, the background of the scene on stage, sounds and music. Sounds and
- * music play through the studio's player, so everyone hears them and they're in the recording.
+ * Media (Studio phase 3, 21 Nov; Studio v2 layout, 26 Nov): the logo and where it shows, video clips (intro and
+ * outro are tagged clips, each with Loop), our ready-made cards and the countdown, and the background of the scene
+ * on stage. Banners and Sounds have their own places on the rail (BannersPanel, SoundsPanel). Sounds and music play
+ * through the studio's player, so everyone hears them and they're in the recording.
  */
 const label = "mt-6 text-xs font-bold uppercase tracking-[0.06em] text-[#667085]";
 const EVERYONE = "Everyone in your studio hears it, and it goes into your recording and live show.";
@@ -26,71 +26,36 @@ const CARDS: { slot: PlaySlot; title: string; short: string }[] = [
   { slot: "thanks", title: "Thank you for watching", short: "Thank you" },
 ];
 
-export function MediaPanel({ kit }: { kit: RoomKit }) {
-  const look = kit.look!;
+export function MediaPanel({ kit, fallback }: { kit: RoomKit; /** The show's own icon for the logo row (their cover, else our tile). */ fallback?: string }) {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-6 pt-5" data-testid="media-panel">
       <p className="text-lg font-bold tracking-tight">Media</p>
-      <p className="mt-0.5 text-[13px] text-[#667085]">Changes show on the stage right away.</p>
+      <p className="mt-0.5 text-[13px] text-[#667085]">Everything here shows on the stage right away.</p>
 
       <p className={label}>Logo</p>
-      <LogoSection kit={kit} />
-
-      <details className="group/b mt-6" data-testid="media-banners">
-        <summary className="flex cursor-pointer list-none items-center justify-between text-xs font-bold uppercase tracking-[0.06em] text-[#667085]">
-          <span>Banners{look.banners.length ? ` · ${look.banners.length}` : ""}</span><span className="text-[11px] font-semibold normal-case tracking-normal text-[#053877] group-open/b:hidden">Show</span>
-        </summary>
-        <Banners kit={kit} />
-      </details>
-      <ScrollingBanner kit={kit} />
+      <LogoSection kit={kit} fallback={fallback} />
 
       <p className={label}>Video clips</p>
       <Clips kit={kit} />
 
       <p className={label}>Background</p>
       <SceneBackground kit={kit} />
-
-      <p className={label}>Sounds</p>
-      <Sounds kit={kit} />
-
-      <p className={label}>Background music</p>
-      <MusicList kit={kit} />
     </div>
   );
 }
 
-/**
- * The scrolling banner (mockup approved 25 Nov, "Go, build both"): one line that crawls along the bottom of the
- * stage, in the recording and the live show, through every scene change until it's stopped. The timed banners
- * above stay as they are.
- */
-function ScrollingBanner({ kit }: { kit: RoomKit }) {
-  const t = kit.live.ticker;
-  const on = !!t?.on;
-  const [text, setText] = useState(t?.text ?? "");
-  // The words already on the room (a reload, another window) fill an empty box.
-  useEffect(() => { if (t?.text && !text) setText(t.text); }, [t?.text]); // eslint-disable-line react-hooks/exhaustive-deps
-  const clean = text.replace(/\s+/g, " ").trim();
-  const changed = clean !== (t?.text ?? "");
+/** Sounds (Studio v2, 26 Nov: its own place on the rail): the pads and the background music. */
+export function SoundsPanel({ kit }: { kit: RoomKit }) {
   return (
-    <div className={`mt-3 flex flex-col gap-2.5 rounded-2xl p-3.5 ${on ? "border-2 border-[#053877] bg-[#f5f8fd]" : "border border-[#e4e7ec]"}`} data-testid="ticker-card">
-      <div className="flex items-center gap-2">
-        <p className="min-w-0 flex-1 whitespace-nowrap text-sm font-bold">Scrolling banner</p>
-        {on && <span className="flex h-6 shrink-0 items-center whitespace-nowrap gap-1.5 rounded-full bg-[#d1fadf] px-2.5 text-xs font-bold text-[#067647]" data-testid="ticker-on"><span className="h-[7px] w-[7px] rounded-full bg-[#12b76a]" />On the stage</span>}
-      </div>
-      {!on && <p className="text-[13px] leading-relaxed text-[#475467]">A line that crawls along the bottom of the stage, through every scene, until you stop it. Good for your next episode, a sponsor or where to follow you.</p>}
-      <label htmlFor="ticker-text" className="text-xs font-semibold text-[#475467]">What it says</label>
-      <textarea id="ticker-text" value={text} onChange={(e) => setText(e.target.value)} maxLength={200} rows={3} placeholder="e.g. New episode every Tuesday · Follow @yourshow everywhere"
-        className="resize-none rounded-[10px] border border-[#d0d5dd] bg-white px-2.5 py-2 text-[13px] font-medium text-[#101828] outline-none focus:border-[#053877] focus:ring-2 focus:ring-[#053877]/15" data-testid="ticker-text" />
-      {on ? (
-        <div className="flex gap-2">
-          <button type="button" onClick={() => kit.setTicker(clean, true)} disabled={!clean || !changed} className="h-10 flex-1 rounded-[10px] bg-[#053877] text-[13px] font-bold text-white disabled:opacity-50" data-testid="ticker-update">Update it</button>
-          <button type="button" onClick={() => kit.setTicker(t?.text ?? clean, false)} className="h-10 rounded-[10px] border border-[#d0d5dd] bg-white px-[18px] text-[13px] font-bold text-[#344054] hover:bg-[#f9fafb]" data-testid="ticker-stop">Stop</button>
-        </div>
-      ) : (
-        <button type="button" onClick={() => kit.setTicker(clean, true)} disabled={!clean} className="h-10 rounded-[10px] bg-[#053877] text-[13px] font-bold text-white disabled:opacity-50" data-testid="ticker-start">Start it</button>
-      )}
-      {on && <p className="text-xs text-[#667085]">Keeps running through every scene until you stop it.</p>}
+    <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-6 pt-5" data-testid="sounds-panel">
+      <p className="text-lg font-bold tracking-tight">Sounds</p>
+      <p className="mt-0.5 text-[13px] text-[#667085]">{EVERYONE}</p>
+
+      <p className={label}>Sound pads</p>
+      <Sounds kit={kit} />
+
+      <p className={label}>Background music</p>
+      <MusicList kit={kit} />
     </div>
   );
 }
@@ -145,7 +110,7 @@ function Clips({ kit }: { kit: RoomKit }) {
       })}
       {videos.length < 12 && <RightsUpload kind="video" accept="video/*" kit={kit} label="Upload a clip" />}
 
-      <p className="mt-2 text-[12px] font-semibold text-[#475467]">Ready-made, in your style</p>
+      <p className={label}>Ready-made</p>
       <div className="grid grid-cols-3 gap-1.5">
         {CARDS.map((c) => {
           const on = playing?.slot === c.slot;
@@ -157,6 +122,7 @@ function Clips({ kit }: { kit: RoomKit }) {
           );
         })}
       </div>
+      <p className={label}>Countdown</p>
       <Countdown kit={kit} />
     </div>
   );
@@ -174,9 +140,8 @@ function Countdown({ kit }: { kit: RoomKit }) {
   const nextName = look.scenes.find((s) => s.id === (on ? playing?.next : next?.id))?.name;
   return (
     <div className={`rounded-xl border px-3 py-2.5 ${on ? "border-[#053877] bg-[#f5f8fd]" : "border-[#e4e7ec]"}`} data-testid="card-countdown">
-      {/* The name on its own line, so the narrow panel never cuts it to "C…"; the minutes and Start below it. */}
-      <p className="text-[13px] font-semibold">Countdown</p>
-      <div className="mt-1.5 flex items-center gap-2">
+      {/* Its name is the section's label above (Studio v2); the minutes and Start here. */}
+      <div className="flex items-center gap-2">
         {!on && (
           <Select value={minutes} onChange={(e) => setMinutes(Number(e.target.value))} aria-label="Minutes" wrap="flex-1" className="h-8 rounded-lg border border-[#d0d5dd] bg-white pl-2.5 text-[12px]">
             {[1, 2, 3, 5, 10, 15].map((m) => <option key={m} value={m}>{m} minute{m > 1 ? "s" : ""}</option>)}
@@ -184,7 +149,7 @@ function Countdown({ kit }: { kit: RoomKit }) {
         )}
         <button type="button" onClick={() => kit.play(on ? null : "countdown", on ? undefined : { minutes, next: next?.id })} className={`h-8 shrink-0 rounded-lg px-3 text-[12px] font-bold ${on ? "ml-auto bg-[#053877] text-white" : "border border-[#053877] text-[#053877] hover:bg-[#eef3fb]"}`} data-testid="countdown-start">{on ? "Stop" : "Start"}</button>
       </div>
-      <p className="mt-1 text-[11px] leading-snug text-[#667085]">Ends on "We're starting".{nextName ? ` Then take ${nextName} when you're ready.` : ""}</p>
+      <p className="mt-1 text-[11px] leading-snug text-[#667085]">Ends on "We're starting".{nextName ? ` Then switch to ${nextName} when you're ready.` : ""}</p>
     </div>
   );
 }
@@ -276,7 +241,6 @@ function Sounds({ kit }: { kit: RoomKit }) {
       {pads.some((x) => x.source) && <p className="text-[11px] text-[#98a2b3]">Free sounds from {pads.filter((x) => x.source).map((x) => x.source!.site).filter((v, i, a) => a.indexOf(v) === i).join(", ")}, each {pads.find((x) => x.source)!.source!.licence}. Hover a pad for its source.</p>}
       {pads.length < LIMIT && <AddFromLibrary items={lib} what="sounds" onAdd={(x) => kit.change((l) => ({ ...l, sounds: [...(l.sounds ?? []), { id: x.id, name: x.name, asset: x.asset, source: x.source }].slice(0, LIMIT) }))} />}
       {pads.length < LIMIT && <RightsUpload kind="sound" accept="audio/*" kit={kit} label="Upload a sound" />}
-      <p className="text-[12px] leading-snug text-[#667085]">{EVERYONE}</p>
     </div>
   );
 }

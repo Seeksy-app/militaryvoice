@@ -52,13 +52,16 @@ export type SoundItem = { id: string; name: string; asset: Asset; source?: Libra
 export type MusicItem = SoundItem;
 /** GET /api/host/room/library. */
 export type LibraryItem = { id: string; kind: "sound" | "music"; name: string; sec: number; asset: Asset; source: LibrarySource };
-export type Banner = { id: string; text: string; seconds: number };
+/** seconds 0 = Timer Off (stays until clicked off); ticker = scrolls across the bottom (Studio v2, 26 Nov). */
+export type Banner = { id: string; text: string; seconds: number; ticker?: boolean };
 export type Look = {
   rev: number;
   background: Background;
   logo: Logo;
   /** Their show's icon in the bottom-left when no logo is picked (absent = on). Media > Logo > None turns it off. */
   showIcon?: boolean;
+  /** Where that icon sits (Media > Logo > Where it shows); absent = bottom left. */
+  iconCorner?: "tl" | "tr" | "bl" | "br";
   logos: Asset[];
   /** Uploaded pictures to pick from (asked of Podcasting; until then only the one in use). */
   backgrounds?: Asset[];
@@ -96,7 +99,7 @@ export const BACKGROUNDS: Record<Color, string> = {
   light: "#e8eef7",
 };
 
-export const LIMITS = { logos: 6, backgrounds: 6, banners: 10, bannerText: 80, sceneName: 30, scenes: 9 };
+export const LIMITS = { logos: 6, backgrounds: 6, banners: 10, bannerText: 80, tickerText: 200, sceneName: 30, scenes: 9 };
 
 /** Fill any field the server left out, so the panels never trip on a missing list. */
 export function normalize(l: Partial<Look> | null | undefined): Look | null {
@@ -262,7 +265,7 @@ export function useRoomKit(owner: boolean, meta: string | undefined) {
   /** Show a banner for its own seconds, or take it down (null). */
   const showBanner = (bannerId: string | null) => {
     const b = look?.banners.find((x) => x.id === bannerId);
-    void optimistic({ showing: b ? { bannerId: b.id, until: Date.now() + b.seconds * 1000 } : null }, async () => {
+    void optimistic({ showing: b ? { bannerId: b.id, until: Date.now() + (b.seconds || 12 * 3600) * 1000 } : null }, async () => {
       await settle();
       const j = await post<{ showing?: Live["showing"] }>("/api/host/my-studio/banner", { bannerId });
       return j.showing !== undefined ? { showing: j.showing } : undefined;

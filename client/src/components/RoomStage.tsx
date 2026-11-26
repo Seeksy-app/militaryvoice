@@ -154,6 +154,8 @@ export function RoomPicture({
     <ProfileCard p={scene.profile ?? {}} people={people} bg={bg} logo={logo} color={style?.brandColor} font={style?.font} />
   ) : null;
 
+  const beside = useBesideCorner(root, !!banner);
+
   return (
     <div ref={root} className="relative h-full w-full" style={{ containerType: "inline-size" }} data-stage-root>
       {players.map((t) => <PlayerAudio key={t.identity} tile={t} muted={muted} />)}
@@ -179,7 +181,7 @@ export function RoomPicture({
         </div>
       )}
       {banner && (
-        <div className="pointer-events-none absolute z-30" style={{ left: "4%", right: "4%", bottom: "9%" }} data-testid="room-banner">
+        <div className="pointer-events-none absolute z-30" style={{ left: beside.left ? `max(4%, ${beside.left}px)` : "4%", right: beside.right ? `max(4%, ${beside.right}px)` : "4%", bottom: "9%" }} data-testid="room-banner">
           <div className="text-white shadow-lg" style={{ background: "rgba(5,56,119,0.96)", borderLeft: "0.7cqw solid #F0A71F", borderRadius: "1cqw", padding: "1.1cqw 2cqw", fontSize: "2.6cqw", fontWeight: 600, lineHeight: 1.25 }}>
             {banner}
           </div>
@@ -187,6 +189,35 @@ export function RoomPicture({
       )}
     </div>
   );
+}
+
+/**
+ * Studio v2 (UI/UX, 26 Nov: the lower third sat on the logo tile): with the show's icon in a bottom corner, the banner
+ * starts 12px past it (bottom left) or stops 12px short of it (bottom right). The icon already rises over the ticker
+ * (ShowCorner), so the three never overlap. Top corners and no icon leave the banner at its usual 4% margins.
+ */
+export function useBesideCorner(root: React.RefObject<HTMLDivElement>, on: boolean) {
+  const [beside, setBeside] = useState<{ left?: number; right?: number }>({});
+  useEffect(() => {
+    const r = root.current;
+    if (!on || !r) { setBeside({}); return; }
+    const measure = () => {
+      const fr = r.getBoundingClientRect();
+      const el = r.querySelector<HTMLElement>('[data-testid="show-corner"]');
+      const me = el?.getBoundingClientRect();
+      let next: { left?: number; right?: number } = {};
+      if (el && me && me.width && fr.width && el.style.visibility !== "hidden" && me.top > fr.top + fr.height / 2) {
+        next = me.left - fr.left < fr.width / 2 ? { left: Math.round(me.right - fr.left + 12) } : { right: Math.round(fr.right - me.left + 12) };
+      }
+      setBeside((cur) => (cur.left === next.left && cur.right === next.right ? cur : next));
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(r);
+    const t = window.setInterval(measure, 1000);
+    return () => { ro.disconnect(); window.clearInterval(t); };
+  }, [root, on]);
+  return beside;
 }
 
 /** The player bot's sounds and music, straight to the speakers (not through the voice leveler, so its own volume holds). */

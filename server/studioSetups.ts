@@ -159,6 +159,40 @@ export function registerStudioSetups(app: Express, requireHostSession: RequestHa
     res.json({ look: out });
   });
 
+  /**
+   * Tips > Conversation starters (Studio v2, Andrew, 26 Nov: "they can toggle that off or on"): the owner's switch, where
+   * ideas may come from, and how long a quiet spell is. Engineering's listener reads it (setting studio-starters:<id>)
+   * and sends the cards on the room's "mv-starter" topic to the owner only; until it runs, nothing shows. Off by default.
+   */
+  const startersKey = (id: number) => `studio-starters:${id}`;
+  type Starters = { on: boolean; from: { notes: boolean; prep: boolean; talk: boolean }; wait: number };
+  const WAITS = [5, 8, 12, 20];
+  const readStarters = async (id: number): Promise<Starters> => {
+    let v: Partial<Starters> = {};
+    try { v = JSON.parse((await storage.getSetting(startersKey(id))) ?? "{}"); } catch { v = {}; }
+    // Off until the owner turns it on (Engineering, 26 Nov): the listener hears the room and costs ~$0.50/hour.
+    return { on: v.on === true, from: { notes: v.from?.notes !== false, prep: v.from?.prep !== false, talk: v.from?.talk !== false }, wait: WAITS.includes(Number(v.wait)) ? Number(v.wait) : 8 };
+  };
+  app.get("/api/host/my-studio/starters", requireHostSession, async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    const s = await studio(req, res);
+    if (!s) return;
+    res.json(await readStarters(s.id));
+  });
+  app.put("/api/host/my-studio/starters", requireHostSession, async (req, res) => {
+    const s = await studio(req, res);
+    if (!s) return;
+    const cur = await readStarters(s.id);
+    const b = req.body ?? {};
+    const next: Starters = {
+      on: typeof b.on === "boolean" ? b.on : cur.on,
+      from: { notes: typeof b.from?.notes === "boolean" ? b.from.notes : cur.from.notes, prep: typeof b.from?.prep === "boolean" ? b.from.prep : cur.from.prep, talk: typeof b.from?.talk === "boolean" ? b.from.talk : cur.from.talk },
+      wait: WAITS.includes(Number(b.wait)) ? Number(b.wait) : cur.wait,
+    };
+    await storage.setSetting(startersKey(s.id), JSON.stringify(next));
+    res.json(next);
+  });
+
   app.patch("/api/host/my-studio/setups/:id", requireHostSession, async (req, res) => {
     const s = await studio(req, res);
     if (!s) return;
