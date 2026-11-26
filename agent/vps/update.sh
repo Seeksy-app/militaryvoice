@@ -40,14 +40,14 @@ CUR=$(cat "$STATE/deployed" 2>/dev/null || true)
 RUNNING=$(docker ps -q -f "name=^${NAME}$")
 
 # The conversation starters listener (agent/starters.ts): the same image as the worker, in a small container of its
-# own. It holds only API_BASE and AGENT_TOKEN (not the worker's other keys). No jobs to wait for: on SIGTERM it leaves
+# own. It holds only API_BASE, AGENT_TOKEN and DEEPGRAM_API_KEY if set (not the worker's other keys). No jobs to wait for: on SIGTERM it leaves
 # its rooms, and the new one is back in them within 15 seconds.
 LISTENER=mv-listener
 LISTENER_ENV=/etc/mv-listener.env
 start_listener() {
   local image=$1
   docker image inspect "$image" >/dev/null 2>&1 || return 0
-  (umask 077; grep -E '^(API_BASE|AGENT_TOKEN)=' "$ENV_FILE" > "$LISTENER_ENV")
+  (umask 077; grep -E '^(API_BASE|AGENT_TOKEN|DEEPGRAM_API_KEY)=' "$ENV_FILE" > "$LISTENER_ENV")
   docker rm -f "$LISTENER" >/dev/null 2>&1 || true
   docker run -d --name "$LISTENER" --restart unless-stopped \
     --env-file "$LISTENER_ENV" -e WORKER_NAME=vps \

@@ -228,10 +228,13 @@ class Session {
   private async openWs() {
     this.wsBusy = true;
     try {
-      const { token } = await api<{ token: string }>("POST", "/api/agent/starters/stt-token");
+      // The box's own Deepgram key if it has one (agent/vps: DEEPGRAM_API_KEY in /etc/mv-listener.env), else a
+      // 10-minute token from the API (needs a Deepgram key that may mint them).
+      const own = (process.env.DEEPGRAM_API_KEY || "").trim();
+      const auth = own ? `Token ${own}` : `Bearer ${(await api<{ token: string }>("POST", "/api/agent/starters/stt-token")).token}`;
       if (!this.wsWanted || this.closed) return;
       const q = new URLSearchParams({ model: "nova-3", language: "en-US", encoding: "linear16", sample_rate: String(RATE), channels: "1", interim_results: "true", smart_format: "true", vad_events: "true", endpointing: "300" });
-      const ws = new WebSocket(`wss://api.deepgram.com/v1/listen?${q}`, { headers: { Authorization: `Bearer ${token}` } });
+      const ws = new WebSocket(`wss://api.deepgram.com/v1/listen?${q}`, { headers: { Authorization: auth } });
       ws.on("message", (raw) => {
         let m: { type?: string; is_final?: boolean; channel?: { alternatives?: { transcript?: string }[] } } = {};
         try { m = JSON.parse(String(raw)); } catch { return; }
