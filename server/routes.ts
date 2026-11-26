@@ -200,6 +200,7 @@ import { registerMail } from "./mail.js";
 import { registerAutomations } from "./automations.js";
 import { registerTrash, toTrash } from "./trash.js";
 import { registerMyStudio } from "./myStudio.js";
+import { registerStarters } from "./starters.js";
 import { registerCreatorTravel } from "./creatorTravel.js";
 import { registerCreatorHotels } from "./creatorHotels.js";
 import { isCompPlan, nextCreditsAt, registerPostifyCredits } from "./postifyCredits.js";
@@ -7242,6 +7243,8 @@ export function registerRoutes(app: Express): void {
   registerShowMove(app, requireAdmin);
   registerTrash(app, requireHostSession);
   registerMyStudio(app, requireHostSession, { youtubeToken });
+  // Conversation starters: the hidden listener on the Alex VPS (agent/starters.ts) asks these with the agent token.
+  registerStarters(app, requireAgent, requireAdmin);
   registerCreatorTravel(app, requireHostSession, requireAdmin);
   registerCreatorHotels(app, requireHostSession);
   registerPostifyCredits(app, requireHostSession, requireAdmin);

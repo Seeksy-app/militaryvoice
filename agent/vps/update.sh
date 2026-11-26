@@ -39,10 +39,34 @@ NEW=$(git_ -C "$SRC" rev-parse refs/remotes/live/main)
 CUR=$(cat "$STATE/deployed" 2>/dev/null || true)
 RUNNING=$(docker ps -q -f "name=^${NAME}$")
 
+# The conversation starters listener (agent/starters.ts): the same image as the worker, in a small container of its
+# own. It holds only API_BASE and AGENT_TOKEN (not the worker's other keys). No jobs to wait for: on SIGTERM it leaves
+# its rooms, and the new one is back in them within 15 seconds.
+LISTENER=mv-listener
+LISTENER_ENV=/etc/mv-listener.env
+start_listener() {
+  local image=$1
+  docker image inspect "$image" >/dev/null 2>&1 || return 0
+  (umask 077; grep -E '^(API_BASE|AGENT_TOKEN)=' "$ENV_FILE" > "$LISTENER_ENV")
+  docker rm -f "$LISTENER" >/dev/null 2>&1 || true
+  docker run -d --name "$LISTENER" --restart unless-stopped \
+    --env-file "$LISTENER_ENV" -e WORKER_NAME=vps \
+    --cpus 1 --memory 1g --memory-swap 1g \
+    --log-opt max-size=20m --log-opt max-file=3 \
+    --stop-timeout 20 \
+    "$image" node --import tsx agent/starters.ts >/dev/null
+  echo "running $LISTENER:${image##*:}"
+}
+ensure_listener() {
+  [ -n "$(docker ps -q -f "name=^${LISTENER}$")" ] && return 0
+  start_listener "$(docker inspect -f '{{.Config.Image}}' "$NAME" 2>/dev/null || true)"
+}
+
 if [ "$FORCE" = 0 ] && [ -n "$RUNNING" ] && [ -n "$CUR" ]; then
-  [ "$CUR" = "$NEW" ] && exit 0
+  [ "$CUR" = "$NEW" ] && { ensure_listener; exit 0; }
   if git_ -C "$SRC" diff --quiet "$CUR" "$NEW" -- "${PATHS[@]}" 2>/dev/null; then
     echo "$NEW" > "$STATE/deployed"   # main moved on, but not the worker's code
+    ensure_listener
     exit 0
   fi
 fi
@@ -81,6 +105,7 @@ docker run -d --name "$NAME" --restart unless-stopped \
 docker rm -f "${NAME}-old" >/dev/null 2>&1 || true
 echo "$NEW" > "$STATE/deployed"
 echo "running $NAME:$TAG"
+start_listener "$NAME:$TAG"
 
 # This script and its timer update themselves from main (a fresh file, so this run isn't disturbed).
 install -m 755 "$CTX/agent/vps/update.sh" /usr/local/sbin/mv-clipper-update

@@ -18,6 +18,12 @@ running within ~5–10 minutes (the timer every 5, then a build of a minute or t
 old worker works, then waits for the worker's job count (`/var/lib/mv-clipper/tmp/worker-busy`) to reach 0,
 for at most 3 hours. A job stopped anyway is handed back on SIGTERM, and clip jobs resume.
 
+**Conversation starters listener** (since 26 Nov 2026, Andrew: "Yes, run it"). `agent/starters.ts` runs from the same image as
+the docker container `mv-listener` (1 CPU, 1GB). It holds only API_BASE and AGENT_TOKEN (`/etc/mv-listener.env`, written by
+update.sh from the worker's env file). update.sh starts it with each new build, and restarts it if it isn't running. It joins
+only rooms that `/api/agent/starters/rooms` lists: the toggle on, the studio in setting `starters:studios` (default `13`),
+and someone in the room. Logs: `docker logs -f --tail 100 mv-listener`. Spend: Admin `GET /api/admin/starters`.
+
 **Everyday commands** (Mac: `ssh vps`, which is root):
 
 ```bash

@@ -18,7 +18,9 @@ RUN npm init -y >/dev/null && npm pkg set type=module \
       @anthropic-ai/sdk@^0.125.0 \
       sharp@^0.35.4 \
       dotenv@^16.4.7 \
-      opentype.js@^2.0.0
+      opentype.js@^2.0.0 \
+      @livekit/rtc-node@^0.13.35 \
+      ws@^8.18.0
 
 COPY agent ./agent
 COPY server/textPath.ts ./server/textPath.ts
@@ -28,4 +30,6 @@ COPY tsconfig.json ./tsconfig.json
 ENV NODE_ENV=production
 # Node itself, not npx: npx runs it through sh, which never passes Render's
 # SIGTERM on, so a redeploy killed the worker before it could hand its job back.
+# The same image runs the conversation starters listener as its own container (agent/vps/update.sh):
+#   node --import tsx agent/starters.ts
 CMD ["node", "--import", "tsx", "agent/clipper.ts"]
