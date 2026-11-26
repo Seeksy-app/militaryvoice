@@ -59,7 +59,8 @@ export function ChooseSetup({ roomName, shows, showId, onShow, v3, onDone, logo 
   const narrow = typeof window !== "undefined" && window.innerWidth < 640;
 
   // The studio's look changed on the server: the studio loads it fresh when they go in.
-  const changed = () => { qc.removeQueries({ queryKey: LOOK_KEY }); void qc.invalidateQueries({ queryKey: [SETUPS_KEY] }); };
+  // Blank also switches the destinations off, so the studio's own answer is read again too.
+  const changed = () => { qc.removeQueries({ queryKey: LOOK_KEY }); void qc.invalidateQueries({ queryKey: [SETUPS_KEY] }); void qc.invalidateQueries({ queryKey: ["/api/host/my-studio"], exact: true }); void qc.invalidateQueries({ queryKey: ["/api/host/live-page"] }); };
   const run = async (what: string, fn: () => Promise<unknown>, name: string) => {
     setBusy(what); setError("");
     try { await fn(); changed(); onDone(name); }

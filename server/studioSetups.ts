@@ -62,6 +62,14 @@ async function replaceLook(s: PersonalStudioRow, next: (cur: Look) => Record<str
   return "Your studio changed in another window. Try again.";
 }
 
+/** Every destination off: YouTube, each saved stream key, and the watch page. Nothing is deleted. */
+async function destinationsOff(s: PersonalStudioRow): Promise<void> {
+  let streams: { on?: boolean }[] = [];
+  try { const v = JSON.parse(s.streams || "[]"); streams = Array.isArray(v) ? v : []; } catch { streams = []; }
+  await db.update(personalStudios).set({ youtubeOn: false, streams: JSON.stringify(streams.map((x) => ({ ...x, on: false }))) }).where(eq(personalStudios.id, s.id));
+  await storage.setSetting(`live-page:${s.ownerEmail.trim().toLowerCase()}`, "0");
+}
+
 export function registerStudioSetups(app: Express, requireHostSession: RequestHandler): void {
   const studio = async (req: Request, res: import("express").Response, change = false) => {
     const s = await studioOf(me(req));
@@ -120,8 +128,8 @@ export function registerStudioSetups(app: Express, requireHostSession: RequestHa
   /**
    * Start fresh: a template's scenes (the style, logo and Media stay), or Blank: one "Just me" scene and a clean
    * Media panel (Andrew, 26 Nov: "Everything should be clean and shouldn't have any logos or preset anything"): no
-   * logo or show icon, banners, video clips, backgrounds or music, and the sound pads back to the starting set.
-   * Nothing is deleted: the uploads stay, and the look that was there is kept as "Before <date>".
+   * logo or show icon, banners, video clips, backgrounds or music, the sound pads back to the starting set, and every
+   * destination listed but off (a saved setup never switches them on). Nothing is deleted: the uploads stay, and the look that was there is kept as "Before <date>".
    */
   app.post("/api/host/my-studio/setups/fresh", requireHostSession, async (req, res) => {
     const s = await studio(req, res, true);
@@ -145,6 +153,9 @@ export function registerStudioSetups(app: Express, requireHostSession: RequestHa
       };
     });
     if (typeof out === "string") return res.status(409).json({ message: out });
+    // Blank: where the show goes is still listed but switched off (Andrew, 26 Nov: "They should be on there, but they
+    // should be switched off"). Nothing is removed: YouTube stays connected, keys stay saved, one click turns each on.
+    if (!tpl) await destinationsOff(s);
     res.json({ look: out });
   });
 
