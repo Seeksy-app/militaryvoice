@@ -150,7 +150,7 @@ export type Look = {
 const libEntry = (x: LibraryItem): SoundItem => ({ id: `lib-${x.slug}`, name: x.name, asset: libraryAsset(x) as Asset, source: x.source });
 const librarySounds = () => libraryReady().filter((x) => x.kind === "sound").map(libEntry);
 
-const freshLook = (): Look => ({
+export const freshLook = (): Look => ({
   rev: 0,
   background: { kind: "color", value: "blue" },
   logo: null,

@@ -96,6 +96,7 @@ const useNow = () => { const [now, setNow] = useState(Date.now()); useEffect(() 
 
 export default function MyStudio({ invite }: { invite?: string }) {
   const owner = !invite;
+  const { toast } = useToast();
   useInter();
   useYoutubeConnectResult();
   const [conn, setConn] = useState<Conn | null>(null);
@@ -185,7 +186,19 @@ export default function MyStudio({ invite }: { invite?: string }) {
       connect
       video={setup.cam ? (setup.camId ? { deviceId: setup.camId } : true) : false}
       audio={setup.mic ? (setup.micId ? { deviceId: setup.micId } : true) : false}
-      onDisconnected={(why) => { void stopAllExtraCameras(); setRemoved(why === DisconnectReason.PARTICIPANT_REMOVED); setLeft(true); }}
+      onDisconnected={(why) => {
+        void stopAllExtraCameras();
+        const out = why === DisconnectReason.PARTICIPANT_REMOVED;
+        // The owner leaving lands back on the Studio start, where they pick a setup (Andrew, 26 Nov: "it should just
+        // take me back to the start point of Studio, not back to the dashboard"). Guests still get their goodbye.
+        if (owner && !out) {
+          setConn(null); setSetup(null); setChosen(null);
+          void studio.refetch();
+          toast({ title: "You've left your studio", description: "Anything you recorded is on its way to your Library, ready for clips." });
+          return;
+        }
+        setRemoved(out); setLeft(true);
+      }}
       style={{ height: "100dvh" }}
     >
       <RoomAudioRenderer />
@@ -495,9 +508,8 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
   // Andrew, 21 Nov: Leave never ends a live show on its own. Guests just leave; the owner, while live or
   // recording, chooses to end it and leave, or leave and keep it going (guests carry on).
   const [leaving, setLeaving] = useState(false);
-  // Andrew, 21 Nov: "we need an EXIT from studio". The header's exit (and the logo) go to the
-  // dashboard; Leave ends on "You've left your studio" with a big Back to your dashboard. Both ask
-  // first while live or recording, by the same rules.
+  // Andrew, 21 Nov: "we need an EXIT from studio". The header's exit, the logo and Leave all take the owner
+  // back to the Studio start (26 Nov); guests get their goodbye. All ask first while live or recording.
   const exitTo = useRef<string | null>(null);
   const go = async () => {
     await stopAllExtraCameras();
@@ -517,7 +529,8 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
     void qc.invalidateQueries({ queryKey: ["/api/host/my-studio"] });
     void go();
   };
-  const exit = () => leave(owner ? DASHBOARD : undefined);
+  // The owner's exit goes back to the Studio start too (26 Nov); the dashboard is one click on from there.
+  const exit = () => leave();
 
   return (
     <div className="flex h-[100dvh] flex-col bg-[#f3f4f7] text-[#101828]" data-testid="my-studio" style={{ fontFamily: INTER }}>
@@ -529,10 +542,10 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
       {owner && <StudioHoursBar busy={!!(rec || live)} />}
       {/* Top bar */}
       <header className="flex h-16 shrink-0 items-center gap-3 border-b border-[#e4e7ec] bg-white px-4 lg:gap-3.5 lg:px-5" data-testid="my-studio-bar">
-        <button type="button" onClick={exit} className="hidden shrink-0 sm:block" aria-label={owner ? "MilitaryVoices.ai, back to your dashboard" : "MilitaryVoices.ai, exit the studio"}><Logo className="h-[38px]" /></button>
+        <button type="button" onClick={exit} className="hidden shrink-0 sm:block" aria-label={owner ? "MilitaryVoices.ai, leave to the Studio start" : "MilitaryVoices.ai, exit the studio"}><Logo className="h-[38px]" /></button>
         <div className="hidden h-7 w-px bg-[#e4e7ec] sm:block" />
         <button type="button" onClick={exit} className="flex h-9 shrink-0 items-center gap-1.5 rounded-lg border border-[#d0d5dd] bg-white px-2.5 text-[13px] font-semibold text-[#344054] hover:bg-[#f9fafb]" data-testid="my-studio-exit">
-          <ArrowLeft className="h-4 w-4" /><span className="hidden sm:inline">{owner ? "Dashboard" : "Exit studio"}</span>
+          <ArrowLeft className="h-4 w-4" /><span className="hidden sm:inline">Exit studio</span>
         </button>
         <div className="min-w-0">
           <p className="truncate text-[15px] font-bold tracking-tight">{roomName}</p>

@@ -8,7 +8,7 @@ import crypto from "node:crypto";
 import { eq } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { getSessionEmail } from "./session.js";
-import { assetsOf, clean, getLook, saveLook, type Look } from "./roomKit.js";
+import { assetsOf, clean, freshLook, getLook, saveLook, type Look } from "./roomKit.js";
 import { studioShow } from "./hostShows.js";
 import { personalStudios, roomLooks, type PersonalStudioRow } from "../shared/schema.js";
 import { freeName, templateById } from "../shared/studioTemplates.js";
@@ -117,7 +117,12 @@ export function registerStudioSetups(app: Express, requireHostSession: RequestHa
     res.json({ look: out });
   });
 
-  /** Start fresh: a template's scenes, or one "Just me" scene; the style, logo and Media stay. */
+  /**
+   * Start fresh: a template's scenes (the style, logo and Media stay), or Blank: one "Just me" scene and a clean
+   * Media panel (Andrew, 26 Nov: "Everything should be clean and shouldn't have any logos or preset anything"): no
+   * logo or show icon, banners, video clips, backgrounds or music, and the sound pads back to the starting set.
+   * Nothing is deleted: the uploads stay, and the look that was there is kept as "Before <date>".
+   */
   app.post("/api/host/my-studio/setups/fresh", requireHostSession, async (req, res) => {
     const s = await studio(req, res, true);
     if (!s) return;
@@ -125,13 +130,19 @@ export function registerStudioSetups(app: Express, requireHostSession: RequestHa
     if (req.body?.template !== "blank" && !tpl) return res.status(400).json({ message: "Pick a template." });
     const v3 = req.body?.v3 === true;
     const out = await replaceLook(s, (cur) => {
+      const blank = tpl ? null : freshLook();
+      const background = blank ? blank.background : cur.background;
       const taken = new Set<string>();
       const scenes = (tpl ? tpl.scenes(v3) : [{ name: "Just me", type: "single" as const, layout: "solo" as const, people: 1 }]).map((x, i) => {
         const name = freeName(x.name, taken);
         taken.add(name);
-        return { ...x, name, id: crypto.randomBytes(4).toString("hex"), n: i + 1, stage: [], look: { background: cur.background } };
+        return { ...x, name, id: crypto.randomBytes(4).toString("hex"), n: i + 1, stage: [], look: { background } };
       });
-      return { scenes };
+      if (!blank) return { scenes };
+      return {
+        scenes, background, logo: null, showIcon: false, logos: [], backgrounds: [], banners: [],
+        videos: [], intro: null, outro: null, sounds: blank.sounds, music: [],
+      };
     });
     if (typeof out === "string") return res.status(409).json({ message: out });
     res.json({ look: out });
