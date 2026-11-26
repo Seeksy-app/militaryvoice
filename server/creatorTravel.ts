@@ -8,11 +8,13 @@ import { airlineByIata, MILITARY_AIRLINES, MILITARY_CALL_DESKS, MILITARY_FARES_V
 /**
  * Travel (Andrew, 26 Nov 2026: "Yes, build it"). Creators fly a lot (conferences, speaking), so a signed-in creator
  * searches flights here and sees each airline's military perk for their status beside the price. Where an airline only
- * quotes its military fare by phone, "Have us call" saves a request; an assistant (Synthflow) rings that airline,
+ * quotes its military fare by phone, "Have us call" saves a request; an assistant (ElevenLabs Agents, over our own
+ * Twilio number; Andrew 26 Nov: "Use another provider" than Synthflow) rings that airline,
  * asks for the military fare on the exact flight, hangs up and we write the report: military fare against web price.
  *
  * HARD GATE: no call to any airline is placed until Andrew OKs one test call. Calls go out only while the setting
- * travel:calls is "on" (off by default) and SYNTHFLOW_API_KEY + SYNTHFLOW_AGENT_ID are set. While travel:test-number
+ * travel:calls is "on" (off by default) and ELEVENLABS_AGENTS_API_KEY, ELEVENLABS_TRAVEL_AGENT_ID and
+ * ELEVENLABS_TRAVEL_PHONE_ID are set. While travel:test-number
  * holds a number, every call rings that number instead of the airline (for a rehearsal with someone playing the desk).
  *
  * Flights come from Parallel's Flights API (search only, ~$5 per 1,000 searches, 120 a minute). An identical search
@@ -20,7 +22,7 @@ import { airlineByIata, MILITARY_AIRLINES, MILITARY_CALL_DESKS, MILITARY_FARES_V
  */
 
 const PARALLEL_FLIGHTS = "https://api.parallel.ai/v1/flights/search";
-const SYNTHFLOW = "https://api.synthflow.ai/v2";
+const ELEVEN = "https://api.elevenlabs.io";
 const CACHE_MS = 30 * 60_000;
 const SEARCHES_A_DAY = 25;
 const CALLS_A_DAY = 3;
@@ -29,9 +31,22 @@ const dayStart = () => `${now().slice(0, 10)}T00:00:00.000Z`;
 
 const parallelKey = () =>
   ["PARALLEL_API_KEY", "PARALLEL_AI_API_KEY", "PARALLELAI_API_KEY", "PARALLEL_KEY"].map((n) => (process.env[n] || "").trim()).find(Boolean) || "";
-const synthflowKey = () => (process.env.SYNTHFLOW_API_KEY || "").trim();
-const synthflowAgent = () => (process.env.SYNTHFLOW_AGENT_ID || "").trim();
-const synthflowFrom = () => (process.env.SYNTHFLOW_FROM_NUMBER || "").trim();
+// A key of its own with ElevenAgents read + write, so the Alex/TTS key (ELEVENLABS_API_KEY, no Agents permission)
+// stays as it is. The agent is the travel caller; the phone id is our Twilio number as imported into ElevenAgents.
+// The agent and phone ids aren't secret: POST /api/admin/travel/setup makes the agent and finds the number, and keeps
+// both in site settings (travel:agent-id, travel:phone-id); the env vars, if set, win.
+const agentsKey = () => (process.env.ELEVENLABS_AGENTS_API_KEY || "").trim();
+let ids = { agent: "", phone: "" };
+async function loadIds() {
+  ids = {
+    agent: (process.env.ELEVENLABS_TRAVEL_AGENT_ID || "").trim() || ((await storage.getSetting("travel:agent-id").catch(() => null)) || "").trim(),
+    phone: (process.env.ELEVENLABS_TRAVEL_PHONE_ID || "").trim() || ((await storage.getSetting("travel:phone-id").catch(() => null)) || "").trim(),
+  };
+  return ids;
+}
+const travelAgent = () => ids.agent;
+const travelPhone = () => ids.phone;
+const agentsReady = () => !!agentsKey() && !!travelAgent() && !!travelPhone();
 
 export async function callsOn(): Promise<boolean> {
   return (await storage.getSetting("travel:calls").catch(() => null)) === "on";
@@ -42,7 +57,8 @@ async function testNumber(): Promise<string> {
 }
 /** Whether "Have us call" places a call now, or only saves the request. */
 async function callsLive(): Promise<boolean> {
-  return (await callsOn()) && !!synthflowKey() && !!synthflowAgent();
+  await loadIds();
+  return (await callsOn()) && agentsReady();
 }
 
 class HttpError extends Error {
@@ -275,14 +291,15 @@ Never, under any circumstances:
   return { greeting, prompt };
 }
 
-async function synthflow(path: string, init?: RequestInit) {
-  return fetch(`${SYNTHFLOW}${path}`, { ...init, headers: { Authorization: `Bearer ${synthflowKey()}`, "Content-Type": "application/json", ...(init?.headers ?? {}) }, signal: AbortSignal.timeout(30_000) });
+async function eleven(path: string, init?: RequestInit) {
+  return fetch(`${ELEVEN}${path}`, { ...init, headers: { "xi-api-key": agentsKey(), "Content-Type": "application/json", ...(init?.headers ?? {}) }, signal: AbortSignal.timeout(30_000) });
 }
 
 /** Rings the airline (or the test number). Refuses unless calls are switched on: the hard gate. */
 export async function placeCall(id: number): Promise<TravelCallRow> {
   if (!(await callsOn())) throw new HttpError(409, "Calls are switched off (travel:calls isn't \"on\").");
-  if (!synthflowKey() || !synthflowAgent()) throw new HttpError(503, "SYNTHFLOW_API_KEY or SYNTHFLOW_AGENT_ID isn't set.");
+  await loadIds();
+  if (!agentsReady()) throw new HttpError(503, "ElevenAgents isn't set up: ELEVENLABS_AGENTS_API_KEY, or the travel agent or phone number (POST /api/admin/travel/setup).");
   // Claim the row so two requests can't ring twice.
   const [c] = await db.update(travelCalls).set({ status: "calling", updatedAt: now() }).where(and(eq(travelCalls.id, id), eq(travelCalls.status, "waiting"))).returning();
   if (!c) throw new HttpError(409, "That call isn't waiting.");
@@ -297,47 +314,55 @@ export async function placeCall(id: number): Promise<TravelCallRow> {
   const airline = airlineByIata(c.iata)?.airline || c.iata;
   const { greeting, prompt } = callPrompt(airline, f, c.webPriceCents ? c.webPriceCents / 100 : null);
   try {
-    const r = await synthflow("/calls", {
+    // ElevenAgents outbound call over our imported Twilio number. The per-call prompt and first message are
+    // conversation overrides, which the agent must allow (Security tab: System prompt, First message).
+    const r = await eleven("/v1/convai/twilio/outbound-call", {
       method: "POST",
       body: JSON.stringify({
-        model_id: synthflowAgent(),
-        phone: to,
-        name: `${airline} reservations`,
-        ...(synthflowFrom() ? { from_phone_number: synthflowFrom() } : {}),
-        prompt,
-        greeting,
-        custom_variables: [
-          { key: "airline", value: airline },
-          { key: "flights", value: f.flights.join(", ") },
-          { key: "travel_call_id", value: String(c.id) },
-        ],
+        agent_id: travelAgent(),
+        agent_phone_number_id: travelPhone(),
+        to_number: to,
+        conversation_initiation_client_data: {
+          conversation_config_override: { agent: { first_message: greeting, prompt: { prompt } } },
+          dynamic_variables: { airline, flights: f.flights.join(", "), travel_call_id: String(c.id) },
+        },
       }),
     });
-    const j = (await r.json().catch(() => ({}))) as { status?: string; response?: { call_id?: string }; detail?: string; message?: string };
-    const callId = String(j.response?.call_id ?? "");
-    if (!r.ok || !callId) return fail(`Synthflow didn't start the call (${r.status} ${String(j.detail ?? j.message ?? "").slice(0, 200)}).`);
+    const j = (await r.json().catch(() => ({}))) as { success?: boolean; message?: string; conversation_id?: string; detail?: unknown };
+    const callId = String(j.conversation_id ?? "");
+    if (!r.ok || !j.success || !callId) {
+      const why = typeof j.detail === "string" ? j.detail : JSON.stringify(j.detail ?? j.message ?? "");
+      return fail(`ElevenLabs didn't start the call (${r.status} ${why.slice(0, 200)}).`);
+    }
     const [row] = await db.update(travelCalls).set({ callId, calledNumber: to, updatedAt: now() }).where(eq(travelCalls.id, c.id)).returning();
     return row;
   } catch (err) {
-    return fail(`Couldn't reach Synthflow: ${(err as Error).message}`);
+    return fail(`Couldn't reach ElevenLabs: ${(err as Error).message}`);
   }
 }
 
-const ENDED = new Set(["completed", "no-answer", "busy", "failed", "canceled", "user-canceled", "hangup_on_voicemail", "left_voicemail", "spam"]);
+type ElevenConversation = {
+  status?: "initiated" | "in-progress" | "processing" | "done" | "failed";
+  transcript?: { role?: "user" | "agent"; message?: string | null; time_in_call_secs?: number }[];
+  metadata?: { call_duration_secs?: number; termination_reason?: string; cost_fiat?: number };
+};
 
-/** A call that's ringing or ended: read it from Synthflow and, once it's over, write the report. */
+/** A call that's ringing or ended: read it from ElevenLabs and, once it's over, write the report. */
 async function refresh(c: TravelCallRow): Promise<TravelCallRow> {
-  if (c.status !== "calling" || !c.callId || !synthflowKey()) return c;
-  const r = await synthflow(`/calls/${encodeURIComponent(c.callId)}`).catch(() => null);
+  if (c.status !== "calling" || !c.callId || !agentsKey()) return c;
+  const r = await eleven(`/v1/convai/conversations/${encodeURIComponent(c.callId)}`).catch(() => null);
   if (!r?.ok) return c;
-  const j = (await r.json().catch(() => ({}))) as { response?: { calls?: { status?: string; transcript?: string; duration?: number; error_message?: string }[] } };
-  const call = j.response?.calls?.[0];
-  const status = String(call?.status ?? "");
-  if (!call || !ENDED.has(status)) return c;
-  const transcript = String(call.transcript ?? "");
-  const durationSec = Math.round(Number(call.duration) || 0);
-  if (status !== "completed" || transcript.trim().length < 40) {
-    const why = status === "completed" ? "The call ended before anyone answered the question." : `The call ended: ${status.replace(/[-_]/g, " ")}.`;
+  const call = (await r.json().catch(() => ({}))) as ElevenConversation;
+  const status = String(call.status ?? "");
+  if (status !== "done" && status !== "failed") return c;
+  // "user" is whoever picked up: the airline's agent (or its phone menu).
+  const turns = (call.transcript ?? []).filter((t) => (t.message ?? "").trim());
+  const transcript = turns.map((t) => `${t.role === "agent" ? "assistant" : "airline"}: ${String(t.message).trim()}`).join("\n");
+  const durationSec = Math.round(Number(call.metadata?.call_duration_secs) || 0);
+  const airlineSpoke = turns.some((t) => t.role === "user");
+  if (status !== "done" || !airlineSpoke || transcript.trim().length < 40) {
+    const reason = String(call.metadata?.termination_reason ?? "").trim();
+    const why = status === "done" ? "The call ended before anyone answered the question." : `The call didn't go through${reason ? ` (${reason.slice(0, 120)})` : ""}.`;
     const [row] = await db.update(travelCalls).set({ status: "failed", transcript, durationSec, error: why, updatedAt: now() }).where(eq(travelCalls.id, c.id)).returning();
     return row;
   }
@@ -453,15 +478,67 @@ export function registerCreatorTravel(app: Express, requireHostSession: RequestH
   app.get("/api/admin/travel", requireAdmin, async (_req, res) => {
     res.set("Cache-Control", "no-store");
     await schemaIsReady();
+    await loadIds();
     const calls = await db.select().from(travelCalls).orderBy(desc(travelCalls.createdAt)).limit(30);
     const searches = await db.select({ id: travelSearches.id, cached: travelSearches.cached }).from(travelSearches).where(gte(travelSearches.createdAt, dayStart()));
     res.json({
       callsOn: await callsOn(),
       testNumber: (await testNumber()) ? "set" : "",
-      configured: { parallel: !!parallelKey(), synthflowKey: !!synthflowKey(), synthflowAgent: !!synthflowAgent(), fromNumber: !!synthflowFrom() },
+      configured: { parallel: !!parallelKey(), agentsKey: !!agentsKey(), travelAgent: !!travelAgent(), travelPhone: !!travelPhone() },
       today: { searches: searches.length, paidSearches: searches.filter((s) => !s.cached).length },
       calls: calls.map((c) => ({ ...viewOf(c), who: c.ownerEmail.replace(/^(.).*@/, "$1***@"), durationSec: c.durationSec, calledNumber: c.calledNumber ? "set" : "" })),
     });
+  });
+
+  /**
+   * One-time setup, after the Agents key is in and the Twilio number is imported in ElevenAgents: makes the travel
+   * agent (if there isn't one) with the overrides it needs and a 25-minute cap (airline hold times), and picks the
+   * imported number (the one labelled "travel", else the only one). Places no call. Body: { phoneId? } to choose.
+   */
+  app.post("/api/admin/travel/setup", requireAdmin, async (req, res) => {
+    try {
+      if (!agentsKey()) throw new HttpError(503, "ELEVENLABS_AGENTS_API_KEY isn't set.");
+      await loadIds();
+      let agent = travelAgent();
+      if (!agent) {
+        const r = await eleven("/v1/convai/agents/create", {
+          method: "POST",
+          body: JSON.stringify({
+            name: "MilitaryVoices travel caller",
+            conversation_config: {
+              agent: {
+                language: "en",
+                first_message: "Hi, I'm an automated assistant calling on behalf of a traveler. I'm not booking today, just asking about a fare.",
+                prompt: { prompt: "You are an automated phone assistant for MilitaryVoices.ai asking an airline about one fare. Each call brings its own instructions. Never give any personal detail, and never book, pay or agree to anything." },
+              },
+              conversation: { max_duration_seconds: 1500 },
+            },
+            platform_settings: { overrides: { conversation_config_override: { agent: { first_message: true, prompt: { prompt: true } } } } },
+          }),
+        });
+        const j = (await r.json().catch(() => ({}))) as { agent_id?: string; detail?: unknown };
+        if (!r.ok || !j.agent_id) throw new HttpError(502, `ElevenLabs didn't make the agent (${r.status} ${JSON.stringify(j.detail ?? "").slice(0, 200)}).`);
+        agent = j.agent_id;
+        await storage.setSetting("travel:agent-id", agent);
+      }
+      const want = String(req.body?.phoneId ?? "").trim();
+      let phone = want || travelPhone();
+      const list = await eleven("/v1/convai/phone-numbers");
+      const numbers = list.ok ? ((await list.json().catch(() => [])) as { phone_number_id?: string; label?: string; provider?: string; phone_number?: string }[]) : [];
+      if (!phone) {
+        const pick = numbers.find((n) => /travel/i.test(n.label ?? "")) ?? (numbers.length === 1 ? numbers[0] : undefined);
+        phone = pick?.phone_number_id ?? "";
+      }
+      if (phone) await storage.setSetting("travel:phone-id", phone);
+      await loadIds();
+      res.json({
+        agent: !!travelAgent(),
+        phone: !!travelPhone(),
+        numbers: numbers.map((n) => ({ id: n.phone_number_id, label: n.label, provider: n.provider })),
+        ready: agentsReady(),
+        callsOn: await callsOn(),
+      });
+    } catch (err) { send(res, err); }
   });
 
   /** Places one waiting call. Still refuses unless travel:calls is "on". */
@@ -472,7 +549,7 @@ export function registerCreatorTravel(app: Express, requireHostSession: RequestH
     } catch (err) { send(res, err); }
   });
 
-  /** Reads one call back from Synthflow now (and writes the report if it has ended), with the transcript. */
+  /** Reads one call back from ElevenLabs now (and writes the report if it has ended), with the transcript. */
   app.get("/api/admin/travel/calls/:id", requireAdmin, async (req, res) => {
     try {
       await schemaIsReady();
