@@ -106,15 +106,27 @@ export type TravelSearchResponse = {
 
 const IATA = /^[A-Z]{3}$/;
 const DAY = /^\d{4}-\d{2}-\d{2}$/;
+/**
+ * One airport ("DCA") or a metro of up to three ("DCA,IAD,BWI", UI/UX 26 Nov: "Washington, DC (all airports)").
+ * Returns the codes deduped and sorted, so "IAD,DCA" and "DCA,IAD" share a cache key; null if any code is bad.
+ */
+const codesOf = (s: string): string[] | null => {
+  const codes = s.split(",").map((c) => c.trim()).filter((c, i, all) => c && all.indexOf(c) === i).sort();
+  return codes.length >= 1 && codes.length <= 3 && codes.every((c) => IATA.test(c)) ? codes : null;
+};
+/** The airports of one side of a query, as a list. */
+export const airportsOf = (side: string) => side.split(",");
 function readQuery(body: unknown): TravelQuery {
   const b = (body ?? {}) as Record<string, unknown>;
-  const from = String(b.from ?? "").trim().toUpperCase();
-  const to = String(b.to ?? "").trim().toUpperCase();
+  const fromCodes = codesOf(String(b.from ?? "").toUpperCase());
+  const toCodes = codesOf(String(b.to ?? "").toUpperCase());
   const depart = String(b.depart ?? "").trim();
   const ret = String(b.return ?? "").trim();
   const status: TravelerStatus = b.status === "active" ? "active" : "veteran";
-  if (!IATA.test(from) || !IATA.test(to)) throw new HttpError(400, "Use the three-letter airport codes, like DCA or SAN.");
-  if (from === to) throw new HttpError(400, "Pick two different airports.");
+  if (!fromCodes || !toCodes) throw new HttpError(400, "Use the three-letter airport codes, like DCA or SAN.");
+  if (fromCodes.some((c) => toCodes.includes(c))) throw new HttpError(400, "Pick two different airports.");
+  const from = fromCodes.join(",");
+  const to = toCodes.join(",");
   const today = now().slice(0, 10);
   if (!DAY.test(depart) || depart < today) throw new HttpError(400, "Pick a departure date from today on.");
   if (ret && (!DAY.test(ret) || ret < depart)) throw new HttpError(400, "The return date has to be on or after the departure date.");
@@ -128,7 +140,7 @@ async function searchParallel(q: TravelQuery): Promise<ParallelResult[]> {
   const r = await fetch(PARALLEL_FLIGHTS, {
     method: "POST",
     headers: { "x-api-key": parallelKey(), "Content-Type": "application/json" },
-    body: JSON.stringify({ origins: [q.from], destinations: [q.to], departure_date: q.depart, ...(q.return ? { return_date: q.return } : {}), advanced_settings: { max_results: 20 } }),
+    body: JSON.stringify({ origins: airportsOf(q.from), destinations: airportsOf(q.to), departure_date: q.depart, ...(q.return ? { return_date: q.return } : {}), advanced_settings: { max_results: 20 } }),
     signal: AbortSignal.timeout(90_000),
   });
   if (!r.ok) {
@@ -441,7 +453,8 @@ async function requestCall(email: string, searchId: number, i: number): Promise<
   if (!res.canCall) throw new HttpError(400, q.status === "active" ? `${res.airline} doesn't quote military fares by phone. Book it online.` : "Phone-only military fares are for active duty.");
   const calls = await db.select({ id: travelCalls.id }).from(travelCalls).where(and(eq(travelCalls.ownerEmail, email), gte(travelCalls.createdAt, dayStart())));
   if (calls.length >= CALLS_A_DAY) throw new HttpError(429, `You've asked for today's ${CALLS_A_DAY} calls. Ask again tomorrow.`);
-  const flight: CallFlight = { from: q.from, to: q.to, depart: q.depart, return: q.return, flights: res.flights, outbound: res.outbound, inbound: res.inbound, cabin: String(res.outbound.segments[0]?.cabin ?? "Economy") };
+  // The airports this flight really uses (a metro search has several on each side).
+  const flight: CallFlight = { from: res.outbound.departure_airport || airportsOf(q.from)[0], to: res.outbound.arrival_airport || airportsOf(q.to)[0], depart: q.depart, return: q.return, flights: res.flights, outbound: res.outbound, inbound: res.inbound, cabin: String(res.outbound.segments[0]?.cabin ?? "Economy") };
   let [row] = await db.insert(travelCalls).values({
     ownerEmail: email,
     searchId,
