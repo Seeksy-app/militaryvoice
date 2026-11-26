@@ -1467,21 +1467,6 @@ Return JSON only: {"titles":["","",""],"description":""}`,
   /** Episodes scheduled to go live (published, their time still ahead), for the Social Calendar's read-only
    *  "Episode goes live" markers (Andrew, 26 Nov 2026: the podcast episodes' dates and times on the calendar, no clips).
    *  Never a host post: nothing here is posted anywhere, the feed puts each one out at its time. */
-  // Also at /api/host/podcast-episodes/scheduled as a plain array ({ id, show, title, episodeNumber, at ISO, artworkUrl }):
-  // the first shape Social and Podcasting traded (26 Nov), kept so either build of the Calendar finds it.
-  app.get("/api/host/podcast-episodes/scheduled", requireHostSession, async (req, res) => {
-    res.setHeader("Cache-Control", "no-store");
-    const shows = await showsOf(emailOf(req));
-    if (!shows.length) return res.json([]);
-    const from = new Date().toISOString();
-    const to = new Date(Date.now() + 90 * 86_400_000).toISOString();
-    const eps = await db.select({ id: hostedEpisodes.id, showId: hostedEpisodes.showId, title: hostedEpisodes.title, episodeNumber: hostedEpisodes.episodeNumber, publishedAt: hostedEpisodes.publishedAt, artworkUrl: hostedEpisodes.artworkUrl })
-      .from(hostedEpisodes)
-      .where(and(inArray(hostedEpisodes.showId, shows.map((s) => s.id)), eq(hostedEpisodes.status, "published"), sql`${hostedEpisodes.publishedAt} > ${from}`, sql`${hostedEpisodes.publishedAt} <= ${to}`))
-      .orderBy(hostedEpisodes.publishedAt).limit(200);
-    const byId = new Map(shows.map((s) => [s.id, s]));
-    res.json(eps.map((e) => ({ id: e.id, show: byId.get(e.showId)?.title ?? "", title: e.title, episodeNumber: e.episodeNumber ?? null, at: e.publishedAt, artworkUrl: e.artworkUrl || byId.get(e.showId)?.artworkUrl || "" })));
-  });
   app.get("/api/host/episodes/upcoming", requireHostSession, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     const shows = await showsOf(emailOf(req));
