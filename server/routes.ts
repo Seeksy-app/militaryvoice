@@ -7237,7 +7237,7 @@ export function registerRoutes(app: Express): void {
   registerGuests(app, requireAdmin);
   registerGuestInvites(app, requireHostSession);
   registerGuestBrief(app, requireHostSession, requireAdmin);
-  // Military Voices LIVE, phase 1 (Packet A, 26 Nov): /api/live/*, behind live:on (admins and the two test logins until then).
+  // Military Voices LIVE, phase 1 (Packet A, 26 Nov): /api/production/* (its own prefix: /api/live/:handle is the creators' watch API), behind live:on (admins and the two test logins until then).
   registerLive(app);
   registerCaptures(app, requireAdmin, (req) => getAdminEmail(req) ?? "");
   registerStreamIn(app);

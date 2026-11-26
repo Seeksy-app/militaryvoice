@@ -2,7 +2,7 @@
  * Military Voices LIVE, phase 1 API contract (Packet A, Podcasting, 26 Nov 2026). FROZEN: UI/UX builds against
  * these shapes. Add fields only; never rename or remove one without telling UI/UX first.
  *
- * Every route is under /api/live/*, signed in with the ordinary emailed-code session (clients and crew too).
+ * Every route is under /api/production/*, signed in with the ordinary emailed-code session (clients and crew too).
  * Access comes only from production_members, never admin_users; a platform admin (admin session) passes everywhere
  * except approving (the client approves content, and nobody approves their own change).
  * While the setting live:on is off, only platform admins (and the two test logins below) get past the gate (403).
@@ -36,9 +36,9 @@ export type ApprovalState = (typeof APPROVAL_STATES)[number];
 export type LiveOrg = { id: number; name: string; kind: "client" | "vendor" | string; logoUrl: string;
   /** For the client portal at /live/<slug>: made from the name, unique among LIVE orgs (a clash gets -<id>). */
   slug: string };
-/** GET /api/live/orgs?kind=client|vendor → LiveOrg[] (MV roles and admins). Create one with newOrg on a production or member POST. */
+/** GET /api/production/orgs?kind=client|vendor → LiveOrg[] (MV roles and admins). Create one with newOrg on a production or member POST. */
 
-/** GET /api/live/productions → Production[] (the ones I can see, newest first). GET /api/live/productions/:id → Production. */
+/** GET /api/production/productions → Production[] (the ones I can see, newest first). GET /api/production/productions/:id → Production. */
 export type Production = {
   id: number;
   name: string;
@@ -67,7 +67,7 @@ export type ProductionCan = {
   approve: boolean; // decide approvals addressed to my role
 };
 
-/** POST /api/live/productions (platform admins only in phase 1) and PATCH /api/live/productions/:id: any subset. */
+/** POST /api/production/productions (platform admins only in phase 1) and PATCH /api/production/productions/:id: any subset. */
 export type ProductionInput = {
   name?: string; // 2–120 chars, required on create
   status?: ProductionStatus;
@@ -80,7 +80,7 @@ export type ProductionInput = {
   eventId?: number | null;
 };
 
-/** GET /api/live/productions/:id/members → Member[]. MV roles see everyone; crew_lead and client_admin see their own org; others see themselves. */
+/** GET /api/production/productions/:id/members → Member[]. MV roles see everyone; crew_lead and client_admin see their own org; others see themselves. */
 export type Member = {
   id: number;
   productionId: number;
@@ -94,20 +94,20 @@ export type Member = {
   /** Invites are stored only in phase 1: no email goes out. Always false until invites are switched on. */
   inviteSent: boolean;
 };
-/** POST /api/live/productions/:id/members → Member (201). 409 when that email is already on the production. */
+/** POST /api/production/productions/:id/members → Member (201). 409 when that email is already on the production. */
 export type MemberInput = { email: string; name?: string; role: Exclude<LiveRole, "mv_admin">; orgId?: number | null; newOrg?: { name: string; kind: "client" | "vendor" } };
-/** PATCH /api/live/productions/:id/members/:memberId → Member. Nobody changes their own row. */
+/** PATCH /api/production/productions/:id/members/:memberId → Member. Nobody changes their own row. */
 export type MemberPatch = { role?: Exclude<LiveRole, "mv_admin">; status?: "active" | "removed"; name?: string };
 
-/** GET/POST /api/live/venues → Venue[] / Venue. Venues are shared across productions (MV roles and admins). */
+/** GET/POST /api/production/venues → Venue[] / Venue. Venues are shared across productions (MV roles and admins). */
 export type Venue = { id: number; name: string; address: string; timezone: string; power: string; network: string; createdAt: string };
 export type VenueInput = { name: string; address?: string; timezone?: string; power?: string; network?: string };
 
-/** GET/POST /api/live/productions/:id/stages → Stage[] / Stage. Each stage runs in one existing studio. */
+/** GET/POST /api/production/productions/:id/stages → Stage[] / Stage. Each stage runs in one existing studio. */
 export type Stage = { id: number; productionId: number; name: string; venue: Pick<Venue, "id" | "name"> | null; studioId: number | null; ingestProfile: string; createdAt: string };
 export type StageInput = { name: string; venueId?: number | null; studioId?: number | null; ingestProfile?: string };
 
-/** GET /api/live/productions/:id/approvals → Approval[] (MV and client roles; crew see none). */
+/** GET /api/production/productions/:id/approvals → Approval[] (MV and client roles; crew see none). */
 export type Approval = {
   id: number;
   productionId: number;
@@ -128,13 +128,13 @@ export type Approval = {
 /** Client content: only the client decides these (a platform admin can't). Any other subject type (e.g. "go_no_go")
  *  is decided by the role it's addressed to, MV ones included; a platform admin may decide those. Nobody decides their own. */
 export const CLIENT_CONTENT_SUBJECTS = ["run_of_show", "session", "speaker", "script", "asset"] as const;
-/** POST /api/live/approvals/:id/decide → Approval. Only from pending. */
+/** POST /api/production/approvals/:id/decide → Approval. Only from pending. */
 export type ApprovalDecision = { decision: "approved" | "changes_requested"; note?: string };
 
-/** GET /api/live/productions/:id/audit → AuditEntry[] (newest first, 200 max; ?before=<id> for more). MV Admin, Producer, Coordinator. */
+/** GET /api/production/productions/:id/audit → AuditEntry[] (newest first, 200 max; ?before=<id> for more). MV Admin, Producer, Coordinator. */
 export type AuditEntry = { id: number; productionId: number | null; who: string; what: string; subjectType: string; subjectId: number | null; before: unknown; after: unknown; at: string };
 
-/** GET /api/live/me → who I am in LIVE: whether the gate lets me in, and my productions count. */
+/** GET /api/production/me → who I am in LIVE: whether the gate lets me in, and my productions count. */
 export type LiveMe = { email: string; admin: boolean; open: boolean; productions: number };
 
 /** The two test logins (phase 1 "done when"): each must see only its own production. */

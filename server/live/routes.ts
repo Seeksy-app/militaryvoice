@@ -260,10 +260,10 @@ const body = (req: Request) => (req.body && typeof req.body === "object" ? req.b
 export function registerLive(app: Express): void {
   const MANAGE: LiveRole[] = ["mv_producer", "mv_coordinator"];
   const noStore: RequestHandler = (_req, res, next) => { res.setHeader("Cache-Control", "no-store"); next(); };
-  app.use("/api/live", noStore);
+  app.use("/api/production", noStore);
 
   /** Who I am in LIVE (no gate, so the screen can say "not open yet"). */
-  app.get("/api/live/me", (req, res) => send(res, (async () => {
+  app.get("/api/production/me", (req, res) => send(res, (async () => {
     const who = await whoIs(req);
     if (!who) throw new Bad(401, "Please sign in again.");
     const open = who.admin || who.email === LIVE_TEST_CLIENT || who.email === LIVE_TEST_CREW || (await liveOpen());
@@ -271,26 +271,26 @@ export function registerLive(app: Express): void {
   })()));
 
   /** Platform admins: make (or find) the phase 1 test production and its two test logins. Idempotent; no email. */
-  app.post("/api/live/admin/fixtures", requireLive, (req, res) => send(res, (async () => {
+  app.post("/api/production/admin/fixtures", requireLive, (req, res) => send(res, (async () => {
     if (!L(req).live.admin) throw new Bad(403, "MV admins only.");
     return (await import("./fixtures.js")).seedLiveFixtures(L(req).live.email);
   })()));
 
-  app.get("/api/live/productions", requireLive, (req, res) => send(res, visibleProductions(L(req).live)));
-  app.post("/api/live/productions", requireLive, (req, res) => send(res, createProduction(L(req).live, body(req)), 201));
-  app.get("/api/live/productions/:id", ...requireProductionRole(), (req, res) => send(res, getProduction(L(req).productionId!, L(req).liveRole!)));
-  app.patch("/api/live/productions/:id", ...requireProductionRole(...MANAGE), (req, res) => send(res, updateProduction(L(req).live, L(req).productionId!, L(req).liveRole!, body(req))));
+  app.get("/api/production/productions", requireLive, (req, res) => send(res, visibleProductions(L(req).live)));
+  app.post("/api/production/productions", requireLive, (req, res) => send(res, createProduction(L(req).live, body(req)), 201));
+  app.get("/api/production/productions/:id", ...requireProductionRole(), (req, res) => send(res, getProduction(L(req).productionId!, L(req).liveRole!)));
+  app.patch("/api/production/productions/:id", ...requireProductionRole(...MANAGE), (req, res) => send(res, updateProduction(L(req).live, L(req).productionId!, L(req).liveRole!, body(req))));
 
-  app.get("/api/live/productions/:id/members", ...requireProductionRole(), (req, res) => send(res, listMembers(L(req).live, L(req).productionId!, L(req).liveRole!)));
-  app.post("/api/live/productions/:id/members", ...requireProductionRole("mv_coordinator", "client_admin", "crew_lead"), (req, res) => send(res, inviteMember(L(req).live, L(req).productionId!, L(req).liveRole!, body(req)), 201));
-  app.patch("/api/live/productions/:id/members/:memberId", ...requireProductionRole("mv_coordinator", "client_admin", "crew_lead"), (req, res) => send(res, patchMember(L(req).live, L(req).productionId!, L(req).liveRole!, Number(req.params.memberId), body(req))));
+  app.get("/api/production/productions/:id/members", ...requireProductionRole(), (req, res) => send(res, listMembers(L(req).live, L(req).productionId!, L(req).liveRole!)));
+  app.post("/api/production/productions/:id/members", ...requireProductionRole("mv_coordinator", "client_admin", "crew_lead"), (req, res) => send(res, inviteMember(L(req).live, L(req).productionId!, L(req).liveRole!, body(req)), 201));
+  app.patch("/api/production/productions/:id/members/:memberId", ...requireProductionRole("mv_coordinator", "client_admin", "crew_lead"), (req, res) => send(res, patchMember(L(req).live, L(req).productionId!, L(req).liveRole!, Number(req.params.memberId), body(req))));
 
-  app.get("/api/live/productions/:id/stages", ...requireProductionRole(), (req, res) => send(res, (async () => {
+  app.get("/api/production/productions/:id/stages", ...requireProductionRole(), (req, res) => send(res, (async () => {
     const rows = await db.select().from(stages).where(eq(stages.productionId, L(req).productionId!)).orderBy(stages.id);
     const vs = rows.length ? new Map((await db.select().from(venues).where(inArray(venues.id, Array.from(new Set(rows.map((s) => s.venueId).filter(Boolean))).concat(0)))).map((v) => [v.id, v])) : new Map<number, VenueRow>();
     return rows.map((s) => stageView(s, vs.get(s.venueId)));
   })()));
-  app.post("/api/live/productions/:id/stages", ...requireProductionRole(...MANAGE), (req, res) => send(res, (async () => {
+  app.post("/api/production/productions/:id/stages", ...requireProductionRole(...MANAGE), (req, res) => send(res, (async () => {
     const b = body(req), id = L(req).productionId!;
     const name = str(b.name, 80);
     if (name.length < 1) throw new Bad(400, "Give the stage a name.");
@@ -302,7 +302,7 @@ export function registerLive(app: Express): void {
   })(), 201));
 
   /** Client and vendor orgs, for the pickers (MV roles and admins). */
-  app.get("/api/live/orgs", requireLive, (req, res) => send(res, (async () => {
+  app.get("/api/production/orgs", requireLive, (req, res) => send(res, (async () => {
     if (!(await mvAnywhere(L(req).live))) throw new Bad(403, "That list is for the MV team.");
     const kind = req.query.kind === "client" || req.query.kind === "vendor" ? [String(req.query.kind)] : ["client", "vendor"];
     const rows = await db.select().from(organizations).where(inArray(organizations.kind, kind)).orderBy(organizations.name);
@@ -310,11 +310,11 @@ export function registerLive(app: Express): void {
     return rows.map((o) => orgView(o, slugs));
   })()));
 
-  app.get("/api/live/venues", requireLive, (req, res) => send(res, (async () => {
+  app.get("/api/production/venues", requireLive, (req, res) => send(res, (async () => {
     if (!(await mvAnywhere(L(req).live))) throw new Bad(403, "Venues are for the MV team.");
     return (await db.select().from(venues).orderBy(venues.name)).map(venueView);
   })()));
-  app.post("/api/live/venues", requireLive, (req, res) => send(res, (async () => {
+  app.post("/api/production/venues", requireLive, (req, res) => send(res, (async () => {
     const who = L(req).live, b = body(req);
     if (!(await mvAnywhere(who))) throw new Bad(403, "Venues are for the MV team.");
     const name = str(b.name, 120);
@@ -326,13 +326,13 @@ export function registerLive(app: Express): void {
     return venueView(v);
   })(), 201));
 
-  app.get("/api/live/productions/:id/approvals", ...requireProductionRole("mv_producer", "mv_coordinator", "mv_editor", "client_admin", "client_reviewer", "client_viewer"), (req, res) => send(res, (async () => {
+  app.get("/api/production/productions/:id/approvals", ...requireProductionRole("mv_producer", "mv_coordinator", "mv_editor", "client_admin", "client_reviewer", "client_viewer"), (req, res) => send(res, (async () => {
     const rows = await db.select().from(approvals).where(eq(approvals.productionId, L(req).productionId!)).orderBy(desc(approvals.id));
     return rows.map((a) => approvalView(a, L(req).live, L(req).liveRole!));
   })()));
-  app.post("/api/live/approvals/:id/decide", requireLive, (req, res) => send(res, decideApproval(L(req).live, Number(req.params.id), body(req))));
+  app.post("/api/production/approvals/:id/decide", requireLive, (req, res) => send(res, decideApproval(L(req).live, Number(req.params.id), body(req))));
 
-  app.get("/api/live/productions/:id/audit", ...requireProductionRole(...MANAGE), (req, res) => send(res, (async () => {
+  app.get("/api/production/productions/:id/audit", ...requireProductionRole(...MANAGE), (req, res) => send(res, (async () => {
     const before = Number(req.query.before) || 0;
     const rows = await db.select().from(auditLog)
       .where(before ? and(eq(auditLog.productionId, L(req).productionId!), lt(auditLog.id, before)) : eq(auditLog.productionId, L(req).productionId!))
