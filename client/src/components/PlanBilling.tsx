@@ -8,15 +8,18 @@ import { hm, hoursWord, resetDay, useStudioHours } from "@/components/StudioHour
 import { startPlanCheckout, startAddonCheckout, startTokenCheckout, openBillingPortal } from "@/lib/tokens";
 import { IconTile } from "@/components/ui/icon-tile";
 import { CreditsInfo } from "@/components/CreditsInfo";
+import { CreditsLog } from "@/components/CreditsLog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 type Features = {
   beta: { tokens: number; payments: boolean; unlimited?: boolean };
   /** comp: a gift from us (no Stripe behind it, so no billing page to manage). */
-  plan: { key: string; name: string; comp?: boolean; interval: "month" | "year"; credits: number; periodEnd: string; status: string } | null;
+  plan: { key: string; name: string; comp?: boolean; interval: "month" | "year" | "quarter"; credits: number; periodEnd: string; nextCreditsAt?: string | null; status: string } | null;
 };
 type DiscoverMe = { member: object | null; discoveryPro?: boolean; verifiedLocked?: boolean; withProPlan?: boolean; reveals: { used: number; allowance: number } | null; searches?: { used: number; allowance: number | null } | null; lookups?: { used: number; allowance: number } | null };
 
 const day = (iso: string) => (iso ? new Date(iso).toLocaleDateString(undefined, { day: "numeric", month: "long", year: "numeric" }) : "");
+const short = (iso: string) => new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
 
 /**
  * Account > Plan & billing: what they're on, what's left, and one button to
@@ -25,6 +28,7 @@ const day = (iso: string) => (iso ? new Date(iso).toLocaleDateString(undefined, 
 export function PlanBilling() {
   const { toast } = useToast();
   const [busy, setBusy] = useState<string | null>(null);
+  const [log, setLog] = useState(false);
   const features = useQuery<Features>({ queryKey: ["/api/host/features"] });
   const me = useQuery<DiscoverMe>({ queryKey: ["/api/discover/me"] });
   const go = async (key: string, fn: () => Promise<void>) => {
@@ -53,7 +57,7 @@ export function PlanBilling() {
             <p className="mt-1 text-xl font-bold">{onPlan ? plan!.name : "Growth"}{onPlan && plan!.comp && <span className="ml-2 rounded-full bg-emerald-600/10 px-2 py-0.5 align-middle text-xs font-semibold text-emerald-700 dark:text-emerald-400">Gift</span>}</p>
             <p className="mt-1 text-sm text-muted-foreground">
               {onPlan && plan!.comp
-                ? `${plan!.credits} credits a month, on us${plan!.periodEnd ? ` until ${day(plan!.periodEnd)}` : ""}.`
+                ? `${plan!.credits} credits a month, on us${plan!.periodEnd ? ` until ${day(plan!.periodEnd)}` : ""}.${plan!.nextCreditsAt ? ` Next ${plan!.credits} on ${short(plan!.nextCreditsAt)}.` : ""}`
                 : onPlan
                 ? `${plan!.credits} credits a month${plan!.interval === "year" ? ", paid yearly" : ""}${plan!.periodEnd ? ` · renews ${day(plan!.periodEnd)}` : ""}${plan!.status === "past_due" ? " · payment didn't go through" : ""}`
                 : features.data?.beta.unlimited ? "Free, always, and a tester's unlimited credits on top." : "Free, always: your SmartLink, podcast hosting and Ask my show."}
@@ -94,13 +98,23 @@ export function PlanBilling() {
           <IconTile icon={Coins} />
           <div className="min-w-0">
             <p className="flex items-center gap-1 font-semibold">{credits} credit{credits === 1 ? "" : "s"} <CreditsInfo /></p>
-            <p className="text-sm text-muted-foreground">For clips, clean episodes and contact emails past your monthly ones. They don't run out.</p>
+            <p className="text-sm text-muted-foreground">For clips, clean episodes and contact emails past your monthly ones. They don't run out. <button type="button" onClick={() => setLog(true)} className="font-medium text-[#053877] hover:underline dark:text-white" data-testid="billing-credits-log">See where your credits went</button></p>
           </div>
         </div>
         <Button variant="outline" onClick={() => { const pk = CREDIT_PACKS.find((x) => "popular" in x) ?? CREDIT_PACKS[0]; void go("pack", () => startTokenCheckout(pk.key)); }} disabled={busy !== null} className="gap-2 rounded-full" data-testid="billing-buy-credits">
           {spin("pack")} Buy 50 credits · $35
         </Button>
       </section>
+
+      <Dialog open={log} onOpenChange={setLog}>
+        <DialogContent className="sm:max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-lg">Where your credits went</DialogTitle>
+            <DialogDescription>You have {credits} credit{credits === 1 ? "" : "s"} now.</DialogDescription>
+          </DialogHeader>
+          <div className="max-h-[60vh] overflow-y-auto">{log && <CreditsLog />}</div>
+        </DialogContent>
+      </Dialog>
 
       <StudioHoursCard />
 

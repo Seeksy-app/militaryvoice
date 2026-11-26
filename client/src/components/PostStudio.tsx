@@ -23,7 +23,8 @@ import { useToast } from "@/hooks/use-toast";
 import { API_BASE, apiRequest } from "@/lib/queryClient";
 import type { CleanResult, ClipProgress, ClipRow, RecordingRow } from "@shared/schema";
 import { Slider } from "@/components/ui/slider";
-import { Bookmark, Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2, Clapperboard, Plus, ArrowLeftToLine, ArrowRightToLine, MoreHorizontal, Blend, Brackets, Library, ArrowLeft, CalendarClock } from "lucide-react";
+import { Bookmark, Trash2, Pencil, Coins, X, Check, Clock3, Disc, Download, FileText, Film, Loader2, Play, Pause, Music2, Scissors, Sparkles, Wand2, AlertTriangle, Crop, Send, Upload, Headphones, Video, Copy, ChevronDown, Maximize2, Minimize2, Clapperboard, Plus, ArrowLeftToLine, ArrowRightToLine, MoreHorizontal, Blend, Brackets, Library, ArrowLeft, CalendarClock, ChevronLeft, ChevronRight } from "lucide-react";
+import { CreditsLog } from "@/components/CreditsLog";
 import { IconTile } from "@/components/ui/icon-tile";
 import { seesTwoPeople, twoUpLayout, twoUpOf, type TwoUp } from "@/components/LayoutPicker";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -400,16 +401,28 @@ function MusicPick({ value, onChange }: { value: string; onChange: (v: string) =
   );
 }
 
+/** Clips an episode makes on this plan (Pro 6, else 4). */
+const clipsOf = (plan: Plan) => PLANS[plan.key]?.clipsPerEpisode ?? 4;
+/** "Pro gives you 90 every month. Next 90 on Dec 1." — the date only when credits really are coming. */
+function planLine(plan: Plan): { gives: string; next: string } {
+  const per = plan.interval === "year" ? plan.credits * 12 : plan.interval === "quarter" ? plan.credits * 3 : plan.credits;
+  const every = plan.interval === "year" ? "every year" : plan.interval === "quarter" ? "every three months" : "every month";
+  const when = plan.nextCreditsAt ? new Date(plan.nextCreditsAt).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "";
+  return { gives: `${plan.name} gives you ${per.toLocaleString()} ${every}.`, next: when ? `Next ${per.toLocaleString()} on ${when}.` : "" };
+}
+
 /**
- * Plans — or, on a plan, what's left this month, the limit on extra credits,
- * and Stripe's billing page. Opened from the credits chip, "Generate more",
- * and wherever an episode can't start for want of credits.
+ * Plans — or, on a plan, how many credits they have, where they come from, what things cost, where they went,
+ * the limit on extras (paid monthly plans only), packs and Stripe's billing page (26 Nov rebuild, Andrew: "I'm
+ * minimalist"). Opened from the credits chip, "Generate more", and wherever an episode can't start for want of credits.
  */
 function PlanDialog({ open, onOpenChange, beta, plan, note }: { open: boolean; onOpenChange: (v: boolean) => void; beta?: Beta; plan?: Plan | null; note?: string }) {
   const { toast } = useToast();
   const qc = useQueryClient();
   const [busy, setBusy] = useState<string | null>(null);
   const [yearly, setYearly] = useState(false);
+  const [showLog, setShowLog] = useState(false);
+  useEffect(() => { if (!open) setShowLog(false); }, [open]);
   const go = async (what: string, fn: () => Promise<void>) => {
     setBusy(what);
     try {
@@ -427,41 +440,67 @@ function PlanDialog({ open, onOpenChange, beta, plan, note }: { open: boolean; o
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="sm:max-w-2xl">
-        {plan ? (
+        {plan && showLog ? (
           <>
-            <DialogHeader>
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-[#b36b00]">Your plan</p>
-              <DialogTitle className="text-2xl">{plan.name}{plan.interval === "year" ? " · yearly" : ""}</DialogTitle>
-              <DialogDescription>
-                {plan.interval === "year" ? `${plan.credits * 12} credits a year` : `${plan.credits} credits a month`}{plan.periodEnd ? ` · next credits ${new Date(plan.periodEnd).toLocaleDateString(undefined, { month: "short", day: "numeric" })}` : ""}.
-                {plan.status === "past_due" ? " Your last payment didn't go through — update your card under Manage billing." : ""}
-              </DialogDescription>
-            </DialogHeader>
-            <div className={`grid gap-3 ${plan.interval === "year" ? "grid-cols-1" : "grid-cols-2"}`}>
-              <div className="rounded-xl border border-border p-3">
-                <p className="flex items-center gap-1 text-xs text-muted-foreground">Credits left <CreditsInfo /></p>
-                <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">{beta?.tokens ?? 0}</p>
+            <DialogHeader className="flex-row items-center gap-1 space-y-0 text-left">
+              <button type="button" onClick={() => setShowLog(false)} aria-label="Back to your plan" className="-ml-2 flex h-9 w-9 items-center justify-center rounded-full text-muted-foreground hover:bg-muted hover:text-foreground" data-testid="plan-log-back"><ChevronLeft className="h-5 w-5" /></button>
+              <div className="min-w-0">
+                <DialogTitle className="text-lg">Where your credits went</DialogTitle>
+                <DialogDescription>You have {beta?.tokens ?? 0} credits now.</DialogDescription>
               </div>
-              {plan.interval !== "year" && <div className="rounded-xl border border-border p-3">
-                <p className="text-xs text-muted-foreground">Extra credits this month</p>
-                <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">{cents(plan.extraCents)} <span className="text-sm font-medium text-muted-foreground">of {cents(plan.capCents)}</span></p>
-              </div>}
+            </DialogHeader>
+            <div className="max-h-[60vh] overflow-y-auto"><CreditsLog /></div>
+          </>
+        ) : plan ? (
+          <>
+            <DialogHeader className="space-y-1 text-left">
+              <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-[#b36b00]">Your plan</p>
+              <DialogTitle className="flex items-center gap-2 text-xl">
+                {plan.name}{plan.interval === "year" ? " · yearly" : plan.interval === "quarter" ? " · quarterly" : ""}
+                {plan.comp && <span className="rounded-full bg-emerald-600/10 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400">Gift</span>}
+              </DialogTitle>
+            </DialogHeader>
+            {/* One number first (Andrew, 26 Nov: "How many credits do I get with it?"), then where they come from. */}
+            <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-1 rounded-xl bg-[#053877]/[0.05] px-4 py-3 dark:bg-white/[0.06]" data-testid="plan-balance">
+              <p className="text-sm text-muted-foreground">You have <span className="block text-3xl font-bold leading-tight tabular-nums text-[#053877] dark:text-white">{beta?.tokens ?? 0} <span className="text-base font-semibold">credits</span></span></p>
+              <p className="text-sm text-foreground/80" data-testid="plan-next">{planLine(plan).gives}{planLine(plan).next && <> <span className="whitespace-nowrap">{planLine(plan).next}</span></>}</p>
             </div>
-            {plan.interval !== "year" && <div>
-              <p className="text-sm font-medium text-foreground">Your limit on extra credits a month</p>
-              <p className="text-xs text-muted-foreground">When your credits run out, extras are {cents(plan.overageCents)} each and go on your next bill — never past this.</p>
+            {plan.status === "past_due" && <p className="text-sm font-medium text-[#b42318]">Your last payment didn't go through. Update your card under Card, invoices or cancel.</p>}
+            {/* What things cost, on one line (wraps on a phone). */}
+            <p className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground" data-testid="plan-costs">
+              <span><span className="font-semibold text-foreground">{episodeCredits({ captions: "animated" }, clipsOf(plan))}</span> an episode</span>
+              <span aria-hidden>·</span>
+              <span><span className="font-semibold text-foreground">{episodeCredits({ captions: "classic" }, clipsOf(plan))}</span> with Classic captions</span>
+              <span aria-hidden className="hidden sm:inline">·</span>
+              {/* On a phone: two even lines, never a lone word or info mark. */}
+              <span aria-hidden className="basis-full sm:hidden" />
+              <span><span className="font-semibold text-foreground">2</span> a clip more (1 Classic)</span>
+              <span aria-hidden>·</span>
+              <span className="inline-flex items-center gap-1 whitespace-nowrap">back if no talking <CreditsInfo /></span>
+            </p>
+            <button type="button" onClick={() => setShowLog(true)} className="flex min-h-11 w-full items-center justify-between rounded-xl border border-border px-4 text-sm font-semibold text-[#053877] hover:border-[#053877]/40 hover:bg-[#053877]/[0.03] dark:text-white" data-testid="plan-see-log">
+              See where your credits went <ChevronRight className="h-4 w-4" />
+            </button>
+            {/* Extras only where they can be billed: a paid monthly plan (gifts have no card; yearly and trials top up with packs). */}
+            {plan.extras && <div data-testid="plan-extras">
+              <p className="text-sm font-medium text-foreground">If you run out</p>
+              <p className="text-xs text-muted-foreground">We can keep going and add it to your bill, {cents(plan.overageCents)} a credit, up to a limit you pick.{plan.extraCents > 0 ? ` This month so far: ${cents(plan.extraCents)}.` : ""}</p>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {OVERAGE_CAP_CHOICES.map((c) => (
-                  <button key={c} type="button" disabled={cap.isPending} onClick={() => cap.mutate(c)} className={`rounded-full border px-3 py-1 text-xs font-semibold ${plan.capCents === c ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:border-[#053877]/40"}`} data-testid={`plan-cap-${c}`}>
-                    {c === 0 ? "No extras" : cents(c)}
+                  <button key={c} type="button" disabled={cap.isPending} onClick={() => cap.mutate(c)} aria-pressed={plan.capCents === c} className={`min-h-8 rounded-full border px-3 text-xs font-semibold ${plan.capCents === c ? "border-[#053877] bg-[#053877] text-white" : "border-border hover:border-[#053877]/40"}`} data-testid={`plan-cap-${c}`}>
+                    {c === 0 ? "Stop, don't bill" : `Up to ${cents(c)}`}
                   </button>
                 ))}
               </div>
             </div>}
-            <Button variant="outline" onClick={() => void go("portal", openBillingPortal)} disabled={busy !== null} className="w-full gap-2 rounded-full" data-testid="plan-portal">
-              {busy === "portal" && <Loader2 className="h-4 w-4 animate-spin" />} Manage billing: card, invoices, cancel
-            </Button>
-            <CreditPacks busy={busy} go={go} label="Need more this month? Top up once" />
+            <CreditPacks busy={busy} go={go} label={plan.extras ? "Or add a pack now" : "Need more? Add a pack"} />
+            {plan.comp ? (
+              <p className="text-center text-xs text-muted-foreground" data-testid="plan-gift-note">Your {plan.name} plan is a gift, so there's no card and nothing to bill.</p>
+            ) : (
+              <Button variant="outline" onClick={() => void go("portal", openBillingPortal)} disabled={busy !== null} className="w-full gap-2 rounded-full" data-testid="plan-portal">
+                {busy === "portal" && <Loader2 className="h-4 w-4 animate-spin" />} Card, invoices or cancel
+              </Button>
+            )}
           </>
         ) : (
           <>
@@ -1932,7 +1971,8 @@ export function ClipCard({ c, onPreview, menuExtra }: { c: ClipRow; onPreview: (
 }
 
 interface Beta { unlimited: boolean; used: number; limit: number; left: number | null; maxMinutes: number; tokens: number; payments: boolean }
-interface Plan { key: PlanKey; name: string; interval?: "month" | "year"; credits: number; overageCents: number; capCents: number; extraCents: number; periodEnd: string; status: string }
+/** From /api/host/features. comp: a gift (no card). extras: going past the balance can go on the bill (paid monthly only). */
+interface Plan { key: PlanKey; name: string; comp?: boolean; extras?: boolean; nextCreditsAt?: string | null; interval?: "month" | "year" | "quarter"; credits: number; overageCents: number; capCents: number; extraCents: number; periodEnd: string; status: string }
 
 /** Always in Pōstify's header: credits left (and the plan), and the way to more. */
 /**
