@@ -431,7 +431,7 @@ function Calendar({ posts, launches = [], slots, onOpen, onSlot, onMove, onRemov
         <span className="ml-1 text-sm font-semibold">{label}</span>
         <span className="ml-auto hidden text-xs text-muted-foreground sm:inline">Drag a scheduled post to another day. Click an open slot to fill it.</span>
       </div>
-      <div className="grid grid-cols-7 gap-1.5 overflow-x-auto">
+      <div className="grid grid-cols-[repeat(7,minmax(7.5rem,1fr))] gap-1.5 overflow-x-auto pb-1">
         {days.map((d) => {
           const today = sameDay(d, Date.now());
           const past = d + DAY <= Date.now();
