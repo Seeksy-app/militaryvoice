@@ -159,7 +159,9 @@ export function shape(raw: ParallelResult[], q: TravelQuery): TravelResult[] {
       outbound: r.outbound,
       inbound: r.inbound ?? null,
       perk,
-      canCall: !!perk?.phoneOnly,
+      // phoneOnly is also true for veterans on JetBlue (WeSalute+ books by phone or chat), but that's a fixed 5%,
+      // so there's nothing for us to ask: "Have us call" stays active duty only.
+      canCall: q.status === "active" && !!perk?.phoneOnly,
     });
   });
   return out;
