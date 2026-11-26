@@ -20,6 +20,7 @@ import { lnSearchEpisodes, spendListenNotes, isListenNotesConfigured, type LnEpi
 import { sameGuest } from "./lnGuests.js";
 import { rawAccount, PLATFORMS } from "./discovery.js";
 import { workDomain, type Brief } from "../shared/guestBrief.js";
+import { inviteShow } from "./hostShows.js";
 
 const API = "https://api.parallel.ai/v1/tasks/runs";
 const KEY_NAMES = ["PARALLEL_API_KEY", "PARALLEL_AI_API_KEY", "PARALLELAI_API_KEY", "PARALLEL_KEY", "PARALLEL_WEB_API_KEY"];
@@ -92,13 +93,14 @@ async function parallel(path: string, init?: RequestInit): Promise<Response> {
   return fetch(`${API}${path}`, { ...init, headers: { "x-api-key": pKey(), "Content-Type": "application/json", ...(init?.headers ?? {}) } });
 }
 
+/** The show the invite is for, the same way the invite email names it: the picked show (hosts with two or more), else their podcast name. */
 async function showContext(owner: string, showId: number): Promise<{ title: string; about: string }> {
-  try {
-    const r = rows(await db.execute(showId
-      ? sql`select title, description from hosted_shows where id=${showId} and lower(email)=${owner} limit 1`
-      : sql`select title, description from hosted_shows where lower(email)=${owner} and archived_at='' order by id limit 1`))[0];
-    if (r) return { title: str(r.title, 120), about: str(r.description, 600) };
-  } catch { /* no hosted show */ }
+  const show = await inviteShow(owner, showId).catch(() => null);
+  if (show) {
+    let about = "";
+    try { about = str(rows(await db.execute(sql`select description from hosted_shows where id=${show.id} limit 1`))[0]?.description, 600); } catch { /* no description */ }
+    return { title: str(show.title, 120), about };
+  }
   const p = await storage.getProfileByEmail(owner).catch(() => undefined);
   return { title: str(p?.podcastName, 120), about: "" };
 }
@@ -165,7 +167,8 @@ async function socials(handles: { platform: string; handle: string; url: string 
 }
 
 async function questionsFor(name: string, b: Omit<Brief, "questions">, show: { title: string; about: string }): Promise<string[]> {
-  if (!process.env.ANTHROPIC_API_KEY) return [];
+  // Nothing found, nothing to build on: no questions (the card says we couldn't be sure it's them).
+  if (!process.env.ANTHROPIC_API_KEY || b.confidence === "low" || (!b.summary && !b.podcasts.length)) return [];
   try {
     const facts = [b.summary, b.role && `Role: ${b.role}`, b.service && `Service: ${b.service}`, b.podcasts.length && `Recent podcasts: ${b.podcasts.map((p) => `${p.show} (${p.episode})`).join("; ")}`].filter(Boolean).join("\n");
     const out = await new Anthropic().messages.create({
@@ -220,7 +223,8 @@ async function settle(r: Row): Promise<Row> {
     const key = (p: { show: string; episode: string }) => `${p.show}|${p.episode}`.toLowerCase().replace(/[^a-z0-9|]+/g, "");
     const podcasts = [...pods, ...fromLn].filter((p, i, a) => a.findIndex((q) => key(q) === key(p)) === i).slice(0, 3);
     const handles = low ? [] : (Array.isArray(c.handles) ? c.handles : []).map((h: any) => ({ platform: str(h?.platform, 20), handle: str(h?.handle, 60), url: str(h?.url, 300) })).filter((h: { platform: string }) => h.platform && h.platform !== "linkedin");
-    const site = noLinkedIn(String(c.website ?? "")) ? str(c.website, 300) : "";
+    // Their site: the first link given (Parallel sometimes lists two).
+    const site = (String(c.website ?? "").match(/https?:\/\/[^\s;,)]+/g) ?? []).find(noLinkedIn) ?? "";
     const base: Omit<Brief, "questions"> = {
       confidence: conf, summary, role: low ? "" : str(c.role, 120),
       service: low ? "" : str(c.service, 120), serviceWhere: low ? "" : str(c.service_where, 60),

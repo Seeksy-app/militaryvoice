@@ -477,6 +477,7 @@ function ActualCosts({ eventId = 0, eventName, scope = "event", starting = START
             </table>
           </div>
         )}
+        {platform && <BriefUsage />}
         <div className="grid gap-px border-t border-border bg-border sm:grid-cols-3">
           {(platform
             ? [["Ours a month", usd(ours), "our share of every bill"], ["Full bills", usd(total), "what we pay, shared or not"], ["Still to enter", String(missing), missing === 1 ? "bill to read" : "bills to read"]]
@@ -490,6 +491,18 @@ function ActualCosts({ eventId = 0, eventName, scope = "event", starting = START
         </div>
       </div>
     </section>
+  );
+}
+
+/** Read-only, counted by the site (PM, 26 Nov): fresh guest briefs this month at about $0.035 each. Not in the totals above. */
+function BriefUsage() {
+  const { data } = useQuery<{ briefs: number; perBriefUsd: number; estUsd: number }>({ queryKey: ["/api/admin/guest-briefs/usage"], queryFn: () => adminGet("/api/admin/guest-briefs/usage") });
+  if (!data) return null;
+  return (
+    <div className="flex items-center justify-between gap-3 border-t border-border px-5 py-2 text-xs text-muted-foreground" data-testid="finance-brief-usage">
+      <span>Automatic · Guest briefs: {data.briefs} this month × ${data.perBriefUsd.toFixed(3)}</span>
+      <span className="font-semibold tabular-nums text-foreground">{usd(data.estUsd)}</span>
+    </div>
   );
 }
 
