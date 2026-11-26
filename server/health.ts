@@ -16,6 +16,7 @@ import { eq, sql } from "drizzle-orm";
 import { db, storage } from "./storage.js";
 import { discoveryCache } from "../shared/schema.js";
 import { egress, isLiveKitConfigured, rooms } from "./livekit.js";
+import { stageStudios } from "./stageStudio.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
 import { podscanUsedToday } from "./podscan.js";
 
@@ -83,7 +84,10 @@ const DEFS: Def[] = [
       const ev = await storage.getFeaturedEvent();
       const lost: string[] = [];
       let live = 0, recording = 0;
-      for (const st of await storage.listStudios(ev.id)) {
+      // The featured event's studios as before, plus each LIVE stage's studio (Packet B), each counted once.
+      const studios = await storage.listStudios(ev.id);
+      for (const s of await stageStudios().catch(() => [])) if (!studios.some((x) => x.id === s.studio.id)) studios.push(s.studio);
+      for (const st of studios) {
         if (st.broadcastEgressId) { if (running.has(st.broadcastEgressId)) live++; else lost.push(`${st.name || "Studio"}'s broadcast`); }
         if (st.recordingEgressId) { if (running.has(st.recordingEgressId)) recording++; else lost.push(`${st.name || "Studio"}'s recording`); }
       }

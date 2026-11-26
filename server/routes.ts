@@ -140,6 +140,7 @@ import { registerMagazine, planSegments, claimSegmentCut } from "./magazine.js";
 import { registerSurvey } from "./survey.js";
 import { registerSms } from "./sms.js";
 import { logSceneTake, registerSceneLog } from "./sceneLog.js";
+import { studioForStage, stageStudios, eventForStudio } from "./stageStudio.js";
 import { audienceRecipients, registerPeople } from "./people.js";
 import { registerOrganizer } from "./organizer.js";
 import { registerProjects } from "./projects.js";
@@ -173,7 +174,7 @@ import { adminChat, type ChatTurn } from "./adminChat.js";
 import { waitUntil } from "@vercel/functions";
 import { notify, pushPublicKey, type PushMessage } from "./push.js";
 import { sendConfirmationEmail, sendLoginCodeEmail, sendReminderConfirmationEmail, sendSponsorInquiryEmail, sendSponsorThanksEmail, sendPlatformInterestEmail, sendOneOffEmail, sendImportReadyEmail, buildCalendarLinks } from "./email.js";
-import type { DestinationRow, SceneRow, StudioRow, StudioParticipantRow, RunItemRow, BroadcastRow } from "../shared/schema.js";
+import type { DestinationRow, SceneRow, StudioRow, StudioParticipantRow, RunItemRow, BroadcastRow, IngressRow } from "../shared/schema.js";
 import { stageMetaFromStudio } from "../shared/stageMeta.js";
 import { draftYoutubeDescription, chaptersFrom } from "./youtubeDraft.js";
 import { registerZoom, importFetch } from "./zoom.js";
@@ -2988,6 +2989,20 @@ export function registerRoutes(app: Express): void {
   //      soundboard and won't give that up for a web page. We hand them an
   //      RTMP URL and key instead; their feed arrives in the room as an
   //      ordinary participant and the producer promotes them like anyone else.
+  /** Their encoder key: any of theirs with no stage (as before), or the one in that stage's studio. */
+  async function ingressFor(email: string, stageId: unknown): Promise<IngressRow | undefined> {
+    if (!(Number(stageId) > 0)) {
+      const row = await storage.getIngressByEmail(email);
+      // Never hand the featured path a key that feeds a LIVE stage's room.
+      const staged = row ? new Set((await stageStudios().catch(() => [])).map((s) => s.studio.id)) : null;
+      if (!row || !staged?.has(row.studioId)) return row;
+      const featured = (await studioForStage())!;
+      return (await storage.listIngresses(featured.event.id)).find((r) => r.ownerEmail === email && !staged.has(r.studioId));
+    }
+    const where = await studioForStage(Number(stageId));
+    if (!where) return undefined;
+    return (await storage.listIngresses(where.event.id)).find((r) => r.studioId === where.studio.id && r.ownerEmail === email);
+  }
   app.get("/api/host/ingress", requireHostSession, async (req, res) => {
     noStore(res);
     if (!isLiveKitConfigured()) {
@@ -2995,7 +3010,7 @@ export function registerRoutes(app: Express): void {
       return;
     }
     const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
-    const row = await storage.getIngressByEmail(email);
+    const row = await ingressFor(email, req.query.stageId);
     // Their own key, for their own encoder — this one they're meant to see.
     res.json({
       configured: true,
@@ -3009,13 +3024,19 @@ export function registerRoutes(app: Express): void {
       return;
     }
     const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
-    const existing = await storage.getIngressByEmail(email);
+    // No stage: the featured event's studio, as before. A LIVE stage: its own studio (Packet B).
+    const stageId = req.body?.stageId ?? req.query.stageId;
+    const where = await studioForStage(Number(stageId) || null);
+    if (!where) {
+      res.status(404).json({ message: "That stage has no studio yet." });
+      return;
+    }
+    const existing = await ingressFor(email, stageId);
     if (existing) {
       res.json({ id: existing.id, url: existing.url, streamKey: existing.streamKey, displayName: existing.displayName });
       return;
     }
-    const event = await storage.getFeaturedEvent();
-    const studio = await storage.getOrCreateStudio(event.id);
+    const { event, studio } = where;
     const profile = await storage.getProfileByEmail(email);
     const mySignup = (await storage.listSignups(event.id)).find(
       (sg) => sg.email.toLowerCase().trim() === email && sg.status === "confirmed",
@@ -3046,7 +3067,7 @@ export function registerRoutes(app: Express): void {
   /** Regenerating is delete-then-create: a leaked key should stop working. */
   app.delete("/api/host/ingress", requireHostSession, async (req, res) => {
     const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
-    const row = await storage.getIngressByEmail(email);
+    const row = await ingressFor(email, req.body?.stageId ?? req.query.stageId);
     if (!row) {
       res.json({ ok: true });
       return;
@@ -6503,9 +6524,24 @@ export function registerRoutes(app: Express): void {
     if (secret && (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "") !== secret) return res.status(401).json({ message: "Not authorised." });
     // Every minute: Vercel's scheduler is running.
     void beat("cron");
-    const ev = await storage.getFeaturedEvent();
-    const studio = await storage.getOrCreateStudio(ev.id);
-    if (!studio.broadcastEgressId && studio.status !== "Live") return res.json({ added: 0, reason: "not on air" });
+    // The featured studio exactly as before, then each LIVE stage's own studio (Packet B): each one only ever
+    // touches its own event's line-up and destinations.
+    const featured = (await studioForStage())!;
+    const out = await studioChannels(featured.event, featured.studio);
+    const stagesOut: unknown[] = [];
+    // Destinations belong to an event, so one studio per event: a stage in the featured event (or a second stage in
+    // an event already done) would push the same channels twice.
+    const done = new Set([featured.event.id]);
+    for (const s of await stageStudios().catch(() => [])) {
+      if (done.has(s.event.id)) continue;
+      done.add(s.event.id);
+      stagesOut.push({ stageId: s.stageId, studioId: s.studio.id, ...(await studioChannels(s.event, s.studio).catch((err) => ({ error: (err as Error).message }))) });
+    }
+    res.json(stagesOut.length ? { ...out, stages: stagesOut } : out);
+  });
+
+  async function studioChannels(ev: Awaited<ReturnType<typeof storage.getFeaturedEvent>>, studio: StudioRow): Promise<Record<string, unknown>> {
+    if (!studio.broadcastEgressId && studio.status !== "Live") return { added: 0, reason: "not on air" };
     const segments = await segmentChannels(ev, studio).catch((err) => { console.error("Segment channels failed:", err); return { on: [], off: [] as string[] }; });
     const timed = await timedDestinations(studio).catch((err) => { console.error("Timed destinations failed:", err); return { on: [] as string[], off: [] as string[] }; });
     const fresh = (await storage.getStudioById(studio.id)) ?? studio;
@@ -6522,8 +6558,8 @@ export function registerRoutes(app: Express): void {
       await updateBroadcastTargets(studio.broadcastEgressId, due.map((d) => ingestUrl(d)), []);
       for (const d of due) await storage.updateDestination(d.id, { live: true });
     }
-    res.json({ added: due.length, segments, timed });
-  });
+    return { added: due.length, segments, timed };
+  }
 
   /**
    * A podcaster's own channel carries their segment and nothing else: on a
@@ -6572,8 +6608,9 @@ export function registerRoutes(app: Express): void {
     try {
       const st = await storage.getStudioById(studioId);
       if (!st || (!st.broadcastEgressId && st.status !== "Live")) return;
-      const ev = await storage.getFeaturedEvent();
-      if (ev.id !== st.eventId) return;
+      // The featured event's studios as before, or a LIVE stage's studio with its own event (Packet B).
+      const ev = await eventForStudio(st);
+      if (!ev) return;
       await segmentChannels(ev, st);
     } catch (err) {
       console.error("Segment channels after a scene failed:", err);
