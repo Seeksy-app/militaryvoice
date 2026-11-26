@@ -554,7 +554,9 @@ export function registerCreatorTravel(app: Express, requireHostSession: RequestH
       res.json({
         agent: !!travelAgent(),
         phone: !!travelPhone(),
-        numbers: numbers.map((n) => ({ id: n.phone_number_id, label: n.label, provider: n.provider })),
+        // Only ours by name; the shared workspace's other numbers are only counted.
+        number: numbers.filter((n) => n.phone_number_id === travelPhone()).map((n) => ({ id: n.phone_number_id, label: n.label, last4: String(n.phone_number ?? "").replace(/\D/g, "").slice(-4) }))[0] ?? null,
+        otherNumbers: numbers.filter((n) => n.phone_number_id !== travelPhone()).length,
         ready: agentsReady(),
         callsOn: await callsOn(),
       });
