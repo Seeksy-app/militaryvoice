@@ -967,6 +967,8 @@ export type MilitaryLodging = {
   eligible: HotelEligibility[];
   /** Which veterans can stay: "all", "some" (Purple Heart, former POW, service-connected, caregivers, per the note), or "retirees" only. */
   veterans: "all" | "some" | "retirees";
+  /** false = this program doesn't take the 2018 expanded-access group even though some veterans qualify (Edelweiss). */
+  expanded_access?: boolean;
   veterans_note: string;
   how_to_book: string;
   /** E.164, or "". */
@@ -1180,6 +1182,7 @@ export const MILITARY_LODGING: MilitaryLodging[] = [
       "dod_civilians"
     ],
     "veterans": "some",
+    "expanded_access": false,
     "veterans_note": "Only 100% service-connected honorably discharged veterans. The 2018 expanded-access group (Purple Heart, POW, other service-connected veterans, caregivers) is excluded: the authorization 'currently does not include the Edelweiss Lodge and Resort'.",
     "how_to_book": "Online at edelweisslodgeandresort.com or call the German reservations number.",
     "reservations_phone": "",
@@ -1345,6 +1348,8 @@ export function lodgingFor(l: MilitaryLodging, status: TravelerStatus) {
     forYou,
     /** Which veterans can stay: "all", "some" (the expanded-access group) or "retirees" only. */
     veterans: l.veterans,
+    /** Show the "Who qualifies" (expanded-access) box on this program: "some" programs, except Edelweiss. */
+    expandedAccess: l.veterans === "some" && l.expanded_access !== false,
     veteransNote: l.veterans_note,
     howToBook: l.how_to_book,
     reservationsPhone: l.reservations_phone || null,
