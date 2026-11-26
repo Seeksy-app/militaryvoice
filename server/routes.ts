@@ -2,6 +2,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import express from "express";
 import type { Express, Request, Response, NextFunction, RequestHandler } from "express";
 import crypto from "node:crypto";
+import { adminKeyOk, scriptKeyOk, sharedPasswordOk, sharedPasswordRetired, SCRIPT_ADMIN_EMAIL } from "./adminKey.js";
 import multer from "multer";
 import sharp from "sharp";
 import { storage, db } from "./storage.js";
@@ -755,6 +756,13 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
     res.status(403).json({ message: ok ? "The read key only opens admin reads." : "Admins only." });
     return;
   }
+  // Our own scripts (no browser): ADMIN_SCRIPT_KEY in x-admin-script-key is full admin. It replaces the shared
+  // event password, which stops counting the moment the key is set (server/adminKey.ts).
+  if (scriptKeyOk(req)) {
+    (req as any).adminEmail = SCRIPT_ADMIN_EMAIL;
+    next();
+    return;
+  }
   // Preferred: a signed admin session from the email-code sign-in.
   const sessionEmail = leftoverAdmin ? null : adminAddr;
   if (sessionEmail && (await storage.isAdminEmail(sessionEmail))) {
@@ -801,10 +809,8 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
     next();
     return;
   }
-  // Fallback: the legacy shared password (kept so existing links keep working).
-  const password = (req.header("x-admin-password") || (req.query.password as string) || "").trim();
-  const event = await storage.getFeaturedEvent();
-  if (password && password === event.adminPassword) {
+  // Fallback: the legacy shared password, header only, until ADMIN_SCRIPT_KEY is set (then it is retired).
+  if (await sharedPasswordOk(req.header("x-admin-password"))) {
     next();
     return;
   }
@@ -1433,11 +1439,7 @@ export function registerRoutes(app: Express): void {
     let isAdmin = false;
     const sessionEmail = getAdminEmail(req);
     if (sessionEmail && (await storage.isAdminEmail(sessionEmail))) isAdmin = true;
-    if (!isAdmin) {
-      const pw = (req.header("x-admin-password") || "").trim();
-      const featured = await storage.getFeaturedEvent();
-      if (pw && pw === featured.adminPassword) isAdmin = true;
-    }
+    if (!isAdmin && (await adminKeyOk(req))) isAdmin = true;
     if (!isCron && !isAdmin) {
       res.status(401).json({ message: "Not authorised." });
       return;
@@ -10589,9 +10591,11 @@ export function registerRoutes(app: Express): void {
 
   // ---- Admin: auth check ------------------------------------------------------
   app.post("/api/admin/login", async (req, res) => {
-    const password = (req.body?.password || "").trim();
-    const event = await storage.getFeaturedEvent();
-    if (!password || password !== event.adminPassword) {
+    if (sharedPasswordRetired()) {
+      res.status(410).json({ message: "Password sign-in is retired. Sign in with the emailed code." });
+      return;
+    }
+    if (!(await sharedPasswordOk(req.body?.password))) {
       res.status(401).json({ message: "Incorrect password" });
       return;
     }

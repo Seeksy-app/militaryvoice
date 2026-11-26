@@ -11,6 +11,7 @@
 // a creator's analytics for a month, a contact for good. Revealing a contact
 // is the expensive, personal step, so each member gets an allowance a month.
 import crypto from "node:crypto";
+import { adminKeyOk } from "./adminKey.js";
 import { buildProfile } from "./creatorProfile.js";
 import { registerPodcastRoutes } from "./podchaser.js";
 import type { Express, Request, Response } from "express";
@@ -659,8 +660,7 @@ const OUT_OF_CREDITS = { upgrade: true, credits: true };
 async function requireMember(req: Request, opts: { free?: boolean } = {}): Promise<{ email: string; member: NonNullable<Awaited<ReturnType<typeof memberFor>>>; free: boolean }> {
   // Admins always have Discovery: by their admin session, or the admin key.
   const adminEmail = getAdminEmail(req);
-  const adminKey = String(req.get("x-admin-password") ?? "");
-  if (adminEmail || (adminKey && adminKey === (await storage.getFeaturedEvent()).adminPassword)) {
+  if (adminEmail || (await adminKeyOk(req))) {
     const e = (adminEmail || "admin@militaryvoice.ai").toLowerCase();
     return { email: e, member: (await memberFor(e)) ?? { id: 0, email: e, role: "admin", orgName: "MilitaryVoices", source: "admin", createdAt: "" }, free: false };
   }
@@ -914,7 +914,7 @@ export function registerDiscoveryRoutes(app: Express): void {
   /** For the admin: visits and new accounts by source, members by role. */
   app.get("/api/admin/discover/stats", (req, res) =>
     send(res, async () => {
-      if (!getAdminEmail(req) && String(req.get("x-admin-password") ?? "") !== (await storage.getFeaturedEvent()).adminPassword) throw new HttpError(401, "Admins only.");
+      if (!getAdminEmail(req) && !(await adminKeyOk(req))) throw new HttpError(401, "Admins only.");
       const visits = await db.select().from(discoveryVisits);
       const members = await db.select().from(discoveryMembers);
       const bySource: Record<string, { visits: number; joins: number }> = {};
@@ -944,7 +944,7 @@ export function registerDiscoveryRoutes(app: Express): void {
    */
   app.post("/api/admin/discover/enrich-verified", (req, res) =>
     send(res, async () => {
-      if (!getAdminEmail(req) && String(req.get("x-admin-password") ?? "") !== (await storage.getFeaturedEvent()).adminPassword) throw new HttpError(401, "Admins only.");
+      if (!getAdminEmail(req) && !(await adminKeyOk(req))) throw new HttpError(401, "Admins only.");
       const ev = await storage.getFeaturedEvent();
       const only = Number(req.body?.signupId) || 0;
       const signups = (await storage.listSignups(ev.id)).filter((s) => s.status !== "cancelled" && s.email !== "hello@militaryvoice.ai" && s.email !== "andrew@smartloads.io" && (!only || s.id === only));
@@ -1044,7 +1044,7 @@ export function registerDiscoveryRoutes(app: Express): void {
   );
   app.get("/api/admin/discover/intros", (req, res) =>
     send(res, async () => {
-      if (!getAdminEmail(req) && String(req.get("x-admin-password") ?? "") !== (await storage.getFeaturedEvent()).adminPassword) throw new HttpError(401, "Admins only.");
+      if (!getAdminEmail(req) && !(await adminKeyOk(req))) throw new HttpError(401, "Admins only.");
       const rows = await db.select().from(discoveryIntros).orderBy(desc(discoveryIntros.createdAt));
       const ev = await storage.getFeaturedEvent();
       const signups = await storage.listSignups(ev.id);
@@ -1587,8 +1587,7 @@ export function registerDiscoveryRoutes(app: Express): void {
 
   app.post("/api/admin/discover/sample", (req, res) =>
     send(res, async () => {
-      const adminKey = String(req.get("x-admin-password") ?? "");
-      if (!getAdminEmail(req) && !(adminKey && adminKey === (await storage.getFeaturedEvent()).adminPassword)) throw new HttpError(403, "Only an admin can spend credits on this.");
+      if (!getAdminEmail(req) && !(await adminKeyOk(req))) throw new HttpError(403, "Only an admin can spend credits on this.");
       // The same request the search sends for this question with no filters,
       // so it shares that search's cache.
       const body = { platform: SAMPLE_PLATFORM, nlp_search: SAMPLE_QUERY, paging: { limit: PAGE_SIZE, page: 0 }, sort: { sort_by: "relevancy", sort_order: "desc" }, filters: {} };
@@ -1619,8 +1618,7 @@ export function registerDiscoveryRoutes(app: Express): void {
   //      0.8 credits a creator the first time, nothing after. Admin only: it spends.
   app.post("/api/admin/discover/fill", (req, res) =>
     send(res, async () => {
-      const adminKey = String(req.get("x-admin-password") ?? "");
-      if (!getAdminEmail(req) && !(adminKey && adminKey === (await storage.getFeaturedEvent()).adminPassword)) throw new HttpError(403, "Only an admin can spend credits on this.");
+      if (!getAdminEmail(req) && !(await adminKeyOk(req))) throw new HttpError(403, "Only an admin can spend credits on this.");
       const rows = (Array.isArray(req.body?.rows) ? req.body.rows : []).slice(0, 12)
         .map((r: any) => ({ platform: asPlatform(r?.platform), handle: String(r?.handle ?? "").replace(/^@/, "").trim().slice(0, 100) }))
         .filter((r: { handle: string }) => r.handle);
