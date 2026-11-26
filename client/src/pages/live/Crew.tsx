@@ -1,8 +1,10 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { useLive } from "./LiveApp";
-import { can, ROLE_LABEL, sideOf, useLiveWrite, useMembers, type Member, type Role, type Side } from "./api";
+import { assignable as rolesFor, ROLE_LABEL, sideOf, useInvite, useMembers, useOrgs, usePatchMember, type Member, type MemberRole, type Side } from "./api";
 import { Btn, C, Card, Coming, Field, FONT_COND, Input, Pill, Select } from "./ui";
+
+const NEW = "new";
 
 /**
  * Crew & Technical, phase 1: the people on a production and their roles. Invites are stored only: nothing is emailed
@@ -15,12 +17,12 @@ const GROUPS: { side: Side; title: string }[] = [
 ];
 
 export default function Crew() {
-  const { current, role, side } = useLive();
+  const { current, side, email } = useLive();
   const [tab, setTab] = useState<"crew" | "kit" | "signal">("crew");
   const members = useMembers(current?.id ?? null);
   if (!current) return <p style={{ color: C.muted }}>Pick or create a production first.</p>;
   const rows = (members.data ?? []).filter((m) => m.status !== "removed");
-  const assignable = can.assignable(role);
+  const assignable = rolesFor(current);
   // Crew see only their own vendor's people; MV see everyone, grouped.
   const groups = side === "mv" ? GROUPS : GROUPS.filter((g) => g.side === side);
 
@@ -50,14 +52,14 @@ export default function Crew() {
 
       {tab === "crew" && (
         <>
-          {assignable.length > 0 && <Invite productionId={current.id} roles={assignable} vendorOrgs={vendorOrgs(rows)} asMv={side === "mv"} />}
+          {assignable.length > 0 && <Invite key={current.id} productionId={current.id} roles={assignable} asMv={side === "mv"} />}
           <Card testId="live-people">
             {groups.map((g, i) => {
               const list = rows.filter((m) => sideOf(m.role) === g.side);
               return (
                 <div key={g.side} className={i ? "mt-3" : ""} data-testid={`live-group-${g.side}`}>
                   <p className="mb-0.5 text-[13px] font-semibold uppercase" style={{ fontFamily: FONT_COND, letterSpacing: ".08em", color: C.muted }}>{g.title} · {list.length}</p>
-                  {list.length ? list.map((m) => <MemberRow key={m.id} m={m} roles={assignable} productionId={current.id} />) : <p className="py-1 text-[13.5px]" style={{ color: C.muted }}>No one yet.</p>}
+                  {list.length ? list.map((m) => <MemberRow key={m.id} m={m} roles={assignable} productionId={current.id} self={m.email === email} />) : <p className="py-1 text-[13.5px]" style={{ color: C.muted }}>No one yet.</p>}
                 </div>
               );
             })}
@@ -69,21 +71,24 @@ export default function Crew() {
   );
 }
 
-const vendorOrgs = (rows: Member[]) => Array.from(new Set(rows.filter((m) => sideOf(m.role) === "crew" && m.org_name).map((m) => m.org_name)));
-
-function Invite({ productionId, roles, vendorOrgs, asMv }: { productionId: number; roles: Role[]; vendorOrgs: string[]; asMv: boolean }) {
-  const [f, setF] = useState({ email: "", name: "", role: roles[0], org_name: "" });
+function Invite({ productionId, roles, asMv }: { productionId: number; roles: MemberRole[]; asMv: boolean }) {
+  const [f, setF] = useState({ email: "", name: "", role: roles[0] });
+  const [org, setOrg] = useState(""); // an org id, NEW, or ""
+  const [orgName, setOrgName] = useState("");
   const [done, setDone] = useState("");
-  const save = useLiveWrite<typeof f, Member>("POST", () => `/productions/${productionId}/members`);
+  const save = useInvite(productionId);
   const s = sideOf(f.role);
-  // The vendor (crew) or client organisation they belong to; MV staff have none.
+  const kind = s === "crew" ? "vendor" : "client";
+  // MV pick the vendor (crew) or client org; Crew Leads and Client Admins always add to their own, so they pick nothing.
   const needsOrg = asMv && s !== "mv";
-  const ok = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim()) && (!needsOrg || f.org_name.trim());
+  const orgs = useOrgs(kind, needsOrg);
+  const ok = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim()) && (!needsOrg || (org && (org !== NEW || orgName.trim())));
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!ok) return;
-    save.mutate(needsOrg ? f : { ...f, org_name: "" }, {
-      onSuccess: (m) => { setDone(`Invite saved for ${m.email}. We'll send it when invites are switched on.`); setF({ ...f, email: "", name: "" }); },
+    const who = !needsOrg ? {} : org === NEW ? { newOrg: { name: orgName.trim(), kind } as const } : { orgId: Number(org) };
+    save.mutate({ email: f.email.trim(), name: f.name.trim() || undefined, role: f.role, ...who }, {
+      onSuccess: (m) => { setDone(`Invite saved for ${m.email}. We'll send it when invites are switched on.`); setF({ ...f, email: "", name: "" }); if (org === NEW) { setOrg(""); setOrgName(""); } },
     });
   };
   return (
@@ -92,15 +97,24 @@ function Invite({ productionId, roles, vendorOrgs, asMv }: { productionId: numbe
         <Field label="Email"><Input type="email" value={f.email} onChange={(e) => { setF({ ...f, email: e.target.value }); setDone(""); }} placeholder="name@company.com" data-testid="live-invite-email" /></Field>
         <Field label="Name"><Input value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} placeholder="Optional" maxLength={80} /></Field>
         <Field label="Role">
-          <Select value={f.role} onChange={(e) => setF({ ...f, role: e.target.value as Role })} data-testid="live-invite-role">
+          <Select value={f.role} onChange={(e) => { setF({ ...f, role: e.target.value as MemberRole }); setOrg(""); }} data-testid="live-invite-role">
             {roles.map((r) => <option key={r} value={r}>{ROLE_LABEL[r]}</option>)}
           </Select>
         </Field>
         {needsOrg ? (
-          <Field label={s === "crew" ? "Vendor" : "Client organisation"}>
-            <Input value={f.org_name} onChange={(e) => setF({ ...f, org_name: e.target.value })} list={s === "crew" ? "live-vendors" : undefined} placeholder={s === "crew" ? "AV company" : "Client's organisation"} maxLength={120} data-testid="live-invite-org" />
-            <datalist id="live-vendors">{vendorOrgs.map((o) => <option key={o} value={o} />)}</datalist>
-          </Field>
+          org === NEW ? (
+            <Field label={s === "crew" ? "New vendor" : "New client"}>
+              <Input value={orgName} onChange={(e) => setOrgName(e.target.value)} placeholder={s === "crew" ? "AV company" : "Client's organisation"} maxLength={120} autoFocus data-testid="live-invite-neworg" />
+            </Field>
+          ) : (
+            <Field label={s === "crew" ? "Vendor" : "Client organisation"}>
+              <Select value={org} onChange={(e) => setOrg(e.target.value)} data-testid="live-invite-org">
+                <option value="">Pick one</option>
+                {(orgs.data ?? []).map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}
+                <option value={NEW}>{s === "crew" ? "New vendor…" : "New client…"}</option>
+              </Select>
+            </Field>
+          )
         ) : <span className="hidden lg:block" />}
         <Btn primary type="submit" disabled={!ok || save.isPending} data-testid="live-invite-save">{save.isPending ? "Saving…" : "Save invite"}</Btn>
       </form>
@@ -111,20 +125,21 @@ function Invite({ productionId, roles, vendorOrgs, asMv }: { productionId: numbe
   );
 }
 
-function MemberRow({ m, roles, productionId }: { m: Member; roles: Role[]; productionId: number }) {
-  const patch = useLiveWrite<{ role?: Role; status?: "removed" }, Member>("PATCH", () => `/productions/${productionId}/members/${m.id}`);
-  const canChange = roles.includes(m.role);
+function MemberRow({ m, roles, productionId, self }: { m: Member; roles: MemberRole[]; productionId: number; self: boolean }) {
+  const patch = usePatchMember(productionId, m.id);
+  // Nobody changes their own row.
+  const canChange = !self && roles.includes(m.role);
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 border-b py-1.5 text-[13.5px] last:border-b-0" style={{ borderColor: C.line }} data-testid={`live-member-${m.id}`}>
       <div className="min-w-0 basis-full sm:basis-0 sm:flex-1">
         <p className="truncate font-semibold">{m.name || m.email}</p>
-        <p className="truncate text-[12.5px]" style={{ color: C.muted }}>{m.name ? m.email : ""}{m.name && sideOf(m.role) !== "mv" && m.org_name ? " · " : ""}{sideOf(m.role) !== "mv" ? m.org_name : ""}</p>
+        <p className="truncate text-[12.5px]" style={{ color: C.muted }}>{m.name ? m.email : ""}{m.name && m.org ? " · " : ""}{m.org?.name ?? ""}{self ? " · You" : ""}</p>
       </div>
       {m.status === "invited" ? <Pill tone="warn">Invite saved</Pill> : <Pill tone="ok">Active</Pill>}
       {canChange ? (
         <select
           value={m.role}
-          onChange={(e) => patch.mutate({ role: e.target.value as Role })}
+          onChange={(e) => patch.mutate({ role: e.target.value as MemberRole })}
           className="h-8 w-[150px] rounded-md border bg-transparent px-2 text-[13px] outline-none"
           style={{ borderColor: C.line, color: C.ink, colorScheme: "dark" }}
           aria-label={`Role for ${m.email}`}

@@ -2,9 +2,8 @@ import { createContext, useContext, useEffect, useMemo, useState, type ReactNode
 import { Link, Redirect, Route, Switch, useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarChart3, CalendarDays, CheckSquare, Film, LayoutDashboard, ListOrdered, LogOut, Radio, Sparkles, Users } from "lucide-react";
-import { useAdminAuth } from "@/lib/admin-auth";
 import { LoginCard } from "@/pages/HostDashboard";
-import { effectiveRole, mockAs, mockEmail, sideOf, STATUS_LABEL, useProduction, useProductions, type Production, type Role, type Side } from "./api";
+import { sideOf, STATUS_LABEL, useMe, useProductions, useStages, type Production, type Role, type Side } from "./api";
 import { C, FONT_BODY, FONT_COND, FONT_MONO, Pill, useEtClock, useLiveFonts } from "./ui";
 import Overview from "./Overview";
 import Events, { EventEdit } from "./Events";
@@ -32,21 +31,21 @@ const OWN = ["events", "crew", "run-of-show", "ai", "control", "media", "approva
 export default function LiveApp() {
   useLiveFonts();
   const qc = useQueryClient();
-  const mock = mockAs();
-  const { admin, isLoading: adminLoading } = useAdminAuth();
+  const me = useMe();
+  const signedOut = me.error?.status === 401;
+  // The sign-in card refreshes every /api/host query when a code is accepted; watching the session tells us to ask again.
   const session = useQuery<{ email: string } | null>({
     queryKey: ["/api/host/session", "live"],
     queryFn: async () => { const r = await fetch("/api/host/session", { credentials: "include", cache: "no-store" }); return r.ok ? r.json() : null; },
-    enabled: !mock,
+    enabled: signedOut,
     retry: false,
   });
-  const email = mock ? mockEmail(mock) : admin?.email ?? session.data?.email ?? "";
-  // A sign-in on this page: ask again as the new person.
-  useEffect(() => { void qc.invalidateQueries({ predicate: (q) => String(q.queryKey[0]).startsWith("/api/live") }); }, [email, qc]);
+  useEffect(() => { if (session.data?.email) void qc.invalidateQueries({ queryKey: ["/api/production"] }); }, [session.data?.email, qc]);
 
-  const isAdmin = mock ? mock === "admin" : !!admin && !admin.eventAdmin;
-  const signedIn = !!mock || !!admin || !!session.data;
-  const prods = useProductions();
+  const open = !!me.data?.open;
+  const prods = useProductions(open);
+  const email = me.data?.email ?? "";
+  const isAdmin = !!me.data?.admin;
 
   const [pick, setPick] = useState<number | null>(() => {
     const q = Number(new URLSearchParams(window.location.search).get("p"));
@@ -56,13 +55,15 @@ export default function LiveApp() {
   const list = prods.data ?? [];
   const current = list.find((p) => p.id === pick) ?? list[0] ?? null;
   const setCurrent = (id: number) => { setPick(id); try { localStorage.setItem("live:prod", String(id)); } catch { /* private window */ } };
-  const role = effectiveRole(current, isAdmin);
+  const role = current?.myRole ?? (isAdmin ? "mv_admin" : null);
   const ctx = useMemo<Ctx>(() => ({ productions: list, current, setCurrent, role, side: sideOf(role), isAdmin, email }), [list, current, role, isAdmin, email]);
 
-  if (!mock && (adminLoading || session.isLoading)) return <Splash />;
-  if (!signedIn || prods.error?.status === 401) return <SignIn />;
+  if (me.isLoading) return <Splash />;
+  if (signedOut || prods.error?.status === 401) return <SignIn />;
+  if (me.error) return <NotOpen text={me.error.status === 403 || me.error.status === 404 ? "Military Voices LIVE isn't open for this account." : me.error.message} email="" />;
+  if (!open || prods.error?.status === 403) return <NotOpen text="Military Voices LIVE isn't open for this account." email={email} />;
   if (prods.isLoading) return <Splash />;
-  if (prods.error) return <NotOpen text={prods.error.status === 403 || prods.error.status === 404 ? "Military Voices LIVE isn't open for this account." : prods.error.message} email={email} />;
+  if (prods.error) return <NotOpen text={prods.error.message} email={email} />;
   if (!list.length && !isAdmin) return <NotOpen text="You're not on a production yet. When the production team adds you, it shows here." email={email} />;
 
   return (
@@ -71,7 +72,7 @@ export default function LiveApp() {
       <Switch>
         {ctx.side === "client" ? [
           <Route key="portal" path="/:slug/:tab?">{(p) => <ClientPortal slug={p.slug} tab={p.tab} />}</Route>,
-          <Route key="home"><Redirect to={`/${current?.client?.slug || "portal"}`} replace /></Route>,
+          <Route key="home"><Redirect to={`/${current?.org?.slug || "portal"}`} replace /></Route>,
         ] : [
           <Route key="home" path="/"><Shell><Overview /></Shell></Route>,
           <Route key="events" path="/events"><Shell><Events /></Shell></Route>,
@@ -109,8 +110,8 @@ function Shell({ children }: { children: ReactNode }) {
   const { productions, current, setCurrent, side, email, isAdmin } = useLive();
   const [loc] = useLocation();
   const clock = useEtClock();
-  const detail = useProduction(current?.id ?? null);
-  const first = detail.data?.stages?.[0]?.name;
+  const stages = useStages(current?.id ?? null);
+  const first = stages.data?.[0]?.name;
   // A production often carries its stage in its name already ("Convention · Exhibit Hall Stage").
   const stage = first && !current?.name.includes(first) ? first : "";
   const nav = NAV.filter((n) => n.sides.includes(side));
@@ -213,7 +214,7 @@ function Splash() {
 
 function SignIn() {
   return (
-    <div className="min-h-screen bg-[#f3f5f9] pb-10 text-[#0d1b2e]" style={{ fontFamily: FONT_BODY }}>
+    <div className="min-h-screen pb-10 text-white" style={{ fontFamily: FONT_BODY, background: C.bg }}>
       <div className="mx-auto flex max-w-md items-center gap-2 px-4 pt-10">
         <span className="text-[17px] font-bold tracking-[.06em]" style={{ fontFamily: FONT_COND }}>MILITARY VOICES</span>
         <span className="rounded px-1.5 py-px text-[13px] font-bold italic tracking-[.08em]" style={{ fontFamily: FONT_COND, background: C.gold, color: "#0b2447" }}>LIVE</span>

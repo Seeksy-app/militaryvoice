@@ -1,7 +1,7 @@
 import { Link } from "wouter";
 import { AlertTriangle, Info } from "lucide-react";
 import { useLive } from "./LiveApp";
-import { can, sideOf, STATUS_LABEL, useApprovals, useAudit, useMembers, useProduction, type Member } from "./api";
+import { assignable, sideOf, STATUS_LABEL, useApprovals, useAudit, useMembers, useStages, type Member } from "./api";
 import { LinkBtn, C, Card, Coming, FONT_COND, fmtRange, fmtWhen, Row } from "./ui";
 
 /**
@@ -9,11 +9,11 @@ import { LinkBtn, C, Card, Coming, FONT_COND, fmtRange, fmtWhen, Row } from "./u
  * approvals and recent changes from real rows; on now, coming up and tech readiness say which phase brings them.
  */
 export default function Overview() {
-  const { current, side, role, isAdmin } = useLive();
-  const detail = useProduction(current?.id ?? null);
+  const { current, side, isAdmin } = useLive();
+  const stageQ = useStages(current?.id ?? null);
   const members = useMembers(current?.id ?? null);
   const approvals = useApprovals(side === "mv" ? current?.id ?? null : null);
-  const audit = useAudit(current?.id ?? null, side === "mv");
+  const audit = useAudit(current?.can.audit ? current.id : null);
 
   if (!current) {
     return (
@@ -27,12 +27,11 @@ export default function Overview() {
   const people = (members.data ?? []).filter((m) => m.status !== "removed");
   const bySide = (s: "mv" | "crew" | "client") => people.filter((m) => sideOf(m.role) === s);
   const unsent = people.filter((m) => m.status === "invited").length;
-  const stages = detail.data?.stages ?? [];
-  const venueOf = (id: number | null) => detail.data?.venues.find((v) => v.id === id);
+  const stages = stageQ.data ?? [];
   const pending = (approvals.data ?? []).filter((a) => a.state === "pending");
 
   const alerts: { tone: "warn" | "info"; text: string; href?: string; go?: string }[] = [];
-  if (side === "mv" && detail.data && !stages.length) alerts.push({ tone: "warn", text: "No stage yet. A production needs at least one stage before crew can be booked.", href: `/events/${current.id}`, go: "Add a stage" });
+  if (current.can.stages && stageQ.data && !stages.length) alerts.push({ tone: "warn", text: "No stage yet. A production needs at least one stage before crew can be booked.", href: `/events/${current.id}`, go: "Add a stage" });
   if (unsent) alerts.push({ tone: "info", text: `${unsent} invite${unsent === 1 ? "" : "s"} saved, not sent. Invites go out when they're switched on.`, href: "/crew", go: "See people" });
 
   return (
@@ -46,15 +45,15 @@ export default function Overview() {
       ))}
 
       <div className="grid grid-cols-1 gap-3 lg:grid-cols-3">
-        <Card title="Event status" action={can.editProduction(role) ? <LinkBtn small href={`/events/${current.id}`}>Edit</LinkBtn> : undefined} testId="live-card-status">
+        <Card title="Event status" action={current.can.edit ? <LinkBtn small href={`/events/${current.id}`}>Edit</LinkBtn> : undefined} testId="live-card-status">
           <p className="mb-1 line-clamp-2 text-balance text-[20px] font-semibold leading-tight" style={{ fontFamily: FONT_COND }}>{current.name}</p>
           <Row label="Stage of work">{STATUS_LABEL[current.status]}</Row>
-          <Row label="Dates">{fmtRange(current.starts_on, current.ends_on)}</Row>
-          {side !== "crew" && <Row label="Client">{current.client?.name ?? "Not set"}</Row>}
-          <Row label="Stages">{stages.length ? stages.map((s) => s.name + (venueOf(s.venue_id) ? `, ${venueOf(s.venue_id)!.name}` : "")).join(" · ") : "None yet"}</Row>
+          <Row label="Dates">{fmtRange(current.startsOn, current.endsOn)}</Row>
+          {side !== "crew" && <Row label="Client">{current.org?.name ?? "Not set"}</Row>}
+          <Row label="Stages">{stages.length ? stages.map((s) => s.name + (s.venue ? `, ${s.venue.name}` : "")).join(" · ") : "None yet"}</Row>
         </Card>
 
-        <Card title={side === "crew" ? "Your crew" : "People"} action={<LinkBtn small href="/crew">{can.assignable(role).length ? "Manage" : "Open"}</LinkBtn>} testId="live-card-people">
+        <Card title={side === "crew" ? "Your crew" : "People"} action={<LinkBtn small href="/crew">{assignable(current).length ? "Manage" : "Open"}</LinkBtn>} testId="live-card-people">
           {side === "crew" ? (
             <PeopleRows rows={bySide("crew")} />
           ) : (
@@ -68,7 +67,7 @@ export default function Overview() {
 
         {side === "mv" ? (
           <Card title="Waiting on approval" action={<LinkBtn small href="/approvals">Open</LinkBtn>} testId="live-card-approvals">
-            {pending.length ? pending.slice(0, 4).map((a) => <Row key={a.id} label={a.title}>v{a.version}</Row>) : <p className="text-[13.5px]" style={{ color: C.muted }}>Nothing is waiting. Run of show, scripts and clips arrive here from phase 2.</p>}
+            {pending.length ? pending.slice(0, 4).map((a) => <Row key={a.id} label={a.summary}>v{a.version}</Row>) : <p className="text-[13.5px]" style={{ color: C.muted }}>Nothing is waiting. Run of show, scripts and clips arrive here from phase 2.</p>}
           </Card>
         ) : (
           <Card title="On-site crew control">
@@ -81,7 +80,7 @@ export default function Overview() {
         <Card title="Tech readiness"><Coming what="Feeds, destinations and recording" phase={3} /></Card>
       </div>
 
-      {side === "mv" && (
+      {current.can.audit && (
         <Card title="Recent changes" testId="live-card-audit">
           {(audit.data ?? []).slice(0, 4).map((r) => <Row key={r.id} label={`${r.what} · ${r.who}`}>{fmtWhen(r.at)}</Row>)}
           {!audit.data?.length && <p className="text-[13.5px]" style={{ color: C.muted }}>{audit.isLoading ? "Loading…" : "No changes yet."}</p>}

@@ -2,7 +2,7 @@ import { useState, type ReactNode } from "react";
 import { Link } from "wouter";
 import { ChevronLeft, LogOut } from "lucide-react";
 import { useLive } from "./LiveApp";
-import { can, CLIENT_ROLES, effectiveRole, ROLE_LABEL, sideOf, STATUS_LABEL, useApprovals, useLiveWrite, useMembers, useProduction, type Member, type Role } from "./api";
+import { assignable, CLIENT_ROLES, ROLE_LABEL, sideOf, STATUS_LABEL, useApprovals, useInvite, useMembers, useStages, type MemberRole, type Production } from "./api";
 import { ApprovalRow } from "./Approvals";
 import { FONT_BODY, FONT_COND, fmtRange } from "./ui";
 
@@ -23,11 +23,10 @@ const TABS: { key: string; label: string; soon?: string }[] = [
 const INK = "#0d1b2e", MUTED = "#4f5d72", LINE = "#dde3ec";
 
 export default function ClientPortal({ slug, tab = "", preview = false }: { slug: string; tab?: string; preview?: boolean }) {
-  const { productions, current, isAdmin, email } = useLive();
-  const mine = productions.filter((p) => p.client?.slug === slug);
+  const { productions, current, email } = useLive();
+  const mine = productions.filter((p) => p.org?.slug === slug);
   const p = mine.find((x) => x.id === current?.id) ?? mine[0] ?? (slug === "portal" ? current : null);
-  const role = effectiveRole(p, isAdmin);
-  const detail = useProduction(p?.id ?? null);
+  const stageQ = useStages(p?.id ?? null);
   const t = TABS.find((x) => x.key === (tab ?? "")) ?? TABS[0];
 
   if (!p) {
@@ -41,9 +40,8 @@ export default function ClientPortal({ slug, tab = "", preview = false }: { slug
       </Frame>
     );
   }
-  const client = p.client;
-  const stages = detail.data?.stages ?? [];
-  const venue = (id: number | null) => detail.data?.venues.find((v) => v.id === id);
+  const client = p.org;
+  const stages = stageQ.data ?? [];
 
   return (
     <Frame>
@@ -55,9 +53,9 @@ export default function ClientPortal({ slug, tab = "", preview = false }: { slug
       )}
       <header className="border-b bg-white" style={{ borderColor: LINE }}>
         <div className="mx-auto flex max-w-[1120px] items-center gap-3 px-4 py-3">
-          {client?.logo_url
-            ? <img src={client.logo_url} alt="" className="h-10 w-10 rounded-md object-contain" />
-            : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-[15px] font-bold text-white" style={{ background: client?.brand_color || "#0b2447" }} aria-hidden>{initials(client?.name ?? p.name)}</span>}
+          {client?.logoUrl
+            ? <img src={client.logoUrl} alt="" className="h-10 w-10 rounded-md object-contain" />
+            : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-[15px] font-bold text-white" style={{ background: "#0b2447" }} aria-hidden>{initials(client?.name ?? p.name)}</span>}
           <div className="min-w-0">
             <p className="line-clamp-2 text-balance text-[19px] font-semibold leading-tight" style={{ fontFamily: FONT_COND }}>{p.name}</p>
             <p className="text-[12.5px]" style={{ color: MUTED }}>{client?.name ? `${client.name} · ` : ""}Produced by MilitaryVoices.ai</p>
@@ -92,11 +90,11 @@ export default function ClientPortal({ slug, tab = "", preview = false }: { slug
           <div className="grid grid-cols-1 gap-3 md:grid-cols-3" data-testid="portal-overview">
             <Box title="Readiness">
               <p className="mb-1 text-[18px] font-semibold" style={{ fontFamily: FONT_COND }}>{STATUS_LABEL[p.status]}</p>
-              <Line k="Dates" v={fmtRange(p.starts_on, p.ends_on)} />
-              <Line k={stages.length > 1 ? "Stages" : "Stage"} v={stages.length ? stages.map((s) => s.name + (venue(s.venue_id) ? `, ${venue(s.venue_id)!.name}` : "")).join(" · ") : "Being set up"} />
+              <Line k="Dates" v={fmtRange(p.startsOn, p.endsOn)} />
+              <Line k={stages.length > 1 ? "Stages" : "Stage"} v={stages.length ? stages.map((s) => s.name + (s.venue ? `, ${s.venue.name}` : "")).join(" · ") : "Being set up"} />
             </Box>
-            <NeedsYou productionId={p.id} role={role} me={email} slug={slug} />
-            <Team productionId={p.id} role={role} />
+            <NeedsYou productionId={p.id} slug={slug} />
+            <Team p={p} />
             <Box title="Watch links"><Soon>Links to watch on your channels and our watch page, ready to copy.</Soon></Box>
             <Box title="Schedule"><Soon>Your run of show by day, once the sessions are in.</Soon></Box>
             <Box title="After the event"><Soon>Recordings, clips and reports, delivered here.</Soon></Box>
@@ -105,7 +103,7 @@ export default function ClientPortal({ slug, tab = "", preview = false }: { slug
             </Box>
           </div>
         )}
-        {t.key === "approvals" && <ApprovalsTab productionId={p.id} role={role} me={email} />}
+        {t.key === "approvals" && <ApprovalsTab productionId={p.id} />}
         {t.soon && <Box title={t.label}><Soon>{t.soon}</Soon></Box>}
       </main>
     </Frame>
@@ -132,12 +130,12 @@ const Line = ({ k, v }: { k: string; v: ReactNode }) => (
 );
 const initials = (s: string) => s.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("");
 
-function NeedsYou({ productionId, role, me, slug }: { productionId: number; role: Role | null; me: string; slug: string }) {
+function NeedsYou({ productionId, slug }: { productionId: number; slug: string }) {
   const q = useApprovals(productionId);
-  const waiting = (q.data ?? []).filter((a) => a.state === "pending" && a.requested_by !== me);
+  const waiting = (q.data ?? []).filter((a) => a.mine);
   return (
     <Box title="Needs you">
-      {can.decide(role) && waiting.length ? (
+      {waiting.length ? (
         <>
           <p className="text-[14px]">{waiting.length} waiting for your review.</p>
           <Link href={`/${slug}/approvals`} className="mt-2 inline-flex h-8 items-center rounded-md bg-[#0b2447] px-3 text-[13px] font-semibold text-white hover:bg-[#132e57]">Review</Link>
@@ -147,25 +145,25 @@ function NeedsYou({ productionId, role, me, slug }: { productionId: number; role
   );
 }
 
-function ApprovalsTab({ productionId, role, me }: { productionId: number; role: Role | null; me: string }) {
+function ApprovalsTab({ productionId }: { productionId: number }) {
   const q = useApprovals(productionId);
   const rows = q.data ?? [];
   return (
     <Box title="Approvals">
-      {rows.length ? rows.map((a) => <ApprovalRow key={a.id} a={a} decide={can.decide(role)} light me={me} />) : <p className="text-[13.5px]" style={{ color: MUTED }}>{q.isLoading ? "Loading…" : "Nothing to approve yet. The run of show, speaker bios and clips come here for your OK."}</p>}
+      {rows.length ? rows.map((a) => <ApprovalRow key={a.id} a={a} light />) : <p className="text-[13.5px]" style={{ color: MUTED }}>{q.isLoading ? "Loading…" : "Nothing to approve yet. The run of show, speaker bios and clips come here for your OK."}</p>}
     </Box>
   );
 }
 
-/** The client's own people. A Client Admin can add reviewers and viewers from their organisation. */
-function Team({ productionId, role }: { productionId: number; role: Role | null }) {
-  const q = useMembers(productionId);
+/** The client's own people. A Client Admin can add reviewers and viewers; the server puts them in the admin's own org. */
+function Team({ p }: { p: Production }) {
+  const q = useMembers(p.id);
   const rows = (q.data ?? []).filter((m) => sideOf(m.role) === "client" && m.status !== "removed");
-  const roles = can.assignable(role).filter((r) => CLIENT_ROLES.includes(r));
+  const roles = assignable(p).filter((r) => CLIENT_ROLES.includes(r));
   const [open, setOpen] = useState(false);
-  const [f, setF] = useState<{ email: string; role: Role }>({ email: "", role: "client_reviewer" });
+  const [f, setF] = useState<{ email: string; role: MemberRole }>({ email: "", role: "client_reviewer" });
   const [done, setDone] = useState("");
-  const add = useLiveWrite<typeof f, Member>("POST", () => `/productions/${productionId}/members`);
+  const add = useInvite(p.id);
   const ok = /^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(f.email.trim());
   return (
     <Box title="Your team">
@@ -173,10 +171,10 @@ function Team({ productionId, role }: { productionId: number; role: Role | null 
       {rows.length > 4 && <p className="pt-1 text-[12.5px]" style={{ color: MUTED }}>and {rows.length - 4} more</p>}
       {roles.length > 0 && !open && <button type="button" className="mt-2 text-[13px] font-semibold text-[#1f4f8f] hover:underline" onClick={() => setOpen(true)} data-testid="portal-add-person">Add a person</button>}
       {open && (
-        <form className="mt-2 flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); if (ok) add.mutate(f, { onSuccess: (m) => { setDone(`Invite saved for ${m.email}. We'll send it when invites are switched on.`); setF({ ...f, email: "" }); } }); }}>
+        <form className="mt-2 flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); if (ok) add.mutate({ email: f.email.trim(), role: f.role }, { onSuccess: (m) => { setDone(`Invite saved for ${m.email}. We'll send it when invites are switched on.`); setF({ ...f, email: "" }); } }); }}>
           <div className="flex gap-2">
             <input type="email" value={f.email} onChange={(e) => { setF({ ...f, email: e.target.value }); setDone(""); }} placeholder="name@yourorg.org" className="h-9 min-w-0 flex-1 rounded-md border px-2.5 text-[14px] outline-none focus:ring-2 focus:ring-[#1f4f8f]/30" style={{ borderColor: LINE }} />
-            <select value={f.role} onChange={(e) => setF({ ...f, role: e.target.value as Role })} className="h-9 rounded-md border px-2 text-[13.5px]" style={{ borderColor: LINE }} aria-label="Role">
+            <select value={f.role} onChange={(e) => setF({ ...f, role: e.target.value as MemberRole })} className="h-9 rounded-md border px-2 text-[13.5px]" style={{ borderColor: LINE }} aria-label="Role">
               {roles.map((r) => <option key={r} value={r}>{r === "client_reviewer" ? "Reviewer" : "Viewer"}</option>)}
             </select>
           </div>
