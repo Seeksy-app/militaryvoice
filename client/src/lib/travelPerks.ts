@@ -27,6 +27,16 @@ const NAMES: Record<string, [string, string]> = {
   MX: ["Breeze", "flybreeze.com"], XP: ["Avelo", "aveloair.com"],
 };
 export const airlineSite = (iata: string) => NAMES[iata]?.[1];
+
+/**
+ * Each airline's brand colour, for its name set as text and its round badge (Andrew's Travel target, 26 Nov). Never
+ * a logo file or a drawn mark: just the name in the colour. Each one is dark enough for white text on the badge.
+ */
+const COLORS: Record<string, string> = {
+  DL: "#0B2A6B", UA: "#0A4FA3", AA: "#0B6BC2", AS: "#01426A", HA: "#5B2C8F", B6: "#0033A0", WN: "#304CB2",
+  F9: "#00703C", G4: "#0A4D9A", SY: "#C8551A", MX: "#0A6FB7", XP: "#5A2D82", NK: "#5C5400",
+};
+export const airlineColor = (iata: string) => COLORS[iata] ?? "#053877";
 export const airlineName = (iata: string, fallback: string) => NAMES[iata]?.[0] ?? fallback;
 
 const NONE = /^(—|-|no|none|nothing)\b/i;
