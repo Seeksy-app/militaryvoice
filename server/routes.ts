@@ -200,6 +200,7 @@ import { registerAutomations } from "./automations.js";
 import { registerTrash, toTrash } from "./trash.js";
 import { registerMyStudio } from "./myStudio.js";
 import { registerCreatorTravel } from "./creatorTravel.js";
+import { registerCreatorHotels } from "./creatorHotels.js";
 import { getYoutubeKey, registerYoutubeKey, setYoutubeKey, YOUTUBE_OAUTH, YOUTUBE_RTMP } from "./youtubeKey.js";
 import { registerLivePage } from "./livePage.js";
 import { registerShowLogo, cornerLogoOf, showCoverOf } from "./showLogo.js";
@@ -7239,6 +7240,7 @@ export function registerRoutes(app: Express): void {
   registerTrash(app, requireHostSession);
   registerMyStudio(app, requireHostSession, { youtubeToken });
   registerCreatorTravel(app, requireHostSession, requireAdmin);
+  registerCreatorHotels(app, requireHostSession);
   registerYoutubeKey(app, requireHostSession);
   registerLivePage(app, requireHostSession);
   registerShowLogo(app, requireHostSession);

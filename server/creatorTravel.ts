@@ -23,13 +23,14 @@ import { airlineByIata, MILITARY_AIRLINES, MILITARY_CALL_DESKS, MILITARY_FARES_V
 
 const PARALLEL_FLIGHTS = "https://api.parallel.ai/v1/flights/search";
 const ELEVEN = "https://api.elevenlabs.io";
-const CACHE_MS = 30 * 60_000;
+export const CACHE_MS = 30 * 60_000;
 const SEARCHES_A_DAY = 25;
-const CALLS_A_DAY = 3;
-const now = () => new Date().toISOString();
-const dayStart = () => `${now().slice(0, 10)}T00:00:00.000Z`;
+/** "Have us call" requests a day per account, flights and hotels together. */
+export const CALLS_A_DAY = 3;
+export const now = () => new Date().toISOString();
+export const dayStart = () => `${now().slice(0, 10)}T00:00:00.000Z`;
 
-const parallelKey = () =>
+export const parallelKey = () =>
   ["PARALLEL_API_KEY", "PARALLEL_AI_API_KEY", "PARALLELAI_API_KEY", "PARALLEL_KEY"].map((n) => (process.env[n] || "").trim()).find(Boolean) || "";
 // A key of its own with ElevenAgents read + write, so the Alex/TTS key (ELEVENLABS_API_KEY, no Agents permission)
 // stays as it is. The agent is the travel caller; the phone id is our Twilio number as imported into ElevenAgents.
@@ -56,15 +57,15 @@ async function testNumber(): Promise<string> {
   return /^\+\d{10,15}$/.test(n) ? n : "";
 }
 /** Whether "Have us call" places a call now, or only saves the request. */
-async function callsLive(): Promise<boolean> {
+export async function callsLive(): Promise<boolean> {
   await loadIds();
   return (await callsOn()) && agentsReady();
 }
 
-class HttpError extends Error {
+export class HttpError extends Error {
   constructor(public status: number, message: string) { super(message); }
 }
-const emailOf = (req: Request) => String((req as unknown as { hostEmail?: string }).hostEmail ?? "").trim().toLowerCase();
+export const emailOf = (req: Request) => String((req as unknown as { hostEmail?: string }).hostEmail ?? "").trim().toLowerCase();
 
 // ---- Flight search ------------------------------------------------------------------------------------------------
 
@@ -182,7 +183,7 @@ function perksAndNotes(results: TravelResult[], status: TravelerStatus) {
 }
 
 async function searchesToday(email: string): Promise<number> {
-  const rows = await db.select({ id: travelSearches.id }).from(travelSearches).where(and(eq(travelSearches.ownerEmail, email), gte(travelSearches.createdAt, dayStart())));
+  const rows = await db.select({ id: travelSearches.id }).from(travelSearches).where(and(eq(travelSearches.ownerEmail, email), eq(travelSearches.kind, "flight"), gte(travelSearches.createdAt, dayStart())));
   return rows.length;
 }
 
@@ -192,7 +193,7 @@ async function search(email: string, q: TravelQuery, admin: boolean): Promise<Tr
   const key = keyOf(q);
   const since = new Date(Date.now() - CACHE_MS).toISOString();
   const [hit] = await db.select().from(travelSearches)
-    .where(and(eq(travelSearches.key, key), eq(travelSearches.error, ""), gte(travelSearches.createdAt, since)))
+    .where(and(eq(travelSearches.key, key), eq(travelSearches.kind, "flight"), eq(travelSearches.error, ""), gte(travelSearches.createdAt, since)))
     .orderBy(desc(travelSearches.createdAt)).limit(1);
   let raw: ParallelResult[];
   let cached = false;
@@ -293,6 +294,20 @@ Never, under any circumstances:
   return { greeting, prompt };
 }
 
+/**
+ * Other things "Have us call" can ring (hotels, server/creatorHotels.ts). Each kind says who to ring and what to say,
+ * and writes its own report from the transcript; the gate, the claim on the row, the call itself and the read-back
+ * are shared here.
+ */
+export type CallKind = {
+  plan(c: TravelCallRow): { to: string; greeting: string; prompt: string; vars: Record<string, string> } | { error: string };
+  report(c: TravelCallRow, transcript: string): Promise<unknown>;
+  view(c: TravelCallRow): unknown;
+};
+const callKinds: Record<string, CallKind> = {};
+export function registerCallKind(kind: string, k: CallKind) { callKinds[kind] = k; }
+const viewAny = (c: TravelCallRow) => (c.kind && c.kind !== "flight" && callKinds[c.kind] ? callKinds[c.kind].view(c) : viewOf(c));
+
 async function eleven(path: string, init?: RequestInit) {
   return fetch(`${ELEVEN}${path}`, { ...init, headers: { "xi-api-key": agentsKey(), "Content-Type": "application/json", ...(init?.headers ?? {}) }, signal: AbortSignal.timeout(30_000) });
 }
@@ -305,16 +320,26 @@ export async function placeCall(id: number): Promise<TravelCallRow> {
   // Claim the row so two requests can't ring twice.
   const [c] = await db.update(travelCalls).set({ status: "calling", updatedAt: now() }).where(and(eq(travelCalls.id, id), eq(travelCalls.status, "waiting"))).returning();
   if (!c) throw new HttpError(409, "That call isn't waiting.");
-  const desk = MILITARY_CALL_DESKS[c.iata];
-  const to = (await testNumber()) || desk?.phone || "";
   const fail = async (why: string) => {
     const [row] = await db.update(travelCalls).set({ status: "failed", error: why.slice(0, 300), updatedAt: now() }).where(eq(travelCalls.id, c.id)).returning();
     return row;
   };
-  if (!to) return fail("No number to call for this airline.");
-  const f = JSON.parse(c.flight) as CallFlight;
-  const airline = airlineByIata(c.iata)?.airline || c.iata;
-  const { greeting, prompt } = callPrompt(airline, f, c.webPriceCents ? c.webPriceCents / 100 : null);
+  let plan: { to: string; greeting: string; prompt: string; vars: Record<string, string> };
+  if (c.kind && c.kind !== "flight") {
+    const k = callKinds[c.kind];
+    if (!k) return fail(`No caller for "${c.kind}".`);
+    const p = k.plan(c);
+    if ("error" in p) return fail(p.error);
+    plan = p;
+  } else {
+    const f = JSON.parse(c.flight) as CallFlight;
+    const airline = airlineByIata(c.iata)?.airline || c.iata;
+    plan = { to: MILITARY_CALL_DESKS[c.iata]?.phone || "", ...callPrompt(airline, f, c.webPriceCents ? c.webPriceCents / 100 : null), vars: { airline, flights: f.flights.join(", ") } };
+  }
+  // While a test number is set, every call rings it instead.
+  const to = (await testNumber()) || plan.to;
+  if (!to) return fail("No number to call.");
+  const { greeting, prompt } = plan;
   try {
     // ElevenAgents outbound call over our imported Twilio number. The per-call prompt and first message are
     // conversation overrides, which the agent must allow (Security tab: System prompt, First message).
@@ -326,7 +351,7 @@ export async function placeCall(id: number): Promise<TravelCallRow> {
         to_number: to,
         conversation_initiation_client_data: {
           conversation_config_override: { agent: { first_message: greeting, prompt: { prompt } } },
-          dynamic_variables: { airline, flights: f.flights.join(", "), travel_call_id: String(c.id) },
+          dynamic_variables: { ...plan.vars, travel_call_id: String(c.id) },
         },
       }),
     });
@@ -350,16 +375,17 @@ type ElevenConversation = {
 };
 
 /** A call that's ringing or ended: read it from ElevenLabs and, once it's over, write the report. */
-async function refresh(c: TravelCallRow): Promise<TravelCallRow> {
+export async function refresh(c: TravelCallRow): Promise<TravelCallRow> {
   if (c.status !== "calling" || !c.callId || !agentsKey()) return c;
   const r = await eleven(`/v1/convai/conversations/${encodeURIComponent(c.callId)}`).catch(() => null);
   if (!r?.ok) return c;
   const call = (await r.json().catch(() => ({}))) as ElevenConversation;
   const status = String(call.status ?? "");
   if (status !== "done" && status !== "failed") return c;
-  // "user" is whoever picked up: the airline's agent (or its phone menu).
+  // "user" is whoever picked up: the airline's or hotel's agent (or its phone menu).
   const turns = (call.transcript ?? []).filter((t) => (t.message ?? "").trim());
-  const transcript = turns.map((t) => `${t.role === "agent" ? "assistant" : "airline"}: ${String(t.message).trim()}`).join("\n");
+  const them = c.kind === "hotel" ? "hotel" : "airline";
+  const transcript = turns.map((t) => `${t.role === "agent" ? "assistant" : them}: ${String(t.message).trim()}`).join("\n");
   const durationSec = Math.round(Number(call.metadata?.call_duration_secs) || 0);
   const airlineSpoke = turns.some((t) => t.role === "user");
   if (status !== "done" || !airlineSpoke || transcript.trim().length < 40) {
@@ -368,7 +394,7 @@ async function refresh(c: TravelCallRow): Promise<TravelCallRow> {
     const [row] = await db.update(travelCalls).set({ status: "failed", transcript, durationSec, error: why, updatedAt: now() }).where(eq(travelCalls.id, c.id)).returning();
     return row;
   }
-  const report = await writeReport(c, transcript).catch((err) => {
+  const report = await (c.kind && c.kind !== "flight" ? callKinds[c.kind]?.report(c, transcript) ?? Promise.reject(new Error(`no ${c.kind} writer`)) : writeReport(c, transcript)).catch((err) => {
     console.error("Travel report:", (err as Error).message);
     return null;
   });
@@ -406,7 +432,7 @@ async function writeReport(c: TravelCallRow, transcript: string): Promise<Travel
 }
 
 async function requestCall(email: string, searchId: number, i: number): Promise<TravelCallView> {
-  const [s] = await db.select().from(travelSearches).where(and(eq(travelSearches.id, searchId), eq(travelSearches.ownerEmail, email))).limit(1);
+  const [s] = await db.select().from(travelSearches).where(and(eq(travelSearches.id, searchId), eq(travelSearches.ownerEmail, email), eq(travelSearches.kind, "flight"))).limit(1);
   if (!s?.results) throw new HttpError(404, "Search again, then pick the flight.");
   const q = JSON.parse(s.query) as TravelQuery;
   const raw = (JSON.parse(s.results) as ParallelResult[])[i];
@@ -470,7 +496,7 @@ export function registerCreatorTravel(app: Express, requireHostSession: RequestH
   app.get("/api/travel/calls", requireHostSession, async (req, res) => {
     try {
       await schemaIsReady();
-      const rows = await db.select().from(travelCalls).where(eq(travelCalls.ownerEmail, emailOf(req))).orderBy(desc(travelCalls.createdAt)).limit(20);
+      const rows = await db.select().from(travelCalls).where(and(eq(travelCalls.ownerEmail, emailOf(req)), eq(travelCalls.kind, "flight"))).orderBy(desc(travelCalls.createdAt)).limit(20);
       const fresh = await Promise.all(rows.map((c) => refresh(c).catch(() => c)));
       res.json({ calls: fresh.map(viewOf), callsLive: await callsLive() });
     } catch (err) { send(res, err); }
@@ -482,7 +508,7 @@ export function registerCreatorTravel(app: Express, requireHostSession: RequestH
     await schemaIsReady();
     await loadIds();
     const calls = await db.select().from(travelCalls).orderBy(desc(travelCalls.createdAt)).limit(30);
-    const searches = await db.select({ id: travelSearches.id, cached: travelSearches.cached }).from(travelSearches).where(gte(travelSearches.createdAt, dayStart()));
+    const searches = await db.select({ id: travelSearches.id, cached: travelSearches.cached, kind: travelSearches.kind }).from(travelSearches).where(gte(travelSearches.createdAt, dayStart()));
     // Read-only look at ElevenAgents: whether the Agents key can read, and the numbers labelled for travel (the
     // workspace is shared, so others' numbers are only counted, never listed).
     let agents: { read: boolean | null; error: string; travelNumbers: { id: string; label: string; last4: string; provider: string; assigned: boolean }[]; otherNumbers: number } = { read: null, error: "", travelNumbers: [], otherNumbers: 0 };
@@ -508,8 +534,8 @@ export function registerCreatorTravel(app: Express, requireHostSession: RequestH
       agents,
       testNumber: (await testNumber()) ? "set" : "",
       configured: { parallel: !!parallelKey(), agentsKey: !!agentsKey(), travelAgent: !!travelAgent(), travelPhone: !!travelPhone() },
-      today: { searches: searches.length, paidSearches: searches.filter((s) => !s.cached).length },
-      calls: calls.map((c) => ({ ...viewOf(c), who: c.ownerEmail.replace(/^(.).*@/, "$1***@"), durationSec: c.durationSec, calledNumber: c.calledNumber ? "set" : "" })),
+      today: { searches: searches.length, paidSearches: searches.filter((s) => !s.cached).length, hotelSearches: searches.filter((s) => s.kind === "hotel").length },
+      calls: calls.map((c) => ({ kind: c.kind || "flight", ...(viewAny(c) as object), who: c.ownerEmail.replace(/^(.).*@/, "$1***@"), durationSec: c.durationSec, calledNumber: c.calledNumber ? "set" : "" })),
     });
   });
 
@@ -569,7 +595,7 @@ export function registerCreatorTravel(app: Express, requireHostSession: RequestH
   app.post("/api/admin/travel/calls/:id/place", requireAdmin, async (req, res) => {
     try {
       await schemaIsReady();
-      res.json(viewOf(await placeCall(Number(req.params.id))));
+      res.json(viewAny(await placeCall(Number(req.params.id))));
     } catch (err) { send(res, err); }
   });
 
@@ -580,7 +606,7 @@ export function registerCreatorTravel(app: Express, requireHostSession: RequestH
       const [c] = await db.select().from(travelCalls).where(eq(travelCalls.id, Number(req.params.id))).limit(1);
       if (!c) throw new HttpError(404, "No such call.");
       const row = await refresh(c);
-      res.json({ ...viewOf(row), transcript: row.transcript, durationSec: row.durationSec });
+      res.json({ kind: row.kind || "flight", ...(viewAny(row) as object), transcript: row.transcript, durationSec: row.durationSec });
     } catch (err) { send(res, err); }
   });
 }

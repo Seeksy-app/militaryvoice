@@ -3616,6 +3616,8 @@ export const REQUEST_KINDS = { sponsor: "Sponsored read", post: "Social post or 
 export const travelSearches = pgTable("travel_searches", {
   id: serial("id").primaryKey(),
   ownerEmail: text("owner_email").notNull(),
+  /** "flight" or "hotel" (hotels added 26 Nov); each has its own daily cap. */
+  kind: text("kind").notNull().default("flight"),
   key: text("key").notNull(),
   query: text("query").notNull().default(""),
   /** Parallel's results, as JSON text (empty on a cached row). */
@@ -3633,6 +3635,8 @@ export const travelCalls = pgTable("travel_calls", {
   id: serial("id").primaryKey(),
   ownerEmail: text("owner_email").notNull(),
   searchId: integer("search_id").notNull().default(0),
+  /** "flight": an airline, `iata` is its code and `flight` the itinerary. "hotel": `iata` is the brand key (shared/militaryHotels.ts) and `flight` holds the stay. */
+  kind: text("kind").notNull().default("flight"),
   iata: text("iata").notNull(),
   traveler: text("traveler").notNull().default("active"),
   /** The flight asked about, as JSON text: flight numbers, airports, local times, date(s), cabin. */
@@ -3642,6 +3646,8 @@ export const travelCalls = pgTable("travel_calls", {
   status: text("status").notNull().default("waiting"),
   /** The number actually rung (the airline's desk, or a test number while testing). */
   calledNumber: text("called_number").notNull().default(""),
+  /** Hotels: who we ring, as JSON text {phone, who: "property" | "brand", name}; found when the request is made. */
+  target: text("target").notNull().default(""),
   callId: text("call_id").notNull().default(""),
   /** The report: JSON text {available, militaryFare, currency, conditions, summary}. */
   report: text("report").notNull().default(""),
