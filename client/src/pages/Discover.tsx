@@ -4,7 +4,7 @@ import {
   Search, Sparkles, BadgeCheck, Bookmark, BookmarkCheck, Users, Mail, Phone, Globe, ShieldCheck,
   Mic2, Send, Megaphone, CalendarDays, X, Loader2, ExternalLink, Plus, Trash2, Download, ChevronRight, Lock, MapPin, Heart, Hash, Handshake, Info,
   Check, SlidersHorizontal, AtSign, Type as TypeIcon, Wand2, TrendingUp, Instagram, Youtube, Twitter, Twitch, Music2, Share2, Linkedin, Facebook,
-  Compass,
+  Compass, Link2,
 } from "lucide-react";
 import { NavBar } from "@/components/NavBar";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -120,7 +120,7 @@ const DOORS = [
 const MODES = [
   { v: "ai", label: "SI search", icon: Wand2, hint: "Describe who you want, in plain English." },
   { v: "keywords", label: "Keywords in bio", icon: TypeIcon, hint: "Words that appear in their bio. Separate with commas." },
-  { v: "username", label: "Username", icon: AtSign, hint: "A handle or a profile link. Opens their full profile." },
+  { v: "username", label: "Username", icon: Link2, hint: "A handle or a profile link. Opens their full profile." },
 ] as const;
 /** With Podcasts picked: shows, or the people who host them and guest on them. */
 const PC_MODES = [
