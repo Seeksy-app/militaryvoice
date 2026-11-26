@@ -842,26 +842,57 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
   const [pos, setPos] = useState({ t: 0, d: 0 });
   // Before anything is marked, the strip suggests 30 seconds from where you are.
   const stopAt = useRef<number | null>(null);
+  // Play clip is a toggle (Andrew, 26 Nov: "When I play it, I can't turn it off"): Pause while the clip plays.
+  // It ends at the end mark, on Pause, Space, a click on the video, a move of the playhead, or Start here / End here.
+  const clipFrom = useRef(0);
+  const [clipOn, setClipOn] = useState(false);
+  const stopClip = () => { stopAt.current = null; setClipOn(false); };
   useEffect(() => {
     const v = videoRef.current;
     if (!v) return;
     const tick = () => {
       setPos({ t: v.currentTime, d: Number.isFinite(v.duration) ? v.duration : 0 });
-      if (stopAt.current !== null && v.currentTime >= stopAt.current) { v.pause(); stopAt.current = null; }
+      // Once, at the end mark: pause there and stay there (never back to the start, so it can't loop).
+      if (stopAt.current !== null && v.currentTime >= stopAt.current) { v.pause(); stopClip(); }
     };
+    const onPause = () => stopClip();
+    // The playhead moved outside the clip: that's the end of the preview.
+    const onSeek = () => { if (stopAt.current !== null && (v.currentTime < clipFrom.current - 0.5 || v.currentTime > stopAt.current + 0.5)) stopClip(); };
     v.addEventListener("timeupdate", tick);
     v.addEventListener("loadedmetadata", tick);
+    v.addEventListener("pause", onPause);
+    v.addEventListener("seeking", onSeek);
     tick();
-    return () => { v.removeEventListener("timeupdate", tick); v.removeEventListener("loadedmetadata", tick); };
+    return () => { v.removeEventListener("timeupdate", tick); v.removeEventListener("loadedmetadata", tick); v.removeEventListener("pause", onPause); v.removeEventListener("seeking", onSeek); };
   }, [videoRef, source, rec.id]);
   const seek = (t: number) => { if (videoRef.current) videoRef.current.currentTime = t; };
+  const pauseClip = () => { const v = videoRef.current; if (v && !v.paused) v.pause(); stopClip(); };
   const preview = () => {
     const v = videoRef.current;
     if (!v || mark.in === null) return;
-    v.currentTime = mark.in;
+    if (clipOn) return pauseClip();
+    clipFrom.current = mark.in;
     stopAt.current = mark.out;
-    void v.play();
+    v.currentTime = mark.in;
+    setClipOn(true);
+    void v.play().catch(() => stopClip());
   };
+  // Space plays and pauses on the clip tab, as in any player (not while typing; a focused button or the
+  // player itself already answers Space on its own).
+  useEffect(() => {
+    if (tab !== "clip") return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== " " || e.metaKey || e.ctrlKey || e.altKey) return;
+      const el = e.target as HTMLElement;
+      if (el?.closest?.("input, textarea, select, button, video, [contenteditable=true], [role=slider]")) return;
+      const v = videoRef.current;
+      if (!v) return;
+      e.preventDefault();
+      if (v.paused) void v.play(); else v.pause();
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [tab, videoRef]);
   const pct = (t: number) => (pos.d ? `${Math.min(100, Math.max(0, (t / pos.d) * 100))}%` : "0%");
   const makeClip = useMutation({
     mutationFn: async () => (await apiRequest("POST", `/api/host/recordings/${rec.id}/clips`, { startSec: mark.in, endSec: mark.out, title, source: source === "clean" ? "clean" : "", formats, layout: showLayout ? twoUpLayout(layoutNow, ownLayout) : "auto" })).json(),
@@ -1186,8 +1217,8 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
   // Step 3, once both ends are marked: name it, pick the shapes, make it.
   const finish = (
     <>
-      <TimelineButton tip="Play just the clip" onClick={preview} testid="mark-preview">
-        <Play className="h-4 w-4" /> Play clip
+      <TimelineButton tip={clipOn ? "Stop the clip" : "Play just the clip"} on={clipOn} onClick={preview} testid="mark-preview">
+        {clipOn ? <><Pause className="h-4 w-4" /> Pause</> : <><Play className="h-4 w-4" /> Play clip</>}
       </TimelineButton>
       <span className="text-xs font-semibold tabular-nums text-violet-700 dark:text-violet-300">{hms(len)}</span>
       <span className="mx-1 hidden h-6 w-px bg-border sm:block" aria-hidden />
@@ -1266,13 +1297,14 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
             maxLen={180}
             actions={
               <>
-                <TimelineButton tip="The clip starts where the playhead is" onClick={() => setMark({ in: now(), out: null })} testid="mark-in" tone="violet">
+                <TimelineButton tip="The clip starts where the playhead is" onClick={() => { pauseClip(); setMark({ in: now(), out: null }); }} testid="mark-in" tone="violet">
                   <ArrowLeftToLine className="h-4 w-4" /> Start here
                 </TimelineButton>
                 <TimelineButton
                   tip={mark.in === null ? "Press Start here first" : "The clip ends where the playhead is"}
                   disabled={mark.in === null}
                   onClick={() => {
+                    pauseClip();
                     const t = now();
                     if (mark.in === null) return;
                     if (t - mark.in < 5) return toast({ title: "Move the playhead further on", description: "The end has to be at least 5 seconds after the start.", variant: "destructive" });
