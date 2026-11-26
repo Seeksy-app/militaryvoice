@@ -18,6 +18,7 @@ import WebSocket from "ws";
 const API_BASE = (process.env.API_BASE || "http://localhost:3000").replace(/\/+$/, "");
 const AGENT_TOKEN = (process.env.AGENT_TOKEN || "").trim();
 const POLL_MS = 15_000;
+const MISSES_TO_LEAVE = 3;
 const RATE = 16_000;
 const TICK_MS = 100;
 const BLOCK = (RATE * TICK_MS) / 1000;
@@ -74,6 +75,8 @@ class Session {
   private streamedMs = 0;
   private used = 0;
   private dismissed = 0;
+  /** Polls in a row that left this room out. One missed poll (a LiveKit list hiccup) is not "everyone left". */
+  missed = 0;
   private state = "";
   private closed = false;
   private meta: { playing?: unknown; music?: unknown; sound?: { at?: number } | null } = {};
@@ -315,8 +318,11 @@ const sessions = new Map<number, Session>();
 
 async function poll() {
   let list: RoomPass[];
+  let off = new Set<number>();
   try {
-    list = (await api<{ rooms: RoomPass[] }>("GET", "/api/agent/starters/rooms")).rooms;
+    const got = await api<{ rooms: RoomPass[]; off?: number[] }>("GET", "/api/agent/starters/rooms");
+    list = got.rooms;
+    off = new Set(got.off ?? []);
   } catch (err) {
     // A failed poll is never read as "everyone left".
     log(`poll failed: ${(err as Error).message}`);
@@ -325,7 +331,11 @@ async function poll() {
   const want = new Map(list.map((r) => [r.studioId, r]));
   for (const [id, s] of sessions) {
     if (s.done) { sessions.delete(id); continue; }
-    if (!want.has(id)) { sessions.delete(id); await s.stop(); }
+    if (want.has(id)) { s.missed = 0; continue; }
+    // Switched off by the host: leave now, never 45 seconds later.
+    if (off.has(id)) { sessions.delete(id); await s.stop(); continue; }
+    // Leave only after 3 polls in a row (45s) without the room; 26 Nov's studio 13 test dropped out on single misses.
+    if (++s.missed >= MISSES_TO_LEAVE) { sessions.delete(id); await s.stop(); }
   }
   for (const pass of list) {
     const cur = sessions.get(pass.studioId);

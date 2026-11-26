@@ -151,12 +151,14 @@ export function registerStarters(app: Express, requireAgent: RequestHandler, req
     await schemaIsReady();
     const keys = rowsOf(await db.execute(sql`select key, value from site_settings where key like 'studio-starters:%'`));
     const out: unknown[] = [];
+    // Switched off (or not allowed): the listener leaves these at once. Only a room merely missing waits 3 polls.
+    const off: number[] = [];
     for (const k of keys) {
       const id = Number(String(k.key).split(":")[1]);
       if (!id) continue;
       let on = false;
       try { on = (JSON.parse(String(k.value)) as { on?: boolean }).on === true; } catch { on = false; }
-      if (!on || !(await allowed(id))) continue;
+      if (!on || !(await allowed(id))) { off.push(id); continue; }
       const room = `my-${id}`;
       let people = 0;
       try { people = (await rooms().listParticipants(room)).filter((p) => realPerson(p.identity)).length; } catch { continue; }
@@ -167,7 +169,7 @@ export function registerStarters(app: Express, requireAgent: RequestHandler, req
       at.addGrant({ room, roomJoin: true, hidden: true, canPublish: false, canSubscribe: true, canPublishData: true });
       out.push({ studioId: id, room, url: publicLiveKitUrl(), token: await at.toJwt(), people, wait: s.wait, cap: await capHit(id) });
     }
-    res.json({ rooms: out });
+    res.json({ rooms: out, off });
   });
 
   /** A Deepgram token good for 10 minutes, for one streaming connection. The key itself never leaves here. */
