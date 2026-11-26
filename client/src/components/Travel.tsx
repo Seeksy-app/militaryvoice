@@ -1,9 +1,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeftRight, CalendarDays, Check, ChevronDown, ChevronsUp, Clock, ExternalLink, Info, Loader2, Luggage, MapPin, Phone, PhoneCall, Plane, PlaneLanding, PlaneTakeoff, Search, ShieldCheck, Tag as TagIcon, Users, X } from "lucide-react";
+import { ArrowLeftRight, BedDouble, ChevronsUp, Clock, ExternalLink, Info, Loader2, Luggage, MapPin, Phone, PhoneCall, Plane, PlaneLanding, PlaneTakeoff, Search, ShieldCheck, Tag as TagIcon, Users, X } from "lucide-react";
 import type { TravelerStatus } from "@shared/militaryFares";
 import { AIRPORTS, airlineColor, airlineName, airlineSite, airportName, checkedOn, deskOf, membershipLabel, perkTags, truePrice, type Perk } from "@/lib/travelPerks";
 import { TravelSky } from "@/components/TravelSky";
+import { DateField, Field, GOLD, HEAD, Select, Tag, call, list, money, todayEt } from "@/components/TravelParts";
+import { HotelFields, HotelsBody, useHotels } from "@/components/TravelHotels";
 
 // Travel (Andrew, 26 Nov 2026): a trip and the creator's status, flights from the server's Parallel search
 // (server/creatorTravel.ts) with each airline's perk for them, and "Have us call" for airlines whose military fare is
@@ -11,10 +13,8 @@ import { TravelSky } from "@/components/TravelSky";
 // says so. We never book or pay. The look follows Andrew's target (exports/travel-andrew-target.webp, 26 Nov); the
 // words and numbers are ours, from shared/militaryFares.ts.
 
-const HEAD = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 const SHOWN = 8;
 const CALLS_AT_ONCE = 3; // the server's calls a day
-const GOLD = "#F0A71F";
 
 // What the server sends (server/creatorTravel.ts).
 type Leg = { departure_airport: string; departure_time: string; arrival_airport: string; arrival_time: string; duration_minutes: number; stops: number; layovers: { airport: string }[] };
@@ -24,14 +24,10 @@ type SearchResponse = { searchId: number; cached: boolean; searchesLeft: number 
 type Report = { available: "yes" | "no" | "unknown"; militaryFare: number | null; difference: number | null; conditions: string; summary: string };
 export type CallView = { id: number; iata: string; airline: string; traveler: TravelerStatus; flight: { from: string; to: string; depart: string; return: string; flights: string[] }; webPrice: number | null; status: "waiting" | "calling" | "done" | "failed"; report: Report | null; error: string; createdAt: string; updatedAt: string };
 
-const money = (n: number) => `$${Math.round(n).toLocaleString()}`;
-const ymdLong = (d: string) => (d ? new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" }) : "");
 export const ymdNice = (d: string) => (d ? new Date(`${d}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric", timeZone: "UTC" }) : "");
 const clock = (t: string) => { const m = /(\d{2}):(\d{2})$/.exec(t); if (!m) return t; const h = Number(m[1]); return `${h % 12 || 12}:${m[2]} ${h < 12 ? "am" : "pm"}`; };
 const dur = (m: number | null | undefined) => (m ? `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, "0")}m` : "");
-const todayEt = () => new Intl.DateTimeFormat("en-CA", { timeZone: "America/New_York" }).format(new Date());
 const tripKey = (t: { from: string; to: string; depart: string; return: string }) => `${t.from}|${t.to}|${t.depart}|${t.return || ""}`;
-const list = (xs: string[]) => (xs.length <= 1 ? xs.join("") : `${xs.slice(0, -1).join(", ")} and ${xs[xs.length - 1]}`);
 const sameFlights = (a: string[], b: string[]) => a.join() === b.join();
 const whoFor = (s: TravelerStatus) => (s === "veteran" ? "veterans and retirees" : "active duty, Guard and Reserve");
 
@@ -46,13 +42,6 @@ function codeOf(v: string): string {
   return hit ? hit[0] : "";
 }
 const label = (code: string) => (code ? `${airportName(code)} (${code})` : "");
-
-async function call<T>(method: string, url: string, body?: unknown): Promise<T> {
-  const r = await fetch(url, { method, headers: body ? { "Content-Type": "application/json" } : {}, body: body ? JSON.stringify(body) : undefined, credentials: "include" });
-  const j = await r.json().catch(() => ({}));
-  if (!r.ok) throw new Error((j as { message?: string }).message || "Something went wrong. Try again.");
-  return j as T;
-}
 
 /** The phone fare that beats the web price on a finished call, else null. */
 function phoneWin(c: CallView | undefined): number | null {
@@ -72,6 +61,13 @@ export function Travel({ serviceStatus }: { serviceStatus?: string | null }) {
   const [sort, setSort] = useState<"deal" | "price">("deal");
   const [bags, setBags] = useState(1);
   const [openRow, setOpenRow] = useState<number | null>(null);
+  // Flights | Hotels (Andrew, 26 Nov: "Add hotels"); ?tab=hotels opens on Hotels.
+  const [tab, setTab] = useState<"flights" | "hotels">(() => (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("tab") === "hotels" ? "hotels" : "flights"));
+  const pickTab = (t: "flights" | "hotels") => {
+    setTab(t);
+    try { const u = new URL(window.location.href); if (t === "hotels") u.searchParams.set("tab", "hotels"); else u.searchParams.delete("tab"); window.history.replaceState(window.history.state, "", u); } catch { /* the tab still switches */ }
+  };
+  const hotels = useHotels(status, tab === "hotels");
 
   const search = useMutation({
     mutationFn: (q: Query) => call<SearchResponse>("POST", "/api/travel/search", q),
@@ -167,23 +163,37 @@ export function Travel({ serviceStatus }: { serviceStatus?: string | null }) {
           <span className="h-12 w-[3px] shrink-0 rounded-full sm:h-16" style={{ background: GOLD }} />
           <div className="min-w-0">
             <h1 className="text-[34px] font-bold leading-none tracking-tight text-[#0b1b33] sm:text-[46px] dark:text-white" style={HEAD}>Travel</h1>
-            <p className="mt-1.5 text-[14px] leading-snug text-[#24324a] text-balance sm:text-[18px] dark:text-white/80">Compare flights and military travel benefits in one&nbsp;place.</p>
+            <p className="mt-1.5 text-[14px] leading-snug text-[#24324a] text-balance sm:text-[18px] dark:text-white/80">Compare flights, hotels and military travel benefits in one&nbsp;place.</p>
           </div>
         </div>
 
-        <form onSubmit={(e) => { e.preventDefault(); go(); }} className="relative mt-5 rounded-2xl border border-white/70 bg-card p-3 shadow-[0_14px_34px_-16px_rgba(5,56,119,0.45)] sm:mt-7 sm:p-4 dark:border-white/10" data-testid="travel-trip">
+        <div className="relative mt-5 overflow-hidden rounded-2xl border border-white/70 bg-card shadow-[0_14px_34px_-16px_rgba(5,56,119,0.45)] sm:mt-7 dark:border-white/10">
+          <div className="flex border-b border-border" role="tablist" aria-label="Search">
+            {([{ k: "flights", t: "Flights", I: Plane }, { k: "hotels", t: "Hotels", I: BedDouble }] as const).map(({ k, t, I }) => {
+              const on = tab === k;
+              return (
+                <button key={k} type="button" role="tab" aria-selected={on} onClick={() => pickTab(k)} className={`relative flex flex-1 items-center justify-center gap-2 py-3 text-[15px] font-bold transition-colors sm:flex-none sm:px-7 ${on ? "text-[#053877] dark:text-white" : "text-muted-foreground hover:text-foreground"}`} data-testid={`travel-tab-${k}`}>
+                  <I className="h-[18px] w-[18px]" /> {t}
+                  {on && <span className="absolute inset-x-3 bottom-0 h-[3px] rounded-t-full" style={{ background: GOLD }} />}
+                </button>
+              );
+            })}
+          </div>
+        <div className="p-3 sm:p-4">
           <div className="grid grid-cols-2 gap-2 sm:flex" role="radiogroup" aria-label="I'm">
             {(["veteran", "active"] as const).map((s) => {
               const on = status === s;
               const Icon = s === "veteran" ? Users : ChevronsUp;
               return (
-                <button key={s} type="button" role="radio" aria-checked={on} onClick={() => pickStatus(s)} className={`flex items-center justify-center gap-2 rounded-full border px-3 py-2 text-[13px] font-semibold leading-tight transition-colors sm:justify-start sm:px-5 sm:text-[15px] ${on ? "border-[#053877] bg-[#053877] text-white shadow-[0_0_0_2px_#F0A71F]" : "border-border bg-card text-foreground hover:bg-muted"}`} data-testid={`travel-status-${s}`}>
+                <button key={s} type="button" role="radio" aria-checked={on} onClick={() => (tab === "hotels" ? setStatus(s) : pickStatus(s))} className={`flex items-center justify-center gap-2 rounded-full border px-3 py-2 text-[13px] font-semibold leading-tight transition-colors sm:justify-start sm:px-5 sm:text-[15px] ${on ? "border-[#053877] bg-[#053877] text-white shadow-[0_0_0_2px_#F0A71F]" : "border-border bg-card text-foreground hover:bg-muted"}`} data-testid={`travel-status-${s}`}>
                   <Icon className={`h-4 w-4 shrink-0 sm:h-5 sm:w-5 ${on ? "text-[#F0A71F]" : "text-[#053877] dark:text-white"}`} />
                   <span className="text-left sm:whitespace-nowrap">{s === "veteran" ? "Veteran or retiree" : "Active duty, Guard or Reserve"}</span>
                 </button>
               );
             })}
           </div>
+          {tab === "hotels" ? <HotelFields h={hotels} status={status} /> : (
+          <form onSubmit={(e) => { e.preventDefault(); go(); }} data-testid="travel-trip">
           {/* One row on a wide screen; From–To over the dates on a narrower one; stacked on a phone. */}
           <div className="mt-3 flex flex-col gap-2 xl:flex-row xl:items-stretch">
             <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch xl:min-w-0 xl:flex-1">
@@ -200,9 +210,13 @@ export function Travel({ serviceStatus }: { serviceStatus?: string | null }) {
             </div>
           </div>
           {(formError || search.error) && <p className="px-1 pt-2 text-[13px] font-medium text-[#b42318]">{formError || (search.error as Error).message}</p>}
-        </form>
+          </form>
+          )}
+        </div>
+        </div>
       </div>
 
+      {tab === "hotels" ? <HotelsBody h={hotels} status={status} /> : <>
       <div className="mt-3 flex items-start gap-3 rounded-xl border border-[#c7d7f2] bg-[#e8f0fd] px-4 py-3 dark:border-white/10 dark:bg-white/5" data-testid="travel-banner">
         <Info className="mt-0.5 h-5 w-5 shrink-0 text-[#0b1b33] dark:text-white" />
         <p className="text-[14px] font-medium leading-snug text-[#0b1b33] text-balance dark:text-white">{status === "active" ? "Military" : "Veteran"} travel benefits vary by airline. Some offer discounted fares, others offer vacation-package savings or free baggage. We'll show what's confirmed and how to claim&nbsp;it.</p>
@@ -303,58 +317,14 @@ export function Travel({ serviceStatus }: { serviceStatus?: string | null }) {
       )}
 
       <p className="mt-4 text-center text-[12px] text-muted-foreground text-balance">{trip ? <>You book with the airline. We never book or pay for you, and fares can change until you&nbsp;do.</> : <>Fares can change until you&nbsp;book.</>}</p>
+      </>}
     </section>
-  );
-}
-
-function Field({ label, icon: Icon, className, children }: { label: string; icon: typeof MapPin; className?: string; children: React.ReactNode }) {
-  return (
-    <label className={`flex min-w-0 flex-col rounded-xl border border-border bg-background px-3 py-2 focus-within:border-[#053877] focus-within:ring-1 focus-within:ring-[#053877] ${className ?? ""}`}>
-      <span className="text-[12px] font-medium text-muted-foreground">{label}</span>
-      <span className="mt-0.5 flex min-w-0 items-center gap-2"><Icon className="h-4 w-4 shrink-0 text-[#0b1b33] dark:text-white" />{children}</span>
-    </label>
-  );
-}
-
-/** A date box that reads "Dec 1, 2026"; the real date input sits on top, invisible, so any tap opens the picker. */
-function DateField({ label, aria, hint, value, min, onChange, onClear, testid }: { label: string; aria: string; hint?: string; value: string; min: string; onChange: (v: string) => void; onClear?: () => void; testid: string }) {
-  return (
-    <label className="relative flex min-w-0 flex-col rounded-xl border border-border bg-background px-3 py-2 focus-within:border-[#053877] focus-within:ring-1 focus-within:ring-[#053877] sm:w-[168px] sm:shrink-0">
-      <span className="text-[12px] font-medium text-muted-foreground">{label}{hint && !value ? <span className="font-normal"> · {hint}</span> : null}</span>
-      <span className="mt-0.5 flex items-center gap-2">
-        <CalendarDays className="h-4 w-4 shrink-0 text-[#0b1b33] dark:text-white" />
-        <span className={`truncate text-[16px] ${value ? "font-semibold" : "text-muted-foreground"}`}>{value ? ymdLong(value) : "Add date"}</span>
-      </span>
-      <input type="date" aria-label={aria} min={min} value={value} onChange={(e) => onChange(e.target.value)} onClick={(e) => { try { (e.currentTarget as HTMLInputElement & { showPicker?: () => void }).showPicker?.(); } catch { /* older browsers open it themselves */ } }} className="absolute inset-0 h-full w-full cursor-pointer opacity-0" data-testid={testid} />
-      {value && onClear && <button type="button" onClick={(e) => { e.preventDefault(); onClear(); }} aria-label={`Clear ${label}`} className="absolute right-2 top-2 z-10 rounded-full p-0.5 text-muted-foreground hover:bg-muted hover:text-foreground"><X className="h-3.5 w-3.5" /></button>}
-    </label>
-  );
-}
-
-function Select({ label, value, onChange, options, testid }: { label: string; value: string; onChange: (v: string) => void; options: [string, string][]; testid: string }) {
-  return (
-    <label className="relative flex items-center rounded-lg border border-border bg-card text-[13px] font-semibold">
-      <span className="sr-only">{label}</span>
-      <select value={value} onChange={(e) => onChange(e.target.value)} className="appearance-none bg-transparent py-1.5 pl-3 pr-8 outline-none" data-testid={testid}>
-        {options.map(([v, t]) => <option key={v} value={v}>{t}</option>)}
-      </select>
-      <ChevronDown className="pointer-events-none absolute right-2.5 h-3.5 w-3.5" />
-    </label>
   );
 }
 
 /** A round badge in the airline's colour with its two-letter code (no logo). */
 export function Tile({ code }: { code: string }) {
   return <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full text-[13px] font-bold text-white shadow-sm" style={{ background: airlineColor(code) }}>{code}</span>;
-}
-
-/** A tag in Andrew's grey-pill style; a confirmed benefit gets a green tick, a phone-only fare a phone. */
-function Tag({ tone, children }: { tone: "green" | "grey" | "amber"; children: React.ReactNode }) {
-  const c = tone === "green" ? "bg-[#ecf7f0] text-[#14532d] ring-[#bfe3cc] dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/30"
-    : tone === "amber" ? "bg-[#FFF3D6] text-[#7a4f00] ring-[#F0A71F]/50 dark:bg-[#F0A71F]/10 dark:text-[#F0A71F]"
-    : "bg-[#f1f4f9] text-foreground/75 ring-[#e3e8f0] dark:bg-white/5 dark:ring-white/10";
-  const Icon = tone === "green" ? Check : tone === "amber" ? Phone : Info;
-  return <span className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-[12.5px] font-medium ring-1 ${c}`}><Icon className="h-3.5 w-3.5 shrink-0" />{children}</span>;
 }
 
 /**
