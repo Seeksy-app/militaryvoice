@@ -12,7 +12,7 @@ import {
 import { ConnectionState, DisconnectReason, Track, type Participant } from "livekit-client";
 import {
   ArrowLeft, Check, Circle, Clapperboard, Copy, ExternalLink, Image as ImageIcon, Loader2, LogOut, MessageSquare, Mic, MicOff, MonitorUp, MoreHorizontal, NotebookPen, Presentation,
-  ChevronLeft, ChevronRight, Lightbulb, Music, Type, Palette, Pause, Play, Plus, RotateCcw, Settings, Square, UserPlus, UserRound, Users, Video, VideoOff, X, } from "lucide-react";
+  ChevronLeft, ChevronRight, LayoutDashboard, Lightbulb, Music, Type, Palette, Pause, Play, Plus, RotateCcw, Settings, Square, UserPlus, UserRound, Users, Video, VideoOff, X, } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { BACKGROUNDS, LIMITS, PRESENT_NAME, bgCss, isClipScene, isPresenting, sceneLive, useRoomKit, type Asset, type Playing, type RoomKit, type Scene } from "@/components/room/look";
@@ -27,6 +27,7 @@ import { StylePanel } from "@/components/room/StylePanel";
 import { PhoneStudio } from "@/components/room/PhoneStudio";
 import { LayoutEditor } from "@/components/room/LayoutEditor";
 import { MarkClip } from "@/components/room/MarkClip";
+import { ShowPanel } from "@/components/room/ShowPanel";
 import { AddDestinationSheet, DestinationBar, anyDestinationOn } from "@/components/room/Destinations";
 import { CopyLinkButton } from "@/components/WatchLink";
 import { RoomStage } from "@/components/RoomStage";
@@ -54,12 +55,12 @@ const Logo = ({ className }: { className: string }) => <img src="/logo-lockup.pn
  * API); until then the room stays phase 1, a plain grid like the recording, with no layout picker
  * (Andrew: "go, hide layouts").
  */
-type Studio = { you?: string; shows?: { id: number; title: string }[]; showId?: number | null; id: number; name: string; inviteLink: string; recording: { since: string } | null; live: { since: string; watchUrl: string } | null; youtube: boolean; youtubeOn: boolean; youtubeKey?: string; youtubeLegacy?: boolean; livePage?: { on: boolean; url: string }; streams: { id: string; name: string; on: boolean }[]; ready: boolean; canRecord: boolean; v3?: boolean };
+type Studio = { you?: string; studioName?: string; showTitle?: string; shows?: { id: number; title: string }[]; showId?: number | null; id: number; name: string; inviteLink: string; recording: { since: string } | null; live: { since: string; watchUrl: string } | null; youtube: boolean; youtubeOn: boolean; youtubeKey?: string; youtubeLegacy?: boolean; livePage?: { on: boolean; url: string }; streams: { id: string; name: string; on: boolean }[]; ready: boolean; canRecord: boolean; v3?: boolean };
 type Conn = { url: string; token: string; name: string };
 type Setup = { name: string; title: string; mic: boolean; cam: boolean; micId?: string; camId?: string };
-type Tab = "look" | "banners" | "media" | "style" | "sounds" | "tips" | "people" | "notes" | "recording" | "chat";
+type Tab = "show" | "look" | "banners" | "media" | "style" | "sounds" | "tips" | "people" | "notes" | "recording" | "chat";
 /** Studio v2 (26 Nov): the panels that only exist with STUDIO_V3. */
-const V3_TABS: Tab[] = ["banners", "media", "style", "sounds", "tips"];
+const V3_TABS: Tab[] = ["show", "banners", "media", "style", "sounds", "tips"];
 
 const NAVY = "#053877";
 /** Mark a clip stays hidden until Podcasting's POST /api/host/my-studio/mark is on main. */
@@ -446,7 +447,7 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
   // Scenes ⋯ (Andrew, 24 Nov): Start from a template… and Save this setup as….
   const [setupDialog, setSetupDialog] = useState<"" | "template" | "save">("");
   const setupMenu = editing ? <SetupMenuButton onTemplate={() => setSetupDialog("template")} onSave={() => setSetupDialog("save")} /> : null;
-  const tab: Tab = picked && (v3 ? picked !== "look" && (picked !== "tips" || owner) : !V3_TABS.includes(picked)) ? picked : editing ? (v3 ? "banners" : "look") : "people";
+  const tab: Tab = picked && (v3 ? picked !== "look" && ((picked !== "tips" && picked !== "show") || owner) : !V3_TABS.includes(picked)) ? picked : editing ? (v3 ? "show" : "look") : "people";
 
   // Once connected, put the scene on air again so the room carries it (Engineering: call /scene after joining).
   const joined = useRef(false);
@@ -625,7 +626,7 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
               <LayoutPicker value={scene.layout} onPick={(layout) => kit.change((l) => ({ ...l, scenes: l.scenes.map((s) => (s.id === scene.id ? { ...s, layout } : s)) }))} />
             </div>
           )}
-          {v3 && <PhoneStudio kit={kit} onEditLayout={setLayoutFor} menu={setupMenu} />}
+          {v3 && <PhoneStudio kit={kit} onEditLayout={setLayoutFor} menu={setupMenu} show={owner ? <ShowPanel studioName={studio?.studioName || studio?.name || ""} showTitle={studio?.showTitle ?? ""} /> : undefined} />}
           <Backstage kit={kit} />
           {owner && <PrompterNews onOpen={() => setTab("notes")} />}
           <PeopleStrip kit={kit} owner={owner} sharing={isScreenShareEnabled} onShare={() => void share()} onInvite={copyInvite} />
@@ -650,6 +651,7 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
           <HidePanelTab hidden={rail.hidden} onToggle={() => rail.setHidden(!rail.hidden)} />
           <div className={`min-w-0 flex-1 flex-col ${rail.hidden ? "hidden" : "flex"}`}>
             {tab === "look" && editing && <LookPanel kit={kit} />}
+            {tab === "show" && v3 && owner && <><p className="border-b border-[#eef0f4] px-4 py-3 text-[15px] font-bold">Show</p><ShowPanel studioName={studio?.studioName || studio?.name || ""} showTitle={studio?.showTitle ?? ""} /></>}
             {tab === "banners" && v3 && <BannersPanel kit={kit} />}
             {tab === "media" && v3 && <MediaPanel kit={kit} fallback={logo} />}
             {tab === "style" && v3 && <StylePanel kit={kit} />}
@@ -663,11 +665,13 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
           <nav className={`flex w-[96px] shrink-0 flex-col items-center gap-1 pt-3 ${rail.hidden ? "" : "border-l border-[#eef0f4]"}`} aria-label="Panels">
             {editing && !v3 && <RailButton on={!rail.hidden && tab === "look"} onClick={() => setTab("look")} icon={<Palette className="h-[22px] w-[22px]" />} label="Look" />}
             {/* Studio v2 (Andrew, 26 Nov: "Let's go back to simplicity. StreamYard has it right"): one place per job. */}
+            {/* Show first and open on load (Andrew, 26 Nov: "I just don't like it when it starts out just with banners"). */}
+            {v3 && owner && <RailButton on={!rail.hidden && tab === "show"} onClick={() => setTab("show")} icon={<LayoutDashboard className="h-[22px] w-[22px]" />} label="Show" testId="rail-show" />}
             {v3 && <RailButton on={!rail.hidden && tab === "banners"} onClick={() => setTab("banners")} icon={<Type className="h-[22px] w-[22px]" />} label="Banners" testId="rail-banners" />}
             {v3 && <RailButton on={!rail.hidden && tab === "media"} onClick={() => setTab("media")} icon={<ImageIcon className="h-[22px] w-[22px]" />} label="Media" />}
             {v3 && <RailButton on={!rail.hidden && tab === "style"} onClick={() => setTab("style")} icon={<Palette className="h-[22px] w-[22px]" />} label="Style" />}
             {v3 && <RailButton on={!rail.hidden && tab === "sounds"} onClick={() => setTab("sounds")} icon={<Music className="h-[22px] w-[22px]" />} label="Sounds" testId="rail-sounds" />}
-            {v3 && owner && <RailButton on={!rail.hidden && tab === "tips"} onClick={() => setTab("tips")} icon={<Lightbulb className="h-[22px] w-[22px]" />} label="Tips" testId="rail-tips" />}
+            {v3 && owner && <RailButton on={!rail.hidden && tab === "tips"} onClick={() => setTab("tips")} icon={<Lightbulb className="h-[22px] w-[22px]" />} label="Starters" testId="rail-tips" />}
             <RailButton on={!rail.hidden && tab === "people"} onClick={() => setTab("people")} icon={<Users className="h-[22px] w-[22px]" />} label="People" />
             <RailButton on={!rail.hidden && tab === "notes"} green={prompterOn} onClick={() => setTab("notes")} icon={<NotebookPen className="h-[22px] w-[22px]" />} label={notesLabel} testId="rail-notes" />
             {owner && <RailButton on={!rail.hidden && tab === "recording"} onClick={() => setTab("recording")} icon={<Circle className={`h-[22px] w-[22px] ${rec ? "fill-[#d92d20] text-[#d92d20]" : ""}`} />} label="Recording" />}

@@ -1,5 +1,5 @@
 import { useState, type ReactNode } from "react";
-import { Image as ImageIcon, Layers, Music, Palette, Type, X } from "lucide-react";
+import { Image as ImageIcon, LayoutDashboard, Layers, Music, Palette, Type, X } from "lucide-react";
 import { sceneLive, type RoomKit } from "./look";
 import { ScenesPanel } from "./ScenesPanel";
 import { MediaPanel, SoundsPanel } from "./MediaPanel";
@@ -10,15 +10,17 @@ import { StylePanel } from "./StylePanel";
  * Studio phase 3 on a phone (mockup p1/p2): the scenes as chips under the stage, one tap to
  * take one, and a sheet with Scenes, Banners, Media, Style and Sounds (Studio v2, 26 Nov). Below lg only; the desktop has the rails.
  */
-type Sheet = "scenes" | "banners" | "media" | "style" | "sounds";
+type Sheet = "show" | "scenes" | "banners" | "media" | "style" | "sounds";
 
-export function PhoneStudio({ kit, onEditLayout, menu }: { kit: RoomKit; onEditLayout?: (sceneId: string) => void; menu?: ReactNode }) {
+/** show: the host's Show panel, first in the sheet (26 Nov); guests don't get it. */
+export function PhoneStudio({ kit, onEditLayout, menu, show }: { kit: RoomKit; onEditLayout?: (sceneId: string) => void; menu?: ReactNode; show?: ReactNode }) {
   const look = kit.look!;
   const [open, setOpen] = useState<Sheet | null>(null);
   const scenes = [...look.scenes].sort((a, b) => a.n - b.n);
   const onAir = sceneLive(look, kit.live)?.id;
   const next = kit.live.playing?.slot === "countdown" ? kit.live.playing.next : undefined;
   const tabs: { id: Sheet; label: string; icon: JSX.Element }[] = [
+    ...(show ? [{ id: "show" as const, label: "Show", icon: <LayoutDashboard className="h-4 w-4" /> }] : []),
     { id: "scenes", label: "Scenes", icon: <Layers className="h-4 w-4" /> },
     { id: "banners", label: "Banners", icon: <Type className="h-4 w-4" /> },
     { id: "media", label: "Media", icon: <ImageIcon className="h-4 w-4" /> },
@@ -37,8 +39,8 @@ export function PhoneStudio({ kit, onEditLayout, menu }: { kit: RoomKit; onEditL
           );
         })}
       </div>
-      {/* Five across, the icon over its word, so they fit a 375px phone. */}
-      <div className="mt-2 grid grid-cols-5 gap-1.5">
+      {/* All in one row, the icon over its word, so they fit a 375px phone (six with the host's Show). */}
+      <div className={`mt-2 grid gap-1.5 ${show ? "grid-cols-6" : "grid-cols-5"}`}>
         {tabs.map((t) => <button key={t.id} type="button" onClick={() => setOpen(t.id)} className="flex h-12 flex-col items-center justify-center gap-0.5 rounded-xl border border-[#d0d5dd] bg-white text-[11px] font-semibold text-[#344054]" data-testid={`phone-open-${t.id}`}>{t.icon}{t.label}</button>)}
       </div>
       {open && (
@@ -51,6 +53,7 @@ export function PhoneStudio({ kit, onEditLayout, menu }: { kit: RoomKit; onEditL
               <button type="button" onClick={() => setOpen(null)} aria-label="Close" className="ml-auto flex h-9 w-9 items-center justify-center rounded-lg text-[#667085]"><X className="h-5 w-5" /></button>
             </div>
             <div className="flex min-h-0 flex-1 flex-col overflow-y-auto">
+              {open === "show" && show}
               {open === "scenes" && <ScenesPanel kit={kit} v3 sheet menu={menu} onEditLayout={onEditLayout ? (id) => { setOpen(null); onEditLayout(id); } : undefined} />}
               {open === "banners" && <BannersPanel kit={kit} />}
               {open === "media" && <MediaPanel kit={kit} />}

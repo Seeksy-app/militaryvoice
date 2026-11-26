@@ -47,7 +47,7 @@ export function TipsPanel() {
   );
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-6 pt-5" data-testid="tips-panel">
-      <p className="text-lg font-bold tracking-tight">Tips</p>
+      <p className="text-lg font-bold tracking-tight">Starters</p>
       <p className="mt-0.5 text-[13px] text-[#667085]">Help while you're on air. Only you see it.</p>
       <div className="mt-3.5 flex items-start gap-3 rounded-xl border border-[#e4e7ec] p-3">
         <div className="min-w-0 flex-1">
@@ -80,7 +80,7 @@ export function TipsSwitch({ onOpen }: { onOpen: () => void }) {
   const on = s?.on === true;
   return (
     <div className="hidden h-[58px] items-center gap-2 rounded-xl px-2 text-[12px] font-semibold text-[#344054] lg:flex" data-testid="tips-switch">
-      <button type="button" onClick={onOpen} className="flex flex-col items-center gap-1 hover:text-[#101828]" aria-label="Open Tips"><Lightbulb className="h-[22px] w-[22px]" />Tips</button>
+      <button type="button" onClick={onOpen} className="flex flex-col items-center gap-1 hover:text-[#101828]" aria-label="Open Starters"><Lightbulb className="h-[22px] w-[22px]" />Starters</button>
       <Toggle on={on} onClick={() => set({ on: !on })} label="Conversation starters" />
     </div>
   );

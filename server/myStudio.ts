@@ -189,9 +189,10 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
     if (picked && (await storage.getSetting(studioShowKey(s.id)).catch(() => null)) !== String(picked.id)) await storage.setSetting(studioShowKey(s.id), String(picked.id)).catch(() => {});
     // Hosts with 2 or more shows pick one on the entry screen; it names the studio, the icon and the recording.
     const list = await ownerShows(email);
-    const shows = list.length > 1 ? { shows: list.map(({ id, title }) => ({ id, title })), showId: (await studioShow(email, s.id, s.name, picked?.id).catch(() => null))?.id ?? null } : {};
-    // Their own name, for the camera check's name box.
-    res.json({ ...view(await titled(s, picked?.id), await yt(email)), you: profile?.hostName?.trim() || "", ...shows });
+    const show = await studioShow(email, s.id, s.name, picked?.id).catch(() => null);
+    const shows = list.length > 1 ? { shows: list.map(({ id, title }) => ({ id, title })), showId: show?.id ?? null } : {};
+    // Their own name, for the camera check's name box. studioName + showTitle: the Show panel (26 Nov).
+    res.json({ ...view(await titled(s, picked?.id), await yt(email)), you: profile?.hostName?.trim() || "", studioName: s.name, showTitle: show?.title || profile?.podcastName?.trim() || "", ...shows });
   });
 
   app.patch("/api/host/my-studio", requireHostSession, async (req, res) => {

@@ -112,6 +112,16 @@ export function registerGuestInvites(app: Express, requireHostSession: RequestHa
     res.json(rows(await db.execute(sql`select * from guest_invites where owner_email=${mine(req)} order by id desc limit 100`)).map(view));
   });
 
+  /** Studio → Show panel (26 Nov): the next guest, nearest from an hour ago on, or null. Host only. */
+  app.get("/api/host/guest-invites/next", requireHostSession, async (req, res) => {
+    res.setHeader("Cache-Control", "no-store");
+    await ensure();
+    const from = Date.now() - 3600_000;
+    const next = rows(await db.execute(sql`select id, guest_name, when_text, when_iso, brief_id from guest_invites where owner_email=${mine(req)} and when_iso<>''`))
+      .map((r) => ({ r, t: Date.parse(String(r.when_iso)) || 0 })).filter((x) => x.t >= from).sort((a, b) => a.t - b.t)[0]?.r;
+    res.json(next ? { id: Number(next.id), guestName: String(next.guest_name), whenText: String(next.when_text), whenIso: String(next.when_iso), briefId: Number(next.brief_id ?? 0) || null } : null);
+  });
+
   /** The host's coming Radio shows, for the "in my booth" choice. */
   app.get("/api/host/guest-invites/bookings", requireHostSession, async (req, res) => {
     const list = await boothBookings(mine(req));
