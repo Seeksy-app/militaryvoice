@@ -20,7 +20,14 @@ const TABS: { key: string; label: string; soon?: string }[] = [
   { key: "reports", label: "Reports", soon: "Viewers by channel and session, and sponsor delivery." },
 ];
 
-const INK = "#0d1b2e", MUTED = "#4f5d72", LINE = "#dde3ec";
+const INK = "#0d1b2e", MUTED = "#4f5d72", LINE = "#dde3ec", NAVY = "#0b2447";
+
+/** The client's brand colour ("#rrggbb", or "" for the MV navy), with dark or white text picked so it always reads. */
+function brand(hex?: string) {
+  const bg = /^#[0-9a-f]{6}$/i.test(hex ?? "") ? hex! : NAVY;
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(bg.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return { bg, fg: 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? INK : "#fff" };
+}
 
 export default function ClientPortal({ slug, tab = "", preview = false }: { slug: string; tab?: string; preview?: boolean }) {
   const { productions, current, email } = useLive();
@@ -41,6 +48,7 @@ export default function ClientPortal({ slug, tab = "", preview = false }: { slug
     );
   }
   const client = p.org;
+  const accent = brand(client?.brandColor);
   const stages = stageQ.data ?? [];
 
   return (
@@ -51,11 +59,11 @@ export default function ClientPortal({ slug, tab = "", preview = false }: { slug
           <span className="text-[#a9b8cf]">· You're seeing the client's view, as {client?.name ?? "the client"} sees it.</span>
         </div>
       )}
-      <header className="border-b bg-white" style={{ borderColor: LINE }}>
+      <header className="border-b border-t-[3px] bg-white" style={{ borderBottomColor: LINE, borderTopColor: accent.bg }}>
         <div className="mx-auto flex max-w-[1120px] items-center gap-3 px-4 py-3">
           {client?.logoUrl
             ? <img src={client.logoUrl} alt="" className="h-10 w-10 rounded-md object-contain" />
-            : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-[15px] font-bold text-white" style={{ background: "#0b2447" }} aria-hidden>{initials(client?.name ?? p.name)}</span>}
+            : <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-md text-[15px] font-bold text-white" style={{ background: accent.bg, color: accent.fg }} aria-hidden>{initials(client?.name ?? p.name)}</span>}
           <div className="min-w-0">
             <p className="line-clamp-2 text-balance text-[19px] font-semibold leading-tight" style={{ fontFamily: FONT_COND }}>{p.name}</p>
             <p className="text-[12.5px]" style={{ color: MUTED }}>{client?.name ? `${client.name} · ` : ""}Produced by MilitaryVoices.ai</p>
@@ -76,7 +84,7 @@ export default function ClientPortal({ slug, tab = "", preview = false }: { slug
             return (
               <Link key={x.key} href={`/${slug}${x.key ? `/${x.key}` : ""}`}
                 className="whitespace-nowrap border-b-2 px-2.5 py-2 text-[14px] font-semibold"
-                style={on ? { borderColor: "#0b2447", color: INK } : { borderColor: "transparent", color: MUTED }}
+                style={on ? { borderColor: accent.bg, color: INK } : { borderColor: "transparent", color: MUTED }}
                 data-testid={`portal-tab-${x.key || "overview"}`}>
                 {x.label}
               </Link>

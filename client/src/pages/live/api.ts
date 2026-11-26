@@ -112,9 +112,9 @@ const now = () => new Date().toISOString();
 const ME: Record<As, string> = { admin: "admin@militaryvoices.ai", client: LIVE_TEST_CLIENT, crew: LIVE_TEST_CREW };
 
 function seed(): Db {
-  const client: LiveOrg = { id: 501, name: "Test Client Org", kind: "client", logoUrl: "", slug: "test-client" };
-  const client2: LiveOrg = { id: 502, name: "Second Test Org", kind: "client", logoUrl: "", slug: "second-test" };
-  const vendor: LiveOrg = { id: 601, name: "Test AV Vendor", kind: "vendor", logoUrl: "", slug: "test-av-vendor" };
+  const client: LiveOrg = { id: 501, name: "Test Client Org", kind: "client", logoUrl: "", brandColor: "#7a1f2b", slug: "test-client" };
+  const client2: LiveOrg = { id: 502, name: "Second Test Org", kind: "client", logoUrl: "", brandColor: "", slug: "second-test" };
+  const vendor: LiveOrg = { id: 601, name: "Test AV Vendor", kind: "vendor", logoUrl: "", brandColor: "", slug: "test-av-vendor" };
   const base = { timezone: "America/Chicago", eventId: null, createdAt: now(), updatedAt: now() };
   const m = (id: number, productionId: number, email: string, name: string, org: LiveOrg | null, role: MemberRole, status: Member["status"], invitedBy = "producer@militaryvoices.ai"): Member =>
     ({ id, productionId, email, name, org, role, status, invitedBy, createdAt: now(), inviteSent: false });
@@ -181,7 +181,7 @@ function mock(as: As, method: string, path: string, body: any): unknown {
     if (method === "GET") return d.productions.filter((p) => roleOn(p.id)).map(view);
     if (as !== "admin") deny();
     let org: LiveOrg | null = d.orgs.find((o) => o.id === body?.orgId) ?? null;
-    if (body?.newOrg?.name) { org = { id: ++d.seq, name: body.newOrg.name, kind: "client", logoUrl: "", slug: slugify(body.newOrg.name) }; d.orgs.push(org); }
+    if (body?.newOrg?.name) { org = { id: ++d.seq, name: body.newOrg.name, kind: "client", logoUrl: "", brandColor: body.newOrg.brandColor ?? "", slug: slugify(body.newOrg.name) }; d.orgs.push(org); }
     const p = { id: ++d.seq, name: String(body?.name ?? "").trim(), status: "scoping" as Status, org, startsOn: body?.startsOn ?? "", endsOn: body?.endsOn ?? "", timezone: body?.timezone ?? "America/New_York", scope: body?.scope ?? "", eventId: null, createdAt: now(), updatedAt: now() };
     d.productions.unshift(p); log(p.id, "Created the production", "production", p.id); return view(p);
   }
@@ -216,7 +216,7 @@ function mock(as: As, method: string, path: string, body: any): unknown {
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new LiveError(400, "That email doesn't look right.");
       if (d.members.some((x) => x.productionId === pid && x.email === email && x.status !== "removed")) throw new LiveError(409, "They're already on this production.");
       let org: LiveOrg | null = side === "mv" ? d.orgs.find((o) => o.id === body?.orgId) ?? null : self?.org ?? null;
-      if (side === "mv" && body?.newOrg?.name) { org = { id: ++d.seq, name: body.newOrg.name, kind: body.newOrg.kind, logoUrl: "", slug: slugify(body.newOrg.name) }; d.orgs.push(org); }
+      if (side === "mv" && body?.newOrg?.name) { org = { id: ++d.seq, name: body.newOrg.name, kind: body.newOrg.kind, logoUrl: "", brandColor: "", slug: slugify(body.newOrg.name) }; d.orgs.push(org); }
       if (sideOf(body.role) === "mv") org = null;
       const nm: Member = { id: ++d.seq, productionId: pid, email, name: String(body?.name ?? "").trim(), org, role: body.role, status: "invited", invitedBy: me, createdAt: now(), inviteSent: false };
       d.members.push(nm); log(pid, `Saved an invite for ${email} as ${ROLE_LABEL[nm.role]}`, "member", nm.id); return nm;
