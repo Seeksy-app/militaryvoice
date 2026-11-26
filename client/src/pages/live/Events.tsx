@@ -2,8 +2,8 @@ import { useEffect, useState } from "react";
 import { Link, useLocation } from "wouter";
 import { ChevronLeft } from "lucide-react";
 import { useLive } from "./LiveApp";
-import { STATUS_LABEL, STATUSES, useAddStage, useAddVenue, useCreateProduction, useOrgs, usePatchProduction, useProduction, useStages, useVenues, type Stage, type Status } from "./api";
-import { Btn, C, Card, Field, FONT_COND, fmtRange, Input, LinkBtn, Row, Select } from "./ui";
+import { sideOf, STATUS_LABEL, STATUSES, useAddStage, useAddVenue, useCreateProduction, useOrgs, usePatchOrg, usePatchProduction, useProduction, useStages, useVenues, type LiveOrg, type Stage, type Status } from "./api";
+import { brand, Btn, C, Card, Field, FONT_COND, fmtRange, initials, Input, LinkBtn, Row, Select } from "./ui";
 
 /** Events: every production this person can see, and one production's details, stages and venues. */
 export default function Events() {
@@ -133,6 +133,7 @@ export function EventEdit({ id }: { id: number | null }) {
               {p!.scope && <Row label="Scope">{p!.scope}</Row>}
             </>
           )}
+          {id !== null && p!.org && (isAdmin || (p!.myRole && sideOf(p!.myRole) === "mv")) && <ClientBrand key={p!.org.id} org={p!.org} />}
         </Card>
         {id !== null && <Stages productionId={id} canAdd={!!p!.can.stages} />}
       </div>
@@ -197,5 +198,50 @@ function Stages({ productionId, canAdd }: { productionId: number; canAdd: boolea
         </form>
       )}
     </Card>
+  );
+}
+
+/**
+ * The client's logo and portal colour, in one row under Details (MV roles only). Both live on the client org, so the
+ * portal at /live/<client> shows them for every production with that client. Logo is a link for now (https://).
+ */
+function ClientBrand({ org }: { org: LiveOrg }) {
+  const [logo, setLogo] = useState(org.logoUrl);
+  const [color, setColor] = useState(org.brandColor);
+  const [broken, setBroken] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const save = usePatchOrg(org.id);
+  const tile = brand(color);
+  const logoOk = !logo.trim() || /^https:\/\/\S+$/.test(logo.trim());
+  const dirty = logo.trim() !== org.logoUrl || color !== org.brandColor;
+  useEffect(() => setBroken(false), [logo]);
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!dirty || !logoOk) return;
+    save.mutate({ logoUrl: logo.trim(), brandColor: color }, { onSuccess: () => { setSaved(true); setTimeout(() => setSaved(false), 2500); } });
+  };
+
+  return (
+    <form onSubmit={submit} className="mt-3 border-t pt-3" style={{ borderColor: C.line }} data-testid="live-client-brand">
+      <p className="mb-1.5 text-[12px] font-semibold uppercase" style={{ fontFamily: FONT_COND, letterSpacing: ".08em", color: C.muted }}>Client's logo and colour</p>
+      <div className="flex flex-wrap items-center gap-2">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-md text-[13px] font-bold" style={{ background: logo.trim() && logoOk && !broken ? "#fff" : tile.bg, color: tile.fg }} aria-hidden>
+          {logo.trim() && logoOk && !broken
+            ? <img src={logo.trim()} alt="" className="h-full w-full object-contain" onError={() => setBroken(true)} />
+            : initials(org.name)}
+        </span>
+        <Input value={logo} onChange={(e) => setLogo(e.target.value)} placeholder="Logo link, https://…" maxLength={500} className="min-w-0 flex-1 basis-[180px]" aria-label="Logo link" data-testid="live-brand-logo" />
+        <label className="flex h-9 shrink-0 cursor-pointer items-center gap-1.5 rounded-md border px-2 text-[13px]" style={{ borderColor: C.line }} title="Portal colour">
+          <input type="color" value={tile.bg} onChange={(e) => setColor(e.target.value)} className="h-5 w-6 cursor-pointer border-0 bg-transparent p-0" aria-label="Portal colour" data-testid="live-brand-color" />
+          <span className="font-mono text-[12px]" style={{ color: color ? C.ink : C.muted }}>{color ? color.toUpperCase() : "Navy"}</span>
+        </label>
+        {color && <button type="button" className="h-9 shrink-0 px-1 text-[13px] hover:underline" style={{ color: C.muted }} onClick={() => setColor("")}>Use navy</button>}
+        <Btn type="submit" small disabled={!dirty || !logoOk || save.isPending} data-testid="live-brand-save">{save.isPending ? "Saving…" : "Save"}</Btn>
+      </div>
+      <p className="mt-1.5 text-[12.5px]" style={{ color: !logoOk || broken || save.error ? "#ff8a80" : C.muted }}>
+        {!logoOk ? "Logo links start with https://." : broken ? "That link doesn't open as an image." : save.error?.message ?? (saved ? "Saved. The client's portal shows it now." : `Shows on ${org.name}'s portal, for every production with them.`)}
+      </p>
+    </form>
   );
 }

@@ -101,6 +101,8 @@ export const useAddStage = (id: number) => useWrite<StageInput, Stage>("POST", (
 export const useAddVenue = () => useWrite<VenueInput, Venue>("POST", () => "/venues");
 export const useInvite = (id: number) => useWrite<MemberInput, Member>("POST", () => `/productions/${id}/members`);
 export const usePatchMember = (id: number, memberId: number) => useWrite<MemberPatch, Member>("PATCH", () => `/productions/${id}/members/${memberId}`);
+/** The client's logo and portal colour, kept on the org, so every production for that client shows it (MV roles and admins). */
+export const usePatchOrg = (orgId: number) => useWrite<{ logoUrl?: string; brandColor?: string }, LiveOrg>("PATCH", () => `/orgs/${orgId}`);
 export const useDecide = () =>
   useWrite<ApprovalDecision & { id: number }, Approval>("POST", (b) => `/approvals/${b.id}/decide`, ({ decision, note }) => ({ decision, note }));
 
@@ -163,6 +165,15 @@ function mock(as: As, method: string, path: string, body: any): unknown {
   const anyMv = as === "admin" || d.members.some((x) => x.email === me && sideOf(x.role) === "mv");
 
   if (parts[0] === "me") return { email: me, admin: as === "admin", open: true, productions: d.productions.filter((p) => roleOn(p.id)).length } satisfies LiveMe;
+  if (parts[0] === "orgs" && parts[1] && method === "PATCH") {
+    if (!anyMv) deny();
+    const o = d.orgs.find((x) => x.id === Number(parts[1])); if (!o) throw new LiveError(404, "That organization isn't here.");
+    if (body?.logoUrl !== undefined && body.logoUrl !== "" && !/^https:\/\//.test(body.logoUrl)) throw new LiveError(400, "Logo links start with https://.");
+    if (body?.brandColor !== undefined && body.brandColor !== "" && !/^#[0-9a-f]{6}$/i.test(body.brandColor)) throw new LiveError(400, "Brand colours are written #RRGGBB.");
+    if (body?.logoUrl !== undefined) o.logoUrl = body.logoUrl;
+    if (body?.brandColor !== undefined) o.brandColor = body.brandColor.toLowerCase();
+    return o;
+  }
   if (parts[0] === "orgs") { if (!anyMv) deny(); const kind = new URLSearchParams(qs).get("kind"); return d.orgs.filter((o) => !kind || o.kind === kind); }
   if (parts[0] === "venues") {
     if (!anyMv) deny();

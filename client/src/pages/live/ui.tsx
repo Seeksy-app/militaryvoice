@@ -118,3 +118,11 @@ export const fmtRange = (a: string, b: string) => {
   return `${mon(da)} ${da.getDate()} – ${mon(db)} ${db.getDate()}, ${db.getFullYear()}`;
 };
 export const fmtWhen = (iso: string) => (iso ? new Date(iso).toLocaleString("en-US", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }) : "");
+
+/** The client's brand colour ("#rrggbb", or "" for the MV navy), with dark or white text picked so it always reads. */
+export function brand(hex?: string) {
+  const bg = /^#[0-9a-f]{6}$/i.test(hex ?? "") ? hex! : "#0b2447";
+  const [r, g, b] = [1, 3, 5].map((i) => parseInt(bg.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
+  return { bg, fg: 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? "#0d1b2e" : "#fff" };
+}
+export const initials = (s: string) => s.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("");

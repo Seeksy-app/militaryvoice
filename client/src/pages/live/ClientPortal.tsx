@@ -4,7 +4,7 @@ import { ChevronLeft, LogOut } from "lucide-react";
 import { useLive } from "./LiveApp";
 import { assignable, CLIENT_ROLES, ROLE_LABEL, sideOf, STATUS_LABEL, useApprovals, useInvite, useMembers, useStages, type MemberRole, type Production } from "./api";
 import { ApprovalRow } from "./Approvals";
-import { FONT_BODY, FONT_COND, fmtRange } from "./ui";
+import { brand, FONT_BODY, FONT_COND, fmtRange, initials } from "./ui";
 
 /**
  * The client's portal at /live/<client> (plan decision 2): light, the client's name and logo, produced by
@@ -20,14 +20,8 @@ const TABS: { key: string; label: string; soon?: string }[] = [
   { key: "reports", label: "Reports", soon: "Viewers by channel and session, and sponsor delivery." },
 ];
 
-const INK = "#0d1b2e", MUTED = "#4f5d72", LINE = "#dde3ec", NAVY = "#0b2447";
+const INK = "#0d1b2e", MUTED = "#4f5d72", LINE = "#dde3ec";
 
-/** The client's brand colour ("#rrggbb", or "" for the MV navy), with dark or white text picked so it always reads. */
-function brand(hex?: string) {
-  const bg = /^#[0-9a-f]{6}$/i.test(hex ?? "") ? hex! : NAVY;
-  const [r, g, b] = [1, 3, 5].map((i) => parseInt(bg.slice(i, i + 2), 16) / 255).map((c) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4));
-  return { bg, fg: 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? INK : "#fff" };
-}
 
 export default function ClientPortal({ slug, tab = "", preview = false }: { slug: string; tab?: string; preview?: boolean }) {
   const { productions, current, email } = useLive();
@@ -136,7 +130,6 @@ const Line = ({ k, v }: { k: string; v: ReactNode }) => (
     <span style={{ color: MUTED }}>{k}</span><span className="min-w-0 truncate text-right font-medium">{v}</span>
   </div>
 );
-const initials = (s: string) => s.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("");
 
 function NeedsYou({ productionId, slug }: { productionId: number; slug: string }) {
   const q = useApprovals(productionId);
