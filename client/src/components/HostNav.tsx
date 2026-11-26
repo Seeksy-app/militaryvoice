@@ -7,14 +7,14 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { LogoLockup } from "@/components/Logo";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { GetTheApp } from "@/components/GetTheApp";
-import { LayoutDashboard, Plus, Podcast, Clapperboard, Film, Upload, Globe, ChevronRight, ChevronDown, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones, PanelLeftClose, PanelLeftOpen, Sun, Moon, Monitor, Check, MoreHorizontal, BadgeCheck, CalendarClock, CreditCard, Trash2, Video, Radio, Building2, Send, Inbox, SlidersHorizontal, Menu } from "lucide-react";
+import { LayoutDashboard, Plus, Podcast, Clapperboard, Film, Upload, Globe, ChevronRight, ChevronDown, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones, PanelLeftClose, PanelLeftOpen, Sun, Moon, Monitor, Check, MoreHorizontal, BadgeCheck, CalendarClock, CreditCard, Trash2, Video, Radio, Building2, Send, Inbox, SlidersHorizontal, Menu, Plane } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { NotificationsMenuItem } from "@/components/Notifications";
 import { Link } from "wouter";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { GuideMenuItem, useGuideName } from "@/components/LoriGuide";
 
-export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "greenroom" | "recordings" | "contacts" | "pro" | "cohost" | "analytics" | "postify" | "social" | "discovery" | "verified" | "podcast" | "page" | "billing" | "trash" | "studio" | "fans" | "myevents" | "organization" | "requests" | "opportunities" | "calendar" | "podcaststats";
+export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "greenroom" | "recordings" | "contacts" | "pro" | "cohost" | "analytics" | "postify" | "social" | "discovery" | "verified" | "podcast" | "page" | "billing" | "trash" | "studio" | "fans" | "myevents" | "organization" | "requests" | "opportunities" | "calendar" | "podcaststats" | "travel";
 
 interface Item {
   key: HostScreen;
@@ -191,6 +191,8 @@ export function HostNav({
         // The producer console (Radio and events) only for the people who run it: admins and studio hosts on a real event.
         ...(consoleOn ? [{ key: "pro" as const, feature: "studio", label: "Studio console", hint: "The producer console for Radio and events: scenes, run of show and lower thirds", icon: SlidersHorizontal }] : []),
         ...(path !== "planner" ? [{ key: "myevents" as const, label: "Events", hint: "The events you're in, and your own: create one, build your page and lineup, and run it from our studio", icon: CalendarDays, badge: eventsCount || undefined }] : []),
+        // Travel (Andrew, 26 Nov: "ok. build it"): conferences and speaking trips sit beside Events.
+        ...(path !== "planner" ? [{ key: "travel" as const, label: "Travel", hint: "Flights for a trip with your military or veteran perk on each one, and we call the airlines whose military fare is phone-only", icon: Plane, tag: "New" }] : []),
       ],
     },
     {

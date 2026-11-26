@@ -59,6 +59,7 @@ import { SponsorFinder } from "@/components/SponsorFinder";
 import { ShowSponsorsCard } from "@/components/ShowSponsors";
 import { AdminChat, AdminChatDock } from "@/components/AdminChat";
 import { AdminTeamDesk } from "@/components/AdminTeamDesk";
+import { AdminTravelCalls } from "@/components/AdminTravelCalls";
 import { AdminMail } from "@/components/AdminMail";
 import { ContactProfile } from "@/components/AdminContact";
 import { AdminProjects } from "@/components/AdminProjects";
@@ -5275,6 +5276,9 @@ export default function Admin({ tab, eventId: eventParam }: { tab?: string; even
                   </TabsContent>
                   <TabsContent value="desk" className="mt-2 lg:mt-0">
                     <AdminTeamDesk />
+                  </TabsContent>
+                  <TabsContent value="travel" className="mt-2 lg:mt-0">
+                    <AdminTravelCalls />
                   </TabsContent>
                   <TabsContent value="aar" className="mt-2 lg:mt-0">
                     <AdminAar

@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BarChart3, ChevronDown, LayoutDashboard, MonitorPlay, ListOrdered, Users, Handshake, Megaphone, Mail, Contact, DollarSign, Settings2, CalendarDays, DoorOpen, PanelLeftClose, PanelLeftOpen, Film, Compass, BookOpen, BadgeCheck, BookUser, Activity, MessagesSquare, ClipboardList, NotebookPen, Smartphone, KanbanSquare, Building2, Rocket } from "lucide-react";
+import { BarChart3, ChevronDown, LayoutDashboard, MonitorPlay, ListOrdered, Users, Handshake, Megaphone, Mail, Contact, DollarSign, Settings2, CalendarDays, DoorOpen, PanelLeftClose, PanelLeftOpen, Film, Compass, BookOpen, BadgeCheck, BookUser, Activity, MessagesSquare, ClipboardList, NotebookPen, Smartphone, KanbanSquare, Building2, Rocket, Plane } from "lucide-react";
 
 // The admin's nav, down the left.
 //
@@ -98,6 +98,8 @@ export const TOP_GROUPS: { title: string; items: AdminSection[] }[] = [
     items: [
       { key: "team", label: "Team", icon: Contact },
       { key: "desk", label: "Team desk", icon: MessagesSquare },
+      // Travel "Have us call" requests (26 Nov 2026): the calls gate, set-up and each answer, read-only.
+      { key: "travel", label: "Travel calls", icon: Plane },
       { key: "finances", label: "Finances", icon: DollarSign },
       { key: "aar", label: "AAR", icon: NotebookPen },
       { key: "health", label: "System health", icon: Activity },

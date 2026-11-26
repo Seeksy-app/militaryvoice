@@ -85,6 +85,7 @@ import { useGuide, useGuideName } from "@/components/LoriGuide";
 import { GuideStep, guideOffered } from "@/components/GuidePicker";
 import { PromotionScreen } from "@/components/PromotionScreen";
 import { SocialScreen } from "@/components/SocialScreen";
+import { Travel } from "@/components/Travel";
 import { GreenRoomScreen } from "@/components/GreenRoomScreen";
 import { ZoomConnect } from "@/components/ZoomConnect";
 import Discover from "@/pages/Discover";
@@ -633,7 +634,7 @@ function BackToEvent({ onGo }: { onGo: (s: "events") => void }) {
 }
 
 /** The screens the dashboard nav switches between, and their URLs. */
-const SCREENS = ["dashboard", "editProfile", "events", "promotion", "greenroom", "discovery", "verified", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social", "podcast", "page", "billing", "trash", "studio", "fans", "myevents", "organization", "requests", "opportunities", "calendar", "podcaststats"] as const;
+const SCREENS = ["dashboard", "editProfile", "events", "promotion", "greenroom", "discovery", "verified", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social", "podcast", "page", "billing", "trash", "studio", "fans", "myevents", "organization", "requests", "opportunities", "calendar", "podcaststats", "travel"] as const;
 type Screen = (typeof SCREENS)[number];
 
 /** /host/dashboard/<slug> ⇄ screen. Home has no slug; the rest are lowercase. */
@@ -652,6 +653,7 @@ const SCREEN_SLUG: Record<Screen, string> = {
   social: "social",
   calendar: "calendar",
   podcaststats: "podcast-analytics",
+  travel: "travel",
   podcast: "podcast",
   page: "page",
   greenroom: "green-room",
@@ -1460,6 +1462,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           <SocialScreen view="social" />
         ) : screen === "podcaststats" ? (
           <section className="mt-6" data-testid="podcast-analytics"><h1 className="mb-4 text-xl font-bold text-foreground">Podcast analytics</h1><PodcastListens bare onConnect={() => goTo("integrations")} /></section>
+        ) : screen === "travel" ? (
+          <Travel serviceStatus={profile?.serviceStatus} />
         ) : screen === "calendar" ? (
           <SocialScreen view="calendar" />
         ) : screen === "podcast" ? (
