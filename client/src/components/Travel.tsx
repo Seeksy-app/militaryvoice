@@ -257,7 +257,7 @@ export function Travel({ serviceStatus }: { serviceStatus?: string | null }) {
         </div>
       )}
 
-      <p className="mt-4 text-center text-[12px] text-muted-foreground text-balance">You book with the airline. We never book or pay for you, and fares can change until you&nbsp;do.</p>
+      <p className="mt-4 text-center text-[12px] text-muted-foreground text-balance">{trip ? <>You book with the airline. We never book or pay for you, and fares can change until you&nbsp;do.</> : <>Fares can change until you&nbsp;book.</>}</p>
     </section>
   );
 }
