@@ -16,6 +16,7 @@ import { dxEventIds } from "./digitalExperience.js";
 import { roomInviteLink } from "./myStudio.js";
 import { inviteShow, showFor, type Show } from "./hostShows.js";
 import { buildShareCard } from "./shareCard.js";
+import { attachBrief, deleteBriefOf, ensureBriefs } from "./guestBrief.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 
@@ -81,6 +82,8 @@ function ensure(): Promise<void> {
     await db.execute(sql`ALTER TABLE guest_invites ADD COLUMN IF NOT EXISTS linkedin_url TEXT NOT NULL DEFAULT ''`);
     // Where it's recorded when it's the host's own tool (streamyard | restream | obs; '' = Zoom or ours), so the email names the link right.
     await db.execute(sql`ALTER TABLE guest_invites ADD COLUMN IF NOT EXISTS link_kind TEXT NOT NULL DEFAULT ''`);
+    // The guest brief (26 Nov): guest_briefs, and brief_id here.
+    await ensureBriefs();
   })());
 }
 
@@ -100,7 +103,7 @@ export function registerGuestInvites(app: Express, requireHostSession: RequestHa
   const view = (r: Record<string, unknown>) => {
     let answers: Record<string, string> = {}; try { answers = JSON.parse(String(r.answers || "{}")); } catch { answers = {}; }
     let questions: string[] = []; try { questions = JSON.parse(String(r.questions || "[]")); } catch { questions = []; }
-    return { id: r.id, questions, guestName: r.guest_name, guestEmail: r.guest_email, whenText: r.when_text, whenIso: r.when_iso, linkedinUrl: r.linkedin_url ?? "", zoomLink: r.zoom_link, linkLater: Number(r.link_later ?? 0) === 1, note: r.note, showId: Number(r.show_id ?? 0) || null, status: r.status, answers, hasPhoto: !!r.photo_key, invitedAt: r.invited_at, answeredAt: r.answered_at, usedRec: r.used_rec, link: `${ORIGIN}/guest-invite/${r.token}` };
+    return { id: r.id, questions, guestName: r.guest_name, guestEmail: r.guest_email, whenText: r.when_text, whenIso: r.when_iso, linkedinUrl: r.linkedin_url ?? "", zoomLink: r.zoom_link, linkLater: Number(r.link_later ?? 0) === 1, note: r.note, showId: Number(r.show_id ?? 0) || null, status: r.status, answers, hasPhoto: !!r.photo_key, invitedAt: r.invited_at, answeredAt: r.answered_at, usedRec: r.used_rec, briefId: Number(r.brief_id ?? 0) || null, link: `${ORIGIN}/guest-invite/${r.token}` };
   };
 
   app.get("/api/host/guest-invites", requireHostSession, async (req, res) => {
@@ -184,6 +187,9 @@ export function registerGuestInvites(app: Express, requireHostSession: RequestHa
     if (show) { await db.execute(sql`update guest_invites set show_id=${show.id} where id=${Number(r.id)}`); r.show_id = show.id; }
     if (linkedinUrl) { await db.execute(sql`update guest_invites set linkedin_url=${linkedinUrl} where id=${Number(r.id)}`); r.linkedin_url = linkedinUrl; }
     if (linkKind) { await db.execute(sql`update guest_invites set link_kind=${linkKind} where id=${Number(r.id)}`); r.link_kind = linkKind; }
+    // A brief looked up on the form goes with the invite (it's the host's alone; nothing of it is in the email).
+    const briefId = Number(req.body?.briefId) || 0;
+    if (briefId) { await attachBrief(owner, Number(r.id), briefId); r.brief_id = briefId; }
     const ok = await sendInterviewInvite({ fromLocal: await senderFor(owner, show), to: guestEmail, guestName, hostName: profile?.hostName ?? "", hostEmail: owner, show: boothShow || show?.title || (profile?.podcastName ?? ""), whenText, zoomLink, linkLater, where: linkKind, note, link: `${ORIGIN}/guest-invite/${token}` });
     if (!ok) return res.status(502).json({ message: "The email didn't go. Try again in a moment.", invite: view(r) });
     res.status(201).json(view(r));
@@ -211,7 +217,10 @@ export function registerGuestInvites(app: Express, requireHostSession: RequestHa
 
   app.delete("/api/host/guest-invites/:id", requireHostSession, async (req, res) => {
     await ensure();
-    await db.execute(sql`delete from guest_invites where id=${Number(req.params.id)} and owner_email=${mine(req)}`);
+    const owner = mine(req);
+    const gone = rows(await db.execute(sql`delete from guest_invites where id=${Number(req.params.id)} and owner_email=${owner} returning brief_id`))[0];
+    // Its brief goes with it (PM, 26 Nov: "deleted with the invite").
+    await deleteBriefOf(owner, Number(gone?.brief_id ?? 0));
     res.json({ ok: true });
   });
 

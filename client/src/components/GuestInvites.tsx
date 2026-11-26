@@ -13,8 +13,10 @@ import { CopyField } from "@/components/OwnEncoder";
 import { WatchLinkCard } from "@/components/WatchLink";
 import { Art3D, IconTile } from "@/components/ui/icon-tile";
 import { otherLinkCopy } from "@shared/guestWhere";
+import { canLookUp } from "@shared/guestBrief";
+import { BriefAsk, BriefCard, useBriefAllowance, useStartBrief } from "@/components/GuestBrief";
 
-type Invite = { id: number; guestName: string; guestEmail: string; whenText: string; zoomLink: string; note: string; status: "invited" | "answered"; answers: Record<string, string> & { custom?: { q: string; a: string }[] }; hasPhoto: boolean; whenIso?: string; linkedinUrl?: string; invitedAt: string; answeredAt: string; usedRec: number; link: string };
+type Invite = { id: number; briefId?: number | null; guestName: string; guestEmail: string; whenText: string; zoomLink: string; note: string; status: "invited" | "answered"; answers: Record<string, string> & { custom?: { q: string; a: string }[] }; hasPhoto: boolean; whenIso?: string; linkedinUrl?: string; invitedAt: string; answeredAt: string; usedRec: number; link: string };
 const say = (e: unknown) => ((e as Error).message ?? "").replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, "") || "Try again in a moment.";
 
 /** "name@gmail.om" and the like: a big mail provider with the wrong ending. Returns the fixed address, or "". */
@@ -113,13 +115,27 @@ export function GuestInvites({ prefill, shows = [], showId }: { prefill?: { name
     requestAnimationFrame(() => document.querySelector("[data-testid='guest-invite-form']")?.scrollIntoView({ behavior: "smooth", block: "start" }));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill?.n]);
+  // The guest brief (26 Nov): looked up on the form, it goes with the invite; not looked up, Send looks them up.
+  const allowance = useBriefAllowance();
+  const [brief, setBrief] = useState<{ id: number; name: string } | null>(null);
+  const [briefErr, setBriefErr] = useState("");
+  const [openBrief, setOpenBrief] = useState<number | null>(null);
+  const startBrief = useStartBrief((v) => { setBriefErr(""); setBrief({ id: v.id, name: v.guestName }); }, setBriefErr);
+  const afterSend = useStartBrief(() => {}, () => {});
+  const briefOn = !!allowance.data?.on;
+  const briefHere = brief && brief.name.toLowerCase() === f.guestName.trim().toLowerCase() ? brief : null;
+  const lookUp = () => startBrief.mutate({ guestName: f.guestName.trim(), guestEmail: f.guestEmail.trim(), linkedin: f.linkedin.trim(), showId: pickedShow });
   const send = useMutation({
     mutationFn: async () => {
       const whenIso = f.when ? new Date(f.when).toISOString() : "";
       const whenText = whenLabel(f.when);
-      return (await apiRequest("POST", "/api/host/guest-invites", { guestName: f.guestName, guestEmail: f.guestEmail, linkedin: f.linkedin.trim(), whenText, whenIso, zoomLink: byLink && !linkLater ? f.zoomLink.trim() : "", linkLater: byLink && linkLater, note: f.note, ...(where === "booth" ? { where: "booth", bookingId: pickedBooking } : where === "studio" ? { where: "studio" } : isOutside(where) ? { where } : {}), questions: questions.map((q) => q.trim()).filter(Boolean), ...(pickedShow ? { showId: pickedShow } : {}) })).json();
+      return (await apiRequest("POST", "/api/host/guest-invites", { guestName: f.guestName, guestEmail: f.guestEmail, linkedin: f.linkedin.trim(), whenText, whenIso, zoomLink: byLink && !linkLater ? f.zoomLink.trim() : "", linkLater: byLink && linkLater, note: f.note, ...(where === "booth" ? { where: "booth", bookingId: pickedBooking } : where === "studio" ? { where: "studio" } : isOutside(where) ? { where } : {}), questions: questions.map((q) => q.trim()).filter(Boolean), ...(pickedShow ? { showId: pickedShow } : {}), ...(briefHere ? { briefId: briefHere.id } : {}) })).json();
     },
-    onSuccess: () => { setF({ guestName: "", guestEmail: "", linkedin: "", when: "", zoomLink: "", note: "" }); setQuestions([]); setNoteOpen(false); setQsOpen(false); setWhere("studio"); setLinkLater(false); setNeedLink(false); void qc.invalidateQueries({ queryKey: ["/api/host/guest-invites"] }); toast({ title: "Invitation sent", description: "They'll get an email from you through MilitaryVoices.ai, and you'll hear when they answer." }); },
+    onSuccess: (sent: { id?: number }) => {
+      if (!briefHere && briefOn && sent?.id && canLookUp(f.guestName, f.guestEmail, f.linkedin) && allowance.data?.left !== 0) afterSend.mutate({ guestName: f.guestName.trim(), guestEmail: f.guestEmail.trim(), linkedin: f.linkedin.trim(), showId: pickedShow, inviteId: sent.id });
+      setBrief(null); setBriefErr("");
+      setF({ guestName: "", guestEmail: "", linkedin: "", when: "", zoomLink: "", note: "" }); setQuestions([]); setNoteOpen(false); setQsOpen(false); setWhere("studio"); setLinkLater(false); setNeedLink(false); void qc.invalidateQueries({ queryKey: ["/api/host/guest-invites"] }); toast({ title: "Invitation sent", description: "They'll get an email from you through MilitaryVoices.ai, and you'll hear when they answer." });
+    },
     onError: (e) => toast({ title: "Couldn't send that", description: say(e), variant: "destructive" }),
   });
   const del = useMutation({ mutationFn: async (id: number) => apiRequest("DELETE", `/api/host/guest-invites/${id}`), onSuccess: () => void qc.invalidateQueries({ queryKey: ["/api/host/guest-invites"] }) });
@@ -173,6 +189,7 @@ export function GuestInvites({ prefill, shows = [], showId }: { prefill?: { name
                   <StatusTag st={st} />
                   {st === "waiting" && <Button type="button" variant="outline" size="sm" onClick={() => setFixing(fixing?.id === g.id ? null : { id: g.id, email: g.guestEmail })} data-testid={`guest-invite-resend-${g.id}`}>Fix email or resend</Button>}
                   {st !== "done" && <Button type="button" variant="ghost" size="sm" className="h-9 w-9 p-0" onClick={() => void copy(g.link)} aria-label="Copy their link"><Copy className="h-4 w-4" /></Button>}
+                  {g.briefId && <Button type="button" variant="outline" size="sm" onClick={() => setOpenBrief(openBrief === g.id ? null : g.id)} data-testid={`guest-invite-brief-${g.id}`}>{openBrief === g.id ? "Hide brief" : "Guest brief"}</Button>}
                   {g.status === "answered" && <Button type="button" variant="outline" size="sm" onClick={() => setOpen(open === g.id ? null : g.id)}>{open === g.id ? "Hide answers" : "See answers"}</Button>}
                   <Button type="button" variant="ghost" size="sm" className="h-9 w-9 p-0" onClick={() => del.mutate(g.id)} aria-label="Delete this invitation"><Trash2 className="h-4 w-4" /></Button>
                   </div>
@@ -184,6 +201,7 @@ export function GuestInvites({ prefill, shows = [], showId }: { prefill?: { name
                     {typoFix(fixing.email) && <span className="text-xs text-amber-800">Did you mean <button type="button" onClick={() => setFixing({ id: g.id, email: typoFix(fixing.email) })} className="font-semibold underline">{typoFix(fixing.email)}</button>?</span>}
                   </form>
                 )}
+                {openBrief === g.id && g.briefId && <div className="mt-3 border-t border-border pt-3"><BriefCard id={g.briefId} onGone={() => setOpenBrief(null)} /></div>}
                 {open === g.id && (
                   <dl className="mt-3 space-y-2 border-t border-border pt-3 text-sm">
                     {([["title", "What they do"], ["bio", "Bio"], ["topics", "Topics"], ["links", "Where to find them"], ["avoid", "Rather not discuss"]] as const).filter(([k]) => g.answers[k]).map(([k, label]) => (
@@ -272,6 +290,9 @@ export function GuestInvites({ prefill, shows = [], showId }: { prefill?: { name
                 : <p className="text-xs text-muted-foreground">{linkLater ? "We'll tell your guest the link is coming from you." : where === "zoom" ? "Make the meeting in Zoom and paste its link here." : `Your guest joins you in ${OUTSIDE[where as keyof typeof OUTSIDE].name} with this link.`}</p>}
             </div>
           )}
+          {briefOn && (briefHere
+            ? <BriefCard id={briefHere.id} onGone={() => setBrief(null)} onAddQuestion={(q) => { setQsOpen(true); setQuestions((qs) => [...qs.filter((x) => x.trim()), q].slice(0, 10)); }} />
+            : canLookUp(f.guestName, f.guestEmail, f.linkedin) && <BriefAsk name={f.guestName} left={allowance.data?.left ?? null} busy={startBrief.isPending} error={briefErr} onLookUp={lookUp} />)}
           {isOutside(where) && (
             <div className="space-y-3 rounded-xl border border-border/70 p-4 sm:col-span-2 [&>*]:max-w-2xl" data-testid="invite-stream-in">
               <div>

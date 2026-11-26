@@ -12,7 +12,7 @@ import { Select } from "./Select";
  * on the room's "mv-starter" topic to the owner only (agreed 26 Nov). Until that listener runs nothing arrives, so the
  * card never shows: there are no made-up suggestions. Never seen by guests or viewers, never in the recording.
  */
-export type Starters = { on: boolean; from: { notes: boolean; prep: boolean; talk: boolean }; wait: number };
+export type Starters = { on: boolean; from: { notes: boolean; prep: boolean; talk: boolean; brief: boolean }; wait: number };
 const KEY = ["/api/host/my-studio/starters"];
 const WAITS = [5, 8, 12, 20];
 
@@ -39,7 +39,7 @@ function Toggle({ on, onClick, label }: { on: boolean; onClick: () => void; labe
 export function TipsPanel() {
   const { s, set } = useStarters(true);
   const on = s?.on === true;
-  const from = s?.from ?? { notes: true, prep: true, talk: true };
+  const from = { notes: true, prep: true, talk: true, brief: true, ...(s?.from ?? {}) };
   const box = (k: keyof Starters["from"], text: string) => (
     <label className="flex items-center gap-2 text-[13px] font-medium">
       <input type="checkbox" checked={from[k]} onChange={(e) => set({ from: { ...from, [k]: e.target.checked } })} className="h-4 w-4 accent-[#053877]" data-testid={`starters-from-${k}`} />{text}
@@ -60,6 +60,7 @@ export function TipsPanel() {
       <div className="mt-2 grid gap-1.5">
         {box("notes", "Your show notes")}
         {box("prep", "Your guest's prep form")}
+        {box("brief", "Your guest brief")}
         {box("talk", "What's been said so far")}
       </div>
       <div className="mt-4 flex items-center justify-between gap-3 text-[13px] font-medium">

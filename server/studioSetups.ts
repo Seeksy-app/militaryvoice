@@ -165,13 +165,13 @@ export function registerStudioSetups(app: Express, requireHostSession: RequestHa
    * and sends the cards on the room's "mv-starter" topic to the owner only; until it runs, nothing shows. Off by default.
    */
   const startersKey = (id: number) => `studio-starters:${id}`;
-  type Starters = { on: boolean; from: { notes: boolean; prep: boolean; talk: boolean }; wait: number };
+  type Starters = { on: boolean; from: { notes: boolean; prep: boolean; talk: boolean; brief: boolean }; wait: number };
   const WAITS = [5, 8, 12, 20];
   const readStarters = async (id: number): Promise<Starters> => {
     let v: Partial<Starters> = {};
     try { v = JSON.parse((await storage.getSetting(startersKey(id))) ?? "{}"); } catch { v = {}; }
     // Off until the owner turns it on (Engineering, 26 Nov): the listener hears the room and costs ~$0.50/hour.
-    return { on: v.on === true, from: { notes: v.from?.notes !== false, prep: v.from?.prep !== false, talk: v.from?.talk !== false }, wait: WAITS.includes(Number(v.wait)) ? Number(v.wait) : 8 };
+    return { on: v.on === true, from: { notes: v.from?.notes !== false, prep: v.from?.prep !== false, talk: v.from?.talk !== false, brief: v.from?.brief !== false }, wait: WAITS.includes(Number(v.wait)) ? Number(v.wait) : 8 };
   };
   app.get("/api/host/my-studio/starters", requireHostSession, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
@@ -186,7 +186,7 @@ export function registerStudioSetups(app: Express, requireHostSession: RequestHa
     const b = req.body ?? {};
     const next: Starters = {
       on: typeof b.on === "boolean" ? b.on : cur.on,
-      from: { notes: typeof b.from?.notes === "boolean" ? b.from.notes : cur.from.notes, prep: typeof b.from?.prep === "boolean" ? b.from.prep : cur.from.prep, talk: typeof b.from?.talk === "boolean" ? b.from.talk : cur.from.talk },
+      from: { notes: typeof b.from?.notes === "boolean" ? b.from.notes : cur.from.notes, prep: typeof b.from?.prep === "boolean" ? b.from.prep : cur.from.prep, talk: typeof b.from?.talk === "boolean" ? b.from.talk : cur.from.talk, brief: typeof b.from?.brief === "boolean" ? b.from.brief : cur.from.brief },
       wait: WAITS.includes(Number(b.wait)) ? Number(b.wait) : cur.wait,
     };
     await storage.setSetting(startersKey(s.id), JSON.stringify(next));

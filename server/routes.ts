@@ -191,6 +191,7 @@ import type { StageThanks } from "../shared/stageMeta.js";
 import { registerBioPage, registerBioAgent, claimLivingSqueeze, subscribersFor, publishedBioUrl } from "./bioPage.js";
 import { registerGuests, guestByToken, markGuestJoined, publicGuestsFor } from "./guests.js";
 import { registerGuestInvites, takeAnsweredInvite } from "./guestInvites.js";
+import { registerGuestBrief } from "./guestBrief.js";
 import { registerCaptures, onCaptureWebhook } from "./captures.js";
 import { registerStreamIn, onStreamInWebhook, streamInSkipsClips } from "./streamIn.js";
 import { registerIngest } from "./ingestEngine.js";
@@ -7231,6 +7232,7 @@ export function registerRoutes(app: Express): void {
   registerBioAgent(app, requireAgent);
   registerGuests(app, requireAdmin);
   registerGuestInvites(app, requireHostSession);
+  registerGuestBrief(app, requireHostSession, requireAdmin);
   registerCaptures(app, requireAdmin, (req) => getAdminEmail(req) ?? "");
   registerStreamIn(app);
   registerIngest(app, requireAdmin);
