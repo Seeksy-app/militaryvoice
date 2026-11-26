@@ -4,7 +4,7 @@ import {
   Search, Sparkles, BadgeCheck, Bookmark, BookmarkCheck, Users, Mail, Phone, Globe, ShieldCheck,
   Mic2, Send, Megaphone, CalendarDays, X, Loader2, ExternalLink, Plus, Trash2, Download, ChevronRight, Lock, MapPin, Heart, Hash, Handshake, Info,
   Check, SlidersHorizontal, AtSign, Type as TypeIcon, Wand2, TrendingUp, Instagram, Youtube, Twitter, Twitch, Music2, Share2, Linkedin, Facebook,
-  Compass, Link2,
+  Compass, Link2, ChevronDown,
 } from "lucide-react";
 import { NavBar } from "@/components/NavBar";
 import { SiteFooter } from "@/components/SiteFooter";
@@ -55,7 +55,7 @@ type RowExtra = {
 type Me = { discoveryPro?: boolean; signedIn: boolean; email?: string; isPodcaster?: boolean; member?: { role: string; orgName: string } | null; reveals?: { used: number; allowance: number; unlimited?: boolean } | null; lookups?: { used: number; allowance: number } | null; isAdmin?: boolean; free?: FreeState | null };
 /** The saved sample search, every column filled; free to show. */
 type Sample = { q: string; platform: string; total: number; results: Card[]; builtAt: string };
-type SearchResult = { brief: string; mode?: string; total: number; page: number; pageSize: number; results: Card[]; verified: Card[]; understood?: { notes?: string[]; from_nlp?: Record<string, unknown> } | null };
+type SearchResult = { brief: string; mode?: string; /** Lookalikes: a full page came back, so ask for the next. */ more?: boolean; total: number; page: number; pageSize: number; results: Card[]; verified: Card[]; understood?: { notes?: string[]; from_nlp?: Record<string, unknown> } | null };
 type Analytics = {
   incomeMin: number | null; incomeMax: number | null; likesMedian: number | null; commentsMedian: number | null;
   reelsPercent: number | null; reelsMedianViews: number | null;
@@ -116,17 +116,19 @@ const DOORS = [
   },
 ] as const;
 
-/** Three ways to ask: describe them, name the words in their bio, or name the account. */
+/** Every way to search, in one menu (Andrew, 26 Nov: "just be all one thing, and then they can pick what they want"). */
 const MODES = [
-  { v: "ai", label: "SI search", icon: Wand2, hint: "Describe who you want, in plain English." },
-  { v: "keywords", label: "Keywords in bio", icon: TypeIcon, hint: "Words that appear in their bio. Separate with commas." },
-  { v: "username", label: "Username", icon: Link2, hint: "A handle or a profile link. Opens their full profile." },
+  { v: "ai", label: "SI search", icon: Wand2, hint: "Describe who you want" },
+  { v: "keywords", label: "Keywords in bio", icon: TypeIcon, hint: "Words in their bio" },
+  { v: "username", label: "Username or link", icon: Link2, hint: "Opens their profile" },
+  { v: "like", label: "Lookalikes", icon: Sparkles, hint: "Creators like @handle" },
 ] as const;
-/** With Podcasts picked: shows, or the people who host them and guest on them. */
+/** The podcast index (Listen Notes, Podchaser/Podscan behind it): shows, or the people who host them and guest on them. */
 const PC_MODES = [
-  { v: "shows", label: "Shows", icon: Mic2, hint: "Podcasts by topic: to pitch, sponsor, or be a guest on." },
-  { v: "people", label: "Hosts & guests", icon: Users, hint: "People who host a show or have been a guest on one." },
+  { v: "shows", label: "Shows", icon: Mic2, hint: "Podcasts by topic" },
+  { v: "people", label: "Hosts & guests", icon: Users, hint: "People on the mic" },
 ] as const;
+const MODE_GROUPS = [{ title: "Creators", items: MODES }, { title: "Podcasts", items: PC_MODES }] as const;
 const PC_TRIES = {
   shows: ["Transition out of the military", "Military spouse life", "PTSD and recovery", "Veteran entrepreneurs"],
   people: ["Veteran authors", "Special operations", "Military historians", "Medal of Honor"],
@@ -138,6 +140,13 @@ const compact = (n: number | null | undefined) =>
   n == null ? "–" : n >= 1_000_000 ? `${(n / 1_000_000).toFixed(n >= 10_000_000 ? 0 : 1)}M` : n >= 1_000 ? `${(n / 1_000).toFixed(n >= 10_000 ? 0 : 1)}K` : String(Math.round(n));
 const pct = (n: number | null | undefined, d = 1) => (n == null ? "–" : `${n.toFixed(d)}%`);
 const isPod = (p: string) => p === "podcast" || p === "podperson";
+/** "@name", "name" or a profile link → "name". */
+const handleOf = (s: string) => {
+  const t = s.trim();
+  if (!t) return "";
+  const path = /^https?:\/\//i.test(t) || /\.(com|tv)\//i.test(t) ? t.replace(/^https?:\/\/[^/]+\//i, "").replace(/^[^/]*\.(com|tv)\//i, "").split(/[/?#]/).filter(Boolean)[0] ?? "" : t;
+  return path.replace(/^@/, "").trim().slice(0, 100);
+};
 const profileUrl = (c: Pick<Card, "platform" | "handle">) =>
   isPod(c.platform) ? "" : c.platform === "youtube" ? `https://youtube.com/@${c.handle}` : c.platform === "tiktok" ? `https://tiktok.com/@${c.handle}` : c.platform === "twitter" ? `https://x.com/${c.handle}` : c.platform === "twitch" ? `https://twitch.tv/${c.handle}` : `https://instagram.com/${c.handle}`;
 const platformLabel = (p: string) => (p === "podcast" ? "Podcast" : p === "podperson" ? "Host or guest" : PLATFORMS.find((x) => x.v === p)?.label ?? p);
@@ -265,6 +274,16 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
     setPlatform(p);
     if (was !== now) { setMode(now ? "shows" : "ai"); setPcSort("best"); setSubmitted(null); }
   };
+  // One menu picks the way to search; a podcast way switches the source to the podcast index, and a creator way
+  // comes back to the platform they had.
+  const lastSocial = useRef("instagram");
+  if (platform !== "podcasts") lastSocial.current = platform;
+  const chooseMode = (m: Mode) => {
+    if (isPodMode(m) && platform !== "podcasts") { setPlatform("podcasts"); setPcSort("best"); setSubmitted(null); }
+    else if (!isPodMode(m) && platform === "podcasts") { setPlatform(lastSocial.current); setSubmitted(null); }
+    else if ((m === "like") !== (mode === "like")) setSubmitted(null);
+    setMode(m);
+  };
   // Book guests opens on podcast hosts and guests: people who've already been on shows.
   // The other doors go back to creators if that's where they'd been taken.
   const pickDoor = (k: (typeof DOORS)[number]["key"]) => {
@@ -347,7 +366,12 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
     setTab("search");
     // A visitor gets a real answer — the top five — before being asked for an
     // account. Looking up one exact account is a member's tool.
-    if (!isMember && m === "username") { setSubmitted(next); setGate(true); return; }
+    if (!isMember && (m === "username" || m === "like")) { setSubmitted(next); setGate(true); return; }
+    if (m === "like") {
+      const h = handleOf(next.q);
+      if (!h) return toast({ title: "Type a creator's handle", description: "For example: @militaryspouse, or paste their profile link." });
+      return setSubmitted({ ...next, q: h });
+    }
     if (m === "username") return void lookupUser(next.q, next.platform);
     if (sample && m === "ai" && next.q.trim().toLowerCase() === sample.q.toLowerCase() && next.platform === sample.platform && !next.branch && next.size === 0 && activeFilters(filters).length === 0) {
       setSubmitted(null);
@@ -388,9 +412,18 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
     queryKey: ["/api/discover/search", submitted],
     enabled: !!submitted && submitted.mode !== "username" && !isPodMode(submitted.mode) && (isMember || !meLoading),
     initialPageParam: 0,
-    getNextPageParam: (last) => (last.total > (last.page + 1) * last.pageSize && last.page < 40 ? last.page + 1 : undefined),
+    getNextPageParam: (last) => (last.mode === "like" ? (last.more ? last.page + 1 : undefined) : last.total > (last.page + 1) * last.pageSize && last.page < 40 ? last.page + 1 : undefined),
     queryFn: async ({ pageParam }) => {
       const s = submitted!;
+      if (s.mode === "like") {
+        const page = Number(pageParam) || 0;
+        const res = await fetch(`/api/discover/similar?platform=${s.platform}&handle=${encodeURIComponent(s.q)}&limit=24&page=${page}`, { credentials: "include" });
+        const j = await res.json();
+        if (!res.ok) throw new Error(j.message ?? "Couldn't find lookalikes.");
+        const results = (Array.isArray(j) ? j : []) as Card[];
+        // The endpoint gives no total: a full page means there may be more (up to five pages).
+        return { brief: `@${s.q}`, mode: "like", more: results.length === 24 && page < 4, total: page * 24 + results.length, page, pageSize: 24, results, verified: [] } satisfies SearchResult;
+      }
       const res = await fetch("/api/discover/search", {
         method: "POST",
         credentials: "include",
@@ -489,12 +522,12 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
             platform={platform}
             setPlatform={choosePlatform}
             mode={mode}
-            setMode={setMode}
+            setMode={chooseMode}
             q={q}
             setQ={setQ}
-            placeholder={mode === "shows" ? "Leadership, transition, fitness, faith…" : mode === "people" ? "A topic they're known for, or a name…" : mode === "ai" ? d.placeholder : mode === "keywords" ? "army wife, military spouse, milso" : "@handle, or paste a profile link"}
+            placeholder={mode === "shows" ? "Leadership, transition, fitness, faith…" : mode === "people" ? "A topic they're known for, or a name…" : mode === "ai" ? d.placeholder : mode === "keywords" ? "army wife, military spouse, milso" : mode === "like" ? "@handle of a creator you like" : "@handle, or paste a profile link"}
             ghost={ghost}
-            callout={tryOwn && !tryOwnDone && !submitted && !q && !ghost ? <TryYourOwn onClose={() => setTryOwnDone(true)} /> : null}
+            callout={tryOwn && !tryOwnDone && !submitted && !q && !ghost && !menuOpen && mode === "ai" ? <TryYourOwn onClose={() => setTryOwnDone(true)} /> : null}
             onFocusQ={() => { if (tryOwn) setTryOwnDone(true); }}
             onSubmit={() => run()}
             busy={userLoading}
@@ -503,7 +536,8 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
             onFilters={() => { setShowFilters((v) => !v); setTimeout(() => document.getElementById("discover-main")?.scrollIntoView({ behavior: "smooth" }), 60); }}
           />
         );
-        const tries = (
+        // The examples are briefs; a lookalike search starts from a handle, so it has none.
+        const tries = mode === "like" ? null : (
           <div className="mt-3 flex flex-wrap items-center gap-2">
             <span className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">Try</span>
             {(isPodMode(mode) ? PC_TRIES[mode] : d.tries).map((t) => (
@@ -538,7 +572,8 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
                 {bar}
                 {free && <FreeCounter free={free} className="mt-3" />}
                 {tries}
-                {tab !== "enrich" && (
+                {/* Lookalikes take no branch, size or filters: the creator they named is the brief. */}
+                {tab !== "enrich" && mode !== "like" && (
                   <div className="mt-4 flex flex-wrap items-center gap-2">
                     <div className="flex flex-wrap gap-1.5" aria-label="Branch">
                       {BRANCHES.map((b) => {
@@ -639,9 +674,9 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
             <div className="flex flex-wrap items-baseline justify-between gap-3">
               <div className="min-w-0">
                 <h2 className="text-xl font-semibold tracking-tight">
-                  {search.isLoading ? "Searching…" : r ? `${r.total.toLocaleString()} creators on ${platformLabel(submitted.platform)}` : "Search"}
+                  {search.isLoading ? "Searching…" : r?.mode === "like" ? `Creators like @${submitted.q} on ${platformLabel(submitted.platform)}` : r ? `${r.total.toLocaleString()} creators on ${platformLabel(submitted.platform)}` : "Search"}
                 </h2>
-                {r && <p className="mt-1 text-sm text-muted-foreground">{r.mode === "keywords" ? <>Creators whose <span className="font-medium text-foreground">{r.brief}</span></> : <>We searched for <span className="font-medium text-foreground">"{r.brief}"</span></>}</p>}
+                {r && r.mode !== "like" && <p className="mt-1 text-sm text-muted-foreground">{r.mode === "keywords" ? <>Creators whose <span className="font-medium text-foreground">{r.brief}</span></> : <>We searched for <span className="font-medium text-foreground">"{r.brief}"</span></>}</p>}
               </div>
             </div>
             {r?.understood?.notes?.length ? (
@@ -732,29 +767,61 @@ function ModeMenu({ mode, setMode, onOpenChange, peopleOpen }: { mode: Mode; set
     document.addEventListener("mousedown", off);
     return () => document.removeEventListener("mousedown", off);
   }, [open]);
-  const list: readonly { v: Mode; label: string; icon: typeof Wand2; hint: string }[] = isPodMode(mode) ? PC_MODES : MODES;
-  const cur = list.find((m) => m.v === mode) ?? list[0];
+  const all: readonly { v: Mode; label: string; icon: typeof Wand2; hint: string }[] = [...MODES, ...PC_MODES];
+  const cur = all.find((m) => m.v === mode) ?? all[0];
   const Icon = cur.icon;
   return (
     <div ref={ref} className="relative">
       <button type="button" onClick={() => setOpen((v) => !v)} aria-haspopup="listbox" aria-expanded={open} className="flex h-12 w-full items-center gap-2 whitespace-nowrap rounded-xl bg-[#053877]/[0.07] px-3 text-sm font-medium text-[#053877] hover:bg-[#053877]/[0.11] sm:w-auto" data-testid="discover-mode">
         <Icon className="h-4 w-4" /> {cur.label}
-        <ChevronRight className={`ml-auto h-3.5 w-3.5 transition-transform sm:ml-0 ${open ? "-rotate-90" : "rotate-90"}`} />
+        <ChevronDown className={`ml-auto h-4 w-4 transition-transform sm:ml-1 ${open ? "rotate-180" : ""}`} />
       </button>
       {open && (
-        <ul role="listbox" className="absolute left-0 top-[calc(100%+6px)] z-30 w-72 overflow-hidden rounded-2xl border border-border bg-popover p-1.5 text-foreground shadow-2xl">
-          {list.map((m) => {
-            const I = m.icon;
-            const soon = m.v === "people" && !peopleOpen;
-            return (
-              <li key={m.v}>
-                <button type="button" role="option" aria-selected={m.v === mode} aria-disabled={soon} disabled={soon} onClick={() => { setMode(m.v); setOpen(false); }} className={`flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left ${soon ? "cursor-default opacity-60" : "hover:bg-muted"} ${m.v === mode ? "bg-[#053877]/[0.06]" : ""}`} data-testid={`discover-mode-${m.v}`}>
-                  <IconTile icon={I} size="sm" />
-                  <span><span className="flex items-center gap-2 text-sm font-semibold">{m.label}{soon && <span className="rounded-full bg-[#053877]/10 px-2 py-0.5 text-[11px] font-semibold text-[#053877]">Soon</span>}</span><span className="block text-xs text-muted-foreground">{m.hint}</span></span>
-                </button>
-              </li>
-            );
-          })}
+        <div role="listbox" className="absolute right-0 top-[calc(100%+6px)] z-30 w-64 rounded-2xl border border-border bg-popover p-1.5 text-foreground shadow-2xl sm:left-0 sm:right-auto">
+          {MODE_GROUPS.map((g, gi) => (
+            <div key={g.title} role="group" aria-label={g.title} className={gi ? "mt-1 border-t border-border pt-1" : ""}>
+              <p className="px-3 pb-0.5 pt-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-muted-foreground">{g.title}</p>
+              {g.items.map((m) => {
+                const I = m.icon;
+                const soon = m.v === "people" && !peopleOpen;
+                return (
+                  <button key={m.v} type="button" role="option" aria-selected={m.v === mode} aria-disabled={soon} disabled={soon} onClick={() => { setMode(m.v); setOpen(false); }} className={`flex w-full items-center gap-2.5 rounded-xl px-2.5 py-1.5 text-left ${soon ? "cursor-default opacity-60" : "hover:bg-muted"} ${m.v === mode ? "bg-[#053877]/[0.06]" : ""}`} data-testid={`discover-mode-${m.v}`}>
+                    <IconTile icon={I} size="sm" />
+                    <span className="min-w-0"><span className="flex items-center gap-2 text-sm font-semibold leading-tight">{m.label}{soon && <span className="rounded-full bg-[#053877]/10 px-2 py-0.5 text-[11px] font-semibold text-[#053877]">Soon</span>}</span><span className="block text-xs text-muted-foreground">{m.hint}</span></span>
+                  </button>
+                );
+              })}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The platform, as a button like the mode menu (Andrew, 26 Nov: the select's arrow sat "right up against the edge"). */
+function PlatformMenu({ platform, setPlatform, podcasts }: { platform: string; setPlatform: (p: string) => void; podcasts: boolean }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const off = (e: MouseEvent) => { if (!ref.current?.contains(e.target as Node)) setOpen(false); };
+    document.addEventListener("mousedown", off);
+    return () => document.removeEventListener("mousedown", off);
+  }, [open]);
+  useEffect(() => { if (podcasts) setOpen(false); }, [podcasts]);
+  const social = PLATFORMS.filter((p) => p.v !== "podcasts");
+  return (
+    <div ref={ref} className="relative">
+      <button type="button" disabled={podcasts} onClick={() => setOpen((v) => !v)} aria-haspopup="listbox" aria-expanded={open} aria-label="Platform" title={podcasts ? "Podcast search covers every show, so there's no platform to pick." : undefined} className={`flex h-12 w-full items-center gap-2 whitespace-nowrap rounded-xl bg-muted/60 px-3 text-sm font-medium sm:w-[9.5rem] ${podcasts ? "cursor-default text-muted-foreground" : "hover:bg-muted"}`} data-testid="discover-platform">
+        {podcasts ? <><Mic2 className="h-4 w-4" /> All podcasts</> : (social.find((p) => p.v === platform)?.label ?? "Instagram")}
+        {!podcasts && <ChevronDown className={`ml-auto h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />}
+      </button>
+      {open && !podcasts && (
+        <ul role="listbox" className="absolute left-0 top-[calc(100%+6px)] z-30 w-44 rounded-2xl border border-border bg-popover p-1.5 text-foreground shadow-2xl">
+          {social.map((p) => (
+            <li key={p.v}><button type="button" role="option" aria-selected={p.v === platform} onClick={() => { setPlatform(p.v); setOpen(false); }} className={`flex h-9 w-full items-center rounded-lg px-3 text-sm hover:bg-muted ${p.v === platform ? "bg-[#053877]/[0.06] font-semibold" : ""}`} data-testid={`discover-platform-${p.v}`}>{p.label}</button></li>
+          ))}
         </ul>
       )}
     </div>
@@ -792,14 +859,12 @@ function SearchBar({ platform, setPlatform, mode, setMode, q, setQ, placeholder,
   platform: string; setPlatform: (p: string) => void; mode: Mode; setMode: (m: Mode) => void; q: string; setQ: (q: string) => void;
   placeholder: string; onSubmit: () => void; busy: boolean; filterCount: number; onFilters: () => void;
 }) {
-  const Lead = mode === "username" ? AtSign : Search;
+  const Lead = mode === "username" || mode === "like" ? AtSign : Search;
   return (
     <form onSubmit={(e) => { e.preventDefault(); onSubmit(); }} className="rounded-2xl border border-border bg-card p-2 text-foreground shadow-[0_12px_32px_-16px_rgba(4,16,43,0.35)]" data-testid="discover-search-form">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="grid grid-cols-2 gap-2 sm:flex">
-          <select value={platform} onChange={(e) => setPlatform(e.target.value)} className="h-12 rounded-xl border-0 bg-muted/60 px-3 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-[#053877] sm:w-[8.5rem]" aria-label="Platform" data-testid="discover-platform">
-            {PLATFORMS.map((p) => <option key={p.v} value={p.v}>{p.label}</option>)}
-          </select>
+          <PlatformMenu platform={platform} setPlatform={setPlatform} podcasts={isPodMode(mode)} />
           <ModeMenu mode={mode} setMode={setMode} onOpenChange={onMenu} peopleOpen={peopleOpen} />
         </div>
         <div className="relative flex-1">
@@ -808,14 +873,14 @@ function SearchBar({ platform, setPlatform, mode, setMode, q, setQ, placeholder,
           {callout}
         </div>
         <div className="flex gap-2">
-          {mode !== "username" && !isPodMode(mode) && (
+          {mode !== "username" && mode !== "like" && !isPodMode(mode) && (
             <button type="button" onClick={onFilters} className="relative flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-border text-muted-foreground hover:border-[#053877]/40 hover:text-[#053877]" aria-label="Filters" title="All filters" data-testid="discover-bar-filters">
               <SlidersHorizontal className="h-5 w-5" />
               {filterCount > 0 && <span className="absolute -right-1 -top-1 flex h-5 min-w-5 items-center justify-center rounded-full bg-[#F0A71F] px-1 text-[11px] font-semibold text-[#1a1200]">{filterCount}</span>}
             </button>
           )}
           <Button type="submit" disabled={busy} className="h-12 flex-1 gap-2 rounded-xl bg-[#053877] px-6 text-base font-medium text-white hover:bg-[#0a4a99] sm:flex-none" data-testid="discover-go">
-            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} {mode === "username" ? "Look up" : "Search"}
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Search className="h-4 w-4" />} {mode === "username" ? "Look up" : mode === "like" ? "Find lookalikes" : "Search"}
           </Button>
         </div>
       </div>

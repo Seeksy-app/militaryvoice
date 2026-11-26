@@ -1294,8 +1294,12 @@ export function registerDiscoveryRoutes(app: Express): void {
       const platform = asPlatform(req.query.platform);
       const handle = String(req.query.handle ?? "").replace(/^@/, "").trim().slice(0, 100);
       if (!handle) throw new HttpError(400, "Which creator?");
-      const list = await cached(`similar:${platform}:${handle.toLowerCase()}`, 30 * DAY, async () => {
-        const r = await ic("/discovery/creators/similar/", { platform, filter_key: "username", filter_value: handle, paging: { limit: 12, page: 0 } });
+      // The profile's "Similar creators" reads 12; the Lookalikes search reads pages of 24 (0.01 credits a creator).
+      const limit = req.query.limit === "24" ? 24 : 12;
+      const page = limit === 24 ? Math.min(4, Math.max(0, Math.floor(Number(req.query.page) || 0))) : 0;
+      const key = limit === 12 ? `similar:${platform}:${handle.toLowerCase()}` : `similar:${platform}:${handle.toLowerCase()}:24:p${page}`;
+      const list = await cached(key, 30 * DAY, async () => {
+        const r = await ic("/discovery/creators/similar/", { platform, filter_key: "username", filter_value: handle, paging: { limit, page } });
         const cards = (r?.accounts ?? []).map((a: any) => toCard(platform, a));
         keepPictures(cards);
         return cards;
