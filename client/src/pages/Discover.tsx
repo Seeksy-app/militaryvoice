@@ -953,7 +953,8 @@ function HeroB({ raised, door, setDoor, bar, tries, onEnrich, verified, onOpen }
           <p className="inline-flex items-center gap-2 rounded-full border border-[#F0A71F]/30 bg-[#F0A71F]/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-[#F0A71F]">
             <Sparkles className="h-3.5 w-3.5" /> MilitaryVoices Discovery
           </p>
-          <h1 className="mt-6 text-5xl font-semibold leading-[1.02] tracking-[-0.02em] text-white sm:text-[4.25rem] lg:text-[3.9rem] xl:text-[4.25rem]">
+          {/* 42px on a phone so "Military creators," (kept on one line) fits 375 without pushing the page sideways. */}
+          <h1 className="mt-6 text-[2.625rem] font-semibold leading-[1.02] tracking-[-0.02em] text-white sm:text-[4.25rem] lg:text-[3.9rem] xl:text-[4.25rem]">
             <span className="whitespace-nowrap">Military creators,</span>
             <br />
             <span className="bg-gradient-to-r from-[#F0A71F] via-[#ffd27a] to-[#F0A71F] bg-clip-text text-transparent">measured.</span>
