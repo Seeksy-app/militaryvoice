@@ -54,7 +54,7 @@ export function mockAs(): As | null {
 
 async function live<T>(method: string, path: string, body?: unknown): Promise<T> {
   const as = mockAs();
-  if (as) return mock(as, method, path, body) as T;
+  if (as && MOCK) return MOCK(as, method, path, body) as T;
   const r = await fetch(`/api/production${path}`, {
     method, credentials: "include", cache: "no-store",
     headers: body ? { "Content-Type": "application/json" } : undefined,
@@ -233,3 +233,6 @@ function mock(as: As, method: string, path: string, body: any): unknown {
 }
 
 const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
+
+/** Only a dev build keeps the mock; a production build drops it and its sample rows. */
+const MOCK = import.meta.env.DEV ? mock : null;
