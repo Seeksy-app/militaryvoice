@@ -7,7 +7,9 @@ import { Loader2, Upload } from "lucide-react";
 import { IconTile } from "@/components/ui/icon-tile";
 
 /** Add a video you already have: it's filed as a recording, nothing more (clipping is Pōstify's). */
-export function UploadRecording({ onDone, tall = false, autoOpen = false, initialFile, title = "Drop a video here, or click to browse", note = "MP4, MOV or WebM, up to 2GB. Then make clips from it in Pōstify." }: {
+export function UploadRecording({ onDone, tall = false, button = false, autoOpen = false, initialFile, title = "Drop a video here, or click to browse", note = "MP4, MOV or WebM, up to 2GB. Then make clips from it in Pōstify." }: {
+  /** One "Upload a video" button (the Library, 26 Nov); the page around it takes drops and passes them as initialFile. */
+  button?: boolean;
   /** A file already dropped somewhere else (Social's box): upload it straight away. */
   initialFile?: File | null;
   /** Open the file picker on arrival: the dashboard's + Create › Upload video. */
@@ -75,6 +77,19 @@ export function UploadRecording({ onDone, tall = false, autoOpen = false, initia
     }
   }
   const busy = pct !== null;
+  const picker = <input ref={input} type="file" accept="video/*" className="hidden" onChange={(e) => e.target.files?.[0] && void go(e.target.files[0])} data-testid="recording-upload-input" />;
+  if (button) {
+    return busy ? (
+      <span className="inline-flex h-10 min-w-0 max-w-[260px] items-center gap-2 rounded-full border border-[#053877]/25 bg-card px-4 text-[13px] font-semibold text-foreground" title={name} data-testid="recording-upload">
+        {picker}<Loader2 className="h-4 w-4 shrink-0 animate-spin text-[#053877] dark:text-[#8fb5e8]" />
+        <span className="truncate">{pct! < 100 ? `Uploading ${pct}%` : "Saving…"}</span>
+      </span>
+    ) : (
+      <button type="button" onClick={() => input.current?.click()} className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full bg-[#053877] px-4 text-[14px] font-semibold text-white hover:bg-[#0a4aa0]" title="MP4, MOV or WebM, up to 2GB. You can also drop it anywhere on this page." data-testid="recording-upload">
+        {picker}<Upload className="h-4 w-4" /> Upload a video
+      </button>
+    );
+  }
   return (
     <div
       role="button"
@@ -94,7 +109,7 @@ export function UploadRecording({ onDone, tall = false, autoOpen = false, initia
       }`}
       data-testid="recording-upload"
     >
-      <input ref={input} type="file" accept="video/*" className="hidden" onChange={(e) => e.target.files?.[0] && void go(e.target.files[0])} data-testid="recording-upload-input" />
+      {picker}
       <IconTile icon={busy ? Loader2 : Upload} spin={busy} />
       {busy ? (
         <div className={`min-w-0 ${tall ? "w-full max-w-md" : "flex-1"}`}>

@@ -86,6 +86,7 @@ import { GuideStep, guideOffered } from "@/components/GuidePicker";
 import { PromotionScreen } from "@/components/PromotionScreen";
 import { SocialScreen } from "@/components/SocialScreen";
 import { Travel } from "@/components/Travel";
+import { ClipsScreen } from "@/components/ClipsScreen";
 import { GreenRoomScreen } from "@/components/GreenRoomScreen";
 import { ZoomConnect } from "@/components/ZoomConnect";
 import Discover from "@/pages/Discover";
@@ -634,7 +635,7 @@ function BackToEvent({ onGo }: { onGo: (s: "events") => void }) {
 }
 
 /** The screens the dashboard nav switches between, and their URLs. */
-const SCREENS = ["dashboard", "editProfile", "events", "promotion", "greenroom", "discovery", "verified", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social", "podcast", "page", "billing", "trash", "studio", "fans", "myevents", "organization", "requests", "opportunities", "calendar", "podcaststats", "travel"] as const;
+const SCREENS = ["dashboard", "editProfile", "events", "promotion", "greenroom", "discovery", "verified", "recordings", "integrations", "contacts", "pro", "claim", "cohost", "analytics", "postify", "social", "podcast", "page", "billing", "trash", "studio", "fans", "myevents", "organization", "requests", "opportunities", "calendar", "podcaststats", "travel", "clips"] as const;
 type Screen = (typeof SCREENS)[number];
 
 /** /host/dashboard/<slug> ⇄ screen. Home has no slug; the rest are lowercase. */
@@ -654,6 +655,7 @@ const SCREEN_SLUG: Record<Screen, string> = {
   calendar: "calendar",
   podcaststats: "podcast-analytics",
   travel: "travel",
+  clips: "clips",
   podcast: "podcast",
   page: "page",
   greenroom: "green-room",
@@ -1458,6 +1460,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           <FanEmails />
         ) : screen === "postify" ? (
           <PostStudio />
+        ) : screen === "clips" ? (
+          <ClipsScreen />
         ) : screen === "social" ? (
           <SocialScreen view="social" />
         ) : screen === "podcaststats" ? (

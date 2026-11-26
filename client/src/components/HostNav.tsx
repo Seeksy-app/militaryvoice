@@ -7,14 +7,14 @@ import { Sheet, SheetContent, SheetTitle } from "@/components/ui/sheet";
 import { LogoLockup } from "@/components/Logo";
 import { useTheme, type ThemeMode } from "@/lib/theme";
 import { GetTheApp } from "@/components/GetTheApp";
-import { LayoutDashboard, Plus, Podcast, Clapperboard, Film, Upload, Globe, ChevronRight, ChevronDown, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones, PanelLeftClose, PanelLeftOpen, Sun, Moon, Monitor, Check, MoreHorizontal, BadgeCheck, CalendarClock, CreditCard, Trash2, Video, Radio, Building2, Send, Inbox, SlidersHorizontal, Menu, Plane } from "lucide-react";
+import { LayoutDashboard, Plus, Podcast, Clapperboard, Film, Upload, Globe, ChevronRight, ChevronDown, UserRound, CalendarDays, Link2, Users, Mail, Contact, MonitorPlay, Lock, LifeBuoy, Mic2, Compass, BarChart3, Wand2, ChevronsUpDown, LogOut, Library, Share2, Headphones, PanelLeftClose, PanelLeftOpen, Sun, Moon, Monitor, Check, MoreHorizontal, BadgeCheck, CalendarClock, CreditCard, Trash2, Video, Radio, Building2, Send, Inbox, SlidersHorizontal, Menu, Plane, Scissors } from "lucide-react";
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { NotificationsMenuItem } from "@/components/Notifications";
 import { Link } from "wouter";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { GuideMenuItem, useGuideName } from "@/components/LoriGuide";
 
-export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "greenroom" | "recordings" | "contacts" | "pro" | "cohost" | "analytics" | "postify" | "social" | "discovery" | "verified" | "podcast" | "page" | "billing" | "trash" | "studio" | "fans" | "myevents" | "organization" | "requests" | "opportunities" | "calendar" | "podcaststats" | "travel";
+export type HostScreen = "dashboard" | "editProfile" | "events" | "integrations" | "promotion" | "greenroom" | "recordings" | "contacts" | "pro" | "cohost" | "analytics" | "postify" | "social" | "discovery" | "verified" | "podcast" | "page" | "billing" | "trash" | "studio" | "fans" | "myevents" | "organization" | "requests" | "opportunities" | "calendar" | "podcaststats" | "travel" | "clips";
 
 interface Item {
   key: HostScreen;
@@ -187,18 +187,20 @@ export function HostNav({
       title: "Studio & events",
       items: [
         // Studio is the Room for every creator (20 Nov 2026, Andrew): the one we're making StreamYard-like, on every plan.
-        { key: "pro", feature: "room", label: "Studio", hint: "Your studio: check your camera and mic, invite guests, record or go live. It all lands in your Library.", icon: MonitorPlay, tag: "Beta" },
+        { key: "pro", feature: "room", label: "Studio", hint: "Your studio: check your camera and mic, invite guests, record or go live. It all lands in your Library.", icon: MonitorPlay },
         // The producer console (Radio and events) only for the people who run it: admins and studio hosts on a real event.
         ...(consoleOn ? [{ key: "pro" as const, feature: "studio", label: "Studio console", hint: "The producer console for Radio and events: scenes, run of show and lower thirds", icon: SlidersHorizontal }] : []),
         ...(path !== "planner" ? [{ key: "myevents" as const, label: "Events", hint: "The events you're in, and your own: create one, build your page and lineup, and run it from our studio", icon: CalendarDays, badge: eventsCount || undefined }] : []),
         // Travel (Andrew, 26 Nov: "ok. build it"): conferences and speaking trips sit beside Events.
-        ...(path !== "planner" ? [{ key: "travel" as const, label: "Travel", hint: "Flights for a trip with your military or veteran perk on each one, and we call the airlines whose military fare is phone-only", icon: Plane, tag: "New" }] : []),
+        ...(path !== "planner" ? [{ key: "travel" as const, label: "Travel", hint: "Flights for a trip with your military or veteran perk on each one, and we call the airlines whose military fare is phone-only", icon: Plane }] : []),
       ],
     },
     {
       title: "Clips & social",
       items: [
-        { key: "postify", label: "Pōstify", hint: "Create short clips from your video podcast, and clean up the full episode", icon: Wand2, tag: "Beta" },
+        { key: "postify", label: "Pōstify", hint: "Create short clips from your video podcast, and clean up the full episode", icon: Wand2 },
+        // Clips under Pōstify, the way Analytics sits under Podcast (Andrew, 26 Nov); no more Beta or New tags, Upgrade stays.
+        { key: "clips", label: "Clips", hint: "Every clip Pōstify made from your recordings: post, trim or retitle one", icon: Scissors, sub: true },
         { key: "social", label: "Social", hint: "Post your clips and episodes to all your social accounts, and see what's queued", icon: Share2 },
         { key: "calendar", label: "Calendar", hint: "Your week of posts: drag to move one, and fill the open slots", icon: CalendarClock },
         { key: "analytics", label: "Analytics", hint: "Your audience as sponsors see it, and how your posts did", icon: BarChart3 },
@@ -218,7 +220,7 @@ export function HostNav({
     {
       title: "Coming soon",
       // One quiet line: what's coming shouldn't take the space of what's here.
-      items: [{ key: "pro", label: "Pro tools", hint: "A contacts CRM and email sequences, coming soon", icon: Lock, locked: true, feature: "campaigns", tag: "Soon" }],
+      items: [{ key: "pro", label: "Pro tools", hint: "A contacts CRM and email sequences, coming soon", icon: Lock, locked: true, feature: "campaigns" }],
     },
     {
       title: "Help",

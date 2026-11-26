@@ -9,7 +9,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSub, D
 import { PostDialog } from "@/components/PostDialog";
 import { ConfirmDelete } from "@/components/ConfirmDelete";
 import { DEFAULT_CLIP_OPTIONS, parseClipOptions, type RecordingRow } from "@shared/schema";
-import { CalendarClock, Check, Download, Library, Loader2, Mic2, MoreHorizontal, Pencil, Play, Share2, Trash2, Wand2, X, Send } from "lucide-react";
+import { CalendarClock, Check, Download, Library, Link2, Loader2, Mic2, MonitorPlay, MoreHorizontal, Pencil, Play, Share2, Sparkles, Trash2, Upload, Video, Wand2, X, Send } from "lucide-react";
 import { PodcastEpisodeGrid, usePodcastEpisodes } from "@/components/PodcastEpisodes";
 import { MoveToFolder, dragToFolder, useLibraryFolders } from "@/components/LibraryFolders";
 import { seesTwoPeople } from "@/components/LayoutPicker";
@@ -29,13 +29,6 @@ function duration(sec: number): string {
 function clock(sec: number): string {
   const h = Math.floor(sec / 3600), m = Math.floor((sec % 3600) / 60), s = Math.round(sec % 60);
   return h ? `${h}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}` : `${m}:${String(s).padStart(2, "0")}`;
-}
-
-function size(bytes: string): string {
-  const n = Number(bytes);
-  if (!n) return "";
-  const mb = n / 1_048_576;
-  return mb >= 1024 ? `${(mb / 1024).toFixed(1)} GB` : `${Math.round(mb)} MB`;
 }
 
 /** Fully theirs (deleted outright): uploads, imports, Pōstify's copies, staged test episodes. A studio or event session only leaves their Library. */
@@ -91,6 +84,15 @@ function episodes(rows: RecordingRow[]): Episode[] {
 }
 
 const plainTitle = (t: string) => t.replace(/ \((clean|edited)\)$/i, "");
+
+/** Where a recording came from, as a coloured tag on its card (Andrew, 26 Nov: "add some color"). */
+function sourceTag(r: RecordingRow): { label: string; icon: typeof Upload; cls: string } {
+  if (r.egressId.startsWith("UPLOAD_")) return { label: "Upload", icon: Upload, cls: "bg-[#F0A71F]/15 text-[#8a5a00] dark:text-[#F0A71F]" };
+  if (r.egressId.startsWith("ZOOM_")) return { label: "Zoom", icon: Video, cls: "bg-sky-500/15 text-sky-700 dark:text-sky-300" };
+  if (r.egressId.startsWith("LINK_")) return { label: "Link", icon: Link2, cls: "bg-violet-500/15 text-violet-700 dark:text-violet-300" };
+  if (r.eventId > 0) return { label: "Event", icon: Mic2, cls: "bg-rose-500/15 text-rose-700 dark:text-rose-300" };
+  return { label: "Studio", icon: MonitorPlay, cls: "bg-[#053877]/10 text-[#053877] dark:bg-white/10 dark:text-[#8fb5e8]" };
+}
 
 export function MyRecordings({
   socialAccounts,
@@ -291,7 +293,7 @@ export function MyRecordings({
     <section className="mt-2">
       {mover.dialog}
       {/* Thumbnails, each with one menu: the things you do with an episode. */}
-      {shown.length > 0 && <ul className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+      {shown.length > 0 && <ul className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
         {shown.map(({ main, versions, earlier }) => {
           // Their latest edit first when there is one (it's the one they made to use); otherwise the clean copy.
           const all = [...versions, ...earlier];
@@ -318,9 +320,14 @@ export function MyRecordings({
                     {r.durationSec > 0 && <span className="absolute bottom-2 right-2 rounded bg-black/70 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums text-white">{clock(r.durationSec)}</span>}
                     {/* Only while work is running (Andrew, 24 Nov): "Clips ready" and "Clean episode" repeated the card, covered
                         the picture and looked like buttons. The card's "Open in Pōstify" and Clean / Original switch say it. */}
-                    {(working(main) || working(r)) && (
+                    {(working(main) || working(r)) ? (
                       <span className="absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-black/70 px-2 py-0.5 text-[10px] font-bold text-white" data-testid={`working-${main.id}`}>
                         <Loader2 className="h-3 w-3 animate-spin" /> {working(main) || working(r)}
+                      </span>
+                    ) : versions.length > 0 && (
+                      // The proud moment on each card (Andrew, 26 Nov: "celebrate more about the post-edit"): small, not a button.
+                      <span className="pointer-events-none absolute left-2 top-2 inline-flex items-center gap-1 rounded-full bg-emerald-500 px-2 py-0.5 text-[10px] font-bold text-white shadow-sm" data-testid={`cleaned-${main.id}`}>
+                        <Sparkles className="h-3 w-3" /> Cleaned up
                       </span>
                     )}
                   </button>
@@ -331,8 +338,8 @@ export function MyRecordings({
                 </span>
               )}
             </div>
-            <div className="flex flex-wrap items-start gap-2 p-3">
-              <div className="min-w-0 flex-1">
+            <div className="flex flex-wrap items-start gap-x-1 gap-y-2 p-3">
+              <div className="order-1 min-w-0 flex-1">
                 {renaming?.id === main.id ? (
                   <form onSubmit={(e) => { e.preventDefault(); void saveTitle(); }} className="flex items-center gap-1">
                     <Input
@@ -352,9 +359,9 @@ export function MyRecordings({
                 ) : (
                   <p className="line-clamp-2 text-sm font-semibold leading-snug text-card-foreground" title={plainTitle(main.title)}>{plainTitle(main.title) || "Your session"}</p>
                 )}
-                <p className="mt-0.5 tabular-nums text-xs text-muted-foreground">
-                  {new Date(r.startedAt).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" })}
-                  {size(r.sizeBytes) ? ` · ${size(r.sizeBytes)}` : ""}
+                <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 tabular-nums text-xs text-muted-foreground">
+                  {(() => { const t = sourceTag(main); return <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-px text-[10px] font-semibold ${t.cls}`}><t.icon className="h-3 w-3" />{t.label}</span>; })()}
+                  {new Date(r.startedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}
                   {onShowClips && (clipCounts?.get(main.id) ?? 0) > 0 && (
                     <> · <button type="button" onClick={() => onShowClips(main.id)} className="font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]" data-testid={`recording-clips-${main.id}`}>{clipCounts!.get(main.id)} clip{clipCounts!.get(main.id) === 1 ? "" : "s"} →</button></>
                   )}
@@ -369,7 +376,7 @@ export function MyRecordings({
                     e.preventDefault();
                     void postifyIt(main);
                   }}
-                  className={`inline-flex h-8 shrink-0 items-center gap-1.5 rounded-full px-3 text-xs font-semibold ${main.clipStatus === "none" || main.clipStatus === "failed" ? "bg-[#F0A71F] text-[#1a1200] hover:bg-[#f5b94a]" : "border border-border text-foreground hover:bg-muted"}`}
+                  className={`order-3 inline-flex h-8 w-full items-center justify-center gap-1 whitespace-nowrap rounded-full px-1.5 text-xs font-semibold sm:gap-1.5 sm:px-3 ${main.clipStatus === "none" || main.clipStatus === "failed" ? "bg-[#F0A71F] text-[#1a1200] hover:bg-[#f5b94a]" : "border border-border text-foreground hover:bg-muted"}`}
                   data-testid={`button-postify-card-${main.id}`}
                 >
                   {starting === main.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />} {starting === main.id ? "Starting…" : main.clipStatus === "none" || main.clipStatus === "failed" ? "Pōstify it" : main.clipStatus === "done" ? "Open in Pōstify" : "Pōstifying…"}
@@ -378,7 +385,7 @@ export function MyRecordings({
               {r.status !== "Recording" && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button size="icon" variant="ghost" className="h-8 w-8 shrink-0 rounded-full" aria-label="More" data-testid={`menu-recording-${r.id}`}>
+                    <Button size="icon" variant="ghost" className="order-2 -mr-1.5 -mt-1 h-8 w-8 shrink-0 rounded-full" aria-label="More" data-testid={`menu-recording-${r.id}`}>
                       <MoreHorizontal className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>
@@ -448,14 +455,14 @@ export function MyRecordings({
               )}
               {/* The versions get their own full-width row so the labels never wrap. */}
               {versions.length > 0 && (
-                <div className="mt-1 flex w-full items-center gap-1 rounded-full border border-border p-1" role="group" aria-label="Version">
+                <div className="order-4 flex w-full items-center gap-1 rounded-full border border-border p-1" role="group" aria-label="Version">
                   {versions.map((v) => (
                     <button
                       key={v.rec.id}
                       type="button"
                       onClick={() => { setPicked((p) => ({ ...p, [main.id]: v.rec.id })); setPlaying(null); }}
                       aria-pressed={v.rec.id === r.id}
-                      className={`flex-1 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${v.rec.id === r.id ? "bg-[#000741] text-white dark:bg-white dark:text-[#000741]" : "text-muted-foreground hover:text-foreground"}`}
+                      className={`min-w-0 flex-1 truncate whitespace-nowrap rounded-full px-2 py-1 text-[11px] font-semibold transition-colors ${v.rec.id === r.id ? "bg-[#000741] text-white dark:bg-white dark:text-[#000741]" : "text-muted-foreground hover:text-foreground"}`}
                       data-testid={`version-${main.id}-${v.rec.id}`}
                     >
                       {v.label}
@@ -464,8 +471,8 @@ export function MyRecordings({
                   {earlier.length > 0 && (
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
-                        <button type="button" className={`flex-1 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition-colors ${olderPicked ? "bg-[#000741] text-white dark:bg-white dark:text-[#000741]" : "text-muted-foreground hover:text-foreground"}`} data-testid={`version-earlier-${main.id}`}>
-                          {olderPicked ? olderPicked.label : `Earlier edits (${earlier.length})`} ▾
+                        <button type="button" className={`min-w-0 flex-1 truncate whitespace-nowrap rounded-full px-2 py-1 text-[11px] font-semibold transition-colors ${olderPicked ? "bg-[#000741] text-white dark:bg-white dark:text-[#000741]" : "text-muted-foreground hover:text-foreground"}`} data-testid={`version-earlier-${main.id}`}>
+                          {olderPicked ? olderPicked.label : `Earlier (${earlier.length})`} ▾
                         </button>
                       </DropdownMenuTrigger>
                       <DropdownMenuContent align="start" className="w-56">

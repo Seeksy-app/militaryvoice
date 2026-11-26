@@ -24,7 +24,9 @@ export type Fileable = { kind: "recording" | "episode" | "clip"; id: number };
  */
 export const TUTORIALS = -1;
 
-const DRAG = "text/x-mv-library";
+export const DRAG = "text/x-mv-library";
+/** Each folder's colour, in the order they were made (Andrew, 26 Nov: "add some color"). */
+const TINTS = ["text-[#b36b00]", "text-emerald-600", "text-sky-600", "text-rose-500", "text-violet-600", "text-teal-600"];
 const URL_OF: Record<Fileable["kind"], string> = { recording: "recordings", episode: "podcast-episodes", clip: "clips" };
 
 type Ctx = {
@@ -82,7 +84,7 @@ export function dragToFolder(lib: Ctx | null, item: Fileable) {
 }
 
 /** The bar: All, each folder (click to open, drop to file), New folder; Rename and Delete for the open one. */
-export function FolderBar({ counts, tutorials = 0, unfiled }: { counts: Map<number, number>; tutorials?: number; /** What the Library chip holds: everything not in a folder. */ unfiled?: number }) {
+export function FolderBar({ counts, tutorials = 0, unfiled, inline = false }: { counts: Map<number, number>; tutorials?: number; /** What the Library chip holds: everything not in a folder. */ unfiled?: number; /** Sit in the Library's one row beside its tabs (26 Nov): no row of its own and no Library chip, the tabs are the Library. */ inline?: boolean }) {
   const lib = useLibraryFolders();
   const bar = useContext(BarCtx);
   const qc = useQueryClient();
@@ -118,9 +120,9 @@ export function FolderBar({ counts, tutorials = 0, unfiled }: { counts: Map<numb
   };
 
   return (
-    <div className="mb-4 flex flex-wrap items-center gap-2" data-testid="library-folders">
+    <div className={inline ? "contents" : "mb-4 flex flex-wrap items-center gap-2"} data-testid="library-folders">
       {/* Library: what isn't in a folder, like Drive's My Drive (Andrew, 24 Nov). Drop a card here to take it out of its folder. */}
-      <Chip
+      {!inline && <Chip
         active={open == null}
         over={over === 0}
         onClick={() => setOpen(null)}
@@ -131,9 +133,9 @@ export function FolderBar({ counts, tutorials = 0, unfiled }: { counts: Map<numb
         onDragLeave={() => setOver(null)}
         onDrop={drop(0)}
         testId="folder-all"
-      />
-      {tutorials > 0 && <Chip active={open === TUTORIALS} onClick={() => setOpen(TUTORIALS)} icon={<GraduationCap className="h-3.5 w-3.5" />} label="Tutorials" n={tutorials} testId="folder-tutorials" />}
-      {folders.map((f) =>
+      />}
+      {tutorials > 0 && <Chip active={open === TUTORIALS} onClick={() => setOpen(TUTORIALS)} icon={<GraduationCap className={`h-3.5 w-3.5 ${open === TUTORIALS ? "" : "text-[#053877] dark:text-[#8fb5e8]"}`} />} label="Tutorials" n={tutorials} testId="folder-tutorials" />}
+      {folders.map((f, i) =>
         naming?.id === f.id ? (
           <NameInput key={f.id} value={naming.name} onChange={(name) => setNaming({ ...naming, name })} onSave={save} onCancel={() => setNaming(null)} />
         ) : (
@@ -142,7 +144,7 @@ export function FolderBar({ counts, tutorials = 0, unfiled }: { counts: Map<numb
             active={open === f.id}
             over={over === f.id}
             onClick={() => setOpen(f.id)}
-            icon={open === f.id ? <FolderOpen className="h-3.5 w-3.5" /> : <Folder className="h-3.5 w-3.5" />}
+            icon={open === f.id ? <FolderOpen className="h-3.5 w-3.5" /> : <Folder className={`h-3.5 w-3.5 ${TINTS[i % TINTS.length]}`} fill="currentColor" fillOpacity={0.18} />}
             label={f.name}
             n={counts.get(f.id) ?? 0}
             onDragOver={(e) => { if (e.dataTransfer.types.includes(DRAG)) { e.preventDefault(); setOver(f.id); } }}
@@ -155,7 +157,7 @@ export function FolderBar({ counts, tutorials = 0, unfiled }: { counts: Map<numb
       {naming?.id === null ? (
         <NameInput value={naming.name} onChange={(name) => setNaming({ ...naming, name })} onSave={save} onCancel={() => setNaming(null)} />
       ) : (
-        <button type="button" onClick={() => setNaming({ id: null, name: "" })} className="inline-flex items-center gap-1.5 rounded-full border border-dashed border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:border-foreground/40 hover:text-foreground" data-testid="button-new-folder">
+        <button type="button" onClick={() => setNaming({ id: null, name: "" })} className="inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border border-dashed border-border px-3 py-1.5 text-xs font-semibold text-muted-foreground hover:border-foreground/40 hover:text-foreground" data-testid="button-new-folder">
           <FolderPlus className="h-3.5 w-3.5" /> New folder
         </button>
       )}
@@ -236,8 +238,8 @@ function Chip({ active, over, onClick, icon, label, n, onDragOver, onDragLeave, 
       onDragLeave={onDragLeave}
       onDrop={onDrop}
       aria-pressed={active}
-      className={`inline-flex max-w-[16rem] items-center gap-1.5 rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
-        over ? "border-[#F0A71F] bg-[#F0A71F]/15 text-foreground" : active ? "border-[#000741] bg-[#000741] text-white dark:border-white dark:bg-white dark:text-[#000741]" : "border-border bg-card text-muted-foreground hover:text-foreground"
+      className={`inline-flex max-w-[16rem] shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full border px-3 py-1.5 text-xs font-semibold transition-colors ${
+        over ? "border-[#F0A71F] bg-[#F0A71F]/15 text-foreground" : active ? "border-[#000741] bg-[#000741] text-white dark:border-white dark:bg-white dark:text-[#000741]" : "border-border bg-card text-foreground/80 hover:text-foreground"
       }`}
       data-testid={testId}
     >
