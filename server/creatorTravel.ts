@@ -481,8 +481,29 @@ export function registerCreatorTravel(app: Express, requireHostSession: RequestH
     await loadIds();
     const calls = await db.select().from(travelCalls).orderBy(desc(travelCalls.createdAt)).limit(30);
     const searches = await db.select({ id: travelSearches.id, cached: travelSearches.cached }).from(travelSearches).where(gte(travelSearches.createdAt, dayStart()));
+    // Read-only look at ElevenAgents: whether the Agents key can read, and the numbers labelled for travel (the
+    // workspace is shared, so others' numbers are only counted, never listed).
+    let agents: { read: boolean | null; error: string; travelNumbers: { id: string; label: string; last4: string; provider: string; assigned: boolean }[]; otherNumbers: number } = { read: null, error: "", travelNumbers: [], otherNumbers: 0 };
+    if (agentsKey()) {
+      const r = await eleven("/v1/convai/phone-numbers").catch(() => null);
+      if (!r) agents = { ...agents, read: false, error: "Couldn't reach ElevenLabs." };
+      else if (!r.ok) {
+        const j = (await r.json().catch(() => ({}))) as { detail?: { message?: string } | string };
+        agents = { ...agents, read: false, error: (typeof j.detail === "string" ? j.detail : j.detail?.message ?? `HTTP ${r.status}`).slice(0, 200) };
+      } else {
+        const list = ((await r.json().catch(() => [])) as { phone_number_id?: string; label?: string; provider?: string; phone_number?: string; assigned_agent?: unknown }[]) ?? [];
+        const ours = list.filter((n) => /\btravel\b/i.test(n.label ?? ""));
+        agents = {
+          read: true,
+          error: "",
+          travelNumbers: ours.map((n) => ({ id: String(n.phone_number_id ?? ""), label: String(n.label ?? ""), last4: String(n.phone_number ?? "").replace(/\D/g, "").slice(-4), provider: String(n.provider ?? ""), assigned: !!n.assigned_agent })),
+          otherNumbers: list.length - ours.length,
+        };
+      }
+    }
     res.json({
       callsOn: await callsOn(),
+      agents,
       testNumber: (await testNumber()) ? "set" : "",
       configured: { parallel: !!parallelKey(), agentsKey: !!agentsKey(), travelAgent: !!travelAgent(), travelPhone: !!travelPhone() },
       today: { searches: searches.length, paidSearches: searches.filter((s) => !s.cached).length },
@@ -525,10 +546,9 @@ export function registerCreatorTravel(app: Express, requireHostSession: RequestH
       let phone = want || travelPhone();
       const list = await eleven("/v1/convai/phone-numbers");
       const numbers = list.ok ? ((await list.json().catch(() => [])) as { phone_number_id?: string; label?: string; provider?: string; phone_number?: string }[]) : [];
-      if (!phone) {
-        const pick = numbers.find((n) => /travel/i.test(n.label ?? "")) ?? (numbers.length === 1 ? numbers[0] : undefined);
-        phone = pick?.phone_number_id ?? "";
-      }
+      // The ElevenLabs workspace is shared with other projects' agents and numbers: pick ours by its label only.
+      if (!phone) phone = numbers.find((n) => /\btravel\b/i.test(n.label ?? ""))?.phone_number_id ?? "";
+      if (phone && !numbers.some((n) => n.phone_number_id === phone)) throw new HttpError(400, "That number isn't in ElevenAgents.");
       if (phone) await storage.setSetting("travel:phone-id", phone);
       await loadIds();
       res.json({
