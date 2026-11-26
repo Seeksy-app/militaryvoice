@@ -210,7 +210,8 @@ class Session {
       if (this.lastSpeech > at) { this.lastCard = at; return; }
       const to = owners(this.room);
       if (!to.length) return;
-      const card = { kind: "starter", id: r.id ?? Math.random().toString(16).slice(2, 10), lines: r.lines, basis: r.basis, at: new Date().toISOString() };
+      // A hidden sender reaches the browser with no participant attached, so the card says who to answer (the ack).
+      const card = { kind: "starter", id: r.id ?? Math.random().toString(16).slice(2, 10), lines: r.lines, basis: r.basis, at: new Date().toISOString(), from: this.room.localParticipant?.identity ?? `listener-${this.id}` };
       await this.room.localParticipant!.publishData(enc.encode(JSON.stringify(card)), { reliable: true, topic: TOPIC, destination_identities: to });
       this.lastCard = Date.now();
       this.cardTimes.push(this.lastCard);

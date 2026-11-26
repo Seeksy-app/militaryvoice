@@ -124,6 +124,14 @@ async function guestBrief(ownerEmail: string, near: Record<string, unknown> | nu
   try { return (await briefText(ownerEmail, Number(near.id))).slice(0, 3000); } catch { return ""; }
 }
 
+/** The "where it came from" note: whole words, under 60 characters, never cut mid-word. */
+const shortBasis = (v: string) => {
+  const words = v.replace(/\s+/g, " ").trim().split(" ");
+  let out = "";
+  for (const w of words) { if ((out ? out.length + 1 : 0) + w.length > 56) break; out = out ? `${out} ${w}` : w; }
+  return out.replace(/[,;:]$/, "") || undefined;
+};
+
 const SYSTEM = `You help a podcast host when the conversation goes quiet. You see what has been said in the last few minutes and the host's own prep. Suggest 2 or 3 questions the host could ask next.
 
 Rules:
@@ -131,7 +139,7 @@ Rules:
 - Follow a thread from the conversation or the prep, or move the conversation on. Never repeat a question already asked or already suggested.
 - No yes/no questions. Nothing about money, politics, religion or anything the guest asked to avoid. No medical, legal or financial advice. Be respectful to service members, veterans and their families.
 - Never invent facts about the guest.
-- basis: a few words on where the first question came from, like "From their invite answers" or "From what they just said".
+- basis: at most 6 words on where the first question came from, like "From their invite answers" or "From what they just said".
 
 Return JSON only: {"lines": ["...", "..."], "basis": "..."}`;
 
@@ -224,7 +232,7 @@ export function registerStarters(app: Express, requireAgent: RequestHandler, req
       const lines = (Array.isArray(j.lines) ? j.lines : []).map((x) => String(x ?? "").replace(/\s+/g, " ").trim()).filter((x) => x && x.length <= 140).slice(0, 3);
       const mc = Math.ceil((out.usage?.input_tokens ?? 0) * HAIKU_IN + (out.usage?.output_tokens ?? 0) * HAIKU_OUT);
       await addUsage(id, { cards: lines.length ? 1 : 0, mc });
-      res.json({ lines, basis: typeof j.basis === "string" ? j.basis.slice(0, 60) : undefined, id: crypto.randomBytes(4).toString("hex") });
+      res.json({ lines, basis: typeof j.basis === "string" ? shortBasis(j.basis) : undefined, id: crypto.randomBytes(4).toString("hex") });
     } catch (err) {
       console.error("Starters suggest failed:", (err as Error).message);
       res.status(502).json({ message: "No suggestion this time." });
