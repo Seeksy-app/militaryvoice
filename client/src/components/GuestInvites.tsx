@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, Loader2, Send, Trash2 } from "lucide-react";
+import { Check, Copy, Eye, Loader2, Send, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
@@ -11,6 +11,8 @@ import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
 import { CopyField } from "@/components/OwnEncoder";
 import { WatchLinkCard } from "@/components/WatchLink";
+import { Art3D, IconTile } from "@/components/ui/icon-tile";
+import { otherLinkCopy } from "@shared/guestWhere";
 
 type Invite = { id: number; guestName: string; guestEmail: string; whenText: string; zoomLink: string; note: string; status: "invited" | "answered"; answers: Record<string, string> & { custom?: { q: string; a: string }[] }; hasPhoto: boolean; whenIso?: string; linkedinUrl?: string; invitedAt: string; answeredAt: string; usedRec: number; link: string };
 const say = (e: unknown) => ((e as Error).message ?? "").replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, "") || "Try again in a moment.";
@@ -27,6 +29,8 @@ const stateOf = (g: Invite): State => (g.usedRec > 0 || (g.whenIso && Date.parse
 const initials = (name: string) => name.trim().split(/\s+/).filter(Boolean).map((w) => w[0]).slice(0, 2).join("").toUpperCase() || "?";
 /** "Wed, Dec 2 · 6:30 PM": short enough to never be cut off. */
 const shortWhen = (g: Invite) => (g.whenIso ? new Date(g.whenIso).toLocaleString("en-US", { weekday: "short", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" }).replace(/, (\d+:\d+)/, " · $1").replace(/^(\w+), /, "$1, ") : g.whenText);
+/** The "When" line the email carries, from the form's datetime-local value. */
+const whenLabel = (v: string) => (v ? new Date(v).toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }) : "");
 const tabCls = (on: boolean) => `border-b-2 px-0.5 pb-2 text-sm font-medium transition-colors ${on ? "border-[#053877] font-semibold text-[#053877] dark:border-[#8fb5e8] dark:text-[#8fb5e8]" : "border-transparent text-muted-foreground hover:text-foreground"}`;
 /** Where the interview is recorded or goes out live (Andrew, 25 Nov): our studio first, then Zoom, then the tools that stream in. */
 type Where = "studio" | "zoom" | "streamyard" | "restream" | "obs" | "booth";
@@ -90,7 +94,11 @@ export function GuestInvites({ prefill, shows = [], showId }: { prefill?: { name
     onError: (e) => toast({ title: "Couldn't send that", description: say(e), variant: "destructive" }),
   });
   const [questions, setQuestions] = useState<string[]>([]);
-  const sender = useQuery<{ slug: string; address: string; replyTo: string; fromShow?: boolean }>({ queryKey: ["/api/host/guest-invites/sender", pickedShow], queryFn: async () => (await apiRequest("GET", `/api/host/guest-invites/sender${pickedShow ? `?show=${pickedShow}` : ""}`)).json() });
+  // The note and own questions open from their "+ Add…" links; the email preview starts open (Andrew, 26 Nov).
+  const [noteOpen, setNoteOpen] = useState(false);
+  const [qsOpen, setQsOpen] = useState(false);
+  const [preview, setPreview] = useState(true);
+  const sender = useQuery<{ slug: string; address: string; replyTo: string; fromShow?: boolean; who?: string; show?: string; studioLink?: string }>({ queryKey: ["/api/host/guest-invites/sender", pickedShow], queryFn: async () => (await apiRequest("GET", `/api/host/guest-invites/sender${pickedShow ? `?show=${pickedShow}` : ""}`)).json() });
   const [editSlug, setEditSlug] = useState<string | null>(null);
   const saveSlug = useMutation({
     mutationFn: async () => (await apiRequest("PUT", "/api/host/guest-invites/sender", { slug: editSlug })).json(),
@@ -108,10 +116,10 @@ export function GuestInvites({ prefill, shows = [], showId }: { prefill?: { name
   const send = useMutation({
     mutationFn: async () => {
       const whenIso = f.when ? new Date(f.when).toISOString() : "";
-      const whenText = f.when ? new Date(f.when).toLocaleString("en-US", { weekday: "long", month: "long", day: "numeric", hour: "numeric", minute: "2-digit", timeZoneName: "short" }) : "";
+      const whenText = whenLabel(f.when);
       return (await apiRequest("POST", "/api/host/guest-invites", { guestName: f.guestName, guestEmail: f.guestEmail, linkedin: f.linkedin.trim(), whenText, whenIso, zoomLink: byLink && !linkLater ? f.zoomLink.trim() : "", linkLater: byLink && linkLater, note: f.note, ...(where === "booth" ? { where: "booth", bookingId: pickedBooking } : where === "studio" ? { where: "studio" } : isOutside(where) ? { where } : {}), questions: questions.map((q) => q.trim()).filter(Boolean), ...(pickedShow ? { showId: pickedShow } : {}) })).json();
     },
-    onSuccess: () => { setF({ guestName: "", guestEmail: "", linkedin: "", when: "", zoomLink: "", note: "" }); setQuestions([]); setWhere("studio"); setLinkLater(false); setNeedLink(false); void qc.invalidateQueries({ queryKey: ["/api/host/guest-invites"] }); toast({ title: "Invitation sent", description: "They'll get an email from you through MilitaryVoices.ai, and you'll hear when they answer." }); },
+    onSuccess: () => { setF({ guestName: "", guestEmail: "", linkedin: "", when: "", zoomLink: "", note: "" }); setQuestions([]); setNoteOpen(false); setQsOpen(false); setWhere("studio"); setLinkLater(false); setNeedLink(false); void qc.invalidateQueries({ queryKey: ["/api/host/guest-invites"] }); toast({ title: "Invitation sent", description: "They'll get an email from you through MilitaryVoices.ai, and you'll hear when they answer." }); },
     onError: (e) => toast({ title: "Couldn't send that", description: say(e), variant: "destructive" }),
   });
   const del = useMutation({ mutationFn: async (id: number) => apiRequest("DELETE", `/api/host/guest-invites/${id}`), onSuccess: () => void qc.invalidateQueries({ queryKey: ["/api/host/guest-invites"] }) });
@@ -195,9 +203,27 @@ export function GuestInvites({ prefill, shows = [], showId }: { prefill?: { name
 
       {sub === "new" && <>
 
-      <div className="rounded-2xl border border-border bg-card p-5 shadow-sm">
-        <p className="text-sm text-muted-foreground [text-wrap:pretty]">We email your guest from you. They answer a few questions and add the photo they want shown, and you get it all before the interview. Their name and photo go on your episode's guest card.</p>
-        <form data-testid="guest-invite-form" className="mt-5 grid gap-5 sm:grid-cols-2" onSubmit={(e) => { e.preventDefault(); const fix = typoFix(f.guestEmail); if (fix && window.confirm(`Is ${f.guestEmail} right? It looks like it should end in .com (${fix}).\n\nOK sends it to ${f.guestEmail}. Cancel lets you fix it.`) === false) return; if (byLink && !f.zoomLink.trim() && !linkLater) { setNeedLink(true); document.getElementById("gi-f-zoom")?.focus(); return; } send.mutate(); }}>
+      {/* Version A (Andrew, 26 Nov: "I like this format"): a slim header and the three steps, the form in two
+          columns, the note and questions behind "+ Add…" links, and the email they'll get open underneath. */}
+      <div data-testid="guest-invite-new">
+        <div className="flex items-center gap-3">
+          <IconTile art="send" size="sm" />
+          <div className="min-w-0">
+            <h2 className="text-xl font-bold tracking-tight">Invite a guest</h2>
+            <p className="text-sm text-muted-foreground [text-wrap:pretty]">We email them from you. You get their answers and photo before the interview.</p>
+          </div>
+        </div>
+        {/* Phones skip the steps: the line above already says it (UI/UX, 26 Nov). */}
+        <div className="mt-3 hidden flex-wrap items-center gap-x-3.5 gap-y-1.5 rounded-xl border border-border bg-card px-3 py-2 text-[13px] font-medium text-muted-foreground sm:flex" data-testid="invite-steps">
+          <span className="inline-flex items-center gap-1.5"><Art3D name="clipboard" size={18} />They answer a few questions</span>
+          <span aria-hidden className="text-muted-foreground/50">→</span>
+          <span className="inline-flex items-center gap-1.5"><Art3D name="camera" size={18} />Send their photo</span>
+          <span aria-hidden className="text-muted-foreground/50">→</span>
+          <span className="inline-flex items-center gap-1.5"><Art3D name="link" size={18} />Join with one link</span>
+        </div>
+
+      <div className="mt-3.5 rounded-2xl border border-border bg-card p-4 shadow-sm sm:p-5">
+        <form data-testid="guest-invite-form" className="grid grid-cols-1 gap-x-4 gap-y-3.5 sm:grid-cols-2 [&>*]:min-w-0" onSubmit={(e) => { e.preventDefault(); const fix = typoFix(f.guestEmail); if (fix && window.confirm(`Is ${f.guestEmail} right? It looks like it should end in .com (${fix}).\n\nOK sends it to ${f.guestEmail}. Cancel lets you fix it.`) === false) return; if (byLink && !f.zoomLink.trim() && !linkLater) { setNeedLink(true); document.getElementById("gi-f-zoom")?.focus(); return; } send.mutate(); }}>
           {many && (
             <div className="flex flex-col gap-1.5 sm:col-span-2" data-testid="invite-show">
               <Label htmlFor="gi-f-show">For which show?</Label>
@@ -208,11 +234,11 @@ export function GuestInvites({ prefill, shows = [], showId }: { prefill?: { name
           )}
           <div className="space-y-1.5"><Label htmlFor="gi-f-name">Guest's name</Label><Input id="gi-f-name" value={f.guestName} onChange={set("guestName")} maxLength={80} required /></div>
           <div className="space-y-1.5"><Label htmlFor="gi-f-email">Guest's email</Label><Input id="gi-f-email" type="email" value={f.guestEmail} onChange={set("guestEmail")} required />{typoFix(f.guestEmail) && <p className="text-xs text-amber-800">Did you mean <button type="button" onClick={() => setF((x) => ({ ...x, guestEmail: typoFix(x.guestEmail) }))} className="font-semibold underline">{typoFix(f.guestEmail)}</button>?</p>}</div>
-          <div className="space-y-1.5 sm:col-span-2 sm:pr-[calc(50%+0.625rem)]" data-testid="invite-linkedin"><Label htmlFor="gi-f-li">Guest's LinkedIn (optional)</Label><Input id="gi-f-li" value={f.linkedin} onChange={set("linkedin")} placeholder="linkedin.com/in/their-name" inputMode="url" /><p className="text-xs text-muted-foreground [text-wrap:pretty]">We read it to get your prep ready: who they are and questions worth asking. Their photo stays the one they send you.</p></div>
+          {/* Where and When describe the session, so they sit together (UI/UX, 26 Nov). */}
           <div className="flex flex-col gap-1.5" data-testid="invite-where">
-            <Label htmlFor="gi-f-where">Where will you record or go live?</Label>
+            <Label htmlFor="gi-f-where">Where will you record or go live?{where === "studio" && <span className="ml-1.5 rounded-full bg-[#FFF3D6] px-1.5 py-px align-[1px] text-[10.5px] font-bold text-[#8a5a00]">Built in</span>}</Label>
             <Select id="gi-f-where" wrap="w-full" value={where} onChange={(e) => { setWhere(e.target.value as Where); setNeedLink(false); }} className={selCls} data-testid="invite-where-select">
-              <option value="studio">My MilitaryVoices studio</option>
+              <option value="studio">My Studio</option>
               <option value="zoom">Zoom</option>
               <option value="streamyard">StreamYard</option>
               <option value="restream">Restream</option>
@@ -221,18 +247,19 @@ export function GuestInvites({ prefill, shows = [], showId }: { prefill?: { name
             </Select>
           </div>
           {where === "booth" && coming.length > 0 ? (
-            <div className="space-y-1.5 sm:col-span-2" data-testid="invite-booth">
+            <div className="flex flex-col gap-1.5" data-testid="invite-booth">
               <Label htmlFor="gi-f-booking">Which show?</Label>
               <Select id="gi-f-booking" wrap="w-full" value={pickedBooking ?? ""} onChange={(e) => setBookingId(Number(e.target.value))} className={selCls}>
                 {coming.map((b) => <option key={b.id} value={b.id}>{b.label}</option>)}
               </Select>
-              <p className="text-xs text-muted-foreground">Your guest gets a private link into your Radio show, with the time filled in. They open it on the day, allow their camera and microphone, and they're in. No account needed.</p>
             </div>
           ) : (
-            <>
-          <div className="flex flex-col gap-1.5"><Label htmlFor="gi-f-when">When is the interview?</Label><Input id="gi-f-when" type="datetime-local" value={f.when} onChange={set("when")} />{byLink && !f.when && <p className="text-xs text-amber-800" data-testid="invite-when-nudge">Add the day and time so your guest knows when to join.</p>}</div>
-          {where === "studio" && <p className="-mt-2 text-xs text-muted-foreground sm:col-span-2 [text-wrap:pretty]" data-testid="invite-studio-note">Your guest gets the link to your own studio, the one under Studio in your menu. They open it at that time, allow their camera and microphone, and they're in. No account needed.</p>}
-          {(where === "zoom" || isOutside(where)) && (
+            <div className="flex flex-col gap-1.5"><Label htmlFor="gi-f-when">When is the interview?</Label><Input id="gi-f-when" type="datetime-local" value={f.when} onChange={set("when")} />{byLink && !f.when && <p className="text-xs text-amber-800" data-testid="invite-when-nudge">Add the day and time so your guest knows when to join.</p>}</div>
+          )}
+          <div className="space-y-1.5" data-testid="invite-linkedin"><Label htmlFor="gi-f-li">LinkedIn <span className="font-medium text-muted-foreground">(optional)</span></Label><Input id="gi-f-li" value={f.linkedin} onChange={set("linkedin")} placeholder="linkedin.com/in/their-name" inputMode="url" /></div>
+          {where === "studio" && <p className="self-center text-xs text-muted-foreground [text-wrap:pretty] sm:pt-6" data-testid="invite-studio-note">Your guest gets the link to your studio. No account needed.</p>}
+          {where === "booth" && coming.length > 0 && <p className="self-center text-xs text-muted-foreground [text-wrap:pretty] sm:pt-6">Your guest gets a private link into your Radio show, with the time filled in. They open it on the day, allow their camera and microphone, and they're in. No account needed.</p>}
+          {byLink && (
             <div className="space-y-1.5">
               <Label htmlFor="gi-f-zoom">{where === "zoom" ? "Zoom link" : OUTSIDE[where as keyof typeof OUTSIDE].link}</Label>
               <Input id="gi-f-zoom" value={linkLater ? "" : f.zoomLink} onChange={(e) => { set("zoomLink")(e); setNeedLink(false); }} placeholder={linkLater ? "You'll send it yourself" : where === "zoom" ? "Paste the link from Zoom" : "Paste the link your guest opens"} disabled={linkLater} aria-invalid={needLink} data-testid="invite-zoom-link" />
@@ -265,39 +292,87 @@ export function GuestInvites({ prefill, shows = [], showId }: { prefill?: { name
               <p className="text-xs text-muted-foreground">Already added it? You're set: the same key works every time. {where === "streamyard" && "StreamYard lists Custom RTMP on its paid plans. "}<a href="/stream-in" target="_blank" rel="noreferrer" className="font-semibold text-[#053877] underline underline-offset-2 dark:text-[#8fb5e8]">Your stream key page</a></p>
             </div>
           )}
-            </>
-          )}
-          <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="gi-f-note">A note to your guest (optional)</Label><Textarea id="gi-f-note" value={f.note} onChange={set("note")} rows={3} maxLength={1200} placeholder="What the interview is about, how long it runs, what to have ready." /></div>
+          {(noteOpen || f.note) && <div className="space-y-1.5 sm:col-span-2"><Label htmlFor="gi-f-note">A note to your guest (optional)</Label><Textarea id="gi-f-note" value={f.note} onChange={set("note")} rows={3} maxLength={1200} placeholder="What the interview is about, how long it runs, what to have ready." autoFocus={noteOpen && !f.note} /></div>}
+          {(qsOpen || questions.length > 0) && (
           <div className="space-y-3 rounded-xl border border-border/70 p-4 sm:col-span-2" data-testid="guest-invite-questions">
             <Label>Your own questions for the guest (optional)</Label>
             <p className="text-xs text-muted-foreground">We already ask their name, bio, topics, links and photo. Add anything else you want to know before the interview.</p>
             {questions.map((q, i) => (
               <div key={i} className="flex items-center gap-2">
-                <Input value={q} onChange={(e) => setQuestions((qs) => qs.map((x, j) => (j === i ? e.target.value : x)))} maxLength={300} placeholder="For example: What's the story you've never told on a podcast?" aria-label={`Question ${i + 1}`} />
+                <Input value={q} onChange={(e) => setQuestions((qs) => qs.map((x, j) => (j === i ? e.target.value : x)))} maxLength={300} placeholder="For example: What's the story you've never told on a podcast?" aria-label={`Question ${i + 1}`} autoFocus={i === questions.length - 1 && !q} />
                 <Button type="button" variant="ghost" size="sm" onClick={() => setQuestions((qs) => qs.filter((_, j) => j !== i))} aria-label={`Remove question ${i + 1}`}><Trash2 className="h-4 w-4" /></Button>
               </div>
             ))}
             {questions.length < 10 && <Button type="button" variant="outline" size="sm" className="rounded-full" onClick={() => setQuestions((qs) => [...qs, ""])} data-testid="guest-invite-add-question">+ Add a question</Button>}
           </div>
+          )}
+          {(!(noteOpen || f.note) || !(qsOpen || questions.length > 0)) && (
+            <div className="flex flex-wrap gap-x-5 gap-y-2 sm:col-span-2">
+              {!(noteOpen || f.note) && <button type="button" onClick={() => setNoteOpen(true)} className="text-sm font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]" data-testid="invite-add-note">+ Add a note</button>}
+              {!(qsOpen || questions.length > 0) && <button type="button" onClick={() => { setQsOpen(true); setQuestions([""]); }} className="text-sm font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]" data-testid="invite-add-questions">+ Add your own questions</button>}
+            </div>
+          )}
           {/* Where people watch the show (25 Nov: "Yes, build it", the watch page for everyone): a studio or stream-in show plays there. */}
           {(where === "studio" || isOutside(where)) && <div className="sm:col-span-2"><WatchLinkCard note="send it to your guest so they can share it" testId="invite-watch" /></div>}
-          <div className="sm:col-span-2"><Button type="submit" disabled={send.isPending || !f.guestName.trim() || !f.guestEmail.trim()} className="rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="guest-invite-submit">{send.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}Send the invitation</Button></div>
-          <div className="space-y-1 sm:col-span-2 text-xs text-muted-foreground" data-testid="invite-sender">
-            {editSlug === null ? (
-              <p>* The email comes from <b className="text-foreground">{sender.data?.address ?? "…"}</b>. When your guest replies, it comes to you ({sender.data?.replyTo ?? "your email"}). {!sender.data?.fromShow && <button type="button" onClick={() => setEditSlug(sender.data?.slug ?? "")} className="font-semibold text-[#053877] underline underline-offset-2 dark:text-[#8fb5e8]" data-testid="invite-sender-edit">Change the name</button>}</p>
-            ) : (
-              <div className="flex flex-wrap items-center gap-2">
-                <span>* From</span>
-                <Input value={editSlug} onChange={(e) => setEditSlug(e.target.value.toLowerCase())} className="h-8 w-48" maxLength={30} data-testid="invite-sender-input" />
-                <span>@militaryvoices.ai</span>
-                <Button type="button" size="sm" className="h-8 rounded-full" disabled={saveSlug.isPending || editSlug.trim().length < 3} onClick={() => saveSlug.mutate()}>Save</Button>
-                <Button type="button" size="sm" variant="ghost" className="h-8" onClick={() => setEditSlug(null)}>Cancel</Button>
-              </div>
-            )}
+          <div className="flex flex-col gap-3 border-t border-border pt-4 sm:col-span-2 sm:flex-row sm:items-center sm:gap-4">
+            <Button type="submit" disabled={send.isPending || !f.guestName.trim() || !f.guestEmail.trim()} className="h-11 shrink-0 rounded-full bg-[#F0A71F] px-6 text-[15px] font-bold text-[#1d1300] hover:bg-[#e09612]" data-testid="guest-invite-submit">{send.isPending ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Send className="mr-2 h-4 w-4" />}Send invite</Button>
+            <div className="min-w-0 flex-1 text-xs text-muted-foreground" data-testid="invite-sender">
+              {editSlug === null ? (
+                <p className="[text-wrap:pretty]">From <b className="text-foreground">{sender.data?.address ?? "…"}</b>. Replies come to you. {!sender.data?.fromShow && <button type="button" onClick={() => setEditSlug(sender.data?.slug ?? "")} className="font-semibold text-[#053877] underline underline-offset-2 dark:text-[#8fb5e8]" data-testid="invite-sender-edit">Change</button>}</p>
+              ) : (
+                <div className="flex flex-wrap items-center gap-2">
+                  <span>From</span>
+                  <Input value={editSlug} onChange={(e) => setEditSlug(e.target.value.toLowerCase())} className="h-8 w-48" maxLength={30} data-testid="invite-sender-input" />
+                  <span>@militaryvoices.ai</span>
+                  <Button type="button" size="sm" className="h-8 rounded-full" disabled={saveSlug.isPending || editSlug.trim().length < 3} onClick={() => saveSlug.mutate()}>Save</Button>
+                  <Button type="button" size="sm" variant="ghost" className="h-8" onClick={() => setEditSlug(null)}>Cancel</Button>
+                </div>
+              )}
+            </div>
+            <button type="button" onClick={() => setPreview((v) => !v)} className="inline-flex shrink-0 items-center gap-1.5 self-start text-sm font-semibold text-[#053877] hover:underline sm:self-auto dark:text-[#8fb5e8]" aria-expanded={preview} data-testid="invite-preview-toggle"><Eye className="h-4 w-4" />{preview ? "Hide the email" : "Preview the email"}</button>
           </div>
         </form>
+        {preview && <InvitePreview who={sender.data?.who ?? "Your host"} show={sender.data?.show ?? ""} studioLink={sender.data?.studioLink ?? ""} guestName={f.guestName} when={f.when} where={where} link={f.zoomLink.trim()} linkLater={linkLater} note={f.note} />}
+      </div>
       </div>
       </>}
+    </div>
+  );
+}
+
+/**
+ * The email the guest gets, drawn from what's in the form (Andrew, 26 Nov: "Show them what it will look like").
+ * The words are sendInterviewInvite's in server/email.ts: change them there and here together.
+ */
+function InvitePreview({ who, show, studioLink, guestName, when, where, link, linkLater, note }: { who: string; show: string; studioLink: string; guestName: string; when: string; where: Where; link: string; linkLater: boolean; note: string }) {
+  const first = guestName.trim().split(/\s+/)[0] || "there";
+  const whenText = whenLabel(when);
+  const other = isOutside(where) ? otherLinkCopy(where, who) : null;
+  const url = (u: string) => <span className="break-all text-[#053877] underline underline-offset-2 dark:text-[#8fb5e8]">{u}</span>;
+  return (
+    <div className="mt-4 rounded-xl border border-border bg-[#fbfcfe] p-4 text-[13px] leading-relaxed dark:bg-white/5" data-testid="invite-preview">
+      <p className="border-b border-border pb-2 text-xs text-muted-foreground"><b className="text-foreground">{who} via MilitaryVoices.ai</b> · {who} invites you to be a guest on {show || "their podcast"}</p>
+      <p className="mt-2.5 text-[10.5px] font-bold uppercase tracking-[0.14em] text-[#B9770E]">You're invited</p>
+      <p className="mt-0.5 text-[15px] font-bold [text-wrap:balance]">Hi {first}, you're invited to {show || "the podcast"}</p>
+      <p className="mt-1.5">{who} would like you as a guest.</p>
+      {whenText && <p className="mt-1"><b>When:</b> {whenText}</p>}
+      {where === "studio" && <>
+        <p className="mt-1"><b>Your link to join:</b> {studioLink ? url(studioLink) : "your studio link"}</p>
+        <p className="mt-1 text-foreground/80">Open it at the time, allow your camera and microphone, and you're in the studio with {who}. No account needed.</p>
+      </>}
+      {where === "booth" && <>
+        <p className="mt-1"><b>Your link to join:</b> a private link into your Radio show</p>
+        <p className="mt-1 text-foreground/80">Open it on the day, allow your camera and microphone, and you're on the Radio with {who}. No account needed. It's live on MilitaryVoices Radio.</p>
+      </>}
+      {where === "zoom" && (link ? <p className="mt-1"><b>Zoom:</b> {url(link)}</p> : linkLater ? <p className="mt-1"><b>Zoom:</b> {who} will send you the Zoom link in a separate email.</p> : null)}
+      {other && (link ? <>
+        <p className="mt-1"><b>{other.label}:</b> {url(link)}</p>
+        {other.help && <p className="mt-1 text-foreground/80">{other.help}</p>}
+      </> : linkLater ? <p className="mt-1"><b>{other.label}:</b> {other.later}</p> : null)}
+      {note.trim() && <p className="mt-2.5 whitespace-pre-line">{note}</p>}
+      <p className="mt-2.5">To get ready, please answer a few quick questions and add the photo you'd like shown with your name. It takes about five minutes.</p>
+      <span className="mt-2.5 inline-block rounded-full bg-[#053877] px-3.5 py-1.5 text-xs font-semibold text-white">Answer a few questions</span>
+      <p className="mt-3 text-[11px] text-muted-foreground">Sent for {who} through MilitaryVoices.ai. Reply to this email to reach them.</p>
     </div>
   );
 }

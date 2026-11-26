@@ -120,8 +120,16 @@ export function registerGuestInvites(app: Express, requireHostSession: RequestHa
     const email = mine(req);
     const show = await inviteShow(email, req.query.show);
     const slug = await senderFor(email, show);
+    // For the email preview under the form (Andrew, 26 Nov: "Show them what it will look like"): the same names and
+    // studio link sendInterviewInvite uses. Read only: a host with no studio yet sees no link rather than getting one made.
+    const profile = await storage.getProfileByEmail(email);
+    const title = show?.title || (profile?.podcastName ?? "");
+    const tok = rows(await db.execute(sql`select invite_token from personal_studios where owner_email=${email} limit 1`))[0]?.invite_token;
     // fromShow: the address follows the picked show, so "Change the name" doesn't apply.
-    res.json({ slug, address: `${slug}@militaryvoices.ai`, replyTo: email, fromShow: !!show && slug === show.slug });
+    res.json({
+      slug, address: `${slug}@militaryvoices.ai`, replyTo: email, fromShow: !!show && slug === show.slug,
+      who: profile?.hostName || title || "Your host", show: title, studioLink: tok ? `${ORIGIN}/my-studio/join/${tok}${show ? `?show=${show.id}` : ""}` : "",
+    });
   });
   app.put("/api/host/guest-invites/sender", requireHostSession, async (req, res) => {
     const email = mine(req);

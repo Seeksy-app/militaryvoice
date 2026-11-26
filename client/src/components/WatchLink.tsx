@@ -37,15 +37,14 @@ export function WatchLinkCard({ note, testId = "watch-link-card" }: { note: stri
   const { data } = useWatchPage();
   if (!data?.url) return null;
   return (
-    <div className="flex items-center gap-3 rounded-2xl border border-[#d5e1f2] bg-[#f5f8fd] p-3.5 dark:border-white/10 dark:bg-white/5" data-testid={testId}>
-      <div className="min-w-0 flex-1">
-        <p className="text-sm font-semibold">Where people can watch</p>
-        <p className="mt-0.5 text-[13px] text-[#475467] dark:text-white/70">
-          <a href={data.url} target="_blank" rel="noreferrer" className="font-medium text-[#053877] hover:underline dark:text-white">{shortUrl(data.url)}</a>
-          {note ? ` · ${note}` : ""}
-        </p>
-      </div>
-      <CopyLinkButton url={data.url} testId={`${testId}-copy`} />
+    // Phone: title and Copy link share the top row, the full link and note run below at full width (never cut off).
+    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-x-3 gap-y-1 rounded-2xl border border-[#d5e1f2] bg-[#f5f8fd] p-3.5 dark:border-white/10 dark:bg-white/5" data-testid={testId}>
+      <p className="text-sm font-semibold">Where people can watch</p>
+      <div className="sm:row-span-2"><CopyLinkButton url={data.url} testId={`${testId}-copy`} /></div>
+      <p className="col-span-2 text-[13px] text-[#475467] sm:col-span-1 dark:text-white/70">
+        <a href={data.url} target="_blank" rel="noreferrer" className="break-all font-medium text-[#053877] hover:underline dark:text-white">{shortUrl(data.url)}</a>
+        {note ? ` · ${note}` : ""}
+      </p>
     </div>
   );
 }
