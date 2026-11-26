@@ -24,6 +24,10 @@ export type MilitaryHotel = {
   /** E.164, or "" when there isn't one we trust. */
   central_reservations_phone: string;
   id_needed: string;
+  /** The rate code to type when the military rate books online ("" or absent when there isn't one). */
+  rate_code?: string;
+  /** A stay perk that comes with the rate (late checkout, upgrade, parking); "" or absent for none. */
+  stay_perk?: string;
   restrictions: string;
   stacking: string;
   sources: string[];
@@ -65,6 +69,10 @@ export function hotelPerkFor(h: MilitaryHotel, status: TravelerStatus) {
     eligible,
     rate: eligible ? h.rate : "",
     phoneOnly: eligible && h.phone_only,
+    code: eligible ? (h.rate_code ?? "").trim() : "",
+    stayPerk: eligible ? (h.stay_perk ?? "").trim() : "",
+    /** The brand's central reservations, for travelers who ring themselves. */
+    reservationsPhone: h.central_reservations_phone || null,
     howToBook: h.how_to_book,
     idNeeded: h.id_needed,
     restrictions: h.restrictions,

@@ -66,6 +66,8 @@ export type HotelResult = {
   checkOutTime: string;
   /** One photo, only on a fresh search (photo links expire, so we don't keep them); null on a cached one. */
   image: string | null;
+  /** The brand matched from the name ("Marriott Bonvoy"), or null. */
+  brand: string | null;
   perk: MilitaryHotelPerk | null;
   /** This traveler qualifies and the brand quotes its military rate by phone: show "Have us call". */
   canCall: boolean;
@@ -170,6 +172,7 @@ export function shape(raw: ParallelHotel[], q: HotelQuery, fresh: boolean): Hote
       checkInTime: String(h.check_in_time ?? ""),
       checkOutTime: String(h.check_out_time ?? ""),
       image: fresh ? (h.images ?? []).find((u) => /^https:\/\//.test(u)) ?? null : null,
+      brand: brand?.brand ?? null,
       perk,
       canCall: !!perk?.phoneOnly,
     }];
@@ -254,6 +257,8 @@ export type HotelCallView = {
   stay: CallStay;
   /** Who we ring: the hotel itself, or the brand's central reservations. */
   calling: "property" | "brand";
+  /** The hotel's (or brand's) number, for "Call to book the rate we found". Never the test number. */
+  phone: string | null;
   onlinePerNight: number | null;
   status: "waiting" | "calling" | "done" | "failed";
   report: HotelCallReport | null;
@@ -275,6 +280,7 @@ function viewOf(c: TravelCallRow): HotelCallView {
     traveler: c.traveler === "active" ? "active" : "veteran",
     stay,
     calling: target.who === "brand" ? "brand" : "property",
+    phone: target.phone || null,
     onlinePerNight: stay.pricePerNight,
     status: (["waiting", "calling", "done", "failed"].includes(c.status) ? c.status : "waiting") as HotelCallView["status"],
     report,
