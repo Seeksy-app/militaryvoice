@@ -102,14 +102,17 @@ export function StarterCard() {
   const [card, setCard] = useState<Card | null>(null);
   useEffect(() => {
     const got = (payload: Uint8Array, p?: RemoteParticipant, _k?: unknown, topic?: string) => {
-      // Only the listener may draw on the host's screen: a guest sending this topic is ignored (Engineering, 26 Nov).
+      // Only the listener may draw on the host's screen (Engineering, 26 Nov). It joins hidden, and a hidden sender
+      // arrives with no participant; a guest is never hidden, so a guest's message always has p and is dropped.
       // Its "starters-state" pause notices are ignored too; the card simply stops arriving.
-      if (topic !== "mv-starter" || !p || !p.identity.startsWith("listener-")) return;
-      let m: { kind?: string; id?: string; lines?: unknown; basis?: string } = {};
+      if (topic !== "mv-starter" || (p && !p.identity.startsWith("listener-"))) return;
+      let m: { kind?: string; id?: string; lines?: unknown; basis?: string; from?: unknown } = {};
       try { m = JSON.parse(dec.decode(payload)); } catch { return; }
       if (m.kind === "starter" && typeof m.id === "string" && Array.isArray(m.lines)) {
         const lines = m.lines.map((x) => String(x ?? "").trim().slice(0, 120)).filter(Boolean).slice(0, 3);
-        if (lines.length) setCard({ id: m.id, lines, basis: typeof m.basis === "string" ? m.basis.slice(0, 60) : undefined, from: p.identity });
+        // The ack goes back to the card's own "from" (listener-<id>), else the sender; never to anyone else.
+        const from = typeof m.from === "string" && m.from.startsWith("listener-") ? m.from : p?.identity ?? "";
+        if (lines.length) setCard({ id: m.id, lines, basis: typeof m.basis === "string" ? m.basis.slice(0, 60) : undefined, from });
       }
     };
     room.on(RoomEvent.DataReceived, got);
@@ -118,7 +121,7 @@ export function StarterCard() {
   useEffect(() => { if (!on) setCard(null); }, [on]);
   if (!on || !card) return null;
   const ack = (action: "used" | "dismissed") => {
-    void room.localParticipant.publishData(enc.encode(JSON.stringify({ kind: "starter-ack", id: card.id, action })), { reliable: true, topic: "mv-starter", destinationIdentities: [card.from] }).catch(() => {});
+    if (card.from) void room.localParticipant.publishData(enc.encode(JSON.stringify({ kind: "starter-ack", id: card.id, action })), { reliable: true, topic: "mv-starter", destinationIdentities: [card.from] }).catch(() => {});
     setCard(null);
   };
   return (
