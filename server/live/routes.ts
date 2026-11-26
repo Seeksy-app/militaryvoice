@@ -3,7 +3,7 @@
 import type { Express, Request, RequestHandler, Response } from "express";
 import { and, desc, eq, inArray, lt } from "drizzle-orm";
 import { db, schemaIsReady } from "../storage.js";
-import { approvals, auditLog, organizations, productionMembers, productions, stages, venues, type ApprovalRow, type OrganizationRow, type ProductionMemberRow, type ProductionRow, type StageRow, type VenueRow } from "../../shared/schema.js";
+import { approvals, auditLog, liveOrgBrands, organizations, productionMembers, productions, stages, venues, type ApprovalRow, type OrganizationRow, type ProductionMemberRow, type ProductionRow, type StageRow, type VenueRow } from "../../shared/schema.js";
 import {
   CLIENT_CONTENT_SUBJECTS, CLIENT_ROLES, MEMBER_ROLES, PRODUCTION_STATUSES, LIVE_TEST_CLIENT, LIVE_TEST_CREW,
   type Approval, type AuditEntry, type LiveOrg, type LiveRole, type Member, type Production, type Stage, type Venue,
@@ -29,14 +29,26 @@ async function slugsFor(orgs: OrganizationRow[]): Promise<Map<number, string>> {
   for (const o of all) { const s = slugify(o.name); if (!first.has(s)) first.set(s, o.id); }
   return new Map(orgs.map((o) => { const s = slugify(o.name); return [o.id, first.get(s) === o.id || !first.has(s) ? s : `${s}-${o.id}`]; }));
 }
-const orgView = (o: OrganizationRow | undefined, slugs: Map<number, string>): LiveOrg | null => (o ? { id: o.id, name: o.name, kind: o.kind, logoUrl: o.logoUrl, slug: slugs.get(o.id) ?? slugify(o.name) } : null);
+/** The org views for a set of rows: slug (portal URL), logo and brand colour (live_org_brands). */
+async function viewOrgs(rows: OrganizationRow[]): Promise<LiveOrg[]> {
+  if (!rows.length) return [];
+  const slugs = await slugsFor(rows);
+  const brands = new Map((await db.select().from(liveOrgBrands).where(inArray(liveOrgBrands.orgId, rows.map((o) => o.id)))).map((b) => [b.orgId, b.brandColor]));
+  return rows.map((o) => ({ id: o.id, name: o.name, kind: o.kind, logoUrl: o.logoUrl, slug: slugs.get(o.id) ?? slugify(o.name), brandColor: brands.get(o.id) ?? "" }));
+}
 type Orgs = { get: (id: number) => LiveOrg | null };
 async function orgsById(ids: number[]): Promise<Orgs> {
   const want = Array.from(new Set(ids.filter((x) => x > 0)));
   const rows = want.length ? await db.select().from(organizations).where(inArray(organizations.id, want)) : [];
-  const slugs = await slugsFor(rows);
-  const m = new Map(rows.map((o) => [o.id, orgView(o, slugs)]));
+  const m = new Map((await viewOrgs(rows)).map((o) => [o.id, o]));
   return { get: (id) => m.get(id) ?? null };
+}
+/** "#rrggbb" (lower case), "" to clear, or null when it isn't a colour. */
+const color = (v: unknown) => { const s = str(v, 7).toLowerCase(); return s === "" || /^#[0-9a-f]{6}$/.test(s) ? s : null; };
+async function setBrand(orgId: number, brandColor: string, by: string): Promise<void> {
+  const [had] = await db.select().from(liveOrgBrands).where(eq(liveOrgBrands.orgId, orgId)).limit(1);
+  if (had) await db.update(liveOrgBrands).set({ brandColor, updatedBy: by, updatedAt: now() }).where(eq(liveOrgBrands.id, had.id));
+  else await db.insert(liveOrgBrands).values({ orgId, brandColor, updatedBy: by, updatedAt: now() });
 }
 function productionView(p: ProductionRow, role: LiveRole, org: LiveOrg | null, counts: { stages: number; members: number }): Production {
   return {
@@ -107,10 +119,13 @@ async function getProduction(id: number, role: LiveRole): Promise<Production> {
 }
 
 /** A client or vendor org for LIVE (approved at once; it never appears in sign-up or Discovery choices). */
-async function makeOrg(name: string, kind: "client" | "vendor", by: string, logoUrl = ""): Promise<OrganizationRow> {
+async function makeOrg(name: string, kind: "client" | "vendor", by: string, logoUrl: unknown = "", brandColor: unknown = ""): Promise<OrganizationRow> {
   const n = str(name, 120);
   if (n.length < 2) throw new Bad(400, "Give the organisation a name.");
+  const c = color(brandColor);
+  if (c === null) throw new Bad(400, "Brand colours are written #RRGGBB.");
   const [o] = await db.insert(organizations).values({ name: n, kind, logoUrl: str(logoUrl, 500), status: "approved", createdBy: by, createdAt: now(), approvedAt: now() }).returning();
+  if (c) await setBrand(o.id, c, by);
   return o;
 }
 async function orgOk(id: unknown, kind?: "client" | "vendor"): Promise<number> {
@@ -136,8 +151,8 @@ function productionFields(b: Record<string, unknown>, creating: boolean): Partia
 export async function createProduction(who: LiveWho, b: Record<string, unknown>): Promise<Production> {
   if (!who.admin) throw new Bad(403, "Only MV admins can start a production for now.");
   const f = productionFields(b, true);
-  const nb = b.newOrg as { name?: string; logoUrl?: string } | undefined;
-  const orgId = nb?.name ? (await makeOrg(nb.name, "client", who.email, nb.logoUrl)).id : await orgOk(b.orgId, "client");
+  const nb = b.newOrg as { name?: string; logoUrl?: string; brandColor?: string } | undefined;
+  const orgId = nb?.name ? (await makeOrg(nb.name, "client", who.email, nb.logoUrl, nb.brandColor)).id : await orgOk(b.orgId, "client");
   const [p] = await db.insert(productions).values({ ...f, name: f.name!, orgId, createdBy: who.email, createdAt: now(), updatedAt: now() }).returning();
   await audit(p.id, who.email, "production.created", "production", p.id, null, p);
   return getProduction(p.id, "mv_admin");
@@ -148,8 +163,8 @@ export async function updateProduction(who: LiveWho, id: number, role: LiveRole,
   if (!before) throw new Bad(404, "We couldn't find that production.");
   const f = productionFields(b, false);
   if (b.orgId !== undefined || b.newOrg !== undefined) {
-    const nb = b.newOrg as { name?: string; logoUrl?: string } | undefined;
-    f.orgId = nb?.name ? (await makeOrg(nb.name, "client", who.email, nb.logoUrl)).id : await orgOk(b.orgId, "client");
+    const nb = b.newOrg as { name?: string; logoUrl?: string; brandColor?: string } | undefined;
+    f.orgId = nb?.name ? (await makeOrg(nb.name, "client", who.email, nb.logoUrl, nb.brandColor)).id : await orgOk(b.orgId, "client");
   }
   const s = f.startsOn ?? before.startsOn, e = f.endsOn ?? before.endsOn;
   if (s && e && e < s) throw new Bad(400, "The end date is before the start date.");
@@ -306,8 +321,21 @@ export function registerLive(app: Express): void {
     if (!(await mvAnywhere(L(req).live))) throw new Bad(403, "That list is for the MV team.");
     const kind = req.query.kind === "client" || req.query.kind === "vendor" ? [String(req.query.kind)] : ["client", "vendor"];
     const rows = await db.select().from(organizations).where(inArray(organizations.kind, kind)).orderBy(organizations.name);
-    const slugs = await slugsFor(rows);
-    return rows.map((o) => orgView(o, slugs));
+    return viewOrgs(rows);
+  })()));
+
+  /** A LIVE org's portal look: { logoUrl?, brandColor? } (MV roles and admins). Name and kind don't change here. */
+  app.patch("/api/production/orgs/:id", requireLive, (req, res) => send(res, (async () => {
+    const who = L(req).live, b = body(req);
+    if (!(await mvAnywhere(who))) throw new Bad(403, "That's for the MV team.");
+    const [o] = await db.select().from(organizations).where(eq(organizations.id, Number(req.params.id) || 0)).limit(1);
+    if (!o || (o.kind !== "client" && o.kind !== "vendor")) throw new Bad(404, "We couldn't find that organisation.");
+    const [before] = await viewOrgs([o]);
+    if (b.brandColor !== undefined) { const c = color(b.brandColor); if (c === null) throw new Bad(400, "Brand colours are written #RRGGBB."); await setBrand(o.id, c, who.email); }
+    if (b.logoUrl !== undefined) { const u = str(b.logoUrl, 500); if (u && !/^https:\/\//.test(u)) throw new Bad(400, "The logo needs an https:// link."); await db.update(organizations).set({ logoUrl: u }).where(eq(organizations.id, o.id)); }
+    const [after] = await viewOrgs((await db.select().from(organizations).where(eq(organizations.id, o.id))));
+    await audit(0, who.email, "org.updated", "org", o.id, before, after);
+    return after;
   })()));
 
   app.get("/api/production/venues", requireLive, (req, res) => send(res, (async () => {

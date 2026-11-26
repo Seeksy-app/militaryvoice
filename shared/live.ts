@@ -35,8 +35,11 @@ export type ApprovalState = (typeof APPROVAL_STATES)[number];
 /** The parties a production touches (organizations.kind gains client and vendor). */
 export type LiveOrg = { id: number; name: string; kind: "client" | "vendor" | string; logoUrl: string;
   /** For the client portal at /live/<slug>: made from the name, unique among LIVE orgs (a clash gets -<id>). */
-  slug: string };
-/** GET /api/production/orgs?kind=client|vendor → LiveOrg[] (MV roles and admins). Create one with newOrg on a production or member POST. */
+  slug: string;
+  /** The portal's accent, "#rrggbb"; "" means use the MV look. Set with PATCH /api/production/orgs/:id or newOrg. */
+  brandColor: string };
+/** GET /api/production/orgs?kind=client|vendor → LiveOrg[] (MV roles and admins). Create one with newOrg on a production or member POST.
+ *  PATCH /api/production/orgs/:id { logoUrl?, brandColor? } → LiveOrg (MV roles and admins; logoUrl https:// or ""). */
 
 /** GET /api/production/productions → Production[] (the ones I can see, newest first). GET /api/production/productions/:id → Production. */
 export type Production = {
@@ -72,7 +75,7 @@ export type ProductionInput = {
   name?: string; // 2–120 chars, required on create
   status?: ProductionStatus;
   orgId?: number | null; // a client org; or newOrg to make one
-  newOrg?: { name: string; logoUrl?: string };
+  newOrg?: { name: string; logoUrl?: string; brandColor?: string };
   startsOn?: string;
   endsOn?: string;
   timezone?: string;

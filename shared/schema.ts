@@ -3790,3 +3790,14 @@ export const auditLog = pgTable("audit_log", {
   at: text("at").notNull(),
 }, (t) => [index("audit_log_production_idx").on(t.productionId, t.id)]);
 export type AuditLogRow = typeof auditLog.$inferSelect;
+
+/** Military Voices LIVE (26 Nov): a client or vendor org's portal look (/live/<slug>). Its own table so organizations
+ *  keeps its columns; one row per org, made the first time a colour is set. */
+export const liveOrgBrands = pgTable("live_org_brands", {
+  id: serial("id").primaryKey(),
+  orgId: integer("org_id").notNull(),
+  brandColor: text("brand_color").notNull().default(""), // "#rrggbb", or "" for the MV look
+  updatedBy: text("updated_by").notNull().default(""),
+  updatedAt: text("updated_at").notNull(),
+}, (t) => [uniqueIndex("live_org_brands_org_idx").on(t.orgId)]);
+export type LiveOrgBrandRow = typeof liveOrgBrands.$inferSelect;
