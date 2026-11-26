@@ -75,6 +75,7 @@ import ForBrands from "@/pages/ForBrands";
 import Tour from "@/pages/Tour";
 import Pricing from "@/pages/Pricing";
 import BlackFriday from "@/pages/BlackFriday";
+import LiveApp from "@/pages/live/LiveApp";
 
 /**
  * Client-side navigation keeps the old scroll position by default. Every
@@ -198,6 +199,8 @@ function AppRouter() {
       <Route path="/admin/e/:id">{(p) => <Admin eventId={p.id} />}</Route>
       <Route path="/admin/e/:id/:tab">{(p) => <Admin eventId={p.id} tab={p.tab} />}</Route>
       <Route path="/admin/:tab">{(p) => <Admin tab={p.tab} />}</Route>
+      {/* Military Voices LIVE (phase 1, 26 Nov 2026): Production Command and client portals, behind live:on. */}
+      <Route path="/live" nest>{() => <LiveApp />}</Route>
       <Route path="/national-military-podcast-day">{() => <NationalMilitaryPodcastDay />}</Route>
       {/* Unlisted: a sponsorship proposal delivered by URL, not linked in nav. */}
       <Route path="/sponsor">{() => <Sponsor />}</Route>
