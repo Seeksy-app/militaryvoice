@@ -270,6 +270,18 @@ export async function briefText(owner: string, inviteId: number): Promise<string
   } catch { return ""; }
 }
 
+/** For the Starters listener (Engineering): the brief for the guest whose interview is nearest now (within 12 hours,
+ *  by the invite's time), or "" when no invite near now has one. Host-only text; never sent anywhere public. */
+export async function nearestBriefText(owner: string): Promise<string> {
+  await ensureBriefs();
+  const me = owner.trim().toLowerCase();
+  const list = rows(await db.execute(sql`select id, when_iso from guest_invites where owner_email=${me} and brief_id>0 and when_iso<>''`));
+  const now = Date.now();
+  const near = list.map((r) => ({ id: Number(r.id), d: Math.abs((Date.parse(String(r.when_iso)) || 0) - now) }))
+    .filter((x) => x.d <= 12 * 3600_000).sort((a, b) => a.d - b.d)[0];
+  return near ? briefText(me, near.id) : "";
+}
+
 export function registerGuestBrief(app: Express, requireHostSession: RequestHandler, requireAdmin: RequestHandler) {
   const mine = (req: Request) => (getSessionEmail(req) ?? "").trim().toLowerCase();
 

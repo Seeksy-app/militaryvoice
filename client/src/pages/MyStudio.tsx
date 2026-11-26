@@ -379,7 +379,7 @@ function PreviewToggle({ on, onClick, label, children }: { on: boolean; onClick:
  * The stage as big as the room allows (Andrew, 22 Nov: "make the viewer a little bit larger"): the column's
  * width, or the height left once the bar, the people row and the controls are counted. It was capped at 768px.
  */
-const STAGE_W = "min(100%, calc((100dvh - 375px) * 16 / 9))";
+const STAGE_W = "min(100%, calc((100dvh - 415px) * 16 / 9))"; // 415: header, Mark a clip row, people, controls
 
 /** The right panel (Andrew, 24 Nov: "I like the hide panel better", no dragging): a fixed width, a wider icon rail so
  *  every label fits whole, and a "Hide panel" tab on its edge that folds it down to the rail. Kept per computer. */
@@ -440,8 +440,6 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
   const v3 = editing && studio?.v3 === true;
   const scene = sceneLive(look, kit.live);
   // Mark a clip sits above whatever runs along the bottom of the stage: a banner, else the ticker.
-  const bannerUp = !!kit.live.showing && kit.live.showing.until > now && !look?.banners.find((b) => b.id === kit.live.showing?.bannerId)?.ticker;
-  const markBottom = bannerUp ? "21%" : kit.live.ticker?.on ? "9.5%" : "3%";
   // The layout editor (21 Nov): a scene's ⋯ → Edit layout. It takes the stage column and the right panel until Done or Cancel.
   const [layoutFor, setLayoutFor] = useState<string | null>(null);
   const layoutScene = v3 && layoutFor ? look?.scenes.find((s) => s.id === layoutFor) : undefined;
@@ -612,13 +610,13 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
               {/* The teleprompter: on this screen only, over the preview; the program is drawn elsewhere. */}
               <PrompterOverlay roomKey={noteKey} text={notes} />
               <SlidesBar kit={kit} />
-              {/* Mark a clip on the stage, bottom right (Studio v2, 26 Nov), stepping up over the ticker and a banner.
-                  This is the host's own preview: the recording and the live show never carry it. */}
-              {MARK_CLIP && <div className="absolute right-[1.6%] z-30" style={{ bottom: markBottom }}><MarkClip recording={!!rec} onStage /></div>}
             </div>
           ) : (
             <Stage kit={kit} scene={scene} fallbackLogo={look ? undefined : logo} />
           )}
+          {/* Mark a clip just below the stage, right-aligned (Andrew, 26 Nov: "it's below the stage. It doesn't float
+              around on the stage"): never over the video or its frame. */}
+          {owner && MARK_CLIP && <div className="mt-2 flex w-full shrink-0 justify-end" style={{ maxWidth: STAGE_W }}><MarkClip recording={!!rec} onStage /></div>}
           {owner && <ClipBar kit={kit} />}
           {/* Conversation starters: only what the listener sends, only to the owner, never on air (Studio v2). */}
           {owner && v3 && <div className="w-full shrink-0" style={{ maxWidth: STAGE_W }}><StarterCard /></div>}

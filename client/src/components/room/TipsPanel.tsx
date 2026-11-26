@@ -102,7 +102,9 @@ export function StarterCard() {
   const [card, setCard] = useState<Card | null>(null);
   useEffect(() => {
     const got = (payload: Uint8Array, p?: RemoteParticipant, _k?: unknown, topic?: string) => {
-      if (topic !== "mv-starter" || !p) return;
+      // Only the listener may draw on the host's screen: a guest sending this topic is ignored (Engineering, 26 Nov).
+      // Its "starters-state" pause notices are ignored too; the card simply stops arriving.
+      if (topic !== "mv-starter" || !p || !p.identity.startsWith("listener-")) return;
       let m: { kind?: string; id?: string; lines?: unknown; basis?: string } = {};
       try { m = JSON.parse(dec.decode(payload)); } catch { return; }
       if (m.kind === "starter" && typeof m.id === "string" && Array.isArray(m.lines)) {
