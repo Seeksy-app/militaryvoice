@@ -1,0 +1,1 @@
+Airports: OurAirports (public domain). Cities: GeoNames (CC-BY 4.0, geonames.org). Built 2026-11-26.

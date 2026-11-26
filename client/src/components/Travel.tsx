@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeftRight, BedDouble, ChevronsUp, Clock, ExternalLink, Info, Loader2, Luggage, MapPin, Phone, PhoneCall, Plane, PlaneLanding, PlaneTakeoff, Search, ShieldCheck, Tag as TagIcon, Users, X } from "lucide-react";
+import { ArrowLeftRight, BedDouble, Briefcase, ChevronsUp, Clock, ExternalLink, Info, Loader2, Luggage, MapPin, Phone, PhoneCall, Plane, PlaneLanding, PlaneTakeoff, Search, ShieldCheck, Tag as TagIcon, Users, X } from "lucide-react";
 import type { TravelerStatus } from "@shared/militaryFares";
 import { AIRPORTS, airlineColor, airlineName, airlineSite, airportName, checkedOn, deskOf, membershipLabel, perkTags, truePrice, type Perk } from "@/lib/travelPerks";
 import { TravelSky } from "@/components/TravelSky";
-import { DateField, Field, GOLD, HEAD, Select, Tag, call, list, money, todayEt } from "@/components/TravelParts";
+import { Banner, BrandLogo, DateField, Field, GOLD, HEAD, Select, Tag, call, list, money, todayEt } from "@/components/TravelParts";
+import { airlineLogo, airlineMark } from "@/lib/brandLogos";
+import { PlaceInput, placeCodes, placeText } from "@/components/TravelPlaces";
 import { HotelFields, HotelsBody, useHotels } from "@/components/TravelHotels";
 
 // Travel (Andrew, 26 Nov 2026): a trip and the creator's status, flights from the server's Parallel search
@@ -55,6 +57,9 @@ export function Travel({ serviceStatus }: { serviceStatus?: string | null }) {
   const [status, setStatus] = useState<TravelerStatus>(() => (/active|guard|reserve/i.test(serviceStatus ?? "") ? "active" : "veteran"));
   const [fromText, setFromText] = useState("");
   const [toText, setToText] = useState("");
+  // What was picked from the suggestions, kept while the box still shows it: a metro searches all its airports.
+  const [fromPick, setFromPick] = useState<{ text: string; code: string } | null>(null);
+  const [toPick, setToPick] = useState<{ text: string; code: string } | null>(null);
   const [leave, setLeave] = useState("");
   const [back, setBack] = useState("");
   const [all, setAll] = useState(false);
@@ -68,6 +73,18 @@ export function Travel({ serviceStatus }: { serviceStatus?: string | null }) {
     try { const u = new URL(window.location.href); if (t === "hotels") u.searchParams.set("tab", "hotels"); else u.searchParams.delete("tab"); window.history.replaceState(window.history.state, "", u); } catch { /* the tab still switches */ }
   };
   const hotels = useHotels(status, tab === "hotels");
+  // Andrew's target lays the search and each flight out on one line. That needs about 1000px, which the page has with
+  // the nav tucked or on a big screen; narrower, the same pieces sit on two lines. Measured, since the nav changes it.
+  const [box, setBox] = useState<HTMLElement | null>(null);
+  const [wide, setWide] = useState(false);
+  useEffect(() => {
+    if (!box) return;
+    setWide(box.getBoundingClientRect().width >= 1000);
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(([e]) => setWide(e.contentRect.width >= 1000));
+    ro.observe(box);
+    return () => ro.disconnect();
+  }, [box]);
 
   const search = useMutation({
     mutationFn: (q: Query) => call<SearchResponse>("POST", "/api/travel/search", q),
@@ -89,8 +106,8 @@ export function Travel({ serviceStatus }: { serviceStatus?: string | null }) {
     onSettled: () => qc.invalidateQueries({ queryKey: ["/api/travel/calls"] }),
   });
 
-  const from = codeOf(fromText);
-  const to = codeOf(toText);
+  const from = fromPick?.text === fromText ? fromPick.code : codeOf(fromText);
+  const to = toPick?.text === toText ? toPick.code : codeOf(toText);
   const formError = !from && fromText.trim().length >= 3 ? "Pick From from the list, or type its 3-letter code." : !to && toText.trim().length >= 3 ? "Pick To from the list, or type its 3-letter code." : from && from === to ? "From and To are the same airport." : "";
   const ready = !!from && !!to && !!leave && from !== to;
   const go = () => { if (ready) search.mutate({ from, to, depart: leave, return: back, status }); };
@@ -144,68 +161,75 @@ export function Travel({ serviceStatus }: { serviceStatus?: string | null }) {
   // Best deal for you (Andrew, 26 Nov): fare + the bags they'd pay for − the ones they get free. A fee we don't have
   // keeps a flight out of that order; those come after, by fare, under a line that says why.
   const priced = useMemo(() => rows.map((x) => ({ ...x, tp: x.r.price != null ? truePrice(x.phone ?? x.r.price, x.r.perk, bags, trip!.status) : null })), [rows, bags]);
-  const known = sort === "deal" ? priced.filter((x) => x.tp?.total != null).sort((a, b) => a.tp!.total! - b.tp!.total!) : priced;
+  // Lowest price goes by the big number each row shows: the price with their bags, or the fare when a bag fee isn't listed.
+  const shownPrice = (x: (typeof priced)[number]) => x.tp?.total ?? x.phone ?? x.r.price ?? 1e9;
+  const known = sort === "deal" ? priced.filter((x) => x.tp?.total != null).sort((a, b) => a.tp!.total! - b.tp!.total!) : [...priced].sort((a, b) => shownPrice(a) - shownPrice(b));
   const unknown = sort === "deal" ? priced.filter((x) => x.tp?.total == null) : [];
   const shownKnown = all ? known : known.slice(0, SHOWN);
   const shownUnknown = all ? unknown : unknown.slice(0, Math.max(0, SHOWN - known.length));
-  const row = (x: (typeof priced)[number], best = false) => <FlightRow key={x.r.i} r={x.r} best={best} searchedFrom={trip!.from} status={trip!.status} phoneFare={x.phone} call={x.call} tp={x.tp} bags={bags} open={openRow === x.r.i} onOpen={() => setOpenRow(openRow === x.r.i ? null : x.r.i)} />;
+  const row = (x: (typeof priced)[number], best = false) => <FlightRow key={x.r.i} r={x.r} best={best} badge={sort === "deal"} searchedFrom={trip!.from} searchedTo={trip!.to} status={trip!.status} phoneFare={x.phone} call={x.call} tp={x.tp} bags={bags} open={openRow === x.r.i} onOpen={() => setOpenRow(openRow === x.r.i ? null : x.r.i)} />;
   const searched = trip && !search.isPending;
 
   return (
-    <section className="mx-auto max-w-[1120px] pb-16 pt-1" data-testid="travel">
-      <datalist id="mv-airports">{AIRPORTS.map(([c, n]) => <option key={c} value={`${n} (${c})`} />)}</datalist>
+    <section ref={setBox} data-wide={wide} className="group/travel mx-auto max-w-[1120px] pb-16 pt-1" data-testid="travel">
 
-      {/* The title on a light sky, then the trip on a raised white card. */}
-      <div className="relative overflow-hidden rounded-3xl px-3 pb-4 pt-5 sm:px-6 sm:pb-6 sm:pt-7">
-        <TravelSky />
-        <div className="relative flex items-center gap-3 sm:gap-4">
-          <span className="flex h-14 w-14 shrink-0 items-center justify-center rounded-2xl bg-[#053877] text-white shadow-[0_6px_16px_-6px_rgba(5,56,119,0.6)] sm:h-[68px] sm:w-[68px]"><Luggage className="h-7 w-7 sm:h-8 sm:w-8" /></span>
-          <span className="h-12 w-[3px] shrink-0 rounded-full sm:h-16" style={{ background: GOLD }} />
-          <div className="min-w-0">
-            <h1 className="text-[34px] font-bold leading-none tracking-tight text-[#0b1b33] sm:text-[46px] dark:text-white" style={HEAD}>Travel</h1>
-            <p className="mt-1.5 text-[14px] leading-snug text-[#24324a] text-balance sm:text-[18px] dark:text-white/80">Compare flights, hotels and military travel benefits in one&nbsp;place.</p>
+      {/* Andrew's target v2: the title on a photographic sky, then the trip on a white card that floats over its foot. */}
+      <div className="relative">
+        <div className="relative overflow-hidden rounded-t-3xl px-3 pb-[64px] pt-6 sm:px-6 sm:pb-[78px] sm:pt-8">
+          <TravelSky />
+          <div className="relative flex items-center gap-3 sm:gap-5">
+            <span className="relative flex h-14 w-14 shrink-0 items-center justify-center rounded-[16px] bg-[#0b3a78] text-white shadow-[0_8px_18px_-8px_rgba(5,56,119,0.7)] sm:h-[62px] sm:w-[62px]">
+              <Briefcase className="h-8 w-8 sm:h-9 sm:w-9" strokeWidth={2} />
+              <Plane className="absolute left-1/2 top-[54%] h-[15px] w-[15px] -translate-x-1/2 -translate-y-1/2 sm:h-4 sm:w-4" fill="currentColor" strokeWidth={1.5} />
+            </span>
+            <span className="h-12 w-[3px] shrink-0 rounded-full sm:h-[60px]" style={{ background: GOLD }} />
+            <div className="min-w-0">
+              <h1 className="text-[36px] font-bold leading-none tracking-tight text-[#0b1b33] sm:text-[50px] dark:text-white" style={HEAD}>Travel</h1>
+              <p className="mt-1.5 max-w-[530px] text-[15px] leading-snug text-[#33425a] text-balance sm:mt-2 sm:text-[20px] group-data-[wide=true]/travel:max-w-none dark:text-white/80">Compare flights, hotels and military travel benefits in one&nbsp;place.</p>
+            </div>
           </div>
         </div>
 
-        <div className="relative mt-5 overflow-hidden rounded-2xl border border-white/70 bg-card shadow-[0_14px_34px_-16px_rgba(5,56,119,0.45)] sm:mt-7 dark:border-white/10">
-          <div className="flex border-b border-border" role="tablist" aria-label="Search">
-            {([{ k: "flights", t: "Flights", I: Plane }, { k: "hotels", t: "Hotels", I: BedDouble }] as const).map(({ k, t, I }) => {
-              const on = tab === k;
-              return (
-                <button key={k} type="button" role="tab" aria-selected={on} onClick={() => pickTab(k)} className={`relative flex flex-1 items-center justify-center gap-2 py-3 text-[15px] font-bold transition-colors sm:flex-none sm:px-7 ${on ? "text-[#053877] dark:text-white" : "text-muted-foreground hover:text-foreground"}`} data-testid={`travel-tab-${k}`}>
-                  <I className="h-[18px] w-[18px]" /> {t}
-                  {on && <span className="absolute inset-x-3 bottom-0 h-[3px] rounded-t-full" style={{ background: GOLD }} />}
-                </button>
-              );
-            })}
-          </div>
-        <div className="p-3 sm:p-4">
-          <div className="grid grid-cols-2 gap-2 sm:flex" role="radiogroup" aria-label="I'm">
+        <div className="relative z-10 -mt-[52px] rounded-[22px] border border-white bg-card px-3 py-3.5 shadow-[0_18px_40px_-18px_rgba(5,56,119,0.38),0_2px_6px_rgba(11,27,51,0.06)] sm:-mt-[62px] sm:px-5 sm:py-4 dark:border-white/10">
+          {/* Top row: who's travelling on the left, Flights | Hotels on the right (one pill pair, the card's only addition). */}
+          <div className="flex flex-col-reverse gap-2.5 sm:flex-row sm:flex-wrap sm:items-center sm:justify-between">
+          <div className="grid grid-cols-2 gap-2 sm:flex sm:gap-3" role="radiogroup" aria-label="I'm">
             {(["veteran", "active"] as const).map((s) => {
               const on = status === s;
               const Icon = s === "veteran" ? Users : ChevronsUp;
               return (
-                <button key={s} type="button" role="radio" aria-checked={on} onClick={() => (tab === "hotels" ? setStatus(s) : pickStatus(s))} className={`flex items-center justify-center gap-2 rounded-full border px-3 py-2 text-[13px] font-semibold leading-tight transition-colors sm:justify-start sm:px-5 sm:text-[15px] ${on ? "border-[#053877] bg-[#053877] text-white shadow-[0_0_0_2px_#F0A71F]" : "border-border bg-card text-foreground hover:bg-muted"}`} data-testid={`travel-status-${s}`}>
-                  <Icon className={`h-4 w-4 shrink-0 sm:h-5 sm:w-5 ${on ? "text-[#F0A71F]" : "text-[#053877] dark:text-white"}`} />
+                <button key={s} type="button" role="radio" aria-checked={on} onClick={() => (tab === "hotels" ? setStatus(s) : pickStatus(s))} className={`flex items-center justify-center gap-2.5 rounded-full border px-3 py-2 text-[13.5px] font-bold leading-tight transition-colors sm:min-h-[40px] sm:justify-start sm:px-6 sm:text-[16px] ${on ? "border-[#0b2f63] bg-[#0b2f63] text-white shadow-[0_0_0_2px_#F0A71F]" : "border-[#d5dce8] bg-white text-[#0b1b33] hover:bg-muted dark:border-white/15 dark:bg-card dark:text-white"}`} data-testid={`travel-status-${s}`}>
+                  <Icon className={`h-[18px] w-[18px] shrink-0 sm:h-5 sm:w-5 ${on ? "text-[#F0A71F]" : "text-[#0b1b33] dark:text-white"}`} strokeWidth={2.2} />
                   <span className="text-left sm:whitespace-nowrap">{s === "veteran" ? "Veteran or retiree" : "Active duty, Guard or Reserve"}</span>
                 </button>
               );
             })}
           </div>
+          <div className="grid grid-cols-2 rounded-full bg-[#eef2f8] p-1 sm:flex dark:bg-white/5" role="tablist" aria-label="Search">
+            {([{ k: "flights", t: "Flights", I: Plane }, { k: "hotels", t: "Hotels", I: BedDouble }] as const).map(({ k, t, I }) => {
+              const on = tab === k;
+              return (
+                <button key={k} type="button" role="tab" aria-selected={on} onClick={() => pickTab(k)} className={`flex items-center justify-center gap-2 rounded-full px-5 py-1.5 text-[14.5px] font-bold transition-colors ${on ? "bg-white text-[#0b2f63] shadow-[0_1px_3px_rgba(11,27,51,0.18)] dark:bg-card dark:text-white" : "text-[#5b6678] hover:text-[#0b1b33] dark:text-white/60"}`} data-testid={`travel-tab-${k}`}>
+                  <I className="h-4 w-4" /> {t}
+                </button>
+              );
+            })}
+          </div>
+          </div>
           {tab === "hotels" ? <HotelFields h={hotels} status={status} /> : (
           <form onSubmit={(e) => { e.preventDefault(); go(); }} data-testid="travel-trip">
           {/* One row on a wide screen; From–To over the dates on a narrower one; stacked on a phone. */}
-          <div className="mt-3 flex flex-col gap-2 xl:flex-row xl:items-stretch">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-stretch xl:min-w-0 xl:flex-1">
-              <Field label="From" icon={MapPin} className="sm:min-w-0 sm:flex-1"><input list="mv-airports" aria-label="From" value={fromText} onChange={(e) => setFromText(e.target.value)} onBlur={() => from && setFromText(label(from))} placeholder="City or airport" className="w-full min-w-0 bg-transparent text-[16px] font-semibold outline-none placeholder:font-normal placeholder:text-muted-foreground" data-testid="travel-from" /></Field>
-              <button type="button" aria-label="Swap From and To" onClick={() => { setFromText(toText); setToText(fromText); }} className="hidden h-10 w-10 shrink-0 items-center justify-center self-center rounded-full border border-border bg-card text-foreground hover:bg-muted sm:flex"><ArrowLeftRight className="h-4 w-4" /></button>
-              <Field label="To" icon={MapPin} className="sm:min-w-0 sm:flex-1"><input list="mv-airports" aria-label="To" value={toText} onChange={(e) => setToText(e.target.value)} onBlur={() => to && setToText(label(to))} placeholder="City or airport" className="w-full min-w-0 bg-transparent text-[16px] font-semibold outline-none placeholder:font-normal placeholder:text-muted-foreground" data-testid="travel-to" /></Field>
+          <div className="mt-3.5 flex flex-col gap-2.5 group-data-[wide=true]/travel:flex-row group-data-[wide=true]/travel:items-stretch">
+            <div className="flex flex-col gap-2.5 sm:flex-row sm:items-stretch group-data-[wide=true]/travel:min-w-0 group-data-[wide=true]/travel:flex-1">
+              <Field label="From" icon={MapPin} className="sm:min-w-0 sm:flex-[1.08]"><PlaceInput mode="flight" aria="From" value={fromText} onText={setFromText} onPick={(p) => { const t = placeText(p); setFromText(t); setFromPick({ text: t, code: placeCodes(p).join(",") }); }} onLeave={() => fromPick?.text !== fromText && from && airportName(from) !== from && setFromText(label(from))} placeholder="City or airport" className="w-full min-w-0 bg-transparent text-[17px] font-bold outline-none placeholder:font-normal placeholder:text-muted-foreground sm:text-[18px]" testid="travel-from" /></Field>
+              <button type="button" aria-label="Swap From and To" onClick={() => { setFromText(toText); setToText(fromText); setFromPick(toPick); setToPick(fromPick); }} className="hidden h-[34px] w-[34px] shrink-0 items-center justify-center self-center rounded-full border border-[#d5dce8] bg-white text-[#0b1b33] shadow-[0_1px_2px_rgba(11,27,51,0.08)] hover:bg-muted sm:flex dark:border-white/15 dark:bg-card dark:text-white"><ArrowLeftRight className="h-4 w-4" strokeWidth={2.4} /></button>
+              <Field label="To" icon={MapPin} className="sm:min-w-0 sm:flex-1"><PlaceInput mode="flight" aria="To" value={toText} onText={setToText} onPick={(p) => { const t = placeText(p); setToText(t); setToPick({ text: t, code: placeCodes(p).join(",") }); }} onLeave={() => toPick?.text !== toText && to && airportName(to) !== to && setToText(label(to))} placeholder="City or airport" className="w-full min-w-0 bg-transparent text-[17px] font-bold outline-none placeholder:font-normal placeholder:text-muted-foreground sm:text-[18px]" testid="travel-to" /></Field>
             </div>
-            <div className="grid grid-cols-2 gap-2 sm:flex sm:items-stretch">
+            <div className="grid grid-cols-2 gap-2.5 sm:flex sm:items-stretch">
               <DateField label="Depart" aria="Leave" value={leave} min={todayEt()} onChange={(v) => { setLeave(v); if (back && v > back) setBack(""); }} testid="travel-leave" />
               <DateField label="Return" aria="Back" hint="Optional" value={back} min={leave || todayEt()} onChange={setBack} onClear={() => setBack("")} testid="travel-back" />
-              <button type="submit" disabled={!ready || search.isPending} className="col-span-2 flex items-center justify-center gap-2 whitespace-nowrap rounded-xl px-6 py-3 text-[16px] font-bold text-[#1a1200] shadow-[0_6px_14px_-6px_rgba(240,167,31,0.9)] transition-colors hover:brightness-95 disabled:opacity-60 sm:flex-1 sm:py-0 xl:flex-none" style={{ background: GOLD }} data-testid="travel-find">
-                {search.isPending ? <><Loader2 className="h-5 w-5 animate-spin" /> Finding flights</> : <><Search className="h-5 w-5" strokeWidth={2.5} /> Find Flights</>}
+              <button type="submit" disabled={!ready || search.isPending} className="col-span-2 flex items-center justify-center gap-2.5 whitespace-nowrap rounded-xl px-6 py-3.5 text-[18px] font-bold text-[#0b1b33] shadow-[0_8px_18px_-8px_rgba(240,167,31,0.95)] transition-colors hover:brightness-95 disabled:opacity-60 sm:flex-1 sm:py-0 sm:text-[19px] group-data-[wide=true]/travel:w-[178px] group-data-[wide=true]/travel:flex-none" style={{ background: GOLD }} data-testid="travel-find">
+                {search.isPending ? <><Loader2 className="h-5 w-5 animate-spin" /> Finding flights</> : <><Search className="h-[22px] w-[22px]" strokeWidth={2.6} /> Find Flights</>}
               </button>
             </div>
           </div>
@@ -213,14 +237,10 @@ export function Travel({ serviceStatus }: { serviceStatus?: string | null }) {
           </form>
           )}
         </div>
-        </div>
       </div>
 
       {tab === "hotels" ? <HotelsBody h={hotels} status={status} /> : <>
-      <div className="mt-3 flex items-start gap-3 rounded-xl border border-[#c7d7f2] bg-[#e8f0fd] px-4 py-3 dark:border-white/10 dark:bg-white/5" data-testid="travel-banner">
-        <Info className="mt-0.5 h-5 w-5 shrink-0 text-[#0b1b33] dark:text-white" />
-        <p className="text-[14px] font-medium leading-snug text-[#0b1b33] text-balance dark:text-white">{status === "active" ? "Military" : "Veteran"} travel benefits vary by airline. Some offer discounted fares, others offer vacation-package savings or free baggage. We'll show what's confirmed and how to claim&nbsp;it.</p>
-      </div>
+      <Banner testid="travel-banner">Military savings vary by airline. Compare fares, baggage perks, and&nbsp;eligibility.</Banner>
 
       {search.isPending && (
         <div className="mt-4 flex items-center justify-center gap-2 rounded-2xl border border-border bg-card px-4 py-10 text-center text-[14px] text-muted-foreground text-balance" data-testid="travel-loading">
@@ -244,15 +264,15 @@ export function Travel({ serviceStatus }: { serviceStatus?: string | null }) {
       )}
 
       {searched && (
-        <div className="mt-4 rounded-2xl border border-border bg-card shadow-[0_1px_3px_rgba(16,24,40,0.05)]" data-testid="travel-results">
-          <div className="flex flex-col gap-2 px-4 pb-3 pt-4 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
-              <h2 className="text-[20px] font-bold" style={HEAD}>Flight Results</h2>
-              <p className="text-[13px] text-muted-foreground text-balance">{results.length ? <>{results.length} {results.length === 1 ? "flight" : "flights"} found. Comparing fares and military benefits to find your best travel&nbsp;value.</> : "No flights found."}</p>
+        <div className="mt-5 rounded-[20px] border border-[#dfe4ec] bg-card shadow-[0_1px_3px_rgba(16,24,40,0.05)] dark:border-white/10" data-testid="travel-results">
+          <div className="flex flex-col gap-2 px-4 pb-3.5 pt-4 sm:px-6 sm:pt-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-5 gap-y-0.5">
+              <h2 className="text-[20px] font-bold text-[#0b1b33] sm:text-[21px] dark:text-white" style={HEAD}>Flight Results</h2>
+              <p className="text-[13.5px] text-[#4a5568] dark:text-white/60">{results.length ? [`${results.length} ${results.length === 1 ? "flight" : "flights"}`, sort === "deal" ? "best deal first" : "cheapest first", trip.return ? "round trip" : "one way", "1 traveler"].join(" • ") : "No flights found."}</p>
             </div>
             {results.length > 0 && (
-              <div className="flex shrink-0 flex-wrap items-center gap-2">
-                <span className="text-[13px] text-muted-foreground">Sort by:</span>
+              <div className="flex shrink-0 flex-wrap items-center gap-2.5">
+                <span className="text-[14px] text-[#4a5568] dark:text-white/60">Sort by:</span>
                 <Select label="Sort" value={sort} onChange={(v) => setSort(v as "deal" | "price")} testid="travel-sort" options={[["deal", "Best deal for you"], ["price", "Lowest price"]]} />
                 <Select label="Checked bags" value={String(bags)} onChange={(v) => setBags(Number(v))} testid="travel-bags" options={[["0", "No checked bags"], ["1", "1 checked bag"], ["2", "2 checked bags"]]} />
               </div>
@@ -262,8 +282,9 @@ export function Travel({ serviceStatus }: { serviceStatus?: string | null }) {
             <p className="border-t border-border px-4 py-8 text-center text-sm text-muted-foreground text-balance">No flights came back for those days. Try a day either side, or a nearby&nbsp;airport.</p>
           ) : (
             <div className="pb-2">
-              {shownKnown.length > 0 && sort === "deal" && <div className="px-2 pb-2 sm:px-3">{row(shownKnown[0], true)}</div>}
-              <div className="divide-y divide-border border-t border-border">{(sort === "deal" ? shownKnown.slice(1) : shownKnown).map((x) => row(x))}</div>
+              {/* The top row gets the gold border (target v2): the best deal, or the cheapest when sorted by price. */}
+              {shownKnown.length > 0 && <div className="px-2 pb-2 sm:px-3">{row(shownKnown[0], true)}</div>}
+              <div className="divide-y divide-border border-t border-border">{shownKnown.slice(1).map((x) => row(x))}</div>
               {shownUnknown.length > 0 && (
                 <>
                   <p className="border-y border-border bg-muted/40 px-4 py-1.5 text-[12px] font-medium text-muted-foreground sm:px-5">Bag fees aren't listed for these airlines yet, so they're sorted by&nbsp;fare</p>
@@ -345,24 +366,24 @@ function Benefits({ results, perks, status }: { results: Result[]; perks: Perk[]
   const cards = [...here.map((p) => ({ p, off: false })), ...away.map((p) => ({ p, off: true }))];
   const newest = cards.map((c) => c.p.lastVerified ?? "").sort().pop();
   return (
-    <div className="mt-5" data-testid="travel-benefits">
-      <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
-        <h2 className="flex items-center gap-2 text-[19px] font-bold sm:text-[20px]" style={HEAD}><TagIcon className="h-5 w-5 shrink-0 -scale-x-100" style={{ color: GOLD }} /> Verified Military Benefits by&nbsp;Airline</h2>
-        {newest && <p className="flex items-center gap-1.5 text-[12px] text-muted-foreground"><ShieldCheck className="h-4 w-4 shrink-0" style={{ color: GOLD }} /> Benefits are based on each airline's published program (checked {checkedOn(newest)}).</p>}
+    <div className="mt-6" data-testid="travel-benefits">
+      <div className="flex flex-col gap-1 group-data-[wide=true]/travel:flex-row group-data-[wide=true]/travel:items-center group-data-[wide=true]/travel:justify-between group-data-[wide=true]/travel:gap-4">
+        <h2 className="flex items-center gap-2.5 text-[19px] font-bold text-[#0b1b33] sm:text-[21px] dark:text-white" style={HEAD}><TagIcon className="h-6 w-6 shrink-0 -scale-x-100" style={{ color: GOLD }} strokeWidth={2.2} /> Verified Military Benefits by&nbsp;Airline</h2>
+        {newest && <p className="flex items-center gap-2 text-[12.5px] text-[#33425a] dark:text-white/60"><ShieldCheck className="h-[18px] w-[18px] shrink-0" style={{ color: GOLD }} /> Benefits are based on each airline's published program (checked {checkedOn(newest)}).</p>}
       </div>
       {cards.length > 0 && (
-        <div className="mt-3 grid gap-2.5 md:grid-cols-2 xl:grid-cols-3">
+        <div className="mt-3.5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {cards.map(({ p, off }, k) => {
             const t = perkTags(p, status)!;
             const site = airlineSite(p.iata);
             const name = airlineName(p.iata, p.airline);
             return (
-              <div key={p.iata} className={`${k >= 3 && !more ? "hidden md:flex" : "flex"} items-center gap-3 rounded-xl border border-border bg-card px-3 py-3 shadow-[0_1px_2px_rgba(16,24,40,0.04)]`} data-testid={`benefit-${p.iata}`}>
-                <span className="w-[96px] shrink-0 text-center text-[18px] font-extrabold leading-[1.05] tracking-tight" style={{ color: airlineColor(p.iata), ...HEAD }}>{name}</span>
-                <span className="h-11 w-[2px] shrink-0 self-center rounded-full" style={{ background: GOLD }} />
+              <div key={p.iata} className={`${k >= 3 && !more ? "hidden md:flex" : "flex"} min-h-[76px] items-center gap-4 rounded-2xl border border-[#dfe4ec] bg-card px-4 py-3 shadow-[0_1px_3px_rgba(16,24,40,0.05)] dark:border-white/10`} data-testid={`benefit-${p.iata}`}>
+                <span className="flex w-[118px] shrink-0 items-center justify-center"><BrandLogo src={airlineLogo(p.iata)} name={name} color={airlineColor(p.iata)} className="h-[34px] max-w-[118px]" /></span>
+                <span className="h-12 w-[2px] shrink-0 self-center rounded-full" style={{ background: GOLD }} />
                 <div className="min-w-0 flex-1">
-                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5"><p className="text-[14px] font-bold">{name}</p>{off && <span className="whitespace-nowrap rounded-full bg-muted px-2 py-px text-[11px] font-medium text-muted-foreground">Not on this route</span>}</div>
-                  <p className="text-[13px] leading-snug text-foreground/80">{[t.phone ? "Military fare by phone" : t.fare, t.bags].filter(Boolean).join(" · ")}</p>
+                  <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5"><p className="text-[15px] font-bold leading-tight text-[#0b1b33] dark:text-white">{name}</p>{off && <span className="whitespace-nowrap rounded-full bg-muted px-2 py-px text-[11px] font-medium text-muted-foreground">Not on this route</span>}</div>
+                  <p className="mt-0.5 text-[14px] leading-snug text-[#33425a] dark:text-white/75">{[t.phone ? "Military fare by phone" : t.fare, t.bags].filter(Boolean).join(" · ")}</p>
                   {p.claim?.line && <p className="mt-1 text-[11.5px] leading-snug text-muted-foreground"><span className="font-semibold text-foreground/80">How to claim:</span> {p.claim.line}{membershipLabel(p.claim.membership) && <span className="ml-1 inline-block rounded-full bg-[#eef4ff] px-1.5 py-px text-[10.5px] font-semibold text-[#053877] dark:bg-white/10 dark:text-white">{membershipLabel(p.claim.membership)}</span>}</p>}
                   {p.bookingUrl && <a href={p.bookingUrl} target="_blank" rel="noopener noreferrer" className="mt-0.5 inline-block text-[11px] text-muted-foreground underline underline-offset-2 hover:text-foreground">Source: {site ?? "the airline's page"}</a>}
                 </div>
@@ -377,27 +398,29 @@ function Benefits({ results, perks, status }: { results: Result[]; perks: Perk[]
   );
 }
 
-function LegLine({ icon: Icon, leg, prefix }: { icon: typeof PlaneTakeoff; leg: Leg; prefix?: string }) {
+function LegLine({ icon: Icon, leg, prefix, back }: { icon: typeof PlaneTakeoff; leg: Leg; prefix?: string; back?: boolean }) {
   const stops = leg.stops === 0 ? "Nonstop" : `${leg.stops} ${leg.stops === 1 ? "stop" : "stops"}${leg.layovers?.length ? `, ${leg.layovers.map((l) => l.airport).join(", ")}` : ""}`;
   const nextDay = leg.arrival_time.slice(0, 10) > leg.departure_time.slice(0, 10);
   return (
-    <div className="flex items-start gap-2.5">
-      <Icon className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+    <div className="flex items-start gap-3">
+      <Icon className={`mt-0.5 h-[18px] w-[18px] shrink-0 text-[#0b1b33] dark:text-white/80 ${back ? "-scale-x-100" : ""} rotate-[-8deg]`} strokeWidth={1.7} />
       <div className="min-w-0 leading-tight">
-        <p className="whitespace-nowrap text-[14px] font-semibold tabular-nums">{clock(leg.departure_time)} – {clock(leg.arrival_time)}{nextDay ? <sup className="ml-0.5 text-[10px] text-muted-foreground">+1</sup> : null}</p>
-        <p className="truncate text-[12px] text-muted-foreground">{prefix}{stops}{leg.duration_minutes ? ` • ${dur(leg.duration_minutes)}` : ""}</p>
+        <p className="whitespace-nowrap text-[15px] font-bold tabular-nums text-[#0b1b33] dark:text-white">{clock(leg.departure_time)} – {clock(leg.arrival_time)}{nextDay ? <sup className="ml-0.5 text-[10px] text-muted-foreground">+1</sup> : null}</p>
+        <p className="mt-0.5 truncate text-[13px] text-[#4a5568] dark:text-white/60">{prefix}{stops}{leg.duration_minutes ? ` • ${dur(leg.duration_minutes)}` : ""}</p>
       </div>
     </div>
   );
 }
 
-function FlightRow({ r, best, searchedFrom, status, phoneFare, call: c, tp, bags, open, onOpen }: { r: Result; best: boolean; searchedFrom: string; status: TravelerStatus; phoneFare: number | null; call?: CallView; tp: ReturnType<typeof truePrice> | null; bags: number; open: boolean; onOpen: () => void }) {
+function FlightRow({ r, best, badge, searchedFrom, searchedTo, status, phoneFare, call: c, tp, bags, open, onOpen }: { r: Result; best: boolean; badge?: boolean; searchedFrom: string; searchedTo: string; status: TravelerStatus; phoneFare: number | null; call?: CallView; tp: ReturnType<typeof truePrice> | null; bags: number; open: boolean; onOpen: () => void }) {
   const name = airlineName(r.iata, r.airline);
   const site = airlineSite(r.iata);
   const desk = deskOf(r.iata);
   const t = perkTags(r.perk, status);
   const o = r.outbound;
-  const fromOther = o.departure_airport && o.departure_airport !== searchedFrom ? `From ${o.departure_airport} · ` : "";
+  // A metro search ("DCA,IAD,BWI") says which airports this flight really uses; a one-airport search only when it differs.
+  const metro = searchedFrom.includes(",") || searchedTo.includes(",");
+  const fromOther = metro && o.departure_airport && o.arrival_airport ? `${o.departure_airport} → ${o.arrival_airport} · ` : o.departure_airport && o.departure_airport !== searchedFrom ? `From ${o.departure_airport} · ` : "";
   const fare = phoneFare ?? r.price;
   const pop = useRef<HTMLDivElement>(null);
   // Close the popover on a click anywhere else or Escape.
@@ -421,31 +444,36 @@ function FlightRow({ r, best, searchedFrom, status, phoneFare, call: c, tp, bags
     : <Tag tone="grey">No {status === "veteran" ? "veteran" : "military"} fare discount</Tag>;
   const freeBags = !!tp?.lines.some((l) => l.free);
   const sub = phoneFare != null ? "military fare, by phone" : !tp ? "" : tp.total == null ? "+ bags (fee not listed)" : tp.total !== fare && bags > 0 ? `with ${bags} ${bags === 1 ? "bag" : "bags"}` : freeBags && t?.member ? "bags free with WeSalute+" : freeBags ? "bags included" : "";
-  const button = "inline-flex min-w-0 flex-1 items-center justify-center gap-1.5 whitespace-nowrap rounded-full px-3 py-2 text-[13px] font-semibold sm:w-[214px] sm:flex-none sm:shrink-0 sm:px-4 sm:text-[14px]";
+  const button = "inline-flex w-full min-w-0 flex-none items-center justify-center gap-2 whitespace-nowrap rounded-full px-4 py-2.5 text-[13.5px] font-bold sm:w-[226px] sm:shrink-0";
+  const mark = airlineMark(r.iata);
+  const word = airlineLogo(r.iata);
   return (
-    <div className={`relative px-4 py-3.5 sm:px-5 ${best ? "rounded-2xl border-2 bg-[#fffdf7] dark:bg-[#F0A71F]/5" : ""}`} style={best ? { borderColor: GOLD } : undefined} data-testid={`flight-${r.iata}`}>
-      {best && <span className="absolute -top-2.5 left-4 rounded-full px-2 py-px text-[11px] font-bold text-[#1a1200]" style={{ background: GOLD }}>Best deal for you</span>}
-      {/* Wide: the airline, its legs, the price and the button on one line, the two tags under the legs. Phone: stacked. */}
-      <div className="grid gap-3 lg:grid-cols-[150px_minmax(0,1fr)_auto] lg:gap-x-5 lg:gap-y-2.5">
-        <div className="flex items-center gap-3 lg:row-span-2 lg:self-center">
-          <Tile code={r.iata} />
-          <p className="min-w-0 text-[16px] font-bold leading-tight">{name}</p>
+    <div className={`relative px-4 py-4 sm:px-6 ${best ? "rounded-[18px] border-2 bg-white dark:bg-[#F0A71F]/5" : ""}`} style={best ? { borderColor: GOLD } : undefined} data-testid={`flight-${r.iata}`}>
+      {best && badge && <span className="absolute -top-2.5 left-5 rounded-full px-2 py-px text-[11px] font-bold text-[#1a1200]" style={{ background: GOLD }}>Best deal for you</span>}
+      {/* Target v2, left to right: the airline, its legs | the tags and Baggage & eligibility | the price, the button. */}
+      <div className="grid grid-cols-[minmax(0,1fr)] gap-3 md:grid-cols-[168px_minmax(0,1fr)_auto] md:gap-x-5 md:gap-y-2.5 group-data-[wide=true]/travel:grid-cols-[150px_184px_minmax(0,1fr)_auto] group-data-[wide=true]/travel:items-center">
+        <div className="flex items-center gap-3.5 md:row-span-2 md:self-center group-data-[wide=true]/travel:row-span-1">
+          {/* The airline's own symbol in a circle beside its name; else its wordmark (it says the name); else initials. */}
+          {mark || !word ? <>
+            {mark ? <span className="flex h-[46px] w-[46px] shrink-0 items-center justify-center overflow-hidden rounded-full bg-white ring-1 ring-[#e3e8f0]"><BrandLogo src={mark} name={r.iata} color={airlineColor(r.iata)} className="h-full w-full" /></span> : <Tile code={r.iata} />}
+            <p className="min-w-0 text-[18px] font-bold leading-tight text-[#0b1b33] dark:text-white">{name}</p>
+          </> : <span className="flex h-[46px] items-center rounded-lg bg-white dark:px-2.5"><BrandLogo src={word} name={name} color={airlineColor(r.iata)} className="h-[26px] w-auto max-w-[140px]" textClass="text-[18px] font-bold" /></span>}
         </div>
-        <div className="flex flex-col gap-2 sm:flex-row sm:gap-8 lg:col-start-2 lg:row-start-1 lg:flex-col lg:gap-1.5 lg:self-center">
-          <LegLine icon={PlaneTakeoff} leg={o} prefix={fromOther} />
-          {r.inbound && <LegLine icon={PlaneLanding} leg={r.inbound} />}
+        <div className="flex flex-col gap-2 sm:flex-row sm:gap-8 md:col-start-2 md:row-start-1 md:flex-col md:gap-2 md:self-center group-data-[wide=true]/travel:border-r group-data-[wide=true]/travel:border-[#e3e8f0] group-data-[wide=true]/travel:pr-4 dark:border-white/10">
+          <LegLine icon={Plane} leg={o} prefix={fromOther} />
+          {r.inbound && <LegLine icon={Plane} leg={r.inbound} back />}
         </div>
         {/* Two tags, never one mixed line: the fare, then the bags. Then the full story behind one link. */}
-        <div className="flex flex-wrap items-center gap-1.5 lg:col-span-2 lg:col-start-2 lg:row-start-2">
+        <div className="flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1.5 md:col-span-2 md:col-start-2 md:row-start-2 group-data-[wide=true]/travel:col-span-1 group-data-[wide=true]/travel:col-start-3 group-data-[wide=true]/travel:row-start-1">
           {t ? <>{fareTag}<Tag tone={t.bags ? "green" : "grey"}>{t.bags ?? "No free bags"}</Tag></> : <Tag tone="grey">{r.perk && !r.perk.flying ? "Not flying" : `${name}'s military rules aren't in our list yet`}</Tag>}
-          <button type="button" onClick={(e) => { e.stopPropagation(); onOpen(); }} aria-expanded={open} className="ml-1 inline-flex items-center gap-1.5 whitespace-nowrap text-[13px] font-medium text-foreground/80 hover:text-foreground" data-testid={`baggage-${r.iata}`}>
-            <Luggage className="h-4 w-4" /> Baggage &amp; eligibility <Info className="h-3.5 w-3.5" />
+          <button type="button" onClick={(e) => { e.stopPropagation(); onOpen(); }} aria-expanded={open} className="inline-flex items-center gap-2 whitespace-nowrap text-[14px] font-medium text-[#0b1b33] hover:text-[#053877] dark:text-white/85" data-testid={`baggage-${r.iata}`}>
+            <Luggage className="h-5 w-5" strokeWidth={1.8} /> Baggage &amp; eligibility <Info className="h-[18px] w-[18px]" strokeWidth={1.8} />
           </button>
         </div>
-        <div className="flex items-center justify-between gap-3 sm:gap-4 lg:col-start-3 lg:row-start-1 lg:justify-end lg:self-center">
-          <button type="button" onClick={(e) => { e.stopPropagation(); onOpen(); }} disabled={!tp} className="shrink-0 text-left leading-tight sm:min-w-[96px] lg:w-[160px] lg:border-l lg:border-border lg:pl-5" data-testid={`price-${r.iata}`}>
-            <span className="block whitespace-nowrap text-[26px] font-bold tabular-nums" style={HEAD}>{fare == null ? "—" : money(tp?.total ?? fare)}</span>
-            <span className="block whitespace-nowrap text-[13px] text-muted-foreground">{r.inbound ? "round trip" : "one way"}</span>
+        <div className="flex flex-wrap items-center justify-between gap-3 sm:flex-nowrap sm:gap-5 md:col-start-3 md:row-start-1 md:justify-end md:self-center group-data-[wide=true]/travel:col-start-4 group-data-[wide=true]/travel:border-l group-data-[wide=true]/travel:border-[#e3e8f0] group-data-[wide=true]/travel:pl-5 dark:border-white/10">
+          <button type="button" onClick={(e) => { e.stopPropagation(); onOpen(); }} disabled={!tp} className="shrink-0 text-left leading-tight sm:min-w-[96px] md:w-[100px] md:text-center" data-testid={`price-${r.iata}`}>
+            <span className="block whitespace-nowrap text-[27px] font-bold tabular-nums text-[#0b1b33] sm:text-[29px] dark:text-white" style={HEAD}>{fare == null ? "—" : money(tp?.total ?? fare)}</span>
+            <span className="block whitespace-nowrap text-[14px] text-[#4a5568] dark:text-white/60">{r.inbound ? "round trip" : "one way"}</span>
             {sub && <span className="block whitespace-nowrap text-[11.5px] font-medium text-[#053877] dark:text-white/80">{sub}</span>}
           </button>
           {phoneFare != null && desk ? (
@@ -453,14 +481,14 @@ function FlightRow({ r, best, searchedFrom, status, phoneFare, call: c, tp, bags
           ) : r.perk?.phoneOnly && status !== "active" && desk ? (
             <a href={`tel:${desk.tel}`} className={`${button} border-2 border-[#c7d7f2] text-[#053877] hover:bg-[#eef4ff] dark:text-white`} data-testid={`book-${r.iata}`}><Phone className="h-4 w-4" /> Book by phone {desk.phone}</a>
           ) : (
-            <a href={r.url} target="_blank" rel="noopener noreferrer" className={`${button} border-2 border-[#c7d7f2] text-[#053877] hover:bg-[#eef4ff] dark:text-white`} data-testid={`book-${r.iata}`}>
-              Book on {site ?? "the airline's site"} <ExternalLink className="h-3.5 w-3.5" />
+            <a href={r.url} target="_blank" rel="noopener noreferrer" className={`${button} border-[1.5px] border-[#b9cbe8] bg-white text-[#0b3a78] shadow-[0_1px_2px_rgba(11,27,51,0.06)] hover:bg-[#eef4ff] dark:bg-transparent dark:text-white`} data-testid={`book-${r.iata}`}>
+              <span className="truncate">Book on {site ?? "the airline's site"}</span> <ExternalLink className="h-4 w-4 shrink-0" />
             </a>
           )}
         </div>
       </div>
       {open && (
-        <div ref={pop} onClick={(e) => e.stopPropagation()} className="z-20 mt-3 rounded-xl border border-border bg-card p-4 text-[13px] shadow-[0_16px_40px_-12px_rgba(11,27,51,0.35)] lg:absolute lg:left-[170px] lg:top-[calc(100%-6px)] lg:mt-0 lg:w-[400px]" role="dialog" aria-label={`Baggage and eligibility: ${name}`} data-testid={`price-detail-${r.iata}`}>
+        <div ref={pop} onClick={(e) => e.stopPropagation()} className="z-20 mt-3 rounded-xl border border-border bg-card p-4 text-[13px] shadow-[0_16px_40px_-12px_rgba(11,27,51,0.35)] md:absolute md:left-[190px] md:top-[calc(100%-10px)] md:mt-0 md:w-[420px] group-data-[wide=true]/travel:left-[440px]" role="dialog" aria-label={`Baggage and eligibility: ${name}`} data-testid={`price-detail-${r.iata}`}>
           <div className="flex items-start justify-between gap-2">
             <p className="flex items-center gap-2 text-[14px] font-bold"><Luggage className="h-4 w-4" /> Baggage &amp; Eligibility – {name}</p>
             <button type="button" onClick={onOpen} aria-label="Close"><X className="h-4 w-4 text-muted-foreground" /></button>

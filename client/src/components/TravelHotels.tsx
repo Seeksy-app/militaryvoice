@@ -3,7 +3,9 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, Check, ChevronDown, Clock, ExternalLink, Info, Loader2, MapPin, Phone, PhoneCall, Search, ShieldCheck, Star, Tag as TagIcon, Users } from "lucide-react";
 import type { TravelerStatus } from "@shared/militaryFares";
 import type { MilitaryHotelPerk, MilitaryLodgingView } from "@shared/militaryHotels";
-import { DateField, Field, GOLD, HEAD, Select, Tag, call, hostOf, list, money, phoneText, todayEt } from "@/components/TravelParts";
+import { Banner, BrandLogo, DateField, Field, GOLD, HEAD, LABEL, Select, Tag, VALUE, call, hostOf, list, money, phoneText, todayEt } from "@/components/TravelParts";
+import { hotelLogo } from "@/lib/brandLogos";
+import { PlaceInput, placeText } from "@/components/TravelPlaces";
 import { checkedOn } from "@/lib/travelPerks";
 
 // Hotels on the Travel page (Andrew, 26 Nov 2026: "Add hotels. Most hotels have mil discounts but have to call"),
@@ -27,7 +29,7 @@ type HotelCallView = {
   report: { available: "yes" | "no" | "unknown"; militaryPerNight: number | null; militaryTotal: number | null; difference: number | null; conditions: string; summary: string } | null;
   error: string; createdAt: string; updatedAt: string;
 };
-type Lodging = { lodging: MilitaryLodgingView[]; expandedAccess: { title: string; note: string; idNeeded: string }; verified: string };
+type Lodging = { lodging: MilitaryLodgingView[]; expandedAccess: { title: string; summary?: string; note: string; idNeeded: string }; verified: string };
 
 const SHOWN = 8;
 const BRANDS_SHOWN = 6;
@@ -54,7 +56,8 @@ function rateTag(p: MilitaryHotelPerk | null, status: TravelerStatus): { tone: "
   if (p.tag === "call") return { tone: "amber", text: "Military rate, call to book" };
   if (p.tag === "online") return { tone: "green", text: p.code ? `Military rate online, code ${p.code}${p.codeThirdParty ? " (from third-party sites)" : ""}` : "Military rate online" };
   if (p.tag === "ask") return { tone: "grey", text: "Ask the hotel" };
-  return { tone: "grey", text: status === "veteran" ? "No military rate for veterans" : "No military rate for active duty" };
+  // Engineering's noneLine (7a6da096) says what a traveller can still try, e.g. Marriott for veterans; else the plain none.
+  return { tone: "grey", text: p.noneLine || (status === "veteran" ? "No military rate for veterans" : "No military rate for active duty") };
 }
 const ORDER = { call: 0, online: 1, ask: 2, none: 3 } as const;
 
@@ -99,17 +102,17 @@ export function HotelFields({ h }: { h: Hotels; status: TravelerStatus }) {
   const next = (d: string) => { const t = new Date(`${d}T12:00:00Z`); t.setUTCDate(t.getUTCDate() + 1); return t.toISOString().slice(0, 10); };
   return (
     <form onSubmit={(e) => { e.preventDefault(); h.go(); }} data-testid="hotels-trip">
-      <div className="mt-3 flex flex-col gap-2 xl:flex-row xl:items-stretch">
-        <Field label="Where" icon={MapPin} className="xl:min-w-0 xl:flex-1">
-          <input aria-label="Where" value={h.where} onChange={(e) => h.setWhere(e.target.value)} placeholder="City, neighborhood or landmark" className="w-full min-w-0 bg-transparent text-[16px] font-semibold outline-none placeholder:font-normal placeholder:text-muted-foreground" data-testid="hotels-where" />
+      <div className="mt-3.5 flex flex-col gap-2.5 group-data-[wide=true]/travel:flex-row group-data-[wide=true]/travel:items-stretch">
+        <Field label="Where" icon={MapPin} className="group-data-[wide=true]/travel:min-w-0 group-data-[wide=true]/travel:flex-1">
+          <PlaceInput mode="hotel" aria="Where" value={h.where} onText={h.setWhere} onPick={(p) => h.setWhere(placeText(p))} placeholder="City, neighborhood or landmark" className="w-full min-w-0 bg-transparent text-[17px] font-bold outline-none placeholder:font-normal placeholder:text-muted-foreground sm:text-[18px]" testid="hotels-where" />
         </Field>
-        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-stretch">
+        <div className="grid grid-cols-2 gap-2.5 sm:flex sm:items-stretch">
           <DateField label="Check in" aria="Check in" value={h.checkIn} min={todayEt()} onChange={(v) => { h.setCheckIn(v); if (!h.checkOut || h.checkOut <= v) h.setCheckOut(next(v)); }} testid="hotels-in" />
           <DateField label="Check out" aria="Check out" value={h.checkOut} min={h.checkIn ? next(h.checkIn) : todayEt()} onChange={h.setCheckOut} testid="hotels-out" />
-          <div className="col-span-2 flex min-w-0 flex-col rounded-xl border border-border bg-background px-3 py-2 sm:w-[244px] sm:shrink-0">
-            <span className="text-[12px] font-medium text-muted-foreground">Guests · Rooms</span>
-            <span className="mt-0.5 flex items-center gap-2 text-[16px] font-semibold">
-              <Users className="h-4 w-4 shrink-0 text-[#0b1b33] dark:text-white" />
+          <div className="col-span-2 flex min-w-0 flex-col justify-center rounded-xl border border-[#d5dce8] bg-white px-3.5 py-1.5 sm:min-h-[56px] sm:w-[222px] sm:shrink-0 dark:border-white/15 dark:bg-background">
+            <span className={LABEL}>Guests · Rooms</span>
+            <span className={`mt-0.5 flex items-center gap-2 ${VALUE}`}>
+              <Users className="h-[18px] w-[18px] shrink-0 text-[#0b1b33] dark:text-white" />
               <select aria-label="Guests" value={h.adults} onChange={(e) => { const n = Number(e.target.value); h.setAdults(n); if (h.rooms > n) h.setRooms(n); }} className="shrink-0 appearance-none bg-transparent outline-none" data-testid="hotels-guests">
                 {Array.from({ length: 8 }, (_, k) => k + 1).map((n) => <option key={n} value={n}>{n} {n === 1 ? "guest" : "guests"}</option>)}
               </select>
@@ -120,8 +123,8 @@ export function HotelFields({ h }: { h: Hotels; status: TravelerStatus }) {
               <ChevronDown className="ml-auto h-4 w-4 shrink-0 text-muted-foreground" />
             </span>
           </div>
-          <button type="submit" disabled={!h.ready || h.search.isPending} className="col-span-2 flex items-center justify-center gap-2 whitespace-nowrap rounded-xl px-6 py-3 text-[16px] font-bold text-[#1a1200] shadow-[0_6px_14px_-6px_rgba(240,167,31,0.9)] transition-colors hover:brightness-95 disabled:opacity-60 sm:flex-1 sm:py-0 xl:flex-none" style={{ background: GOLD }} data-testid="hotels-find">
-            {h.search.isPending ? <><Loader2 className="h-5 w-5 animate-spin" /> Finding hotels</> : <><Search className="h-5 w-5" strokeWidth={2.5} /> Find Hotels</>}
+          <button type="submit" disabled={!h.ready || h.search.isPending} className="col-span-2 flex items-center justify-center gap-2.5 whitespace-nowrap rounded-xl px-6 py-3.5 text-[18px] font-bold text-[#0b1b33] shadow-[0_8px_18px_-8px_rgba(240,167,31,0.95)] transition-colors hover:brightness-95 disabled:opacity-60 sm:flex-1 sm:py-0 sm:text-[19px] group-data-[wide=true]/travel:w-[178px] group-data-[wide=true]/travel:flex-none" style={{ background: GOLD }} data-testid="hotels-find">
+            {h.search.isPending ? <><Loader2 className="h-5 w-5 animate-spin" /> Finding hotels</> : <><Search className="h-[22px] w-[22px]" strokeWidth={2.6} /> Find Hotels</>}
           </button>
         </div>
       </div>
@@ -170,10 +173,7 @@ export function HotelsBody({ h, status }: { h: Hotels; status: TravelerStatus })
 
   return (
     <>
-      <div className="mt-3 flex items-start gap-3 rounded-xl border border-[#c7d7f2] bg-[#e8f0fd] px-4 py-3 dark:border-white/10 dark:bg-white/5" data-testid="hotels-banner">
-        <Info className="mt-0.5 h-5 w-5 shrink-0 text-[#0b1b33] dark:text-white" />
-        <p className="text-[14px] font-medium leading-snug text-[#0b1b33] text-balance dark:text-white">Most hotels have a military rate, but many only give it by phone. We'll show which brands have one, how to claim it, and we can call for&nbsp;you.</p>
-      </div>
+      <Banner testid="hotels-banner">Most hotels have a military rate, but many only give it by phone. We can call for&nbsp;you.</Banner>
 
       {h.search.isPending && (
         <div className="mt-4 flex items-center justify-center gap-2 rounded-2xl border border-border bg-card px-4 py-10 text-center text-[14px] text-muted-foreground text-balance" data-testid="hotels-loading">
@@ -193,15 +193,15 @@ export function HotelsBody({ h, status }: { h: Hotels; status: TravelerStatus })
       )}
 
       {searched && (
-        <div className="mt-4 rounded-2xl border border-border bg-card shadow-[0_1px_3px_rgba(16,24,40,0.05)]" data-testid="hotels-results">
-          <div className="flex flex-col gap-2 px-4 pb-3 pt-4 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
-            <div className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5">
-              <h2 className="text-[20px] font-bold" style={HEAD}>Hotel Results</h2>
-              <p className="text-[13px] text-muted-foreground text-balance">{results.length ? <>{results.length} {results.length === 1 ? "hotel" : "hotels"} found · {nights} {nights === 1 ? "night" : "nights"} · nightly price before taxes, stay total as each site lists&nbsp;it</> : "No hotels found."}</p>
+        <div className="mt-5 rounded-[20px] border border-[#dfe4ec] bg-card shadow-[0_1px_3px_rgba(16,24,40,0.05)] dark:border-white/10" data-testid="hotels-results">
+          <div className="flex flex-col gap-2 px-4 pb-3.5 pt-4 sm:px-6 sm:pt-5 lg:flex-row lg:items-center lg:justify-between">
+            <div className="flex min-w-0 flex-wrap items-baseline gap-x-5 gap-y-0.5">
+              <h2 className="text-[20px] font-bold text-[#0b1b33] sm:text-[21px] dark:text-white" style={HEAD}>Hotel Results</h2>
+              <p className="text-[13.5px] text-[#4a5568] text-balance dark:text-white/60">{results.length ? <>{results.length} {results.length === 1 ? "hotel" : "hotels"} found · {nights} {nights === 1 ? "night" : "nights"} · nightly price before taxes, stay total as each site lists&nbsp;it</> : "No hotels found."}</p>
             </div>
             {results.length > 0 && (
               <div className="flex shrink-0 flex-wrap items-center gap-2">
-                <span className="text-[13px] text-muted-foreground">Sort by:</span>
+                <span className="text-[14px] text-[#4a5568] dark:text-white/60">Sort by:</span>
                 <Select label="Sort" value={sort} onChange={(v) => setSort(v as typeof sort)} testid="hotels-sort" options={[["deal", "Best deal for you"], ["price", "Lowest price"], ["rating", "Top rated"]]} />
               </div>
             )}
@@ -248,23 +248,23 @@ function BrandBenefits({ perks, verified, status }: { perks: MilitaryHotelPerk[]
   if (!perks.length) return null;
   const sorted = [...perks].sort((a, b) => Number(a.quiet) - Number(b.quiet) || ORDER[a.tag] - ORDER[b.tag]);
   return (
-    <div className="mt-5" data-testid="hotels-benefits">
-      <div className="flex flex-col gap-1 xl:flex-row xl:items-center xl:justify-between xl:gap-4">
-        <h2 className="flex items-center gap-2 text-[19px] font-bold sm:text-[20px]" style={HEAD}><TagIcon className="h-5 w-5 shrink-0 -scale-x-100" style={{ color: GOLD }} /> Verified Military Benefits by Hotel&nbsp;Brand</h2>
-        {verified && <p className="flex items-start gap-1.5 text-[12px] text-muted-foreground"><ShieldCheck className="h-4 w-4 shrink-0" style={{ color: GOLD }} /><span>Based on each brand's published program <span className="whitespace-nowrap">(checked {checkedOn(verified)})</span></span></p>}
+    <div className="mt-6" data-testid="hotels-benefits">
+      <div className="flex flex-col gap-1 group-data-[wide=true]/travel:flex-row group-data-[wide=true]/travel:items-center group-data-[wide=true]/travel:justify-between group-data-[wide=true]/travel:gap-4">
+        <h2 className="flex items-center gap-2.5 text-[19px] font-bold text-[#0b1b33] sm:text-[21px] dark:text-white" style={HEAD}><TagIcon className="h-6 w-6 shrink-0 -scale-x-100" style={{ color: GOLD }} strokeWidth={2.2} /> Verified Military Benefits by Hotel&nbsp;Brand</h2>
+        {verified && <p className="flex items-start gap-2 text-[12.5px] text-[#33425a] dark:text-white/60"><ShieldCheck className="h-[18px] w-[18px] shrink-0" style={{ color: GOLD }} /><span>Benefits are based on each brand's published program <span className="whitespace-nowrap">(checked {checkedOn(verified)}).</span></span></p>}
       </div>
-      <div className="mt-3 grid gap-2.5 md:grid-cols-2 xl:grid-cols-3">
+      <div className="mt-3.5 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
         {sorted.map((p, k) => {
           const [mark, color] = markOf(p);
           const t = rateTag(p, status);
           const hide = !all && k >= BRANDS_SHOWN ? "hidden" : !all && k >= 3 ? "hidden md:flex" : "flex";
           return (
-            <div key={p.key} className={`${hide} items-center gap-3 rounded-xl border border-border bg-card px-3 py-3 shadow-[0_1px_2px_rgba(16,24,40,0.04)] ${p.tag === "none" ? "opacity-75" : ""}`} data-testid={`hotel-benefit-${p.key}`}>
-              <span className="w-[96px] shrink-0 text-center text-[17px] font-extrabold leading-[1.05] tracking-tight text-balance" style={{ color, ...HEAD }}>{mark}</span>
-              <span className="h-11 w-[2px] shrink-0 self-center rounded-full" style={{ background: GOLD }} />
+            <div key={p.key} className={`${hide} min-h-[76px] items-center gap-4 rounded-2xl border border-[#dfe4ec] bg-card px-4 py-3 shadow-[0_1px_3px_rgba(16,24,40,0.05)] dark:border-white/10 ${p.tag === "none" ? "opacity-75" : ""}`} data-testid={`hotel-benefit-${p.key}`}>
+              <span className="flex w-[118px] shrink-0 items-center justify-center"><BrandLogo src={hotelLogo(p.key)} name={mark} color={color} className="h-[34px] max-w-[118px]" textClass="text-center text-[18px] font-extrabold leading-[1.05] tracking-tight text-balance" /></span>
+              <span className="h-12 w-[2px] shrink-0 self-center rounded-full" style={{ background: GOLD }} />
               <div className="min-w-0 flex-1">
-                <p className="text-[14px] font-bold leading-tight">{plainName(p.brand)}</p>
-                <p className="text-[13px] leading-snug text-foreground/80">{t.text}{p.rate && !/^(varies|couldn't)/i.test(p.rate) ? ` · ${p.rate}` : ""}</p>
+                <p className="text-[15px] font-bold leading-tight text-[#0b1b33] dark:text-white">{plainName(p.brand)}</p>
+                <p className="mt-0.5 text-[14px] leading-snug text-[#33425a] dark:text-white/75">{t.text}{p.rate && !/^(varies|couldn't)/i.test(p.rate) ? ` · ${p.rate}` : ""}</p>
                 {p.stayPerk && <p className="mt-0.5 text-[12px] leading-snug text-emerald-800 dark:text-emerald-300">Perk: {p.stayPerk}</p>}
                 {p.claim?.line && <p className="mt-1 text-[11.5px] leading-snug text-muted-foreground"><span className="font-semibold text-foreground/80">How to claim:</span> {p.claim.line}</p>}
                 <p className="mt-0.5 text-[11px] text-muted-foreground">
@@ -301,7 +301,7 @@ function LodgingCard({ data, status }: { data: Lodging; status: TravelerStatus }
       : v.veterans === "retirees" ? { t: "Retirees", c: "bg-[#f1f4f9] text-foreground/75 dark:bg-white/5" }
       : { t: "Some veterans", c: "bg-[#FFF3D6] text-[#7a4f00] dark:bg-[#F0A71F]/10 dark:text-[#F0A71F]" };
   const names = items.slice(0, 3).map((v) => plainName(v.name)).join(", ");
-  const some = status === "veteran" && items.some((v) => v.veterans === "some");
+  const some = status === "veteran" && items.some((v) => v.expandedAccess);
   const ea = data.expandedAccess;
   return (
     <div className="mt-4 overflow-hidden rounded-2xl border border-border bg-card" data-testid="hotels-lodging">
@@ -318,7 +318,7 @@ function LodgingCard({ data, status }: { data: Lodging; status: TravelerStatus }
           {some && (
             <div className="mx-4 mt-3 rounded-xl border border-[#F0A71F]/60 bg-[#FFF8E8] px-3 py-2.5 sm:mx-5 dark:bg-[#F0A71F]/10">
               <p className="text-[13px] font-bold">Who counts as "some veterans"</p>
-              <p className="mt-0.5 text-[12.5px] leading-snug text-foreground/85">{firstSentence(ea.note)} ID to bring: {firstSentence(ea.idNeeded)} Not every program takes this group, so check each&nbsp;one.</p>
+              <p className="mt-0.5 text-[12.5px] leading-snug text-foreground/85">{ea.summary || <>{firstSentence(ea.note)} ID to bring: {firstSentence(ea.idNeeded)}</>} Not every program takes this group, so check each&nbsp;one.</p>
             </div>
           )}
           <div className="divide-y divide-border">
@@ -405,7 +405,7 @@ function HotelRow({ x, best, nights, status, searchId, open, onMore, onAsk, aski
         <div className="flex min-w-0 flex-1 flex-col gap-3 lg:flex-row lg:items-center lg:gap-5">
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
-              {mark && <span className="text-[12px] font-extrabold" style={{ color, ...HEAD }}>{mark}</span>}
+              {mark && p && <BrandLogo src={hotelLogo(p.key)} name={mark} color={color} className="h-[18px] max-w-[90px]" textClass="text-[12px] font-extrabold" />}
               {r.hotelClass ? <span className="flex items-center gap-px" aria-label={`${r.hotelClass}-star hotel`}>{Array.from({ length: Math.round(r.hotelClass) }, (_, k) => <Star key={k} className="h-3.5 w-3.5 fill-[#F0A71F] text-[#F0A71F]" />)}</span> : null}
             </div>
             <p className="text-[17px] font-bold leading-tight">{r.name}</p>
@@ -427,7 +427,7 @@ function HotelRow({ x, best, nights, status, searchId, open, onMore, onAsk, aski
               {!won && r.totalPrice != null && <span className="block whitespace-nowrap text-[11.5px] font-medium text-[#053877] dark:text-white/80">{money(r.totalPrice)} for {nights} {nights === 1 ? "night" : "nights"}</span>}
             </div>
             <div className="flex min-w-0 flex-1 flex-col items-stretch gap-1 sm:w-[214px] sm:flex-none">
-              <a href={r.url} target="_blank" rel="noopener noreferrer" className="inline-flex min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full border-2 border-[#c7d7f2] px-3 py-2 text-[13px] font-semibold text-[#053877] hover:bg-[#eef4ff] sm:text-[14px] dark:text-white" data-testid={`hotel-book-${r.i}`}>
+              <a href={r.url} target="_blank" rel="noopener noreferrer" className="inline-flex min-w-0 items-center justify-center gap-1.5 whitespace-nowrap rounded-full border-[1.5px] border-[#b9cbe8] bg-white px-4 py-2.5 text-[13.5px] font-bold text-[#0b3a78] shadow-[0_1px_2px_rgba(11,27,51,0.06)] hover:bg-[#eef4ff] dark:bg-transparent dark:text-white" data-testid={`hotel-book-${r.i}`}>
                 <span className="truncate">Book on {bookLabel}</span> <ExternalLink className="h-3.5 w-3.5 shrink-0" />
               </a>
               <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-0.5">
