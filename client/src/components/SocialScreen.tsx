@@ -16,7 +16,7 @@ import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, D
 import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import type { ClipRow, HostPostRow, PostMetrics, PostResult, RecordingRow, SocialPlatform } from "@shared/schema";
-import { AlertTriangle, BarChart3, Heart, Lightbulb, MessageCircle, Repeat2, TrendingDown, TrendingUp, Users, Eye, ChevronDown, Clapperboard, Film, ImagePlus, Upload, CalendarClock, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, ExternalLink, Home, Link2, Loader2, Play, Plus, Send, Settings2, Share2, Sparkles, Target, Trash2, X } from "lucide-react";
+import { AlertTriangle, BarChart3, Heart, Lightbulb, MessageCircle, Mic, Repeat2, TrendingDown, TrendingUp, Users, Eye, ChevronDown, Clapperboard, Film, ImagePlus, Upload, CalendarClock, CalendarDays, Check, ChevronLeft, ChevronRight, Clock, ExternalLink, Home, Link2, Loader2, Play, Plus, Send, Settings2, Share2, Sparkles, Target, Trash2, X } from "lucide-react";
 import { IconTile } from "@/components/ui/icon-tile";
 
 /**
@@ -79,6 +79,12 @@ export function SocialScreen({ view = "social" }: { view?: "social" | "calendar"
   const clips = useQuery<ClipRow[]>({ queryKey: ["/api/host/clips"], queryFn: async () => (await apiRequest("GET", "/api/host/clips")).json() });
   const recs = useQuery<RecordingRow[]>({ queryKey: ["/api/host/recordings"], queryFn: async () => (await apiRequest("GET", "/api/host/recordings")).json() });
   const postsQ = useQuery<HostPostRow[]>({ queryKey: ["/api/host/posts"], queryFn: async () => (await apiRequest("GET", "/api/host/posts")).json(), refetchInterval: 60_000 });
+  // Podcast episodes that go live later (Podcasting's route): read-only markers on the Calendar, never posts (Andrew via PM, 26 Nov).
+  const launches = useQuery<EpisodeLaunch[]>({
+    queryKey: ["/api/host/episodes/upcoming"],
+    queryFn: async () => { try { const j = await (await apiRequest("GET", "/api/host/episodes/upcoming")).json(); return Array.isArray(j?.episodes) ? j.episodes : []; } catch { return []; } },
+    enabled: view === "calendar", retry: false, staleTime: 5 * 60_000,
+  });
   const queue = useQuery<Queue>({ queryKey: ["/api/host/social/queue"], queryFn: async () => (await apiRequest("GET", "/api/host/social/queue")).json(), retry: false });
 
   const accounts = social.data?.accounts ?? [];
@@ -250,6 +256,7 @@ export function SocialScreen({ view = "social" }: { view?: "social" | "calendar"
       ) : (
         <Calendar
           posts={posts}
+          launches={(launches.data ?? []).map((e) => ({ ...e, t: Number(e.at) })).filter((e) => Number.isFinite(e.t) && e.t > 0)}
           onRemove={setRemoving}
           slots={(queue.data?.slots ?? []).filter((s) => s.available && s.post_count === 0).map((s) => Date.parse(s.datetime_utc))}
           onOpen={setOpen}
@@ -406,7 +413,9 @@ function PostRow({ p, onOpen, onRemove, compactRow }: { p: Post; onOpen: () => v
 }
 
 /** The week: seven days, each with its posts and its open queue slots. Drag a waiting post to another day. */
-function Calendar({ posts, slots, onOpen, onSlot, onMove, onRemove }: { posts: Post[]; slots: number[]; onOpen: (p: Post) => void; onSlot: (t: number) => void; onMove: (p: Post, t: number) => void; onRemove: (p: Post) => void }) {
+type EpisodeLaunch = { id: number; showId: number; showTitle: string; number: number | null; title: string; at: number; cover: string };
+
+function Calendar({ posts, launches = [], slots, onOpen, onSlot, onMove, onRemove }: { posts: Post[]; launches?: (EpisodeLaunch & { t: number })[]; slots: number[]; onOpen: (p: Post) => void; onSlot: (t: number) => void; onMove: (p: Post, t: number) => void; onRemove: (p: Post) => void }) {
   const [start, setStart] = useState(() => weekStart(Date.now()));
   const [dragging, setDragging] = useState<Post | null>(null);
   const [over, setOver] = useState<number | null>(null);
@@ -428,6 +437,7 @@ function Calendar({ posts, slots, onOpen, onSlot, onMove, onRemove }: { posts: P
           const past = d + DAY <= Date.now();
           const items = posts.filter((p) => p.status !== "sending" && sameDay(p.at, d)).sort((a, b) => a.at - b.at);
           const open = slots.filter((t) => sameDay(t, d)).sort((a, b) => a - b);
+          const eps = launches.filter((e) => sameDay(e.t, d));
           return (
             <div
               key={d}
@@ -449,8 +459,17 @@ function Calendar({ posts, slots, onOpen, onSlot, onMove, onRemove }: { posts: P
               <p className={`px-1 text-xs font-semibold ${today ? "text-[#053877] dark:text-[#8fb5e8]" : "text-muted-foreground"}`}>
                 {new Date(d).toLocaleDateString(undefined, { weekday: "short" })} <span className="tabular-nums">{new Date(d).getDate()}</span>
               </p>
-              {[...items.map((p) => ({ t: p.at, p })), ...open.map((t) => ({ t, p: null as Post | null }))].sort((a, b) => a.t - b.t).map(({ t, p }) =>
-                p ? (
+              {[...items.map((p) => ({ t: p.at, p, e: null as (EpisodeLaunch & { t: number }) | null })), ...open.map((t) => ({ t, p: null as Post | null, e: null as (EpisodeLaunch & { t: number }) | null })), ...eps.map((e) => ({ t: e.t, p: null as Post | null, e }))].sort((a, b) => a.t - b.t).map(({ t, p, e }) =>
+                e ? (
+                  <a key={`e${e.id}`} href={`/host/dashboard/podcast?ep=${e.id}`} className="flex w-full items-center gap-1.5 rounded-lg border border-[#F0A71F]/70 bg-[#F0A71F]/10 p-1 text-left text-[11px] leading-tight hover:bg-[#F0A71F]/20" title={`${e.showTitle}: goes live ${fmtTime(e.t)}`} data-testid={`social-cal-episode-${e.id}`}>
+                    {e.cover ? <img src={e.cover} alt="" className="h-7 w-7 shrink-0 rounded object-cover" loading="lazy" /> : <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded bg-[#F0A71F]/25 text-[#8a5a00] dark:text-[#F0A71F]"><Mic className="h-3.5 w-3.5" /></span>}
+                    <span className="min-w-0 flex-1">
+                      <span className="flex items-center gap-1 font-semibold tabular-nums"><Mic className="h-3 w-3 shrink-0 text-[#b07800] dark:text-[#F0A71F]" />{fmtTime(e.t)}</span>
+                      <span className="block font-medium text-[#8a5a00] dark:text-[#F0A71F]">Episode goes live</span>
+                      <span className="line-clamp-2">{e.number ? `#${e.number} ` : ""}{e.title || "Untitled"}</span>
+                    </span>
+                  </a>
+                ) : p ? (
                   <div key={`p${p.id}`} className="group/item relative">
                   <button
                     type="button"
