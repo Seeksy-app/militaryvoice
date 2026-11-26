@@ -1303,6 +1303,7 @@ const BROADCAST_BANNERS: Record<string, string> = {
   headphones: `${SITE}/email/headphones.jpg`,
   board: `${SITE}/email/board.jpg`,
   schedule: `${SITE}/email/schedule.jpg`,
+  thanksgiving: `${SITE}/email/thanksgiving.jpg`,
 };
 
 const RICO_PHOTO = `${SITE}/riccoh-player.jpg`;

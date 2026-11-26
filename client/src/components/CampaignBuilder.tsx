@@ -131,6 +131,7 @@ const BANNERS = [
   { key: "headphones", label: "Headphones", src: "/email/headphones.jpg" },
   { key: "board", label: "Mixing board", src: "/email/board.jpg" },
   { key: "schedule", label: "Agenda", src: "/email/schedule.jpg" },
+  { key: "thanksgiving", label: "Thanksgiving", src: "/email/thanksgiving.jpg" },
 ];
 
 /** A creator's picture for a Picture block: public, so every mail app shows it. */
