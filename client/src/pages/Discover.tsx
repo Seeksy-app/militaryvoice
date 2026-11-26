@@ -228,6 +228,9 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
   const [sort, setSort] = useState("relevancy");
   const [page, setPage] = useState(0);
   const [mode, setMode] = useState<Mode>("ai");
+  // Until they pick, the platform and the way to search show as grey placeholders (Andrew, 26 Nov: "These need to be
+  // placeholders. I think we should just do SI search at the top"), and the page always opens on SI search.
+  const [picked, setPicked] = useState({ mode: false, platform: false });
   const [filters, setFilters] = useState<Filters>({});
   const [showFilters, setShowFilters] = useState(false);
   // While the search-mode menu is open the hero sits above the sticky filter bar, so the menu isn't painted over.
@@ -298,7 +301,8 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
     if (doorPicked.current || meLoading || pcStatus.isLoading) return;
     doorPicked.current = true;
     const want = (() => { try { return new URLSearchParams(window.location.search).get("door") ?? ""; } catch { return ""; } })();
-    const k = want === "guests" ? "podcaster" : want === "brands" ? "brand" : want === "speakers" ? "event" : me?.isPodcaster ? "podcaster" : "";
+    // Only a link picks a door: a podcaster opens on SI search like everyone (Andrew, 26 Nov), not on Hosts & guests.
+    const k = want === "guests" ? "podcaster" : want === "brands" ? "brand" : want === "speakers" ? "event" : "";
     if (k && k !== door) pickDoor(k as (typeof DOORS)[number]["key"]);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meLoading, me?.isPodcaster, pcStatus.isLoading]);
@@ -520,9 +524,11 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
           <SearchBar
             peopleOpen={peopleOpen}
             platform={platform}
-            setPlatform={choosePlatform}
+            setPlatform={(p) => { setPicked((x) => ({ ...x, platform: true })); choosePlatform(p); }}
             mode={mode}
-            setMode={chooseMode}
+            setMode={(m) => { setPicked((x) => ({ ...x, mode: true })); chooseMode(m); }}
+            modeChosen={picked.mode || mode !== "ai"}
+            platformChosen={picked.platform || platform !== "instagram"}
             q={q}
             setQ={setQ}
             placeholder={mode === "shows" ? "Leadership, transition, fitness, faith…" : mode === "people" ? "A topic they're known for, or a name…" : mode === "ai" ? d.placeholder : mode === "keywords" ? "army wife, military spouse, milso" : mode === "like" ? "@handle of a creator you like" : "@handle, or paste a profile link"}
@@ -757,7 +763,7 @@ export default function Discover({ embedded = false, part = "all" }: { embedded?
 // The search bar: platform, how to search, what, and the filters
 // ===========================================================================
 
-function ModeMenu({ mode, setMode, onOpenChange, peopleOpen }: { mode: Mode; setMode: (m: Mode) => void; onOpenChange?: (open: boolean) => void; peopleOpen?: boolean }) {
+function ModeMenu({ mode, setMode, onOpenChange, peopleOpen, chosen = true }: { mode: Mode; setMode: (m: Mode) => void; onOpenChange?: (open: boolean) => void; peopleOpen?: boolean; chosen?: boolean }) {
   const [open, setOpen] = useState(false);
   useEffect(() => onOpenChange?.(open), [open]); // eslint-disable-line react-hooks/exhaustive-deps
   const ref = useRef<HTMLDivElement>(null);
@@ -772,7 +778,7 @@ function ModeMenu({ mode, setMode, onOpenChange, peopleOpen }: { mode: Mode; set
   const Icon = cur.icon;
   return (
     <div ref={ref} className="relative">
-      <button type="button" onClick={() => setOpen((v) => !v)} aria-haspopup="listbox" aria-expanded={open} className="flex h-12 w-full items-center gap-2 whitespace-nowrap rounded-xl bg-[#053877]/[0.07] px-3 text-sm font-medium text-[#053877] hover:bg-[#053877]/[0.11] sm:w-auto" data-testid="discover-mode">
+      <button type="button" onClick={() => setOpen((v) => !v)} aria-haspopup="listbox" aria-expanded={open} className={`flex h-12 w-full items-center gap-2 whitespace-nowrap rounded-xl px-3 text-sm sm:w-auto ${chosen ? "bg-[#053877]/[0.07] font-medium text-[#053877] hover:bg-[#053877]/[0.11]" : "bg-muted/60 text-muted-foreground hover:bg-muted"}`} data-testid="discover-mode" data-chosen={chosen ? "1" : "0"}>
         <Icon className="h-4 w-4" /> {cur.label}
         <ChevronDown className={`ml-auto h-4 w-4 transition-transform sm:ml-1 ${open ? "rotate-180" : ""}`} />
       </button>
@@ -800,7 +806,7 @@ function ModeMenu({ mode, setMode, onOpenChange, peopleOpen }: { mode: Mode; set
 }
 
 /** The platform, as a button like the mode menu (Andrew, 26 Nov: the select's arrow sat "right up against the edge"). */
-function PlatformMenu({ platform, setPlatform, podcasts }: { platform: string; setPlatform: (p: string) => void; podcasts: boolean }) {
+function PlatformMenu({ platform, setPlatform, podcasts, chosen = true }: { platform: string; setPlatform: (p: string) => void; podcasts: boolean; chosen?: boolean }) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -813,7 +819,7 @@ function PlatformMenu({ platform, setPlatform, podcasts }: { platform: string; s
   const social = PLATFORMS.filter((p) => p.v !== "podcasts");
   return (
     <div ref={ref} className="relative">
-      <button type="button" disabled={podcasts} onClick={() => setOpen((v) => !v)} aria-haspopup="listbox" aria-expanded={open} aria-label="Platform" title={podcasts ? "Podcast search covers every show, so there's no platform to pick." : undefined} className={`flex h-12 w-full items-center gap-2 whitespace-nowrap rounded-xl bg-muted/60 px-3 text-sm font-medium sm:w-[9.5rem] ${podcasts ? "cursor-default text-muted-foreground" : "hover:bg-muted"}`} data-testid="discover-platform">
+      <button type="button" disabled={podcasts} onClick={() => setOpen((v) => !v)} aria-haspopup="listbox" aria-expanded={open} aria-label="Platform" title={podcasts ? "Podcast search covers every show, so there's no platform to pick." : undefined} className={`flex h-12 w-full items-center gap-2 whitespace-nowrap rounded-xl bg-muted/60 px-3 text-sm sm:w-[9.5rem] ${podcasts ? "cursor-default text-muted-foreground" : chosen ? "font-medium hover:bg-muted" : "text-muted-foreground hover:bg-muted"}`} data-testid="discover-platform" data-chosen={chosen && !podcasts ? "1" : "0"}>
         {podcasts ? <><Mic2 className="h-4 w-4" /> All podcasts</> : (social.find((p) => p.v === platform)?.label ?? "Instagram")}
         {!podcasts && <ChevronDown className={`ml-auto h-4 w-4 text-muted-foreground transition-transform ${open ? "rotate-180" : ""}`} />}
       </button>
@@ -848,8 +854,11 @@ function TryYourOwn({ onClose }: { onClose: () => void }) {
   );
 }
 
-function SearchBar({ platform, setPlatform, mode, setMode, q, setQ, placeholder, onSubmit, busy, filterCount, onFilters, onMenu, ghost, callout, onFocusQ, peopleOpen }: {
+function SearchBar({ platform, setPlatform, mode, setMode, q, setQ, placeholder, onSubmit, busy, filterCount, onFilters, onMenu, ghost, callout, onFocusQ, peopleOpen, modeChosen, platformChosen }: {
   onMenu?: (open: boolean) => void;
+  /** False until they pick one: shown grey, as a placeholder. */
+  modeChosen?: boolean;
+  platformChosen?: boolean;
   peopleOpen?: boolean;
   /** A pointer under the box, e.g. "Now try your own". */
   callout?: React.ReactNode;
@@ -864,8 +873,8 @@ function SearchBar({ platform, setPlatform, mode, setMode, q, setQ, placeholder,
     <form onSubmit={(e) => { e.preventDefault(); onSubmit(); }} className="rounded-2xl border border-border bg-card p-2 text-foreground shadow-[0_12px_32px_-16px_rgba(4,16,43,0.35)]" data-testid="discover-search-form">
       <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
         <div className="grid grid-cols-2 gap-2 sm:flex">
-          <PlatformMenu platform={platform} setPlatform={setPlatform} podcasts={isPodMode(mode)} />
-          <ModeMenu mode={mode} setMode={setMode} onOpenChange={onMenu} peopleOpen={peopleOpen} />
+          <PlatformMenu platform={platform} setPlatform={setPlatform} podcasts={isPodMode(mode)} chosen={platformChosen} />
+          <ModeMenu mode={mode} setMode={setMode} onOpenChange={onMenu} peopleOpen={peopleOpen} chosen={modeChosen} />
         </div>
         <div className="relative flex-1">
           <Lead className="pointer-events-none absolute left-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
