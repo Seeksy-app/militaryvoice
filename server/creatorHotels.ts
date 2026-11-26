@@ -4,7 +4,7 @@ import { and, desc, eq, gte } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { travelCalls, travelSearches, type TravelCallRow } from "../shared/schema.js";
 import type { TravelerStatus } from "../shared/militaryFares.js";
-import { hotelBrandOf, hotelByKey, hotelPerkFor, MILITARY_HOTELS, MILITARY_HOTELS_VERIFIED, type MilitaryHotelPerk } from "../shared/militaryHotels.js";
+import { hotelBrandOf, hotelByKey, hotelPerkFor, LODGING_EXPANDED_ACCESS, lodgingFor, MILITARY_HOTELS, MILITARY_HOTELS_VERIFIED, MILITARY_LODGING, type MilitaryHotelPerk } from "../shared/militaryHotels.js";
 import { CACHE_MS, CALLS_A_DAY, HttpError, callsLive, dayStart, emailOf, now, parallelKey, placeCall, refresh, registerCallKind } from "./creatorTravel.js";
 
 /**
@@ -174,7 +174,8 @@ export function shape(raw: ParallelHotel[], q: HotelQuery, fresh: boolean): Hote
       image: fresh ? (h.images ?? []).find((u) => /^https:\/\//.test(u)) ?? null : null,
       brand: brand?.brand ?? null,
       perk,
-      canCall: !!perk?.phoneOnly,
+      // PM 26 Nov: "Have us call" follows eligible for the status (phone-only or not); "Ask the hotel" brands never.
+      canCall: !!perk?.eligible,
     }];
   });
 }
@@ -420,8 +421,8 @@ const phoneLookups = new Map<string, { at: number; t: CallTarget | null }>();
 async function requestCall(email: string, searchId: number, i: number): Promise<HotelCallView> {
   const { q, res } = await resultOf(email, searchId, i);
   if (!res.perk) throw new HttpError(400, "We don't have a military rate on file for this hotel's brand.");
-  if (!res.perk.eligible) throw new HttpError(400, `${res.perk.brand}'s military rate isn't for ${q.status === "active" ? "active duty" : "veterans"}.`);
-  if (!res.canCall) throw new HttpError(400, `${res.perk.brand} shows its military rate online. Book it there.`);
+  if (res.perk.tag === "ask") throw new HttpError(400, `${res.perk.brand} doesn't say who gets its military rate. Ask the hotel when you book.`);
+  if (!res.perk.eligible || !res.canCall) throw new HttpError(400, `${res.perk.brand}'s military rate isn't for ${q.status === "active" ? "active duty" : "veterans"}.`);
   const calls = await db.select({ id: travelCalls.id }).from(travelCalls).where(and(eq(travelCalls.ownerEmail, email), gte(travelCalls.createdAt, dayStart())));
   if (calls.length >= CALLS_A_DAY) throw new HttpError(429, `You've asked for today's ${CALLS_A_DAY} calls. Ask again tomorrow.`);
   const target = await targetFor(res);
@@ -468,6 +469,12 @@ export function registerCreatorHotels(app: Express, requireHostSession: RequestH
   app.get("/api/travel/hotels/perks", requireHostSession, (req, res) => {
     const status: TravelerStatus = req.query.status === "active" ? "active" : "veteran";
     res.json({ status, perks: MILITARY_HOTELS.map((h) => hotelPerkFor(h, status)), notes: perksAndNotes([], status).notes, verified: MILITARY_HOTELS_VERIFIED });
+  });
+
+  /** On-base lodging, AFRC resorts and AFVC for the "Military lodging" card (not tied to a search). */
+  app.get("/api/travel/hotels/lodging", requireHostSession, (req, res) => {
+    const status: TravelerStatus = req.query.status === "active" ? "active" : "veteran";
+    res.json({ status, lodging: MILITARY_LODGING.map((l) => lodgingFor(l, status)), expandedAccess: LODGING_EXPANDED_ACCESS, verified: MILITARY_HOTELS_VERIFIED });
   });
 
   /** "Have us call" on one hotel of one of their searches. */
