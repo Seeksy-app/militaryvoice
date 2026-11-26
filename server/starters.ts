@@ -19,6 +19,7 @@ import { db, storage, schemaIsReady } from "./storage.js";
 import { isLiveKitConfigured, publicLiveKitUrl, rooms } from "./livekit.js";
 import { personalStudios } from "../shared/schema.js";
 import { studioTitle } from "./hostShows.js";
+import { briefText } from "./guestBrief.js";
 
 const rowsOf = (r: unknown) => ((r as { rows?: Record<string, unknown>[] }).rows ?? (r as Record<string, unknown>[]));
 const realPerson = (identity: string) => /^(owner|guest)-/.test(identity);
@@ -84,16 +85,24 @@ async function addUsage(id: number, add: Partial<Usage>): Promise<void> {
   }
 }
 
-/** The guest whose interview is nearest now (within 12 hours): their invite answers, for the prompt. Host only. */
-async function guestPrep(ownerEmail: string): Promise<string> {
+/** The invite for the guest whose interview is nearest now (within 12 hours), answered or not. Host only. */
+async function nearestInvite(ownerEmail: string): Promise<Record<string, unknown> | null> {
   try {
-    const list = rowsOf(await db.execute(sql`select guest_name, when_iso, answered_at, note, answers from guest_invites where owner_email=${ownerEmail} and status='answered' order by id desc limit 20`));
+    const list = rowsOf(await db.execute(sql`select id, status, guest_name, when_iso, answered_at, invited_at, note, answers from guest_invites where owner_email=${ownerEmail} and status <> 'cancelled' order by id desc limit 20`));
     const t = Date.now();
-    const near = list
-      .map((r) => ({ r, d: Math.abs((Date.parse(String(r.when_iso)) || Date.parse(String(r.answered_at)) || 0) - t) }))
+    return list
+      .map((r) => ({ r, d: Math.abs((Date.parse(String(r.when_iso)) || Date.parse(String(r.answered_at)) || Date.parse(String(r.invited_at)) || 0) - t) }))
       .filter((x) => x.d < 12 * 3600_000)
-      .sort((a, b) => a.d - b.d)[0]?.r;
-    if (!near) return "";
+      .sort((a, b) => a.d - b.d)[0]?.r ?? null;
+  } catch {
+    return null;
+  }
+}
+
+/** That guest's invite answers, for the prompt. */
+function guestPrep(near: Record<string, unknown> | null): string {
+  try {
+    if (!near || near.status !== "answered") return "";
     let a: { custom?: { q?: string; a?: string }[]; name?: string; title?: string; bio?: string; topics?: string; avoid?: string } = {};
     try { a = JSON.parse(String(near.answers || "{}")); } catch { a = {}; }
     return [
@@ -109,9 +118,10 @@ async function guestPrep(ownerEmail: string): Promise<string> {
   }
 }
 
-/** Podcasting's guest brief (server/guestBrief.ts briefText): wired in once it's on main. Host only. */
-async function guestBrief(_ownerEmail: string): Promise<string> {
-  return "";
+/** Podcasting's guest brief for that invite (server/guestBrief.ts): the host's edited notes, or the brief's facts. */
+async function guestBrief(ownerEmail: string, near: Record<string, unknown> | null): Promise<string> {
+  if (!near) return "";
+  try { return (await briefText(ownerEmail, Number(near.id))).slice(0, 3000); } catch { return ""; }
 }
 
 const SYSTEM = `You help a podcast host when the conversation goes quiet. You see what has been said in the last few minutes and the host's own prep. Suggest 2 or 3 questions the host could ask next.
@@ -186,8 +196,9 @@ export function registerStarters(app: Express, requireAgent: RequestHandler, req
     if (s.from.notes) {
       try { const v = JSON.parse((await storage.getSetting(`studio-notes:${id}`)) ?? "{}") as { text?: string }; notes = String(v.text ?? "").slice(0, 4000); } catch { notes = ""; }
     }
-    const prep = s.from.prep ? await guestPrep(owner) : "";
-    const brief = s.from.brief ? await guestBrief(owner) : "";
+    const near = s.from.prep || s.from.brief ? await nearestInvite(owner) : null;
+    const prep = s.from.prep ? guestPrep(near) : "";
+    const brief = s.from.brief ? await guestBrief(owner, near) : "";
     if (!transcript && !notes && !prep && !brief) return res.json({ lines: [] });
     const title = await studioTitle(owner, id, studio.name).catch(() => studio.name);
     const user = [
