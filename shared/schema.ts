@@ -3607,3 +3607,48 @@ export const requestMessages = pgTable("request_messages", {
   createdAt: text("created_at").notNull(),
 }, (t) => [index("request_messages_rcpt_idx").on(t.recipientId)]);
 export const REQUEST_KINDS = { sponsor: "Sponsored read", post: "Social post or video", guest: "Guest spot", appearance: "Event appearance", ambassador: "Ambassador", other: "Something else" } as const;
+
+/**
+ * Travel (Andrew, 26 Nov 2026: "Yes, build it"). One row per flight search a creator runs: `key` is the search itself
+ * (route, dates), so an identical search within 30 minutes reuses the stored `results` instead of paying Parallel again.
+ * `cached` rows are look-ups that were answered from another row; every row counts toward the daily cap.
+ */
+export const travelSearches = pgTable("travel_searches", {
+  id: serial("id").primaryKey(),
+  ownerEmail: text("owner_email").notNull(),
+  key: text("key").notNull(),
+  query: text("query").notNull().default(""),
+  /** Parallel's results, as JSON text (empty on a cached row). */
+  results: text("results").notNull().default(""),
+  cached: boolean("cached").notNull().default(false),
+  error: text("error").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+}, (t) => [index("travel_searches_owner_idx").on(t.ownerEmail, t.createdAt), index("travel_searches_key_idx").on(t.key, t.createdAt)]);
+
+/**
+ * "Have us call": an assistant rings an airline's military desk and asks for the military fare on one exact flight.
+ * waiting (saved; calls are off or not placed yet) → calling → done | failed. Nothing personal is ever given on a call.
+ */
+export const travelCalls = pgTable("travel_calls", {
+  id: serial("id").primaryKey(),
+  ownerEmail: text("owner_email").notNull(),
+  searchId: integer("search_id").notNull().default(0),
+  iata: text("iata").notNull(),
+  traveler: text("traveler").notNull().default("active"),
+  /** The flight asked about, as JSON text: flight numbers, airports, local times, date(s), cabin. */
+  flight: text("flight").notNull(),
+  /** The price the search showed for this itinerary, in whole cents (0 = none listed). */
+  webPriceCents: integer("web_price_cents").notNull().default(0),
+  status: text("status").notNull().default("waiting"),
+  /** The number actually rung (the airline's desk, or a test number while testing). */
+  calledNumber: text("called_number").notNull().default(""),
+  callId: text("call_id").notNull().default(""),
+  /** The report: JSON text {available, militaryFare, currency, conditions, summary}. */
+  report: text("report").notNull().default(""),
+  transcript: text("transcript").notNull().default(""),
+  durationSec: integer("duration_sec").notNull().default(0),
+  error: text("error").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (t) => [index("travel_calls_owner_idx").on(t.ownerEmail, t.createdAt)]);
+export type TravelCallRow = typeof travelCalls.$inferSelect;
