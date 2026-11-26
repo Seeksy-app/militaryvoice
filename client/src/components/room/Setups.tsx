@@ -48,6 +48,7 @@ export function ChooseSetup({ roomName, shows, showId, onShow, v3, onDone, logo 
   onDone: (name: string) => void; logo: ReactNode;
 }) {
   const qc = useQueryClient();
+  const { toast } = useToast();
   const q = useSetups(showId);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
@@ -67,7 +68,11 @@ export function ChooseSetup({ roomName, shows, showId, onShow, v3, onDone, logo 
     catch (e) { setError(say(e)); setBusy(""); }
   };
   const use = (c: Card) => run(c.id, () => apiRequest("POST", `${SETUPS_KEY}/${c.id}/use`), c.name);
-  const fresh = (t: TemplateId | "blank", name: string) => run(t, () => apiRequest("POST", `${SETUPS_KEY}/fresh`, { template: t, v3 }), name);
+  // Blank switched every destination off: say so, so nobody goes live to nothing by surprise (PM, 26 Nov).
+  const fresh = (t: TemplateId | "blank", name: string) => run(t, async () => {
+    await apiRequest("POST", `${SETUPS_KEY}/fresh`, { template: t, v3 });
+    if (t === "blank") toast({ title: "Destinations switched off", description: "Your YouTube, stream keys and watch page are switched off. Turn on the ones you want beside Record." });
+  }, name);
   const act = async (fn: () => Promise<unknown>) => {
     setError("");
     try { await fn(); await q.refetch(); } catch (e) { setError(say(e)); }
