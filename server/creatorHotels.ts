@@ -93,7 +93,8 @@ const int = (v: unknown, lo: number, hi: number, dflt: number) => {
 
 function readQuery(body: unknown): HotelQuery {
   const b = (body ?? {}) as Record<string, unknown>;
-  const location = String(b.location ?? "").replace(/\s+/g, " ").trim();
+  // `where` and `guests` are accepted too (UI/UX's names).
+  const location = String(b.location ?? b.where ?? "").replace(/\s+/g, " ").trim();
   const checkIn = String(b.checkIn ?? "").trim();
   const checkOut = String(b.checkOut ?? "").trim();
   if (location.length < 2 || location.length > 200) throw new HttpError(400, "Type a city, neighborhood or address, like \"San Diego\" or \"near the convention center, Orlando\".");
@@ -101,7 +102,7 @@ function readQuery(body: unknown): HotelQuery {
   if (!DAY.test(checkIn) || checkIn < today) throw new HttpError(400, "Pick a check-in date from today on.");
   if (!DAY.test(checkOut) || checkOut <= checkIn) throw new HttpError(400, "Check-out has to be after check-in.");
   if (nightsOf(checkIn, checkOut) > 30) throw new HttpError(400, "Search up to 30 nights at a time.");
-  const adults = int(b.adults, 1, 16, 1);
+  const adults = int(b.adults ?? b.guests, 1, 16, 1);
   const rooms = Math.min(int(b.rooms, 1, 8, 1), adults);
   const sort = b.sort === "price" || b.sort === "rating" ? b.sort : "relevance";
   const maxPrice = Math.max(0, Math.round(Number(b.maxPrice) || 0));
@@ -389,22 +390,35 @@ async function propertyPhone(h: HotelResult): Promise<string> {
   return "";
 }
 
-async function requestCall(email: string, searchId: number, i: number): Promise<HotelCallView> {
+/** One result of one of their searches, re-shaped from the stored row. */
+async function resultOf(email: string, searchId: number, i: number): Promise<{ q: HotelQuery; res: HotelResult }> {
   const [s] = await db.select().from(travelSearches).where(and(eq(travelSearches.id, searchId), eq(travelSearches.ownerEmail, email), eq(travelSearches.kind, "hotel"))).limit(1);
   if (!s?.results) throw new HttpError(404, "Search again, then pick the hotel.");
   const q = JSON.parse(s.query) as HotelQuery;
   const raw = (JSON.parse(s.results) as ParallelHotel[])[i];
   const res = raw ? shape([raw], q, false)[0] : undefined;
   if (!res) throw new HttpError(404, "Search again, then pick the hotel.");
+  return { q, res };
+}
+
+/** Who to ring for this hotel: its own line (Parallel Places), else its brand's central reservations. */
+async function targetFor(res: HotelResult): Promise<CallTarget | null> {
+  const own = await propertyPhone(res);
+  if (own) return { phone: own, who: "property", name: res.name };
+  const brand = res.perk ? hotelByKey(res.perk.key) : undefined;
+  const central = e164(brand?.central_reservations_phone ?? "");
+  return central && brand ? { phone: central, who: "brand", name: brand.brand } : null;
+}
+const phoneLookups = new Map<string, { at: number; t: CallTarget | null }>();
+
+async function requestCall(email: string, searchId: number, i: number): Promise<HotelCallView> {
+  const { q, res } = await resultOf(email, searchId, i);
   if (!res.perk) throw new HttpError(400, "We don't have a military rate on file for this hotel's brand.");
   if (!res.perk.eligible) throw new HttpError(400, `${res.perk.brand}'s military rate isn't for ${q.status === "active" ? "active duty" : "veterans"}.`);
   if (!res.canCall) throw new HttpError(400, `${res.perk.brand} shows its military rate online. Book it there.`);
   const calls = await db.select({ id: travelCalls.id }).from(travelCalls).where(and(eq(travelCalls.ownerEmail, email), gte(travelCalls.createdAt, dayStart())));
   if (calls.length >= CALLS_A_DAY) throw new HttpError(429, `You've asked for today's ${CALLS_A_DAY} calls. Ask again tomorrow.`);
-  const brand = hotelByKey(res.perk.key);
-  const own = await propertyPhone(res);
-  const central = e164(brand?.central_reservations_phone ?? "");
-  const target: CallTarget | null = own ? { phone: own, who: "property", name: res.name } : central ? { phone: central, who: "brand", name: brand?.brand ?? res.perk.brand } : null;
+  const target = await targetFor(res);
   if (!target) throw new HttpError(400, "We couldn't find a number for this hotel. Call it yourself and ask for the military rate.");
   const stay: CallStay = {
     name: res.name, address: res.address, location: q.location, checkIn: q.checkIn, checkOut: q.checkOut,
@@ -458,6 +472,30 @@ export function registerCreatorHotels(app: Express, requireHostSession: RequestH
       const i = Number(req.body?.i);
       if (!Number.isInteger(searchId) || !Number.isInteger(i) || i < 0) throw new HttpError(400, "Pick a hotel first.");
       res.status(201).json(await requestCall(emailOf(req), searchId, i));
+    } catch (err) { send(res, err); }
+  });
+
+  /**
+   * The number to ring for one hotel of one of their searches, for "Book by phone": the hotel's own line (looked up
+   * on Parallel Places when asked, ~$1 per 1,000, never for the whole list) or its brand's central reservations.
+   * { phone: "+1…" | null, who: "property" | "brand" | null, name }. Remembered for 30 minutes.
+   */
+  app.get("/api/travel/hotels/phone", requireHostSession, async (req, res) => {
+    try {
+      await schemaIsReady();
+      const email = emailOf(req);
+      const searchId = Number(req.query.searchId);
+      const i = Number(req.query.i);
+      if (!Number.isInteger(searchId) || !Number.isInteger(i) || i < 0) throw new HttpError(400, "Pick a hotel first.");
+      const k = `${email}|${searchId}|${i}`;
+      let hit = phoneLookups.get(k);
+      if (!hit || Date.now() - hit.at > CACHE_MS) {
+        const { res: r } = await resultOf(email, searchId, i);
+        hit = { at: Date.now(), t: await targetFor(r) };
+        if (phoneLookups.size > 2000) phoneLookups.clear();
+        phoneLookups.set(k, hit);
+      }
+      res.json({ phone: hit.t?.phone ?? null, who: hit.t?.who ?? null, name: hit.t?.name ?? "" });
     } catch (err) { send(res, err); }
   });
 
