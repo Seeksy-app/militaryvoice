@@ -1,7 +1,8 @@
 import type { Express, Request, RequestHandler } from "express";
-import { and, asc, desc, eq, gte, inArray, lt, sql } from "drizzle-orm";
-import { db, schemaIsReady } from "./storage.js";
-import { clips, postifyTokens, recordings, scheduledGrants, type PostifySubscriptionRow } from "../shared/schema.js";
+import { and, asc, desc, eq, gt, gte, inArray, like, lt, sql } from "drizzle-orm";
+import { db, schemaIsReady, storage } from "./storage.js";
+import { clips, postifySubscriptions, postifyTokens, recordings, scheduledGrants, type PostifySubscriptionRow } from "../shared/schema.js";
+import { planOf } from "../shared/tokens.js";
 
 /**
  * Pōstify credits: where they went (Andrew, 26 Nov: "we need to have a log they can look at for their credits to see
@@ -24,7 +25,48 @@ export async function nextCreditsAt(sub: PostifySubscriptionRow): Promise<string
   const [g] = await db.select({ at: scheduledGrants.grantAt }).from(scheduledGrants)
     .where(and(eq(scheduledGrants.email, sub.email), eq(scheduledGrants.doneAt, ""), gte(scheduledGrants.grantAt, new Date().toISOString())))
     .orderBy(asc(scheduledGrants.grantAt)).limit(1);
+  // With monthly gift credits on, the next 1st (while the gift lasts) if no grant comes sooner.
+  if (await compMonthlyOn()) {
+    const first = nextFirst(new Date());
+    if (first < (sub.periodEnd || "9999") && (!g || first < g.at)) return first;
+  }
   return g?.at ?? null;
+}
+
+// ---- Gifted plans give their own monthly credits ------------------------------------------------------------------
+
+/**
+ * Off until Andrew's go (26 Nov). On: every active gifted plan gets its plan's credits once a calendar month (UTC), with
+ * ref comp:<email>:<YYYY-MM>, so a month lands once however often the cron runs. A month that already has a plan grant
+ * in scheduled_grants (the October gifts' hand-made November and December 90s) is skipped, so nobody gets it twice.
+ * Turning it on in a month gives that month too (the 21 Nov gifts' November).
+ */
+export const COMP_MONTHLY_SETTING = "postify:comp-monthly";
+export const compMonthlyOn = async () => (await storage.getSetting(COMP_MONTHLY_SETTING).catch(() => null)) === "on";
+const monthOf = (d: Date) => d.toISOString().slice(0, 7);
+/** 12:00 UTC on the 1st of next month, when the monthly credits come (the same hour the hand-made grants used). */
+const nextFirst = (d: Date) => new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1, 12)).toISOString();
+
+export async function giveCompMonthly(at = new Date()): Promise<{ given: number; skipped: number }> {
+  if (!(await compMonthlyOn())) return { given: 0, skipped: 0 };
+  const t = at.toISOString();
+  const month = monthOf(at);
+  const monthStart = `${month}-01T00:00:00.000Z`;
+  const monthEnd = nextFirst(at).slice(0, 10) + "T00:00:00.000Z";
+  const subs = await db.select().from(postifySubscriptions)
+    .where(and(like(postifySubscriptions.subscriptionId, "comp:%"), eq(postifySubscriptions.status, "active"), gt(postifySubscriptions.periodEnd, t)));
+  let given = 0;
+  let skipped = 0;
+  for (const sub of subs) {
+    const plan = planOf(sub.plan);
+    if (!plan || (sub.periodStart && sub.periodStart > t)) continue;
+    const handMade = await db.select({ credits: scheduledGrants.credits, note: scheduledGrants.note }).from(scheduledGrants)
+      .where(and(eq(scheduledGrants.email, sub.email), gte(scheduledGrants.grantAt, monthStart), lt(scheduledGrants.grantAt, monthEnd)));
+    if (handMade.some((g) => g.credits === plan.credits || /pro plan|plan's|plan:/i.test(g.note))) { skipped++; continue; }
+    const added = await storage.addTokens({ email: sub.email, delta: plan.credits, reason: `${plan.name} monthly (gift): ${plan.credits} credits`, ref: `comp:${sub.email}:${month}` });
+    if (added) given++;
+  }
+  return { given, skipped };
 }
 
 export type CreditKind = "episode" | "clip" | "more" | "reclean" | "refund" | "plan" | "pack" | "gift" | "discovery" | "other";
@@ -55,7 +97,8 @@ export function kindOf(ref: string): CreditKind {
   const p = ref.split(":")[0];
   if (p === "episode" || p === "clip" || p === "more" || p === "reclean" || p === "refund" || p === "plan") return p;
   if (p === "stripe") return "pack";
-  if (p === "bonus" || p === "grant" || p === "comp") return "gift";
+  if (p === "comp") return "plan";
+  if (p === "bonus" || p === "grant") return "gift";
   if (p === "profile" || p === "reveal") return "discovery";
   return "other";
 }

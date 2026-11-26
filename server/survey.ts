@@ -473,6 +473,9 @@ export function registerSurvey(app: Express, requireAdmin: RequestHandler): void
       await db.update(scheduledGrants).set({ doneAt: now() }).where(eq(scheduledGrants.id, g.id));
       given++;
     }
+    // Gifted plans' own monthly credits (off until Andrew's go; postifyCredits.ts).
+    const comp = await import("./postifyCredits.js").then((m) => m.giveCompMonthly()).catch((e: Error) => { console.error("comp monthly:", e.message); return { given: 0, skipped: 0 }; });
+    given += comp.given;
     // A gifted plan ends on its date; a paid one is Stripe's to end.
     const ended = await db.update(postifySubscriptions).set({ status: "canceled", updatedAt: now() })
       .where(and(like(postifySubscriptions.subscriptionId, "comp:%"), eq(postifySubscriptions.status, "active"), lte(postifySubscriptions.periodEnd, t)))
