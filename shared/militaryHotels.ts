@@ -42,6 +42,8 @@ export type MilitaryHotel = {
   stay_perk: string;
   /** How to claim it, one short line (written from how_to_book). */
   claim: string;
+  /** What to say when this status doesn't qualify, instead of a flat "none" (Marriott for veterans). */
+  none_line?: string;
   membership: Membership;
   /** The code comes from third-party sites, not the brand's own page (Hyatt MILVET, Great Wolf HEROES). */
   code_third_party: boolean;
@@ -112,6 +114,7 @@ export const MILITARY_HOTELS: MilitaryHotel[] = [
     "id_needed": "Active-duty government or military ID at check-in (CAC, travel orders or a government travel card are also listed as qualifying documents).",
     "rate_code": "GOV",
     "stay_perk": "",
+    "none_line": "No published veteran rate. Retirees can ask the hotel whether they qualify for Government & Military.",
     "claim": "Pick 'Government & Military' on marriott.com, or code GOV in the app",
     "membership": "none",
     "code_third_party": false,
@@ -172,7 +175,7 @@ export const MILITARY_HOTELS: MilitaryHotel[] = [
     "id_needed": "Current, valid U.S. or Canadian military ID at check-in.",
     "rate_code": "",
     "stay_perk": "",
-    "claim": "Call 1-800-HONORS and ask for the Military Family Rate",
+    "claim": "Book online under Family Rates, or call 1-800-HONORS and ask for the Military Family Rate.",
     "membership": "none",
     "code_third_party": false,
     "restrictions": "Leisure stays only, not official travel (official travel uses the separate government per diem rate). Participating hotels only; blackout dates, deposit, cancellation and early-departure rules may apply. Not for existing reservations or groups. No military stay perk stated. Full-service 'Hilton <City>' names need a starts-with rule, and never match 'Hilton Head'.",
@@ -1251,6 +1254,7 @@ export const MILITARY_LODGING: MilitaryLodging[] = [
 /** The 2018 Act, in effect since 1 Jan 2020, that opened MWR lodging to some veterans. */
 export const LODGING_EXPANDED_ACCESS = {
   "title": "Purple Heart, former POWs, service-connected veterans and caregivers",
+  "summary": "Since 2020, Purple Heart recipients, former POWs, veterans with any VA service-connected rating, and VA family caregivers can use many on-base lodges and resorts. Bring a VA health card marked PURPLE HEART, FORMER POW or SERVICE CONNECTED (caregivers: your VA letter) and a photo ID.",
   "note": "Only these veterans: Purple Heart recipients, former POWs, and veterans with a VA service-connected disability rating (0-90% under this Act; 100% were already eligible), plus VA-designated primary family caregivers. Covers MWR retail activities including 'recreational lodging/resorts'. Other veterans are not covered.",
   "idNeeded": "VA Veteran Health Identification Card showing PURPLE HEART, FORMER POW or SERVICE CONNECTED (plus REAL ID or passport at most sites). Caregivers: VA Office of Community Care eligibility letter. Without a VHIC there is no in-person base access, but online exchanges and American Forces Travel still work.",
   "sources": [
@@ -1311,6 +1315,8 @@ export function hotelPerkFor(h: MilitaryHotel, status: TravelerStatus) {
     codeThirdParty: eligible && !!h.rate_code && h.code_third_party,
     stayPerk: eligible ? h.stay_perk : "",
     claim: eligible || ask ? { line: h.claim, membership: h.membership } : null,
+    /** tag "none" only: the line to show instead of a flat "No military rate" ("" = use that). */
+    noneLine: tag === "none" ? h.none_line ?? "" : "",
     /** The brand's central reservations, for travelers who ring themselves; null when the pages gave none. */
     reservationsPhone: h.central_reservations_phone || null,
     /** Low confidence: show the quieter line and link the source. */
