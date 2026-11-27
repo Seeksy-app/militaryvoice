@@ -110,6 +110,7 @@ import { type FreeState } from "@/components/DiscoverFree";
 import { useYourDiscoveryCard, YourDiscoverySheet } from "@/components/YourDiscovery";
 import { IntegrationsScreen } from "@/components/IntegrationsScreen";
 import { ThemeSwitch } from "@/components/ThemeSwitch";
+import { DirectoryListing } from "@/components/DirectoryListing";
 import { ProScreen } from "@/components/ProScreen";
 import { AudienceConsent } from "@/components/AudienceConsent";
 import { ConnectYoutube } from "@/components/ConnectYoutube";
@@ -1394,6 +1395,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                 )}
               </div>
             )}
+            {!firstTime && hasProfile && profile && <DirectoryListing hidden={!!profile.directoryHidden} hasPhoto={!!profile.photoUrl?.trim()} />}
             <ProfileForm
               interests={profile?.interests || interests || (pending ? "events" : "")}
               email={data.email}

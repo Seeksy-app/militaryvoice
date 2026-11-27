@@ -11295,6 +11295,15 @@ export function registerRoutes(app: Express): void {
     res.json(profile ?? null);
   });
 
+  // ---- Host: their own on/off for the public Member Directory (Andrew, 27 Nov 2026) ----
+  app.put("/api/host/directory-listing", requireHostSession, async (req, res) => {
+    const email = (req as any).hostEmail as string;
+    if (typeof req.body?.listed !== "boolean") return res.status(400).json({ message: "On or off?" });
+    if (!(await storage.getProfileByEmail(email))) return res.status(404).json({ message: "Set up your profile first." });
+    const p = await storage.upsertProfile(email, { directoryHidden: !req.body.listed } as never);
+    res.json({ listed: !p.directoryHidden });
+  });
+
   // ---- Host: create/update their podcaster profile (multipart: fields + optional photo) --
   app.put("/api/host/profile", requireHostSession, (req, res, next) => {
     upload.single("photo")(req, res, (err) => {
