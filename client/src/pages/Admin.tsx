@@ -5049,7 +5049,9 @@ export default function Admin({ tab, eventId: eventParam }: { tab?: string; even
                 </span>
               </span>
               {!eventOnly && <HealthLight />}
-              {mvEvents && (!eventOnly || mvEvents.length > 1) && (
+              {/* Platform admins reach an event from MV events in the rail (Andrew, 27 Nov: no Event dropdown up here).
+                  An event admin with more than one event still switches here. */}
+              {mvEvents && eventOnly && mvEvents.length > 1 && (
                 <MvEventPicker events={mvEvents} current={mvCurrent} day={selectedEventId} platform={!eventOnly} onOpen={(id) => pickEvent(id)} onAll={(create) => navigate(`/admin/events${create ? "?new=1" : ""}`)} />
               )}
               {!eventOnly && <ViewAs />}

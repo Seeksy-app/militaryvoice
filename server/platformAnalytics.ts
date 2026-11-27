@@ -71,6 +71,10 @@ export function registerPlatformAnalytics(app: Express, requireAdmin: RequestHan
       if (ad) mrrCents += (Number(a.n) || 0) * ad.cents;
     }
 
+    // Money Stripe actually took in over the window, after refunds (Andrew, 27 Nov: a quarter paid up front,
+    // like Frank's $732, shows here; the monthly figure above spreads it over three months). Read-only.
+    const paidIn = await safe(() => stripePaidIn(Math.floor(Date.parse(since) / 1000)), null);
+
     // Day by day: new accounts, clips made, SmartLink views, episode downloads.
     const series = await safe(async () => {
       const acc = await rows(sql`select left(created_at, 10) d, count(*)::int n from podcaster_profiles where created_at >= ${since} group by 1`);
@@ -91,7 +95,7 @@ export function registerPlatformAnalytics(app: Express, requireAdmin: RequestHan
       days,
       magazineEventId,
       accounts: { total: accounts, new: accountsNew },
-      revenue: { mrrCents, plans, addons: addons.map((a) => ({ addon: String(a.addon), n: Number(a.n) || 0 })) },
+      revenue: { mrrCents, paidInCents: paidIn?.cents ?? null, paidInCount: paidIn?.count ?? 0, plans, addons: addons.map((a) => ({ addon: String(a.addon), n: Number(a.n) || 0 })) },
       postify: { uploads: recordingsNew, clips: clipsNew, episodes: episodesClipped },
       smartlink: { pages: pagesAll, live: pagesLive, views: kind(bioKinds, "view"), clicks: bioKinds.filter((r) => r.kind !== "view").reduce((a, r) => a + (Number(r.n) || 0), 0) },
       hosting: { shows, downloads },
@@ -101,4 +105,25 @@ export function registerPlatformAnalytics(app: Express, requireAdmin: RequestHan
       series,
     };
   }
+}
+
+/** Succeeded charges since `gte` (unix seconds), less refunds, in US cents. Null when Stripe isn't set up. */
+async function stripePaidIn(gte: number): Promise<{ cents: number; count: number } | null> {
+  const key = process.env.STRIPE_SECRET_KEY;
+  if (!key) return null;
+  let cents = 0, count = 0, after = "";
+  for (let page = 0; page < 10; page++) {
+    const q = new URLSearchParams({ "created[gte]": String(gte), limit: "100", ...(after ? { starting_after: after } : {}) });
+    const r = await fetch(`https://api.stripe.com/v1/charges?${q}`, { headers: { authorization: `Bearer ${key}` } });
+    const body = (await r.json().catch(() => ({}))) as any;
+    if (!r.ok) throw new Error(body?.error?.message || `Stripe ${r.status}`);
+    for (const c of body.data ?? []) {
+      if (c.status !== "succeeded" || !c.paid || c.currency !== "usd") continue;
+      const net = (Number(c.amount) || 0) - (Number(c.amount_refunded) || 0);
+      if (net > 0) { cents += net; count++; }
+    }
+    if (!body.has_more || !body.data?.length) break;
+    after = body.data[body.data.length - 1].id;
+  }
+  return { cents, count };
 }
