@@ -417,8 +417,9 @@ export type ActivityEntry = {
   subjectType: string;
   subjectId: number | null;
   aiActionId: number | null;
-  /** Plain words for the line, e.g. "Panel: Building a second career" (built from before/after for older rows). */
-  summary: string;
+  /** Plain words for the line, e.g. "Panel: Building a second career" (built from before/after for older rows). Always
+   *  sent by the server; optional here so screens built before it still type-check. */
+  summary?: string;
 };
 /** GET /api/production/productions/:id/alex → AlexStatus (MV roles): her switches as they stand, for "Her jobs". */
 export type AlexStatus = {
