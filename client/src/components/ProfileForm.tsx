@@ -185,6 +185,10 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
   const [photoNote, setPhotoNote] = useState<string | null>(null);
   const [rawImageSrc, setRawImageSrc] = useState<string | null>(null);
   const [cropOpen, setCropOpen] = useState(false);
+  /** Reframing the photo already saved: it was saved cropped, so more of them can only come from the original. */
+  const [reframing, setReframing] = useState(false);
+  /** The uncropped picture they chose this visit, so Reframe starts from all of it, not from the crop. */
+  const [chosenSrc, setChosenSrc] = useState<string | null>(null);
   const [photoDataUrl, setPhotoDataUrl] = useState<string | null>(null);
   const bypassGuard = useRef(false);
   const nextAfterSave = useRef<"events" | "dashboard">("events");
@@ -203,6 +207,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
       setPhotoFile(null);
       setPhotoPreview(null);
       setPhotoNote(null);
+      setChosenSrc(null);
       return;
     }
     if (!file.type.startsWith("image/")) {
@@ -232,10 +237,14 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
           setPhotoNote(`This one is ${probe.naturalWidth} × ${probe.naturalHeight}. It will do, but it will look soft on the big screen. If you have a bigger original, use that.`);
         }
         setRawImageSrc(src);
+        setChosenSrc(src);
+        setReframing(false);
         setCropOpen(true);
       };
       probe.onerror = () => {
         setRawImageSrc(src);
+        setChosenSrc(src);
+        setReframing(false);
         setCropOpen(true);
       };
       probe.src = src;
@@ -543,39 +552,43 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
                 <div className="flex flex-col gap-1.5">
                   <div className="text-sm font-medium">Your photo {shownPhoto ? "" : <span className="font-normal text-muted-foreground">(you can add it later)</span>}</div>
                   <p className="text-xs text-muted-foreground">
-                    Your face or your show's logo. The bigger the better (1000 × 1000 or more looks sharp on the big screen and in print). You'll frame it in a circle next.
+                    Your face or your show's logo. Head and shoulders looks best. The bigger the better: 1000 × 1000 or more looks sharp on the big screen and in&nbsp;print.
                   </p>
                   <div className="mt-1 flex flex-wrap items-center gap-2">
+                    {shownPhoto && (
+                      <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        className="gap-1.5"
+                        onClick={() => {
+                          // A photo chosen this visit reframes from the whole picture; a saved one from what we kept.
+                          // A saved photo is fetched fresh, so the cached copy (loaded without CORS) can't taint the canvas.
+                          const src = chosenSrc ?? (/^https?:/.test(shownPhoto) ? `${shownPhoto}${shownPhoto.includes("?") ? "&" : "?"}reframe=1` : shownPhoto);
+                          setReframing(!chosenSrc);
+                          setRawImageSrc(src);
+                          setCropOpen(true);
+                        }}
+                        data-testid="button-adjust-crop"
+                      >
+                        <Crop className="h-3.5 w-3.5" /> Reframe
+                      </Button>
+                    )}
                     <Button type="button" variant="outline" size="sm" className="gap-1.5" onClick={() => fileInputRef.current?.click()}>
                       <ImagePlus className="h-3.5 w-3.5" />
                       {shownPhoto ? "Change photo" : "Upload photo"}
                     </Button>
                     {photoFile && (
-                      <>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            if (photoPreview) {
-                              setRawImageSrc(photoPreview);
-                              setCropOpen(true);
-                            }
-                          }}
-                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-primary"
-                          data-testid="button-adjust-crop"
-                        >
-                          <Crop className="h-3 w-3" /> Adjust crop
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => {
-                            handlePhotoChange(null);
-                            if (fileInputRef.current) fileInputRef.current.value = "";
-                          }}
-                          className="flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive"
-                        >
-                          <X className="h-3 w-3" /> Remove
-                        </button>
-                      </>
+                      <button
+                        type="button"
+                        onClick={() => {
+                          handlePhotoChange(null);
+                          if (fileInputRef.current) fileInputRef.current.value = "";
+                        }}
+                        className="flex items-center gap-1 text-xs text-muted-foreground hover:text-destructive"
+                      >
+                        <X className="h-3 w-3" /> Remove
+                      </button>
                     )}
                   </div>
                   {photoError && <p className="text-sm font-medium text-destructive">{photoError}</p>}
@@ -592,6 +605,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
                 <PhotoCropDialog
                   open={cropOpen}
                   imageSrc={rawImageSrc}
+                  note={reframing ? "Want more of you in the circle? Use Change photo and pick the original." : undefined}
                   onCancel={() => {
                     setCropOpen(false);
                     setRawImageSrc(null);
