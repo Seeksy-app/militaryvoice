@@ -216,15 +216,20 @@ function Finished({ recordings, clips, posts, clipCounts }: { recordings: Record
   const sent = posts.filter((p) => p.status !== "failed").length;
   const when = new Date(top.copy.startedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" });
   const title = plainTitle(top.src.title) || "Your episode";
-  // Already in their podcast: open it there; otherwise make it an episode of their first show (a draft to finish there).
+  // Already in their podcast: open it there. Otherwise make it an episode (a draft to finish there) of the show it was
+  // recorded for, else the one their SmartLink names, else their only show. Never the oldest of two or more (Andrew,
+  // 26 Nov: a Next Mile recording was headed for his Veteran Benefits show): when the server can't tell, they choose
+  // on the podcast page.
   const shows = showsQ.data?.shows ?? [];
   const inShow = shows.flatMap((x) => x.episodes ?? []).find((e) => e.recordingId != null && (e.recordingId === top.copy.id || e.recordingId === top.src.id));
   async function toPodcast() {
     if (inShow) { window.location.href = `/host/dashboard/podcast?ep=${inShow.id}`; return; }
-    if (!shows[0]) { window.location.href = "/host/dashboard/podcast"; return; }
+    if (!shows.length) { window.location.href = "/host/dashboard/podcast"; return; }
     setMaking(true);
     try {
-      const e = (await (await apiRequest("POST", `/api/host/hosting/shows/${shows[0].show.id}/episodes`, { recordingId: top.copy.id })).json()) as { id: number };
+      const target = ((await (await apiRequest("GET", `/api/host/recordings/${top.copy.id}/show?src=${top.src.id}`)).json()) as { show: { id: number } | null }).show;
+      if (!target) { window.location.href = "/host/dashboard/podcast"; return; }
+      const e = (await (await apiRequest("POST", `/api/host/hosting/shows/${target.id}/episodes`, { recordingId: top.copy.id })).json()) as { id: number };
       window.location.href = `/host/dashboard/podcast?ep=${e.id}`;
     } catch (err) {
       toast({ title: "Couldn't make the episode", description: (err as Error).message.replace(/^\d+:\s*/, ""), variant: "destructive" });

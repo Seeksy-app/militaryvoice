@@ -6,7 +6,7 @@ import sharp from "sharp";
 import { and, desc, eq, gte, inArray, ne, sql } from "drizzle-orm";
 import { db, storage, schemaIsReady, inTransaction } from "./storage.js";
 import { withCredits } from "./roomKit.js";
-import { showFor } from "./hostShows.js";
+import { recordingShow, showFor } from "./hostShows.js";
 import { fillFooter } from "../shared/footer.js";
 import { hostedSpots, type HostedSpotRow } from "../shared/schema.js";
 import { requireHostSession, getSessionEmail } from "./session.js";
@@ -729,7 +729,8 @@ export async function startEpisodeFromRecording(email: string, rec: { id: number
   if (have.length) return "had";
   const e = email.trim().toLowerCase();
   const profile = await storage.getProfileByEmail(e).catch(() => undefined);
-  const pick = await showFor(e, null, ...names, profile?.podcastName);
+  // What's known for sure first (the show it was recorded for, the SmartLink's show, their only show), then the names (26 Nov).
+  const pick = (await recordingShow(e, [rec.id])) ?? (await showFor(e, null, ...names, profile?.podcastName));
   const [show] = pick ? await db.select().from(hostedShows).where(eq(hostedShows.id, pick.id)).limit(1) : [];
   if (!show) return "no-show";
   const eps = await episodesOf(show.id);

@@ -195,6 +195,7 @@ import { registerGuests, guestByToken, markGuestJoined, publicGuestsFor } from "
 import { registerGuestInvites, takeAnsweredInvite } from "./guestInvites.js";
 import { registerGuestBrief } from "./guestBrief.js";
 import { registerLive } from "./live/routes.js";
+import { recordingShow } from "./hostShows.js";
 import { registerCaptures, onCaptureWebhook } from "./captures.js";
 import { registerStreamIn, onStreamInWebhook, streamInSkipsClips } from "./streamIn.js";
 import { registerIngest } from "./ingestEngine.js";
@@ -3598,6 +3599,17 @@ export function registerRoutes(app: Express): void {
   });
 
   /** The file itself, for a <video> (thumbnails, playing it in the page): a redirect to a fresh signed link. */
+  /** Which of their shows a recording publishes to (?src=<the recording it was cleaned from>): { show } or { show: null }
+   *  when it can't tell (2 or more shows, none named), so the Library sends them to choose instead of filing it under the oldest. */
+  app.get("/api/host/recordings/:id/show", requireHostSession, async (req, res) => {
+    noStore(res);
+    const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
+    const ids = [Number(req.params.id), Number(req.query.src) || 0];
+    for (const id of ids.filter((x) => x > 0)) { const r = await storage.getRecording(id); if (!r || r.email !== email) return res.status(404).json({ message: "We couldn't find that recording." }); }
+    const show = await recordingShow(email, ids);
+    res.json({ show: show ? { id: show.id, title: show.title } : null });
+  });
+
   app.get("/api/host/recordings/:id/video", requireHostSession, async (req, res) => {
     noStore(res);
     const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
