@@ -12,7 +12,7 @@ import type { Express, RequestHandler } from "express";
 import { sql } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { PLANS, ADDONS } from "../shared/tokens.js";
-import { FIN_START, monthOf, classifyCharge, expenseCategory, vendorKey, isOwnerText, matchHand, type Kind, type FinRow, type HandLine, type SortKind } from "../shared/finance.js";
+import { FIN_START, maskNumbers, monthOf, classifyCharge, expenseCategory, vendorKey, isOwnerText, matchHand, type Kind, type FinRow, type HandLine, type SortKind } from "../shared/finance.js";
 
 const SORT_KEY = "finance_sort";
 
@@ -205,6 +205,8 @@ async function build() {
   });
 
   out.sort((a, b) => a.date.localeCompare(b.date));
+  // Payers sometimes type a card number into the description (PM, 27 Nov): mask it before anything is sent.
+  for (const r of out) { r.who = maskNumbers(r.who); r.note = maskNumbers(r.note); }
   return { months, rows: out, recurring: { mrrCents, plans, addons: addonRows }, sources, errors, at: new Date().toISOString() };
 }
 

@@ -94,3 +94,6 @@ export function periodMonths(kind: "month" | "quarter" | "ytd", month: string): 
   const last = kind === "quarter" ? first + 2 : m;
   return Array.from({ length: last - first + 1 }, (_, i) => `${y}-${String(first + i).padStart(2, "0")}`);
 }
+
+/** A card or account number typed into a payment's note or name never leaves the server: "•••• 0222". */
+export const maskNumbers = (s: string) => s.replace(/\d(?:[ -]?\d){11,}/g, (m) => `•••• ${m.replace(/\D/g, "").slice(-4)}`);
