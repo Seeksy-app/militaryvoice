@@ -5,7 +5,7 @@ import { and, desc, eq, inArray, lt } from "drizzle-orm";
 import { db, schemaIsReady } from "../storage.js";
 import { approvals, auditLog, liveOrgBrands, organizations, productionMembers, productions, stages, venues, type ApprovalRow, type OrganizationRow, type ProductionMemberRow, type ProductionRow, type StageRow, type VenueRow } from "../../shared/schema.js";
 import {
-  CLIENT_CONTENT_SUBJECTS, CLIENT_ROLES, MEMBER_ROLES, PRODUCTION_STATUSES, LIVE_TEST_CLIENT, LIVE_TEST_CREW,
+  ALEX_EMAIL, ALEX_JOBS, ALEX_NAME, CLIENT_CONTENT_SUBJECTS, CLIENT_ROLES, INVITABLE_ROLES, MEMBER_ROLES, type AlexJob, PRODUCTION_STATUSES, LIVE_TEST_CLIENT, LIVE_TEST_CREW,
   type Approval, type AuditEntry, type LiveOrg, type LiveRole, type Member, type Production, type Stage, type Venue,
 } from "../../shared/live.js";
 import { scriptKeyOk } from "../adminKey.js";
@@ -64,10 +64,20 @@ async function countsFor(ids: number[]): Promise<(id: number) => { stages: numbe
   const mb = await db.select({ p: productionMembers.productionId, s: productionMembers.status }).from(productionMembers).where(inArray(productionMembers.productionId, ids));
   return (id) => ({ stages: st.filter((x) => x.p === id).length, members: mb.filter((x) => x.p === id && x.s !== "removed").length });
 }
+const jobsOf = (raw: string): AlexJob[] => { try { const a = JSON.parse(raw || "[]"); return Array.isArray(a) ? a.filter((x): x is AlexJob => (ALEX_JOBS as readonly string[]).includes(String(x))) : []; } catch { return []; } };
 const memberView = (m: ProductionMemberRow, org: LiveOrg | null): Member => ({
   id: m.id, productionId: m.productionId, email: m.email, name: m.name, org, role: m.role as MemberRole,
   status: m.status as Member["status"], invitedBy: m.invitedBy, createdAt: m.createdAt, inviteSent: false,
+  ai: m.role === "alex", jobs: m.role === "alex" ? jobsOf(m.jobs) : [],
 });
+
+/** Alex's row on a production (made with it; idempotent): active, every job, MV's own (no org). */
+export async function ensureAlex(productionId: number, by: string): Promise<void> {
+  const had = await memberRow(productionId, ALEX_EMAIL);
+  if (had) return;
+  const [m] = await db.insert(productionMembers).values({ productionId, email: ALEX_EMAIL, name: ALEX_NAME, orgId: 0, role: "alex", status: "active", invitedBy: norm(by), createdAt: now(), joinedAt: now(), jobs: JSON.stringify(ALEX_JOBS) }).returning();
+  await audit(productionId, by, "member.added", "member", m.id, null, m);
+}
 const venueView = (v: VenueRow): Venue => ({ id: v.id, name: v.name, address: v.address, timezone: v.timezone, power: v.power, network: v.network, createdAt: v.createdAt });
 const stageView = (s: StageRow, v: VenueRow | undefined): Stage => ({ id: s.id, productionId: s.productionId, name: s.name, venue: v ? { id: v.id, name: v.name } : null, studioId: s.studioId || null, ingestProfile: s.ingestProfile, createdAt: s.createdAt });
 function approvalView(a: ApprovalRow, who: LiveWho, role: LiveRole): Approval {
@@ -156,6 +166,7 @@ export async function createProduction(who: LiveWho, b: Record<string, unknown>)
   const orgId = nb?.name ? (await makeOrg(nb.name, "client", who.email, nb.logoUrl, nb.brandColor)).id : await orgOk(b.orgId, "client");
   const [p] = await db.insert(productions).values({ ...f, name: f.name!, orgId, createdBy: who.email, createdAt: now(), updatedAt: now() }).returning();
   await audit(p.id, who.email, "production.created", "production", p.id, null, p);
+  await ensureAlex(p.id, who.email);
   return getProduction(p.id, "mv_admin");
 }
 
@@ -190,7 +201,7 @@ export async function listMembers(who: LiveWho, id: number, role: LiveRole): Pro
 
 /** Who may give which role: MV Admin and Coordinator any; Client Admin client roles in their org; Crew Lead operators in theirs. */
 async function inviteScope(who: LiveWho, id: number, role: LiveRole): Promise<{ roles: MemberRole[]; orgId: number | null }> {
-  if (role === "mv_admin" || role === "mv_coordinator") return { roles: [...MEMBER_ROLES], orgId: null };
+  if (role === "mv_admin" || role === "mv_coordinator") return { roles: [...INVITABLE_ROLES], orgId: null };
   const me = await memberRow(id, who.email);
   if (role === "client_admin" && me?.orgId) return { roles: CLIENT_ROLES as MemberRole[], orgId: me.orgId };
   if (role === "crew_lead" && me?.orgId) return { roles: ["crew_operator"], orgId: me.orgId };
@@ -201,6 +212,7 @@ export async function inviteMember(who: LiveWho, id: number, role: LiveRole, b: 
   const scope = await inviteScope(who, id, role);
   const email = norm(b.email);
   if (!validEmail(email)) throw new Bad(400, "Enter a valid email.");
+  if (email === ALEX_EMAIL) throw new Bad(400, "Alex is added with the production.");
   const newRole = asRole(b.role);
   if (!newRole || !scope.roles.includes(newRole)) throw new Bad(403, "You can't give that role.");
   let orgId = scope.orgId ?? 0;
@@ -222,6 +234,21 @@ export async function patchMember(who: LiveWho, id: number, role: LiveRole, memb
   const [m] = await db.select().from(productionMembers).where(and(eq(productionMembers.id, memberId), eq(productionMembers.productionId, id))).limit(1);
   if (!m) throw new Bad(404, "We couldn't find that person on this production.");
   if (m.email === who.email) throw new Bad(403, "Ask someone else to change your own role.");
+  // Alex's row: MV Admin and Coordinator change her jobs or take her off and back on; her role and name stay.
+  if (m.role === "alex") {
+    if (role !== "mv_admin" && role !== "mv_coordinator") throw new Bad(403, "You can't change Alex's jobs.");
+    if (b.role !== undefined || b.name !== undefined) throw new Bad(400, "Alex's role and name don't change.");
+    const set: Partial<ProductionMemberRow> = {};
+    if (b.status !== undefined) { if (b.status !== "active" && b.status !== "removed") throw new Bad(400, "Status is active or removed."); set.status = String(b.status); }
+    if (b.jobs !== undefined) {
+      if (!Array.isArray(b.jobs) || b.jobs.some((x) => !(ALEX_JOBS as readonly string[]).includes(String(x)))) throw new Bad(400, "Those aren't Alex's jobs.");
+      set.jobs = JSON.stringify(Array.from(new Set(b.jobs.map(String))));
+    }
+    if (!Object.keys(set).length) return memberView(m, null);
+    const [after] = await db.update(productionMembers).set(set).where(eq(productionMembers.id, m.id)).returning();
+    await audit(id, who.email, "member.updated", "member", m.id, m, after);
+    return memberView(after, null);
+  }
   const scope = await inviteScope(who, id, role);
   if (!scope.roles.includes(m.role as MemberRole) || (scope.orgId !== null && m.orgId !== scope.orgId)) throw new Bad(403, "You can't change that person.");
   const set: Partial<ProductionMemberRow> = {};
@@ -244,6 +271,7 @@ async function mvAnywhere(who: LiveWho): Promise<boolean> {
 /** For later phases (and the fixtures): ask for an approval. The AI and MV never decide; the client does. */
 export async function requestApproval(productionId: number, a: { subjectType: string; subjectId: number; version?: number; summary: string; requestedBy: string; approverRole: LiveRole }): Promise<ApprovalRow> {
   if ((CLIENT_CONTENT_SUBJECTS as readonly string[]).includes(a.subjectType) && !isClient(a.approverRole)) throw new Bad(400, "The client approves content.");
+  if (a.approverRole === "alex") throw new Bad(400, "Alex doesn't sign off approvals.");
   const [row] = await db.insert(approvals).values({ productionId, subjectType: str(a.subjectType, 40), subjectId: a.subjectId, version: a.version ?? 1, summary: str(a.summary, 200), requestedBy: norm(a.requestedBy), approverRole: a.approverRole, state: "pending", createdAt: now() }).returning();
   await audit(productionId, a.requestedBy, "approval.requested", a.subjectType, a.subjectId, null, row);
   return row;
@@ -371,7 +399,7 @@ export function registerLive(app: Express): void {
     const rows = await db.select().from(auditLog)
       .where(before ? and(eq(auditLog.productionId, L(req).productionId!), lt(auditLog.id, before)) : eq(auditLog.productionId, L(req).productionId!))
       .orderBy(desc(auditLog.id)).limit(200);
-    return rows.map((r): AuditEntry => ({ id: r.id, productionId: r.productionId || null, who: r.who, what: r.what, subjectType: r.subjectType, subjectId: r.subjectId || null, before: parse(r.before), after: parse(r.after), at: r.at }));
+    return rows.map((r): AuditEntry => ({ id: r.id, productionId: r.productionId || null, who: r.who, what: r.what, subjectType: r.subjectType, subjectId: r.subjectId || null, before: parse(r.before), after: parse(r.after), at: r.at, actor: (r.actor === "alex" || r.actor === "script" ? r.actor : "person"), aiActionId: r.aiActionId || null }));
   })()));
 }
 

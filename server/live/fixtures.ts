@@ -7,7 +7,7 @@ import { db, schemaIsReady } from "../storage.js";
 import { approvals, organizations, productionMembers, productions } from "../../shared/schema.js";
 import { LIVE_TEST_CLIENT, LIVE_TEST_CREW } from "../../shared/live.js";
 import { audit, now } from "./access.js";
-import { requestApproval } from "./routes.js";
+import { ensureAlex, requestApproval } from "./routes.js";
 
 export const FIXTURE_PRODUCTION = "Test production (LIVE phase 1)";
 export const FIXTURE_OTHER = "Test production B (nobody's)";
@@ -42,6 +42,7 @@ export async function seedLiveFixtures(by: string): Promise<{ production: number
   const other = await production(FIXTURE_OTHER, 0, by);
   await member(p, LIVE_TEST_CLIENT, "client_admin", clientOrg, by);
   await member(p, LIVE_TEST_CREW, "crew_lead", vendorOrg, by);
+  await ensureAlex(p, by); // every production has Alex on it (26 Nov)
   // One pending approval for the client, so the approve path can be tried.
   const [has] = await db.select({ id: approvals.id }).from(approvals).where(eq(approvals.productionId, p)).limit(1);
   if (!has) await requestApproval(p, { subjectType: "run_of_show", subjectId: 0, summary: "Run of show v1 (test)", requestedBy: by, approverRole: "client_admin" });

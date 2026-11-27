@@ -12,10 +12,12 @@
  */
 
 /** Roles, held per production. mv_admin is never stored: it's what a platform admin is on every production. */
-export const LIVE_ROLES = ["mv_admin", "mv_producer", "mv_coordinator", "mv_editor", "crew_lead", "crew_operator", "client_admin", "client_reviewer", "client_viewer"] as const;
+export const LIVE_ROLES = ["mv_admin", "mv_producer", "mv_coordinator", "mv_editor", "crew_lead", "crew_operator", "client_admin", "client_reviewer", "client_viewer", "alex"] as const;
 export type LiveRole = (typeof LIVE_ROLES)[number];
-/** The roles a production_members row can hold. */
+/** The roles a production_members row can hold (alex included: her row is made with the production). */
 export const MEMBER_ROLES = LIVE_ROLES.filter((r) => r !== "mv_admin") as Exclude<LiveRole, "mv_admin">[];
+/** The roles a person can be invited to: every member role but Alex's. Use this for role pickers. */
+export const INVITABLE_ROLES = MEMBER_ROLES.filter((r) => r !== "alex") as Exclude<LiveRole, "mv_admin" | "alex">[];
 export const MV_ROLES: LiveRole[] = ["mv_admin", "mv_producer", "mv_coordinator", "mv_editor"];
 export const CREW_ROLES: LiveRole[] = ["crew_lead", "crew_operator"];
 export const CLIENT_ROLES: LiveRole[] = ["client_admin", "client_reviewer", "client_viewer"];
@@ -23,6 +25,22 @@ export const CLIENT_ROLES: LiveRole[] = ["client_admin", "client_reviewer", "cli
 export const ROLE_LABEL: Record<LiveRole, string> = {
   mv_admin: "MV Admin", mv_producer: "MV Producer", mv_coordinator: "MV Coordinator", mv_editor: "MV Editor",
   crew_lead: "Crew Lead", crew_operator: "Crew Operator", client_admin: "Client Admin", client_reviewer: "Client Reviewer", client_viewer: "Client Viewer",
+  alex: "Alex (AI)",
+};
+
+/**
+ * Alex, the AI team member (Andrew, 26 Nov: "Alex AI is just part of the team and responsible for certain parts").
+ * Every production gets her row when it's made, active, with her jobs on it. She never signs in, never decides an
+ * approval and never invites anyone. MV Admin and MV Coordinator can change her jobs or take her off (status removed)
+ * and back on. What she does is audited with actor "alex" and the ai_actions row behind it.
+ */
+export const ALEX_EMAIL = "alex@militaryvoices.ai";
+export const ALEX_NAME = "Alex";
+export const ALEX_JOBS = ["run_of_show", "emails", "confirmations", "intros", "media", "headshots"] as const;
+export type AlexJob = (typeof ALEX_JOBS)[number];
+export const ALEX_JOB_LABEL: Record<AlexJob, string> = {
+  run_of_show: "Run of show", emails: "Emails", confirmations: "Confirmations and reminders",
+  intros: "Intros and voiceovers", media: "Guest and host media", headshots: "Headshots and bios",
 };
 
 export const PRODUCTION_STATUSES = ["scoping", "planning", "rehearsal", "live", "post", "delivered", "closed"] as const;
@@ -96,11 +114,18 @@ export type Member = {
   createdAt: string;
   /** Invites are stored only in phase 1: no email goes out. Always false until invites are switched on. */
   inviteSent: boolean;
+  /** True for Alex's row (role "alex"): no role picker, no remove for anyone but MV Admin and Coordinator. Always sent. */
+  ai?: boolean;
+  /** Alex's jobs (keys of ALEX_JOB_LABEL); [] for people. Always sent. */
+  jobs?: AlexJob[];
 };
 /** POST /api/production/productions/:id/members → Member (201). 409 when that email is already on the production. */
+/** role "alex" is refused (403): Alex comes with the production. */
 export type MemberInput = { email: string; name?: string; role: Exclude<LiveRole, "mv_admin">; orgId?: number | null; newOrg?: { name: string; kind: "client" | "vendor" } };
 /** PATCH /api/production/productions/:id/members/:memberId → Member. Nobody changes their own row. */
-export type MemberPatch = { role?: Exclude<LiveRole, "mv_admin">; status?: "active" | "removed"; name?: string };
+export type MemberPatch = { role?: Exclude<LiveRole, "mv_admin">; status?: "active" | "removed"; name?: string;
+  /** Alex's row only (MV Admin, MV Coordinator): her jobs. Her role and name don't change. */
+  jobs?: AlexJob[] };
 
 /** GET/POST /api/production/venues → Venue[] / Venue. Venues are shared across productions (MV roles and admins). */
 export type Venue = { id: number; name: string; address: string; timezone: string; power: string; network: string; createdAt: string };
@@ -135,7 +160,10 @@ export const CLIENT_CONTENT_SUBJECTS = ["run_of_show", "session", "speaker", "sc
 export type ApprovalDecision = { decision: "approved" | "changes_requested"; note?: string };
 
 /** GET /api/production/productions/:id/audit → AuditEntry[] (newest first, 200 max; ?before=<id> for more). MV Admin, Producer, Coordinator. */
-export type AuditEntry = { id: number; productionId: number | null; who: string; what: string; subjectType: string; subjectId: number | null; before: unknown; after: unknown; at: string };
+export type AuditEntry = { id: number; productionId: number | null; who: string; what: string; subjectType: string; subjectId: number | null; before: unknown; after: unknown; at: string;
+  /** "person" (who is their email), "alex" (who is ALEX_EMAIL; aiActionId says which ai_actions row), or "script" (our own scripts with the admin key). */
+  actor?: "person" | "alex" | "script"; // always sent
+  aiActionId?: number | null };
 
 /** GET /api/production/me → who I am in LIVE: whether the gate lets me in, and my productions count. */
 export type LiveMe = { email: string; admin: boolean; open: boolean; productions: number };

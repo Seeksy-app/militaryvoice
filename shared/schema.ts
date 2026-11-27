@@ -3704,6 +3704,8 @@ export const productionMembers = pgTable("production_members", {
   invitedBy: text("invited_by").notNull().default(""),
   createdAt: text("created_at").notNull(),
   joinedAt: text("joined_at").notNull().default(""),
+  /** Alex's row (role "alex"): her jobs, JSON string[] (ALEX_JOBS). "" for people. */
+  jobs: text("jobs").notNull().default(""),
 }, (t) => [uniqueIndex("production_members_prod_email_idx").on(t.productionId, t.email), index("production_members_email_idx").on(t.email)]);
 export type ProductionMemberRow = typeof productionMembers.$inferSelect;
 
@@ -3795,6 +3797,10 @@ export const auditLog = pgTable("audit_log", {
   before: text("before").notNull().default(""),
   after: text("after").notNull().default(""),
   at: text("at").notNull(),
+  /** person | alex | script (26 Nov). */
+  actor: text("actor").notNull().default("person"),
+  /** For actor alex: the ai_actions row behind it; 0 otherwise. */
+  aiActionId: integer("ai_action_id").notNull().default(0),
 }, (t) => [index("audit_log_production_idx").on(t.productionId, t.id)]);
 export type AuditLogRow = typeof auditLog.$inferSelect;
 

@@ -6,7 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { db, schemaIsReady, storage } from "../storage.js";
 import { getAdminEmail, getSessionEmail } from "../session.js";
 import { auditLog, productionMembers, productions } from "../../shared/schema.js";
-import { CLIENT_ROLES, CREW_ROLES, LIVE_TEST_CLIENT, LIVE_TEST_CREW, MV_ROLES, type LiveRole, type ProductionCan } from "../../shared/live.js";
+import { ALEX_EMAIL, CLIENT_ROLES, CREW_ROLES, LIVE_TEST_CLIENT, LIVE_TEST_CREW, MV_ROLES, type LiveRole, type ProductionCan } from "../../shared/live.js";
 
 export const now = () => new Date().toISOString();
 export const norm = (e: unknown) => String(e ?? "").trim().toLowerCase();
@@ -101,8 +101,11 @@ export function requireProductionRole(...roles: LiveRole[]): RequestHandler[] {
   }];
 }
 
-/** Every write adds one row. before/after are stored as JSON. */
-export async function audit(productionId: number, who: string, what: string, subjectType: string, subjectId: number, before: unknown, after: unknown): Promise<void> {
+/** Every write adds one row. before/after are stored as JSON. The actor comes from who: Alex (ALEX_EMAIL, with the
+ *  ai_actions row behind it), our scripts ("script"), else a person. */
+export async function audit(productionId: number, who: string, what: string, subjectType: string, subjectId: number, before: unknown, after: unknown, aiActionId = 0): Promise<void> {
   const j = (v: unknown) => (v === undefined || v === null ? "" : JSON.stringify(v).slice(0, 20_000));
-  await db.insert(auditLog).values({ productionId, who: norm(who), what, subjectType, subjectId, before: j(before), after: j(after), at: now() });
+  const w = norm(who);
+  const actor = w === ALEX_EMAIL ? "alex" : w === "script" ? "script" : "person";
+  await db.insert(auditLog).values({ productionId, who: w, what, subjectType, subjectId, before: j(before), after: j(after), at: now(), actor, aiActionId: actor === "alex" ? aiActionId : 0 });
 }
