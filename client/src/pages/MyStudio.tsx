@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { TIP_TEXT, useLookCheck, type LookTip } from "@/components/room/lookCheck";
 import { blurNote, readBlur, saveBlur, useBlur, type BlurState } from "@/components/room/blur";
-import { useHideHelpOnPhone } from "@/lib/helpPlacement";
+import { useCompactHelp, useHideHelpOnPhone } from "@/lib/helpPlacement";
 import { PRACTICE_NAME, practice, usePractice } from "@/components/room/practiceGuest";
 import { startScreenShare } from "@/components/room/screenShare";
 import { BrandMark } from "@/components/BrandMark";
@@ -474,6 +474,8 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
   const state = useConnectionState();
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled, cameraTrack } = useLocalParticipant();
   const now = useNow();
+  // In the room the help bubble is just the face, so it stays off Invite a guest's Copy button (PM, 27 Nov).
+  useCompactHelp();
   // Blur my background (27 Nov): set on the camera check, changed in Settings, and run on the camera as it's sent.
   const [blurOn, setBlurOnState] = useState(readBlur);
   const setBlurOn = (on: boolean) => { setBlurOnState(on); saveBlur(on); };

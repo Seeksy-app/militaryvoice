@@ -1,4 +1,4 @@
-import { useHelpHiddenOnPhone } from "@/lib/helpPlacement";
+import { useHelpCompact, useHelpHiddenOnPhone } from "@/lib/helpPlacement";
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { AnswerActions, AnswerBody, type HelpAction } from "@/components/AlexAnswer";
@@ -44,9 +44,11 @@ function HelpChat_() {
   // Off at phone width while a screen asks (display: contents keeps the page's layout as it was).
   const phoneOff = useHelpHiddenOnPhone();
   const wrap = phoneOff ? "hidden lg:contents" : "contents";
+  // Just the face while a screen asks (the studio room: the pill sat on Invite a guest's Copy button).
+  const askedCompact = useHelpCompact();
   if (g?.enabled) {
     if (HIDDEN_ON.some((p) => location.startsWith(p))) return null;
-    return <div className={wrap}><LoriGuide g={g} compact={/^\/host\/dashboard\/(postify|page)\b/.test(location) || location.startsWith("/black-friday")} /></div>;
+    return <div className={wrap}><LoriGuide g={g} compact={askedCompact || /^\/host\/dashboard\/(postify|page)\b/.test(location) || location.startsWith("/black-friday")} /></div>;
   }
   return <div className={wrap}><AlexChat /></div>;
 }
@@ -57,7 +59,8 @@ function AlexChat() {
   const inApp = location.startsWith("/host/dashboard");
   // On the editing screens (Pōstify, the SmartLink builder) just Alex's face, on a computer too: the
   // full "Ask Alex" pill sat on the timeline and the phone preview (8 Oct).
-  const compact = /^\/host\/dashboard\/(postify|page)\b/.test(location) || location.startsWith("/black-friday");
+  const askedCompact = useHelpCompact();
+  const compact = askedCompact || /^\/host\/dashboard\/(postify|page)\b/.test(location) || location.startsWith("/black-friday");
   const [open, setOpen] = useState(false);
   const [msgs, setMsgs] = useState<Msg[]>([OPENER]);
   const [draft, setDraft] = useState("");
