@@ -3635,6 +3635,27 @@ export function registerRoutes(app: Express): void {
     res.json({ ok: true });
   });
 
+  /**
+   * Admin (27 Nov 2026, Andrew: a "Misc/Test" folder): put some of one account's recordings or copies into a folder of
+   * theirs, made if it isn't there (same name, any case). Only that account's own recordings; nothing is deleted or sent.
+   * { email, name, recordingIds }. A copy filed apart from its source shows in that folder on its own (RecordingsScreen).
+   */
+  app.post("/api/admin/library-folder", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost || (req as any).eventAdmin) return res.status(403).json({ message: "Admins only." });
+    const email = String(req.body?.email ?? "").trim().toLowerCase();
+    const name = folderName(req.body?.name);
+    const ids = (Array.isArray(req.body?.recordingIds) ? req.body.recordingIds : []).map(Number).filter((n: number) => Number.isInteger(n) && n > 0).slice(0, 100);
+    if (!email || !name || !ids.length) return res.status(400).json({ message: "Give email, name and recordingIds." });
+    const own = new Set((await storage.listRecordingsByEmail(email)).map((r) => r.id));
+    const notTheirs = ids.filter((id: number) => !own.has(id));
+    if (notTheirs.length) return res.status(400).json({ message: `Not this account's: ${notTheirs.join(", ")}.` });
+    const mine = await storage.listFolders(email);
+    const folder = mine.find((f) => f.name.toLowerCase() === name.toLowerCase()) ?? (mine.length >= 50 ? null : await storage.createFolder(email, name));
+    if (!folder) return res.status(400).json({ message: "That account has 50 folders already." });
+    await storage.fileRecording(email, ids, folder.id);
+    res.json({ folderId: folder.id, name: folder.name, filed: ids.length });
+  });
+
   // Rename an episode; its clean and edited copies follow, keeping their "(clean)" / "(edited)".
   app.post("/api/host/recordings/:id/title", requireHostSession, async (req, res) => {
     const email = (getSessionEmail(req) ?? "").trim().toLowerCase();
