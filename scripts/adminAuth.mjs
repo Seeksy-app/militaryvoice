@@ -6,9 +6,21 @@
 // only place a script gets its credential. Neither value is ever printed.
 import "dotenv/config";
 import postgres from "postgres";
+import { readFileSync } from "node:fs";
+import { homedir } from "node:os";
+import { join } from "node:path";
+
+// Where there's no .env (the Alex VPS), the key lives in ~/.mv-script-key (mode 600), like ~/.mv-admin-key.
+function keyFile() {
+  try {
+    return readFileSync(join(homedir(), ".mv-script-key"), "utf8").trim();
+  } catch {
+    return "";
+  }
+}
 
 async function load() {
-  const key = (process.env.ADMIN_SCRIPT_KEY ?? "").trim();
+  const key = (process.env.ADMIN_SCRIPT_KEY ?? "").trim() || keyFile();
   if (key.length >= 32) return { "x-admin-script-key": key };
   const url = process.env.POSTGRES_URL || process.env.DATABASE_URL;
   if (!url) throw new Error("No ADMIN_SCRIPT_KEY in .env, and no database URL for the old password.");
