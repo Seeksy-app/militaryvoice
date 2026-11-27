@@ -55,7 +55,10 @@ export default function Crew() {
         <>
           {assignable.length > 0 && <Invite key={current.id} productionId={current.id} roles={assignable} asMv={side === "mv"} />}
           <Card testId="live-people">
-            {groups.map((g, i) => {
+            {/* Never "No one yet" before the list has arrived (PM, 27 Nov). */}
+            {members.isLoading ? <p className="py-1 text-[13.5px]" style={{ color: C.muted }} data-testid="live-people-loading">Loading…</p>
+              : members.isError ? <p className="py-1 text-[13.5px]" style={{ color: C.muted }}>Couldn't load the people just now. Try again in a moment.</p>
+              : groups.map((g, i) => {
               const list = rows.filter((m) => sideOf(m.role) === g.side);
               return (
                 <div key={g.side} className={i ? "mt-3" : ""} data-testid={`live-group-${g.side}`}>

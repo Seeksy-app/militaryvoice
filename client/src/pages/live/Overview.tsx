@@ -50,11 +50,14 @@ export default function Overview() {
           <Row label="Stage of work">{STATUS_LABEL[current.status]}</Row>
           <Row label="Dates">{fmtRange(current.startsOn, current.endsOn)}</Row>
           {side !== "crew" && <Row label="Client">{current.org?.name ?? "Not set"}</Row>}
-          <Row label="Stages">{stages.length ? stages.map((s) => s.name + (s.venue ? `, ${s.venue.name}` : "")).join(" · ") : "None yet"}</Row>
+          <Row label="Stages">{stageQ.isLoading ? "Loading…" : stages.length ? stages.map((s) => s.name + (s.venue ? `, ${s.venue.name}` : "")).join(" · ") : "None yet"}</Row>
         </Card>
 
         <Card title={side === "crew" ? "Your crew" : "People"} action={<LinkBtn small href="/crew">{assignable(current).length ? "Manage" : "Open"}</LinkBtn>} testId="live-card-people">
-          {side === "crew" ? (
+          {/* Never "None yet" before the list has arrived (PM, 27 Nov). */}
+          {members.isLoading || members.isError ? (
+            <p className="text-[13.5px]" style={{ color: C.muted }}>{members.isLoading ? "Loading…" : "Couldn't load the people just now."}</p>
+          ) : side === "crew" ? (
             <PeopleRows rows={bySide("crew")} />
           ) : (
             <>
