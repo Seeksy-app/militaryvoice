@@ -195,7 +195,7 @@ import { registerReview } from "./review.js";
 import { registerSponsorFinder } from "./sponsorFinder.js";
 import { registerPodcastStats } from "./podcastStats.js";
 import { registerRadioLibrary, claimRadioShowCut } from "./radioLibrary.js";
-import { registerHosting, publishShowDrafts, keepUploadedArt, showEpisodesBySlug, startEpisodeFromRecording, listHostEpisodes, claimEpisodeAudio, claimEpisodeBookends, claimEpisodeStill, claimEpisodeVideo, podcastYouTubeAt } from "./hosting.js";
+import { registerHosting, publishShowDrafts, keepUploadedArt, showEpisodesBySlug, useRecordingForDraft, startEpisodeFromRecording, listHostEpisodes, claimEpisodeAudio, claimEpisodeBookends, claimEpisodeStill, claimEpisodeVideo, podcastYouTubeAt } from "./hosting.js";
 import { decideAdvance } from "../shared/showClock.js";
 import type { StageThanks } from "../shared/stageMeta.js";
 import { registerBioPage, registerBioAgent, claimLivingSqueeze, subscribersFor, publishedBioUrl } from "./bioPage.js";
@@ -8494,6 +8494,15 @@ export function registerRoutes(app: Express): void {
     const out = await showEpisodesBySlug(String(req.params.slug));
     if (!out) return res.status(404).json({ message: "No such show." });
     res.json(out);
+  });
+
+  // Admin: a draft episode takes a newer Library recording of the show owner's (27 Nov 2026). Body { recordingId }. Nothing is published.
+  app.post("/api/admin/hosted-episodes/:id/use-recording", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost || (req as any).eventAdmin) return res.status(403).json({ message: "Admins only." });
+    const recordingId = Number(req.body?.recordingId);
+    if (!Number.isInteger(recordingId) || recordingId <= 0) return res.status(400).json({ message: "recordingId?" });
+    try { res.json(await useRecordingForDraft(Number(req.params.id), recordingId)); }
+    catch (err) { res.status((err as { status?: number }).status ?? 500).json({ message: (err as Error).message }); }
   });
 
   // Admin: an older uploaded episode picture kept under the -own- name, so listener pages still show it (27 Nov 2026).

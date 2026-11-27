@@ -1045,6 +1045,29 @@ export async function showEpisodesBySlug(slug: string) {
 }
 
 /**
+ * Admin (27 Nov 2026): a DRAFT episode takes another of the show owner's Library recordings (a newer edit) as its audio and
+ * video. Its audio is made again from it by the worker, as for any episode from the Library; nothing is published, and the
+ * recording it had is kept (swap back with its id). Refuses a published episode, or a recording that isn't theirs or ready.
+ */
+export async function useRecordingForDraft(id: number, recordingId: number): Promise<{ episodeId: number; from: number | null; to: number; durationSec: number }> {
+  const fail = (status: number, message: string) => Object.assign(new Error(message), { status });
+  const [e] = await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.id, id)).limit(1);
+  if (!e) throw fail(404, "No such episode.");
+  if (e.status !== "draft") throw fail(409, "That episode is published. Unpublish it first.");
+  const [show] = await db.select().from(hostedShows).where(eq(hostedShows.id, e.showId)).limit(1);
+  const rec = await storage.getRecording(recordingId).catch(() => undefined);
+  if (!show || !rec || rec.email.trim().toLowerCase() !== show.email.trim().toLowerCase()) throw fail(404, "That recording isn't in the show owner's Library.");
+  if (rec.status !== "Ready" || !rec.url) throw fail(409, "That recording isn't ready yet.");
+  await db.update(hostedEpisodes).set({
+    recordingId: rec.id, audioKey: "", audioUrl: "", mime: "audio/mpeg", sizeBytes: 0, durationSec: Math.round(rec.durationSec || 0),
+    audioJob: "queued", audioJobAt: now(), servedSpots: "", bookendJob: "", bookendJobAt: "",
+  }).where(eq(hostedEpisodes.id, e.id));
+  // Ask my show learns it again from the new audio.
+  await db.delete(showTranscripts).where(and(eq(showTranscripts.email, show.email), eq(showTranscripts.episodeKey, `hosted:${e.id}`))).catch(() => undefined);
+  return { episodeId: e.id, from: e.recordingId, to: rec.id, durationSec: Math.round(rec.durationSec || 0) };
+}
+
+/**
  * Admin: an older picture the podcaster uploaded themselves (…episode-<id>-<time>.jpg, from before -own-), saved again
  * under the -own- name so listener pages keep showing it. The same image; refuses frames (-still-) and anything else.
  */
