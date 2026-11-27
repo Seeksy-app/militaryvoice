@@ -1385,7 +1385,9 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
     let stop = false;
     const tick = async () => {
       try {
-        const r = await adminSend("POST", "/api/admin/studio/auto-tick", { stageSpeaking: speakingRef.current });
+        // Per studio (Engineering, 27 Nov): a LIVE stage studio ticks its own run of show; Radio and the Marathon studio
+        // get the same studio the server picked before.
+        const r = await adminSend("POST", "/api/admin/studio/auto-tick", { stageSpeaking: speakingRef.current, studioId, eventId });
         const j = (await r.json()) as { action: string; why?: string; deskName?: string; at?: string };
         if (stop) return;
         setAutoNote(j.action === "none" ? null : { action: j.action, why: j.why ?? "", deskName: j.deskName ?? "", at: j.at });
@@ -1397,7 +1399,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
     void tick();
     const id = setInterval(() => void tick(), 5000);
     return () => { stop = true; clearInterval(id); };
-  }, [broadcasting, adminSend, queryClient]);
+  }, [broadcasting, adminSend, queryClient, studioId, eventId]);
 
   useEffect(() => {
     if (typeof BroadcastChannel === "undefined") return;
@@ -1700,7 +1702,7 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
               </div>
             )}
             {/* No pill for Michael's chat: one door, the big card, and the producer works it from the green room. */}
-            {autoNote?.action === "wait-done" && (
+            {(autoNote?.action === "wait-done" || autoNote?.action === "ask-done") && (
               <button
                 type="button"
                 onClick={() => {
@@ -1709,14 +1711,15 @@ export function StudioConsole({ adminGet, adminSend, view, eventId, kind, fixedS
                     .catch((e: Error) => toast({ title: "Couldn't move on", description: e.message, variant: "destructive" }));
                 }}
                 className="flex h-9 max-w-[24rem] items-center gap-2 rounded-full bg-white/10 px-3 text-xs font-semibold text-white/85 ring-1 ring-white/15 hover:bg-white/15"
-                title={`${autoNote.why}. Press when they've finished to take the next scene.`}
-                data-testid="studio-wait-done"
+                title={autoNote.action === "ask-done" ? autoNote.why : `${autoNote.why}. Press when they've finished to take the next scene.`}
+                data-testid={autoNote.action === "ask-done" ? "studio-ask-done" : "studio-wait-done"}
               >
                 <Sparkles className="h-3.5 w-3.5 shrink-0" />
-                <span className="truncate">Waiting for "We're done" · they're done →</span>
+                {/* A LIVE session at time: asked, never cut on the clock (Packet B, 27 Nov). */}
+                <span className="truncate">{autoNote.action === "ask-done" ? "Are they done? →" : `Waiting for "We're done" · they're done →`}</span>
               </button>
             )}
-            {autoNote && autoNote.action !== "take" && autoNote.action !== "wait-done" && (
+            {autoNote && autoNote.action !== "take" && autoNote.action !== "wait-done" && autoNote.action !== "ask-done" && (
               <div
                 className={`flex h-9 max-w-[22rem] items-center gap-2 rounded-full px-3 text-xs font-semibold ${autoNote.action === "escalate" ? "bg-[#ED1C24] text-white" : autoNote.action === "hold" ? "bg-[#F0A71F]/20 text-[#F0A71F] ring-1 ring-[#F0A71F]/60" : "bg-white/10 text-white/80 ring-1 ring-white/15"}`}
                 title={autoNote.why}
