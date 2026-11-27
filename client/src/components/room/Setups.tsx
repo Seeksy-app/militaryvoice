@@ -26,6 +26,16 @@ function useSetups(showId: number | null | undefined) {
   return useQuery<Setups>({ queryKey: [SETUPS_KEY, showId ?? null], queryFn: async () => (await apiRequest("GET", SETUPS_KEY)).json(), retry: false, staleTime: 0 });
 }
 
+/**
+ * The saved studio the room is in now, by name: the one whose scenes match today's (Andrew, 27 Nov: he renamed his saved
+ * studio and the Show panel still read the old name). "" when today's look isn't a saved studio (or was changed since).
+ */
+export function useCurrentStudioName(): string {
+  const q = useSetups(null);
+  const n = q.data?.current?.name ?? "";
+  return n === "Last time" ? "" : n;
+}
+
 /** Each layout's own colour (Andrew, 26 Nov: "let's add some color"), and saved setups cycle through a few more. */
 const TEMPLATE_BG: Record<string, string> = { interview: "linear-gradient(135deg,#0b3a8a,#1d5fc4)", solo: "linear-gradient(135deg,#0e7490,#14a3a3)", panel: "linear-gradient(135deg,#5b21b6,#8b5cf6)" };
 const SAVED_BG = ["linear-gradient(135deg,#be123c,#f43f5e)", "linear-gradient(135deg,#047857,#10b981)", "linear-gradient(135deg,#b45309,#f59e0b)", "linear-gradient(135deg,#1e3a8a,#6366f1)"];

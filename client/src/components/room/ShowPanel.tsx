@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CalendarClock, Search } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { BriefCard, useBriefAllowance } from "@/components/GuestBrief";
+import { useCurrentStudioName } from "@/components/room/Setups";
 
 /**
  * Show (Andrew, 26 Nov: "a dashboard at the top, above the banners… the studio name, the show name, and the upcoming
@@ -29,7 +30,10 @@ function when(iso: string, text: string): [string, string] {
   return [date, d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit", timeZoneName: "short" })];
 }
 
-export function ShowPanel({ studioName, showTitle }: { studioName: string; showTitle: string }) {
+export function ShowPanel({ showTitle }: { showTitle: string }) {
+  // The Studio line is the saved studio they're in, as named on the Studio page; never the room's own stored name,
+  // which nobody can rename (it read "Veteran Benefits Podcast" under a studio renamed "Next Mile Podcast", 27 Nov).
+  const studioName = useCurrentStudioName();
   const qc = useQueryClient();
   const next = useQuery<NextGuest>({ queryKey: ["/api/host/guest-invites/next"], staleTime: 60_000, queryFn: async () => (await apiRequest("GET", "/api/host/guest-invites/next")).json() });
   const allowance = useBriefAllowance();
@@ -37,13 +41,13 @@ export function ShowPanel({ studioName, showTitle }: { studioName: string; showT
   const g = next.data;
   const hasBrief = !!g?.briefId && allowance.data?.on === true;
   // One name when the studio is named after its show.
-  const same = !showTitle || studioName.trim().toLowerCase() === showTitle.trim().toLowerCase();
+  const same = !studioName || !showTitle || studioName.trim().toLowerCase() === showTitle.trim().toLowerCase();
   return (
     <div className="flex flex-col gap-3 p-4" data-testid="show-panel">
       <div className="rounded-xl border border-[#e4e7ec] px-3.5 py-3">
         {!same && <><div className={label}>Studio</div><div className="text-[15px] font-bold text-[#101828]">{studioName}</div></>}
         <div className={`${same ? "" : "mt-2 "}${label}`}>Show</div>
-        <div className="text-[15px] font-bold text-[#101828]" data-testid="show-panel-show">{same ? studioName || showTitle : showTitle}</div>
+        <div className="text-[15px] font-bold text-[#101828]" data-testid="show-panel-show">{same ? showTitle || studioName : showTitle}</div>
       </div>
       <div className="rounded-xl border border-[#e4e7ec] px-3.5 py-3">
         <div className={label}>Next guest</div>

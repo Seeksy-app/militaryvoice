@@ -698,7 +698,7 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
               <LayoutPicker value={scene.layout} onPick={(layout) => kit.change((l) => ({ ...l, scenes: l.scenes.map((s) => (s.id === scene.id ? { ...s, layout } : s)) }))} />
             </div>
           )}
-          {v3 && <PhoneStudio kit={kit} onEditLayout={setLayoutFor} menu={setupMenu} show={owner ? <ShowPanel studioName={studio?.studioName || studio?.name || ""} showTitle={studio?.showTitle ?? ""} /> : undefined} />}
+          {v3 && <PhoneStudio kit={kit} onEditLayout={setLayoutFor} menu={setupMenu} show={owner ? <ShowPanel showTitle={studio?.showTitle || studio?.name || ""} /> : undefined} />}
           <Backstage kit={kit} />
           {owner && <PrompterNews onOpen={() => setTab("notes")} />}
           <PeopleStrip kit={kit} owner={owner} sharing={isScreenShareEnabled} onShare={() => void share()} onInvite={copyInvite} />
@@ -723,7 +723,7 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
           <HidePanelTab hidden={rail.hidden} onToggle={() => rail.setHidden(!rail.hidden)} />
           <div className={`min-w-0 flex-1 flex-col ${rail.hidden ? "hidden" : "flex"}`}>
             {tab === "look" && editing && <LookPanel kit={kit} />}
-            {tab === "show" && v3 && owner && <><p className="border-b border-[#eef0f4] px-4 py-3 text-[15px] font-bold">Show</p><ShowPanel studioName={studio?.studioName || studio?.name || ""} showTitle={studio?.showTitle ?? ""} /></>}
+            {tab === "show" && v3 && owner && <><p className="border-b border-[#eef0f4] px-4 py-3 text-[15px] font-bold">Show</p><ShowPanel showTitle={studio?.showTitle || studio?.name || ""} /></>}
             {tab === "banners" && v3 && <BannersPanel kit={kit} />}
             {tab === "media" && v3 && <MediaPanel kit={kit} fallback={logo} />}
             {tab === "style" && v3 && <StylePanel kit={kit} />}
