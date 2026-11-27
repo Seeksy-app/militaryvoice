@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { TIP_TEXT, useLookCheck, type LookTip } from "@/components/room/lookCheck";
-import { BLUR_SLOW, BLUR_UNSUPPORTED, readBlur, saveBlur, useBlur, type BlurState } from "@/components/room/blur";
+import { blurNote, readBlur, saveBlur, useBlur, type BlurState } from "@/components/room/blur";
 import { PRACTICE_NAME, practice, usePractice } from "@/components/room/practiceGuest";
 import { startScreenShare } from "@/components/room/screenShare";
 import { BrandMark } from "@/components/BrandMark";
@@ -407,8 +407,8 @@ function BlurSwitch({ on, state, onChange, compact }: { on: boolean; state: Blur
 }
 
 function BlurNote({ state }: { state: BlurState }) {
-  if (state !== "slow" && state !== "unsupported") return null;
-  return <p className="mt-2 px-1 text-[13px] text-[#667085]" data-testid="blur-note">{state === "slow" ? BLUR_SLOW : BLUR_UNSUPPORTED}</p>;
+  const note = blurNote(state);
+  return note ? <p className="mt-2 px-1 text-[13px] text-[#667085]" data-testid="blur-note">{note}</p> : null;
 }
 
 function PreviewToggle({ on, onClick, label, children }: { on: boolean; onClick: () => void; label: string; children: ReactNode }) {
@@ -456,9 +456,9 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
   // Blur my background (27 Nov): set on the camera check, changed in Settings, and run on the camera as it's sent.
   const [blurOn, setBlurOnState] = useState(readBlur);
   const setBlurOn = (on: boolean) => { setBlurOnState(on); saveBlur(on); };
-  const blurState = useBlur(cameraTrack?.track instanceof LocalVideoTrack ? cameraTrack.track : null, blurOn, () => {
+  const blurState = useBlur(cameraTrack?.track instanceof LocalVideoTrack ? cameraTrack.track : null, blurOn, (why) => {
     setBlurOn(false);
-    toast({ title: BLUR_SLOW });
+    toast({ title: blurNote(why) });
   });
   const [picked, setPicked] = useState<Tab | null>(null);
   const noteKey = owner ? String(studio?.id ?? "mine") : roomName;
