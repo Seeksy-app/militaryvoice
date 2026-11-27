@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Calendar, Check, Copy, ExternalLink, Mail, MessageCircle, Music, Pause, Play, Radio, Send, Share2, Sparkles, Tag, UserPlus, X } from "lucide-react";
 import { PlatformIcon, platformBackground } from "@/components/SocialIcons";
 import { CUTOUT_LAYOUTS, DEFAULT_PODCAST, FONTS, bioPalette, musicEmbed, onColor, promoCodes, standOut, videoEmbed, type BioChatAt, type BioPodcastOptions, type BioPopup, type BioPublic, type BioSection, type BioTheme } from "@shared/bio";
@@ -425,6 +425,37 @@ function SignupBlock({ s, btn, ink, sub, card, line, accent, preview, handle, on
 /** The living photo is off for now (29 Sep 2026): pages show the still. */
 const LIVING_ON = false;
 
+/**
+ * The big name on a cut-out top. Lines break only between words (never "WATC / H"): when the longest word is wider
+ * than the space at the chosen size, the type shrinks until it fits (PM / magazine team, 27 Nov 2026).
+ */
+function FitName({ size, className, style, children }: { size: number; className: string; style: React.CSSProperties; children: string }) {
+  const ref = useRef<HTMLHeadingElement>(null);
+  const [fit, setFit] = useState(size);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const measure = () => {
+      const cs = getComputedStyle(el);
+      const room = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight);
+      if (room <= 0) return;
+      const probe = document.createElement("span");
+      probe.style.cssText = `position:absolute;visibility:hidden;white-space:nowrap;font-size:${size}px;letter-spacing:-0.025em`;
+      el.appendChild(probe);
+      let widest = 0;
+      for (const w of children.split(/\s+/).filter(Boolean)) { probe.textContent = w; widest = Math.max(widest, probe.getBoundingClientRect().width); }
+      probe.remove();
+      setFit(widest > room ? Math.max(16, Math.floor((size * room) / widest)) : size);
+    };
+    measure();
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    void document.fonts?.ready.then(measure);
+    return () => ro.disconnect();
+  }, [size, children]);
+  return <h1 ref={ref} className={`${className} break-normal [overflow-wrap:normal] [hyphens:none]`} style={{ ...style, fontSize: fit }}>{children}</h1>;
+}
+
 function CutoutTop({ kind, src, name, bg, scene, paper, dark, bigName, nameY = 0, dy, size, latest, handle }: { kind: string; src: string; name: string; bg: string; scene: string; paper: string; dark: boolean; bigName: number; nameY?: number; dy: number; size: number; latest?: string; handle: string }) {
   const move: React.CSSProperties = { transform: `translateY(${dy}px) scale(${size})`, transformOrigin: "bottom center" };
   // A scene behind them (an image) in place of the colour: the background, the circle, the blob, the cover.
@@ -472,7 +503,7 @@ function CutoutTop({ kind, src, name, bg, scene, paper, dark, bigName, nameY = 0
     const edge = "drop-shadow(4px 0 0 #fff) drop-shadow(-4px 0 0 #fff) drop-shadow(0 4px 0 #fff) drop-shadow(0 -4px 0 #fff) drop-shadow(0 14px 18px rgba(0,0,0,0.35))";
     return (
       <div className="relative flex min-h-[470px] flex-col justify-end overflow-hidden" style={{ background: `repeating-linear-gradient(135deg, ${bg} 0 26px, ${bg}d9 26px 52px)` }} data-testid="bio-sticker-header">
-        {name && <h1 className="absolute inset-x-0 top-14 z-0 -rotate-6 break-words px-4 text-center font-black uppercase leading-[0.86] tracking-tight" style={{ fontSize: bigName * 0.9, translate: `0 ${nameY}px`, color: onColor(bg), textShadow: onColor(bg) === "#ffffff" ? "0 4px 0 rgba(0,0,0,0.25)" : "0 3px 0 rgba(255,255,255,0.5)" }}>{name}</h1>}
+        {name && <FitName size={Math.round(bigName * 0.9)} className="absolute inset-x-0 top-14 z-0 -rotate-6 px-4 text-center font-black uppercase leading-[0.86] tracking-tight" style={{ translate: `0 ${nameY}px`, color: onColor(bg), textShadow: onColor(bg) === "#ffffff" ? "0 4px 0 rgba(0,0,0,0.25)" : "0 3px 0 rgba(255,255,255,0.5)" }}>{name}</FitName>}
         <img src={src} alt="" className="relative z-10 mx-auto block h-[380px] w-auto max-w-[90%] object-contain object-bottom" style={{ ...move, filter: edge, ...dissolve }} />
         {fade}
       </div>
@@ -482,15 +513,15 @@ function CutoutTop({ kind, src, name, bg, scene, paper, dark, bigName, nameY = 0
     const ink = onColor(bg);
     return (
       <div className="relative flex min-h-[520px] flex-col overflow-hidden" style={{ background: scene ? `linear-gradient(180deg, transparent 60%, ${paper} 100%), center/cover url(${scene})` : `linear-gradient(180deg, ${bg} 0%, ${bg} 70%, ${paper} 100%)` }} data-testid="bio-magazine-header">
-        {name ? <h1 className="z-0 break-words px-3 pt-7 text-center font-black uppercase leading-[0.82] tracking-tight" style={{ fontSize: bigName * 1.05, translate: `0 ${nameY}px`, color: ink, fontFamily: FONTS.playfair.css, ...onScene }}>{name}</h1> : <div className="h-20" />}
-        <img src={src} alt="" className="relative z-10 mx-auto -mt-12 block h-[400px] w-auto max-w-[94%] object-contain object-bottom drop-shadow-[0_18px_30px_rgba(0,0,0,0.35)]" style={{ ...move, ...dissolve }} />
+        {name ? <FitName size={Math.round(bigName * 1.05)} className="z-0 mb-[-0.45em] px-3 pt-7 text-center font-black uppercase leading-[0.82] tracking-tight" style={{ translate: `0 ${nameY}px`, color: ink, fontFamily: FONTS.playfair.css, ...onScene }}>{name}</FitName> : <div className="h-8" />}
+        <img src={src} alt="" className="relative z-10 mx-auto block h-[400px] w-auto max-w-[94%] object-contain object-bottom drop-shadow-[0_18px_30px_rgba(0,0,0,0.35)]" style={{ ...move, ...dissolve }} />
         {fade}
       </div>
     );
   }
   return (
     <div className="relative flex min-h-[470px] flex-col justify-end overflow-hidden" style={{ background: scene ? `linear-gradient(180deg, transparent 55%, ${paper} 100%), center/cover url(${scene})` : `radial-gradient(120% 80% at 50% 30%, ${bg} 0%, ${bg} 45%, ${paper} 100%)` }} data-testid="bio-cutout-header">
-      {name && <h1 className="absolute inset-x-0 top-16 z-0 break-words px-4 text-center font-black uppercase leading-[0.86] tracking-tight" style={{ fontSize: bigName, translate: `0 ${nameY}px`, color: onColor(bg), opacity: 0.92, ...onScene }}>{name}</h1>}
+      {name && <FitName size={bigName} className="absolute inset-x-0 top-16 z-0 px-4 text-center font-black uppercase leading-[0.86] tracking-tight" style={{ translate: `0 ${nameY}px`, color: onColor(bg), opacity: 0.92, ...onScene }}>{name}</FitName>}
       <img src={src} alt="" className="relative z-10 mx-auto block h-[400px] w-auto max-w-[94%] object-contain object-bottom drop-shadow-[0_18px_30px_rgba(0,0,0,0.35)]" style={{ ...move, ...dissolve }} />
       {fade}
     </div>
