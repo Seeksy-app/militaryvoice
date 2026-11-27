@@ -144,7 +144,7 @@ function Shell({ children }: { children: ReactNode }) {
           {current && <span className="hidden sm:inline"><Pill tone="gold">{STATUS_LABEL[current.status].toUpperCase()}</Pill></span>}
           <span className="hidden text-[13px] tabular-nums md:inline" style={{ fontFamily: FONT_MONO, color: C.muted }}>{clock}</span>
           <span className="hidden max-w-[200px] truncate text-[12.5px] lg:inline" style={{ color: C.muted }} title={email}>{email}</span>
-          {!isAdmin && <SignOut />}
+          <SignOut />
         </div>
       </header>
       <div className="flex min-h-0 flex-1">
@@ -182,16 +182,21 @@ function Shell({ children }: { children: ReactNode }) {
 }
 
 function SignOut() {
+  // Everyone gets it (Andrew, 27 Nov: "There is no logout"). An admin carries both sign-ins, so both are cleared, or
+  // the admin one would quietly keep them signed in.
+  const out = () => void Promise.allSettled([
+    fetch("/api/admin/logout", { method: "POST", credentials: "include" }),
+    fetch("/api/host/logout", { method: "POST", credentials: "include" }),
+  ]).finally(() => window.location.reload());
   return (
     <button
       type="button"
-      onClick={() => void fetch("/api/host/logout", { method: "POST", credentials: "include" }).finally(() => window.location.reload())}
-      className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-white/10"
+      onClick={out}
+      className="flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-md px-2 text-[13px] font-semibold hover:bg-white/10"
       style={{ color: C.muted }}
-      title="Sign out"
-      aria-label="Sign out"
+      data-testid="live-sign-out"
     >
-      <LogOut className="h-4 w-4" aria-hidden />
+      <LogOut className="h-4 w-4" aria-hidden /> Sign out
     </button>
   );
 }
