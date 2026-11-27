@@ -155,6 +155,7 @@ import { registerAdminOverview } from "./adminOverview.js";
 import { registerBioPrefill } from "./bioPrefill.js";
 import { registerMagazineStats } from "./magazineStats.js";
 import { registerPlatformAnalytics } from "./platformAnalytics.js";
+import { registerFinances } from "./finances.js";
 import { registerWorldLabs } from "./worldlabs.js";
 import { registerSite } from "./site.js";
 import { registerGtm } from "./gtm.js";
@@ -7408,6 +7409,7 @@ export function registerRoutes(app: Express): void {
   registerBioPrefill(app, requireAdmin);
   registerMagazineStats(app, requireAdmin);
   registerPlatformAnalytics(app, requireAdmin);
+  registerFinances(app, requireAdmin);
   registerWorldLabs(app, requireAdmin);
   registerSite(app);
   registerGtm(app, requireAdmin);

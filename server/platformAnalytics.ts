@@ -1,10 +1,9 @@
 // Admin → Growth → Analytics (9 Oct 2026): the platform's own numbers, not any one event's.
-// Accounts, plans and revenue, Pōstify, SmartLinks, hosting, Discovery, the magazine and email,
+// Accounts, Pōstify, SmartLinks, hosting, Discovery, the magazine and email,
 // over a window (7, 30 or 90 days), with a day-by-day line for the main ones.
 import type { Express, RequestHandler } from "express";
 import { sql } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
-import { PLANS, ADDONS } from "../shared/tokens.js";
 
 type Row = Record<string, unknown>;
 const rows = async (q: ReturnType<typeof sql>): Promise<Row[]> => { const r: any = await db.execute(q); return (r.rows ?? r) as Row[]; };
@@ -35,8 +34,6 @@ export function registerPlatformAnalytics(app: Express, requireAdmin: RequestHan
     // and nineteen at once held them all.
     const accounts = await safe(() => one(sql`select count(*)::int n from podcaster_profiles`), 0);
     const accountsNew = await safe(() => one(sql`select count(*)::int n from podcaster_profiles where created_at >= ${since}`), 0);
-    const subs = await safe(() => rows(sql`select plan, interval, (subscription_id like 'sub_%') paid, count(*)::int n from postify_subscriptions where status in ('active','trialing','past_due') group by 1, 2, 3`), []);
-    const addons = await safe(() => rows(sql`select addon, count(*)::int n from addon_subscriptions where status in ('active','trialing','past_due') and subscription_id like 'sub_%' group by addon`), []);
     const recordingsNew = await safe(() => one(sql`select count(*)::int n from recordings where started_at >= ${since}`), 0);
     const clipsNew = await safe(() => one(sql`select count(*)::int n from clips where created_at >= ${since}`), 0);
     const episodesClipped = await safe(() => one(sql`select count(distinct recording_id)::int n from clips where created_at >= ${since}`), 0);
@@ -54,26 +51,8 @@ export function registerPlatformAnalytics(app: Express, requireAdmin: RequestHan
     const mailFailed = await safe(() => one(sql`select count(*)::int n from mail_log where sent_at >= ${since} and ok = false`), 0);
 
 
-    // Monthly recurring revenue: monthly plans at their price, yearly at a twelfth; add-ons monthly.
-    let mrrCents = 0;
-    // Only plans Stripe bills count as revenue; comped plans (a thank-you, a tester) are listed apart.
-    const plans: { plan: string; name: string; interval: string; n: number; comped?: boolean }[] = [];
-    for (const s of subs) {
-      const p = PLANS[String(s.plan) as keyof typeof PLANS];
-      const n = Number(s.n) || 0;
-      if (!p) continue;
-      const paid = s.paid === true || s.paid === "t";
-      plans.push({ plan: p.key, name: p.name, interval: String(s.interval || "month"), n, ...(paid ? {} : { comped: true }) });
-      if (paid) mrrCents += n * (s.interval === "year" ? Math.round(p.yearCents / 12) : p.cents);
-    }
-    for (const a of addons) {
-      const ad = ADDONS[String(a.addon) as keyof typeof ADDONS];
-      if (ad) mrrCents += (Number(a.n) || 0) * ad.cents;
-    }
-
-    // Money Stripe actually took in over the window, after refunds (Andrew, 27 Nov: a quarter paid up front,
-    // like Frank's $732, shows here; the monthly figure above spreads it over three months). Read-only.
-    const paidIn = await safe(() => stripePaidIn(Math.floor(Date.parse(since) / 1000)), null);
+    // Money (paid in, monthly recurring, plans) moved to Admin → Finances on 27 Nov 2026 (Andrew), where
+    // Riccoh's payments count as owner contributions, not revenue. See server/finances.ts.
 
     // Day by day: new accounts, clips made, SmartLink views, episode downloads.
     const series = await safe(async () => {
@@ -95,7 +74,6 @@ export function registerPlatformAnalytics(app: Express, requireAdmin: RequestHan
       days,
       magazineEventId,
       accounts: { total: accounts, new: accountsNew },
-      revenue: { mrrCents, paidInCents: paidIn?.cents ?? null, paidInCount: paidIn?.count ?? 0, plans, addons: addons.map((a) => ({ addon: String(a.addon), n: Number(a.n) || 0 })) },
       postify: { uploads: recordingsNew, clips: clipsNew, episodes: episodesClipped },
       smartlink: { pages: pagesAll, live: pagesLive, views: kind(bioKinds, "view"), clicks: bioKinds.filter((r) => r.kind !== "view").reduce((a, r) => a + (Number(r.n) || 0), 0) },
       hosting: { shows, downloads },
@@ -105,25 +83,4 @@ export function registerPlatformAnalytics(app: Express, requireAdmin: RequestHan
       series,
     };
   }
-}
-
-/** Succeeded charges since `gte` (unix seconds), less refunds, in US cents. Null when Stripe isn't set up. */
-async function stripePaidIn(gte: number): Promise<{ cents: number; count: number } | null> {
-  const key = process.env.STRIPE_SECRET_KEY;
-  if (!key) return null;
-  let cents = 0, count = 0, after = "";
-  for (let page = 0; page < 10; page++) {
-    const q = new URLSearchParams({ "created[gte]": String(gte), limit: "100", ...(after ? { starting_after: after } : {}) });
-    const r = await fetch(`https://api.stripe.com/v1/charges?${q}`, { headers: { authorization: `Bearer ${key}` } });
-    const body = (await r.json().catch(() => ({}))) as any;
-    if (!r.ok) throw new Error(body?.error?.message || `Stripe ${r.status}`);
-    for (const c of body.data ?? []) {
-      if (c.status !== "succeeded" || !c.paid || c.currency !== "usd") continue;
-      const net = (Number(c.amount) || 0) - (Number(c.amount_refunded) || 0);
-      if (net > 0) { cents += net; count++; }
-    }
-    if (!body.has_more || !body.data?.length) break;
-    after = body.data[body.data.length - 1].id;
-  }
-  return { cents, count };
 }

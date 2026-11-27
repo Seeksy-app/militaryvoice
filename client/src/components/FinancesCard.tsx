@@ -4,6 +4,7 @@ import { adminGet, adminSend } from "@/lib/adminApi";
 import { Slider } from "@/components/ui/slider";
 import type { PublicEvent } from "@shared/schema";
 import { PLANS } from "@shared/tokens";
+import { FinanceStatements } from "@/components/FinanceStatements";
 import { Calculator, TrendingUp, AlertTriangle, Film, ChevronRight, Receipt, Plus, Trash2, Save, HandCoins } from "lucide-react";
 
 // What the event costs to run, and what to charge afterwards.
@@ -157,98 +158,119 @@ export function FinancesCard({ event }: { event: PublicEvent }) {
  * event's own costs.
  */
 export function PlatformFinances() {
+  const [tab, setTab] = useState<"statements" | "bills" | "prices">("statements");
+  const lead = (
+    <div className="flex flex-wrap items-center gap-3">
+      <h2 className="text-xl font-bold tracking-tight text-[#000741] dark:text-white">Finances</h2>
+      <div className="inline-flex rounded-lg bg-muted p-0.5 text-xs font-medium" role="tablist" aria-label="Finances">
+        {([["statements", "Statements"], ["bills", "Bills"], ["prices", "Plans & prices"]] as const).map(([k, l]) => (
+          <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={`rounded-md px-3 py-1 ${tab === k ? "bg-card font-semibold text-[#000741] shadow-sm dark:text-white" : "text-muted-foreground hover:text-foreground"}`} data-testid={`finance-tab-${k}`}>{l}</button>
+        ))}
+      </div>
+    </div>
+  );
+  // Statements (27 Nov 2026): live from Stripe and Mercury. Bills keeps the hand-kept lists the statements
+  // read from (bills paid outside Mercury, at our share; money in that Stripe can't see).
+  if (tab === "statements") return <FinanceStatements lead={lead} />;
   return (
     <div className="flex flex-col gap-8">
-      <ActualCosts scope="platform" eventName="the platform" starting={PLATFORM_STARTING} />
-
-      <Revenue />
-
-      <OwnerContributions />
-
-      {/* ---------------------------------------------------------- what to charge */}
-      <section>
-        <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
-          <TrendingUp className="h-4 w-4" /> The plans, and what each one costs us
-        </h3>
-        <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
-          The three plans on the pricing page, with what one creator costs us a month at the most. Growth is the way in and
-          costs a couple of dollars; the paid plans carry it. Monthly prices; yearly is two months free.
-        </p>
-
-        <div className="mt-4 grid gap-4 md:grid-cols-3">
-          {TIERS.map((t) => {
-            const margin = t.price ? Math.round(((t.price - t.cost) / t.price) * 100) : 0;
-            return (
-              <div
-                key={t.name}
-                className={`flex flex-col rounded-2xl border bg-card p-5 ${t.pick ? "border-2 border-[#F0A71F]" : "border-border"}`}
-              >
-                <div className="text-sm font-semibold">{t.name}</div>
-                <div className="mt-1 text-3xl font-bold tabular-nums">
-                  {t.price ? `$${t.price}` : "Free"}
-                  {t.price ? <span className="text-sm font-medium text-muted-foreground"> / month</span> : null}
-                </div>
-                <ul className="mt-3 flex-1 space-y-1 text-sm text-muted-foreground">
-                  {t.bullets.map((b) => (
-                    <li key={b}>· {b}</li>
-                  ))}
-                </ul>
-                <div className="mt-4 border-t border-border pt-3 text-xs tabular-nums text-muted-foreground">
-                  costs up to {usd(t.cost)}{t.price ? <> · <span className="font-semibold text-emerald-700 dark:text-emerald-400">{margin}% margin</span></> : null}
-                  <span className="mt-0.5 block">{t.costNote}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        {/* The decision still open: Studio hours. The pricing notes put 4 hours in
-            Scale and 10 plus live streaming in Pro; at today's rates that's the
-            line that moves margin most, so it's shown before it's sold. */}
-        <div className="mt-4 rounded-r-xl border-l-4 border-[#F0A71F] bg-[#F0A71F]/10 p-4 text-sm">
-          <span className="font-semibold">Before Studio hours go into the plans:</span> 4 hours in Scale adds about{" "}
-          {usd(4 * COST.studioHour)} a month (margin to{" "}
-          {Math.round(((TIERS[1].price - TIERS[1].cost - 4 * COST.studioHour) / TIERS[1].price) * 100)}%), and 10 hours with
-          live streaming in Pro adds about {usd(10 * (COST.studioHour + COST.liveHour))} (margin to{" "}
-          {Math.round(((TIERS[2].price - TIERS[2].cost - 10 * (COST.studioHour + COST.liveHour)) / TIERS[2].price) * 100)}%).
-          Extra hours at $2 each cover their cost.
-        </div>
-
-        <div className="mt-6 overflow-x-auto rounded-2xl border border-border bg-card">
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.1em] text-muted-foreground">
-                <th className="px-5 py-3 font-medium">Running an event for someone else</th>
-                <th className="px-5 py-3 text-right font-medium">Price</th>
-                <th className="px-5 py-3 text-right font-medium">Our cost</th>
-                <th className="px-5 py-3 text-right font-medium">Margin</th>
-              </tr>
-            </thead>
-            <tbody>
-              {[
-                ["Self-serve event", "Platform only. They run their own control room.", "$1,500", "~$250", "83%"],
-                ["Produced event", "We staff the studio, build the rail, cut the clips, hand over the archive.", "$5,000", "~$600", "88%"],
-                ["Sponsored marathon", "Everything, plus sponsor integration and a post-event report.", "$10,000", "~$1,100", "89%"],
-              ].map(([name, note, price, cost, margin]) => (
-                <tr key={name} className="border-b border-border last:border-0">
-                  <td className="px-5 py-3">
-                    {name}
-                    <span className="block text-xs text-muted-foreground">{note}</span>
-                  </td>
-                  <td className="px-5 py-3 text-right tabular-nums">{price}</td>
-                  <td className="px-5 py-3 text-right tabular-nums text-muted-foreground">{cost}</td>
-                  <td className="px-5 py-3 text-right tabular-nums">{margin}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-        <p className="mt-3 text-xs text-muted-foreground">
-          Cost excludes people. A produced event is a producer awake for the whole day, which is the real line item and the
-          one to price properly before saying yes to a second booking.
-        </p>
-      </section>
+      {lead}
+      {tab === "bills" ? (
+        <>
+          <ActualCosts scope="platform" eventName="the platform" starting={PLATFORM_STARTING} />
+          <Revenue />
+          <OwnerContributions />
+        </>
+      ) : <PlansAndPrices />}
     </div>
+  );
+}
+
+/** The plans, what each costs us, and what to charge for running an event for someone else. */
+function PlansAndPrices() {
+  return (
+    <section>
+      <h3 className="flex items-center gap-2 text-sm font-semibold uppercase tracking-[0.08em] text-foreground">
+        <TrendingUp className="h-4 w-4" /> The plans, and what each one costs us
+      </h3>
+      <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+        The three plans on the pricing page, with what one creator costs us a month at the most. Growth is the way in and
+        costs a couple of dollars; the paid plans carry it. Monthly prices; yearly is two months free.
+      </p>
+
+      <div className="mt-4 grid gap-4 md:grid-cols-3">
+        {TIERS.map((t) => {
+          const margin = t.price ? Math.round(((t.price - t.cost) / t.price) * 100) : 0;
+          return (
+            <div
+              key={t.name}
+              className={`flex flex-col rounded-2xl border bg-card p-5 ${t.pick ? "border-2 border-[#F0A71F]" : "border-border"}`}
+            >
+              <div className="text-sm font-semibold">{t.name}</div>
+              <div className="mt-1 text-3xl font-bold tabular-nums">
+                {t.price ? `$${t.price}` : "Free"}
+                {t.price ? <span className="text-sm font-medium text-muted-foreground"> / month</span> : null}
+              </div>
+              <ul className="mt-3 flex-1 space-y-1 text-sm text-muted-foreground">
+                {t.bullets.map((b) => (
+                  <li key={b}>· {b}</li>
+                ))}
+              </ul>
+              <div className="mt-4 border-t border-border pt-3 text-xs tabular-nums text-muted-foreground">
+                costs up to {usd(t.cost)}{t.price ? <> · <span className="font-semibold text-emerald-700 dark:text-emerald-400">{margin}% margin</span></> : null}
+                <span className="mt-0.5 block">{t.costNote}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+
+      {/* The decision still open: Studio hours. The pricing notes put 4 hours in
+          Scale and 10 plus live streaming in Pro; at today's rates that's the
+          line that moves margin most, so it's shown before it's sold. */}
+      <div className="mt-4 rounded-r-xl border-l-4 border-[#F0A71F] bg-[#F0A71F]/10 p-4 text-sm">
+        <span className="font-semibold">Before Studio hours go into the plans:</span> 4 hours in Scale adds about{" "}
+        {usd(4 * COST.studioHour)} a month (margin to{" "}
+        {Math.round(((TIERS[1].price - TIERS[1].cost - 4 * COST.studioHour) / TIERS[1].price) * 100)}%), and 10 hours with
+        live streaming in Pro adds about {usd(10 * (COST.studioHour + COST.liveHour))} (margin to{" "}
+        {Math.round(((TIERS[2].price - TIERS[2].cost - 10 * (COST.studioHour + COST.liveHour)) / TIERS[2].price) * 100)}%).
+        Extra hours at $2 each cover their cost.
+      </div>
+
+      <div className="mt-6 overflow-x-auto rounded-2xl border border-border bg-card">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border text-left text-[11px] uppercase tracking-[0.1em] text-muted-foreground">
+              <th className="px-5 py-3 font-medium">Running an event for someone else</th>
+              <th className="px-5 py-3 text-right font-medium">Price</th>
+              <th className="px-5 py-3 text-right font-medium">Our cost</th>
+              <th className="px-5 py-3 text-right font-medium">Margin</th>
+            </tr>
+          </thead>
+          <tbody>
+            {[
+              ["Self-serve event", "Platform only. They run their own control room.", "$1,500", "~$250", "83%"],
+              ["Produced event", "We staff the studio, build the rail, cut the clips, hand over the archive.", "$5,000", "~$600", "88%"],
+              ["Sponsored marathon", "Everything, plus sponsor integration and a post-event report.", "$10,000", "~$1,100", "89%"],
+            ].map(([name, note, price, cost, margin]) => (
+              <tr key={name} className="border-b border-border last:border-0">
+                <td className="px-5 py-3">
+                  {name}
+                  <span className="block text-xs text-muted-foreground">{note}</span>
+                </td>
+                <td className="px-5 py-3 text-right tabular-nums">{price}</td>
+                <td className="px-5 py-3 text-right tabular-nums text-muted-foreground">{cost}</td>
+                <td className="px-5 py-3 text-right tabular-nums">{margin}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      <p className="mt-3 text-xs text-muted-foreground">
+        Cost excludes people. A produced event is a producer awake for the whole day, which is the real line item and the
+        one to price properly before saying yes to a second booking.
+      </p>
+    </section>
   );
 }
 

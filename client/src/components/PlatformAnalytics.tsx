@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { BarChart3, Users, Scissors, Link2, Radio, Compass, BookOpen, Mail, DollarSign } from "lucide-react";
+import { BarChart3, Users, Scissors, Link2, Radio, Compass, BookOpen, Mail } from "lucide-react";
 import { adminGet } from "@/lib/adminApi";
 import { StatsPanel } from "@/components/MagazineAdmin";
 
@@ -10,7 +10,6 @@ type Data = {
   days: number;
   magazineEventId?: number;
   accounts: { total: number; new: number };
-  revenue: { mrrCents: number; paidInCents?: number | null; paidInCount?: number; plans: { plan: string; name: string; interval: string; n: number; comped?: boolean }[]; addons: { addon: string; n: number }[] };
   postify: { uploads: number; clips: number; episodes: number };
   smartlink: { pages: number; live: number; views: number; clicks: number };
   hosting: { shows: number; downloads: number };
@@ -20,8 +19,6 @@ type Data = {
   series: { d: string; accounts: number; clips: number; views: number; downloads: number }[];
 };
 
-const ADDON_NAME: Record<string, string> = { discovery: "Discovery Pro", verified: "Verified creators", production: "Production" };
-const money = (c: number) => `$${(c / 100).toLocaleString(undefined, { minimumFractionDigits: c % 100 ? 2 : 0, maximumFractionDigits: 2 })}`;
 
 function Bars({ data, k, label }: { data: Data["series"]; k: "accounts" | "clips" | "views" | "downloads"; label: string }) {
   const max = Math.max(1, ...data.map((x) => x[k]));
@@ -69,7 +66,7 @@ export function PlatformAnalytics() {
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div>
           <h2 className="flex items-center gap-2 text-xl font-bold tracking-tight"><BarChart3 className="h-5 w-5 text-[#053877]" /> Analytics</h2>
-          <p className="mt-1 text-sm text-muted-foreground">The whole platform, not one event.</p>
+          <p className="mt-1 text-sm text-muted-foreground">The whole platform, not one event. Money is under Finances.</p>
         </div>
         <div className="inline-flex rounded-full border border-border bg-card p-1 text-sm font-semibold" role="tablist" aria-label="Window">
           {[7, 30, 90].map((n) => (
@@ -81,16 +78,13 @@ export function PlatformAnalytics() {
         <p className="text-sm text-muted-foreground">{q.isError ? "Couldn't load the numbers." : "Loading…"}</p>
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-5">
+          <div className="grid grid-cols-3 gap-3">
             {[
-              // What Stripe took in over the window; a quarter paid up front lands here in full.
-              [`Paid in · ${d.days}d`, d.revenue.paidInCents == null ? "—" : money(d.revenue.paidInCents), d.revenue.paidInCents == null ? "Stripe didn't answer." : `${d.revenue.paidInCount ?? 0} payment${d.revenue.paidInCount === 1 ? "" : "s"} in Stripe, after refunds`],
-              ["Monthly revenue (paid plans)", money(d.revenue.mrrCents), "Every paid plan and add-on at its monthly share: a quarterly plan counts a third a month"],
               ["Accounts", d.accounts.total.toLocaleString()],
               [`New accounts · ${d.days}d`, d.accounts.new.toLocaleString()],
               [`Clips made · ${d.days}d`, d.postify.clips.toLocaleString()],
-            ].map(([k, v, why], i) => (
-              <div key={k} title={why} className={`rounded-2xl border border-border bg-card p-4 ${i === 0 ? "col-span-2 lg:col-span-1" : ""}`}>
+            ].map(([k, v]) => (
+              <div key={k} className="rounded-2xl border border-border bg-card p-4">
                 <p className="text-2xl font-bold tabular-nums">{v}</p>
                 <p className="text-xs font-semibold text-muted-foreground">{k}</p>
               </div>
@@ -103,11 +97,6 @@ export function PlatformAnalytics() {
             <Bars data={d.series} k="downloads" label="Episode downloads" />
           </div>
           <div className="grid gap-3 md:grid-cols-2 lg:grid-cols-3">
-            <Card icon={DollarSign} title="Plans" rows={[
-              ...d.revenue.plans.map((p) => [`${p.name}${p.interval === "year" ? " (yearly)" : ""}${p.comped ? " (comped, no charge)" : ""}`, p.n] as [string, number]),
-              ...d.revenue.addons.map((a) => [ADDON_NAME[a.addon] ?? a.addon, a.n] as [string, number]),
-              ...(d.revenue.plans.length || d.revenue.addons.length ? [] : [["Paid plans", 0] as [string, number]]),
-            ]} />
             <Card icon={Scissors} title={`Pōstify · ${d.days} days`} rows={[["Episodes uploaded", d.postify.uploads], ["Episodes clipped", d.postify.episodes], ["Clips made", d.postify.clips]]} />
             <Card icon={Link2} title="SmartLinks" rows={[["Pages", d.smartlink.pages], ["Live", d.smartlink.live], [`Views · ${d.days}d`, d.smartlink.views], [`Clicks · ${d.days}d`, d.smartlink.clicks]]} />
             <Card icon={Radio} title="Hosting" rows={[["Shows hosted", d.hosting.shows], [`Downloads · ${d.days}d`, d.hosting.downloads]]} />
