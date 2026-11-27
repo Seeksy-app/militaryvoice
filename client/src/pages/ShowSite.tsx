@@ -129,11 +129,13 @@ function NavyPlay({ ep }: { ep: SiteEpisode }) {
 }
 
 // ---- Shared frame: top bar and footer -----------------------------------------------------
+// Phone sweep (27 Nov): every link and button on the show site gets a 44px tap area without changing its look (as .tap-44).
+const TAP44 = "[&_:is(button,a[href]):not(.absolute,.fixed,.sticky)]:relative [&_:is(button,a[href])]:before:absolute [&_:is(button,a[href])]:before:content-[''] [&_:is(button,a[href])]:before:[inset:min(0px,calc((100%_-_44px)/2))]";
 function Frame({ data, accent, children, home }: { data: { handle: string; name: string; artworkUrl: string; title: string; brandsOn: boolean }; accent: string; children: ReactNode; home: boolean }) {
   const base = `/${data.handle}/show`;
   const links: [string, string][] = [["episodes", "Episodes"], ["clips", "Clips"], ["about", "About"], ["guest", "Be a guest"], ...(data.brandsOn ? [["sponsors", "Sponsors"] as [string, string]] : [])];
   return (
-    <div className="min-h-screen pb-24" style={{ background: PAGE, color: INK }}>
+    <div className={`min-h-screen pb-24 ${TAP44}`} style={{ background: PAGE, color: INK }}>
       <header className="sticky top-0 z-30 border-b bg-white/90 backdrop-blur" style={{ borderColor: LINE }}>
         <div className="mx-auto flex max-w-5xl items-center gap-3 px-4 py-3">
           <Link href={base} className="flex min-w-0 items-center gap-2.5">
@@ -220,7 +222,7 @@ function Home({ d }: { d: SitePublic }) {
             <div className={`min-w-0 sm:self-end ${art ? "" : "col-span-2"}`}>
               <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[#F0A71F]">{d.branch || "Podcast"}</p>
               <h1 className="mt-1.5 text-balance text-2xl font-bold leading-tight tracking-tight sm:text-4xl">{title}</h1>
-              {(d.name || show?.author) && <p className="mt-1 text-[15px] text-white/75">Hosted by <span className="font-semibold text-white">{d.name || show?.author}</span></p>}
+              {(d.name || show?.author) && <p className="mt-1 text-[15px] text-white/75">Hosted by <span className="inline-block font-semibold text-white">{d.name || show?.author}</span></p>}
             </div>
             <div className="col-span-2 min-w-0 sm:col-span-1 sm:col-start-2 sm:self-start">
               {show?.description && (
@@ -483,8 +485,8 @@ function Episode({ e, d }: { e: SiteEpisodeFull; d: SitePublic }) {
         )}
 
         <nav className="mt-12 grid gap-3 border-t pt-6 sm:grid-cols-2" style={{ borderColor: LINE }} aria-label="More episodes">
-          {e.newer ? <Link href={`/${d.handle}/show/${e.newer.slug}`} className="rounded-2xl p-4 hover:bg-black/5" style={{ background: SOFT }}><span className="text-xs font-semibold" style={{ color: SUB }}>← Newer</span><span className="mt-1 line-clamp-2 block font-bold" style={{ color: INK }}>{e.newer.title}</span></Link> : <span />}
-          {e.older && <Link href={`/${d.handle}/show/${e.older.slug}`} className="rounded-2xl p-4 text-right hover:bg-black/5" style={{ background: SOFT }}><span className="text-xs font-semibold" style={{ color: SUB }}>Older →</span><span className="mt-1 line-clamp-2 block font-bold" style={{ color: INK }}>{e.older.title}</span></Link>}
+          {e.newer ? <Link href={`/${d.handle}/show/${e.newer.slug}`} className="rounded-2xl p-4 hover:bg-black/5" style={{ background: SOFT }}><span className="text-xs font-semibold" style={{ color: SUB }}>← Newer</span><span className="mt-1 line-clamp-2 block text-balance font-bold" style={{ color: INK }}>{e.newer.title}</span></Link> : <span />}
+          {e.older && <Link href={`/${d.handle}/show/${e.older.slug}`} className="rounded-2xl p-4 text-right hover:bg-black/5" style={{ background: SOFT }}><span className="text-xs font-semibold" style={{ color: SUB }}>Older →</span><span className="mt-1 line-clamp-2 block text-balance font-bold" style={{ color: INK }}>{e.older.title}</span></Link>}
         </nav>
 
         <div className="mt-8 flex flex-col items-start gap-3 rounded-2xl p-6 sm:flex-row sm:items-center" style={{ background: SOFT }}>
