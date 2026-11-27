@@ -7638,7 +7638,7 @@ export function registerRoutes(app: Express): void {
               transcript: !e.focus ? [] : storedTranscript(ed.transcriptJson).map((l) => (e!.source === "clean" && clean ? { ...l, startSec: toCleanTime(l.startSec, clean), endSec: toCleanTime(l.endSec, clean) } : l)),
               episodeEdit: {
                 focus: !!e.focus,
-                trimStart: e.trimStart, trimEnd: e.trimEnd, cuts: e.cuts ?? [], introUrl: await sign(e.introKey), outroUrl: await sign(e.outroKey), introTransition: e.introTransition ?? "fade", outroTransition: e.outroTransition ?? "fade",
+                trimStart: e.trimStart, trimEnd: e.trimEnd, cuts: e.cuts ?? [], introUrl: await sign(e.introKey), outroUrl: await sign(e.outroKey), introTransition: e.introTransition ?? "fade", outroTransition: e.outroTransition ?? "fade", gain: e.gain,
                 cardSec: e.cardSec, cardMusicUrl: e.cardMusicKey ? await sign((await storage.getMusic(e.cardMusicKey))?.url) : "",
                 // Music under parts of it: each track's file, signed, with where it goes in the episode.
                 music: (await Promise.all((e.music ?? []).map(async (m) => { const t = await storage.getMusic(m.key); const url = t?.url ? await sign(t.url) : ""; return url ? { url, from: m.from, to: m.to, level: m.level } : null; }))).filter(Boolean),
@@ -8445,6 +8445,10 @@ export function registerRoutes(app: Express): void {
     const introKey = clip(req.body?.introKey), outroKey = clip(req.body?.outroKey);
     if (!introKey && !outroKey) return res.status(400).json({ message: "Give an intro or an outro clip (show-assets/….mp4)." });
     const source: EpisodeEdit["source"] = req.body?.source === "clean" ? "clean" : "original";
+    // Optional volume of the whole edit: 0.2–1.5, 1 = as is (0.7 = "30% quieter").
+    const g = Number(req.body?.gain);
+    const gain = Number.isFinite(g) && g >= 0.2 && g <= 1.5 && g !== 1 ? g : 0;
+    if (req.body?.gain !== undefined && !gain && g !== 1) return res.status(400).json({ message: "gain is 0.2 to 1.5 (1 = as is)." });
     if (source === "clean") {
       let clean: CleanResult | null = null;
       try { clean = rec.clean ? JSON.parse(rec.clean) : null; } catch { clean = null; }
@@ -8454,10 +8458,11 @@ export function registerRoutes(app: Express): void {
       source, trimStart: 0, trimEnd: 0,
       introKey: introKey || undefined, introName: String(req.body?.introName ?? "Intro").slice(0, 120),
       outroKey: outroKey || undefined, outroName: String(req.body?.outroName ?? "Outro").slice(0, 120),
+      gain: gain || undefined,
       status: "queued", at: new Date().toISOString(),
     };
     await storage.setEpisodeEdit(rec.id, JSON.stringify(e));
-    res.json({ ok: true, recordingId: rec.id, source, introKey, outroKey });
+    res.json({ ok: true, recordingId: rec.id, source, introKey, outroKey, gain: gain || 1 });
   });
 
   /** Admin: switch a member's package on or off (the template: settings guestcard:<email>). */

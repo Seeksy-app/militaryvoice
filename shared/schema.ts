@@ -1799,6 +1799,8 @@ export interface EpisodeEdit {
   music?: EpisodeMusic[];
   /** "Focus on whoever's talking" (24 Nov 2026): two people, cut in to the speaker's tile on long turns; one person, a gentle reframe. */
   focus?: boolean;
+  /** Volume of the whole finished edit, 1 = as is (0.7 = 30% quieter). */
+  gain?: number;
   status: "queued" | "running" | "done" | "failed";
   error?: string;
   resultId?: number;

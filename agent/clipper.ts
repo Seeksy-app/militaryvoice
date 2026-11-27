@@ -139,7 +139,9 @@ interface Job {
   livingSqueeze?: { pageId: number; kind?: "living" | "intro" };
   episodeEdit?: { trimStart: number; trimEnd: number; cuts?: [number, number][]; cardSec?: number; cardMusicUrl?: string; introUrl?: string; outroUrl?: string; introTransition?: "fade" | "black" | "cut"; outroTransition?: "fade" | "black" | "cut"; music?: { url: string; from: number; to: number; level: "under" | "full" }[];
     /** "Focus on whoever's talking" (24 Nov 2026): two tiles → the speaker's tile in long stretches; one person → a gentle reframe. The transcript comes in job.transcript (in this video's own seconds) or is made here. */
-    focus?: boolean };
+    focus?: boolean;
+    /** Volume of the whole finished edit, 1 = as is (27 Nov 2026: 0.7 for "30% quieter"). */
+    gain?: number };
   /** Bring a recording in from elsewhere (Zoom): fetch downloadUrl with these headers, store it, report. */
   importFrom?: { headers: Record<string, string> };
   /** Clips to make from this episode (Pro: 6). Absent = CLIP_COUNT. */
@@ -2299,13 +2301,16 @@ async function handleEpisodeEdit(job: Job): Promise<void> {
         labels.push(`[mu${k}]`);
         at++;
       }
-      graph.push(`[${cur}a]${labels.join("")}amix=inputs=${labels.length + 1}:duration=first:normalize=0[a]`, `[${cur}v]format=yuv420p[v]`);
+      graph.push(`[${cur}a]${labels.join("")}amix=inputs=${labels.length + 1}:duration=first:normalize=0[am]`, `[${cur}v]format=yuv420p[v]`);
       console.log(`${tag}: music under ${music.length} part${music.length === 1 ? "" : "s"}`);
     } else {
       // The crossfades can hand back 4:4:4 video, which Safari won't play at all and other browsers
       // stutter on: always finish in the ordinary 4:2:0.
-      graph.push(`[${cur}v]format=yuv420p[v]`, `[${cur}a]anull[a]`);
+      graph.push(`[${cur}v]format=yuv420p[v]`, `[${cur}a]anull[am]`);
     }
+    const gain = typeof e.gain === "number" && e.gain >= 0.2 && e.gain <= 1.5 && e.gain !== 1 ? e.gain : 0;
+    graph.push(`[am]${gain ? `volume=${gain}` : "anull"}[a]`);
+    if (gain) console.log(`${tag}: volume ×${gain}`);
     const script = path.join(dir, "graph.txt");
     await fs.writeFile(script, graph.join(";"));
     const out = path.join(dir, `${job.recordingId}-edited.mp4`);
