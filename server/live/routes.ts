@@ -10,7 +10,7 @@ import {
 } from "../../shared/live.js";
 import { scriptKeyOk } from "../adminKey.js";
 import { registerProgramme } from "./programme.js";
-import { audit, canFor, isClient, liveOpen, memberRow, norm, now, requireLive, requireProductionRole, roleOn, seesApprovals, whoIs, type LiveReq, type LiveWho } from "./access.js";
+import { TEST_LOGINS, audit, canFor, isClient, liveOpen, memberRow, norm, now, requireLive, requireProductionRole, roleOn, seesApprovals, whoIs, type LiveReq, type LiveWho } from "./access.js";
 
 type MemberRole = Exclude<LiveRole, "mv_admin">;
 const str = (v: unknown, n: number) => (typeof v === "string" ? v.trim().slice(0, n) : "");
@@ -311,7 +311,7 @@ export function registerLive(app: Express): void {
   app.get("/api/production/me", (req, res) => send(res, (async () => {
     const who = await whoIs(req);
     if (!who) throw new Bad(401, "Please sign in again.");
-    const open = who.admin || who.email === LIVE_TEST_CLIENT || who.email === LIVE_TEST_CREW || (await liveOpen());
+    const open = who.admin || TEST_LOGINS.has(who.email) || (await liveOpen());
     return { email: who.email, admin: who.admin, open, productions: open ? (await visibleProductions(who)).length : 0 };
   })()));
 

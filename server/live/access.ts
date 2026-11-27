@@ -6,7 +6,7 @@ import { and, eq } from "drizzle-orm";
 import { db, schemaIsReady, storage } from "../storage.js";
 import { getAdminEmail, getSessionEmail } from "../session.js";
 import { auditLog, productionMembers, productions } from "../../shared/schema.js";
-import { ALEX_EMAIL, CLIENT_ROLES, CREW_ROLES, LIVE_TEST_CLIENT, LIVE_TEST_CREW, MV_ROLES, type LiveRole, type ProductionCan } from "../../shared/live.js";
+import { ALEX_EMAIL, CLIENT_ROLES, CREW_ROLES, LIVE_TEST_CLIENT, LIVE_TEST_CREW, LIVE_TEST_REVIEWER, MV_ROLES, type LiveRole, type ProductionCan } from "../../shared/live.js";
 
 export const now = () => new Date().toISOString();
 export const norm = (e: unknown) => String(e ?? "").trim().toLowerCase();
@@ -15,7 +15,7 @@ export const norm = (e: unknown) => String(e ?? "").trim().toLowerCase();
 export async function liveOpen(): Promise<boolean> {
   return (await storage.getSetting("live:on").catch(() => null)) === "on";
 }
-const TEST_LOGINS = new Set([LIVE_TEST_CLIENT, LIVE_TEST_CREW]);
+export const TEST_LOGINS = new Set([LIVE_TEST_CLIENT, LIVE_TEST_CREW, LIVE_TEST_REVIEWER]);
 
 /** A platform admin: a signed admin session whose address is an admin. Event admins, studio hosts and keys are not. */
 export async function platformAdmin(req: Request): Promise<string | null> {
