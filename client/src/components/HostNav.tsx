@@ -111,7 +111,7 @@ export function HostNav({
   const me = adminMe as { studioHost?: boolean; teamHost?: boolean } | null;
   const consoleOn = isAdmin && !(me?.studioHost && !me.teamHost);
   /** Doors that are pages of their own rather than dashboard screens. */
-  const pageHref = (it: Item): string | undefined => it.feature === "room" ? "/my-studio" : it.feature === "studio" ? (me?.studioHost ? "/studio/control" : "/admin/studio") : undefined;
+  const pageHref = (it: Item): string | undefined => it.feature === "studio" ? (me?.studioHost ? "/studio/control" : "/admin/studio") : undefined;
   const guideName = useGuideName();
   const helpHint = guideName === "Alex" ? "Search the help articles, or ask Alex, our assistant" : `Search the help articles, or ask ${guideName}, your AI guide`;
   const brand = path === "brand";
@@ -187,7 +187,8 @@ export function HostNav({
       title: "Studio & events",
       items: [
         // Studio is the Room for every creator (20 Nov 2026, Andrew): the one we're making StreamYard-like, on every plan.
-        { key: "pro", feature: "room", label: "Studio", hint: "Your studio: check your camera and mic, invite guests, record or go live. It all lands in your Library.", icon: MonitorPlay },
+        // Studio lands on the Studio page (Andrew, 27 Nov: the Studio home mockup, "1"); Enter my studio is top right there.
+        { key: "studio", label: "Studio", hint: "Your studio: saved studios, your guest link and where you go live. Enter it to record or go live.", icon: MonitorPlay },
         // The producer console (Radio and events) only for the people who run it: admins and studio hosts on a real event.
         ...(consoleOn ? [{ key: "pro" as const, feature: "studio", label: "Studio console", hint: "The producer console for Radio and events: scenes, run of show and lower thirds", icon: SlidersHorizontal }] : []),
         ...(path !== "planner" ? [{ key: "myevents" as const, label: "Events", hint: "The events you're in, and your own: create one, build your page and lineup, and run it from our studio", icon: CalendarDays, badge: eventsCount || undefined }] : []),

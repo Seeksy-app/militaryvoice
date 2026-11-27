@@ -1734,7 +1734,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                       { key: "email", art: "mail", title: "Audience", hint: "Email your subscribers", go: () => goTo("fans") },
                       { key: "discovery", art: "compass", title: "Discovery", hint: "Guests, sponsors", go: () => goTo("discovery") },
                       ...(path !== "planner" ? [{ key: "events", art: "party" as const, title: "Events", hint: "Yours and others", go: () => goTo("myevents") }] : []),
-                      { key: "studio", art: "tv", title: "Studio", hint: "Record or go live", go: () => { setProFeature("room"); goTo("pro"); } },
+                      { key: "studio", art: "tv", title: "Studio", hint: "Record or go live", go: () => goTo("studio") },
                     ];
                     const next: Shortcut | null = step ? { key: `todo-${step.key}`, art: "sparkles", title: step.label, tag: step.tag, hint: "Your next step", go: () => goToStep(step) } : null;
                     return (

@@ -39,7 +39,8 @@ export function brandOf(name: string): Brand | null {
 /** On, off: true when anything is picked to go live to. */
 export const anyDestinationOn = (s: DestStudio) => !!s.livePage?.on || (s.youtube && s.youtubeOn) || s.streams.some((x) => x.on);
 
-function useDestActions() {
+/** On/off, add and remove for the studio's destinations (the Studio page's Where you go live uses them too). */
+export function useDestActions() {
   const qc = useQueryClient();
   const { toast } = useToast();
   const [busy, setBusy] = useState("");
@@ -105,10 +106,10 @@ export function DestinationBar({ studio, live, onAdd }: { studio: DestStudio; li
   );
 }
 
-type KeySite = "facebook" | "linkedin" | "twitch" | "kick" | "x" | "other";
+export type KeySite = "facebook" | "linkedin" | "twitch" | "kick" | "x" | "other";
 type SiteInfo = { name: string; brand: Brand | null; hint: string; server: string; link?: { href: string; text: string }; steps: ReactNode[] };
 /** The plain-word steps per site. A filled-in server is one that's the same for everyone; the rest give their own. */
-const SITES: Record<KeySite, SiteInfo> = {
+export const SITES: Record<KeySite, SiteInfo> = {
   facebook: {
     name: "Facebook", brand: "facebook", hint: "Page, profile or group", server: "rtmps://live-api-s.facebook.com:443/rtmp/",
     link: { href: "https://www.facebook.com/live/producer", text: "Open it" },

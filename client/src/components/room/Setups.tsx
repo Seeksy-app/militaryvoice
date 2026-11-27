@@ -13,7 +13,7 @@ import { ScenePicture } from "./ScenesPanel";
 const NAVY = "#053877";
 const LOOK_KEY = ["/api/host/room/look"];
 const say = (e: unknown) => ((e as Error).message ?? "").replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, "") || "Try again in a moment.";
-const day = (iso: string) => (iso ? new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "");
+const day = (iso: string) => (!iso ? "" : new Date(iso).toDateString() === new Date().toDateString() ? "Today" : new Date(iso).toLocaleDateString("en-US", { month: "short", day: "numeric" }));
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? "" : "s"}`;
 
 type First = Partial<Scene> | null;
@@ -22,7 +22,7 @@ type Current = { name: string; usedAt: string; scenes: number; clips: number; fi
 type Setups = { current: Current | null; setups: Card[] };
 const SETUPS_KEY = "/api/host/my-studio/setups";
 
-function useSetups(showId: number | null | undefined) {
+export function useSetups(showId: number | null | undefined) {
   return useQuery<Setups>({ queryKey: [SETUPS_KEY, showId ?? null], queryFn: async () => (await apiRequest("GET", SETUPS_KEY)).json(), retry: false, staleTime: 0 });
 }
 
@@ -36,19 +36,12 @@ export function useCurrentStudioName(): string {
   return n === "Last time" ? "" : n;
 }
 
-/** Each layout's own colour (Andrew, 26 Nov: "let's add some color"), and saved setups cycle through a few more. */
-const TEMPLATE_BG: Record<string, string> = { interview: "linear-gradient(135deg,#0b3a8a,#1d5fc4)", solo: "linear-gradient(135deg,#0e7490,#14a3a3)", panel: "linear-gradient(135deg,#5b21b6,#8b5cf6)" };
-const SAVED_BG = ["linear-gradient(135deg,#be123c,#f43f5e)", "linear-gradient(135deg,#047857,#10b981)", "linear-gradient(135deg,#b45309,#f59e0b)", "linear-gradient(135deg,#1e3a8a,#6366f1)"];
-
-/** The row colours, in the order the mockup shows them: the layouts' own, then the saved ones'. */
-const ROW_BG = [...Object.values(TEMPLATE_BG), ...SAVED_BG];
-
 /* ───────────────────────── Saved studios (the dashboard's Studio page) ───────────────────────── */
 
 /**
- * Saved studios as rows, like Your files (Andrew, 27 Nov: "Build A (rows)"; exports/studio-page-mockup). There's no
- * "How do you want to start?" page any more: Enter my studio opens the studio as it was left, and Open here loads a
- * saved one first. A studio is saved from inside the studio (Scenes ⋯ → Save this setup as…). One show per profile.
+ * Saved studios as rows, like Your files: the Studio page's Saved studios tab (Andrew, 27 Nov: the Studio home mockup,
+ * version A, "1"). No colour swatches; the one the studio has open now says so under Last used. Enter my studio opens
+ * the studio as it was left, and Open loads a saved one first. A studio is saved from inside the studio.
  */
 export function SavedStudios({ locked }: { locked: boolean }) {
   const q = useSetups(null);
@@ -59,7 +52,7 @@ export function SavedStudios({ locked }: { locked: boolean }) {
   const [deleting, setDeleting] = useState<Card | null>(null);
   const list = q.data?.setups ?? [];
   const last = q.data?.current?.name ?? "";
-  if (q.isError) return null; // no studio yet: the first visit makes it
+  if (q.isError) return <p className="text-sm text-muted-foreground">Your saved studios show here once you've been in your studio.</p>;
   const open = async (c: Card) => {
     setBusy(c.id); setError("");
     try { await apiRequest("POST", `${SETUPS_KEY}/${c.id}/use`); window.location.href = "/my-studio"; }
@@ -69,58 +62,53 @@ export function SavedStudios({ locked }: { locked: boolean }) {
     setError("");
     try { await fn(); await q.refetch(); } catch (e) { setError(say(e)); }
   };
+  const cols = "sm:grid-cols-[minmax(0,1fr)_200px_170px_96px]";
   return (
-    <section data-testid="saved-studios">
-      <h2 className="flex items-center gap-2 text-base font-bold">
-        <span className="relative h-5 w-6 rounded bg-gradient-to-br from-[#ffd27a] to-[#F0A71F] before:absolute before:-top-1 before:left-0 before:h-1.5 before:w-2.5 before:rounded-t before:bg-[#f5b94a]" aria-hidden />
-        Saved studios {q.data && <span className="text-xs font-medium text-muted-foreground">{list.length}</span>}
-      </h2>
-      {error && <p className="mt-2 rounded-xl bg-[#fef3f2] px-4 py-2.5 text-sm font-medium text-[#b42318]" role="alert">{error}</p>}
-      <div className="mt-2.5 rounded-2xl border border-border bg-card">
+    <section className="space-y-2.5" data-testid="saved-studios">
+      {error && <p className="rounded-xl bg-[#fef3f2] px-4 py-2.5 text-sm font-medium text-[#b42318]" role="alert">{error}</p>}
+      <div className="rounded-[14px] border border-border bg-card">
         {q.isLoading ? (
           <div className="flex h-24 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
         ) : !list.length ? (
           <p className="px-4 py-3.5 text-sm text-muted-foreground">Nothing saved yet. In your studio, open Scenes ⋯ and pick <span className="font-semibold text-foreground">Save this setup as…</span></p>
         ) : <>
-          <div className="hidden grid-cols-[minmax(0,1fr)_190px_120px_64px_36px] gap-3.5 border-b border-border px-4 py-2 text-xs text-muted-foreground sm:grid">
-            <span>Name</span><span>Details</span><span>Last used</span><span /><span />
+          <div className={`hidden gap-3.5 border-b border-border px-4 py-2 text-xs text-muted-foreground sm:grid ${cols}`}>
+            <span>Name</span><span>Details</span><span>Last used</span><span />
           </div>
-          {list.map((c, i) => {
+          {list.map((c) => {
             const details = [plural(c.scenes, "scene"), c.clips ? plural(c.clips, "clip") : ""].filter(Boolean).join(" · ");
             const when = day(c.usedAt || c.savedAt);
             const isLast = !!last && c.name === last;
+            const now = <span className="shrink-0 rounded-full bg-[#ecfdf3] px-2 py-0.5 text-[11px] font-semibold text-[#027a48]">Open now</span>;
             return (
-              <div key={c.id} className="grid grid-cols-[minmax(0,1fr)_auto_32px] items-center gap-2 border-b border-border px-3 py-2.5 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_190px_120px_64px_36px] sm:gap-3.5 sm:px-4" data-testid="saved-studio">
-                <span className="flex min-w-0 items-center gap-2.5">
-                  <span className="h-6 w-10 shrink-0 rounded-[5px]" style={{ background: ROW_BG[i % ROW_BG.length] }} aria-hidden />
-                  <span className="min-w-0">
-                    <span className="flex min-w-0 items-center gap-2">
-                      <span className="truncate text-sm font-semibold">{c.name}</span>
-                      {isLast && <span className="hidden shrink-0 rounded-full bg-[#ecfdf3] px-2 py-0.5 text-[11px] font-semibold text-[#027a48] sm:inline">Last used</span>}
-                    </span>
-                    <span className="block truncate text-xs text-muted-foreground sm:hidden">{[isLast ? "Last used" : when, details].filter(Boolean).join(" · ")}</span>
-                  </span>
+              <div key={c.id} className={`grid grid-cols-[minmax(0,1fr)_auto] items-center gap-2 border-b border-border px-3 py-2.5 last:border-b-0 sm:gap-3.5 sm:px-4 ${cols}`} data-testid="saved-studio">
+                <span className="min-w-0">
+                  <span className="block truncate text-sm font-semibold">{c.name}</span>
+                  <span className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground sm:hidden"><span className="truncate">{[when, details].filter(Boolean).join(" · ")}</span>{isLast && now}</span>
                 </span>
                 <span className="hidden truncate text-sm text-muted-foreground sm:block">{details}</span>
-                <span className="hidden text-sm text-muted-foreground sm:block">{when}</span>
-                <button type="button" onClick={() => void open(c)} disabled={locked || !!busy} title={locked ? "You're live or recording. Change scenes inside your studio." : undefined}
-                  className="flex h-8 items-center justify-end gap-1 text-sm font-semibold text-[#053877] hover:underline disabled:opacity-50 disabled:no-underline dark:text-white" data-testid="saved-studio-open">
-                  {busy === c.id && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Open
-                </button>
-                <span className="relative flex justify-center">
-                  <button type="button" onClick={() => setMenu(menu === c.id ? "" : c.id)} aria-label={`More for ${c.name}`} aria-expanded={menu === c.id} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted" data-testid="saved-studio-more"><MoreHorizontal className="h-4 w-4" /></button>
-                  {menu === c.id && (
-                    <Menu onClose={() => setMenu("")} className="right-0 top-9 w-32">
-                      <MenuItem onClick={() => { setMenu(""); setRenaming(c); }} testId="setup-rename">Rename</MenuItem>
-                      <MenuItem onClick={() => { setMenu(""); setDeleting(c); }} danger testId="setup-delete">Delete</MenuItem>
-                    </Menu>
-                  )}
+                <span className="hidden items-center gap-2 text-sm text-muted-foreground sm:flex">{when}{isLast && now}</span>
+                <span className="flex items-center justify-end gap-1">
+                  <button type="button" onClick={() => void open(c)} disabled={locked || !!busy} title={locked ? "You're live or recording. Change scenes inside your studio." : undefined}
+                    className="flex h-8 items-center gap-1 px-1.5 text-sm font-bold text-[#053877] hover:underline disabled:opacity-50 disabled:no-underline dark:text-white" data-testid="saved-studio-open">
+                    {busy === c.id && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Open
+                  </button>
+                  <span className="relative">
+                    <button type="button" onClick={() => setMenu(menu === c.id ? "" : c.id)} aria-label={`More for ${c.name}`} aria-expanded={menu === c.id} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted" data-testid="saved-studio-more"><MoreHorizontal className="h-4 w-4" /></button>
+                    {menu === c.id && (
+                      <Menu onClose={() => setMenu("")} className="right-0 top-9 w-32">
+                        <MenuItem onClick={() => { setMenu(""); setRenaming(c); }} testId="setup-rename">Rename</MenuItem>
+                        <MenuItem onClick={() => { setMenu(""); setDeleting(c); }} danger testId="setup-delete">Delete</MenuItem>
+                      </Menu>
+                    )}
+                  </span>
                 </span>
               </div>
             );
           })}
         </>}
       </div>
+      <p className="text-[12.5px] text-muted-foreground">Open loads that studio's scenes and clips, then takes you in. Save a new one from inside the studio.</p>
 
       {renaming && (
         <NameDialog title="Rename" start={renaming.name} cta="Rename" onClose={() => setRenaming(null)}
