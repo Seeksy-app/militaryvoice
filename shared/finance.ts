@@ -72,9 +72,14 @@ export function matchHand(h: HandLine, rows: FinRow[]): FinRow | undefined {
   if (!h.date) return undefined;
   const at = Date.parse(`${h.date}T12:00:00Z`);
   const want = Math.round(h.amount * 100);
-  const hit = rows.find((r) => !taken.has(r) && (r.source === "stripe" || r.source === "mercury") && r.kind !== "expense"
-    && Math.abs(r.cents - want) <= 1 && Math.abs(Date.parse(`${r.date}T12:00:00Z`) - at) <= 5 * 86_400_000
-    && (r.kind === h.kind || r.kind === "unsorted"));
+  // A shared surname or company word ("Tarver Realty Group" and "Jeffrey Tarver") allows 30 days: invoices get paid late.
+  const words = new Set((h.source.toLowerCase().match(/[a-z]{4,}/g) ?? []).filter((w) => !["group", "network", "player", "deposit"].includes(w)));
+  const hit = rows.find((r) => {
+    if (taken.has(r) || (r.source !== "stripe" && r.source !== "mercury") || r.kind === "expense") return false;
+    if (Math.abs(r.cents - want) > 1 || (r.kind !== h.kind && r.kind !== "unsorted")) return false;
+    const days = Math.abs(Date.parse(`${r.date}T12:00:00Z`) - at) / 86_400_000;
+    return days <= 5 || (days <= 30 && (r.who.toLowerCase().match(/[a-z]{4,}/g) ?? []).some((w) => words.has(w)));
+  });
   if (hit) taken.add(hit);
   return hit;
 }

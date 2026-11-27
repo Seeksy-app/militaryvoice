@@ -123,7 +123,8 @@ async function build() {
   // A charge still "to sort" that matches one takes that line's kind.
   for (const h of [...handRevenue, ...handOwner]) {
     const hit = matchHand(h, out);
-    if (hit) { if (hit.kind === "unsorted" && !sorted[hit.id!]) hit.kind = h.kind; continue; }
+    // The hand-kept name is the clearer one (Stripe's billing name can be a street address).
+    if (hit) { if (hit.kind === "unsorted" && !sorted[hit.id!]) hit.kind = h.kind; if (h.source) { hit.note = [hit.who, hit.note].filter(Boolean).join(" · "); hit.who = h.source; } continue; }
     if (!(h.amount > 0)) continue;
     out.push({ source: "hand", month: h.date ? monthOf(`${h.date}T12:00:00Z`) : monthOf(new Date().toISOString()), date: h.date, kind: h.kind, cents: cents(h.amount), refundCents: 0, who: h.source, note: h.note || "Entered by hand" });
   }

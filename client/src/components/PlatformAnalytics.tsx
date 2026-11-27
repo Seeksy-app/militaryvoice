@@ -84,9 +84,10 @@ export function PlatformAnalytics() {
               [`New accounts · ${d.days}d`, d.accounts.new.toLocaleString()],
               [`Clips made · ${d.days}d`, d.postify.clips.toLocaleString()],
             ].map(([k, v]) => (
-              <div key={k} className="rounded-2xl border border-border bg-card p-4">
-                <p className="text-2xl font-bold tabular-nums">{v}</p>
-                <p className="text-xs font-semibold text-muted-foreground">{k}</p>
+              <div key={k} className="min-w-0 rounded-2xl border border-border bg-card p-2.5 sm:p-4">
+                <p className="text-lg font-bold tabular-nums sm:text-2xl">{v}</p>
+                {/* " · 30d" stays on the line before it, so no lone "30d" at 375. */}
+                <p className="text-balance text-[11px] font-semibold text-muted-foreground sm:text-xs">{String(k).replace(/ · /g, "\u00a0·\u00a0")}</p>
               </div>
             ))}
           </div>
