@@ -3731,6 +3731,8 @@ export const stages = pgTable("stages", {
   name: text("name").notNull(),
   studioId: integer("studio_id").notNull().default(0),
   ingestProfile: text("ingest_profile").notNull().default(""),
+  /** Phase 2 (27 Nov): the stage's run-of-show working version, raised by any change to its sessions or their people. */
+  rosVersion: integer("ros_version").notNull().default(1),
   createdAt: text("created_at").notNull(),
 }, (t) => [index("stages_production_idx").on(t.productionId), index("stages_studio_idx").on(t.studioId)]);
 export type StageRow = typeof stages.$inferSelect;
@@ -3814,6 +3816,117 @@ export const liveOrgBrands = pgTable("live_org_brands", {
   updatedAt: text("updated_at").notNull(),
 }, (t) => [uniqueIndex("live_org_brands_org_idx").on(t.orgId)]);
 export type LiveOrgBrandRow = typeof liveOrgBrands.$inferSelect;
+
+/* ── Military Voices LIVE, phase 2: Programme (Packet A, 27 Nov 2026) ── API contract: shared/live.ts (phase 2 block).
+ * Every table carries production_id. live_ prefix: "sponsors" is already the show-sponsor table. */
+
+/** One row of a stage's day. starts_at / ends_at: ISO UTC. status: draft | confirmed | cancelled | removed. */
+export const liveSessions = pgTable("live_sessions", {
+  id: serial("id").primaryKey(),
+  productionId: integer("production_id").notNull(),
+  stageId: integer("stage_id").notNull(),
+  startsAt: text("starts_at").notNull(),
+  endsAt: text("ends_at").notNull(),
+  title: text("title").notNull(),
+  kind: text("kind").notNull().default("other"),
+  status: text("status").notNull().default("draft"),
+  sort: integer("sort").notNull().default(0),
+  mvOnly: boolean("mv_only").notNull().default(false),
+  notes: text("notes").notNull().default(""),
+  version: integer("version").notNull().default(1),
+  createdBy: text("created_by").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (t) => [index("live_sessions_stage_idx").on(t.productionId, t.stageId, t.startsAt)]);
+export type LiveSessionRow = typeof liveSessions.$inferSelect;
+
+/** A person on stage; belongs to the production's client org. links = JSON [{label,url}]. */
+export const liveSpeakers = pgTable("live_speakers", {
+  id: serial("id").primaryKey(),
+  productionId: integer("production_id").notNull(),
+  orgId: integer("org_id").notNull().default(0),
+  name: text("name").notNull(),
+  title: text("title").notNull().default(""),
+  company: text("company").notNull().default(""),
+  bio: text("bio").notNull().default(""),
+  photoUrl: text("photo_url").notNull().default(""),
+  cutoutUrl: text("cutout_url").notNull().default(""),
+  links: text("links").notNull().default("[]"),
+  pronunciationText: text("pronunciation_text").notNull().default(""),
+  pronunciationAudioUrl: text("pronunciation_audio_url").notNull().default(""),
+  email: text("email").notNull().default(""),
+  phone: text("phone").notNull().default(""),
+  version: integer("version").notNull().default(1),
+  removed: boolean("removed").notNull().default(false),
+  createdBy: text("created_by").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (t) => [index("live_speakers_production_idx").on(t.productionId)]);
+export type LiveSpeakerRow = typeof liveSpeakers.$inferSelect;
+
+/** Who's on a session, in order. role: speaker | moderator | host | performer. */
+export const liveSessionPeople = pgTable("live_session_people", {
+  id: serial("id").primaryKey(),
+  productionId: integer("production_id").notNull(),
+  sessionId: integer("session_id").notNull(),
+  speakerId: integer("speaker_id").notNull(),
+  role: text("role").notNull().default("speaker"),
+  sort: integer("sort").notNull().default(0),
+}, (t) => [index("live_session_people_session_idx").on(t.sessionId), index("live_session_people_speaker_idx").on(t.speakerId)]);
+export type LiveSessionPersonRow = typeof liveSessionPeople.$inferSelect;
+
+/** Words read on air for a session. kind: intro | transition | sponsor_read | outro. state: draft | in_review | approved |
+ *  changes_requested | removed. drafted_by "alex" or an email; ai_action_id when Alex drafted it. */
+export const liveScripts = pgTable("live_scripts", {
+  id: serial("id").primaryKey(),
+  productionId: integer("production_id").notNull(),
+  sessionId: integer("session_id").notNull(),
+  kind: text("kind").notNull().default("intro"),
+  sponsorId: integer("sponsor_id").notNull().default(0),
+  text: text("text").notNull().default(""),
+  audioUrl: text("audio_url").notNull().default(""),
+  version: integer("version").notNull().default(1),
+  state: text("state").notNull().default("draft"),
+  draftedBy: text("drafted_by").notNull().default(""),
+  aiActionId: integer("ai_action_id").notNull().default(0),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (t) => [index("live_scripts_session_idx").on(t.productionId, t.sessionId)]);
+export type LiveScriptRow = typeof liveScripts.$inferSelect;
+
+/** A production's sponsor and what we owe them. obligations = JSON [{what, count?, stageId?}]. */
+export const liveSponsors = pgTable("live_sponsors", {
+  id: serial("id").primaryKey(),
+  productionId: integer("production_id").notNull(),
+  name: text("name").notNull(),
+  logoUrl: text("logo_url").notNull().default(""),
+  obligations: text("obligations").notNull().default("[]"),
+  removed: boolean("removed").notNull().default(false),
+  createdBy: text("created_by").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (t) => [index("live_sponsors_production_idx").on(t.productionId)]);
+export type LiveSponsorRow = typeof liveSponsors.$inferSelect;
+
+/** A message Alex may send once approved. org_id 0 = MV's blank starter; production_id 0 = every production of the org.
+ *  state: draft | pending | approved | changes_requested | retired. */
+export const liveTemplates = pgTable("live_templates", {
+  id: serial("id").primaryKey(),
+  productionId: integer("production_id").notNull().default(0),
+  orgId: integer("org_id").notNull().default(0),
+  kind: text("kind").notNull(),
+  channel: text("channel").notNull().default("email"),
+  subject: text("subject").notNull().default(""),
+  text: text("text").notNull().default(""),
+  version: integer("version").notNull().default(1),
+  state: text("state").notNull().default("draft"),
+  approvedBy: text("approved_by").notNull().default(""),
+  approvedAt: text("approved_at").notNull().default(""),
+  createdBy: text("created_by").notNull().default(""),
+  createdAt: text("created_at").notNull(),
+  updatedAt: text("updated_at").notNull(),
+}, (t) => [index("live_templates_org_idx").on(t.orgId, t.productionId)]);
+export type LiveTemplateRow = typeof liveTemplates.$inferSelect;
 
 /** Track R (26 Nov 2026): how often each area still fell back to the featured event, per UTC day (server/mvEvents.ts). */
 export const eventFallbacks = pgTable("event_fallbacks", {

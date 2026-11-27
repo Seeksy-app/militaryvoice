@@ -171,3 +171,202 @@ export type LiveMe = { email: string; admin: boolean; open: boolean; productions
 /** The two test logins (phase 1 "done when"): each must see only its own production. */
 export const LIVE_TEST_CLIENT = "hello+liveclient@militaryvoices.ai";
 export const LIVE_TEST_CREW = "hello+livecrew@militaryvoices.ai";
+
+/* ══ Phase 2: Programme (Packet A, Podcasting, 27 Nov 2026) ═════════════════════════════════════════════════════
+ * Run of show, speakers, scripts, sponsors and message templates. FROZEN like phase 1: add fields only.
+ * Tables are live_sessions, live_speakers, live_session_people, live_scripts, live_sponsors, live_templates (the
+ * live_ prefix because "sponsors" is already the show-sponsor table); every one carries production_id.
+ *
+ * Who may do what:
+ *  - Read the run of show: every member (crew and clients too). Clients and crew never see mvOnly sessions, Alex's
+ *    drafts (scripts in state "draft"), or speakers' email and phone.
+ *  - Change sessions, speakers, sponsors and scripts: MV Admin, Producer, Coordinator (and MV Editor for scripts).
+ *  - Templates: MV roles read and draft; Client Admin reads its own org's. Approving is phase 2's approvals.
+ * Any change to an approved run of show raises its version and sets it to "changes_pending"; the stage studio's
+ * console keeps the last approved version until the client approves again.
+ */
+
+export const SESSION_KINDS = ["keynote", "panel", "fireside", "interview", "performance", "presentation", "ceremony", "break", "other"] as const;
+export type SessionKind = (typeof SESSION_KINDS)[number];
+export const SESSION_KIND_LABEL: Record<SessionKind, string> = {
+  keynote: "Keynote", panel: "Panel", fireside: "Fireside chat", interview: "Interview", performance: "Performance",
+  presentation: "Presentation", ceremony: "Ceremony", break: "Break", other: "Other",
+};
+/** draft → confirmed; cancelled stays listed (struck through) until it's removed. removed rows are never returned. */
+export const SESSION_STATUSES = ["draft", "confirmed", "cancelled"] as const;
+export type SessionStatus = (typeof SESSION_STATUSES)[number];
+export const SESSION_PERSON_ROLES = ["speaker", "moderator", "host", "performer"] as const;
+export type SessionPersonRole = (typeof SESSION_PERSON_ROLES)[number];
+
+/** One person on stage. Speakers belong to the production's client org. */
+export type Speaker = {
+  id: number;
+  productionId: number;
+  name: string;
+  title: string; // job title, "" when unknown
+  company: string; // their organisation, as words ("" when unknown)
+  bio: string; // plain text
+  photoUrl: string; // headshot, "" until there is one
+  cutoutUrl: string; // headshot with the background removed, "" until made
+  links: { label: string; url: string }[];
+  pronunciationText: string; // e.g. "SHEH-vawn MAK-ee"; "" when not needed or unknown
+  pronunciationAudioUrl: string;
+  /** MV roles (and the client's Client Admin) only; "" for everyone else. */
+  email: string;
+  phone: string;
+  /** Raised by every change; an approved bio is for one version. */
+  version: number;
+  /** The speaker's own approval state: "none" until sent, then the latest approval's state. */
+  approval: "none" | ApprovalState;
+  /** True when this speaker changed after its last approval. */
+  changedSinceApproval: boolean;
+  /** Sessions they're on (ids). */
+  sessionIds: number[];
+  createdAt: string;
+  updatedAt: string;
+};
+/** POST /api/production/productions/:id/speakers → Speaker (201); PATCH .../speakers/:speakerId → Speaker (any subset). */
+export type SpeakerInput = {
+  name?: string; // required on create, 2–120
+  title?: string; company?: string; bio?: string; // bio up to 4000
+  photoUrl?: string; cutoutUrl?: string; // https:// or ""
+  links?: { label: string; url: string }[]; // up to 10
+  pronunciationText?: string; pronunciationAudioUrl?: string;
+  email?: string; phone?: string;
+};
+/** GET /api/production/productions/:id/speakers → Speaker[] (by name). DELETE .../speakers/:speakerId → { ok: true }
+ *  (only when they're on no session; 409 otherwise). */
+
+/** Who's on a session, in order. */
+export type SessionPerson = { speakerId: number; name: string; role: SessionPersonRole; photoUrl: string; cutoutUrl: string };
+
+export type ScriptKind = "intro" | "transition" | "sponsor_read" | "outro";
+export const SCRIPT_KINDS: ScriptKind[] = ["intro", "transition", "sponsor_read", "outro"];
+/** draft (Alex's or a person's, not yet sent) → in_review (with the client) → approved | changes_requested. */
+export type ScriptState = "draft" | "in_review" | "approved" | "changes_requested";
+export type Script = {
+  id: number;
+  productionId: number;
+  sessionId: number;
+  kind: ScriptKind;
+  sponsorId: number | null; // for a sponsor read
+  text: string;
+  /** Alex's voice for an approved script (only while live:voice is on); "" otherwise. Any text change clears it. */
+  audioUrl: string;
+  version: number;
+  state: ScriptState;
+  /** "alex" when she drafted it, else the person's email. */
+  draftedBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+/** GET /api/production/productions/:id/scripts?sessionId= → Script[]. POST .../scripts { sessionId, kind, text, sponsorId? } → Script (201).
+ *  PATCH .../scripts/:scriptId { text } → Script (a new version: back to draft, audio cleared). MV roles and MV Editor. */
+
+/** One row of a stage's day. Times are ISO UTC; screens show them in the production's time zone. */
+export type Session = {
+  id: number;
+  productionId: number;
+  stageId: number;
+  startsAt: string;
+  endsAt: string;
+  /** Whole minutes, ends minus starts, rounded up. */
+  durationMinutes: number;
+  title: string;
+  kind: SessionKind;
+  status: SessionStatus;
+  /** Order among sessions that start at the same time. */
+  sort: number;
+  /** For MV and crew only (e.g. a changeover); clients never see it, and it never goes for approval. */
+  mvOnly: boolean;
+  notes: string; // MV notes, plain text; "" for clients
+  people: SessionPerson[];
+  /** Scripts on this session (clients and crew: in_review and approved only). */
+  scripts: Script[];
+  /** Raised by every change to the session or who's on it. */
+  version: number;
+  /** True when it changed after the run of show was last approved (or it's new since). */
+  changedSinceApproval: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+/** POST /api/production/productions/:id/sessions → Session (201); PATCH .../sessions/:sessionId → Session (any subset).
+ *  DELETE .../sessions/:sessionId → { ok: true } (removed; its console row goes at the next approval). */
+export type SessionInput = {
+  stageId?: number; // required on create: a stage of this production
+  startsAt?: string; endsAt?: string; // ISO; required on create; ends after starts, at most 24 h
+  title?: string; // required on create, 1–160
+  kind?: SessionKind;
+  status?: SessionStatus;
+  sort?: number;
+  mvOnly?: boolean;
+  notes?: string; // up to 4000
+  /** Replaces who's on it, in this order. Speakers must be this production's. */
+  people?: { speakerId: number; role?: SessionPersonRole }[];
+};
+
+/** "draft" (never sent), "in_review" (with the client), "approved", "changes_requested" (the client asked), or
+ *  "changes_pending" (approved before, edited since: the console keeps the approved version). */
+export type RunOfShowState = "draft" | "in_review" | "approved" | "changes_requested" | "changes_pending";
+/** GET /api/production/productions/:id/stages/:stageId/run-of-show → RunOfShow: the stage's sessions as they stand now. */
+export type RunOfShow = {
+  productionId: number;
+  stageId: number;
+  stageName: string;
+  timezone: string; // the production's
+  /** The working version (raised by any change) and the one last approved (null: never). */
+  version: number;
+  approvedVersion: number | null;
+  approvedAt: string;
+  state: RunOfShowState;
+  /** The pending or latest approval for it, if any. */
+  approvalId: number | null;
+  sessions: Session[]; // by startsAt, then sort
+  /** Since the last approval: session ids added, changed and removed. Empty before the first approval. */
+  changes: { added: number[]; changed: number[]; removed: { id: number; title: string }[] };
+};
+
+/** A production's sponsor and what we owe them (e.g. "2 reads on Main Stage", "logo on lower thirds"). MV roles. */
+export type LiveSponsor = { id: number; productionId: number; name: string; logoUrl: string; obligations: { what: string; count?: number; stageId?: number | null }[]; createdAt: string; updatedAt: string };
+/** GET/POST /api/production/productions/:id/sponsors, PATCH/DELETE .../sponsors/:sponsorId. */
+export type LiveSponsorInput = { name?: string; logoUrl?: string; obligations?: LiveSponsor["obligations"] };
+
+export const TEMPLATE_KINDS = ["speaker_invite", "speaker_confirmation", "reminder", "call_time", "thank_you", "missing_info"] as const;
+export type TemplateKind = (typeof TEMPLATE_KINDS)[number];
+export const TEMPLATE_KIND_LABEL: Record<TemplateKind, string> = {
+  speaker_invite: "Speaker invite", speaker_confirmation: "Speaker confirmation", reminder: "Reminder",
+  call_time: "Call time", thank_you: "Thank you", missing_info: "Missing information",
+};
+/** draft → pending (sent for approval) → approved (sendable) | changes_requested; retired = replaced by a newer one. */
+export type TemplateState = "draft" | "pending" | "approved" | "changes_requested" | "retired";
+/** A message Alex may send. Only approved templates are sendable, and nothing leaves while live:send is off (except
+ *  to the hello+live*@ test addresses). MV's blank starters (orgId 0) are copied into a client's own. */
+export type LiveTemplate = {
+  id: number;
+  /** 0 = MV's blank starter; else the client org it belongs to. */
+  orgId: number;
+  productionId: number | null; // null = for every production of that org
+  kind: TemplateKind;
+  channel: "email" | "sms";
+  subject: string; // "" for sms
+  /** Plain text with {{Speaker_Name}}, {{Session_Title}}, {{Session_Time}}, {{Stage}}, {{Production}}, {{Call_Time}}. */
+  text: string;
+  version: number;
+  state: TemplateState;
+  approvedBy: string;
+  approvedAt: string;
+  /** True only when approved: the one thing Alex may send. */
+  sendable: boolean;
+  starter: boolean; // orgId 0
+  createdAt: string;
+  updatedAt: string;
+};
+/** GET /api/production/productions/:id/templates → LiveTemplate[] (MV starters, then the client's own). MV roles; Client
+ *  Admin sees its org's. POST .../templates { kind, channel?, subject?, text?, fromStarterId? } → LiveTemplate (201, a draft
+ *  for the production's client org). PATCH .../templates/:templateId { subject?, text? } → LiveTemplate (a new version:
+ *  back to draft; approval is lost). MV roles. */
+
+/** The test client reviewer (phase 2 done line): approves the run of show and bios in the portal. */
+export const LIVE_TEST_REVIEWER = "hello+livereview@militaryvoices.ai";
+/** Mail to these goes even while live:send is off (the done line's only sends). */
+export const isLiveTestAddress = (email: string): boolean => /^hello\+live[a-z0-9-]*@militaryvoices?\.ai$/i.test(String(email ?? "").trim());
