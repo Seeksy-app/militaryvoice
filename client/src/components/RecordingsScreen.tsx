@@ -308,17 +308,13 @@ function ZoomWayIn({ wide = false }: { wide?: boolean }) {
   );
 }
 
-/** "Send us a recording" (the share link and passcode, Engineering's card), for one of their shows. */
+/** "Send us a recording" (the share link and passcode, Engineering's card). Left without a show, the form asks which
+ * show when there's more than one, and still works with none. */
 function SendLink({ wide = false }: { wide?: boolean }) {
   const [open, setOpen] = useState(false);
-  const showsQ = useQuery<{ shows: { show: { id: number; title: string } }[] }>({ queryKey: ["/api/host/hosting"], queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json(), staleTime: 60_000 });
-  const shows = (showsQ.data?.shows ?? []).map((x) => x.show);
-  const [pick, setPick] = useState<number | null>(null);
-  const showId = pick ?? shows[0]?.id ?? null;
-  if (!shows.length) return null;
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className={`${wide ? "justify-center" : ""} inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-card px-3.5 text-[13px] font-semibold text-foreground hover:border-[#053877]/40`} data-testid="library-send-recording">
+      <button type="button" onClick={() => setOpen(true)} className={`${wide ? "justify-center" : ""} inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-card px-3.5 text-[13px] font-semibold text-foreground hover:border-[#053877]/40`} title="A Zoom, Dropbox or Google Drive share link. We bring it into your Library." data-testid="library-send-recording">
         <Link2 className="h-4 w-4 text-[#053877] dark:text-[#8fb5e8]" />Send us a recording
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
@@ -327,15 +323,7 @@ function SendLink({ wide = false }: { wide?: boolean }) {
             <DialogTitle className="text-balance">Send us a recording</DialogTitle>
             <DialogDescription className="[text-wrap:pretty]">Recorded on Zoom, or saved in Dropbox or Google Drive? Paste the share link and we'll bring it into your Library.</DialogDescription>
           </DialogHeader>
-          {shows.length > 1 && (
-            <label className="block">
-              <span className="mb-1 block text-xs font-medium">For which show</span>
-              <select value={showId ?? ""} onChange={(e) => setPick(Number(e.target.value))} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" data-testid="library-send-show">
-                {shows.map((x) => <option key={x.id} value={x.id}>{x.title}</option>)}
-              </select>
-            </label>
-          )}
-          {showId != null && <SendRecording key={showId} showId={showId} bare />}
+          <SendRecording bare />
         </DialogContent>
       </Dialog>
     </>
