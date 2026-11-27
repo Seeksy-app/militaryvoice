@@ -8663,14 +8663,23 @@ export function registerRoutes(app: Express): void {
     res.json(e);
   });
 
+  /** Show voices the worker may read an intro in (Warriors' Voice: Matilda, approved 27 Nov 2026). Add a show's voice here with its preset. */
+  const VOICED_TTS_VOICES = new Set(["XrExE9yKIg1WjnnlVkGX"]);
   /** The worker's voiced intro, read with the site's ElevenLabs key (the worker's key can't do text-to-speech). */
   app.post("/api/agent/voiced-tts", requireAgent, async (req, res) => {
     const key = (process.env.ELEVENLABS_API_KEY || process.env.ELEVEN_LABS_API_KEY || "").trim();
     if (!key) return res.status(503).json({ message: "No ElevenLabs key on the site." });
     const b = req.body ?? {};
     const voiceId = String(b.voiceId ?? "");
-    const text = String(b.text ?? "").slice(0, 1200);
-    if (!/^[A-Za-z0-9]{10,40}$/.test(voiceId) || !text.trim()) return res.status(400).json({ message: "voiceId and text?" });
+    const text = String(b.text ?? "");
+    // Never an open proxy (PM, 27 Nov): the approved preset voices only, an intro's length, and a few an hour.
+    if (!VOICED_TTS_VOICES.has(voiceId)) return res.status(403).json({ message: "Not an approved show voice." });
+    if (!text.trim() || text.length > 700) return res.status(400).json({ message: "The script is empty or longer than an intro (700 characters)." });
+    const hour = new Date().toISOString().slice(0, 13);
+    let used: { hour: string; n: number } = { hour, n: 0 };
+    try { const u = JSON.parse((await storage.getSetting("voiced-tts:used")) || "null"); if (u?.hour === hour) used = u; } catch { /* fresh */ }
+    if (used.n >= 20) return res.status(429).json({ message: "Too many voiced intros this hour." });
+    await storage.setSetting("voiced-tts:used", JSON.stringify({ hour, n: used.n + 1 }));
     const vs = b.voice_settings && typeof b.voice_settings === "object" ? b.voice_settings : {};
     const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`, {
       method: "POST", signal: AbortSignal.timeout(90_000),
