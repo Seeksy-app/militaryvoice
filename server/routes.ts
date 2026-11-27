@@ -8311,7 +8311,7 @@ export function registerRoutes(app: Express): void {
   const packageOn = async (email: string) => { try { return !!(JSON.parse((await storage.getSetting(`package:${email.trim().toLowerCase()}`)) ?? "{}") as { on?: boolean }).on; } catch { return false; } };
 
   /** The guest card for this recording, made and queued as the edit's intro and outro. */
-  async function attachGuest(rec: { id: number; email: string; clean: string; url: string }, guestName: string, guestPhoto: Buffer, source: EpisodeEdit["source"] = "original"): Promise<void> {
+  async function attachGuest(rec: { id: number; email: string; clean: string; url: string }, guestName: string, guestPhoto: Buffer, source: EpisodeEdit["source"] = "original", quiet = false): Promise<void> {
     const email = rec.email.trim().toLowerCase();
     const profile = await storage.getProfileByEmail(email);
     if (!profile?.photoUrl) throw new Error("Add your own photo to your profile first: it goes on the left of the card.");
@@ -8328,7 +8328,7 @@ export function registerRoutes(app: Express): void {
       const ve: EpisodeEdit = {
         source, trimStart: 0, trimEnd: 0,
         introKey: vkey, introName: `Voiced intro: ${guestName}`, outroKey: preset.outroAudioKey ? vkey : undefined, outroName: preset.outroAudioKey ? `Voiced outro` : undefined,
-        voiced: { preset, guestName }, status: "queued", at: new Date().toISOString(),
+        voiced: { preset, guestName }, quiet: quiet || undefined, status: "queued", at: new Date().toISOString(),
       };
       await storage.setEpisodeEdit(rec.id, JSON.stringify(ve));
       await storage.setSetting(`pkgwait:${rec.id}`, "");
@@ -8341,7 +8341,7 @@ export function registerRoutes(app: Express): void {
     const e: EpisodeEdit = {
       source, trimStart: 0, trimEnd: 0,
       introKey: key, introName: `Guest card: ${guestName}`, outroKey: key, outroName: `Guest card: ${guestName}`,
-      cardMusicKey: gc.musicKey || undefined, cardSec: gc.sec, status: "queued", at: new Date().toISOString(),
+      cardMusicKey: gc.musicKey || undefined, cardSec: gc.sec, quiet: quiet || undefined, status: "queued", at: new Date().toISOString(),
     };
     await storage.setEpisodeEdit(rec.id, JSON.stringify(e));
     await storage.setSetting(`pkgwait:${rec.id}`, "");
@@ -8450,7 +8450,7 @@ export function registerRoutes(app: Express): void {
       if (clean?.status !== "done" || !clean?.videoKey) return res.status(409).json({ message: "The clean episode isn't ready yet." });
     }
     try {
-      await attachGuest(rec, guestName, Buffer.from(m[1], "base64"), source);
+      await attachGuest(rec, guestName, Buffer.from(m[1], "base64"), source, true); // for review: no push to the owner
     } catch (err) {
       return res.status(409).json({ message: (err as Error).message });
     }
@@ -8524,7 +8524,7 @@ export function registerRoutes(app: Express): void {
       source, trimStart: 0, trimEnd: 0,
       introKey: introKey || undefined, introName: String(req.body?.introName ?? "Intro").slice(0, 120),
       outroKey: outroKey || undefined, outroName: String(req.body?.outroName ?? "Outro").slice(0, 120),
-      gain: gain || undefined,
+      gain: gain || undefined, quiet: true, // for review: no push to the owner
       status: "queued", at: new Date().toISOString(),
     };
     await storage.setEpisodeEdit(rec.id, JSON.stringify(e));
@@ -8654,7 +8654,7 @@ export function registerRoutes(app: Express): void {
     if (introText && e.voiced) e.voiced = { ...e.voiced, introText };
     await storage.setEpisodeEdit(rec.id, JSON.stringify({ ...e, status: "done", resultId: copy.id, error: undefined, at: new Date().toISOString() }));
     res.json({ id: copy.id });
-    if (rec.email) pushAfter(rec.email, { title: "Your edited episode is ready", body: `${rec.title || "Your episode"} (edited) is in your Library.`, url: "/host/dashboard/recordings", tag: `edit-${rec.id}` });
+    if (rec.email && !e.quiet) pushAfter(rec.email, { title: "Your edited episode is ready", body: `${rec.title || "Your episode"} (edited) is in your Library.`, url: "/host/dashboard/recordings", tag: `edit-${rec.id}` });
   });
 
   app.post("/api/agent/episode-edits/:id/failed", requireAgent, async (req, res) => {

@@ -1801,6 +1801,8 @@ export interface EpisodeEdit {
   focus?: boolean;
   /** Volume of the whole finished edit, 1 = as is (0.7 = 30% quieter). */
   gain?: number;
+  /** Made by the team for review (admin routes): no "ready" push to the owner. */
+  quiet?: boolean;
   /** A show's voiced intro and outro (27 Nov 2026): introKey/outroKey are the card pictures, this says how they sound. */
   voiced?: { preset: VoicedPreset; guestName: string; introText?: string };
   status: "queued" | "running" | "done" | "failed";
