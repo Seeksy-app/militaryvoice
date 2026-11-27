@@ -9828,7 +9828,7 @@ export function registerRoutes(app: Express): void {
     const bodyText = String(req.body?.bodyText ?? "").trim();
     if (!fromEmail.includes("@") || !bodyText) return res.status(400).json({ message: "Need a sender and the text." });
     const row = await storage.createInbound({
-      resendId: "", messageId: "", fromEmail, fromName: String(req.body?.fromName ?? "").trim(), toAddr: "hello@militaryvoice.ai",
+      resendId: "", messageId: "", fromEmail, fromName: String(req.body?.fromName ?? "").trim(), toAddr: "hello@militaryvoices.ai",
       subject, bodyText, receivedAt: String(req.body?.receivedAt ?? new Date().toISOString()), broadcastId: await matchBroadcast(subject),
       category: "", summary: "", draftFrom: "team", draftSubject: "", draftText: "", status: "new", repliedAt: null, replyResendId: "", replyFrom: "", replyText: "",
       ackAt: null, ackResendId: "", ackText: "",
@@ -13001,7 +13001,7 @@ Watch at militaryvoices.ai/agenda
     const ev = await storage.getEventById(eventId);
     if (!ev) return res.status(404).json({ message: "No such event." });
     const existing = new Set((await storage.listSocialPosts(eventId)).map((r) => r.signupId));
-    const skipEmails = new Set(["hello@militaryvoice.ai", "andrew@smartloads.io"]);
+    const skipEmails = new Set(["hello@militaryvoice.ai", "hello@militaryvoices.ai", "andrew@smartloads.io"]);
     const lineup = (await storage.listSignups(eventId))
       .filter((s) => s.status !== "cancelled" && !skipEmails.has(s.email.trim().toLowerCase()) && !existing.has(s.id))
       .sort((a, b) => a.slotIndex - b.slotIndex);

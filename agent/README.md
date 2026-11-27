@@ -56,7 +56,7 @@ export LIVEKIT_API_SECRET=…
 export DEEPGRAM_API_KEY=…            # captions
 export ANTHROPIC_API_KEY=…           # clipper — without it, picks get worse
 export AGENT_TOKEN=…                 # shared with the API; see below
-export API_BASE=https://www.militaryvoice.ai
+export API_BASE=https://www.militaryvoices.ai
 ```
 
 `AGENT_TOKEN` is the only thing the agents use to authenticate, and it must

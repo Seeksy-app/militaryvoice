@@ -550,9 +550,11 @@ export async function audienceFor(email: string): Promise<import("../shared/bio.
   return null;
 }
 
+/** Our own bookings, under either spelling of the house address: not creators. */
+const HOUSE_SIGNUPS = new Set(["hello@militaryvoice.ai", "hello@militaryvoices.ai", "andrew@smartloads.io"]);
 async function verifiedCreators(): Promise<(CreatorCard & { match: string })[]> {
   const ev = await storage.getFeaturedEvent();
-  const signups = (await storage.listSignups(ev.id)).filter((s) => s.status !== "cancelled" && s.email !== "hello@militaryvoice.ai" && s.email !== "andrew@smartloads.io");
+  const signups = (await storage.listSignups(ev.id)).filter((s) => s.status !== "cancelled" && !HOUSE_SIGNUPS.has(s.email.trim().toLowerCase()));
   const emails = signups.map((s) => s.email.trim().toLowerCase());
   const profiles = emails.length ? await db.select().from(podcasterProfiles).where(inArray(podcasterProfiles.email, emails)) : [];
   const when = (slot: number) =>
@@ -947,7 +949,7 @@ export function registerDiscoveryRoutes(app: Express): void {
       if (!getAdminEmail(req) && !(await adminKeyOk(req))) throw new HttpError(401, "Admins only.");
       const ev = await storage.getFeaturedEvent();
       const only = Number(req.body?.signupId) || 0;
-      const signups = (await storage.listSignups(ev.id)).filter((s) => s.status !== "cancelled" && s.email !== "hello@militaryvoice.ai" && s.email !== "andrew@smartloads.io" && (!only || s.id === only));
+      const signups = (await storage.listSignups(ev.id)).filter((s) => s.status !== "cancelled" && !HOUSE_SIGNUPS.has(s.email.trim().toLowerCase()) && (!only || s.id === only));
       const metrics = await db.select().from(socialMetrics);
       const out: { signupId: number; host: string; platform?: string; handle?: string; reach?: number; quality?: number | null; error?: string }[] = [];
       for (const s of signups) {

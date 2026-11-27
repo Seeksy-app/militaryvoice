@@ -794,7 +794,7 @@ function SignupsCard({ eventId }: { eventId: number }) {
     const m = new Map<string, ShowAssetRow[]>();
     for (const a of assets ?? []) {
       const k = a.email.toLowerCase();
-      if (k === "hello@militaryvoice.ai") continue;
+      if (k === "hello@militaryvoice.ai" || k === "hello@militaryvoices.ai") continue;
       m.set(k, [...(m.get(k) ?? []), a]);
     }
     return m;

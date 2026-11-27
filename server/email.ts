@@ -697,7 +697,7 @@ export async function sendPlatformInterestEmail(v: PlatformInterestInput): Promi
     </table>
   </div>`;
   const text = `${heading}\n\n` + rows.map(([k, val]) => `${k}: ${val}`).join("\n") + "\n";
-  return sendEmail({ kind: "sendPlatformInterestEmail", to: "hello@militaryvoice.ai", subject: `${heading}: ${v.name}`, html, text });
+  return sendEmail({ kind: "sendPlatformInterestEmail", to: "hello@militaryvoices.ai", subject: `${heading}: ${v.name}`, html, text });
 }
 
 // ---------------------------------------------------------------------------

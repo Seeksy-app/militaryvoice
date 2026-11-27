@@ -28,7 +28,7 @@
 //   read -rs AGENT_TOKEN && export AGENT_TOKEN
 //   read -rs ANTHROPIC_API_KEY && export ANTHROPIC_API_KEY
 //   read -rs ELEVENLABS_API_KEY && export ELEVENLABS_API_KEY
-//   API_BASE=https://www.militaryvoice.ai npx tsx agent/clipper.ts
+//   API_BASE=https://www.militaryvoices.ai npx tsx agent/clipper.ts
 //
 // ELEVENLABS_API_KEY is only needed for a recording that has no live
 // transcript — an old episode, or anything staged for a test. Order is live
