@@ -25,6 +25,7 @@ export function CommandCenter({
   firstName,
   photoUrl,
   podcastName,
+  email = "",
   actions,
 }: {
   /** Top right: Show me around, Sign out. */
@@ -53,10 +54,10 @@ export function CommandCenter({
           {photoUrl ? (
             <img src={resolveUploadUrl(photoUrl)} alt={podcastName} className="hidden h-12 w-12 shrink-0 rounded-full object-cover ring-1 ring-border sm:block" />
           ) : (
-            <span className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#053877]/10 text-lg font-bold text-[#053877] sm:flex">{(podcastName || firstName).slice(0, 1)}</span>
+            <span className="hidden h-12 w-12 shrink-0 items-center justify-center rounded-full bg-[#053877]/10 text-lg font-bold text-[#053877] sm:flex">{(podcastName || firstName || email).slice(0, 1).toUpperCase()}</span>
           )}
           <div className="min-w-0">
-            <h1 className="text-balance text-2xl font-bold leading-tight tracking-tight text-foreground sm:text-3xl" style={HEADLINE_FONT}>{greeting(now)}, {firstName}</h1>
+            <h1 className="text-balance text-2xl font-bold leading-tight tracking-tight text-foreground sm:text-3xl" style={HEADLINE_FONT}>{greeting(now)}{firstName ? `, ${firstName}` : ""}</h1>
             <p className="text-balance text-sm text-muted-foreground sm:truncate">{podcastName}{podcastName ? " · " : ""}{now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</p>
           </div>
         </div>

@@ -1678,7 +1678,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                       quiet rows. The navy and gold slabs it replaced made every block shout. */}
                   <HomeTour ready name={guideName} />
                   <CommandCenter
-                    firstName={(profile?.hostName || "").trim().split(/\s+/)[0] || "there"}
+                    firstName={(profile?.hostName || "").trim().split(/\s+/)[0] || ""}
+                    email={data.email}
                     photoUrl={profile?.photoUrl ?? ""}
                     podcastName={showName}
                   />
