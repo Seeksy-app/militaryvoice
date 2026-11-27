@@ -6,6 +6,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Link2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { apiRequest } from "@/lib/queryClient";
 
 type Sent = { id: string; showId: number; site: string; note: string; publishDate: string; status: "sent" | "picked" | "library"; createdAt: string };
@@ -31,7 +32,29 @@ export function siteName(site: string): string {
 }
 const day = (iso: string) => { try { return new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T12:00:00` : iso).toLocaleDateString([], { month: "short", day: "numeric" }); } catch { return ""; } };
 
-export function SendRecording({ showId }: { showId: number }) {
+/**
+ * The way in, beside New episode at the top of Episodes (27 Nov: under a long episode list the card was out of sight).
+ * Opens the card in a dialog.
+ */
+export function SendRecordingButton({ showId }: { showId: number }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <Button variant="outline" onClick={() => setOpen(true)} className="h-9 gap-1.5 rounded-lg" data-testid="hosting-send-recording"><Link2 className="h-4 w-4" /> Send us a recording</Button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-balance">Send us a recording</DialogTitle>
+            <DialogDescription className="[text-wrap:pretty]">Recorded on Zoom, or saved in Dropbox or Google Drive? Paste the share link and we'll bring it into your Library.</DialogDescription>
+          </DialogHeader>
+          <SendRecording showId={showId} bare />
+        </DialogContent>
+      </Dialog>
+    </>
+  );
+}
+
+export function SendRecording({ showId, bare = false }: { showId: number; /** In the dialog: no card frame or heading of its own. */ bare?: boolean }) {
   const qc = useQueryClient();
   const key = ["/api/host/recordings-in", showId];
   const { data } = useQuery<{ sent: Sent[]; nextDate: string }>({ queryKey: key, queryFn: async () => (await apiRequest("GET", `/api/host/recordings-in?showId=${showId}`)).json() });
@@ -66,10 +89,12 @@ export function SendRecording({ showId }: { showId: number }) {
   };
 
   return (
-    <div className="rounded-2xl border border-border bg-card p-4 shadow-sm" data-testid="send-recording">
-      <h2 className="flex items-center gap-2 text-sm font-semibold"><Link2 className="h-4 w-4 text-[#053877] dark:text-[#8fb5e8]" /> Send us a recording</h2>
-      <p className="mt-0.5 text-xs text-muted-foreground [text-wrap:pretty]">Recorded on Zoom, or saved in Dropbox or Google Drive? Paste the share link and we'll bring it into your Library.</p>
-      <form className="mt-3 grid gap-2 sm:grid-cols-[minmax(0,1fr)_170px]" onSubmit={(e) => { e.preventDefault(); void send(); }}>
+    <div className={bare ? "" : "rounded-2xl border border-border bg-card p-4 shadow-sm"} data-testid="send-recording">
+      {!bare && <>
+        <h2 className="flex items-center gap-2 text-sm font-semibold"><Link2 className="h-4 w-4 text-[#053877] dark:text-[#8fb5e8]" /> Send us a recording</h2>
+        <p className="mt-0.5 text-xs text-muted-foreground [text-wrap:pretty]">Recorded on Zoom, or saved in Dropbox or Google Drive? Paste the share link and we'll bring it into your Library.</p>
+      </>}
+      <form className={`${bare ? "" : "mt-3 "}grid gap-2 sm:grid-cols-[minmax(0,1fr)_170px]`} onSubmit={(e) => { e.preventDefault(); void send(); }}>
         <label className="block">
           <span className="mb-1 block text-xs font-medium">Recording link</span>
           <Input value={link} onChange={(e) => setLink(e.target.value)} placeholder="Paste the share link" inputMode="url" autoComplete="off" spellCheck={false} className="h-9" data-testid="send-recording-link" />

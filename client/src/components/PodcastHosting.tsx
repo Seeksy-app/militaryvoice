@@ -1,6 +1,6 @@
 import { shrinkImage } from "@/lib/shrinkImage";
 import { GuestInvites } from "@/components/GuestInvites";
-import { SendRecording } from "@/components/SendRecording";
+import { SendRecordingButton } from "@/components/SendRecording";
 import { Select } from "@/components/room/Select";
 import type { IconType } from "react-icons";
 import { SiApplepodcasts, SiCastbox, SiDeezer, SiIheartradio, SiPlayerfm, SiPocketcasts, SiPodcastindex, SiSpotify, SiYoutube, SiYoutubemusic } from "react-icons/si";
@@ -358,6 +358,8 @@ export function PodcastHosting() {
                   </Button>
                 )}
                 {shows.length > 1 && h.episodes.length > 0 && <Button variant="outline" onClick={() => (selecting ? endSelect() : setSelecting(true))} className="h-9 rounded-lg" data-testid="hosting-select">{selecting ? "Done" : "Select"}</Button>}
+                {/* A share link (Zoom, Dropbox, Drive) the team brings into their Library (Engineering, 27 Nov). */}
+                <SendRecordingButton key={s.id} showId={s.id} />
                 <Button onClick={() => setAdding(true)} className="h-9 gap-1.5 rounded-lg bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-new-episode"><Plus className="h-4 w-4" /> New episode</Button>
               </div>
             </div>
@@ -418,8 +420,6 @@ export function PodcastHosting() {
               <p className="py-6 text-center text-sm text-muted-foreground">No episodes yet. Add your first: upload the audio or the video, or use a recording from your Library.</p>
             )}
           </div>
-          {/* A share link (Zoom, Dropbox, Drive) the team brings into their Library (Engineering, 27 Nov). */}
-          <SendRecording key={s.id} showId={s.id} />
         </>
       )}
 
