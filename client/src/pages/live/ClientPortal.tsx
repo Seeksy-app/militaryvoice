@@ -5,6 +5,7 @@ import { useLive } from "./LiveApp";
 import { assignable, CLIENT_ROLES, ROLE_LABEL, sideOf, STATUS_LABEL, useApprovals, useInvite, useMembers, useStages, type MemberRole, type Production } from "./api";
 import { ApprovalRow } from "./Approvals";
 import { brand, FONT_BODY, FONT_COND, fmtRange, initials } from "./ui";
+import { PortalSchedule, PortalSpeakers } from "./PortalProgramme";
 
 /**
  * The client's portal at /live/<client> (plan decision 2): light, the client's name and logo, produced by
@@ -12,8 +13,8 @@ import { brand, FONT_BODY, FONT_COND, fmtRange, initials } from "./ui";
  */
 const TABS: { key: string; label: string; soon?: string }[] = [
   { key: "", label: "Overview" },
-  { key: "schedule", label: "Schedule", soon: "Your run of show by day, with each session's speakers." },
-  { key: "speakers", label: "Speakers", soon: "Speakers with bios, photos and how to say their names, for you to review." },
+  { key: "schedule", label: "Run of show" },
+  { key: "speakers", label: "Speakers" },
   { key: "approvals", label: "Approvals" },
   { key: "watch", label: "Watch", soon: "Links to watch on your channels and our watch page, ready to copy." },
   { key: "archive", label: "Archive", soon: "Every recording and clip after the event, by session and speaker." },
@@ -98,7 +99,7 @@ export default function ClientPortal({ slug, tab = "", preview = false }: { slug
             <NeedsYou productionId={p.id} slug={slug} />
             <Team p={p} />
             <Box title="Watch links"><Soon>Links to watch on your channels and our watch page, ready to copy.</Soon></Box>
-            <Box title="Schedule"><Soon>Your run of show by day, once the sessions are in.</Soon></Box>
+            <Box title="Run of show"><p className="text-[13.5px]" style={{ color: MUTED }}>Your day by stage, with each session's speakers. <Link href={`/${slug}/schedule`} className="font-semibold text-[#1f4f8f] hover:underline">Open it</Link></p></Box>
             <Box title="After the event"><Soon>Recordings, clips and reports, delivered here.</Soon></Box>
             <Box title="Message the production team" className="md:col-span-3">
               <p className="text-[14px]" style={{ color: MUTED }}>Email <a className="font-semibold text-[#1f4f8f] hover:underline" href="mailto:hello@militaryvoices.ai">hello@militaryvoices.ai</a> and the MilitaryVoices.ai team will get back to you.</p>
@@ -106,6 +107,8 @@ export default function ClientPortal({ slug, tab = "", preview = false }: { slug
           </div>
         )}
         {t.key === "approvals" && <ApprovalsTab productionId={p.id} />}
+        {t.key === "schedule" && <PortalSchedule p={p} />}
+        {t.key === "speakers" && <PortalSpeakers p={p} />}
         {t.soon && <Box title={t.label}><Soon>{t.soon}</Soon></Box>}
       </main>
     </Frame>

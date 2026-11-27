@@ -3,13 +3,15 @@ import { Link, Redirect, Route, Switch, useLocation } from "wouter";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { BarChart3, CalendarDays, CheckSquare, Film, LayoutDashboard, ListOrdered, LogOut, Radio, Sparkles, Users } from "lucide-react";
 import { LoginCard } from "@/pages/HostDashboard";
-import { sideOf, STATUS_LABEL, useMe, useProductions, useStages, type Production, type Role, type Side } from "./api";
+import { sideOf, STATUS_LABEL, useAlexQueue, useApprovals, useMe, useProductions, useStages, type Production, type Role, type Side } from "./api";
 import { C, FONT_BODY, FONT_COND, FONT_MONO, Pill, useEtClock, useLiveFonts } from "./ui";
 import Overview from "./Overview";
 import Events, { EventEdit } from "./Events";
 import Crew from "./Crew";
 import Approvals from "./Approvals";
 import ClientPortal from "./ClientPortal";
+import RunOfShow from "./RunOfShow";
+import Alex from "./Alex";
 
 /**
  * Military Voices LIVE at /live (phase 1, 26 Nov 2026). MV staff and crew get Production Command (navy); a client
@@ -80,7 +82,9 @@ export default function LiveApp() {
           <Route key="edit" path="/events/:id">{(p) => <Shell><EventEdit id={Number(p.id)} /></Shell>}</Route>,
           <Route key="crew" path="/crew"><Shell><Crew /></Shell></Route>,
           <Route key="approvals" path="/approvals"><Shell><Approvals /></Shell></Route>,
-          ...NAV.filter((n) => n.phase > 1).map((n) => (
+          <Route key="ros" path="/run-of-show/:view?">{(p) => <Shell><RunOfShow view={p.view ?? ""} /></Shell>}</Route>,
+          <Route key="ai" path="/ai"><Shell><Alex /></Shell></Route>,
+          ...NAV.filter((n) => n.phase > 2).map((n) => (
             <Route key={n.href} path={n.href}><Shell><ComingPage title={n.label} phase={n.phase} what={n.what ?? ""} /></Shell></Route>
           )),
           // MV can look at a client's portal exactly as the client sees it.
@@ -97,9 +101,9 @@ type NavItem = { href: string; label: string; icon: typeof Users; phase: number;
 const NAV: NavItem[] = [
   { href: "/", label: "Production Command", icon: LayoutDashboard, phase: 1, sides: ["mv", "crew"] },
   { href: "/events", label: "Events", icon: CalendarDays, phase: 1, sides: ["mv", "crew"] },
-  { href: "/run-of-show", label: "Run of Show", icon: ListOrdered, phase: 2, sides: ["mv", "crew"], what: "Sessions, speakers and scripts by day, with versions and the client's approval." },
+  { href: "/run-of-show", label: "Run of Show", icon: ListOrdered, phase: 2, sides: ["mv", "crew"] },
   { href: "/crew", label: "Crew & Technical", icon: Users, phase: 1, sides: ["mv", "crew"] },
-  { href: "/ai", label: "AI Assistant", icon: Sparkles, phase: 2, sides: ["mv"], what: "Drafts and schedule changes waiting for a person to approve, edit or reject, with the full activity log." },
+  { href: "/ai", label: "Alex", icon: Sparkles, phase: 2, sides: ["mv"] },
   { href: "/control", label: "Live Control", icon: Radio, phase: 3, sides: ["mv", "crew"], what: "Cameras, program, health, run of show and cues for the stage. Crew get On-Site Crew Control here." },
   { href: "/media", label: "Media Library", icon: Film, phase: 4, sides: ["mv"], what: "Recordings and clips by day, session and speaker, with rights and approval on each." },
   { href: "/approvals", label: "Approvals", icon: CheckSquare, phase: 1, sides: ["mv"] },
@@ -115,6 +119,10 @@ function Shell({ children }: { children: ReactNode }) {
   // A production often carries its stage in its name already ("Convention · Exhibit Hall Stage").
   const stage = first && !current?.name.includes(first) ? first : "";
   const nav = NAV.filter((n) => n.sides.includes(side));
+  // Counts on the nav, as on the approved mockup: Alex's drafts waiting, and approvals that are mine to decide.
+  const queue = useAlexQueue(side === "mv" ? current?.id ?? null : null);
+  const approvals = useApprovals(side === "mv" ? current?.id ?? null : null);
+  const count: Record<string, number> = { "/ai": queue.data?.length ?? 0, "/approvals": (approvals.data ?? []).filter((a) => a.mine).length };
   return (
     <div className="flex min-h-screen flex-col" style={{ background: C.bg, color: C.ink, fontFamily: FONT_BODY }} data-testid="live-shell">
       <header className="sticky top-0 z-20 flex h-14 shrink-0 items-center gap-3 border-b px-3 sm:gap-4 sm:px-4" style={{ background: C.head, borderColor: C.line }}>
@@ -156,12 +164,13 @@ function Shell({ children }: { children: ReactNode }) {
                 key={n.href}
                 href={n.href}
                 className="mb-0.5 flex h-9 items-center gap-2.5 rounded-md px-2.5 text-[14px] font-medium hover:bg-white/5"
-                style={on ? { background: C.active, color: "#fff" } : { color: n.phase > 1 ? "#7f90ab" : C.ink }}
+                style={on ? { background: C.active, color: "#fff" } : { color: n.phase > 2 ? "#7f90ab" : C.ink }}
                 data-testid={`live-nav-${n.href.slice(1) || "home"}`}
               >
                 <n.icon className="h-4 w-4 shrink-0" style={{ color: on ? C.gold : undefined }} aria-hidden />
                 <span className="min-w-0 flex-1 truncate">{n.label}</span>
-                {n.phase > 1 && <span className="text-[10.5px]" style={{ fontFamily: FONT_MONO, color: "#7f90ab" }}>P{n.phase}</span>}
+                {n.phase > 2 && <span className="text-[10.5px]" style={{ fontFamily: FONT_MONO, color: "#7f90ab" }}>P{n.phase}</span>}
+                {n.phase <= 2 && count[n.href] > 0 && <span className="min-w-[22px] rounded-full px-1.5 text-center text-[11.5px] font-bold" style={{ background: "rgba(141,182,240,.16)", color: "#8db6f0" }} data-testid={`live-nav-count-${n.href.slice(1)}`}>{count[n.href]}</span>}
               </Link>
             );
           })}
@@ -169,7 +178,7 @@ function Shell({ children }: { children: ReactNode }) {
         <main className="min-w-0 flex-1 p-3 sm:p-4">
           {/* Phone: the same sections as a strip under the bar. */}
           <div className="-mx-3 mb-3 flex gap-1 overflow-x-auto border-b px-3 pb-2 md:hidden" style={{ borderColor: C.line }}>
-            {nav.filter((n) => n.phase === 1).map((n) => {
+            {nav.filter((n) => n.phase <= 2).map((n) => {
               const on = n.href === "/" ? loc === "/" : loc.startsWith(n.href);
               return <Link key={n.href} href={n.href} className="whitespace-nowrap rounded-md px-2.5 py-1.5 text-[13.5px] font-semibold" style={on ? { background: C.active, color: "#fff" } : { color: C.muted }}>{n.href === "/" ? "Overview" : n.label}</Link>;
             })}
