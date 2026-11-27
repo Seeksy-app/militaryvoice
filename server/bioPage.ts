@@ -11,7 +11,7 @@ import { parseSocialAccounts } from "./uploadPost.js";
 import { audienceFor } from "./discovery.js";
 import { buildShareCard } from "./shareCard.js";
 import Anthropic from "@anthropic-ai/sdk";
-import { readFeed, hostedAsStats } from "./hosting.js";
+import { readFeed, hostedAsStats, ownEpisodeArt } from "./hosting.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
 import { noteFalRefused } from "./health.js";
 import { aiFor, knowledgeOf, syncKnowledge } from "./askShow.js";
@@ -101,7 +101,7 @@ export async function podcastFor(row: BioPageRow): Promise<BioPublic["podcast"]>
       return {
         title: show.title, artworkUrl: show.artworkUrl, feedUrl: `${ORIGIN}/feed/${show.slug}`, pageUrl: `${ORIGIN}/podcast/${show.slug}`,
         appleUrl: show.appleUrl, spotifyUrl: show.spotifyUrl, episodeCount: eps.length,
-        episodes: eps.slice(0, 12).map((e) => ({ id: String(e.id), title: e.title, publishedAt: e.publishedAt, durationSec: e.durationSec, audio: `${ORIGIN}/e/${e.id}.${/mp4|m4a|aac/.test(e.mime) ? (e.mime.startsWith("video") ? "mp4" : "m4a") : "mp3"}`, notes: "", artworkUrl: e.artworkUrl || show.artworkUrl })),
+        episodes: eps.slice(0, 12).map((e) => ({ id: String(e.id), title: e.title, publishedAt: e.publishedAt, durationSec: e.durationSec, audio: `${ORIGIN}/e/${e.id}.${/mp4|m4a|aac/.test(e.mime) ? (e.mime.startsWith("video") ? "mp4" : "m4a") : "mp3"}`, notes: "", artworkUrl: ownEpisodeArt(e) || show.artworkUrl })),
       };
     }
   }

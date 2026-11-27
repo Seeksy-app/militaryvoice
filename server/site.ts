@@ -10,7 +10,7 @@ import { and, desc, eq, like, ne } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { requireHostSession } from "./session.js";
 import { sendListenerQuestionEmail } from "./email.js";
-import { readFeed } from "./hosting.js";
+import { readFeed, ownEpisodeArt } from "./hosting.js";
 import { resolveFeed } from "./podcastIntake.js";
 import { bioPages, bioEvents, clips, siteSettings, hostedEpisodes, hostedShows, listenerQuestions, showTranscripts, type BioPageRow } from "../shared/schema.js";
 import { parseBrands, parseSocials, parseTheme } from "../shared/bio.js";
@@ -74,7 +74,7 @@ async function buildShow(row: BioPageRow): Promise<Show | null> {
           return {
             key, slug: `${slugOf(decode(e.title))}-${key}`, title: decode(e.title), publishedAt: e.publishedAt, durationSec: e.durationSec,
             audio: `${ORIGIN}/e/${e.id}.${/mp4|m4a|aac/.test(e.mime) ? (e.mime.startsWith("video") ? "mp4" : "m4a") : "mp3"}`,
-            artworkUrl: e.artworkUrl || hosted.artworkUrl, summary: notes.slice(0, 220), episodeNumber: e.episodeNumber, season: e.season,
+            artworkUrl: ownEpisodeArt(e) || hosted.artworkUrl, summary: notes.slice(0, 220), episodeNumber: e.episodeNumber, season: e.season,
             hasTranscript: false, notes, transcriptKey: `hosted:${e.id}`,
           };
         }),

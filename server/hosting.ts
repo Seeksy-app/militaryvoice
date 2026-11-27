@@ -1019,6 +1019,20 @@ export async function announceShow(showId: number): Promise<Announced | null> {
 }
 const announceSoon = (showId: number) => { const job = announceShow(showId).catch((err) => { console.warn("Announce failed:", (err as Error).message); return null; }); try { waitUntil(job); } catch { /* not on Vercel */ } };
 
+/**
+ * An episode's own artwork, for listener pages (SmartLink, podcast page, show website): what the podcaster set (an upload,
+ * or the image in a feed they moved in), never a frame we took from the video (Andrew, 27 Nov 2026: "Use the Podcast Profile
+ * image for thumbnails"). "" means use the show's cover. Frames are saved as …episode-<id>-still-…; uploads as
+ * …episode-<id>-own-…; older ones of ours (…episode-<id>-<time>.jpg) were nearly all frames, so they count as frames.
+ */
+export function ownEpisodeArt(e: { artworkUrl: string }): string {
+  const u = e.artworkUrl || "";
+  if (!u) return "";
+  if (/\/podcast-art\/episode-\d+-own-/.test(u)) return u;
+  if (/\/podcast-art\/episode-\d+-(still-)?\d+\.jpg$/.test(u)) return "";
+  return u;
+}
+
 export function registerHosting(app: Express, requireAgent: import("express").RequestHandler) {
   app.post("/api/agent/episode-still/:id/done", requireAgent, async (req, res) => {
     const id = Number(req.params.id);
@@ -1027,7 +1041,7 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
       if (buf.length < 2000) throw new Error("no picture");
       // Square, on the people in it (Apple wants 1400 or more on a side).
       const img = await sharp(buf).resize(1400, 1400, { fit: "cover", position: "attention" }).jpeg({ quality: 88 }).toBuffer();
-      const url = await uploadPhoto(`podcast-art/episode-${id}-${Date.now()}.jpg`, img, "image/jpeg");
+      const url = await uploadPhoto(`podcast-art/episode-${id}-still-${Date.now()}.jpg`, img, "image/jpeg");
       // Only if they haven't added a picture of their own meanwhile.
       await db.update(hostedEpisodes).set({ artworkUrl: url, stillJob: "done" }).where(and(eq(hostedEpisodes.id, id), eq(hostedEpisodes.artworkUrl, "")));
       await db.update(hostedEpisodes).set({ stillJob: "done" }).where(eq(hostedEpisodes.id, id));
@@ -1111,7 +1125,7 @@ export function registerHosting(app: Express, requireAgent: import("express").Re
       chat: page?.published && page.askEnabled ? page.handle : null,
       chatWelcome: page?.welcome.trim() || "Hi! Thanks for listening. What's on your mind?",
       show: { title: s.title, description: plainDesc(s.description), author: s.author || s.ownerName, artworkUrl: s.artworkUrl, category: s.category, website: s.website, appleUrl: s.appleUrl, spotifyUrl: s.spotifyUrl, feedUrl: feedUrl(s.slug) },
-      episodes: eps.map((e) => ({ id: e.id, title: e.title, notes: [e.notesFormat === "html" ? notesText(e.description) : e.description, footerText(s, e)].filter(Boolean).join("\n\n"), publishedAt: e.publishedAt, durationSec: e.durationSec, episodeNumber: e.episodeNumber, season: e.season, artworkUrl: e.artworkUrl, audio: `${ORIGIN}/e/${e.id}.${extOf(e.mime)}` })),
+      episodes: eps.map((e) => ({ id: e.id, title: e.title, notes: [e.notesFormat === "html" ? notesText(e.description) : e.description, footerText(s, e)].filter(Boolean).join("\n\n"), publishedAt: e.publishedAt, durationSec: e.durationSec, episodeNumber: e.episodeNumber, season: e.season, artworkUrl: ownEpisodeArt(e), audio: `${ORIGIN}/e/${e.id}.${extOf(e.mime)}` })),
     });
   });
 
@@ -1718,7 +1732,7 @@ Return JSON only: {"titles":["","",""],"description":""}`,
       const side = Math.min(meta.width ?? 0, meta.height ?? 0);
       if (side < 600) return res.status(400).json({ message: `That image is ${side}px on its short side. Use one at least 1400 × 1400.` });
       const img = await sharp(req.file.buffer).rotate().resize(Math.min(3000, Math.max(1400, side)), Math.min(3000, Math.max(1400, side)), { fit: "cover", position: "attention" }).jpeg({ quality: 90 }).toBuffer();
-      const url = await uploadPhoto(`podcast-art/episode-${e.id}-${Date.now()}.jpg`, img, "image/jpeg");
+      const url = await uploadPhoto(`podcast-art/episode-${e.id}-own-${Date.now()}.jpg`, img, "image/jpeg");
       await db.update(hostedEpisodes).set({ artworkUrl: url, stillJob: "done" }).where(eq(hostedEpisodes.id, e.id));
       res.json({ ok: true, url });
     } catch (err) {
