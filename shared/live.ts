@@ -178,8 +178,9 @@ export const LIVE_TEST_CREW = "hello+livecrew@militaryvoices.ai";
  * live_ prefix because "sponsors" is already the show-sponsor table); every one carries production_id.
  *
  * Who may do what:
- *  - Read the run of show: every member (crew and clients too). Clients and crew never see mvOnly sessions, Alex's
- *    drafts (scripts in state "draft"), or speakers' email and phone.
+ *  - Read the run of show: every member (crew and clients too). Clients never see mvOnly sessions or MV notes.
+ *    Clients and crew never see draft scripts (Alex's or anyone's) or speakers' email and phone (Client Admin sees
+ *    its own speakers' contact details).
  *  - Change sessions, speakers, sponsors and scripts: MV Admin, Producer, Coordinator (and MV Editor for scripts).
  *  - Templates: MV roles read and draft; Client Admin reads its own org's. Approving is phase 2's approvals.
  * Any change to an approved run of show raises its version and sets it to "changes_pending"; the stage studio's
@@ -279,7 +280,7 @@ export type Session = {
   sort: number;
   /** For MV and crew only (e.g. a changeover); clients never see it, and it never goes for approval. */
   mvOnly: boolean;
-  notes: string; // MV notes, plain text; "" for clients
+  notes: string; // MV notes for MV and crew, plain text; "" for clients
   people: SessionPerson[];
   /** Scripts on this session (clients and crew: in_review and approved only). */
   scripts: Script[];
@@ -370,3 +371,5 @@ export type LiveTemplate = {
 export const LIVE_TEST_REVIEWER = "hello+livereview@militaryvoices.ai";
 /** Mail to these goes even while live:send is off (the done line's only sends). */
 export const isLiveTestAddress = (email: string): boolean => /^hello\+live[a-z0-9-]*@militaryvoices?\.ai$/i.test(String(email ?? "").trim());
+/** A session's length in whole minutes, rounded up, so the console's zero never comes early (Engineering, 27 Nov). */
+export const sessionMinutes = (startsAt: string, endsAt: string): number => Math.max(0, Math.ceil((Date.parse(endsAt) - Date.parse(startsAt)) / 60_000));

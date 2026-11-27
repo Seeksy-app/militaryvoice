@@ -9,6 +9,7 @@ import {
   type Approval, type AuditEntry, type LiveOrg, type LiveRole, type Member, type Production, type Stage, type Venue,
 } from "../../shared/live.js";
 import { scriptKeyOk } from "../adminKey.js";
+import { registerProgramme } from "./programme.js";
 import { audit, canFor, isClient, liveOpen, memberRow, norm, now, requireLive, requireProductionRole, roleOn, seesApprovals, whoIs, type LiveReq, type LiveWho } from "./access.js";
 
 type MemberRole = Exclude<LiveRole, "mv_admin">;
@@ -401,5 +402,7 @@ export function registerLive(app: Express): void {
       .orderBy(desc(auditLog.id)).limit(200);
     return rows.map((r): AuditEntry => ({ id: r.id, productionId: r.productionId || null, who: r.who, what: r.what, subjectType: r.subjectType, subjectId: r.subjectId || null, before: parse(r.before), after: parse(r.after), at: r.at, actor: (r.actor === "alex" || r.actor === "script" ? r.actor : "person"), aiActionId: r.aiActionId || null }));
   })()));
+  // Phase 2: Programme (sessions, speakers, run of show, scripts, sponsors, templates). Same gate and roles.
+  registerProgramme(app);
 }
 
