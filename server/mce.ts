@@ -52,7 +52,7 @@ const FAQ: [string, string][] = [
   ],
   [
     "How do brands find military and veteran creators?",
-    "Discovery by MilitaryVoices.ai searches more than 300 million creator profiles across Instagram, YouTube, TikTok, X and Twitch for veterans, service members and military spouses. Describe who you want in plain English, then open any creator to see how much of their audience is real, where it lives, how it is growing and which brands have already paid them.",
+    "Discovery by MilitaryVoices.ai searches more than 800 million creator profiles across Instagram, YouTube, TikTok, X and Twitch for veterans, service members and military spouses. Describe who you want in plain English, then open any creator to see how much of their audience is real, where it lives, how it is growing and which brands have already paid them.",
   ],
   [
     "How many military creators are there?",
@@ -98,7 +98,7 @@ export function renderMcePage(o: { creators: MceCreator[]; sample: SamplePayload
       name: "MilitaryVoices.ai",
       url: MV,
       logo: `${MV}/google-logo-512.png`,
-      description: "The platform for military and veteran voices: live events, a verified creator directory and Discovery, a search across 300M+ creator profiles.",
+      description: "The platform for military and veteran voices: live events, a verified creator directory and Discovery, a search across 800M+ creator profiles.",
     },
     {
       "@context": "https://schema.org",
@@ -338,7 +338,7 @@ footer nav{display:flex;flex-wrap:wrap;gap:18px}
         <a class="btn btn-ghost" href="${utm("/directory")}">Browse the directory</a>
       </div>
       <div class="stats">
-        <div><b>300M+</b><span>creator profiles searched</span></div>
+        <div><b>800M+</b><span>creator profiles searched</span></div>
         <div><b>${o.creators.length}</b><span>verified military creators</span></div>
         <div><b>5</b><span>platforms: Instagram, YouTube, TikTok, X, Twitch</span></div>
       </div>

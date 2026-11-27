@@ -410,7 +410,7 @@ export default function Pricing() {
                         <TooltipTrigger asChild>
                           <button type="button" onClick={(e) => e.preventDefault()} aria-label="What is Discovery Pro?" className="text-[#8a5200]/70 hover:text-[#8a5200]" data-testid="plan-discovery-info"><Info className="h-3.5 w-3.5" /></button>
                         </TooltipTrigger>
-                        <TooltipContent className="max-w-[280px] text-xs leading-relaxed">Search 800M+ creator profiles across 6 platforms. Filter for military and veteran creators by topic, branch and audience, see their real reach, and get their email to invite them as a guest, partner or sponsor. Verified creators is included. Discovery Pro comes with Pro.</TooltipContent>
+                        <TooltipContent className="max-w-[280px] text-xs leading-relaxed">Search 800M+ creator profiles on Instagram, YouTube, TikTok, X and Twitch. Filter for military and veteran creators by topic, branch and audience, see their real reach, and get their email to invite them as a guest, partner or sponsor. Verified creators is included. Discovery Pro comes with Pro.</TooltipContent>
                       </Tooltip>
                     </span>
                     <span className="mt-0.5 block text-xs text-muted-foreground [text-wrap:pretty]">{yearly ? "Monthly only: add it on a monthly plan, or later." : `Find guests, partners and sponsors among 800M+ creators. ${disc.searches} searches, ${disc.lookups} full profiles and ${disc.reveals} contact emails a month.`}</span>
@@ -459,7 +459,7 @@ export default function Pricing() {
           <div className="flex flex-col gap-4 rounded-3xl border border-[#F0A71F]/50 bg-[#F0A71F]/[0.06] p-6 sm:flex-row sm:items-center" data-testid="addon-discovery">
             <div className="min-w-0 flex-1">
               <p className="flex items-center gap-2 text-lg font-bold text-foreground" style={HEADLINE_FONT}><Compass className="h-5 w-5 text-[#b36b00]" /> {disc.name} <span className="text-base font-semibold text-muted-foreground">· {cents(disc.cents)}/month</span></p>
-              <p className="mt-1 text-sm text-muted-foreground">{disc.blurb} Search 800M+ creator profiles across 6 platforms. It comes with Pro; on Scale, add it above in one payment, or here. Verified creators comes with Pro too, or is {cents(ADDONS.verified.cents)}/month on its own.</p>
+              <p className="mt-1 text-sm text-muted-foreground">{disc.blurb} Search 800M+ creator profiles on Instagram, YouTube, TikTok, X and Twitch. It comes with Pro; on Scale, add it above in one payment, or here. Verified creators comes with Pro too, or is {cents(ADDONS.verified.cents)}/month on its own.</p>
               <ul className="mt-2 space-y-1 text-sm text-foreground/85">
                 {disc.features.map((f) => <li key={f} className="flex items-start gap-2"><Check className="mt-0.5 h-4 w-4 shrink-0 text-[#b36b00]" /> {f}</li>)}
               </ul>

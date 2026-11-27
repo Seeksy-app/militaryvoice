@@ -51,7 +51,7 @@ const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as c
 
 /** What Discovery does, capability by capability. */
 const DISCOVERY_FEATURES = [
-  { icon: Search, title: "300M+ profiles", body: "Instagram, YouTube and TikTok, searched by name, by bio, or by what you describe." },
+  { icon: Search, title: "800M+ profiles", body: "Instagram, YouTube, TikTok, X and Twitch, searched by name, by bio, or by what you describe." },
   { icon: Wand2, title: "SI search", body: "Ask in plain English: \"Army veterans who talk about life after service.\"" },
   { icon: BadgeCheck, title: "Verified on MilitaryVoices", body: "The gold badge means they've been on a MilitaryVoices event lineup." },
   { icon: Globe2, title: "Who's really listening", body: "Audience age, gender, country, city and language, with a credibility score and real reach." },
@@ -233,7 +233,7 @@ export default function Platform({ pitch = false }: { pitch?: boolean } = {}) {
               {[
                 ["Live", "to YouTube · more platforms soon"],
                 ["SI", "producer in the green room"],
-                ["300M+", "creators in Discovery"],
+                ["800M+", "creators in Discovery"],
               ].map(([v, l]) => (
                 <li key={v}>
                   <div className="text-xl font-semibold text-white" style={HEADLINE_FONT}>{v}</div>
@@ -260,7 +260,7 @@ export default function Platform({ pitch = false }: { pitch?: boolean } = {}) {
             <Kicker>Discovery</Kicker>
             <h2 className="mt-2 text-3xl font-semibold leading-[1.1] tracking-tight sm:text-[2.75rem]">Find the mil/vet voices worth working with, and see who's really listening</h2>
             <p className="mx-auto mt-5 max-w-2xl text-base leading-relaxed text-muted-foreground sm:text-lg">
-              Discovery searches over 300 million creator profiles for veterans, service members and military spouses — creators, podcasters, speakers — and opens each one to the audience behind the number and every brand that has already paid them.
+              Discovery searches over 800 million creator profiles for veterans, service members and military spouses — creators, podcasters, speakers — and opens each one to the audience behind the number and every brand that has already paid them.
             </p>
             <div className="mt-8 flex flex-col items-stretch justify-center gap-3 sm:flex-row sm:items-center">
               <Link href="/discover">

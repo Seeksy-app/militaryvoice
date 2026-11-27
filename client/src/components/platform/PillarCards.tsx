@@ -136,8 +136,8 @@ export const PILLARS: Pillar[] = [
   {
     key: "discovery", art: "search", kicker: "Discovery", tint: "from-[#e6f4fb] to-[#f5fbfe] dark:from-[#082a3a] dark:to-[#0a1433]", Scene: DiscoveryScene,
     title: "Find the right voices for it",
-    body: "Search over 300 million creator profiles for veterans, service members and military spouses, and see the real audience behind every follower count.",
-    points: ["Over 300 million creator profiles", "Audience quality, real reach and growth", "Brand deals, and the contact details creators publish"],
+    body: "Search over 800 million creator profiles for veterans, service members and military spouses, and see the real audience behind every follower count.",
+    points: ["Over 800 million creator profiles", "Audience quality, real reach and growth", "Brand deals, and the contact details creators publish"],
   },
   {
     key: "verified", art: "shield", kicker: "Verified", tint: "from-[#e7f6ee] to-[#f6fcf9] dark:from-[#0a2a1c] dark:to-[#0a1433]", Scene: VerifiedScene,
