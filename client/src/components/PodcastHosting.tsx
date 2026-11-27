@@ -188,7 +188,7 @@ export function PodcastHosting() {
       <section className="mt-2" data-testid="podcast-hosting">
         {/* Their show first (the one from sign-up): one press to move it here. Then the way in: have one, or starting one. */}
         {feedUrl && !inSetup && <YourShowElsewhere name={profile?.podcastName ?? ""} rss={feedUrl} onMoved={refresh} />}
-        <PodcastSetup initialFeed={feedUrl} onImported={() => { refresh(); toast({ title: "Alex: your episodes are here", description: "Next, point Apple and Spotify at your new feed so they read it instead of your old host. It is under Directories." }); }} onCreating={() => setInSetup(true)} onFinish={finishSetup} onBack={() => (shows.length ? setInSetup(false) : window.location.assign("/host/dashboard"))} />
+        <PodcastSetup initialFeed={feedUrl} onImported={() => { refresh(); toast({ title: "Alex: your episodes are here", description: "Next, point Apple and Spotify at your new feed so they read it instead of your old host. It is under Directories." }); }} onCreating={() => setInSetup(true)} onFinish={finishSetup} onBack={() => (shows.length ? setInSetup(false) : window.location.assign("/host/dashboard"))} backLabel={shows.length ? "Back" : "Skip — go to my dashboard"} />
       </section>
     );
   }

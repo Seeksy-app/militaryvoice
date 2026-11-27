@@ -723,6 +723,18 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   const [interests, setInterests] = useState<string>(() => {
     try { return localStorage.getItem("mv_interests") ?? ""; } catch { return ""; }
   });
+  // Skipped first-time setup for this visit (Andrew, 27 Nov: "they may not want to set up their show immediately, so
+  // we need to just skip and go to my dashboard. I'll do it later"). Nothing is saved: the dashboard's first Next step
+  // brings them back to the form, and the next visit asks again.
+  const [skipped, setSkipped] = useState<boolean>(() => {
+    try { return sessionStorage.getItem("mv_setup_skipped") === "1"; } catch { return false; }
+  });
+  const skipSetup = () => {
+    try { sessionStorage.setItem("mv_setup_skipped", "1"); } catch { /* this render only */ }
+    setSkipped(true);
+    setProfileDirty(false);
+    setScreen("dashboard");
+  };
   // Which locked door was opened, so the Pro page scrolls to it.
   const [proFeature, setProFeature] = useState<string | undefined>(() => {
     const h = typeof window === "undefined" ? "" : window.location.hash.replace(/^#/, "");
@@ -1145,7 +1157,11 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   const cohostOnly = !!data && !loadingProfile && !!cohost?.isCohost && !eventOver(cohost.event) && data.mySignups.length === 0 && !crewLive;
   const onTeamForGreenRoom = Boolean(crew?.isCrew || cohost?.isCohost);
   const crewMode = !!data && !loadingProfile && !hasProfile && crewLive;
-  const inSetup = !!data && !loadingProfile && !hasProfile && !crewMode;
+  const inSetup = !!data && !loadingProfile && !hasProfile && !crewMode && !skipped;
+  /** Past setup, or skipped it for now: the dashboard with its nav. */
+  const ready = hasProfile || (skipped && !crewMode);
+  /** No profile yet: the profile form is the first-time setup form, whether they're in setup or came back to it. */
+  const firstTime = !hasProfile;
   const guideStep = guideOffered(guide) && hasProfile && !inSetup && !crewMode && screen === "dashboard";
   // Who's signed in, for the account menu (the nav's foot on a computer, the header on a phone).
   // The show this account has now: its hosted show (one that isn't moving away), so a move or a rename shows in the
@@ -1163,14 +1179,14 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
   // Signed in, past setup: this is a workspace, not a page of the website.
   // The public nav is for people deciding whether to take part; somebody who
   // has already taken a slot just loses a band of screen to it.
-  const workspace = !!data && hasProfile && !inSetup;
+  const workspace = !!data && ready && !inSetup;
   const newOpps = (oppsPeek ?? []).filter((o) => o.status === "new").length;
   // Growth creators have a free taste of Discovery now (3 searches, 3 full profiles): open, with its counter.
   const discoveryLocked = Boolean(discoverMe?.locked) && !discoverMe?.free;
   const verifiedLocked = Boolean(discoverMe?.verifiedLocked);
   const eventsCountNav = (hostEvents ?? []).filter((e) => e.slotIndex != null && (!e.event || Date.now() < new Date(e.event.startAtUtc).getTime() + e.event.durationHours * 3600_000)).length;
   // Which path they came in on (podcaster, creator, planner): the dashboard follows it.
-  const path = pathOf(profile?.interests);
+  const path = pathOf(profile?.interests || interests);
   const checklistState = {
     hasShow: !!hostEvents?.some((e) => !!e.show?.showName),
     hasSlot: (data?.mySignups.length ?? 0) > 0,
@@ -1182,7 +1198,8 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
     hasSmartLink: Boolean(bioMine?.page?.published),
     hasPodcast: (hostingMine?.shows?.length ?? 0) > 0,
     hasClips: (recsMine ?? []).some((r) => r.clipStatus === "done"),
-    interests: profile?.interests ?? "",
+    interests: profile?.interests || interests,
+    hasProfile,
     eventOpen,
     hasOwnEvent: (myEventsList?.length ?? 0) > 0,
     openToBrands: Boolean(profile?.openToBrands),
@@ -1263,15 +1280,15 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
         )}
 
         {/* A celebration waiting for them (bonus credits): pops up on any screen. */}
-        {data && hasProfile && !inSetup && <HostNotice />}
+        {data && ready && !inSetup && <HostNotice />}
         {/* The nav down the left, like the admin's, with the page beside it.
             Hidden during first-time setup, where there is only one thing to
             do. */}
-        <div className={data && hasProfile && !inSetup ? (navTucked ? "lg:grid lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid lg:grid-cols-[264px_minmax(0,1fr)]") : ""}>
-        {data && hasProfile && !inSetup && (
+        <div className={data && ready && !inSetup ? (navTucked ? "lg:grid lg:grid-cols-[72px_minmax(0,1fr)]" : "lg:grid lg:grid-cols-[264px_minmax(0,1fr)]") : ""}>
+        {data && ready && !inSetup && (
           <div className="contents">
           <HostNav
-            path={pathOf(profile?.interests)}
+            path={path}
             opportunities={newOpps}
             discoveryLocked={discoveryLocked}
             verifiedLocked={verifiedLocked}
@@ -1362,22 +1379,30 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
           <BrandSetup onDone={() => goTo("dashboard")} />
         ) : inSetup || screen === "editProfile" ? (
           <section className="mt-6">
-            {inSetup && (
-              <p className="mb-6 max-w-2xl text-sm text-muted-foreground">
-                {pending || isPodcaster(profile?.interests || interests)
-                  ? "Tell us about you and your show once. Your directory card is built from these details, and it goes with you to every event you join."
-                  : "Tell us about you once. Your directory card is built from these details — it's how organizers find you and invite you."}
-              </p>
+            {firstTime && (
+              <div className="mb-6 max-w-2xl">
+                <p className="text-sm text-muted-foreground">
+                  {pending || isPodcaster(profile?.interests || interests)
+                    ? "Tell us about you and your show once. Your directory card is built from these details, and it goes with you to every event you join."
+                    : "Tell us about you once. Your directory card is built from these details — it's how organizers find you and invite you."}
+                </p>
+                {/* The way out for now (Andrew, 27 Nov). Not while they're booking a time they picked: that needs the form. */}
+                {inSetup && !pending && (
+                  <button type="button" onClick={skipSetup} className="mt-2 whitespace-nowrap text-sm font-semibold text-[#053877] underline underline-offset-4 hover:text-[#0a4a99] dark:text-[#8ab4f8]" data-testid="setup-skip">
+                    Skip — go to my dashboard
+                  </button>
+                )}
+              </div>
             )}
             <ProfileForm
               interests={profile?.interests || interests || (pending ? "events" : "")}
               email={data.email}
-              variant={inSetup ? "setup" : "profile"}
+              variant={firstTime ? "setup" : "profile"}
               profile={hasProfile ? (profile ?? null) : null}
-              pendingSlot={inSetup ? pendingSummary : null}
+              pendingSlot={firstTime ? pendingSummary : null}
               onDirtyChange={setProfileDirty}
               onSaved={async (next) => {
-                if (inSetup && pending) {
+                if (firstTime && pending) {
                   // Setup asks about the show in the same pass, but the show
                   // belongs to the event — so write that record before
                   // claiming, or the claim has no show to attach to.
@@ -1406,24 +1431,24 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                 const want = profile?.interests || interests;
                 let startShow = false;
                 try { startShow = localStorage.getItem("mv_start_show") === "1"; localStorage.removeItem("mv_start_show"); } catch { /* fine */ }
-                if (inSetup && startShow) {
+                if (firstTime && startShow) {
                   // Their podcast isn't out yet: free hosting is the next step.
                   setScreen("podcast");
-                } else if (inSetup && pathOf(want) === "planner") {
+                } else if (firstTime && pathOf(want) === "planner") {
                   // An event planner's next step is their own event.
                   setScreen("myevents");
-                } else if (inSetup && !eventOpen) {
+                } else if (firstTime && !eventOpen) {
                   // No event coming up: the button said "go to my dashboard", and
                   // its checklist (built from what they came for) is the next step.
                   setScreen("dashboard");
-                } else if (inSetup && want && !/\bevents\b/.test(want)) {
+                } else if (firstTime && want && !/\bevents\b/.test(want)) {
                   // Land where they said they were going.
                   if (/\bgrow\b/.test(want)) setScreen("integrations");
                   else if (/\bdiscover\b/.test(want)) navigate("/discover");
                   else setScreen("dashboard");
-                } else if (inSetup && next === "events") {
+                } else if (firstTime && next === "events") {
                   setScreen("events");
-                } else if (inSetup) {
+                } else if (firstTime) {
                   // They chose to stop here, but a profile alone gets nobody
                   // on air — say so once, with the way there.
                   setScreen("dashboard");
@@ -1432,7 +1457,7 @@ export default function HostDashboard({ tab }: { tab?: string } = {}) {
                   setScreen("dashboard");
                 }
               }}
-              onCancel={hasProfile ? () => setScreen("dashboard") : undefined}
+              onCancel={hasProfile || skipped ? () => setScreen("dashboard") : undefined}
               eventOpen={eventOpen}
             />
           </section>

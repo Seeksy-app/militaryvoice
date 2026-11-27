@@ -1,4 +1,4 @@
-import { pathOf } from "@shared/schema";
+import { isPodcaster, pathOf } from "@shared/schema";
 import { showGuide, type GuideStep } from "@/components/Guide";
 
 // What's left to do, worked out from what they've actually done rather than
@@ -30,6 +30,8 @@ export interface StepState {
   eventOpen?: boolean;
   /** An event planner has created at least one event of their own. */
   hasOwnEvent?: boolean;
+  /** False when they skipped setup on the way in (27 Nov): the first step takes them back to it. */
+  hasProfile?: boolean;
   /** They said yes to being found by brands in Discovery. */
   openToBrands?: boolean;
   /** Discovery isn't on their plan (Growth creators): its step is left out. */
@@ -44,6 +46,7 @@ export interface StepState {
  * than at the top of a page the person then has to search.
  */
 export const STEP_ANCHOR = {
+  profile: "section-about",
   show: "set-up-your-show",
   slot: "your-time-slot",
   materials: "section-media",
@@ -89,6 +92,7 @@ export interface StepNav {
  */
 const t = (sel: string, text: string) => ({ sel: `[data-testid="${sel}"]`, text });
 export const STEP_GUIDE: Partial<Record<keyof typeof STEP_ANCHOR, GuideStep>> = {
+  profile: { title: "Finish setup", at: [t("input-host-name", "Start with your name. Then fill in the rest and save at the bottom.")] },
   photo: { title: "Add your photo", at: [t("button-upload-photo", "Click the circle and pick a photo. You can zoom and frame it before it saves.")] },
   smartlink: { title: "Your SmartLink", at: [
     t("bio-handle", "Pick the name for your link here, like militaryvoices.ai/yourname. Everything saves as you go."),
@@ -155,6 +159,16 @@ export function goToStep(step: Step): void {
  * ended up reaching air without reaching the producer's own monitor.
  */
 export function buildSteps(state: StepState, nav: StepNav): Step[] {
+  const steps = buildPathSteps(state, nav);
+  if (state.hasProfile !== false) return steps;
+  // Skipped setup on the way in (Andrew, 27 Nov: "I'll do it later"): finishing it comes first, and the setup form
+  // has the photo in it, so the photo step waits until then.
+  const podcaster = isPodcaster(state.interests ?? "");
+  const finish: Step = { key: "profile", label: "Finish setup", detail: podcaster ? "Your name and your show's name. It's how people find you." : "Your name, and what you'd like to do here.", done: false, cta: "Finish setting up", go: nav.onGoProfile ?? nav.onGoIntegrations };
+  return [finish, ...steps.filter((x) => x.key !== "photo")];
+}
+
+function buildPathSteps(state: StepState, nav: StepNav): Step[] {
   const want = (state.interests ?? "").split(",").map((x) => x.trim()).filter(Boolean);
   const path = pathOf(state.interests);
   const goTo = (f?: () => void) => f ?? nav.onGoIntegrations;

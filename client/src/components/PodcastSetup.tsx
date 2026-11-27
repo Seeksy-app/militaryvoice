@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { useLocation } from "wouter";
 import { ArrowRight, Check, ChevronLeft, ImagePlus, Loader2, Mic, Podcast, RefreshCw, Upload, Video } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -70,10 +71,12 @@ function BeginCard({ icon: Icon, img, title, text, action, selected, onClick, te
   );
 }
 
-export function PodcastSetup({ initialFeed, onImported, onCreating, onFinish, onBack }: {
+export function PodcastSetup({ initialFeed, onImported, onCreating, onFinish, onBack, backLabel = "Back" }: {
   initialFeed: string;
   /** Leave setup: to their shows, or back to the Dashboard. */
   onBack?: () => void;
+  /** What the way back says: "Skip — go to my dashboard" when it goes there (27 Nov). */
+  backLabel?: string;
   /** A show came in from a feed. */
   onImported: () => void;
   /** About to create their show: keep this screen up while the list refreshes underneath. */
@@ -82,6 +85,7 @@ export function PodcastSetup({ initialFeed, onImported, onCreating, onFinish, on
   onFinish: (next: SetupNext, id: number | null) => void;
 }) {
   const { toast } = useToast();
+  const [, navigate] = useLocation();
   const [stage, setStage] = useState<Stage>("choose");
   const [path, setPath] = useState<"" | "have" | "new">("");
   const [have, setHave] = useState<"" | "rss" | "upload">(initialFeed ? "rss" : "");
@@ -209,7 +213,7 @@ export function PodcastSetup({ initialFeed, onImported, onCreating, onFinish, on
                 <button type="button" onClick={() => (q > 0 ? setQ(q - 1) : setQ(-1))} className="text-sm font-semibold text-muted-foreground hover:text-foreground">Back</button>
                 <Button onClick={nextQ} disabled={!filled} className={nextBtn} style={{ background: filled ? NAVY : undefined }} data-testid="setup-next">Next</Button>
               </div>
-              <p className="mt-10 text-center"><button type="button" onClick={() => setQ(-1)} className="text-base font-medium underline underline-offset-4 text-muted-foreground hover:text-foreground">Not ready? Finish later</button></p>
+              <p className="mt-10 text-center"><button type="button" onClick={() => navigate("/host/dashboard")} className="text-base font-medium underline underline-offset-4 text-muted-foreground hover:text-foreground" data-testid="setup-skip">Skip — go to my dashboard</button></p>
             </>
           )}
 
@@ -322,7 +326,7 @@ export function PodcastSetup({ initialFeed, onImported, onCreating, onFinish, on
     <section className="mx-auto mt-4 max-w-5xl" data-testid="podcast-setup">
       <div ref={top} />
       {(onBack || path) && (
-        <button type="button" onClick={() => (path ? (setPath(""), setHave("")) : onBack?.())} className="mb-4 inline-flex items-center gap-1 text-sm font-semibold text-muted-foreground hover:text-foreground" data-testid="setup-back"><ChevronLeft className="h-4 w-4" /> Back</button>
+        <button type="button" onClick={() => (path ? (setPath(""), setHave("")) : onBack?.())} className="mb-4 inline-flex items-center gap-1 text-sm font-semibold text-muted-foreground hover:text-foreground" data-testid="setup-back">{path || backLabel === "Back" ? <><ChevronLeft className="h-4 w-4" /> Back</> : backLabel}</button>
       )}
       <p className="text-xs font-bold uppercase tracking-[0.2em]" style={{ color: ORANGE }}>Podcast setup</p>
       <h1 className="mt-2 text-4xl font-bold tracking-tight [text-wrap:balance] sm:text-5xl">How would you like to begin?</h1>
