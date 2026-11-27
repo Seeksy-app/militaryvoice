@@ -51,9 +51,9 @@ import { People, type Audience as PeopleAudience } from "@/components/crm/People
 import { AdminNav, EVENT_GROUPS, TOP_GROUPS, EVENT_SECTION_KEYS, TOP_SECTION_KEYS } from "@/components/AdminNav";
 import { MagazineAdmin } from "@/components/MagazineAdmin";
 import Discover from "@/pages/Discover";
-import Directory from "@/pages/Directory";
 import { AdminHealth, HealthLight } from "@/components/AdminHealth";
 import { CREATE_ON, MvEventPicker, MvEventsList, pickedEvent, useMvEvents } from "@/components/MvEvents";
+import { Directories } from "@/components/Directories";
 import { BonusCreditsButton } from "@/components/BonusCredits";
 import { SponsorLeads } from "@/components/SponsorLeads";
 import { SponsorFinder } from "@/components/SponsorFinder";
@@ -4001,11 +4001,15 @@ function AllContacts({ eventId, contacts, onSelect }: { eventId: number; contact
   );
 }
 
-function CrmEventPanel({ eventId, event }: { eventId: number | null; event?: PublicEvent | null }) {
+/** `rail`: on the platform, the admin rail picks the door (People, or one of Email's), so the CRM's own tab row
+ *  goes: People keeps People | Activity, Email's doors show none (Andrew, 27 Nov 2026: CRM apart from Email). */
+function CrmEventPanel({ eventId, event, rail }: { eventId: number | null; event?: PublicEvent | null; rail?: CrmView }) {
   const queryClient = useQueryClient();
   const { toast } = useToast();
+  const [, goTo] = useLocation();
 
-  const [view, setView] = useState<CrmView>("mail");
+  const [view, setView] = useState<CrmView>(rail ?? "mail");
+  useEffect(() => { if (rail) setView(rail); }, [rail]);
   const [search, setSearch] = useState("");
   const [selectedContact, setSelectedContact] = useState<ContactRow | EngagementRecipient | null>(null);
   const [engagementCtx, setEngagementCtx] = useState<{ broadcastId: number; type: string; label: string } | null>(null);
@@ -4338,7 +4342,7 @@ function CrmEventPanel({ eventId, event }: { eventId: number | null; event?: Pub
   // Mail first: what came in, what went out, and what needs an answer, like a mail app.
   // Five doors, each one job: what came in, who we know, what we send once,
   // what sends itself, and what happened.
-  const navItems: { id: CrmView; label: string; badge?: number }[] = [
+  const allNav: { id: CrmView; label: string; badge?: number }[] = [
     { id: "mail", label: "Inbox", badge: repliesWaiting || undefined },
     { id: "contacts", label: "People" },
     { id: "campaigns", label: "Campaigns" },
@@ -4346,6 +4350,7 @@ function CrmEventPanel({ eventId, event }: { eventId: number | null; event?: Pub
     { id: "activity", label: "Activity" },
     { id: "chat", label: "Ask Alex" },
   ];
+  const navItems = !rail ? allNav : rail === "contacts" ? allNav.filter((n) => n.id === "contacts" || n.id === "activity") : [];
   // Lists are a way of looking at contacts, so they sit under that door.
   const activeNav = view === "lists" || view === "list-signups" || view === "list-contacts" || view === "list-engagement" || view === "list-segment" ? "contacts"
     : view === "compose" || view === "templates" ? "campaigns"
@@ -4357,7 +4362,7 @@ function CrmEventPanel({ eventId, event }: { eventId: number | null; event?: Pub
         <ContactProfile email={selectedContact.email} onClose={() => setSelectedContact(null)} />
       )}
       {/* Horizontal sub-nav */}
-      <div className="flex border-b mb-6">
+      {navItems.length > 0 && <div className="flex border-b mb-6">
         {navItems.map((n) => (
           <button
             key={n.id}
@@ -4373,7 +4378,7 @@ function CrmEventPanel({ eventId, event }: { eventId: number | null; event?: Pub
             {n.badge != null && <span className="rounded-full bg-[#053877] px-1.5 py-0.5 text-[10px] font-bold leading-none text-white">{n.badge}</span>}
           </button>
         ))}
-      </div>
+      </div>}
 
       {/* ── CONTACTS: everyone ── */}
       {view === "contacts" && (
@@ -4746,13 +4751,13 @@ function CrmEventPanel({ eventId, event }: { eventId: number | null; event?: Pub
       {/* ── ACTIVITY LOG ── */}
       {view === "activity" && (
         <div className="flex flex-col gap-4">
-          <ActivityLog broadcasts={broadcastList} eventId={eventId} onViewEngagement={openEngagementView} onSelectContact={setSelectedContact} onReplies={() => setView("mail")} />
+          <ActivityLog broadcasts={broadcastList} eventId={eventId} onViewEngagement={openEngagementView} onSelectContact={setSelectedContact} onReplies={() => (rail ? goTo("/admin/crm") : setView("mail"))} />
         </div>
       )}
 
       {(view === "campaigns" || view === "templates") && (
         <div className="flex flex-col gap-4">
-          <BroadcastSubNav view={view} setView={setView} />
+          {!rail && <BroadcastSubNav view={view} setView={setView} />}
           <div className="flex items-center justify-between">
             <p className="text-sm text-muted-foreground">
               {view === "templates" ? (
@@ -4856,7 +4861,7 @@ function CrmEventPanel({ eventId, event }: { eventId: number | null; event?: Pub
           initialSegment={bSegment}
           segmentOptions={segmentOptions}
           teamMembers={teamMembers}
-          onClose={() => setView("campaigns")}
+          onClose={() => setView(rail ?? "campaigns")}
         />
       )}
     </div>
@@ -5280,11 +5285,14 @@ export default function Admin({ tab, eventId: eventParam }: { tab?: string; even
                     <Discover embedded part="verified" />
                   </TabsContent>
                   <TabsContent value="directory" className="mt-2 lg:mt-0">
-                    <Directory embedded />
+                    <Directories />
                   </TabsContent>
-                  <TabsContent value="crm" className="mt-2 lg:mt-0">
-                    <CrmEventPanel eventId={null} />
-                  </TabsContent>
+                  {/* People and Email's doors: one CRM, the rail picks which part (27 Nov 2026). */}
+                  {([["people", "contacts"], ["crm", "mail"], ["campaigns", "campaigns"], ["automations", "automation"], ["templates", "templates"], ["alex", "chat"]] as const).map(([key, rail]) => (
+                    <TabsContent key={key} value={key} className="mt-2 lg:mt-0">
+                      <CrmEventPanel eventId={null} rail={rail} />
+                    </TabsContent>
+                  ))}
                   <TabsContent value="health" className="mt-2 lg:mt-0">
                     <AdminHealth />
                   </TabsContent>

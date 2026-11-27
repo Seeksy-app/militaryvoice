@@ -70,11 +70,13 @@ export function People({ eventId, onSelect, onEmail }: {
   const qc = useQueryClient();
   const key = ["/api/admin/people", eventId ?? 0];
   const { data, isLoading } = useQuery<Data>({ queryKey: key, queryFn: () => adminGet(`/api/admin/people${eventId ? `?eventId=${eventId}` : ""}`) });
-  const [aud, setAud] = useState("everyone");
+  // From Directories → Lists: ?list=saved:<id> opens that list, ?newList=1 opens the filter to make one (27 Nov 2026).
+  const url = typeof window !== "undefined" ? new URLSearchParams(window.location.search) : null;
+  const [aud, setAud] = useState(() => url?.get("list")?.replace(/^aud:/, "") || "everyone");
   const [q, setQ] = useState("");
   const [picked, setPicked] = useState<Set<string>>(new Set());
   const [filter, setFilter] = useState<AudienceFilter>({});
-  const [filtering, setFiltering] = useState(false);
+  const [filtering, setFiltering] = useState(() => url?.get("newList") === "1");
   const [naming, setNaming] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement | null>(null);
 
@@ -109,7 +111,7 @@ export function People({ eventId, onSelect, onEmail }: {
       const a = (await (await adminSend("POST", "/api/admin/people/audiences", { name, filter: { ...filter, base: aud.startsWith("saved:") ? undefined : aud } })).json()) as SavedAudience;
       await qc.invalidateQueries({ queryKey: ["/api/admin/people"] });
       setNaming(null); setFilter({}); setFiltering(false); setAud(`saved:${a.id}`);
-      toast({ title: `Saved "${a.name}"`, description: "It's in your audiences, and you can send a campaign to it." });
+      toast({ title: `Saved "${a.name}"`, description: "It's in Directories → Lists, and you can send a campaign to it." });
     } catch (err) {
       toast({ title: "Not saved", description: (err as Error).message, variant: "destructive" });
     }
@@ -192,7 +194,7 @@ export function People({ eventId, onSelect, onEmail }: {
             <div className="flex flex-wrap items-center gap-2 border-t border-border pt-3">
               <span className="text-sm"><span className="font-semibold tabular-nums">{rows.length}</span> {rows.length === 1 ? "person" : "people"}{current && current.key !== "everyone" ? ` in ${current.label}` : ""}</span>
               {active && (naming === null ? (
-                <Button size="sm" variant="outline" className="ml-auto gap-1.5" onClick={() => setNaming("")} data-testid="crm-save-audience"><Bookmark className="h-4 w-4" /> Save as audience</Button>
+                <Button size="sm" variant="outline" className="ml-auto gap-1.5" onClick={() => setNaming("")} data-testid="crm-save-audience"><Bookmark className="h-4 w-4" /> Save as list</Button>
               ) : (
                 <form className="ml-auto flex gap-1.5" onSubmit={(e) => { e.preventDefault(); if (naming.trim()) void saveAudience(naming.trim()); }}>
                   <input autoFocus value={naming} onChange={(e) => setNaming(e.target.value)} placeholder="Name it: New on Growth" className="h-8 w-52 rounded-lg border border-input bg-background px-2.5 text-sm" data-testid="crm-audience-name" />

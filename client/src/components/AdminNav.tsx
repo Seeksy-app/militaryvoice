@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { BarChart3, ChevronDown, LayoutDashboard, MonitorPlay, ListOrdered, Users, Handshake, Megaphone, Mail, Contact, DollarSign, Settings2, CalendarDays, DoorOpen, PanelLeftClose, PanelLeftOpen, Film, Compass, BookOpen, BadgeCheck, BookUser, Activity, MessagesSquare, ClipboardList, NotebookPen, Smartphone, KanbanSquare, Building2, Rocket, Plane } from "lucide-react";
+import { BarChart3, ChevronDown, LayoutDashboard, MonitorPlay, ListOrdered, Users, Handshake, Megaphone, Mail, Contact, DollarSign, Settings2, CalendarDays, DoorOpen, PanelLeftClose, PanelLeftOpen, Film, Compass, BookOpen, BadgeCheck, BookUser, Activity, MessagesSquare, ClipboardList, NotebookPen, Smartphone, KanbanSquare, Building2, Rocket, Plane, Inbox, Send, Workflow, LayoutTemplate, Sparkles } from "lucide-react";
 
 // The admin's nav, down the left.
 //
@@ -69,12 +69,24 @@ export const TOP_GROUPS: { title: string; items: AdminSection[] }[] = [
   {
     title: "People",
     items: [
-      // The platform's CRM: every member and everyone tied to us, with Mail; each event keeps its own too.
-      { key: "crm", label: "CRM & mail", icon: Mail },
-      { key: "directory", label: "Member Directory", icon: BookUser },
-      { key: "verified", label: "Verified", icon: BadgeCheck },
+      // CRM and Email apart (Andrew, 27 Nov 2026). People: every member and everyone tied to us, with Activity.
+      { key: "people", label: "People", icon: Users },
+      // Groups of members: All subscribers, Verified podcasters and creators, and any made by hand; Lists too.
+      { key: "directory", label: "Directories", icon: BookUser },
       // Brands, agencies and event organizers: accounts with teams of their own.
       { key: "orgs", label: "Organizations", icon: Building2 },
+      { key: "verified", label: "Verified", icon: BadgeCheck },
+    ],
+  },
+  {
+    title: "Email",
+    items: [
+      // "crm" stays the Inbox's key, so every /admin/crm link in Slack and email still opens the mail.
+      { key: "crm", label: "Inbox", icon: Inbox },
+      { key: "campaigns", label: "Campaigns", icon: Send },
+      { key: "automations", label: "Automations", icon: Workflow },
+      { key: "templates", label: "Templates", icon: LayoutTemplate },
+      { key: "alex", label: "Ask Alex", icon: Sparkles },
     ],
   },
   {

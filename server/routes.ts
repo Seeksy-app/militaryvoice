@@ -147,6 +147,7 @@ import { studioForStage, stageStudios, eventForStudio, mvEventStudios, type Stag
 import { consoleText, stageOfStudio, stageTimeUp, syncStageScenes } from "./stageConsole.js";
 import { eventFor, eventPickStatus, explicitOn, listMvEvents } from "./mvEvents.js";
 import { audienceRecipients, registerPeople } from "./people.js";
+import { registerDirectories } from "./directories.js";
 import { registerOrganizer } from "./organizer.js";
 import { registerProjects } from "./projects.js";
 import { registerTeamDesk } from "./teamDesk.js";
@@ -7424,6 +7425,7 @@ export function registerRoutes(app: Express): void {
   registerGuide(app, requireHostSession, requireAdmin);
   registerSceneLog(app, requireAdmin);
   registerPeople(app, requireAdmin);
+  registerDirectories(app, requireAdmin);
   registerOrganizer(app, requireHostSession, requireAdmin);
   registerProjects(app, requireAdmin);
   registerTeamDesk(app, requireAdmin);

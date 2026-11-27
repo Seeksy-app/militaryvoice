@@ -145,7 +145,7 @@ export function PlatformOverview() {
         <section className="rounded-2xl border border-border bg-card p-5">
           <div className="flex items-baseline justify-between">
             <h3 className="flex items-center gap-2 text-base font-semibold"><UserPlus className="h-4 w-4" /> Joined this week</h3>
-            <Link href="/admin/crm" className="text-xs font-semibold text-[#053877] hover:underline dark:text-[#9cc2ff]">Everyone in CRM →</Link>
+            <Link href="/admin/people" className="text-xs font-semibold text-[#053877] hover:underline dark:text-[#9cc2ff]">Everyone in People →</Link>
           </div>
           {/* The members at a glance (these were three tiles up top). */}
           <p className="mt-1 text-xs text-muted-foreground"><Users className="mr-1 inline h-3.5 w-3.5" />{aud("members")} members · {fresh.length} new this week · <Link href="/admin/finances" className="hover:underline"><Sparkles className="mr-0.5 inline h-3.5 w-3.5" />{paying} on a paid plan ({aud("pro")} Pro, {aud("scale")} Scale)</Link></p>

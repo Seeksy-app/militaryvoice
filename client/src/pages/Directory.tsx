@@ -40,13 +40,22 @@ interface Card {
 const HEADLINE = { fontFamily: "'General Sans', 'Inter', sans-serif" } as const;
 
 /** `embedded`: inside admin (Member Directory), without the site's bar, banner and footer. */
-export default function Directory({ embedded = false }: { embedded?: boolean } = {}) {
+/** `slug`: one public directory's own page (/directory/<slug>, made in Admin → Directories), same cards and filters. */
+export default function Directory({ embedded = false, slug }: { embedded?: boolean; slug?: string } = {}) {
   const [q, setQ] = useState("");
   const [kind, setKind] = useState<"all" | "podcasters" | "others">("all");
   const [branch, setBranch] = useState("any");
   const [open, setOpen] = useState<Card | null>(null);
 
-  const { data: cards, isLoading } = useQuery<Card[]>({ queryKey: ["/api/directory"] });
+  const all = useQuery<Card[]>({ queryKey: ["/api/directory"], enabled: !slug });
+  const one = useQuery<{ name: string; description: string; cards: Card[] } | null>({
+    queryKey: ["/api/directory", slug],
+    queryFn: async () => { const r = await fetch(`/api/directory/${encodeURIComponent(slug!)}`); return r.ok ? r.json() : null; },
+    enabled: !!slug,
+  });
+  const cards = slug ? one.data?.cards : all.data;
+  const isLoading = slug ? one.isLoading : all.isLoading;
+  const missing = !!slug && one.isFetched && !one.data;
   // Organizers see the invite button; the check fails quietly for everyone else.
   const { data: me } = useQuery<{ email: string } | null>({
     queryKey: ["/api/admin/me", "directory"],
@@ -74,12 +83,12 @@ export default function Directory({ embedded = false }: { embedded?: boolean } =
 
       {!embedded && <section className="bg-[#04102b] text-white">
         <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16">
-          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#F0A71F]">The directory</p>
+          <p className="text-xs font-bold uppercase tracking-[0.18em] text-[#F0A71F]">{slug ? "A MilitaryVoices directory" : "The directory"}</p>
           <h1 className="mt-2 max-w-3xl text-balance text-3xl font-bold tracking-tight sm:text-5xl" style={HEADLINE}>
-            Military and veteran voices, ready to invite.
+            {slug ? one.data?.name ?? (missing ? "This directory isn't public." : "\u00a0") : "Military and veteran voices, ready to invite."}
           </h1>
           <p className="mt-4 max-w-2xl text-base text-white/75 sm:text-lg">
-            Podcasters, speakers and creators from the MilitaryVoices community. Every card is set up by the person on it.
+            {slug ? one.data?.description || "Podcasters, speakers and creators from the MilitaryVoices community." : "Podcasters, speakers and creators from the MilitaryVoices community. Every card is set up by the person on it."}
           </p>
           <div className="mt-6 flex flex-wrap gap-3">
             <Link href="/host/dashboard">

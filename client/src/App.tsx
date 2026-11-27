@@ -181,6 +181,7 @@ function AppRouter() {
       <Route path="/magazine/:slug">{(p) => <Magazine slug={p.slug} />}</Route>
       <Route path="/event/:slug/watch">{(params) => <Watch slug={params.slug} />}</Route>
       <Route path="/directory">{() => <Directory />}</Route>
+      <Route path="/directory/:slug">{(p) => <Directory slug={p.slug} />}</Route>
       <Route path="/podcast/:slug">{(p) => <PodcastPage slug={p.slug} />}</Route>
       <Route path="/stream-in">{() => <StreamIn />}</Route>
       {/* The creator's studio was "the Room" until 21 Nov 2026; old links and invites land on /my-studio (vercel.json 301s them too). */}
