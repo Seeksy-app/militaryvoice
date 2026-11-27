@@ -1,21 +1,21 @@
 import { useState } from "react";
 import { BrandMark } from "@/components/BrandMark";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { Check, Copy, Loader2, Plus, Radio, RefreshCw, Trash2, Video } from "lucide-react";
+import { Check, Copy, Loader2, Plus, Radio, RefreshCw, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { useToast } from "@/hooks/use-toast";
 import { apiRequest } from "@/lib/queryClient";
-import { IconTile } from "@/components/ui/icon-tile";
+import { SavedStudios } from "@/components/room/Setups";
 
-type Studio = { id: number; name: string; inviteLink: string; recording: { since: string } | null; live: { since: string; watchUrl: string } | null; youtube: boolean; youtubeOn: boolean; streams: { id: string; name: string; key: string; on: boolean }[]; ready: boolean; canRecord: boolean };
+type Studio = { id: number; name: string; showTitle?: string; inviteLink: string; recording: { since: string } | null; live: { since: string; watchUrl: string } | null; youtube: boolean; youtubeOn: boolean; streams: { id: string; name: string; key: string; on: boolean }[]; ready: boolean; canRecord: boolean };
 const say = (e: unknown) => ((e as Error).message ?? "").replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, "") || "Try again in a moment.";
 
 /**
- * Rooms: quick, like Zoom. Hop in any time, with guests on a link; record it (it lands in
- * your Library for Pōstify) or don't, and go live to YouTube or any streaming key if you like.
- * One button in, the rest is set once. (Studio, the full marathon set-up, is its own thing.)
+ * The dashboard's Studio page, version A (Andrew, 27 Nov: "Build A (rows)"; exports/studio-page-mockup): full width,
+ * one show per profile, Enter my studio goes straight in (no "How do you want to start?" page), saved studios as rows
+ * like Your files, then the guest link and where Go live streams to.
  */
 export function StudioHome() {
   const { toast } = useToast();
@@ -33,29 +33,34 @@ export function StudioHome() {
   };
   if (q.isLoading || !q.data) return <div className="flex justify-center py-16"><Loader2 className="h-6 w-6 animate-spin text-muted-foreground" /></div>;
   const s = q.data;
-  const card = "rounded-2xl border border-border bg-card p-5 shadow-sm";
+  const card = "min-w-0 rounded-2xl border border-border bg-card p-4";
+  const title = s.showTitle || s.name;
+  const initials = title.split(/\s+/).filter((w) => /^[A-Za-z0-9]/.test(w)).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("") || "MV";
+  const locked = !!(s.live || s.recording);
 
   return (
-    <div className="mx-auto max-w-3xl space-y-5" data-testid="studio-home">
-      <div>
-        <h1 className="text-2xl font-bold tracking-tight">Studio</h1>
-        <p className="mt-1 text-sm text-muted-foreground">Hop in any time, bring guests on a link, record it or don't, and go live if you like. Recordings land in your Library, ready for Pōstify.</p>
-      </div>
+    <div className="w-full space-y-5" data-testid="studio-home">
+      <h1 className="text-[22px] font-bold tracking-tight">Studio</h1>
 
-      <section className="flex flex-wrap items-center gap-4 rounded-2xl bg-[#04102b] p-6 text-white shadow-sm">
-        <IconTile icon={Video} />
-        <div className="min-w-0 flex-1">
-          <p className="text-lg font-bold">{s.name}</p>
-          <p className="text-sm text-white/70">{s.live ? "You're live now." : s.recording ? "Recording now." : "Check your camera and mic, then you're in."}</p>
+      <section className="flex flex-wrap items-center gap-3.5 rounded-2xl bg-[#04102b] py-3 pl-3 pr-3.5 text-white sm:flex-nowrap">
+        <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[10px] bg-gradient-to-br from-[#0b3a8a] to-[#1d5fc4] text-[13px] font-extrabold" aria-hidden>{initials}</span>
+        <div className="min-w-0 flex-[1_1_calc(100%-60px)] sm:flex-1">
+          <p className="truncate text-[15px] font-bold">{title}</p>
+          <p className="truncate text-[12.5px] text-white/70" data-testid="studio-enter-line">{s.live ? "You're live now." : s.recording ? "Recording now." : "Opens as you left it."}</p>
         </div>
-        <a href="/my-studio" className="inline-flex h-11 items-center gap-2 rounded-full bg-[#F0A71F] px-6 font-bold text-[#1a1200] hover:bg-[#f5b94a]" data-testid="studio-enter"><Radio className="h-5 w-5" /> Enter my studio</a>
+        <a href="/my-studio" className="inline-flex h-10 w-full shrink-0 items-center justify-center gap-2 whitespace-nowrap rounded-full bg-[#F0A71F] px-5 text-sm font-bold text-[#1a1200] hover:bg-[#f5b94a] sm:w-auto" data-testid="studio-enter"><Radio className="h-[18px] w-[18px]" /> {locked ? "Back to my studio" : "Enter my studio"}</a>
       </section>
+
+      <SavedStudios locked={locked} />
+
+      <div className="grid items-start gap-3.5 lg:grid-cols-2">
 
       <section className={card}>
         <p className="font-semibold">Invite a guest</p>
         <p className="mt-0.5 text-sm text-muted-foreground">Send them this link. They type their name and come straight in: no account needed.</p>
         <div className="mt-3 flex flex-wrap gap-2">
-          <Input readOnly value={s.inviteLink} className="min-w-0 flex-1 font-mono text-xs" onFocus={(e) => e.currentTarget.select()} />
+          {/* Shown without https:// so more of the link fits; Copy link copies all of it. */}
+          <Input readOnly value={s.inviteLink.replace(/^https?:\/\//, "")} aria-label="Guest link" className="min-w-0 flex-[1_1_100%] font-mono text-xs" onFocus={(e) => e.currentTarget.select()} />
           <Button type="button" onClick={() => void navigator.clipboard.writeText(s.inviteLink).then(() => { setCopied(true); window.setTimeout(() => setCopied(false), 2000); })} className="gap-1.5 rounded-full bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="studio-copy-invite">{copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}{copied ? "Copied" : "Copy link"}</Button>
           <Button type="button" variant="ghost" onClick={() => { if (window.confirm("Make a new link? The old one stops working.")) void patch({ newInvite: true }); }} disabled={busy} className="gap-1.5 rounded-full text-muted-foreground"><RefreshCw className="h-4 w-4" /> New link</Button>
         </div>
@@ -94,6 +99,7 @@ export function StudioHome() {
           <Button type="button" variant="outline" size="sm" onClick={() => setAdding(true)} className="mt-3 gap-1.5 rounded-full" data-testid="studio-add-stream"><Plus className="h-4 w-4" /> Add a streaming key</Button>
         )}
       </section>
+      </div>
     </div>
   );
 }

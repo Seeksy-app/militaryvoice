@@ -18,7 +18,7 @@ import { useToast } from "@/hooks/use-toast";
 import { BACKGROUNDS, LIMITS, PRESENT_NAME, bgCss, isClipScene, isPresenting, sceneLive, useRoomKit, type Asset, type Playing, type RoomKit, type Scene } from "@/components/room/look";
 import { closeClipSound, useClipSound, useStageClipElement, warmClipSound, type StageClip } from "@/components/room/clipSound";
 import { LayoutPicker, ScenesPanel } from "@/components/room/ScenesPanel";
-import { ChooseSetup, SaveSetupDialog, SetupLine, SetupMenuButton, TemplatesDialog } from "@/components/room/Setups";
+import { SaveSetupDialog, SetupMenuButton, TemplatesDialog } from "@/components/room/Setups";
 import { LookPanel } from "@/components/room/LookPanel";
 import { MediaPanel, SoundsPanel } from "@/components/room/MediaPanel";
 import { BannersPanel } from "@/components/room/BannersPanel";
@@ -108,8 +108,6 @@ export default function MyStudio({ invite }: { invite?: string }) {
   const [setup, setSetup] = useState<Setup | null>(null);
   const [left, setLeft] = useState(false);
   const [removed, setRemoved] = useState(false);
-  // Choose a setup (Andrew, 24 Nov): the host picks one before the camera check; null until they do.
-  const [chosen, setChosen] = useState<string | null>(null);
   // An invitation for one of the host's shows carries ?show=<id>: the room greets the guest with that show's name.
   const forShow = typeof window !== "undefined" ? new URLSearchParams(window.location.search).get("show") ?? "" : "";
   // The host's show pick (?show=, or the entry screen's Show picker); the server remembers it.
@@ -146,22 +144,8 @@ export default function MyStudio({ invite }: { invite?: string }) {
     );
   }
 
-  const onShow = (id: number) => {
-    pick.current = String(id);
-    try { const u = new URL(window.location.href); u.searchParams.set("show", String(id)); window.history.replaceState(null, "", u); } catch { /* fine */ }
-    void studio.refetch();
-  };
-  // Skipped while live or recording: the look can't change mid-show, so they go straight back in.
-  const choosing = owner && !!studio.data && !studio.data.live && !studio.data.recording && chosen === null;
-  if ((!conn || !setup) && choosing) {
-    return (
-      <div style={{ fontFamily: INTER }}>
-        <ChooseSetup roomName={roomName} shows={studio.data?.shows} showId={studio.data?.showId ?? null} onShow={onShow} v3={studio.data?.v3 === true} onDone={setChosen}
-          logo={<a href={DASHBOARD} aria-label="MilitaryVoices.ai, back to your dashboard"><Logo className="h-10" /></a>} />
-      </div>
-    );
-  }
-
+  // No "How do you want to start?" page (Andrew, 27 Nov: "Build A (rows)"): the studio opens as it was left. Saved
+  // studios are opened from the dashboard's Studio page, which loads one before coming here.
   if (!conn || !setup) {
     const blocked = owner ? (studio.error ? "Sign in to open your studio." : "") : guestInfo.error ? say(guestInfo.error) : "";
     return (
@@ -170,8 +154,6 @@ export default function MyStudio({ invite }: { invite?: string }) {
         roomName={roomName}
         blocked={blocked}
         defaultName={readMe(meKeyOf(invite)).name || (owner ? studio.data?.you ?? "" : "")}
-        setupName={owner ? chosen : null}
-        onChangeSetup={() => setChosen(null)}
         onEnter={async (s) => {
           if (s.name.trim()) saveMe(meKeyOf(invite), { name: s.name.trim().slice(0, 60) });
           const r = owner
@@ -194,10 +176,10 @@ export default function MyStudio({ invite }: { invite?: string }) {
       onDisconnected={(why) => {
         void stopAllExtraCameras();
         const out = why === DisconnectReason.PARTICIPANT_REMOVED;
-        // The owner leaving lands back on the Studio start, where they pick a setup (Andrew, 26 Nov: "it should just
-        // take me back to the start point of Studio, not back to the dashboard"). Guests still get their goodbye.
+        // The owner leaving lands back on the Studio start, the camera check (Andrew, 26 Nov: "it should just take me
+        // back to the start point of Studio, not back to the dashboard"). Guests still get their goodbye.
         if (owner && !out) {
-          setConn(null); setSetup(null); setChosen(null);
+          setConn(null); setSetup(null);
           void studio.refetch();
           toast({ title: "You've left your studio", description: "Anything you recorded is on its way to your Library, ready for clips." });
           return;
@@ -214,7 +196,7 @@ export default function MyStudio({ invite }: { invite?: string }) {
 
 /* ───────────────────────── Set up ───────────────────────── */
 
-function SetupScreen({ owner, roomName, blocked, defaultName, setupName, onChangeSetup, onEnter }: { owner: boolean; roomName: string; blocked: string; defaultName: string; setupName: string | null; onChangeSetup: () => void; onEnter: (s: Setup) => Promise<void> }) {
+function SetupScreen({ owner, roomName, blocked, defaultName, onEnter }: { owner: boolean; roomName: string; blocked: string; defaultName: string; onEnter: (s: Setup) => Promise<void> }) {
   const [name, setName] = useState(defaultName);
   const [title, setTitle] = useState("");
   const [mic, setMic] = useState(true);
@@ -352,8 +334,6 @@ function SetupScreen({ owner, roomName, blocked, defaultName, setupName, onChang
             <p className="text-sm font-semibold uppercase tracking-[0.08em] text-[#667085]">{owner ? roomName || "Your studio" : `You're invited to ${roomName || "a show"}`}</p>
             <h1 className="mt-1 text-balance text-[28px] font-bold leading-tight tracking-tight">{owner ? "Set up your studio" : "Get ready to join"}</h1>
             <p className="mt-2 text-[15px] leading-relaxed text-[#475467]">{owner ? "Check your picture and sound. Going in doesn't start anything; you choose when to record and when to go live." : "Check your picture and sound. The host brings you in when you join."}</p>
-            {/* The setup they picked on Choose a setup (the show picker lives there too). */}
-            {owner && setupName && <SetupLine name={setupName} onChange={onChangeSetup} />}
             <label className="mt-6 block text-sm font-semibold" htmlFor="studio-name">Your name on screen</label>
             <input id="studio-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder="Your name" className="mt-1.5 h-12 w-full rounded-xl border border-[#d0d5dd] bg-white px-4 text-[15px] outline-none focus:border-[#053877] focus:ring-2 focus:ring-[#053877]/15" data-testid="studio-name" />
             <label className="mt-4 block text-sm font-semibold" htmlFor="studio-title">Your title <span className="font-normal text-[#667085]">(optional)</span></label>

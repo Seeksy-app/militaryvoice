@@ -1,15 +1,14 @@
-// Choose a setup, Start from a template and Save this setup as… (Andrew, 24 Nov, approved with the mockup, boards 7
-// and 8). A setup is the studio's scenes, Media and look saved under a name, kept per show. The host picks one before
-// the camera check; in the studio, Scenes ⋯ saves today's or adds a template's scenes. Guests never see any of it.
+// Saved studios, Start from a template and Save this setup as… A setup is the studio's scenes, Media and look saved
+// under a name. Since 27 Nov (Andrew: "Build A (rows)") the dashboard's Studio page lists them as rows and Open loads
+// one; there's no picker before the camera check. In the studio, Scenes ⋯ saves today's or adds a template's scenes.
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, Loader2, MoreHorizontal, X } from "lucide-react";
+import { Loader2, MoreHorizontal, X } from "lucide-react";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import { TEMPLATES, freeName, type TemplateId } from "@shared/studioTemplates";
 import { LIMITS, newId, type RoomKit, type Scene } from "./look";
 import { ScenePicture } from "./ScenesPanel";
-import { Select } from "./Select";
 
 const NAVY = "#053877";
 const LOOK_KEY = ["/api/host/room/look"];
@@ -31,167 +30,102 @@ function useSetups(showId: number | null | undefined) {
 const TEMPLATE_BG: Record<string, string> = { interview: "linear-gradient(135deg,#0b3a8a,#1d5fc4)", solo: "linear-gradient(135deg,#0e7490,#14a3a3)", panel: "linear-gradient(135deg,#5b21b6,#8b5cf6)" };
 const SAVED_BG = ["linear-gradient(135deg,#be123c,#f43f5e)", "linear-gradient(135deg,#047857,#10b981)", "linear-gradient(135deg,#b45309,#f59e0b)", "linear-gradient(135deg,#1e3a8a,#6366f1)"];
 
-/** One picture tile: the layout, its name, a spinner while it's being set up. */
-function Tile({ onClick, disabled, busy, label, testId, children }: { onClick: () => void; disabled: boolean; busy: boolean; label: string; testId: string; children: ReactNode }) {
-  return (
-    <button type="button" onClick={onClick} disabled={disabled} className="flex w-full flex-col gap-2 rounded-2xl border border-[#e4e7ec] bg-white p-2 text-left transition-colors hover:border-[#053877] disabled:opacity-60" data-testid={testId}>
-      <span className="block aspect-video w-full overflow-hidden rounded-xl">{children}</span>
-      <span className="flex items-center gap-2 px-1 pb-0.5 pr-9"><span className="truncate text-[15px] font-bold text-[#101828]">{label}</span>{busy && <Loader2 className="h-4 w-4 shrink-0 animate-spin text-[#667085]" />}</span>
-    </button>
-  );
-}
+/** The row colours, in the order the mockup shows them: the layouts' own, then the saved ones'. */
+const ROW_BG = [...Object.values(TEMPLATE_BG), ...SAVED_BG];
 
-/* ───────────────────────── Choose a setup (before the camera check) ───────────────────────── */
+/* ───────────────────────── Saved studios (the dashboard's Studio page) ───────────────────────── */
 
-export function ChooseSetup({ roomName, shows, showId, onShow, v3, onDone, logo }: {
-  roomName: string; shows?: { id: number; title: string }[]; showId?: number | null; onShow?: (id: number) => void; v3: boolean;
-  onDone: (name: string) => void; logo: ReactNode;
-}) {
-  const qc = useQueryClient();
-  const { toast } = useToast();
-  const q = useSetups(showId);
+/**
+ * Saved studios as rows, like Your files (Andrew, 27 Nov: "Build A (rows)"; exports/studio-page-mockup). There's no
+ * "How do you want to start?" page any more: Enter my studio opens the studio as it was left, and Open here loads a
+ * saved one first. A studio is saved from inside the studio (Scenes ⋯ → Save this setup as…). One show per profile.
+ */
+export function SavedStudios({ locked }: { locked: boolean }) {
+  const q = useSetups(null);
   const [busy, setBusy] = useState("");
   const [error, setError] = useState("");
   const [menu, setMenu] = useState("");
   const [renaming, setRenaming] = useState<Card | null>(null);
   const [deleting, setDeleting] = useState<Card | null>(null);
-  const saved = q.data?.setups ?? [];
-  // Smaller pictures in the 2-across phone tiles, so the layout fits inside them.
-  const narrow = typeof window !== "undefined" && window.innerWidth < 640;
-
-  // The studio's look changed on the server: the studio loads it fresh when they go in.
-  // Blank also switches the destinations off, so the studio's own answer is read again too.
-  const changed = () => { qc.removeQueries({ queryKey: LOOK_KEY }); void qc.invalidateQueries({ queryKey: [SETUPS_KEY] }); void qc.invalidateQueries({ queryKey: ["/api/host/my-studio"], exact: true }); void qc.invalidateQueries({ queryKey: ["/api/host/live-page"] }); };
-  const run = async (what: string, fn: () => Promise<unknown>, name: string) => {
-    setBusy(what); setError("");
-    try { await fn(); changed(); onDone(name); }
+  const list = q.data?.setups ?? [];
+  const last = q.data?.current?.name ?? "";
+  if (q.isError) return null; // no studio yet: the first visit makes it
+  const open = async (c: Card) => {
+    setBusy(c.id); setError("");
+    try { await apiRequest("POST", `${SETUPS_KEY}/${c.id}/use`); window.location.href = "/my-studio"; }
     catch (e) { setError(say(e)); setBusy(""); }
   };
-  const use = (c: Card) => run(c.id, () => apiRequest("POST", `${SETUPS_KEY}/${c.id}/use`), c.name);
-  // Blank switched every destination off: say so, so nobody goes live to nothing by surprise (PM, 26 Nov).
-  const fresh = (t: TemplateId | "blank", name: string) => run(t, async () => {
-    await apiRequest("POST", `${SETUPS_KEY}/fresh`, { template: t, v3 });
-    if (t === "blank") toast({ title: "Destinations switched off", description: "Your YouTube, stream keys and watch page are switched off. Turn on the ones you want beside Record." });
-  }, name);
   const act = async (fn: () => Promise<unknown>) => {
     setError("");
     try { await fn(); await q.refetch(); } catch (e) { setError(say(e)); }
   };
-
   return (
-    <div className="min-h-screen bg-[#f3f4f7] text-[#101828]" data-testid="choose-setup">
-      <header className="flex h-16 items-center gap-4 border-b border-[#e4e7ec] bg-white px-5">
-        {logo}
-        <a href="/host/dashboard/studio" className="ml-auto flex shrink-0 items-center gap-1.5 whitespace-nowrap text-sm font-semibold text-[#475467] hover:text-[#101828]"><ArrowLeft className="h-4 w-4" /> <span className="sm:hidden">Dashboard</span><span className="hidden sm:inline">Back to your dashboard</span></a>
-      </header>
-      {/* How do you want to start? (Andrew, 26 Nov: "hard to follow - takes too much thinking power"): one big Continue,
-          then the layouts as pictures. Saved setups only once there are some; no explainer, no how-to, no footer. */}
-      <main className="mx-auto flex max-w-[1040px] flex-col gap-6 px-4 py-6 lg:px-8 lg:py-8">
-        <div className="flex flex-col gap-4 sm:flex-row sm:items-end">
-          <div className="flex-1">
-            {roomName && <p className="text-sm font-semibold uppercase tracking-[0.08em] text-[#667085]">{roomName}</p>}
-            <h1 className="mt-1 text-balance text-[28px] font-bold leading-tight tracking-tight">How do you want to&nbsp;start?</h1>
-          </div>
-          {shows && shows.length > 1 && onShow && (
-            <div className="flex w-full flex-col gap-1 sm:w-[280px]">
-              <label htmlFor="setup-show" className="text-[13px] font-semibold">Show</label>
-              <Select wrap="w-full" id="setup-show" value={showId ?? ""} onChange={(e) => { const id = Number(e.target.value); if (id) onShow(id); }} className="h-11 rounded-xl border border-[#d0d5dd] bg-white pl-3 text-[15px] outline-none focus:border-[#053877] focus:ring-2 focus:ring-[#053877]/15" data-testid="studio-show">
-                {showId == null && <option value="">Pick a show</option>}
-                {shows.map((x) => <option key={x.id} value={x.id}>{x.title}</option>)}
-              </Select>
-            </div>
-          )}
-        </div>
-
-        {error && <p className="rounded-xl bg-[#fef3f2] px-4 py-3 text-sm font-medium text-[#b42318]" role="alert">{error}</p>}
-
+    <section data-testid="saved-studios">
+      <h2 className="flex items-center gap-2 text-base font-bold">
+        <span className="relative h-5 w-6 rounded bg-gradient-to-br from-[#ffd27a] to-[#F0A71F] before:absolute before:-top-1 before:left-0 before:h-1.5 before:w-2.5 before:rounded-t before:bg-[#f5b94a]" aria-hidden />
+        Saved studios {q.data && <span className="text-xs font-medium text-muted-foreground">{list.length}</span>}
+      </h2>
+      {error && <p className="mt-2 rounded-xl bg-[#fef3f2] px-4 py-2.5 text-sm font-medium text-[#b42318]" role="alert">{error}</p>}
+      <div className="mt-2.5 rounded-2xl border border-border bg-card">
         {q.isLoading ? (
-          <div className="flex h-40 items-center justify-center"><Loader2 className="h-6 w-6 animate-spin text-[#667085]" /></div>
+          <div className="flex h-24 items-center justify-center"><Loader2 className="h-5 w-5 animate-spin text-muted-foreground" /></div>
+        ) : !list.length ? (
+          <p className="px-4 py-3.5 text-sm text-muted-foreground">Nothing saved yet. In your studio, open Scenes ⋯ and pick <span className="font-semibold text-foreground">Save this setup as…</span></p>
         ) : <>
-          {q.data?.current && (
-            <button type="button" onClick={() => onDone(q.data!.current!.name)} disabled={!!busy} className="group flex flex-col gap-4 rounded-[20px] border-2 border-[#053877] bg-gradient-to-r from-[#eef4ff] via-white to-white p-3 text-left shadow-[0_8px_24px_rgba(16,24,40,0.08)] transition-shadow hover:shadow-[0_12px_32px_rgba(5,56,119,0.18)] disabled:opacity-60 sm:flex-row sm:items-center sm:gap-6 sm:p-4" data-testid="setup-continue">
-              <span className="block aspect-video w-full shrink-0 overflow-hidden rounded-xl sm:w-[360px]"><ScenePicture s={q.data.current.first} scale={narrow ? 1.6 : 2.2} bg="linear-gradient(135deg,#0b3a8a,#1d5fc4)" /></span>
-              <span className="flex min-w-0 flex-1 flex-col gap-3">
-                <span className="min-w-0">
-                  <span className="block text-[22px] font-bold leading-tight">Continue where you left&nbsp;off</span>
-                  <span className="mt-1 block truncate text-[14px] text-[#667085]">{[q.data.current.name, q.data.current.usedAt && `last used ${day(q.data.current.usedAt)}`].filter(Boolean).join(" · ")}</span>
+          <div className="hidden grid-cols-[minmax(0,1fr)_190px_120px_64px_36px] gap-3.5 border-b border-border px-4 py-2 text-xs text-muted-foreground sm:grid">
+            <span>Name</span><span>Details</span><span>Last used</span><span /><span />
+          </div>
+          {list.map((c, i) => {
+            const details = [plural(c.scenes, "scene"), c.clips ? plural(c.clips, "clip") : ""].filter(Boolean).join(" · ");
+            const when = day(c.usedAt || c.savedAt);
+            const isLast = !!last && c.name === last;
+            return (
+              <div key={c.id} className="grid grid-cols-[minmax(0,1fr)_auto_32px] items-center gap-2 border-b border-border px-3 py-2.5 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_190px_120px_64px_36px] sm:gap-3.5 sm:px-4" data-testid="saved-studio">
+                <span className="flex min-w-0 items-center gap-2.5">
+                  <span className="h-6 w-10 shrink-0 rounded-[5px]" style={{ background: ROW_BG[i % ROW_BG.length] }} aria-hidden />
+                  <span className="min-w-0">
+                    <span className="flex min-w-0 items-center gap-2">
+                      <span className="truncate text-sm font-semibold">{c.name}</span>
+                      {isLast && <span className="hidden shrink-0 rounded-full bg-[#ecfdf3] px-2 py-0.5 text-[11px] font-semibold text-[#027a48] sm:inline">Last used</span>}
+                    </span>
+                    <span className="block truncate text-xs text-muted-foreground sm:hidden">{[isLast ? "Last used" : when, details].filter(Boolean).join(" · ")}</span>
+                  </span>
                 </span>
-                <span className="inline-flex h-12 items-center justify-center gap-2 self-stretch rounded-xl px-7 text-[16px] font-bold text-white sm:self-start" style={{ background: NAVY }} data-testid="setup-continue-go">Continue <ArrowRight className="h-5 w-5 transition-transform group-hover:translate-x-0.5" /></span>
-              </span>
-            </button>
-          )}
-
-          {saved.length > 0 && (
-            <section className="flex flex-col gap-2.5">
-              <h2 className="text-base font-bold">Your setups</h2>
-              <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-                {saved.map((c, i) => (
-                  <div key={c.id} className="relative" data-testid="setup-card">
-                    <Tile onClick={() => void use(c)} disabled={!!busy} busy={busy === c.id} label={c.name} testId="setup-use">
-                      <ScenePicture s={c.first} scale={narrow ? 0.9 : 1.35} bg={SAVED_BG[i % SAVED_BG.length]} />
-                    </Tile>
-                    <button type="button" onClick={() => setMenu(menu === c.id ? "" : c.id)} aria-label={`More for ${c.name}`} aria-expanded={menu === c.id} className={`absolute bottom-2 right-2 flex h-8 w-8 items-center justify-center rounded-lg ${menu === c.id ? "bg-[#f5f8fd] text-[#053877]" : "text-[#475467] hover:bg-[#f2f4f7]"}`} data-testid="setup-more"><MoreHorizontal className="h-4 w-4" /></button>
-                    {menu === c.id && (
-                      <Menu onClose={() => setMenu("")} className="right-2 top-[calc(100%-4px)]">
-                        <MenuItem onClick={() => { setMenu(""); setRenaming(c); }} testId="setup-rename">Rename</MenuItem>
-                        <MenuItem onClick={() => { setMenu(""); void act(() => apiRequest("POST", `${SETUPS_KEY}/${c.id}/duplicate`)); }} testId="setup-duplicate">Duplicate</MenuItem>
-                        <MenuItem onClick={() => { setMenu(""); setDeleting(c); }} danger testId="setup-delete">Delete</MenuItem>
-                      </Menu>
-                    )}
-                  </div>
-                ))}
+                <span className="hidden truncate text-sm text-muted-foreground sm:block">{details}</span>
+                <span className="hidden text-sm text-muted-foreground sm:block">{when}</span>
+                <button type="button" onClick={() => void open(c)} disabled={locked || !!busy} title={locked ? "You're live or recording. Change scenes inside your studio." : undefined}
+                  className="flex h-8 items-center justify-end gap-1 text-sm font-semibold text-[#053877] hover:underline disabled:opacity-50 disabled:no-underline dark:text-white" data-testid="saved-studio-open">
+                  {busy === c.id && <Loader2 className="h-3.5 w-3.5 animate-spin" />}Open
+                </button>
+                <span className="relative flex justify-center">
+                  <button type="button" onClick={() => setMenu(menu === c.id ? "" : c.id)} aria-label={`More for ${c.name}`} aria-expanded={menu === c.id} className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:bg-muted" data-testid="saved-studio-more"><MoreHorizontal className="h-4 w-4" /></button>
+                  {menu === c.id && (
+                    <Menu onClose={() => setMenu("")} className="right-0 top-9 w-32">
+                      <MenuItem onClick={() => { setMenu(""); setRenaming(c); }} testId="setup-rename">Rename</MenuItem>
+                      <MenuItem onClick={() => { setMenu(""); setDeleting(c); }} danger testId="setup-delete">Delete</MenuItem>
+                    </Menu>
+                  )}
+                </span>
               </div>
-            </section>
-          )}
-
-          <section className="flex flex-col gap-2.5">
-            <h2 className="text-base font-bold">{q.data?.current || saved.length ? "Or start new" : "Pick a layout"}</h2>
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              {TEMPLATES.map((t) => {
-                const scenes = t.scenes(v3);
-                // The picture that says the most about the layout: the first scene, or the slides scene for Solo.
-                const pic = t.id === "solo" ? scenes.find((x) => x.type === "media" && (x.people ?? 0) > 0) ?? scenes[0] : scenes[0];
-                return (
-                  <Tile key={t.id} onClick={() => void fresh(t.id, t.name)} disabled={!!busy} busy={busy === t.id} label={t.name} testId={`setup-template-${t.id}`}>
-                    <ScenePicture s={pic} scale={narrow ? 0.82 : 1.2} bg={TEMPLATE_BG[t.id] ?? "#0b3a8a"} />
-                  </Tile>
-                );
-              })}
-              <Tile onClick={() => void fresh("blank", "Start blank")} disabled={!!busy} busy={busy === "blank"} label="Blank" testId="setup-blank">
-                <span className="flex h-full w-full items-center justify-center rounded-xl border-2 border-dashed border-[#F0A71F]/70 bg-[#FFF8E8] text-[13px] font-semibold text-[#8a5a00]">Empty stage</span>
-              </Tile>
-            </div>
-          </section>
+            );
+          })}
         </>}
-      </main>
+      </div>
 
       {renaming && (
-        <NameDialog title="Rename setup" start={renaming.name} cta="Rename" onClose={() => setRenaming(null)}
+        <NameDialog title="Rename" start={renaming.name} cta="Rename" onClose={() => setRenaming(null)}
           onSave={async (name) => { await apiRequest("PATCH", `${SETUPS_KEY}/${renaming.id}`, { name }); await q.refetch(); setRenaming(null); }} />
       )}
       {deleting && (
         <Dialog title={`Delete ${deleting.name}?`} onClose={() => setDeleting(null)}>
-          <p className="text-sm text-[#475467]">This setup goes for good. Your studio as it is now stays the same.</p>
+          <p className="text-sm text-[#475467]">This saved studio goes for good. Your studio as it is now stays the same.</p>
           <div className="mt-5 flex justify-end gap-2">
             <button type="button" onClick={() => setDeleting(null)} className="h-10 rounded-xl border border-[#d0d5dd] bg-white px-4 text-sm font-semibold">Cancel</button>
             <button type="button" onClick={() => { const c = deleting; setDeleting(null); void act(() => apiRequest("DELETE", `${SETUPS_KEY}/${c.id}`)); }} className="h-10 rounded-xl bg-[#d92d20] px-4 text-sm font-bold text-white" data-testid="setup-delete-go">Delete</button>
           </div>
         </Dialog>
       )}
-    </div>
-  );
-}
-
-/** On the camera check: which setup they picked, and a way back to change it. */
-export function SetupLine({ name, onChange }: { name: string; onChange: () => void }) {
-  return (
-    <div className="mt-5 flex items-center gap-2.5 rounded-[10px] border border-[#e4e7ec] bg-white px-3 py-2.5" data-testid="setup-line">
-      <div className="min-w-0 flex-1">
-        <p className="text-xs text-[#667085]">Setup</p>
-        <p className="truncate text-sm font-semibold">{name}</p>
-      </div>
-      <button type="button" onClick={onChange} className="text-sm font-semibold text-[#053877] hover:underline" data-testid="setup-change">Change</button>
-    </div>
+    </section>
   );
 }
 
@@ -276,7 +210,7 @@ export function SaveSetupDialog({ show, showId, onClose }: { show: string; showI
       onSave={async (n) => {
         const r = await (await apiRequest("POST", SETUPS_KEY, { name: n })).json() as { updated?: boolean };
         void qc.invalidateQueries({ queryKey: [SETUPS_KEY] });
-        toast({ title: r.updated ? `Updated ${n}` : `Saved ${n}`, description: "Pick it on Choose a setup next time you come in." });
+        toast({ title: r.updated ? `Updated ${n}` : `Saved ${n}`, description: "It's under Saved studios on your Studio page." });
         onClose();
       }} />
   );
