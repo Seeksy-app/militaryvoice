@@ -17,7 +17,7 @@ import { onLookSaved, roomLookKey } from "./roomKit.js";
 import { liveHandleOf, livePageOn, liveUrlOf } from "./livePage.js";
 import { bumpLookRev, noteMusicOnAir, registerRoomStage, roomTemplateUrl, useRoomKit, v3For } from "./roomStage.js";
 import { personalStudios, type PersonalStudioRow } from "../shared/schema.js";
-import { fuller, inviteShow, ownerShows, recShowKey, studioShow, studioShowKey, studioTitle } from "./hostShows.js";
+import { fuller, inviteShow, ownerShows, studioShow, studioShowKey, studioTitle } from "./hostShows.js";
 import { registerStudioSetups } from "./studioSetups.js";
 import { closeStrayStudioSessions, studioHours, studioMayStart, syncStudioMeter } from "./studioHours.js";
 
@@ -325,9 +325,7 @@ export function registerMyStudio(app: Express, requireHostSession: RequestHandle
         const recShow = await studioShow(email, s.id, s.name).catch(() => null);
         const title = `${fuller(recShow?.title || "", s.name)} · ${new Date().toLocaleDateString("en-US", { month: "short", day: "numeric", year: "numeric", timeZone: "America/New_York" })}`;
         // A Library recording like an upload's: no event, no studio row, theirs by email.
-        const made = await storage.createRecording({ eventId: 0, studioId: 0, signupId: null, email, title, egressId, filepath });
-        // Hosts with 2 or more shows: remember which show it was recorded for, so Publish goes there (26 Nov).
-        if (recShow && made?.id && (await ownerShows(email)).length > 1) await storage.setSetting(recShowKey(made.id), String(recShow.id)).catch(() => {});
+        await storage.createRecording({ eventId: 0, studioId: 0, signupId: null, email, title, egressId, filepath });
         [s] = await db.update(personalStudios).set({ recordingEgressId: egressId, recordingSince: now() }).where(eq(personalStudios.id, s.id)).returning();
         void noteMusicOnAir(s.id);
         await syncStudioMeter(s);

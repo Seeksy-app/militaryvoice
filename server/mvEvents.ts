@@ -11,6 +11,7 @@ import type { Express, Request, RequestHandler } from "express";
 import { and, eq, inArray, sql } from "drizzle-orm";
 import { db, schemaIsReady, storage } from "./storage.js";
 import { eventFallbacks, events, stages, studios, type EventRow } from "../shared/schema.js";
+import { isRadioTest } from "../shared/radio.js";
 
 export const EVENT_AREAS = [
   // Podcasting (R-A)
@@ -180,9 +181,12 @@ export async function listMvEvents(only?: number[]): Promise<MvEventEntry[]> {
   const studiosOf = (id: number) => st.filter((s) => s.eventId === id).map((s) => ({ id: s.id, name: s.name }));
   const radio = new Set(await radioIds());
   const out: MvEventEntry[] = [];
-  const days = all.filter((e) => e.program === "radio" || radio.has(e.id)).sort((a, b) => a.startAtUtc.localeCompare(b.startAtUtc));
+  const onRadio = all.filter((e) => e.program === "radio" || radio.has(e.id));
+  // A rehearsal day ("Radio test (3-minute segment)", Sun 15 Nov) is no Radio day: it stays out of the range, the day
+  // count and the list (PM, 26 Nov). Matched by name only, so a real short day never vanishes.
+  const days = onRadio.filter((e) => !isRadioTest(e.name)).sort((a, b) => a.startAtUtc.localeCompare(b.startAtUtc));
   for (const e of all) {
-    if (days.includes(e)) continue;
+    if (onRadio.includes(e)) continue;
     const end = endOf(e);
     out.push({ id: e.id, name: e.name, program: (e.program || "") as EventProgram, slug: e.slug, startAt: e.startAtUtc, endAt: end, status: statusOf(e.startAtUtc, end), visible: e.visible, featured: e.isFeatured, studios: studiosOf(e.id) });
   }

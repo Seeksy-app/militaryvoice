@@ -13,6 +13,7 @@ import { apiRequest, apiUpload } from "@/lib/queryClient";
 import { Bot, Check, Clock, Loader2, Share2 } from "lucide-react";
 import { CalendarButtons, EditTopic } from "@/components/DxTimes";
 import { DxShare } from "@/components/DxShare";
+import { isRadioTest } from "@shared/radio";
 
 // MilitaryVoices Radio: a live channel, weekdays 7 am to
 // 10 pm Eastern. Pick a time, choose 30 or 60 minutes, book it here (an
@@ -182,7 +183,8 @@ export default function DigitalExperience() {
   const { data, isLoading } = useQuery<{ days: Day[] }>({ queryKey: ["/api/dx"], queryFn: async () => (await apiRequest("GET", "/api/dx")).json(), refetchInterval: 60_000 });
   const session = useQuery<{ email: string } | null>({ queryKey: ["dx-session"], queryFn: async () => { const r = await fetch("/api/host/session", { credentials: "include" }); return r.ok ? r.json() : null; } });
   const mine = useQuery<Mine>({ queryKey: ["/api/dx/mine"], enabled: !!session.data, queryFn: async () => (await apiRequest("GET", "/api/dx/mine")).json() });
-  const days = data?.days ?? [];
+  // A rehearsal day ("Radio test …") is no Radio day: no tab, and it stays out of the range (PM, 26 Nov).
+  const days = useMemo(() => (data?.days ?? []).filter((d) => !isRadioTest(d.name)), [data]);
   // A shared link (?show=<booking>) opens on that show's day, with it marked.
   const shared = useMemo(() => Number(new URLSearchParams(window.location.search).get("show")) || 0, []);
   const sharedDay = days.find((d) => d.slots.some((s) => s.taken?.id === shared));

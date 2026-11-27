@@ -1,7 +1,6 @@
 // A host's own shows (hosted_shows), for the places that need to know which one something is for.
 import { sql } from "drizzle-orm";
 import { db, storage } from "./storage.js";
-import { parseTheme } from "../shared/bio.js";
 
 const rows = (r: unknown) => ((r as { rows?: Record<string, unknown>[] }).rows ?? (r as Record<string, unknown>[]));
 
@@ -74,28 +73,11 @@ export function fuller(show: string, studioName: string): string {
   return a;
 }
 
-/** The show a Library recording was made for, saved when it started recording (hosts with 2 or more shows). */
-export const recShowKey = (recordingId: number) => `rec-show:${recordingId}`;
 /**
- * Where a recording publishes to (Andrew, 26 Nov: his Next Mile recording would have gone into his Veteran Benefits
- * show, the account's first). Only what's known for sure, in this order: the show it was recorded for (saved at the
- * time, for it or the recording it was cleaned from), the show the host's SmartLink names, their only show. Null when
- * it can't tell, so the caller asks: never the oldest show, never a guess from a title.
+ * Where a recording publishes to: the login's one show (each profile is its own login with one show; Andrew, 26 Nov:
+ * "They're two different profiles"). Null when it has none, or more than one, so the caller asks: never the oldest.
  */
-export async function recordingShow(email: string, recordingIds: number[]): Promise<Show | null> {
-  const em = String(email ?? "").trim().toLowerCase();
-  const list = await ownerShows(em);
-  if (!list.length) return null;
-  for (const id of recordingIds.filter((x) => x > 0)) {
-    const saved = Number(await storage.getSetting(recShowKey(id)).catch(() => null));
-    const hit = saved ? list.find((x) => x.id === saved) : undefined;
-    if (hit) return hit;
-  }
-  try {
-    const r = rows(await db.execute(sql`select theme from bio_pages where lower(email)=${em} limit 1`))[0];
-    const source = parseTheme(String(r?.theme ?? "")).podcast?.source ?? "";
-    const named = source.startsWith("show:") ? list.find((x) => x.id === Number(source.slice(5))) : undefined;
-    if (named) return named;
-  } catch { /* no SmartLink: fall through */ }
+export async function recordingShow(email: string): Promise<Show | null> {
+  const list = await ownerShows(String(email ?? "").trim().toLowerCase());
   return list.length === 1 ? list[0] : null;
 }

@@ -729,8 +729,8 @@ export async function startEpisodeFromRecording(email: string, rec: { id: number
   if (have.length) return "had";
   const e = email.trim().toLowerCase();
   const profile = await storage.getProfileByEmail(e).catch(() => undefined);
-  // What's known for sure first (the show it was recorded for, the SmartLink's show, their only show), then the names (26 Nov).
-  const pick = (await recordingShow(e, [rec.id])) ?? (await showFor(e, null, ...names, profile?.podcastName));
+  // Their one show first, then the names (26 Nov).
+  const pick = (await recordingShow(e)) ?? (await showFor(e, null, ...names, profile?.podcastName));
   const [show] = pick ? await db.select().from(hostedShows).where(eq(hostedShows.id, pick.id)).limit(1) : [];
   if (!show) return "no-show";
   const eps = await episodesOf(show.id);
