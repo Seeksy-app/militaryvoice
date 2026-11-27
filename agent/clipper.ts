@@ -2228,7 +2228,11 @@ async function handleEpisodeEdit(job: Job): Promise<void> {
       const r = await fetch(e.introUrl!); if (!r.ok) throw new Error("couldn't open the guest card");
       await fs.writeFile(png, Buffer.from(await r.arrayBuffer()));
       const voice = path.join(dir, "intro-voice.mp3");
-      await speak(v, spoken(v, introText), voice);
+      await speak(v, spoken(v, introText), voice, async (body) => {
+        const r = await fetch(`${API_BASE}/api/agent/voiced-tts`, { method: "POST", headers: { "content-type": "application/json", "x-agent-token": AGENT_TOKEN }, body: JSON.stringify(body) });
+        if (!r.ok) throw new Error(`the voice didn't come back (${r.status}: ${(await r.text()).slice(0, 160)})`);
+        return Buffer.from(await r.arrayBuffer());
+      });
       const sound = path.join(dir, "intro-sound.wav");
       await mixIntro(v, voice, sound, dir);
       const clip = path.join(dir, "voiced-intro.mp4");

@@ -8658,6 +8658,25 @@ export function registerRoutes(app: Express): void {
     res.json(e);
   });
 
+  /** The worker's voiced intro, read with the site's ElevenLabs key (the worker's key can't do text-to-speech). */
+  app.post("/api/agent/voiced-tts", requireAgent, async (req, res) => {
+    const key = (process.env.ELEVENLABS_API_KEY || process.env.ELEVEN_LABS_API_KEY || "").trim();
+    if (!key) return res.status(503).json({ message: "No ElevenLabs key on the site." });
+    const b = req.body ?? {};
+    const voiceId = String(b.voiceId ?? "");
+    const text = String(b.text ?? "").slice(0, 1200);
+    if (!/^[A-Za-z0-9]{10,40}$/.test(voiceId) || !text.trim()) return res.status(400).json({ message: "voiceId and text?" });
+    const vs = b.voice_settings && typeof b.voice_settings === "object" ? b.voice_settings : {};
+    const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}?output_format=mp3_44100_128`, {
+      method: "POST", signal: AbortSignal.timeout(90_000),
+      headers: { "xi-api-key": key, "content-type": "application/json" },
+      body: JSON.stringify({ text, model_id: /^[\w.-]{1,60}$/.test(String(b.model_id ?? "")) ? b.model_id : "eleven_multilingual_v2", voice_settings: { stability: Number(vs.stability) || 0.5, similarity_boost: Number(vs.similarity_boost) || 0.8, style: Number(vs.style) || 0 } }),
+    }).catch(() => null);
+    if (!r?.ok) return res.status(502).json({ message: `ElevenLabs ${r?.status ?? "unreachable"}` });
+    res.setHeader("content-type", "audio/mpeg");
+    res.send(Buffer.from(await r.arrayBuffer()));
+  });
+
   app.post("/api/agent/episode-edits/:id/done", requireAgent, async (req, res) => {
     const rec = await storage.getRecording(Number(req.params.id));
     if (!rec) return res.status(404).json({ message: "No such recording." });

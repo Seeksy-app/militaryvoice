@@ -114,13 +114,19 @@ export function spoken(v: VoicedBookends, line: string): string {
   return s;
 }
 
-export async function speak(v: VoicedBookends, words: string, out: string): Promise<void> {
+/**
+ * The words in the show's voice. Through the site (viaServer) when given: the worker's own ElevenLabs key is scoped to
+ * speech-to-text and music and can't do text-to-speech (27 Nov 2026), the site's key can. Else straight to ElevenLabs.
+ */
+export async function speak(v: VoicedBookends, words: string, out: string, viaServer?: (body: object) => Promise<Buffer>): Promise<void> {
+  const body = { voiceId: v.voiceId, text: words, model_id: v.model || "eleven_multilingual_v2", voice_settings: { stability: 0.5, similarity_boost: 0.8, style: 0.2, ...(v.settings ?? {}) } };
+  if (viaServer) { await fs.writeFile(out, await viaServer(body)); return; }
   const key = (process.env.ELEVENLABS_API_KEY || "").trim();
   if (!key) throw new Error("ELEVENLABS_API_KEY is not set.");
   const r = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(v.voiceId)}?output_format=mp3_44100_128`, {
     method: "POST",
     headers: { "xi-api-key": key, "content-type": "application/json" },
-    body: JSON.stringify({ text: words, model_id: v.model || "eleven_multilingual_v2", voice_settings: { stability: 0.5, similarity_boost: 0.8, style: 0.2, ...(v.settings ?? {}) } }),
+    body: JSON.stringify({ text: body.text, model_id: body.model_id, voice_settings: body.voice_settings }),
   });
   if (!r.ok) throw new Error(`the voice didn't come back (${r.status})`);
   await fs.writeFile(out, Buffer.from(await r.arrayBuffer()));
