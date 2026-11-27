@@ -15,7 +15,7 @@ import { peopleFor, sendSms, toE164 } from "./sms.js";
 import { sendFoundingReminders } from "./foundingReminder.js";
 import { MARATHON_KIND, marathonSkip, senderFrom, bccForSender } from "./marathonFounding.js";
 import { SURVEY_QUESTIONS } from "../shared/survey.js";
-import { EPISODE_DAY_KIND, episodeDayMail } from "./episodeDayMail.js";
+import { EPISODE_DAY_KIND, episodeDayMail, episodeDayRetryAt } from "./episodeDayMail.js";
 import { slackNote } from "./slack.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
@@ -480,8 +480,14 @@ export function registerSurvey(app: Express, requireAdmin: RequestHandler): void
       if (m.kind.startsWith(EPISODE_DAY_KIND)) {
         const built = await episodeDayMail(Number(m.kind.slice(EPISODE_DAY_KIND.length))).catch((err: Error) => ({ ok: false as const, why: `couldn't check: ${err.message}` }));
         if (!built.ok) {
+          // Before 11:45 am ET: back in the queue for 5 minutes, no Slack. After: held for a person, never sent on its own.
+          const again = episodeDayRetryAt(now());
+          if (again) {
+            await db.update(outboxMail).set({ status: "queued", sendAt: again, error: `waiting: ${built.why}`.slice(0, 300) }).where(eq(outboxMail.id, m.id));
+            continue;
+          }
           await db.update(outboxMail).set({ status: "held", error: built.why.slice(0, 300) }).where(eq(outboxMail.id, m.id));
-          await slackNote(`Episode-day email #${m.id} to ${m.to} is held, not sent: ${built.why}. Release it from Admin when it's fixed (POST /api/admin/outbox/release).`).catch(() => undefined);
+          await slackNote(`Episode-day email #${m.id} to ${m.to} is held, not sent (still missing at 11:45 am ET): ${built.why}. Release it from Admin when it's fixed (POST /api/admin/outbox/release).`).catch(() => undefined);
           continue;
         }
         Object.assign(m, { subject: built.subject, html: built.html, text: built.text });

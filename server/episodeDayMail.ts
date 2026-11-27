@@ -7,10 +7,25 @@ import { hostedEpisodes, hostedFeedHits, hostedShows, hostPosts, type PostResult
  * clips, from MilitaryVoices.ai <hello@> as the team (outbox sender "riccoh" = default from, Riccoh blind-copied).
  * Queued in the outbox with kind "episode-day:<episodeId>" and filled in at send time, so every link is a real one.
  * If any link isn't live yet (the episode, Apple or Spotify not showing it, no YouTube video, no clips), it is held,
- * never sent with a gap: the outbox marks it "held" with the reason and Slacks the team.
+ * never sent with a gap: the outbox tries again every 5 minutes until 11:45 am ET, then marks it "held" with the
+ * reason and Slacks the team (#mv-inbox).
  */
 export const EPISODE_DAY_KIND = "episode-day:";
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
+
+/**
+ * When a link isn't live yet at send time (PM, 27 Nov): try again in 5 minutes, and send the moment everything resolves,
+ * but only until 11:45 am ET, because the email says "is live this morning". Returns the next try (ISO), or null when
+ * it's past 11:45 am ET and the email should be held for a person.
+ */
+export const EPISODE_DAY_LAST_TRY_ET = 11 * 60 + 45;
+export function episodeDayRetryAt(nowIso: string): string | null {
+  const t = new Date(nowIso);
+  const p = new Intl.DateTimeFormat("en-US", { timeZone: "America/New_York", hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(t);
+  const n = (k: string) => Number(p.find((x) => x.type === k)?.value ?? "0");
+  if (n("hour") * 60 + n("minute") >= EPISODE_DAY_LAST_TRY_ET) return null;
+  return new Date(t.getTime() + 5 * 60_000).toISOString();
+}
 
 type Built = { ok: true; subject: string; text: string; html: string } | { ok: false; why: string };
 
