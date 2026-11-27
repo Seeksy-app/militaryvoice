@@ -4,6 +4,7 @@ import { eq, sql } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
 import { readFeed } from "./hosting.js";
+import { parseTheme } from "../shared/bio.js";
 import { bioPages, hostedShows, hostedEpisodes, showTranscripts, transcriptChunks, type BioPageRow } from "../shared/schema.js";
 
 /**
@@ -43,17 +44,69 @@ async function store(id: number, email: string, lines: Line[]) {
 }
 
 /**
+ * Ask my show follows the show their page is about (the SmartLink's
+ * theme.podcast.source: "show:<id>", "rss", or the first hosted show), so an
+ * account with two shows learns and answers from the one listeners see. Off by
+ * default: with the switch off, the first hosted show and every transcript of
+ * the account, as before. Turning it on can line up new episodes to learn.
+ */
+export const FOLLOW_SOURCE_SETTING = "askshow:follow-source";
+const followSource = async () => (await storage.getSetting(FOLLOW_SOURCE_SETTING).catch(() => null)) === "on";
+
+type Scope = { show: typeof hostedShows.$inferSelect | null; keys: (col?: string) => ReturnType<typeof sql> };
+
+/** The show the page is about, and which transcripts belong to it (as a condition on episode_key). */
+async function scopeOf(email: string): Promise<Scope> {
+  const shows = await db.select().from(hostedShows).where(eq(hostedShows.email, email)).orderBy(hostedShows.archivedAt, hostedShows.id);
+  if (!(await followSource())) return { show: shows[0] ?? null, keys: () => sql`TRUE` };
+  const [page] = await db.select({ theme: bioPages.theme }).from(bioPages).where(eq(bioPages.email, email)).limit(1);
+  const source = parseTheme(page?.theme).podcast?.source ?? "";
+  const show = source === "rss" ? null : source.startsWith("show:") ? shows.find((s) => s.id === Number(source.slice(5))) ?? shows[0] ?? null : shows[0] ?? null;
+  return show
+    ? { show, keys: (col = "episode_key") => sql`${sql.raw(col)} IN (SELECT 'hosted:' || he.id FROM hosted_episodes he WHERE he.show_id = ${show.id})` }
+    : { show: null, keys: (col = "episode_key") => sql`${sql.raw(col)} LIKE 'rss:%'` };
+}
+
+/**
+ * For admin, before the switch goes on: which show the page would follow for
+ * this account, and how many of its episodes would need transcribing (spend).
+ */
+export async function followSourcePreview(email: string): Promise<{ on: boolean; source: string; show: { id: number; title: string } | null; episodes: number; learned: number; withTranscript: number; toTranscribe: number; minutes: number }> {
+  await schemaIsReady();
+  const on = await followSource();
+  const [page] = await db.select({ theme: bioPages.theme }).from(bioPages).where(eq(bioPages.email, email)).limit(1);
+  const source = parseTheme(page?.theme).podcast?.source ?? "";
+  const shows = await db.select().from(hostedShows).where(eq(hostedShows.email, email)).orderBy(hostedShows.archivedAt, hostedShows.id);
+  const show = source === "rss" ? null : source.startsWith("show:") ? shows.find((s) => s.id === Number(source.slice(5))) ?? shows[0] ?? null : shows[0] ?? null;
+  if (!show) return { on, source, show: null, episodes: 0, learned: 0, withTranscript: 0, toTranscribe: 0, minutes: 0 };
+  const have = new Set((await db.select({ k: showTranscripts.episodeKey }).from(showTranscripts).where(eq(showTranscripts.email, email))).map((r) => r.k));
+  const eps = (await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.showId, show.id))).filter((e) => e.status === "published" && (e.audioKey || e.audioUrl));
+  let learned = 0, withTranscript = 0, toTranscribe = 0, secs = 0;
+  for (const e of eps) {
+    if (have.has(`hosted:${e.id}`)) { learned++; continue; }
+    const rec = e.recordingId ? await storage.getRecording(e.recordingId).catch(() => undefined) : undefined;
+    if (rec?.transcriptJson && rec.transcriptJson.length > 2) withTranscript++;
+    else { toTranscribe++; secs += e.durationSec || 0; }
+  }
+  return { on, source, show: { id: show.id, title: show.title }, episodes: eps.length, learned, withTranscript, toTranscribe, minutes: Math.round(secs / 60) };
+}
+
+export async function setFollowSource(on: boolean): Promise<void> {
+  await storage.setSetting(FOLLOW_SOURCE_SETTING, on ? "on" : "off");
+}
+
+/**
  * Line up every episode to learn: all of a show hosted here (a Library
  * recording's transcript is used as it is), or the latest 25 from their feed.
  * Idempotent; the worker does the rest.
  */
 export async function syncKnowledge(email: string): Promise<void> {
   await schemaIsReady();
+  const { show, keys } = await scopeOf(email);
   // One that failed (the transcriber was down, a bill unpaid) tries again after a few hours, by itself.
   const retry = new Date(Date.now() - 3 * 3600_000).toISOString();
-  await db.execute(sql`UPDATE show_transcripts SET status = 'queued', error = '' WHERE email = ${email} AND status = 'failed' AND claimed_at < ${retry} AND error NOT LIKE 'No audio%' AND error NOT LIKE 'Nothing was said%'`);
+  await db.execute(sql`UPDATE show_transcripts SET status = 'queued', error = '' WHERE email = ${email} AND ${keys()} AND status = 'failed' AND claimed_at < ${retry} AND error NOT LIKE 'No audio%' AND error NOT LIKE 'Nothing was said%'`);
   const have = new Set((await db.select({ k: showTranscripts.episodeKey }).from(showTranscripts).where(eq(showTranscripts.email, email))).map((r) => r.k));
-  const [show] = await db.select().from(hostedShows).where(eq(hostedShows.email, email)).orderBy(hostedShows.archivedAt, hostedShows.id).limit(1);
   const add: (typeof showTranscripts.$inferInsert)[] = [];
   if (show) {
     const eps = (await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.showId, show.id)))
@@ -111,7 +164,8 @@ export async function claimTranscript(): Promise<{ id: number; title: string; ur
 }
 
 export async function knowledgeOf(email: string): Promise<{ done: number; total: number }> {
-  const rows = await db.select({ status: showTranscripts.status, n: sql<number>`count(*)::int` }).from(showTranscripts).where(eq(showTranscripts.email, email)).groupBy(showTranscripts.status);
+  const { keys } = await scopeOf(email);
+  const rows = (await db.execute(sql`SELECT status, count(*)::int AS n FROM show_transcripts WHERE email = ${email} AND ${keys()} GROUP BY status`)) as unknown as { status: string; n: number }[];
   const total = rows.filter((r) => r.status !== "failed").reduce((a, r) => a + r.n, 0);
   return { done: rows.find((r) => r.status === "done")?.n ?? 0, total };
 }
@@ -125,7 +179,8 @@ type Passage = { id: number; start_sec: number; text: string; transcript_id: num
  */
 async function passages(email: string, question: string, episode = ""): Promise<Passage[]> {
   const words = Array.from(new Set(question.toLowerCase().match(/[a-z0-9']{3,}/g) ?? [])).slice(0, 24).map((w) => w.replace(/'/g, ""));
-  const only = episode ? sql`AND t.title = ${episode}` : sql``;
+  const { keys } = await scopeOf(email);
+  const only = episode ? sql`AND t.title = ${episode} AND ${keys("t.episode_key")}` : sql`AND ${keys("t.episode_key")}`;
   const tsq = words.join(" | ");
   const hits = words.length ? (await db.execute(sql`
     SELECT c.id, c.start_sec, c.text, c.transcript_id, t.title, t.audio_url, t.published_at,

@@ -227,7 +227,7 @@ import { registerNudges, fireNudgeFor } from "./nudges.js";
 import { registerCreatorCampaigns } from "./creatorCampaigns.js";
 import { registerContactProfile } from "./contactProfile.js";
 import { registerShowMove } from "./showMove.js";
-import { registerAskShow, claimTranscript } from "./askShow.js";
+import { registerAskShow, claimTranscript, followSourcePreview, setFollowSource } from "./askShow.js";
 import { createTokenCheckout, readPaidSession, verifyWebhook, webhookProblem, paidFromEvent, stripeReady, createPlanCheckout, readPlanSession, planStateFrom, createProductionSubscription, readSessionMeta, readSubscription, reportExtraCredits, billingPortal, createAddonCheckout, readAddonSession, addonStateFrom, bundledAddonStatesFrom, readPlanSessionAddons, ensureExtraItem, type PlanState } from "./stripe.js";
 import { postableTitle } from "../shared/episodeTitle.js";
 import { foundingOpen, episodeCredits, SHORT_VIDEO_SEC, planOf, PLANS, ADDONS, DEFAULT_OVERAGE_CAP_CENTS, OVERAGE_CAP_CHOICES, type PlanKey, type AddonKey } from "../shared/tokens.js";
@@ -8497,6 +8497,24 @@ export function registerRoutes(app: Express): void {
         skipIds: Array.isArray(b.skipIds) ? b.skipIds.map(Number).filter(Number.isFinite) : [],
       }));
     } catch (err) { res.status(400).json({ message: (err as Error).message }); }
+  });
+
+  /**
+   * Admin: Ask my show follows the SmartLink's show (27 Nov 2026), off by default. GET ?email= shows which show it
+   * would follow and how many episodes would need transcribing; PUT { on } flips it for everyone. Turning it on spends
+   * nothing by itself: new episodes line up the next time that podcaster opens their SmartLink builder.
+   */
+  app.get("/api/admin/ask-show/follow-source", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost || (req as any).eventAdmin) return res.status(403).json({ message: "Admins only." });
+    const email = String(req.query.email ?? "").trim().toLowerCase();
+    if (!email) return res.status(400).json({ message: "email?" });
+    res.json(await followSourcePreview(email));
+  });
+  app.put("/api/admin/ask-show/follow-source", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost || (req as any).eventAdmin) return res.status(403).json({ message: "Admins only." });
+    if (typeof req.body?.on !== "boolean") return res.status(400).json({ message: "on: true or false?" });
+    await setFollowSource(req.body.on);
+    res.json({ on: req.body.on });
   });
 
   /**
