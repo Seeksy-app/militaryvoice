@@ -178,8 +178,8 @@ export function CreatorProfileMock() {
         <div className="mt-3 grid grid-cols-2 overflow-hidden rounded-xl border border-border">
           {[
             ["Followers", "184K", ""],
-            ["Engagement", "4.82%", "text-emerald-600 dark:text-emerald-400"],
-            ["Credibility", "91%", "text-emerald-600 dark:text-emerald-400"],
+            ["Engagement", "4.82%", "text-emerald-700 dark:text-emerald-400"],
+            ["Credibility", "91%", "text-emerald-700 dark:text-emerald-400"],
             ["Real reach", "142K", ""],
           ].map(([l, v, c]) => (
             <div key={l} className="-mb-px -mr-px border-b border-r border-border px-3 py-2">

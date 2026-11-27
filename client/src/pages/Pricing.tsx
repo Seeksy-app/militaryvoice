@@ -37,7 +37,7 @@ const GROWTH: Feature[] = [
   // Free since 20 Nov 2026 (Andrew): guestInvites.ts has no plan gate. Same name as the app's Podcast tab.
   { t: "Invite a guest", tip: "Send your guest an invitation from your Podcast page. They answer a few questions and add the photo they want shown, and you get it all before the interview." },
   { t: "Zoom recordings, straight in", tip: "Connect Zoom once. Every cloud recording comes in on its own, ready for clips and a clean episode." },
-  { t: "Events with an SI co-host", tip: "Take a slot in live events like the Podcast Marathon. Alex, our SI co-host, introduces you and keeps the hand-offs moving." },
+  { t: "Events with an SI co-host", tip: "Take a slot in MilitaryVoices live events. Alex, our SI co-host, introduces you and keeps the hand-offs moving." },
 ];
 
 const PLAN_FEATURES: Record<string, Feature[]> = {
@@ -146,7 +146,7 @@ function StudioBand() {
       <div className="rounded-3xl border border-border bg-card p-6 sm:p-8">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
           <h2 className="flex items-start gap-2 text-2xl font-bold tracking-tight text-foreground" style={HEADLINE_FONT}><Radio className="mt-1.5 h-5 w-5 shrink-0 text-[#053877]" /> <span className="text-balance">Live Studio, on every plan</span></h2>
-          <p className="text-sm font-semibold text-emerald-700">{STUDIO_HOURS.growth} hours a month free on Growth</p>
+          <p className="text-sm font-semibold text-emerald-700 dark:text-emerald-400">{STUDIO_HOURS.growth} hours a month free on Growth</p>
         </div>
         <p className="mt-1 max-w-2xl text-sm text-muted-foreground">Go live, record and stream your show from the browser. Hover any line for the detail.</p>
         <ul className="mt-5 grid gap-x-6 gap-y-2 text-sm text-foreground/85 sm:grid-cols-2 lg:grid-cols-3">{STUDIO.map((f) => <Line key={f.t} f={f} />)}</ul>
@@ -200,7 +200,7 @@ function VsStreamYard() {
         </div>
         <div className="grid grid-cols-[1fr_6.5rem_6.5rem] items-center gap-2 border-b border-border bg-[#053877]/[0.04] px-4 py-3 text-sm sm:grid-cols-[1fr_11rem_11rem] sm:px-6">
           <span className="font-semibold">A month</span>
-          <div className="text-center"><p className="font-bold text-emerald-700">Free</p><p className="text-[11px] leading-tight text-muted-foreground">{STUDIO_HOURS.growth} hours a month; {STUDIO_HOURS.creator} on Scale {cents(PLANS.creator.cents)}, {STUDIO_HOURS.pro} on Pro {cents(PLANS.pro.cents)}</p></div>
+          <div className="text-center"><p className="font-bold text-emerald-700 dark:text-emerald-400">Free</p><p className="text-[11px] leading-tight text-muted-foreground">{STUDIO_HOURS.growth} hours a month; {STUDIO_HOURS.creator} on Scale {cents(PLANS.creator.cents)}, {STUDIO_HOURS.pro} on Pro {cents(PLANS.pro.cents)}</p></div>
           <div className="text-center"><p className="font-bold tabular-nums">$18.99 to $88.99</p><p className="text-[11px] leading-tight text-muted-foreground">Essential, Core, Advanced</p></div>
         </div>
         <ul className="divide-y divide-border">
@@ -350,9 +350,9 @@ export default function Pricing() {
       <main className="mx-auto w-full max-w-5xl flex-1 px-4 py-10 sm:px-6">
         <div className="mb-8 flex justify-center">
           <div className="inline-flex rounded-full border border-border bg-card p-1 text-sm font-semibold" role="tablist" aria-label="Billing">
-            <button type="button" role="tab" aria-selected={!yearly} onClick={() => setYearly(false)} className={`rounded-full px-4 py-1.5 ${!yearly ? "bg-[#053877] text-white" : "text-muted-foreground hover:text-foreground"}`} data-testid="billing-monthly">Monthly</button>
-            <button type="button" role="tab" aria-selected={yearly} onClick={() => setYearly(true)} className={`rounded-full px-4 py-1.5 ${yearly ? "bg-[#053877] text-white" : "text-muted-foreground hover:text-foreground"}`} data-testid="billing-yearly">
-              Yearly <span className={yearly ? "text-[#F0A71F]" : "text-emerald-600"}>2 months free</span>
+            <button type="button" role="tab" aria-selected={!yearly} onClick={() => setYearly(false)} className={`tap-44 rounded-full px-4 py-1.5 ${!yearly ? "bg-[#053877] text-white" : "text-muted-foreground hover:text-foreground"}`} data-testid="billing-monthly">Monthly</button>
+            <button type="button" role="tab" aria-selected={yearly} onClick={() => setYearly(true)} className={`tap-44 rounded-full px-4 py-1.5 ${yearly ? "bg-[#053877] text-white" : "text-muted-foreground hover:text-foreground"}`} data-testid="billing-yearly">
+              Yearly <span className={yearly ? "text-[#F0A71F]" : "text-emerald-700 dark:text-emerald-400"}>2 months free</span>
             </button>
           </div>
         </div>
@@ -398,7 +398,7 @@ export default function Pricing() {
                   <label className="mt-5 flex cursor-pointer items-start gap-2.5 rounded-2xl border border-[#F0A71F]/60 bg-[#F0A71F]/[0.08] p-3 text-sm" data-testid="plan-pro-production">
                     <Checkbox checked={withProduction} onCheckedChange={(v) => setWithProduction(v === true)} className="mt-0.5 border-[#b36b00] data-[state=checked]:bg-[#b36b00] data-[state=checked]:text-white" />
                     <span className="min-w-0">
-                      <span className="flex items-center gap-1.5 font-semibold text-[#8a5200]">+ {prod.name} {cents(prod.cents)}/mo</span>
+                      <span className="flex items-center gap-1.5 font-semibold text-[#8a5200] dark:text-[#F0A71F]">+ {prod.name} {cents(prod.cents)}/mo</span>
                       <span className="mt-0.5 block text-xs text-muted-foreground">Paid every 3 months ({cents(prod.quarterCents)}), on its own, so you can stop it and keep Pro. Up to 2 episodes a week, up to 60 minutes each: we add the intro, outro and music, a guest card, and four clips. Nothing posts until you've seen it.</span>
                     </span>
                   </label>
@@ -406,11 +406,11 @@ export default function Pricing() {
                 <label className={`mt-5 flex items-start gap-2.5 rounded-2xl border p-3 text-sm ${yearly ? "border-dashed border-border opacity-70" : "cursor-pointer border-[#F0A71F]/60 bg-[#F0A71F]/[0.08]"}`} data-testid={`plan-${p.key}-discovery`}>
                   <Checkbox checked={addDisc} disabled={yearly} onCheckedChange={(v) => setWithDiscovery((w) => ({ ...w, [p.key]: v === true }))} className="mt-0.5 border-[#b36b00] data-[state=checked]:bg-[#b36b00] data-[state=checked]:text-white" />
                   <span className="min-w-0">
-                    <span className="flex items-center gap-1.5 font-semibold text-[#8a5200]">
+                    <span className="flex items-center gap-1.5 font-semibold text-[#8a5200] dark:text-[#F0A71F]">
                       <Compass className="h-3.5 w-3.5 shrink-0" /> + Discovery Pro {cents(disc.cents)}/mo
                       <Tooltip delayDuration={150}>
                         <TooltipTrigger asChild>
-                          <button type="button" onClick={(e) => e.preventDefault()} aria-label="What is Discovery Pro?" className="text-[#8a5200]/70 hover:text-[#8a5200]" data-testid="plan-discovery-info"><Info className="h-3.5 w-3.5" /></button>
+                          <button type="button" onClick={(e) => e.preventDefault()} aria-label="What is Discovery Pro?" className="tap-44 text-[#8a5200]/70 hover:text-[#8a5200] dark:text-[#F0A71F]/80 dark:hover:text-[#F0A71F]" data-testid="plan-discovery-info"><Info className="h-3.5 w-3.5" /></button>
                         </TooltipTrigger>
                         <TooltipContent className="max-w-[280px] text-xs leading-relaxed">Search 800M+ creator profiles on Instagram, YouTube, TikTok, X and Twitch. Filter for military and veteran creators by topic, branch and audience, see their real reach, and get their email to invite them as a guest, partner or sponsor. Verified creators is included. Discovery Pro comes with Pro.</TooltipContent>
                       </Tooltip>

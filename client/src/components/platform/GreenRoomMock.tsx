@@ -48,7 +48,7 @@ export function ReadyToJoinMock() {
           <div className="mt-1 flex h-10 items-center rounded-xl border border-slate-300 px-3 text-sm">Lena Park</div>
         </div>
         <div>
-          <p className="text-xs font-semibold text-slate-600">Title <span className="font-normal text-slate-400">(optional)</span></p>
+          <p className="text-xs font-semibold text-slate-600">Title <span className="font-normal text-slate-500">(optional)</span></p>
           <div className="mt-1 flex h-10 items-center truncate rounded-xl border border-slate-300 px-3 text-sm">Home Base</div>
         </div>
       </div>
@@ -69,7 +69,7 @@ export function WaitingRoomMock() {
       <div className="rounded-2xl border border-white/10 bg-[#0b1638] p-3.5 text-white shadow-2xl">
         <div className="flex items-center justify-between px-0.5">
           <p className="text-[11px] font-bold uppercase tracking-[0.16em] text-white/70">Green room <span className="ml-1 rounded bg-emerald-500/20 px-1.5 py-0.5 text-emerald-300">3 waiting</span></p>
-          <p className="text-[11px] text-white/45">Not on air</p>
+          <p className="text-[11px] text-white/60">Not on air</p>
         </div>
         <ul className="mt-3 flex flex-col gap-2">
           {WAITING.map((w) => {
@@ -113,7 +113,7 @@ export function WaitingRoomMock() {
         <div className="flex items-center gap-2.5">
           <img src="/alex.jpg" alt="" className="h-8 w-8 rounded-full object-cover ring-2 ring-[#F0A71F]" />
           <p className="text-sm font-semibold">Alex <span className="font-normal text-slate-500">· SI producer</span></p>
-          <span className="ml-auto flex items-center gap-1 text-[11px] text-emerald-600"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> answering</span>
+          <span className="ml-auto flex items-center gap-1 text-[11px] text-emerald-700"><span className="h-1.5 w-1.5 rounded-full bg-emerald-500" /> answering</span>
         </div>
         <div className="mt-3 flex flex-col gap-2 text-[13px] leading-snug">
           <p className="ml-auto max-w-[85%] rounded-2xl rounded-br-md bg-[#053877] px-3 py-2 text-white">Is my audio OK? And when am I on?</p>
