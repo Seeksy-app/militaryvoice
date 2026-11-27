@@ -190,7 +190,7 @@ function AddDialog({ onClose, onAdded }: { onClose: () => void; onAdded: () => v
         {kind === "link" && <Input value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} placeholder="…or paste a link (a page, a press release)" />}
         <Input value={f.title} onChange={(e) => setF({ ...f, title: e.target.value })} placeholder="Title" />
         <Textarea value={f.notes} onChange={(e) => setF({ ...f, notes: e.target.value })} rows={3} placeholder="Notes: the facts a caption can use (who, what, when, the link)" />
-        <Input value={f.tags} onChange={(e) => setF({ ...f, tags: e.target.value })} placeholder="Tags, comma separated (Marathon, Creators, Brands)" />
+        <Input value={f.tags} onChange={(e) => setF({ ...f, tags: e.target.value })} placeholder="Tags, comma separated (Event, Creators, Brands)" />
         <Button className="w-full rounded-full bg-[#053877] hover:bg-[#0a4a99]" disabled={!f.url || Boolean(busy)} onClick={async () => {
           try { await send("POST", "/api/admin/gtm/assets", { ...f, kind, tags: f.tags.split(",").map((t) => t.trim()).filter(Boolean) }); onAdded(); }
           catch (e) { toast({ title: (e as Error).message, variant: "destructive" }); }
