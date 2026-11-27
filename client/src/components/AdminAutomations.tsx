@@ -33,7 +33,7 @@ const TRIGGERS: { value: string; label: string }[] = [
   { value: "smartlink", label: "They make a SmartLink" },
   { value: "podcast", label: "They add a podcast for us to host" },
   { value: "discovery", label: "They join Discovery" },
-  { value: "slot", label: "They book a Marathon slot" },
+  { value: "slot", label: "They book a slot at an event" },
   { value: "contact", label: "They're added to Contacts" },
   { value: "tag", label: "They get a tag…" },
   { value: "manual", label: "I add them myself" },

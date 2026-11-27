@@ -133,7 +133,7 @@ export function CrewDashboard({ crew, email, onPickEvent, cohost }: { crew: Crew
                         {crew.events.map((e) => <option key={e.id} value={e.id} className="text-foreground">{e.name.trim()}</option>)}
                       </select>
                     ) : (
-                      <span className="font-semibold text-white">{ev?.name?.trim() || "The Podcast Marathon"}</span>
+                      <span className="font-semibold text-white">{ev?.name?.trim() || "Your event"}</span>
                     )}
                     <span>· {now.toLocaleDateString(undefined, { weekday: "long", month: "long", day: "numeric" })}</span>
                   </p>

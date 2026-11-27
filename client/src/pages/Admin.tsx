@@ -318,7 +318,7 @@ function EventFormFields({
         <Input
           value={form.slug}
           onChange={(e) => onChange({ ...form, slug: e.target.value.toLowerCase().replace(/[^a-z0-9-]/g, "-") })}
-          placeholder="summer-marathon"
+          placeholder="veterans-day-live"
           data-testid="input-new-event-slug"
         />
       </div>
@@ -1570,7 +1570,7 @@ function SponsorsCard({ eventId }: { eventId: number }) {
     <Card>
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-base">
-          <Handshake className="h-4 w-4 text-primary" /> Friends of the Marathon
+          <Handshake className="h-4 w-4 text-primary" /> Sponsor strip
         </CardTitle>
         <CardDescription>
           Sponsor logos scroll in a strip on the homepage, under the host section. PNG or SVG with a transparent
@@ -2039,7 +2039,7 @@ function EventOverview({ eventId, event, go }: { eventId: number; event: PublicE
             for seeing the dashboard as a podcaster) is not one of the slots. */}
         {tile("Slots booked", `${active.filter((s) => s.slotIndex < total).length} / ${total}`, `${Math.max(0, total - active.filter((s) => s.slotIndex < total).length)} still open`, "signups")}
         {tile("Sent materials", `${withMaterials} / ${active.filter((s) => s.slotIndex < total).length}`, `${prerecorded} pre-recorded · ${needInterviewer} want an interviewer`, "signups")}
-        {tile("Sponsors", (sponsors ?? []).filter((x) => (x.packageId ?? 0) > 0).length, `${(sponsors ?? []).filter((x) => !((x.packageId ?? 0) > 0)).length} friends of the marathon in the strip`, "sponsors")}
+        {tile("Sponsors", (sponsors ?? []).filter((x) => (x.packageId ?? 0) > 0).length, `${(sponsors ?? []).filter((x) => !((x.packageId ?? 0) > 0)).length} in the sponsor strip`, "sponsors")}
         {tile("YouTube connected", `${connections?.youtube ?? "–"} / ${connections?.lineup ?? total}`, "Podcasters who linked a channel", "signups")}
         {tile("Social connected", `${connections?.social ?? "–"} / ${connections?.lineup ?? total}`, "Podcasters with at least one account linked", "signups")}
       </div>
@@ -2234,7 +2234,7 @@ function BroadcastsSection({
             <form onSubmit={saveDraft} className="flex flex-col gap-3">
               <div>
                 <Label>Subject</Label>
-                <Input value={bSubject} onChange={(e) => setBSubject(e.target.value)} placeholder="Podcast Marathon starts Saturday!" />
+                <Input value={bSubject} onChange={(e) => setBSubject(e.target.value)} placeholder="Show day is this Saturday!" />
               </div>
               {eventId && (
                 <div>
@@ -2255,7 +2255,7 @@ function BroadcastsSection({
                   rows={10}
                   value={bBody}
                   onChange={(e) => setBBody(e.target.value)}
-                  placeholder={"Hi there,\n\nThe Military Podcast Marathon is coming up..."}
+                  placeholder={"Hi there,\n\nShow day is coming up..."}
                 />
                 <p className="mt-1 text-xs text-muted-foreground">Paragraphs separated by a blank line. An unsubscribe link is added automatically.</p>
               </div>
@@ -4721,7 +4721,7 @@ function CrmEventPanel({ eventId, event }: { eventId: number | null; event?: Pub
           <AutomationsPanel eventId={eventId} teamMembers={teamMembers} segmentOptions={segmentOptions}>
           <section className="flex flex-col gap-3">
           <div>
-            <h3 className="font-semibold">Marathon countdown</h3>
+            <h3 className="font-semibold">Countdown to show day</h3>
             <p className="text-sm text-muted-foreground">Everything a podcaster receives, in the order it reaches them.</p>
           </div>
 
