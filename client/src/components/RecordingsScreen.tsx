@@ -8,7 +8,9 @@ import { isHowTo } from "@/lib/howTo";
 import { apiRequest } from "@/lib/queryClient";
 import { useToast } from "@/hooks/use-toast";
 import type { PublicEvent, RecordingRow, ClipRow, HostPostRow, CleanResult } from "@shared/schema";
-import { ArrowRight, Check, Loader2, Play, Podcast, Scissors, Sparkles, Upload, Wand2 } from "lucide-react";
+import { ArrowRight, Check, Link2, Loader2, Play, Podcast, Scissors, Sparkles, Upload, Video, Wand2 } from "lucide-react";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { SendRecording } from "@/components/SendRecording";
 
 // The Library is your media (Andrew, 26 Nov: "the library shouldn't have clips in there… The library is more like your
 // media"): what they record in Studio and Rooms, uploads, Zoom calls, and their podcast's episodes. Clips moved to
@@ -109,16 +111,15 @@ function Library_({ socialAccounts }: { socialAccounts?: string | null }) {
         </div>
       )}
 
-      {/* The title, one line, and the one way in for new media. */}
-      <div className="mb-4 flex items-end justify-between gap-3">
-        <div className="min-w-0">
-          <h1 className="text-[28px] font-semibold tracking-tight" style={HEAD}>Library</h1>
-          <p className="hidden text-[14px] text-muted-foreground text-balance sm:block">
-            Your media: what you record in Studio and Rooms, your uploads and{" "}
-            <a href="/host/dashboard/integrations#section-content" className="font-medium text-[#053877] underline-offset-2 hover:underline dark:text-[#8fb5e8]" data-testid="zoom-hint">Zoom&nbsp;calls</a>.
-          </p>
+      {/* The title and the ways in for new media (Andrew, 27 Nov: no subtext; Zoom and "send us a recording" up here). */}
+      {/* On a phone: the title and Upload on one line, the other two ways in side by side under it. */}
+      <div className="mb-4 flex flex-wrap items-center justify-between gap-x-3 gap-y-2">
+        <h1 className="text-[28px] font-semibold tracking-tight" style={HEAD}>Library</h1>
+        <div className="flex items-center gap-2">
+          <span className="hidden sm:contents"><ZoomWayIn /><SendLink /></span>
+          <UploadRecording button autoOpen initialFile={dropped} />
         </div>
-        <UploadRecording button autoOpen initialFile={dropped} />
+        <div className="grid w-full grid-cols-2 gap-2 empty:hidden sm:hidden"><ZoomWayIn wide /><SendLink wide /></div>
       </div>
 
       {open == null && <Finished recordings={recordings ?? []} clips={clips ?? []} posts={posts ?? []} clipCounts={clipCounts} />}
@@ -237,44 +238,107 @@ function Finished({ recordings, clips, posts, clipCounts }: { recordings: Record
     }
   }
 
+  // The title alone, its last two words held together so it never ends on one (the "is cleaned up" moved to the line under it).
+  const titleKept = title.replace(/ (\S+)$/, "\u00a0$1");
+  const did = cut > 0
+    ? `Pōstify cut ${cutText(cut)} of dead air and ums${topClips > 0 ? `, levelled the audio and made ${topClips} ${topClips === 1 ? "clip" : "clips"}` : " and levelled the audio"}.`
+    : `Pōstify levelled the audio${topClips > 0 ? ` and made ${topClips} ${topClips === 1 ? "clip" : "clips"}` : ""}.`;
+  const stats: [string, string, string][] = [
+    [String(done.length), done.length === 1 ? "episode finished" : "episodes finished", done.length === 1 ? "episode" : "episodes"],
+    ...(totalCut > 0 ? [[cutText(totalCut), "dead air cut", "dead air cut"] as [string, string, string]] : []),
+    [String(clips.length), clips.length === 1 ? "clip made" : "clips made", clips.length === 1 ? "clip" : "clips"],
+    [String(sent), sent === 1 ? "post sent" : "posts sent", sent === 1 ? "post sent" : "posts sent"],
+  ];
+
+  // Andrew, 27 Nov: the blue is this one episode only; everything Pōstify has done sits apart in white, so "114 clips"
+  // doesn't read as this episode's. 70/30 beside each other on a wide screen, stacked below that.
   return (
-    <div className="overflow-hidden rounded-2xl bg-gradient-to-br from-[#053877] via-[#0a4aa0] to-[#0e7490] text-white shadow-[0_10px_30px_rgba(5,56,119,0.25)]" data-testid="library-finished">
-      <div className="grid grid-cols-[120px_minmax(0,1fr)] gap-x-3 gap-y-3 p-3 sm:grid-cols-[minmax(0,300px)_1fr] sm:items-center sm:gap-x-5 sm:p-4">
+    <div className="grid gap-3 lg:grid-cols-[minmax(0,7fr)_minmax(0,3fr)]" data-testid="library-finished">
+      <div className="grid grid-cols-[120px_minmax(0,1fr)] items-center gap-3 rounded-2xl bg-gradient-to-br from-[#053877] to-[#0a4aa0] p-3 text-white shadow-[0_10px_30px_rgba(5,56,119,0.22)] sm:grid-cols-[184px_minmax(0,1fr)] sm:gap-x-4 sm:gap-y-2.5 sm:p-3.5">
         <div className="relative aspect-video overflow-hidden rounded-xl bg-black/30 ring-1 ring-white/15 sm:row-span-2">
           {playing ? (
             <video src={`/api/host/recordings/${top.copy.id}/video`} controls autoPlay playsInline className="h-full w-full bg-black object-contain" />
           ) : (
             <button type="button" onClick={() => setPlaying(true)} className="absolute inset-0" aria-label={`Watch ${title}`}>
               <video src={`/api/host/recordings/${top.copy.id}/video#t=8`} preload="metadata" muted playsInline className="h-full w-full object-cover" />
-              <span className="absolute inset-0 flex items-center justify-center"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-[#053877] shadow-lg sm:h-12 sm:w-12"><Play className="h-4 w-4 fill-current sm:h-5 sm:w-5" /></span></span>
+              <span className="absolute inset-0 flex items-center justify-center"><span className="flex h-9 w-9 items-center justify-center rounded-full bg-white/90 text-[#053877] shadow-lg sm:h-11 sm:w-11"><Play className="h-4 w-4 fill-current sm:h-5 sm:w-5" /></span></span>
               {top.copy.durationSec > 0 && <span className="absolute bottom-1.5 right-1.5 rounded bg-black/70 px-1.5 py-0.5 text-[11px] font-semibold tabular-nums">{mmss(top.copy.durationSec)}</span>}
             </button>
           )}
         </div>
-        <div className="min-w-0">
-          <p className="inline-flex items-center gap-1.5 text-[11px] font-semibold uppercase tracking-wide text-[#F0A71F]"><Sparkles className="h-3.5 w-3.5" /> Finished<span className="hidden sm:inline">&nbsp;in Pōstify</span> · {when}</p>
-          <p className="mt-1 line-clamp-2 text-[16px] font-semibold leading-tight text-balance sm:text-[20px]" style={HEAD}>{title} is cleaned up and ready for your&nbsp;listeners</p>
-          <p className="mt-1 hidden text-[13px] text-white/75 text-balance sm:block">
-            {cut > 0 ? `Pōstify cut ${cutText(cut)} of dead air and ums and levelled the audio.` : "Pōstify cleaned it up and levelled the audio."}
-            {topClips > 0 ? ` ${topClips} ${topClips === 1 ? "clip" : "clips"} came out of it.` : ""}
-          </p>
+        <div className="min-w-0 sm:self-end">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-[#F0A71F]"><Sparkles className="mr-1.5 inline h-3.5 w-3.5 align-[-2px]" />Finished<span className="hidden sm:inline">&nbsp;in Pōstify</span> · {when}</p>
+          <p className="mt-1 line-clamp-3 text-[15px] font-semibold leading-tight text-balance sm:line-clamp-2 sm:text-[18px]" style={HEAD} data-testid="library-finished-title">{titleKept}</p>
+          <p className="mt-1 hidden text-[13px] text-white/75 [text-wrap:pretty] sm:block">Cleaned up and ready for your listeners. {did}</p>
         </div>
-        <div className="col-span-2 flex flex-wrap gap-2 sm:col-span-1 sm:col-start-2">
+        <div className="col-span-2 flex flex-wrap gap-2 sm:col-span-1 sm:col-start-2 sm:self-start">
           <button type="button" onClick={() => void toPodcast()} disabled={making} className="inline-flex flex-1 items-center justify-center gap-2 rounded-full bg-[#F0A71F] px-4 py-2 text-[13px] font-semibold text-[#1a1200] hover:bg-[#f5b94a] disabled:opacity-70 sm:flex-none" data-testid="library-finished-podcast">
             {making ? <Loader2 className="h-4 w-4 animate-spin" /> : <Podcast className="h-4 w-4" />} {inShow ? "Open it in your podcast" : "Publish to your podcast"}
           </button>
-          <button type="button" onClick={() => setPlaying(true)} className="hidden items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-[13px] font-semibold text-white ring-1 ring-white/25 hover:bg-white/20 sm:inline-flex"><Play className="h-4 w-4" /> Watch it</button>
-          {topClips > 0 && <a href={clipsHref(top.src.id)} className="inline-flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-[13px] font-semibold text-white ring-1 ring-white/25 hover:bg-white/20"><Scissors className="h-4 w-4" /> {topClips} {topClips === 1 ? "clip" : "clips"}</a>}
+          <button type="button" onClick={() => setPlaying(true)} className="hidden items-center gap-2 rounded-full bg-white/10 px-3.5 py-2 text-[13px] font-semibold text-white ring-1 ring-white/25 hover:bg-white/20 sm:inline-flex"><Play className="h-4 w-4" /> Watch it</button>
+          {topClips > 0 && <a href={clipsHref(top.src.id)} className="inline-flex items-center gap-2 rounded-full bg-white/10 px-3.5 py-2 text-[13px] font-semibold text-white ring-1 ring-white/25 hover:bg-white/20"><Scissors className="h-4 w-4" /> {topClips} {topClips === 1 ? "clip" : "clips"}</a>}
         </div>
       </div>
-      {/* Everything Pōstify has finished, as one line of proud numbers instead of a row of pills. */}
-      <div className="flex flex-wrap items-center gap-x-5 gap-y-1 border-t border-white/15 bg-black/15 px-4 py-2.5 text-[13px] text-white/75">
-        <span className="inline-flex items-center gap-1.5 font-semibold text-[#7ee2b8]"><Check className="h-4 w-4" /> {done.length} {done.length === 1 ? "episode" : "episodes"} finished</span>
-        {totalCut > 0 && <span><b className="text-white">{cutText(totalCut)}</b> of dead air cut</span>}
-        <span><b className="text-white">{clips.length}</b> {clips.length === 1 ? "clip" : "clips"} made</span>
-        <span><b className="text-white">{sent}</b> {sent === 1 ? "post" : "posts"} sent</span>
+      {/* Everything Pōstify has finished for them, on white. */}
+      <div className="flex flex-col rounded-2xl border border-border bg-card p-3.5 sm:p-4" data-testid="library-totals">
+        <p className="flex items-center gap-1.5 text-[14px] font-semibold" style={HEAD}><Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" /> All your episodes</p>
+        <p className="text-[12px] text-muted-foreground">What Pōstify has done for you so far</p>
+        <div className={`mt-3 grid gap-2 lg:grid-cols-2 lg:gap-x-4 lg:gap-y-3 ${stats.length === 4 ? "grid-cols-4" : "grid-cols-3"}`}>
+          {stats.map(([n, long, short]) => (
+            <div key={long} className="min-w-0">
+              <b className="block text-[17px] font-bold leading-tight tabular-nums sm:text-[22px]" style={HEAD}>{n}</b>
+              <span className="block text-[11px] leading-snug text-muted-foreground sm:text-[12px]"><span className="sm:hidden">{short}</span><span className="hidden sm:inline">{long}</span></span>
+            </div>
+          ))}
+        </div>
+        <a href="/host/dashboard/postify" className="mt-auto hidden pt-3 text-[12.5px] font-semibold text-[#053877] hover:underline lg:block dark:text-[#8fb5e8]" data-testid="library-totals-more">See them all in Pōstify →</a>
       </div>
     </div>
+  );
+}
+
+/** Zoom, in the Library header: connect it, or once it's connected bring past recordings in (both on Integrations). */
+function ZoomWayIn({ wide = false }: { wide?: boolean }) {
+  const zoom = useQuery<{ configured: boolean; connected: boolean }>({ queryKey: ["/api/host/zoom"], queryFn: async () => (await apiRequest("GET", "/api/host/zoom")).json(), staleTime: 60_000 });
+  if (!zoom.data?.configured) return null;
+  return (
+    <a href="/host/dashboard/integrations#section-content" className={`${wide ? "justify-center" : ""} inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-card px-3.5 text-[13px] font-semibold text-foreground hover:border-[#053877]/40`} data-testid="library-zoom">
+      <Video className="h-4 w-4 text-[#2D8CFF]" /> {zoom.data.connected ? "From Zoom" : "Connect Zoom"}
+    </a>
+  );
+}
+
+/** "Send us a recording" (the share link and passcode, Engineering's card), for one of their shows. */
+function SendLink({ wide = false }: { wide?: boolean }) {
+  const [open, setOpen] = useState(false);
+  const showsQ = useQuery<{ shows: { show: { id: number; title: string } }[] }>({ queryKey: ["/api/host/hosting"], queryFn: async () => (await apiRequest("GET", "/api/host/hosting")).json(), staleTime: 60_000 });
+  const shows = (showsQ.data?.shows ?? []).map((x) => x.show);
+  const [pick, setPick] = useState<number | null>(null);
+  const showId = pick ?? shows[0]?.id ?? null;
+  if (!shows.length) return null;
+  return (
+    <>
+      <button type="button" onClick={() => setOpen(true)} className={`${wide ? "justify-center" : ""} inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-card px-3.5 text-[13px] font-semibold text-foreground hover:border-[#053877]/40`} data-testid="library-send-recording">
+        <Link2 className="h-4 w-4 text-[#053877] dark:text-[#8fb5e8]" /><span className="sm:hidden">Send a link</span><span className="hidden sm:inline">Send us a recording</span>
+      </button>
+      <Dialog open={open} onOpenChange={setOpen}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-balance">Send us a recording</DialogTitle>
+            <DialogDescription className="[text-wrap:pretty]">Recorded on Zoom, or saved in Dropbox or Google Drive? Paste the share link and we'll bring it into your Library.</DialogDescription>
+          </DialogHeader>
+          {shows.length > 1 && (
+            <label className="block">
+              <span className="mb-1 block text-xs font-medium">For which show</span>
+              <select value={showId ?? ""} onChange={(e) => setPick(Number(e.target.value))} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" data-testid="library-send-show">
+                {shows.map((x) => <option key={x.id} value={x.id}>{x.title}</option>)}
+              </select>
+            </label>
+          )}
+          {showId != null && <SendRecording key={showId} showId={showId} bare />}
+        </DialogContent>
+      </Dialog>
+    </>
   );
 }
 
