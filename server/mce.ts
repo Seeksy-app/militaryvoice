@@ -10,6 +10,7 @@
 
 import type { Express, Request, Response, NextFunction } from "express";
 import { storage } from "./storage.js";
+import { keptOutOfDirectories } from "../shared/review.js";
 import { readSample, type SamplePayload } from "./discovery.js";
 
 export const MCE_HOST = /^(www\.)?militarycreatoreconomy\.com$/i;
@@ -463,7 +464,7 @@ ${
 
 async function loadCreators(): Promise<MceCreator[]> {
   const rows = (await storage.listAllProfiles())
-    .filter((p) => p.hostName.trim() && (p.directoryImage || p.photoUrl).trim() && !p.directoryHidden)
+    .filter((p) => p.hostName.trim() && (p.directoryImage || p.photoUrl).trim() && !p.directoryHidden && !keptOutOfDirectories(p.email))
     .sort((a, b) => a.directoryOrder - b.directoryOrder || a.id - b.id);
   return rows.map((p) => ({
     name: p.hostName.trim(),

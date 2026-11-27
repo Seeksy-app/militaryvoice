@@ -71,6 +71,7 @@ import {
 } from "../shared/schema.js";
 import { isLiveOnlySlot, LIVE_ONLY_LABEL } from "../shared/slots.js";
 import { showClock } from "../shared/showClock.js";
+import { keptOutOfDirectories } from "../shared/review.js";
 import { oldSpelling, sameMailbox } from "../shared/mailbox.js";
 import { registerDiscoveryRoutes, probeIc } from "./discovery.js";
 import { registerMce } from "./mce.js";
@@ -2304,7 +2305,7 @@ export function registerRoutes(app: Express): void {
     // then the lineup, then everyone else in the order they joined.
     const rows = (await storage.listAllProfiles())
       // Brands aren't creators: the directory is the people making the shows.
-      .filter((p) => p.hostName.trim() && p.photoUrl.trim() && !p.directoryHidden && pathOf(p.interests) !== "brand")
+      .filter((p) => p.hostName.trim() && p.photoUrl.trim() && !p.directoryHidden && !keptOutOfDirectories(p.email) && pathOf(p.interests) !== "brand")
       .sort((a, b) =>
         a.directoryOrder - b.directoryOrder ||
         Number(onLineup.has(b.email.trim().toLowerCase())) - Number(onLineup.has(a.email.trim().toLowerCase())) ||
