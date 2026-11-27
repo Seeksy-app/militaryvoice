@@ -195,7 +195,7 @@ import { registerReview } from "./review.js";
 import { registerSponsorFinder } from "./sponsorFinder.js";
 import { registerPodcastStats } from "./podcastStats.js";
 import { registerRadioLibrary, claimRadioShowCut } from "./radioLibrary.js";
-import { registerHosting, publishShowDrafts, keepUploadedArt, startEpisodeFromRecording, listHostEpisodes, claimEpisodeAudio, claimEpisodeBookends, claimEpisodeStill, claimEpisodeVideo, podcastYouTubeAt } from "./hosting.js";
+import { registerHosting, publishShowDrafts, keepUploadedArt, showEpisodesBySlug, startEpisodeFromRecording, listHostEpisodes, claimEpisodeAudio, claimEpisodeBookends, claimEpisodeStill, claimEpisodeVideo, podcastYouTubeAt } from "./hosting.js";
 import { decideAdvance } from "../shared/showClock.js";
 import type { StageThanks } from "../shared/stageMeta.js";
 import { registerBioPage, registerBioAgent, claimLivingSqueeze, subscribersFor, publishedBioUrl } from "./bioPage.js";
@@ -8487,6 +8487,15 @@ export function registerRoutes(app: Express): void {
    * email or push. Listen Notes and the app pings (WebSub, Podcast Index, Podping) only with listenNotes / announce true.
    * { dryRun?: boolean (default true), mode: "today" | "weekly", skipIds?: number[], listenNotes?: boolean, announce?: boolean }.
    */
+  // Admin, read only: a show's episodes with status and publish time (27 Nov 2026), e.g. to check what's scheduled.
+  app.get("/api/admin/hosted-shows/by-slug/:slug/episodes", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost || (req as any).eventAdmin) return res.status(403).json({ message: "Admins only." });
+    res.setHeader("Cache-Control", "no-store");
+    const out = await showEpisodesBySlug(String(req.params.slug));
+    if (!out) return res.status(404).json({ message: "No such show." });
+    res.json(out);
+  });
+
   // Admin: an older uploaded episode picture kept under the -own- name, so listener pages still show it (27 Nov 2026).
   app.post("/api/admin/hosted-episodes/:id/keep-art", requireAdmin, async (req, res) => {
     if ((req as any).studioHost || (req as any).eventAdmin) return res.status(403).json({ message: "Admins only." });

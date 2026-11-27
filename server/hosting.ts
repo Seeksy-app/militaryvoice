@@ -1033,6 +1033,17 @@ export function ownEpisodeArt(e: { artworkUrl: string }): string {
   return u;
 }
 
+/** Admin, read only: a show's episodes by slug (newest first), with status and publish time; scheduled = published in the future. */
+export async function showEpisodesBySlug(slug: string) {
+  const [show] = await db.select().from(hostedShows).where(eq(hostedShows.slug, slug)).limit(1);
+  if (!show) return null;
+  const eps = await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.showId, show.id)).orderBy(desc(hostedEpisodes.publishedAt));
+  return {
+    show: { id: show.id, title: show.title, slug: show.slug },
+    episodes: eps.slice(0, 40).map((e) => ({ id: e.id, number: e.episodeNumber, title: e.title, status: e.status, publishedAt: e.publishedAt, scheduled: e.status === "published" && !!e.publishedAt && Date.parse(e.publishedAt) > Date.now(), hasAudio: !!(e.audioKey || e.audioUrl), durationSec: e.durationSec })),
+  };
+}
+
 /**
  * Admin: an older picture the podcaster uploaded themselves (…episode-<id>-<time>.jpg, from before -own-), saved again
  * under the -own- name so listener pages keep showing it. The same image; refuses frames (-still-) and anything else.
