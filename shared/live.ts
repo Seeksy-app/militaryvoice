@@ -156,8 +156,14 @@ export type Approval = {
 /** Client content: only the client decides these (a platform admin can't). Any other subject type (e.g. "go_no_go")
  *  is decided by the role it's addressed to, MV ones included; a platform admin may decide those. Nobody decides their own. */
 export const CLIENT_CONTENT_SUBJECTS = ["run_of_show", "session", "speaker", "script", "asset"] as const;
-/** POST /api/production/approvals/:id/decide → Approval. Only from pending. */
+/** POST /api/production/approvals/:id/decide → Approval. Only from pending. Approving something that changed after
+ *  it was sent is refused (409); it comes back when MV sends it again. */
 export type ApprovalDecision = { decision: "approved" | "changes_requested"; note?: string };
+/** Phase 2. POST /api/production/productions/:id/approvals → Approval (201): MV Admin, Producer, Coordinator send a run
+ *  of show (subjectId = stage id), a speaker or a script to the client at its current version (MV Editor: scripts only).
+ *  An older pending request for the same thing is withdrawn; a script goes to in_review. Approving a run of show
+ *  freezes it and the stage studio's console follows that copy. GET .../approvals?mine=1 → only what I can decide now. */
+export type ApprovalRequest = { subjectType: "run_of_show" | "speaker" | "script"; subjectId: number; approverRole?: "client_reviewer" | "client_admin"; summary?: string };
 
 /** GET /api/production/productions/:id/audit → AuditEntry[] (newest first, 200 max; ?before=<id> for more). MV Admin, Producer, Coordinator. */
 export type AuditEntry = { id: number; productionId: number | null; who: string; what: string; subjectType: string; subjectId: number | null; before: unknown; after: unknown; at: string;

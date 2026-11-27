@@ -63,7 +63,13 @@ async function stagesOfSpeaker(speakerId: number): Promise<number[]> {
 
 /** What an approved run of show froze (versions.data), as far as "what changed since" needs it. Step 2 writes it. */
 export type FrozenRunOfShow = {
-  sessions: { id: number; version: number; title: string; people: { speakerId: number; version: number }[]; scripts: { id: number; version: number }[] }[];
+  sessions: {
+    id: number; version: number; title: string;
+    people: { speakerId: number; version: number; name?: string; role?: string }[];
+    scripts: { id: number; version: number; kind?: ScriptKind }[];
+    // What the console rows are written from (step 2, approve.ts).
+    kind?: string; status?: string; startsAt?: string; endsAt?: string; sort?: number; mvOnly?: boolean;
+  }[];
 };
 async function approvedOf(stageId: number): Promise<{ version: number; at: string; data: FrozenRunOfShow } | null> {
   const [v] = await db.select().from(versions).where(and(eq(versions.subjectType, "run_of_show"), eq(versions.subjectId, stageId))).orderBy(desc(versions.version)).limit(1);
@@ -124,8 +130,8 @@ async function sessionViews(role: LiveRole, rows: LiveSessionRow[], frozen: Froz
     const mine = scripts.filter((x) => x.sessionId === s.id && x.state !== "removed");
     const f = was.get(s.id);
     const changed = !!frozen && (!f || f.version !== s.version
-      || JSON.stringify(f.people) !== JSON.stringify(links.filter((l) => l.sessionId === s.id && byId.get(l.speakerId) && !byId.get(l.speakerId)!.removed).map((l) => ({ speakerId: l.speakerId, version: byId.get(l.speakerId)!.version })))
-      || JSON.stringify(f.scripts) !== JSON.stringify(mine.map((x) => ({ id: x.id, version: x.version }))));
+      || JSON.stringify(f.people.map((p) => ({ speakerId: p.speakerId, version: p.version }))) !== JSON.stringify(links.filter((l) => l.sessionId === s.id && byId.get(l.speakerId) && !byId.get(l.speakerId)!.removed).map((l) => ({ speakerId: l.speakerId, version: byId.get(l.speakerId)!.version })))
+      || JSON.stringify(f.scripts.map((x) => ({ id: x.id, version: x.version }))) !== JSON.stringify(mine.map((x) => ({ id: x.id, version: x.version }))));
     return {
       id: s.id, productionId: s.productionId, stageId: s.stageId, startsAt: s.startsAt, endsAt: s.endsAt, durationMinutes: sessionMinutes(s.startsAt, s.endsAt),
       title: s.title, kind: s.kind as SessionKind, status: s.status as Session["status"], sort: s.sort, mvOnly: s.mvOnly, notes: client ? "" : s.notes,

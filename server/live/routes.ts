@@ -9,7 +9,8 @@ import {
   type Approval, type AuditEntry, type LiveOrg, type LiveRole, type Member, type Production, type Stage, type Venue,
 } from "../../shared/live.js";
 import { scriptKeyOk } from "../adminKey.js";
-import { registerProgramme } from "./programme.js";
+import { ProgrammeError, registerProgramme } from "./programme.js";
+import { afterDecision, afterRequest, reviewTarget, staleReason } from "./approve.js";
 import { TEST_LOGINS, audit, canFor, isClient, liveOpen, memberRow, norm, now, requireLive, requireProductionRole, roleOn, seesApprovals, whoIs, type LiveReq, type LiveWho } from "./access.js";
 
 type MemberRole = Exclude<LiveRole, "mv_admin">;
@@ -287,15 +288,18 @@ export async function decideApproval(who: LiveWho, approvalId: number, b: Record
   if (a.state !== "pending") throw new Bad(409, "That's already been decided.");
   const decision = b.decision === "approved" || b.decision === "changes_requested" ? b.decision : null;
   if (!decision) throw new Bad(400, "Approve it or ask for changes.");
+  const stale = decision === "approved" ? await staleReason(a) : null;
+  if (stale) throw new Bad(409, stale);
   const [after] = await db.update(approvals).set({ state: decision, decidedBy: who.email, decidedAt: now(), note: str(b.note, 2000) }).where(and(eq(approvals.id, a.id), eq(approvals.state, "pending"))).returning();
   if (!after) throw new Bad(409, "That's already been decided.");
   await audit(a.productionId, who.email, `approval.${decision}`, a.subjectType, a.subjectId, a, after);
+  await afterDecision(after, who.email);
   return approvalView(after, who, role);
 }
 
 /* ── The routes ── */
 const send = (res: Response, p: Promise<unknown>, code = 200) => p.then((v) => res.status(code).json(v)).catch((e: unknown) => {
-  if (e instanceof Bad) return void res.status(e.code).json({ message: e.message });
+  if (e instanceof Bad || e instanceof ProgrammeError) return void res.status(e.code).json({ message: e.message });
   console.error("LIVE route failed:", (e as Error).message);
   res.status(500).json({ message: "Something went wrong. Try again." });
 });
@@ -391,8 +395,17 @@ export function registerLive(app: Express): void {
 
   app.get("/api/production/productions/:id/approvals", ...requireProductionRole("mv_producer", "mv_coordinator", "mv_editor", "client_admin", "client_reviewer", "client_viewer"), (req, res) => send(res, (async () => {
     const rows = await db.select().from(approvals).where(eq(approvals.productionId, L(req).productionId!)).orderBy(desc(approvals.id));
-    return rows.map((a) => approvalView(a, L(req).live, L(req).liveRole!));
+    const all = rows.map((a) => approvalView(a, L(req).live, L(req).liveRole!));
+    return req.query.mine === "1" ? all.filter((a) => a.mine) : all;
   })()));
+  // Send a run of show, a speaker or a script to the client, at its current version (phase 2, step 2).
+  app.post("/api/production/productions/:id/approvals", ...requireProductionRole("mv_producer", "mv_coordinator", "mv_editor"), (req, res) => send(res, (async () => {
+    const who = L(req).live, pid = L(req).productionId!;
+    const t = await reviewTarget(pid, L(req).liveRole!, who.email, body(req));
+    const row = await requestApproval(pid, { ...t, requestedBy: who.email });
+    await afterRequest(row);
+    return approvalView(row, who, L(req).liveRole!);
+  })(), 201));
   app.post("/api/production/approvals/:id/decide", requireLive, (req, res) => send(res, decideApproval(L(req).live, Number(req.params.id), body(req))));
 
   app.get("/api/production/productions/:id/audit", ...requireProductionRole(...MANAGE), (req, res) => send(res, (async () => {
