@@ -611,7 +611,7 @@ export function ProfileForm({ email, profile, onSaved, onCancel, pendingSlot, va
                         Your name <span className="text-destructive">*</span>
                       </FormLabel>
                       <FormControl>
-                        <Input placeholder="Jamie Rivera" {...field} data-testid="input-host-name" />
+                        <Input placeholder="Your name" {...field} data-testid="input-host-name" />
                       </FormControl>
                       <FormMessage />
                     </FormItem>

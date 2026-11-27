@@ -121,7 +121,7 @@ export function SponsorLeads({ eventId }: { eventId: number }) {
           onChange={(e) => setPaste(e.target.value)}
           onKeyDown={(e) => { if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && paste.trim()) add.mutate(paste); }}
           rows={3}
-          placeholder={"https://www.linkedin.com/in/jane-smith\nor\nJane Smith, Acme Outdoor, jane@acme.com"}
+          placeholder={"Their LinkedIn link\nor\nName, company, email"}
           className="resize-none bg-background text-sm"
           data-testid="sponsor-leads-paste"
         />

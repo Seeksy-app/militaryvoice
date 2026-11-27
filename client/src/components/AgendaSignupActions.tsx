@@ -107,7 +107,7 @@ export function AgendaSignupActions({ signup, shareText }: Props) {
                 <Input
                   id={`rem-name-${signup.id}`}
                   required
-                  placeholder="Jamie Rivera"
+                  placeholder="Your name"
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   className="mt-1 h-9"

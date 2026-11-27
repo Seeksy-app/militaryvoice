@@ -209,7 +209,7 @@ export function SponsorDialog({
               <Label htmlFor="sp-name" className="text-xs">
                 Your name <span className="text-destructive">*</span>
               </Label>
-              <Input id="sp-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jamie Rivera" className="mt-1" data-testid="input-sponsor-inq-name" />
+              <Input id="sp-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name" className="mt-1" data-testid="input-sponsor-inq-name" />
             </div>
             <div>
               <Label htmlFor="sp-company" className="text-xs">

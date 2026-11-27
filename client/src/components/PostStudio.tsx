@@ -787,7 +787,7 @@ function GuestCardButton({ onUse }: { onUse: (b: Bookend) => void }) {
           <div className="space-y-4">
             <div className="space-y-1.5">
               <Label htmlFor="guest-card-name">Guest's name</Label>
-              <Input id="guest-card-name" value={name} onChange={(e) => { setName(e.target.value); setMade(null); }} placeholder="Mike and Karen Burkhard" maxLength={60} />
+              <Input id="guest-card-name" value={name} onChange={(e) => { setName(e.target.value); setMade(null); }} placeholder="Guest's name" maxLength={60} />
             </div>
             <div className="space-y-1.5">
               <Label htmlFor="guest-card-photo">Guest's photo</Label>
@@ -843,7 +843,7 @@ function TransitionButton({ value, onChange, where }: { value: EditTransition; o
  * mark a moment and make it a clip; and edit the episode itself — trim the
  * ends, put an intro and outro on — into a new copy in the Library.
  */
-function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, viewer, onMusic }: {
+function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, viewer, onMusic, stats, status }: {
   rec: Rec; source: "clean" | "original"; videoRef: React.RefObject<HTMLVideoElement>;
   /** Which job: edit the episode, or make a clip. */
   tab: "edit" | "clip";
@@ -855,6 +855,9 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
   viewer: React.ReactNode;
   /** Open the music for the clips. */
   onMusic?: () => void;
+  /** The episode's numbers, and what's still waiting (Add music / All done), at the right of the toolbar. */
+  stats?: React.ReactNode;
+  status?: React.ReactNode;
 }) {
   const { toast } = useToast();
   const qc = useQueryClient();
@@ -1204,7 +1207,8 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
           {shortKeep && <p className="mt-1 text-xs font-semibold text-amber-700 dark:text-amber-400">That takes out most of the episode.</p>}
         </div>
       )}
-      <div className="ml-auto flex items-center gap-2 lg:mr-12">
+      {/* Wraps at phone width: Save to Library ran off the edge at 390 (27 Nov). */}
+      <div className="ml-auto flex flex-wrap items-center justify-end gap-2 lg:mr-12">
         {tab === "edit" && tip("Keeps your edits so you can come back and carry on. Nothing is made yet.", (
           <Button type="button" variant="outline" onClick={() => void saveAndClose()} className="h-10 rounded-lg" data-testid="edit-save-close">Save & close</Button>
         ))}
@@ -1244,7 +1248,7 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
   // The toolbar only says where the work is: marking, naming and making all happen on the timeline, in order.
   const clipTools = (
     <>
-      {mark.in === null && <span className="min-w-0 truncate text-sm text-muted-foreground">Mark the moment on the timeline below.</span>}
+      {/* No "Mark the moment" hint here: the timeline's own step line says it, and the row keeps room for the numbers (27 Nov). */}
       {mark.in !== null && <button type="button" onClick={reset} className="ml-auto text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground" data-testid="mark-reset">Start over</button>}
     </>
   );
@@ -1315,6 +1319,8 @@ function EpisodeTools({ rec, source, videoRef, tab, onTab, epSource, onSource, v
         )}
         <span className="mx-1 hidden h-6 w-px bg-border sm:block" aria-hidden />
         {tab === "clip" ? clipTools : editTools}
+        {stats && <>{tab === "edit" && <span className="mx-1 hidden h-6 w-px bg-border sm:block" aria-hidden />}{stats}</>}
+        {status}
       </div>
       {/* The player as wide as the screen's height allows, centred, with room left for the timeline
           below it: at 1280×800 the strip you mark the clip on sat under the fold (8 Oct). */}
@@ -2602,19 +2608,22 @@ export function PostStudio() {
       ))}
     </div>
   );
-  // The editor panel's foot: all done (or what's still waiting), and the three numbers that matter most.
-  const waiting = !done ? "" : mixNow?.status !== "done" && mixNow?.status !== "skipped" ? "Add music to your clips" : clean?.status !== "done" ? "Clean episode on its way" : "";
-  // In the editor's top row: all done (or what's still waiting) and the three numbers that matter most.
+  // At the right of the editor's toolbar (Andrew, 27 Nov: "all the way to the right, we can put 'Add Music'"): what's
+  // still waiting, or All done. It opens the pipeline and every number.
+  const waiting = !done ? "" : mixNow?.status !== "done" && mixNow?.status !== "skipped" ? "Add music" : clean?.status !== "done" ? "Clean episode on its way" : "";
   const statusEl = (
-    <button type="button" onClick={() => setPipeDialog(true)} className="flex min-w-0 items-center gap-2.5 rounded-full border border-border bg-card py-1 pl-1 pr-3 text-left hover:border-emerald-500/50" data-testid="pipeline-done">
+    <button type="button" onClick={() => setPipeDialog(true)} className="ml-auto flex min-w-0 shrink-0 items-center gap-2 rounded-full border border-border bg-card py-1 pl-1 pr-3 text-left hover:border-emerald-500/50" data-testid="pipeline-done">
       <span className={`flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-white ${waiting ? "bg-[#F0A71F]" : "bg-emerald-500"}`}>{waiting ? <Music2 className="h-3.5 w-3.5" /> : <Check className="h-3.5 w-3.5" />}</span>
       <span className="truncate text-sm font-semibold text-foreground">{waiting || "All done"}</span>
-      <span className="hidden shrink-0 items-center gap-3 border-l border-border pl-3 text-xs tabular-nums md:flex">
-        {stats.slice(0, 3).map((st) => (
-          <span key={st.label} className="flex items-baseline gap-1"><span className={`font-bold ${st.color}`}>{st.n}</span><span className="text-muted-foreground">{st.label.toLowerCase()}</span></span>
-        ))}
-      </span>
     </button>
+  );
+  // The four numbers in the toolbar row, the ums count always there ("–" until the clean pass has run).
+  const statsEl = (
+    <span className="flex min-w-0 flex-wrap items-baseline gap-x-3 gap-y-0.5 text-xs tabular-nums" data-testid="tool-stats">
+      {stats.slice(0, 4).map((st) => (
+        <span key={st.label} className="flex items-baseline gap-1 whitespace-nowrap"><span className={`font-bold ${st.color}`}>{st.n}</span><span className="text-muted-foreground">{st.label === "Ums and false starts" ? "ums and false starts" : st.label.toLowerCase()}</span></span>
+      ))}
+    </span>
   );
 
   return (
@@ -2670,7 +2679,6 @@ export function PostStudio() {
             )}
             {/* Credits matter before a run, not after it. */}
             {!done && betaBadge && <div className="ml-auto flex items-center gap-2">{betaBadge}</div>}
-            {editing && statusEl}
           </div>
         </div>
       </div>
@@ -2686,6 +2694,8 @@ export function PostStudio() {
           onSource={setEpSource}
           viewer={viewerEl}
           onMusic={() => { setMusicOpen(true); setPipeDialog(true); }}
+          stats={statsEl}
+          status={statusEl}
         />
       ) : (
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_minmax(0,18rem)]">

@@ -236,7 +236,7 @@ function TeamCard() {
             <Label htmlFor="team-name" className="text-xs">
               Name (optional)
             </Label>
-            <Input id="team-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Jamie Rivera" className="mt-1" data-testid="input-team-name" />
+            <Input id="team-name" value={name} onChange={(e) => setName(e.target.value)} placeholder="Their name" className="mt-1" data-testid="input-team-name" />
           </div>
           <Button type="submit" disabled={busy || !email.trim()} className="gap-1.5" data-testid="button-add-admin">
             <Plus className="h-4 w-4" /> {busy ? "Adding…" : "Add"}
@@ -2561,7 +2561,7 @@ function EventTeamPanel({ eventId }: { eventId: number }) {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Label className="mb-1 block text-xs">Name</Label>
-                  <Input value={inviteName} onChange={(e) => setInviteName(e.target.value)} placeholder="Jane Smith" />
+                  <Input value={inviteName} onChange={(e) => setInviteName(e.target.value)} placeholder="Their name" />
                 </div>
                 <div>
                   <Label className="mb-1 block text-xs">Title</Label>
@@ -2578,7 +2578,7 @@ function EventTeamPanel({ eventId }: { eventId: number }) {
               </div>
               <div>
                 <Label className="mb-1 block text-xs">Email (optional)</Label>
-                <Input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="jane@example.com" />
+                <Input type="email" value={inviteEmail} onChange={(e) => setInviteEmail(e.target.value)} placeholder="Their email" />
               </div>
               <div className="flex gap-2">
                 <Button type="submit" size="sm" disabled={inviteBusy || !inviteName.trim()}>Add to team</Button>

@@ -70,7 +70,7 @@ export function BrandSetup({ onDone, demo = false }: { onDone: () => void; /** T
       <p className="mt-2 text-muted-foreground">Four quick answers. Then you're in Discovery, searching military and veteran creators.</p>
       <form className="mt-6 space-y-5 rounded-2xl border border-border bg-card p-6" onSubmit={(e) => { e.preventDefault(); if (ready) void save(); }}>
         <label className="block text-sm font-medium">Your name
-          <Input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" placeholder="Jordan Ellis" className="mt-1" data-testid="brand-name" />
+          <Input value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" placeholder="Your name" className="mt-1" data-testid="brand-name" />
         </label>
         <div className="grid gap-3 sm:grid-cols-[1fr_auto] sm:items-end">
           <label className="block text-sm font-medium">Company
