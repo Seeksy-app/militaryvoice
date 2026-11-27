@@ -8500,9 +8500,9 @@ export function registerRoutes(app: Express): void {
   });
 
   /**
-   * Admin: Ask my show follows the SmartLink's show (27 Nov 2026), off by default. GET ?email= shows which show it
-   * would follow and how many episodes would need transcribing; PUT { on } flips it for everyone. Turning it on spends
-   * nothing by itself: new episodes line up the next time that podcaster opens their SmartLink builder.
+   * Admin: Ask my show follows the SmartLink's show (27 Nov 2026), per account, off by default. GET ?email= shows which
+   * show it would follow and how many episodes would need transcribing; PUT { email, on } switches it for that account
+   * only. Turning it on spends nothing by itself: new episodes line up the next time they open their SmartLink builder.
    */
   app.get("/api/admin/ask-show/follow-source", requireAdmin, async (req, res) => {
     if ((req as any).studioHost || (req as any).eventAdmin) return res.status(403).json({ message: "Admins only." });
@@ -8512,9 +8512,9 @@ export function registerRoutes(app: Express): void {
   });
   app.put("/api/admin/ask-show/follow-source", requireAdmin, async (req, res) => {
     if ((req as any).studioHost || (req as any).eventAdmin) return res.status(403).json({ message: "Admins only." });
-    if (typeof req.body?.on !== "boolean") return res.status(400).json({ message: "on: true or false?" });
-    await setFollowSource(req.body.on);
-    res.json({ on: req.body.on });
+    const email = String(req.body?.email ?? "").trim().toLowerCase();
+    if (!email || typeof req.body?.on !== "boolean") return res.status(400).json({ message: "email and on: true or false?" });
+    res.json({ email, on: req.body.on, accounts: await setFollowSource(email, req.body.on) });
   });
 
   /**

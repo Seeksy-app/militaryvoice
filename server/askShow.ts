@@ -46,19 +46,23 @@ async function store(id: number, email: string, lines: Line[]) {
 /**
  * Ask my show follows the show their page is about (the SmartLink's
  * theme.podcast.source: "show:<id>", "rss", or the first hosted show), so an
- * account with two shows learns and answers from the one listeners see. Off by
- * default: with the switch off, the first hosted show and every transcript of
- * the account, as before. Turning it on can line up new episodes to learn.
+ * account with two shows learns and answers from the one listeners see. Per
+ * account, off by default: the setting holds the accounts it's on for (a JSON
+ * list of emails). For everyone else, the first hosted show and every
+ * transcript of the account, as before. Turning it on can line up new episodes.
  */
 export const FOLLOW_SOURCE_SETTING = "askshow:follow-source";
-const followSource = async () => (await storage.getSetting(FOLLOW_SOURCE_SETTING).catch(() => null)) === "on";
+async function followList(): Promise<string[]> {
+  try { const v = JSON.parse((await storage.getSetting(FOLLOW_SOURCE_SETTING)) || "[]"); return Array.isArray(v) ? v.map((e) => String(e).toLowerCase()) : []; } catch { return []; }
+}
+const followSource = async (email: string) => (await followList()).includes(email.toLowerCase());
 
 type Scope = { show: typeof hostedShows.$inferSelect | null; keys: (col?: string) => ReturnType<typeof sql> };
 
 /** The show the page is about, and which transcripts belong to it (as a condition on episode_key). */
 async function scopeOf(email: string): Promise<Scope> {
   const shows = await db.select().from(hostedShows).where(eq(hostedShows.email, email)).orderBy(hostedShows.archivedAt, hostedShows.id);
-  if (!(await followSource())) return { show: shows[0] ?? null, keys: () => sql`TRUE` };
+  if (!(await followSource(email))) return { show: shows[0] ?? null, keys: () => sql`TRUE` };
   const [page] = await db.select({ theme: bioPages.theme }).from(bioPages).where(eq(bioPages.email, email)).limit(1);
   const source = parseTheme(page?.theme).podcast?.source ?? "";
   const show = source === "rss" ? null : source.startsWith("show:") ? shows.find((s) => s.id === Number(source.slice(5))) ?? shows[0] ?? null : shows[0] ?? null;
@@ -73,7 +77,7 @@ async function scopeOf(email: string): Promise<Scope> {
  */
 export async function followSourcePreview(email: string): Promise<{ on: boolean; source: string; show: { id: number; title: string } | null; episodes: number; learned: number; withTranscript: number; toTranscribe: number; minutes: number }> {
   await schemaIsReady();
-  const on = await followSource();
+  const on = await followSource(email);
   const [page] = await db.select({ theme: bioPages.theme }).from(bioPages).where(eq(bioPages.email, email)).limit(1);
   const source = parseTheme(page?.theme).podcast?.source ?? "";
   const shows = await db.select().from(hostedShows).where(eq(hostedShows.email, email)).orderBy(hostedShows.archivedAt, hostedShows.id);
@@ -91,8 +95,13 @@ export async function followSourcePreview(email: string): Promise<{ on: boolean;
   return { on, source, show: { id: show.id, title: show.title }, episodes: eps.length, learned, withTranscript, toTranscribe, minutes: Math.round(secs / 60) };
 }
 
-export async function setFollowSource(on: boolean): Promise<void> {
-  await storage.setSetting(FOLLOW_SOURCE_SETTING, on ? "on" : "off");
+/** Switches it on or off for one account; returns the accounts it's on for. */
+export async function setFollowSource(email: string, on: boolean): Promise<string[]> {
+  const e = email.trim().toLowerCase();
+  const list = (await followList()).filter((x) => x !== e);
+  if (on) list.push(e);
+  await storage.setSetting(FOLLOW_SOURCE_SETTING, JSON.stringify(list));
+  return list;
 }
 
 /**
