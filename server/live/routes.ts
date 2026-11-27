@@ -8,6 +8,7 @@ import {
   CLIENT_CONTENT_SUBJECTS, CLIENT_ROLES, MEMBER_ROLES, PRODUCTION_STATUSES, LIVE_TEST_CLIENT, LIVE_TEST_CREW,
   type Approval, type AuditEntry, type LiveOrg, type LiveRole, type Member, type Production, type Stage, type Venue,
 } from "../../shared/live.js";
+import { scriptKeyOk } from "../adminKey.js";
 import { audit, canFor, isClient, liveOpen, memberRow, norm, now, requireLive, requireProductionRole, roleOn, seesApprovals, whoIs, type LiveReq, type LiveWho } from "./access.js";
 
 type MemberRole = Exclude<LiveRole, "mv_admin">;
@@ -285,8 +286,13 @@ export function registerLive(app: Express): void {
     return { email: who.email, admin: who.admin, open, productions: open ? (await visibleProductions(who)).length : 0 };
   })()));
 
-  /** Platform admins: make (or find) the phase 1 test production and its two test logins. Idempotent; no email. */
-  app.post("/api/production/admin/fixtures", requireLive, (req, res) => send(res, (async () => {
+  /** Platform admins, or our own scripts with the admin script key (audited as "script"): make (or find) the phase 1
+   *  test production and its two test logins. Idempotent; no email. The key does nothing until ADMIN_SCRIPT_KEY is set. */
+  const scriptOrLive: RequestHandler = (req, res, next) => {
+    if (scriptKeyOk(req)) { (req as LiveReq).live = { email: "script", admin: true }; return next(); }
+    return requireLive(req, res, next);
+  };
+  app.post("/api/production/admin/fixtures", scriptOrLive, (req, res) => send(res, (async () => {
     if (!L(req).live.admin) throw new Bad(403, "MV admins only.");
     return (await import("./fixtures.js")).seedLiveFixtures(L(req).live.email);
   })()));
