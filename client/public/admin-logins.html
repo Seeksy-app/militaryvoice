@@ -102,7 +102,7 @@ function loadRecs(){
     if(!rows.length){ recs.innerHTML='<p class="sub">Nothing yet.</p>'; return; }
     recs.innerHTML = rows.map(function(r){
       var st=REC[r.status]||REC.sent;
-      return '<div class="row" data-id="'+esc(r.id)+'"><div class="top"><div><div class="name">'+esc(r.showTitle)+' · '+esc(r.site)+'</div><div class="meta">'+esc(r.email)+' · sent '+when(r.createdAt)+(r.hasPasscode?' · has a passcode':'')+(r.revealedAt?' · read '+when(r.revealedAt):'')+'</div>'+(r.note?'<div class="meta">'+esc(r.note)+'</div>':'')+'</div><span class="pill '+st[1]+'">'+st[0]+'</span></div><div class="actions">'
+      return '<div class="row" data-id="'+esc(r.id)+'"><div class="top"><div><div class="name">'+esc(r.showTitle)+' · '+esc(r.site)+'</div><div class="meta">'+esc(r.email)+' · sent '+when(r.createdAt)+(r.hasPasscode?' · has a passcode':'')+(r.publishDate?' · <b>publish '+esc(r.publishDate)+'</b>':' · no publish date')+(r.revealedAt?' · read '+when(r.revealedAt):'')+'</div>'+(r.note?'<div class="meta">'+esc(r.note)+'</div>':'')+'</div><span class="pill '+st[1]+'">'+st[0]+'</span></div><div class="actions">'
         +(r.stored?'<button class="primary" data-a="show">Show link</button>':'')
         +(r.status==="sent"?'<button data-a="picked">Mark picked up</button>':'')
         +(r.status!=="library"?'<button data-a="library">Mark in their Library</button>':'')

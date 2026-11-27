@@ -4,7 +4,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 
 process.env.SESSION_SECRET ||= "test-secret-for-recording-in";
-const { checkLink } = await import("../server/recordingIn.js");
+const { checkLink, nextInRhythm } = await import("../server/recordingIn.js");
 const { seal, open } = await import("../server/shareLogin.js");
 
 test("share links from the usual places pass, with their site", () => {
@@ -24,4 +24,24 @@ test("the link and passcode go in sealed and come back the same", () => {
   assert.ok(!box.includes("zoom") && !box.includes("Ab1"));
   assert.equal(open(box), plain);
   assert.notEqual(seal(plain), box, "a fresh iv every time");
+});
+
+test("the publish date starts on the show's next release day when it keeps a rhythm", () => {
+  // Weekly on Tuesdays: the next Tuesday after today.
+  assert.equal(nextInRhythm(["2026-11-03", "2026-11-10", "2026-11-17", "2026-11-24"], "2026-11-27"), "2026-12-01");
+  // Every two weeks, a day early once: still the rhythm.
+  assert.equal(nextInRhythm(["2026-10-06", "2026-10-20", "2026-11-02", "2026-11-17"], "2026-11-27"), "2026-12-01");
+  // One already scheduled ahead: the one after it.
+  assert.equal(nextInRhythm(["2026-11-10", "2026-11-17", "2026-11-24", "2026-12-01"], "2026-11-27"), "2026-12-08");
+  // Two missed: still the next one on the rhythm, after today.
+  assert.equal(nextInRhythm(["2026-10-20", "2026-10-27", "2026-11-03", "2026-11-10"], "2026-11-27"), "2026-12-01");
+});
+
+test("no steady rhythm, no date", () => {
+  assert.equal(nextInRhythm([], "2026-11-27"), "");
+  assert.equal(nextInRhythm(["2026-11-10", "2026-11-17", "2026-11-24"], "2026-11-27"), "", "three isn't enough");
+  assert.equal(nextInRhythm(["2026-09-01", "2026-09-08", "2026-10-20", "2026-11-24"], "2026-11-27"), "", "uneven");
+  assert.equal(nextInRhythm(["2026-11-21", "2026-11-22", "2026-11-23", "2026-11-24"], "2026-11-27"), "", "daily is out of range");
+  assert.equal(nextInRhythm(["2026-06-02", "2026-06-09", "2026-06-16", "2026-06-23"], "2026-11-27"), "", "gone quiet since June");
+  assert.equal(nextInRhythm(["2026-11-24", "2026-11-24", "2026-11-24", "2026-11-24"], "2026-11-27"), "", "same day");
 });

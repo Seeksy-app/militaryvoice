@@ -1,14 +1,14 @@
 // Send us a recording (27 Nov 2026): a share link, an optional passcode and note, for one show. The team picks it
 // up and brings it into the Library; the list underneath shows where each one is. The link and passcode are never
 // shown back here (server/recordingIn.ts keeps them sealed).
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, Link2, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { apiRequest } from "@/lib/queryClient";
 
-type Sent = { id: string; showId: number; site: string; note: string; status: "sent" | "picked" | "library"; createdAt: string };
+type Sent = { id: string; showId: number; site: string; note: string; publishDate: string; status: "sent" | "picked" | "library"; createdAt: string };
 
 const STATUS: Record<Sent["status"], { label: string; cls: string }> = {
   sent: { label: "Sent", cls: "bg-muted text-muted-foreground" },
@@ -29,12 +29,18 @@ export function siteName(site: string): string {
   if (/(^|\.)(youtube\.com|youtu\.be)$/.test(s)) return "YouTube";
   return site;
 }
-const day = (iso: string) => { try { return new Date(iso).toLocaleDateString([], { month: "short", day: "numeric" }); } catch { return ""; } };
+const day = (iso: string) => { try { return new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T12:00:00` : iso).toLocaleDateString([], { month: "short", day: "numeric" }); } catch { return ""; } };
 
 export function SendRecording({ showId }: { showId: number }) {
   const qc = useQueryClient();
   const key = ["/api/host/recordings-in", showId];
-  const { data: sent = [] } = useQuery<Sent[]>({ queryKey: key, queryFn: async () => (await apiRequest("GET", `/api/host/recordings-in?showId=${showId}`)).json() });
+  const { data } = useQuery<{ sent: Sent[]; nextDate: string }>({ queryKey: key, queryFn: async () => (await apiRequest("GET", `/api/host/recordings-in?showId=${showId}`)).json() });
+  const sent = data?.sent ?? [];
+  // The show's next release day when it keeps a steady rhythm (Andrew, 27 Nov): filled in, theirs to change.
+  const nextDate = data?.nextDate ?? "";
+  const [publishDate, setPublishDate] = useState("");
+  const [touched, setTouched] = useState(false);
+  useEffect(() => { if (!touched && nextDate) setPublishDate(nextDate); }, [nextDate, touched]);
   const [link, setLink] = useState("");
   const [passcode, setPasscode] = useState("");
   const [note, setNote] = useState("");
@@ -48,8 +54,8 @@ export function SendRecording({ showId }: { showId: number }) {
     if (!link.trim()) { setErr("Paste the share link first."); return; }
     setBusy(true);
     try {
-      await apiRequest("POST", "/api/host/recordings-in", { showId, link, passcode, note });
-      setLink(""); setPasscode(""); setNote("");
+      await apiRequest("POST", "/api/host/recordings-in", { showId, link, passcode, note, publishDate });
+      setLink(""); setPasscode(""); setNote(""); setPublishDate(nextDate); setTouched(false);
       setDone(true);
       void qc.invalidateQueries({ queryKey: key });
     } catch (e) {
@@ -76,6 +82,11 @@ export function SendRecording({ showId }: { showId: number }) {
           <span className="mb-1 block text-xs font-medium">Episode title or note <span className="font-normal text-muted-foreground">(optional)</span></span>
           <Input value={note} onChange={(e) => setNote(e.target.value)} placeholder="Episode title, or a note for us" maxLength={300} className="h-9" data-testid="send-recording-note" />
         </label>
+        <label className="block">
+          <span className="mb-1 block text-xs font-medium">Publish date</span>
+          <Input type="date" value={publishDate} onChange={(e) => { setPublishDate(e.target.value); setTouched(true); }} className="h-9" aria-describedby="send-recording-date-hint" data-testid="send-recording-date" />
+        </label>
+        <p id="send-recording-date-hint" className="self-center text-xs text-muted-foreground [text-wrap:pretty]">{nextDate && publishDate === nextDate ? "When should it come out? We filled in your show's next release day. Change it if you like." : "When should it come out? Leave it empty if you're not sure yet."}</p>
         <div className="flex items-end">
           <Button type="submit" disabled={busy} className="h-9 w-full gap-1.5 rounded-lg bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="send-recording-send">{busy && <Loader2 className="h-4 w-4 animate-spin" />} Send recording</Button>
         </div>
@@ -86,7 +97,7 @@ export function SendRecording({ showId }: { showId: number }) {
         <ul className="mt-3 divide-y divide-border border-t border-border" data-testid="send-recording-list">
           {sent.map((r) => (
             <li key={r.id} className="flex items-center gap-3 py-2 text-sm">
-              <span className="min-w-0 flex-1 truncate">{r.note || `${siteName(r.site)} recording`}<span className="text-xs text-muted-foreground"> · {r.note ? `${siteName(r.site)} · ` : ""}{day(r.createdAt)}</span></span>
+              <span className="min-w-0 flex-1"><span className="block truncate">{r.note || `${siteName(r.site)} recording`}</span><span className="block truncate text-xs text-muted-foreground">{r.note ? `${siteName(r.site)} · ` : ""}Sent {day(r.createdAt)}{r.publishDate ? ` · publishes ${day(r.publishDate)}` : ""}</span></span>
               <span className={`shrink-0 rounded-full px-2.5 py-0.5 text-[11px] font-semibold ${STATUS[r.status].cls}`}>{STATUS[r.status].label}</span>
             </li>
           ))}

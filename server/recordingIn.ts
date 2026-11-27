@@ -12,7 +12,7 @@ import { db, storage } from "./storage.js";
 import { getSessionEmail } from "./session.js";
 import { slackNote } from "./slack.js";
 import { seal, open } from "./shareLogin.js";
-import { hostedShows, siteSettings } from "../shared/schema.js";
+import { hostedEpisodes, hostedShows, siteSettings } from "../shared/schema.js";
 
 const PREFIX = "recin:";
 const str = (v: unknown, n: number) => (typeof v === "string" ? v : "").trim().slice(0, n);
@@ -26,6 +26,8 @@ interface Row {
   /** Where the link points (zoom.us, dropbox.com…), so the lists can say what it is without the link. */
   site: string;
   note: string;
+  /** When they want it out, YYYY-MM-DD, or "". */
+  publishDate?: string;
   hasPasscode: boolean;
   status: RecordingInStatus;
   createdAt: string;
@@ -50,6 +52,35 @@ export function checkLink(raw: string): { link: string; site: string } | null {
   }
 }
 
+const DAY = 86_400_000;
+/** A calendar day in New York, where most of our shows publish from. */
+const nyDay = (t: number) => new Date(t).toLocaleDateString("en-CA", { timeZone: "America/New_York" });
+
+/**
+ * The show's next release day, when it keeps a steady rhythm (Andrew, 27 Nov: "if we already have it, just put it
+ * in there"). From the last episodes' days: at least three gaps, all within 15% (a day at least) of their median, which
+ * runs from 6 to 35 days, and no more than three missed since. The next day after `today` on that rhythm, counting on from the newest (a scheduled one too).
+ * No steady rhythm, no date.
+ */
+export function nextInRhythm(days: string[], today: string): string {
+  const t = Array.from(new Set(days.filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)))).sort().slice(-6).map((d) => Date.parse(`${d}T12:00:00Z`));
+  if (t.length < 4) return "";
+  const gaps = t.slice(1).map((v, i) => Math.round((v - t[i]) / DAY));
+  const m = [...gaps].sort((a, b) => a - b)[Math.floor(gaps.length / 2)];
+  if (m < 6 || m > 35 || gaps.some((g) => Math.abs(g - m) > Math.max(1, m * 0.15))) return "";
+  const end = Date.parse(`${today}T12:00:00Z`);
+  // A show that has gone quiet (three missed releases) has no rhythm to go on.
+  if (end - t[t.length - 1] > 3 * m * DAY) return "";
+  let next = t[t.length - 1] + m * DAY;
+  while (next <= end) next += m * DAY;
+  return new Date(next).toISOString().slice(0, 10);
+}
+async function suggestedDate(showId: number): Promise<string> {
+  const eps = await db.select({ status: hostedEpisodes.status, publishedAt: hostedEpisodes.publishedAt, episodeType: hostedEpisodes.episodeType }).from(hostedEpisodes).where(eq(hostedEpisodes.showId, showId));
+  const days = eps.filter((e) => e.status === "published" && e.episodeType === "full" && e.publishedAt).map((e) => nyDay(Date.parse(e.publishedAt))).filter((d) => d !== "Invalid Date");
+  return nextInRhythm(days, nyDay(Date.now()));
+}
+
 async function load(id: string): Promise<Row | null> {
   if (!ID.test(id)) return null;
   const raw = await storage.getSetting(PREFIX + id);
@@ -63,7 +94,7 @@ async function all(): Promise<(Row & { id: string })[]> {
     .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
 }
 /** What the podcaster sees of one: never the link or the passcode. */
-const mineView = (r: Row & { id: string }) => ({ id: r.id, showId: r.showId, site: r.site, note: r.note, status: r.status, createdAt: r.createdAt });
+const mineView = (r: Row & { id: string }) => ({ id: r.id, showId: r.showId, site: r.site, note: r.note, publishDate: r.publishDate ?? "", status: r.status, createdAt: r.createdAt });
 
 export function registerRecordingIn(app: Express, requireHostSession: RequestHandler, requireAdmin: RequestHandler): void {
   const me = (req: Parameters<RequestHandler>[0]) => (getSessionEmail(req) ?? "").trim().toLowerCase();
@@ -74,7 +105,13 @@ export function registerRecordingIn(app: Express, requireHostSession: RequestHan
     const email = me(req);
     const showId = Number(req.query.showId) || 0;
     const rows = (await all()).filter((r) => r.email === email && (!showId || r.showId === showId)).slice(0, 20);
-    res.json(rows.map(mineView));
+    // The date box starts on the show's next release day, when it has a steady rhythm.
+    let nextDate = "";
+    if (showId) {
+      const [show] = await db.select({ id: hostedShows.id }).from(hostedShows).where(and(eq(hostedShows.id, showId), eq(hostedShows.email, email))).limit(1);
+      if (show) nextDate = await suggestedDate(show.id).catch(() => "");
+    }
+    res.json({ sent: rows.map(mineView), nextDate });
   });
 
   app.post("/api/host/recordings-in", requireHostSession, async (req, res) => {
@@ -88,6 +125,8 @@ export function registerRecordingIn(app: Express, requireHostSession: RequestHan
     if (!checked) return res.status(400).json({ message: "Paste the full share link, starting with https://" });
     const passcode = str(req.body?.passcode, 200);
     const note = str(req.body?.note, 300);
+    const publishDate = str(req.body?.publishDate, 10);
+    if (publishDate && (!/^\d{4}-\d{2}-\d{2}$/.test(publishDate) || !Number.isFinite(Date.parse(publishDate)))) return res.status(400).json({ message: "Pick the publish date from the calendar." });
     const mine = (await all()).filter((r) => r.email === email);
     const today = new Date().toISOString().slice(0, 10);
     if (mine.filter((r) => r.createdAt.startsWith(today)).length >= 20) return res.status(429).json({ message: "That's a lot for one day. Please write to us and we'll help." });
@@ -98,11 +137,11 @@ export function registerRecordingIn(app: Express, requireHostSession: RequestHan
       return res.status(503).json({ message: "We can't take this right now. Please write to hello@militaryvoices.ai and we'll find another way." });
     }
     const id = crypto.randomBytes(18).toString("base64url");
-    const row: Row = { email, showId: show.id, showTitle: show.title || "Untitled show", site: checked.site, note, hasPasscode: !!passcode, status: "sent", createdAt: new Date().toISOString(), box };
+    const row: Row = { email, showId: show.id, showTitle: show.title || "Untitled show", site: checked.site, note, publishDate, hasPasscode: !!passcode, status: "sent", createdAt: new Date().toISOString(), box };
     await save(id, row);
     // The team hears which show and where the link points, never the link or the passcode.
     void slackNote(
-      `:inbox_tray: ${row.showTitle} (${email}) sent a recording: a ${checked.site} link${passcode ? " with a passcode" : ""}.${note ? ` Note: ${note}` : ""}`,
+      `:inbox_tray: ${row.showTitle} (${email}) sent a recording: a ${checked.site} link${passcode ? " with a passcode" : ""}.${publishDate ? ` Publish date: ${publishDate}.` : " No publish date given."}${note ? ` Note: ${note}` : ""}`,
       { label: "Open recordings sent in", url: "/admin-logins" },
     );
     res.json(mineView({ ...row, id }));
