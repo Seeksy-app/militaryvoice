@@ -1033,6 +1033,21 @@ export function ownEpisodeArt(e: { artworkUrl: string }): string {
   return u;
 }
 
+/**
+ * Admin: an older picture the podcaster uploaded themselves (…episode-<id>-<time>.jpg, from before -own-), saved again
+ * under the -own- name so listener pages keep showing it. The same image; refuses frames (-still-) and anything else.
+ */
+export async function keepUploadedArt(id: number): Promise<{ from: string; url: string }> {
+  const [e] = await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.id, id)).limit(1);
+  if (!e) throw Object.assign(new Error("No such episode."), { status: 404 });
+  if (!/\/podcast-art\/episode-\d+-\d+\.jpg$/.test(e.artworkUrl || "")) throw Object.assign(new Error("That episode's picture isn't an older upload."), { status: 409 });
+  const r = await fetch(e.artworkUrl);
+  if (!r.ok) throw Object.assign(new Error(`Couldn't read the picture (${r.status}).`), { status: 502 });
+  const url = await uploadPhoto(`podcast-art/episode-${e.id}-own-${Date.now()}.jpg`, Buffer.from(await r.arrayBuffer()), "image/jpeg");
+  await db.update(hostedEpisodes).set({ artworkUrl: url }).where(eq(hostedEpisodes.id, e.id));
+  return { from: e.artworkUrl, url };
+}
+
 export function registerHosting(app: Express, requireAgent: import("express").RequestHandler) {
   app.post("/api/agent/episode-still/:id/done", requireAgent, async (req, res) => {
     const id = Number(req.params.id);

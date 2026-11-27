@@ -195,7 +195,7 @@ import { registerReview } from "./review.js";
 import { registerSponsorFinder } from "./sponsorFinder.js";
 import { registerPodcastStats } from "./podcastStats.js";
 import { registerRadioLibrary, claimRadioShowCut } from "./radioLibrary.js";
-import { registerHosting, publishShowDrafts, startEpisodeFromRecording, listHostEpisodes, claimEpisodeAudio, claimEpisodeBookends, claimEpisodeStill, claimEpisodeVideo, podcastYouTubeAt } from "./hosting.js";
+import { registerHosting, publishShowDrafts, keepUploadedArt, startEpisodeFromRecording, listHostEpisodes, claimEpisodeAudio, claimEpisodeBookends, claimEpisodeStill, claimEpisodeVideo, podcastYouTubeAt } from "./hosting.js";
 import { decideAdvance } from "../shared/showClock.js";
 import type { StageThanks } from "../shared/stageMeta.js";
 import { registerBioPage, registerBioAgent, claimLivingSqueeze, subscribersFor, publishedBioUrl } from "./bioPage.js";
@@ -8487,6 +8487,13 @@ export function registerRoutes(app: Express): void {
    * email or push. Listen Notes and the app pings (WebSub, Podcast Index, Podping) only with listenNotes / announce true.
    * { dryRun?: boolean (default true), mode: "today" | "weekly", skipIds?: number[], listenNotes?: boolean, announce?: boolean }.
    */
+  // Admin: an older uploaded episode picture kept under the -own- name, so listener pages still show it (27 Nov 2026).
+  app.post("/api/admin/hosted-episodes/:id/keep-art", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost || (req as any).eventAdmin) return res.status(403).json({ message: "Admins only." });
+    try { res.json(await keepUploadedArt(Number(req.params.id))); }
+    catch (err) { res.status((err as { status?: number }).status ?? 500).json({ message: (err as Error).message }); }
+  });
+
   app.post("/api/admin/hosted-shows/:id/publish-drafts", requireAdmin, async (req, res) => {
     if ((req as any).studioHost || (req as any).eventAdmin) return res.status(403).json({ message: "Admins only." });
     try {
