@@ -1996,7 +1996,7 @@ function NewEpisodePage({ show, onBack, onCreated }: { show: HostedShowRow; onBa
         )}
       </div>
       <div className="flex flex-wrap gap-2">
-        {([["rss", "Import from an RSS feed", Radio], ["library", "From your Library", Film], ["link", "Send us a recording link", Link2]] as const).map(([k, l, I]) => (
+        {([["rss", "Import from an RSS feed", Radio], ["library", "From your Library", Film], ["link", "Send us a recording", Link2]] as const).map(([k, l, I]) => (
           <button key={k} type="button" onClick={() => setMore(more === k ? "" : k)} className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-semibold ${more === k ? "border-[#053877] bg-[#053877] text-white" : "border-border bg-card hover:bg-muted"}`} data-testid={`new-episode-${k}`}><I className="h-4 w-4" /> {l}</button>
         ))}
       </div>

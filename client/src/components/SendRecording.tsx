@@ -41,7 +41,7 @@ export function SendRecordingButton({ showId }: { showId?: number }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-card px-4 text-[14px] font-semibold text-foreground hover:bg-muted" title="A Zoom, Dropbox or Google Drive share link. We bring it into your Library." data-testid="send-recording-open"><Link2 className="h-4 w-4" /> Send us a recording link</button>
+      <button type="button" onClick={() => setOpen(true)} className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-card px-4 text-[14px] font-semibold text-foreground hover:bg-muted" title="A Zoom, Dropbox or Google Drive share link. We bring it into your Library." data-testid="send-recording-open"><Link2 className="h-4 w-4" /> Send us a recording</button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
