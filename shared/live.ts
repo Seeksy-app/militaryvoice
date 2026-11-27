@@ -379,3 +379,42 @@ export const LIVE_TEST_REVIEWER = "hello+livereview@militaryvoices.ai";
 export const isLiveTestAddress = (email: string): boolean => /^hello\+live[a-z0-9-]*@militaryvoices?\.ai$/i.test(String(email ?? "").trim());
 /** A session's length in whole minutes, rounded up, so the console's zero never comes early (Engineering, 27 Nov). */
 export const sessionMinutes = (startsAt: string, endsAt: string): number => Math.max(0, Math.ceil((Date.parse(endsAt) - Date.parse(startsAt)) / 60_000));
+
+/* ── Phase 2, step 3: Alex's proposals and the activity timeline (MV roles only; clients never see these) ── */
+export const AI_PROPOSAL_KINDS = ["bio", "headshot", "cutout", "pronunciation", "links", "intro", "transition", "sponsor_read", "missing_info"] as const;
+export type AiProposalKind = (typeof AI_PROPOSAL_KINDS)[number];
+/** One thing Alex proposes (an ai_actions row). Nothing she proposes takes effect until MV accepts it. */
+export type AiProposal = {
+  id: number;
+  productionId: number;
+  kind: AiProposalKind;
+  subjectType: "speaker" | "session" | "script";
+  subjectId: number;
+  title: string; // one line, e.g. "Bio for Speaker 1"
+  /** The fields it would set, e.g. { bio } or { photoUrl } or { text }; {} for missing_info. */
+  proposed: Record<string, unknown>;
+  /** The same fields as they are now, for a before/after. */
+  current: Record<string, unknown>;
+  /** Where she got it: a URL, or "guest brief". */
+  source: string;
+  state: "proposed" | "accepted" | "rejected";
+  decidedBy: string;
+  createdAt: string;
+  updatedAt: string;
+};
+/** GET /api/production/productions/:id/ai-actions?state=proposed|accepted|rejected → AiProposal[] (newest first).
+ *  POST .../ai-actions/:actionId → AiProposal: accept writes it as MV's change (a script draft still goes to the client
+ *  through approvals); reject discards it (for missing_info: dismissed). MV Admin, Producer, Coordinator (MV Editor: scripts). */
+export type AiDecision = { decision: "accept" | "reject"; /** Same shape as proposed; replaces it when accepting. */ edited?: Record<string, unknown> };
+/** GET /api/production/productions/:id/activity?who=alex|<email>&before=<cursor> → ActivityEntry[] (newest first, 200 max):
+ *  the audit log and Alex's actions in one timeline. MV Admin, Producer, Coordinator. */
+export type ActivityEntry = {
+  id: string; // "audit-<id>" or "ai-<id>"; pass the last one as before= for more
+  at: string;
+  who: string; // the person's email, or ALEX_EMAIL
+  actor: "person" | "alex" | "script";
+  what: string; // e.g. "session.created", "alex.proposed.bio"
+  subjectType: string;
+  subjectId: number | null;
+  aiActionId: number | null;
+};
