@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { BrandMark } from "@/components/BrandMark";
 import { OutsideCapture } from "@/components/OutsideCapture";
 import { GuestsEditor } from "@/components/GuestsEditor";
@@ -27,7 +27,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Tabs, TabsContent } from "@/components/ui/tabs";
 import { useLocation } from "wouter";
 import { useToast } from "@/hooks/use-toast";
-import { adminGet, adminSend, adminUpload, adminExportUrl } from "@/lib/adminApi";
+import { isEventScoped, setAdminEventScope, adminGet, adminSend, adminUpload, adminExportUrl } from "@/lib/adminApi";
 import { SocialCalendar } from "@/components/SocialCalendar";
 import { DiscoveryStats } from "@/components/DiscoveryStats";
 import { PlatformAnalytics } from "@/components/PlatformAnalytics";
@@ -53,6 +53,7 @@ import { MagazineAdmin } from "@/components/MagazineAdmin";
 import Discover from "@/pages/Discover";
 import Directory from "@/pages/Directory";
 import { AdminHealth, HealthLight } from "@/components/AdminHealth";
+import { CREATE_ON, MvEventPicker, MvEventsList, pickedEvent, useMvEvents } from "@/components/MvEvents";
 import { BonusCreditsButton } from "@/components/BonusCredits";
 import { SponsorLeads } from "@/components/SponsorLeads";
 import { SponsorFinder } from "@/components/SponsorFinder";
@@ -426,7 +427,7 @@ function NewEventCard() {
       <CardHeader className="flex flex-row items-center justify-between gap-4 space-y-0">
         <div>
           <CardTitle className="text-base">New event</CardTitle>
-          <CardDescription>Another marathon, another day, another tenant. It gets its own studio, agenda and sponsors.</CardDescription>
+          <CardDescription>Each event gets its own studio, agenda and sponsors.</CardDescription>
         </div>
         {!creating && (
           <Button variant="outline" size="sm" className="gap-1.5" onClick={() => setCreating(true)} data-testid="button-new-event">
@@ -4901,6 +4902,22 @@ export default function Admin({ tab, eventId: eventParam }: { tab?: string; even
     enabled: isAuthenticated,
   });
   const selectedEvent = adminEvents?.find((e) => e.id === selectedEventId) ?? null;
+  // Track R (R-B): the MV events picker and list. Until GET /api/admin/mv-events answers, nothing here changes.
+  const mv = useMvEvents(isAuthenticated);
+  const mvEvents = mv.data?.events ?? null;
+  const mvCurrent = mvEvents ? pickedEvent(mvEvents, selectedEventId) : null;
+  // Event pages tell the event-scoped admin calls which event they're on (Track R); platform pages never do.
+  setAdminEventScope(selectedEventId);
+  useEffect(() => () => setAdminEventScope(null), []);
+  // Admin queries never go stale on their own, so answers cached for one event are refetched for the next.
+  const scopeQc = useQueryClient();
+  const lastScope = useRef(selectedEventId);
+  useEffect(() => {
+    if (lastScope.current === selectedEventId) return;
+    lastScope.current = selectedEventId;
+    void scopeQc.invalidateQueries({ predicate: (q) => typeof q.queryKey[0] === "string" && isEventScoped(q.queryKey[0]) });
+  }, [selectedEventId]);
+  const newMv = typeof window !== "undefined" && new URLSearchParams(window.location.search).get("new") === "1";
   // An event admin (Riccoh) lives inside their event: no platform, no other events.
   const eventOnly = !!admin?.eventAdmin;
   const myEvents = admin?.events ?? [];
@@ -5032,6 +5049,9 @@ export default function Admin({ tab, eventId: eventParam }: { tab?: string; even
                 </span>
               </span>
               {!eventOnly && <HealthLight />}
+              {mvEvents && (!eventOnly || mvEvents.length > 1) && (
+                <MvEventPicker events={mvEvents} current={mvCurrent} day={selectedEventId} platform={!eventOnly} onOpen={(id) => pickEvent(id)} onAll={(create) => navigate(`/admin/events${create ? "?new=1" : ""}`)} />
+              )}
               {!eventOnly && <ViewAs />}
               <Button
                 variant="outline"
@@ -5068,11 +5088,11 @@ export default function Admin({ tab, eventId: eventParam }: { tab?: string; even
                   {/* A real button, not a faint label: it's the way out of an event (Andrew, 20 Oct). */}
                   {!eventOnly && <button
                     type="button"
-                    onClick={() => pickEvent(null)}
+                    onClick={() => (mvEvents ? navigate("/admin/events") : pickEvent(null))}
                     className="mb-3 inline-flex h-9 items-center gap-1.5 rounded-full border border-border bg-card px-4 text-sm font-semibold text-foreground shadow-sm hover:bg-muted"
                     data-testid="button-all-events"
                   >
-                    <ArrowLeft className="h-4 w-4" /> All events
+                    <ArrowLeft className="h-4 w-4" /> {mvEvents ? "All MV events" : "All events"}
                   </button>}
                   <h2 className="flex flex-wrap items-center gap-3 text-3xl font-bold tracking-tight" style={{ fontFamily: "'General Sans', 'Inter', sans-serif" }}>
                     <span className="min-w-0">{selectedEvent.name}</span>
@@ -5227,14 +5247,24 @@ export default function Admin({ tab, eventId: eventParam }: { tab?: string; even
           ) : (
             <Tabs value={topTab} onValueChange={setEventTab}>
               <div className="flex flex-col gap-4 lg:flex-row lg:gap-7">
-                <AdminNav groups={admin?.noFinance ? TOP_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => i.key !== "finances") })) : TOP_GROUPS} value={topTab} onChange={setEventTab} isMobile={isMobile} />
+                <AdminNav groups={(admin?.noFinance ? TOP_GROUPS.map((g) => ({ ...g, items: g.items.filter((i) => i.key !== "finances") })) : TOP_GROUPS).map((g) => (mvEvents ? { ...g, items: g.items.map((i) => (i.key === "events" ? { ...i, label: "MV events" } : i)) } : g))} value={topTab} onChange={setEventTab} isMobile={isMobile} />
                 <div className="min-w-0 flex-1">
                   <TabsContent value="overview" className="mt-2 lg:mt-0">
                     <PlatformOverview />
                   </TabsContent>
                   <TabsContent value="events" className="mt-2 flex flex-col gap-8 lg:mt-0">
-                    <EventPicker onOpen={(id) => pickEvent(id)} />
-                    <NewEventCard />
+                    {mvEvents ? (
+                      <>
+                        <MvEventsList onOpen={(id) => pickEvent(id)} startCreating={newMv} />
+                        {/* Until POST /api/admin/mv-events is live, today's way to make an event stays. */}
+                        {!CREATE_ON && <NewEventCard />}
+                      </>
+                    ) : (
+                      <>
+                        <EventPicker onOpen={(id) => pickEvent(id)} />
+                        <NewEventCard />
+                      </>
+                    )}
                   </TabsContent>
                   <TabsContent value="rooms" className="mt-2 lg:mt-0">
                     <RoomsPanel onOpen={openRoom} />
