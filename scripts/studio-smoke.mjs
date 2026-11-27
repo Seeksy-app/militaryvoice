@@ -2,6 +2,7 @@
 // Reads the admin password straight from the DB so it never appears anywhere.
 import postgres from "postgres";
 import "dotenv/config";
+import { adminAuth } from "./adminAuth.mjs";
 
 const sql = postgres(process.env.POSTGRES_URL, { ssl: "require" });
 const [{ admin_password: PW }] = await sql`select admin_password from events where is_featured = true`;
@@ -16,7 +17,7 @@ const SLUG = process.argv[3] || "test";
 async function api(method, path, body) {
   const res = await fetch(`${BASE}${path}`, {
     method,
-    headers: { "content-type": "application/json", "x-admin-password": PW },
+    headers: { "content-type": "application/json", ...adminAuth },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const text = await res.text();

@@ -9,6 +9,7 @@
 // podcasters who replied to the co-host ask, and that list lives in Riccoh's
 // inbox, not in a column. Each address must be on the lineup.
 import "dotenv/config";
+import { adminAuth } from "./adminAuth.mjs";
 import postgres from "postgres";
 import { emailShell, EMAIL_BANNERS } from "../server/email";
 
@@ -17,7 +18,7 @@ const apply = args.includes("--apply");
 const test = args.includes("--test");
 const preview = args.includes("--preview");
 const wanted = args.filter((a) => !a.startsWith("--")).map((a) => a.trim().toLowerCase());
-const BASE = process.env.PUBLIC_BASE_URL || "https://www.militaryvoice.ai";
+const BASE = process.env.PUBLIC_BASE_URL || "https://www.militaryvoices.ai";
 const API = process.env.API_BASE || BASE;
 
 if (!wanted.length) {
@@ -111,7 +112,7 @@ let sent = 0, failed = 0;
 for (const r of to) {
   const res = await fetch(`${API}/api/admin/emails/send-one`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },
+    headers: { "content-type": "application/json", ...adminAuth },
     body: JSON.stringify({ to: r.email, subject: SUBJECT, html: htmlFor(r), text: textOf(r), sender: "member:1", banner: "podcasters" }),
   });
   res.ok ? sent++ : failed++;

@@ -19,9 +19,10 @@
 //      rest captioned with the old schedule. Doing this first would just tidy
 //      the stale names into place.
 import "dotenv/config";
+import { adminAuth } from "./adminAuth.mjs";
 import postgres from "postgres";
 
-const API = process.env.MV_API ?? "https://militaryvoice.ai";
+const API = process.env.MV_API ?? "https://www.militaryvoices.ai";
 
 async function main() {
   const apply = process.argv.includes("--apply");
@@ -45,7 +46,7 @@ async function main() {
   process.stdout.write("\nregenerating the run of show… ");
   const res = await fetch(`${API}/api/admin/run-of-show/generate`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },
+    headers: { "content-type": "application/json", ...adminAuth },
     body: JSON.stringify({ eventId: ev.id }),
   });
   if (!res.ok) { console.log(`FAILED ${res.status} ${(await res.text()).slice(0, 300)}`); await sql.end(); return; }

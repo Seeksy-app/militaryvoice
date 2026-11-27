@@ -1,10 +1,11 @@
 // Riccoh confirms Alison at 10:00 PM Eastern (4:00 PM Hawaii), recorded.
 //   npx tsx scripts/email-alison-10pm.ts [--apply]
 import "dotenv/config";
+import { adminAuth } from "./adminAuth.mjs";
 import postgres from "postgres";
 import { emailShell, EMAIL_BANNERS } from "../server/email";
 const apply = process.argv.includes("--apply");
-const BASE = process.env.PUBLIC_BASE_URL || "https://www.militaryvoice.ai";
+const BASE = process.env.PUBLIC_BASE_URL || "https://www.militaryvoices.ai";
 const TO = "alison@alisonbellphotographer.com";
 const SUBJECT = "Re: One more spot — a better hour for Hawaii";
 const text = `Alison,
@@ -33,7 +34,7 @@ console.log(`To: ${TO}\nSubject: ${SUBJECT}\n\n${text}\n`);
 if (!apply) { console.log("Nothing sent. --apply to send."); process.exit(0); }
 const res = await fetch(`${BASE}/api/admin/emails/send-one`, {
   method: "POST",
-  headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },
+  headers: { "content-type": "application/json", ...adminAuth },
   body: JSON.stringify({ to: TO, subject: SUBJECT, text, sender: "member:1", banner: "podcasters", html: emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "The Podcast Marathon · 5 October", heading: "10:00 PM Eastern is yours", body: html }) }),
 });
 console.log(res.ok ? `sent to ${TO}` : `FAILED ${res.status} ${await res.text()}`);

@@ -5,11 +5,12 @@
 //   npx tsx scripts/email-cohost-titles.ts            # preview
 //   npx tsx scripts/email-cohost-titles.ts --apply
 import "dotenv/config";
+import { adminAuth } from "./adminAuth.mjs";
 import postgres from "postgres";
 import { emailShell, EMAIL_BANNERS } from "../server/email";
 
 const apply = process.argv.includes("--apply");
-const BASE = process.env.PUBLIC_BASE_URL || "https://www.militaryvoice.ai";
+const BASE = process.env.PUBLIC_BASE_URL || "https://www.militaryvoices.ai";
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require", max: 1, onnotice: () => {} });
 const [ev] = await sql<{ admin_password: string }[]>`SELECT admin_password FROM events WHERE id = 1`;
@@ -150,7 +151,7 @@ for (const m of [{ ...AMY, subject: SUBJECT }, { ...JANE, subject: SUBJECT }, EN
   if (!apply) continue;
   const res = await fetch(`${BASE}/api/admin/emails/send-one`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },
+    headers: { "content-type": "application/json", ...adminAuth },
     body: JSON.stringify({ to: m.to, subject: m.subject, text: m.text, sender: "member:1", banner: "podcasters", html: emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "The Podcast Marathon · 5 October", heading: m.subject, body: m.html }) }),
   });
   console.log(res.ok ? `sent to ${m.to}` : `FAILED ${res.status} ${await res.text()}`);

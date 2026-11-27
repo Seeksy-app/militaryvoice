@@ -7,6 +7,7 @@
 //
 // From the team, not Riccoh: it is instructions, not an ask between hosts.
 import "dotenv/config";
+import { adminAuth } from "./adminAuth.mjs";
 import postgres from "postgres";
 import { emailShell, EMAIL_BANNERS } from "../server/email";
 
@@ -20,7 +21,7 @@ const preview = args.includes("--preview");
 const pick = (flag: string) => (args.includes(flag) ? (args[args.indexOf(flag) + 1] ?? "").toLowerCase() : "");
 const only = pick("--only");
 const except = pick("--except");
-const BASE = process.env.PUBLIC_BASE_URL || "https://www.militaryvoice.ai";
+const BASE = process.env.PUBLIC_BASE_URL || "https://www.militaryvoices.ai";
 const API = process.env.API_BASE || BASE;
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require", max: 1, onnotice: () => {} });
@@ -109,7 +110,7 @@ let sent = 0, failed = 0;
 for (const r of to) {
   const res = await fetch(`${API}/api/admin/emails/send-one`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },
+    headers: { "content-type": "application/json", ...adminAuth },
     body: JSON.stringify({ to: r.email, subject: SUBJECT, html: htmlFor(r), text: textOf(r), sender: "team", banner: "podcasters" }),
   });
   res.ok ? sent++ : failed++;

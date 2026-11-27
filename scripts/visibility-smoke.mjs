@@ -7,6 +7,7 @@
 // typed or printed.
 import postgres from "postgres";
 import "dotenv/config";
+import { adminAuth } from "./adminAuth.mjs";
 
 const BASE = process.env.API_BASE || "http://localhost:3000";
 const ID = Number(process.argv[2] || 1);
@@ -46,7 +47,7 @@ const get = async (path) => {
 const setVisible = (v) =>
   fetch(`${BASE}/api/admin/events/${ID}`, {
     method: "PUT",
-    headers: { "content-type": "application/json", "x-admin-password": PW },
+    headers: { "content-type": "application/json", ...adminAuth },
     body: JSON.stringify({ visible: v }),
   });
 
@@ -95,7 +96,7 @@ if (hostCookie) {
 }
 
 // Admin must still see it, or an event could be hidden with no way back.
-const adminSee = await fetch(`${BASE}/api/admin/events`, { headers: { "x-admin-password": PW } });
+const adminSee = await fetch(`${BASE}/api/admin/events`, { headers: { ...adminAuth } });
 const adminRows = await adminSee.json();
 check("admin still sees it", adminRows.some((e) => e.id === ID));
 check("admin can tell it is hidden", adminRows.find((e) => e.id === ID)?.visible === false);

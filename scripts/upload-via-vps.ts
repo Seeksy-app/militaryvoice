@@ -17,6 +17,7 @@
 // no R2 key, no database password, no admin password. The URL is good for one
 // object for a few hours, which is the least it can be given and still work.
 import "dotenv/config";
+import { adminAuth } from "./adminAuth.mjs";
 import { statSync } from "node:fs";
 import { basename } from "node:path";
 import { spawnSync } from "node:child_process";
@@ -38,7 +39,7 @@ const FILES = [
 
 const HOST = process.env.MV_VPS ?? "root@187.77.217.123";
 const STAGE = "/root/mv-upload";
-const API = process.env.MV_API ?? "https://militaryvoice.ai";
+const API = process.env.MV_API ?? "https://www.militaryvoices.ai";
 const MB = (n: number) => `${(n / 1048576).toFixed(1)}MB`;
 
 const run = (cmd: string, args: string[]) =>
@@ -115,7 +116,7 @@ async function main() {
 
     const reg = await fetch(`${API}/api/admin/media`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },
+      headers: { "content-type": "application/json", ...adminAuth },
       body: JSON.stringify({
         storageKey: key, fileName: name, sizeBytes: t.size, kind: "Other", durationSeconds,
         label: oneLabel || name.replace(/\.[^.]+$/, "").replace(/\s*-\s*\d{4}-\d{2}-\d{2}.*$/, "").trim(),

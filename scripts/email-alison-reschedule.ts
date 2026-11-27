@@ -6,6 +6,7 @@
 //   npx tsx scripts/email-alison-reschedule.ts --test      # one copy to Andrew
 //   npx tsx scripts/email-alison-reschedule.ts --apply     # send it
 import "dotenv/config";
+import { adminAuth } from "./adminAuth.mjs";
 import postgres from "postgres";
 import { emailShell, EMAIL_BANNERS } from "../server/email";
 
@@ -13,7 +14,7 @@ const args = process.argv.slice(2);
 const apply = args.includes("--apply");
 const test = args.includes("--test");
 const preview = args.includes("--preview");
-const BASE = process.env.PUBLIC_BASE_URL || "https://www.militaryvoice.ai";
+const BASE = process.env.PUBLIC_BASE_URL || "https://www.militaryvoices.ai";
 const API = process.env.API_BASE || BASE;
 const TO = "alison@alisonbellphotographer.com";
 
@@ -65,7 +66,7 @@ if (!test && !apply) { console.log(`\nNothing sent. --preview to read it, --test
 const dest = test ? "andrew@podlogix.co" : TO;
 const res = await fetch(`${API}/api/admin/emails/send-one`, {
   method: "POST",
-  headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },
+  headers: { "content-type": "application/json", ...adminAuth },
   body: JSON.stringify({
     to: dest, subject: SUBJECT, text, sender: "member:1", banner: "podcasters",
     html: emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "The Podcast Marathon · 5 October", heading: SUBJECT, body: html }),

@@ -12,6 +12,7 @@
 // pushes results back to R2 by another signed link. Only the audio, the
 // transcript and the finished clips travel. Secrets stay on this machine.
 import "dotenv/config";
+import { adminAuth } from "./adminAuth.mjs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { spawnSync } from "node:child_process";
@@ -25,7 +26,7 @@ const flag = (n: string) => { const i = args.indexOf(n); return i > -1 ? args[i 
 const EP = Number(flag("--ep"));
 const STEP = flag("--step") || "all";
 const HOST = process.env.MV_VPS ?? "root@187.77.217.123";
-const API = "https://www.militaryvoice.ai";
+const API = "https://www.militaryvoices.ai";
 const REMOTE = "/root/mv-prep";
 const HOME = path.resolve(process.env.PREP_DIR || "/private/tmp/claude-501/-Users-andrewappleton-projects-militaryvoice/eecaf43c-79db-4803-a64b-76693c5cd63b/scratchpad/prep", `ep${EP}`);
 const ON_AIR = 25 * 60;
@@ -174,7 +175,7 @@ async function main() {
       const size = Number(sh(`stat -c %s ${REMOTE}/${remoteName}`, { quiet: true }).trim());
       const code = sh(`cd ${REMOTE} && curl --fail-with-body --retry 5 --retry-all-errors -s -o /dev/null -w '%{http_code}' -X PUT -H 'content-type: video/mp4' --upload-file ${remoteName} ${JSON.stringify(url)}`, { quiet: true }).trim().slice(-3);
       if (code !== "200") throw new Error(`upload ${remoteName} → ${code}`);
-      const reg = await fetch(`${API}/api/admin/media`, { method: "POST", headers: { "content-type": "application/json", "x-admin-password": ev.admin_password }, body: JSON.stringify({ storageKey: key, fileName, sizeBytes: size, kind: "Other", label, durationSeconds: dur }) });
+      const reg = await fetch(`${API}/api/admin/media`, { method: "POST", headers: { "content-type": "application/json", ...adminAuth }, body: JSON.stringify({ storageKey: key, fileName, sizeBytes: size, kind: "Other", label, durationSeconds: dur }) });
       const body = (await reg.json()) as { id?: number; message?: string };
       if (!reg.ok || !body.id) throw new Error(`register ${label}: ${body.message}`);
       console.log(`  library #${body.id}  ${label}  ${mmss(dur)}`);

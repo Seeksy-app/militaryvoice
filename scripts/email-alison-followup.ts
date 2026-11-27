@@ -4,12 +4,13 @@
 //   npx tsx scripts/email-alison-followup.ts --preview
 //   npx tsx scripts/email-alison-followup.ts --apply
 import "dotenv/config";
+import { adminAuth } from "./adminAuth.mjs";
 import postgres from "postgres";
 import { emailShell, EMAIL_BANNERS } from "../server/email";
 
 const args = process.argv.slice(2);
 const apply = args.includes("--apply");
-const BASE = process.env.PUBLIC_BASE_URL || "https://www.militaryvoice.ai";
+const BASE = process.env.PUBLIC_BASE_URL || "https://www.militaryvoices.ai";
 const TO = "alison@alisonbellphotographer.com";
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require", max: 1, onnotice: () => {} });
@@ -39,7 +40,7 @@ console.log(`To: ${TO}\nSubject: ${SUBJECT}\n\n${text}\n`);
 if (!apply) { console.log("Nothing sent. --apply to send."); process.exit(0); }
 const res = await fetch(`${BASE}/api/admin/emails/send-one`, {
   method: "POST",
-  headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },
+  headers: { "content-type": "application/json", ...adminAuth },
   body: JSON.stringify({ to: TO, subject: SUBJECT, text, sender: "member:1", banner: "podcasters", html: emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "The Podcast Marathon · 5 October", heading: SUBJECT, body: html }) }),
 });
 console.log(res.ok ? `sent to ${TO}` : `FAILED ${res.status} ${await res.text()}`);

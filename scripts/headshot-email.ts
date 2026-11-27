@@ -12,6 +12,7 @@
 // Asking somebody for a thing they have already given you is how a request
 // stops being read.
 import "dotenv/config";
+import { adminAuth } from "./adminAuth.mjs";
 import postgres from "postgres";
 import { emailShell, EMAIL_BANNERS } from "../server/email";
 
@@ -19,7 +20,7 @@ const args = process.argv.slice(2);
 const apply = args.includes("--apply");
 const test = args.includes("--test");
 const preview = args.includes("--preview");
-const BASE = process.env.PUBLIC_BASE_URL || "https://www.militaryvoice.ai";
+const BASE = process.env.PUBLIC_BASE_URL || "https://www.militaryvoices.ai";
 // The Resend key is write-only in Vercel, so a one-off send goes through the
 // server rather than from here. Same route email-podcasters.ts uses.
 const API = process.env.API_BASE || BASE;
@@ -40,7 +41,7 @@ const [ev] = await sql<{ admin_password: string }[]>`SELECT admin_password FROM 
 // holding SESSION_SECRET, and the one on a laptop is not the one on Vercel —
 // so every link looked right and every one was dead.
 const linkRes = await fetch(`${API}/api/admin/headshot-links`, {
-  headers: { "x-admin-password": ev.admin_password },
+  headers: { ...adminAuth },
 });
 if (!linkRes.ok) {
   console.error(`Couldn't get the links: ${linkRes.status} ${await linkRes.text()}`);
@@ -146,7 +147,7 @@ let failed = 0;
 for (const r of to) {
   const res = await fetch(`${API}/api/admin/emails/send-one`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },
+    headers: { "content-type": "application/json", ...adminAuth },
     body: JSON.stringify({ to: r.email, subject: SUBJECT, html: htmlFor(r), text: textOf(r) }),
   });
   res.ok ? sent++ : failed++;

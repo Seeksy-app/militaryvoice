@@ -8,10 +8,11 @@
 // podcaster nothing he can act on — it just makes the platform he has trusted
 // with his show sound rickety a fortnight out.
 import "dotenv/config";
+import { adminAuth } from "./adminAuth.mjs";
 import postgres from "postgres";
 import { emailShell, EMAIL_BANNERS } from "../server/email";
 
-const API = process.env.MV_API ?? "https://militaryvoice.ai";
+const API = process.env.MV_API ?? "https://www.militaryvoices.ai";
 const TO = "ian@coldwarconversations.com";
 const SUBJECT = "Fixed — you can connect your accounts now";
 
@@ -48,7 +49,7 @@ async function main() {
   await sql.end();
   const res = await fetch(`${API}/api/admin/emails/send-one`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },
+    headers: { "content-type": "application/json", ...adminAuth },
     body: JSON.stringify({ to: TO, subject: SUBJECT, html, text, replyTo: "hello@militaryvoice.ai" }),
   });
   const body = (await res.json().catch(() => ({}))) as { id?: string; message?: string };

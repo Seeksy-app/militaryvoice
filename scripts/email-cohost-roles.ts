@@ -10,6 +10,7 @@
 // guest. A co-host who has already said yes to the main stage is the natural
 // person to ask for both. From Riccoh, because it is a favour between hosts.
 import "dotenv/config";
+import { adminAuth } from "./adminAuth.mjs";
 import postgres from "postgres";
 import { emailShell, EMAIL_BANNERS } from "../server/email";
 
@@ -18,7 +19,7 @@ const apply = args.includes("--apply");
 const test = args.includes("--test");
 const preview = args.includes("--preview");
 const to = args.find((a) => !a.startsWith("--"))?.trim().toLowerCase();
-const BASE = process.env.PUBLIC_BASE_URL || "https://www.militaryvoice.ai";
+const BASE = process.env.PUBLIC_BASE_URL || "https://www.militaryvoices.ai";
 const API = process.env.API_BASE || BASE;
 if (!to) { console.log("Give me the address."); process.exit(1); }
 
@@ -93,7 +94,7 @@ if (!test && !apply) { console.log(`\nNothing sent. --preview to read it, --test
 const dest = test ? "andrew@podlogix.co" : r.email;
 const res = await fetch(`${API}/api/admin/emails/send-one`, {
   method: "POST",
-  headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },
+  headers: { "content-type": "application/json", ...adminAuth },
   body: JSON.stringify({
     to: dest, subject: SUBJECT, text, sender: "member:1", banner: "podcasters",
     html: emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "The Podcast Marathon · 5 October", heading: SUBJECT, body: html }),

@@ -3,10 +3,11 @@
 //   npx tsx scripts/two-emails.ts           # print them
 //   npx tsx scripts/two-emails.ts --apply   # send
 import "dotenv/config";
+import { adminAuth } from "./adminAuth.mjs";
 import postgres from "postgres";
 import { emailShell, EMAIL_BANNERS } from "../server/email";
 
-const API = process.env.MV_API ?? "https://militaryvoice.ai";
+const API = process.env.MV_API ?? "https://www.militaryvoices.ai";
 const AGENDA = "https://militaryvoice.ai/agenda";
 
 const notes: { to: string; subject: string; html: string; text: string }[] = [
@@ -88,7 +89,7 @@ async function main() {
   for (const n of notes) {
     const res = await fetch(`${API}/api/admin/emails/send-one`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },
+      headers: { "content-type": "application/json", ...adminAuth },
       body: JSON.stringify({ to: n.to, subject: n.subject, html: n.html, text: n.text }),
     });
     const body = (await res.json().catch(() => ({}))) as { id?: string; message?: string };

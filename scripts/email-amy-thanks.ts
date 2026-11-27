@@ -1,10 +1,11 @@
 // Riccoh thanks Amy for her title and her offer to find co-hosts.
 //   npx tsx scripts/email-amy-thanks.ts [--apply]
 import "dotenv/config";
+import { adminAuth } from "./adminAuth.mjs";
 import postgres from "postgres";
 import { emailShell, EMAIL_BANNERS } from "../server/email";
 const apply = process.argv.includes("--apply");
-const BASE = process.env.PUBLIC_BASE_URL || "https://www.militaryvoice.ai";
+const BASE = process.env.PUBLIC_BASE_URL || "https://www.militaryvoices.ai";
 const TO = "amyusd@gmail.com";
 const SUBJECT = "Re: Your title as co-host";
 const text = `Amy,
@@ -28,7 +29,7 @@ console.log(`To: ${TO}\nSubject: ${SUBJECT}\n\n${text}\n`);
 if (!apply) { console.log("Nothing sent. --apply to send."); process.exit(0); }
 const res = await fetch(`${BASE}/api/admin/emails/send-one`, {
   method: "POST",
-  headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },
+  headers: { "content-type": "application/json", ...adminAuth },
   body: JSON.stringify({ to: TO, subject: SUBJECT, text, sender: "member:1", banner: "podcasters", html: emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "The Podcast Marathon · 5 October", heading: "Thank you, Amy", body: html }) }),
 });
 console.log(res.ok ? `sent to ${TO}` : `FAILED ${res.status} ${await res.text()}`);

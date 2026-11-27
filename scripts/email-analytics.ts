@@ -10,6 +10,7 @@
 // podcaster's own profile (the public Share view), taken beforehand into
 // <dir>/<signupId>.png. Nobody without one is sent anything.
 import "dotenv/config";
+import { adminAuth } from "./adminAuth.mjs";
 import fs from "node:fs/promises";
 import path from "node:path";
 import postgres from "postgres";
@@ -48,7 +49,7 @@ for (const s of signups) {
   const stamp = buf.length.toString(36);
   const signed = (await (await fetch(`${API}/api/admin/media/upload-url`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },
+    headers: { "content-type": "application/json", ...adminAuth },
     body: JSON.stringify({ fileName: `analytics-${s.id}-${stamp}.jpg`, contentType: "image/jpeg", size: buf.length }),
   })).json()) as { uploadUrl: string; publicUrl: string };
   execFileSync("curl", ["-s", "-f", "--retry", "5", "--retry-all-errors", "--retry-delay", "2", "-X", "PUT", signed.uploadUrl, "-H", "content-type: image/jpeg", "--data-binary", `@${file}`]);
@@ -104,7 +105,7 @@ const targets = test ? [{ ...rows[0], email: testTo }] : rows;
 for (const r of targets) {
   const res = await fetch(`${API}/api/admin/emails/send-one`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },
+    headers: { "content-type": "application/json", ...adminAuth },
     body: JSON.stringify({ to: r.email, subject: SUBJECT, html: htmlFor(r), text: textOf(r) }),
   });
   console.log(res.ok ? `  sent  ${r.email}` : `  FAILED ${r.email}: ${res.status} ${await res.text()}`);

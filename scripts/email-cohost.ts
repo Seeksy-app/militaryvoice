@@ -14,6 +14,7 @@
 // number the reader can check against their own calendar is the wrong place
 // to be approximately right.
 import "dotenv/config";
+import { adminAuth } from "./adminAuth.mjs";
 import postgres from "postgres";
 import { emailShell, EMAIL_BANNERS } from "../server/email";
 
@@ -21,7 +22,7 @@ const args = process.argv.slice(2);
 const apply = args.includes("--apply");
 const test = args.includes("--test");
 const preview = args.includes("--preview");
-const BASE = process.env.PUBLIC_BASE_URL || "https://www.militaryvoice.ai";
+const BASE = process.env.PUBLIC_BASE_URL || "https://www.militaryvoices.ai";
 const API = process.env.API_BASE || BASE;
 
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require", max: 1, onnotice: () => {} });
@@ -120,7 +121,7 @@ let failed = 0;
 for (const r of to) {
   const res = await fetch(`${API}/api/admin/emails/send-one`, {
     method: "POST",
-    headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },
+    headers: { "content-type": "application/json", ...adminAuth },
     body: JSON.stringify({ to: r.email, subject: SUBJECT, html: htmlFor(r), text: textOf(r), sender: "member:1", banner: "podcasters" }),
   });
   res.ok ? sent++ : failed++;

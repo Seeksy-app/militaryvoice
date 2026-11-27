@@ -1,10 +1,11 @@
 // Frank: the dashboard would not load. Fixed; Michael says so, with the way in.
 //   npx tsx scripts/email-michael-frank-2.ts --apply
 import "dotenv/config";
+import { adminAuth } from "./adminAuth.mjs";
 import postgres from "postgres";
 import { emailShell, EMAIL_BANNERS } from "../server/email";
 const apply = process.argv.includes("--apply");
-const API = process.env.API_BASE || "https://www.militaryvoice.ai";
+const API = process.env.API_BASE || "https://www.militaryvoices.ai";
 const TO = "frankzaccari@gmail.com";
 const sql = postgres(process.env.POSTGRES_URL!, { ssl: "require", max: 1, onnotice: () => {} });
 const [ev] = await sql<{ admin_password: string }[]>`SELECT admin_password FROM events WHERE id = 1`;
@@ -38,7 +39,7 @@ const html = `<p>Frank,</p>
 console.log(`To: ${TO}\nIn-Reply-To: ${inb?.message_id || "(none)"}\n\n${text}\n`);
 if (!apply) { await sql.end(); console.log("Nothing sent. --apply to send."); process.exit(0); }
 const res = await fetch(`${API}/api/admin/emails/send-one`, {
-  method: "POST", headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },
+  method: "POST", headers: { "content-type": "application/json", ...adminAuth },
   body: JSON.stringify({ to: TO, subject: SUBJECT, text, sender: "member:3", banner: "podcasters", from: "Michael <michael@militaryvoice.ai>", replyTo: "michael@militaryvoice.ai", inReplyTo: inb?.message_id || undefined,
     html: emailShell({ banner: EMAIL_BANNERS.podcasters, eyebrow: "The Podcast Marathon · 5 October", heading: "Fixed — try the dashboard again", body: html }) }),
 });

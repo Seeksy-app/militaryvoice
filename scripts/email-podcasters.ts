@@ -9,10 +9,11 @@
 // operational note to people who have already committed to a slot. The
 // trade-off is no {{First_Name}} merge, so it opens plainly.
 import "dotenv/config";
+import { adminAuth } from "./adminAuth.mjs";
 import postgres from "postgres";
 import { emailShell, EMAIL_BANNERS } from "../server/email";
 
-const API = process.env.MV_API ?? "https://militaryvoice.ai";
+const API = process.env.MV_API ?? "https://www.militaryvoices.ai";
 const SITE = "https://militaryvoice.ai";
 const SUBJECT = "The course is full — 26.2 miles of storytelling";
 
@@ -73,7 +74,7 @@ async function main() {
   for (const r of targets as any[]) {
     const res = await fetch(`${API}/api/admin/emails/send-one`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },
+      headers: { "content-type": "application/json", ...adminAuth },
       body: JSON.stringify({ to: r.email, subject: SUBJECT, html, text: BODY_TEXT }),
     });
     res.ok ? sent++ : failed++;

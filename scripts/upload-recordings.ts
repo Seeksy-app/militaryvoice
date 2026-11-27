@@ -18,6 +18,7 @@
 // /api/assets/:id/file signs a URL and redirects to it, so a private bucket
 // costs nothing at playback.
 import "dotenv/config";
+import { adminAuth } from "./adminAuth.mjs";
 import { createReadStream, statSync } from "node:fs";
 import { basename } from "node:path";
 import postgres from "postgres";
@@ -31,7 +32,7 @@ const FILES = [
   "VFW Podcast 73- Sets and Reps.mp4",
 ];
 
-const API = process.env.MV_API ?? "https://militaryvoice.ai";
+const API = process.env.MV_API ?? "https://www.militaryvoices.ai";
 const MB = (n: number) => `${(n / 1048576).toFixed(1)}MB`;
 
 // Twelve attempts, not three. The resets are intermittent rather than
@@ -101,7 +102,7 @@ async function main() {
     if (!ok) { console.log(`    GAVE UP on ${name}`); continue; }
     const reg = await fetch(`${API}/api/admin/media`, {
       method: "POST",
-      headers: { "content-type": "application/json", "x-admin-password": ev.admin_password },
+      headers: { "content-type": "application/json", ...adminAuth },
       body: JSON.stringify({
         storageKey: key,
         fileName: name,
