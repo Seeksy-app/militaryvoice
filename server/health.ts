@@ -19,6 +19,7 @@ import { egress, isLiveKitConfigured, rooms } from "./livekit.js";
 import { stageStudios } from "./stageStudio.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
 import { podscanUsedToday } from "./podscan.js";
+import { fallbackSummary } from "./mvEvents.js";
 
 export type HealthState = "ok" | "down" | "off";
 export type HealthCheck = { key: string; name: string; group: string; powers: string; state: HealthState; detail: string; ms: number };
@@ -345,6 +346,16 @@ const DEFS: Def[] = [
     },
   },
   { key: "turnstile", name: "Cloudflare Turnstile", group: "Payments and safety", powers: "The \"are you human\" check on public forms", run: keyOnly(["TURNSTILE_SECRET_KEY"], "site key pair") },
+  {
+    // Track R (26 Nov): which areas still lean on the featured event. Never "down" (it's a to-do list, not an outage), so it never pages anyone.
+    key: "event-fallbacks", db: true, name: "Featured-event fallbacks", group: "The platform", powers: "Track R: each area is ready to switch once its count reads zero for 24 hours",
+    run: async () => {
+      const f = (await fallbackSummary()).filter((x) => x.last24h > 0 || x.explicit);
+      const leaning = f.filter((x) => x.last24h > 0).sort((a, b) => b.last24h - a.last24h).map((x) => `${x.area} ${x.last24h}`);
+      const on = f.filter((x) => x.explicit).map((x) => x.area);
+      return { state: "ok", detail: [leaning.length ? `Last 24 h: ${leaning.join(", ")}` : "None in the last 24 h", on.length ? `Switched: ${on.join(", ")}` : ""].filter(Boolean).join(" · ") };
+    },
+  },
 ];
 
 /** Checks that need the main routes' helpers (e.g. a channel's YouTube sign-in) are added from there. */

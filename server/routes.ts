@@ -195,6 +195,7 @@ import { registerGuests, guestByToken, markGuestJoined, publicGuestsFor } from "
 import { registerGuestInvites, takeAnsweredInvite } from "./guestInvites.js";
 import { registerGuestBrief } from "./guestBrief.js";
 import { registerLive } from "./live/routes.js";
+import { registerMvEvents } from "./mvEvents.js";
 import { recordingShow } from "./hostShows.js";
 import { registerCaptures, onCaptureWebhook } from "./captures.js";
 import { registerStreamIn, onStreamInWebhook, streamInSkipsClips } from "./streamIn.js";
@@ -338,7 +339,7 @@ async function enhanceAndSavePhoto(buffer: Buffer): Promise<{ url: string; origi
 }
 
 function toPublicEvent(event: EventRow): PublicEvent {
-  const { adminPassword, ownerEmail, ...rest } = event;
+  const { adminPassword, ownerEmail, category, program, ...rest } = event;
   // Where people join an online event goes to who registered, unless nobody signs up (24 Nov).
   return { ...rest, joinUrl: event.signupMode === "none" ? event.joinUrl : "" };
 }
@@ -7321,6 +7322,8 @@ export function registerRoutes(app: Express): void {
   registerMarathonFounding(app, requireAdmin);
   registerShareLogin(app, requireAdmin);
   registerHealth(app, requireAdmin);
+  // Track R (26 Nov): the MV events list for the admin picker, with the featured-event fallback counts.
+  registerMvEvents(app, requireAdmin);
   registerNotices(app, requireAdmin, requireHostSession);
   registerSurvey(app, requireAdmin);
   registerSms(app, requireAdmin);

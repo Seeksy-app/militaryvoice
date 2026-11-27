@@ -72,6 +72,12 @@ export const events = pgTable("events", {
   questions: text("questions").notNull().default(""),
   /** Where people join or watch an online event. Public only when nobody signs up; else it goes to who registered. */
   joinUrl: text("join_url").notNull().default(""),
+  // Track R (26 Nov 2026): which events are ours. Filled on boot where blank (server/mvEvents.ts); "" until then.
+  // (Not "kind": that one is members' own events, above.)
+  /** "mv" (we run it: the Marathon, Radio days, LIVE productions) | "member" (a member's or organizer's) | "personal" (a member's own studio). */
+  category: text("category").notNull().default(""),
+  /** For "mv" events: "marathon" | "radio" | "live" | "" (anything else we run). */
+  program: text("program").notNull().default(""),
 });
 
 /** Who signed up to attend a member's event (24 Nov 2026): one row per person per event. */
@@ -115,7 +121,8 @@ export type EventRow = typeof events.$inferSelect;
 
 // Public-safe event shape (never leak the admin password to the client)
 // An event planner's email never leaves the server in a public payload.
-export type PublicEvent = Omit<EventRow, "adminPassword" | "ownerEmail">;
+/** Track R's category and program stay server-side (the admin MV events list carries them), so public answers don't change. */
+export type PublicEvent = Omit<EventRow, "adminPassword" | "ownerEmail" | "category" | "program">;
 
 // ---------------------------------------------------------------------------
 // Signups — one podcaster/team claiming one slot
@@ -3801,3 +3808,14 @@ export const liveOrgBrands = pgTable("live_org_brands", {
   updatedAt: text("updated_at").notNull(),
 }, (t) => [uniqueIndex("live_org_brands_org_idx").on(t.orgId)]);
 export type LiveOrgBrandRow = typeof liveOrgBrands.$inferSelect;
+
+/** Track R (26 Nov 2026): how often each area still fell back to the featured event, per UTC day (server/mvEvents.ts). */
+export const eventFallbacks = pgTable("event_fallbacks", {
+  id: serial("id").primaryKey(),
+  area: text("area").notNull(),
+  day: text("day").notNull(), // YYYY-MM-DD (UTC)
+  count: integer("count").notNull().default(0),
+  lastPath: text("last_path").notNull().default(""), // "GET /api/admin/run-of-show": the route that last leaned on it
+  lastAt: text("last_at").notNull().default(""),
+}, (t) => [uniqueIndex("event_fallbacks_area_day_idx").on(t.area, t.day)]);
+export type EventFallbackRow = typeof eventFallbacks.$inferSelect;
