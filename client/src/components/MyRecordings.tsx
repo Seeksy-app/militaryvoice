@@ -48,7 +48,12 @@ function sourceOf(r: RecordingRow): number | null {
 }
 
 type Version = { label: string; rec: RecordingRow };
-type Episode = { main: RecordingRow; versions: Version[]; earlier: Version[] };
+/** A copy filed into another folder than its original: a card of its own there (Andrew, 27 Nov: "Misc/Test"). */
+type CopyOf = { kind: "Edited" | "Clean"; title: string; folderId: number | null };
+type Episode = { main: RecordingRow; versions: Version[]; earlier: Version[]; copyOf?: CopyOf };
+
+/** Filed away from its original: in a folder, and not the original's folder. */
+export const filedAway = (copy: RecordingRow, source: RecordingRow | undefined) => !!source && !!copy.folderId && copy.folderId !== (source.folderId ?? null);
 
 /**
  * One card per episode: the original with its clean and edited copies as
@@ -56,15 +61,17 @@ type Episode = { main: RecordingRow; versions: Version[]; earlier: Version[] };
  * keeps a card.
  */
 function episodes(rows: RecordingRow[]): Episode[] {
-  const ids = new Set(rows.map((r) => r.id));
+  const byId = new Map(rows.map((r) => [r.id, r]));
+  // Under its original, unless it's filed in a folder of its own (then its own card there, saying where the original is).
+  const underSource = (r: RecordingRow) => { const src = sourceOf(r); return src != null && byId.has(src) && !filedAway(r, byId.get(src)); };
   const copies = new Map<number, RecordingRow[]>();
-  for (const r of rows) {
-    const src = sourceOf(r);
-    if (src != null && ids.has(src)) copies.set(src, [...(copies.get(src) ?? []), r]);
-  }
+  for (const r of rows) if (underSource(r)) copies.set(sourceOf(r)!, [...(copies.get(sourceOf(r)!) ?? []), r]);
   return rows
-    .filter((r) => { const src = sourceOf(r); return src == null || !ids.has(src); })
+    .filter((r) => !underSource(r))
     .map((main) => {
+      const src = sourceOf(main);
+      const orig = src != null ? byId.get(src) : undefined;
+      const copyOf: CopyOf | undefined = orig ? { kind: main.egressId.startsWith("CLEAN_EDIT_") ? "Edited" : "Clean", title: plainTitle(orig.title) || "your session", folderId: orig.folderId ?? null } : undefined;
       const mine = copies.get(main.id) ?? [];
       const clean = mine.filter((c) => !c.egressId.startsWith("CLEAN_EDIT_"));
       const edited = mine.filter((c) => c.egressId.startsWith("CLEAN_EDIT_")).sort((a, b) => a.id - b.id);
@@ -79,6 +86,7 @@ function episodes(rows: RecordingRow[]): Episode[] {
           { label: "Original", rec: main },
         ],
         earlier: edited.slice(0, -1).reverse().map((rec) => ({ label: `Edited ${when(rec)}`, rec })),
+        copyOf,
       };
     });
 }
@@ -173,6 +181,9 @@ export function MyRecordings({
   });
   const data = eventId == null ? all : (all ?? []).filter((r) => r.eventId === eventId);
   const eps = episodes(data ?? []);
+  // Folder names, for "Original in <folder>" on a copy filed away from its original.
+  const foldersQ = useQuery<{ id: number; name: string }[]>({ queryKey: ["/api/host/folders"], queryFn: async () => (await apiRequest("GET", "/api/host/folders")).json(), staleTime: 60_000 });
+  const folderNames = new Map((foldersQ.data ?? []).map((f) => [f.id, f.name]));
   // Our how-to videos get their own row after the podcaster's own work, and never in a folder view.
   const howTos = eps.filter((e) => isHowTo(e.main.title));
   const shown = (folder == null ? eps : eps.filter((e) => e.main.folderId === folder)).filter((e) => !isHowTo(e.main.title));
@@ -294,7 +305,8 @@ export function MyRecordings({
       {mover.dialog}
       {/* Thumbnails, each with one menu: the things you do with an episode. */}
       {shown.length > 0 && <ul className="grid grid-cols-2 gap-3 lg:grid-cols-4 lg:gap-4">
-        {shown.map(({ main, versions, earlier }) => {
+        {shown.map((ep) => {
+          const { main, versions, earlier } = ep;
           // Their latest edit first when there is one (it's the one they made to use); otherwise the clean copy.
           const all = [...versions, ...earlier];
           const r = all.find((v) => v.rec.id === picked[main.id])?.rec ?? versions.find((v) => v.label === "Edited")?.rec ?? versions[0]?.rec ?? main;
@@ -357,8 +369,14 @@ export function MyRecordings({
                     <Button type="button" size="icon" variant="ghost" className="h-8 w-8 shrink-0 rounded-full" onClick={() => setRenaming(null)} aria-label="Cancel"><X className="h-3.5 w-3.5" /></Button>
                   </form>
                 ) : (
-                  <p className="line-clamp-2 text-sm font-semibold leading-snug text-card-foreground" title={plainTitle(main.title)}>{plainTitle(main.title) || "Your session"}</p>
+                  ep.copyOf ? (
+                    // The title gives way, never "Edited copy of" (UI/UX, 27 Nov).
+                    <p className="flex min-w-0 text-sm font-semibold leading-snug text-card-foreground" title={`${ep.copyOf.kind} copy of ${ep.copyOf.title}`} data-testid={`recording-copyof-${main.id}`}>
+                      <span className="shrink-0">{ep.copyOf.kind} copy of&nbsp;</span><span className="min-w-0 truncate">{ep.copyOf.title}</span>
+                    </p>
+                  ) : <p className="line-clamp-2 text-sm font-semibold leading-snug text-card-foreground" title={plainTitle(main.title)}>{plainTitle(main.title) || "Your session"}</p>
                 )}
+                {ep.copyOf && <p className="mt-0.5 truncate text-xs text-muted-foreground">Original in {(ep.copyOf.folderId && folderNames.get(ep.copyOf.folderId)) || "Library"}</p>}
                 <p className="mt-1 flex flex-wrap items-center gap-x-1.5 gap-y-0.5 tabular-nums text-xs text-muted-foreground">
                   {(() => { const t = sourceTag(main); return <span className={`inline-flex items-center gap-1 rounded-full px-1.5 py-px text-[10px] font-semibold ${t.cls}`}><t.icon className="h-3 w-3" />{t.label}</span>; })()}
                   {new Date(r.startedAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}

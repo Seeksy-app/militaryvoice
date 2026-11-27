@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { UploadRecording } from "@/components/UploadRecording";
-import { MyRecordings } from "@/components/MyRecordings";
+import { MyRecordings, filedAway } from "@/components/MyRecordings";
 import { PodcastEpisodeGrid, usePodcastEpisodes } from "@/components/PodcastEpisodes";
 import { DRAG, FolderBar, LibraryFoldersProvider, TUTORIALS, useLibraryFolders } from "@/components/LibraryFolders";
 import { isHowTo } from "@/lib/howTo";
@@ -71,7 +71,9 @@ function Library_({ socialAccounts }: { socialAccounts?: string | null }) {
   const tutorials = (recordings ?? []).filter((r) => isHowTo(r.title));
   const originals = (recordings ?? []).filter((r) => r.status === "Ready" && !r.egressId.startsWith("CLEAN_") && !isHowTo(r.title));
   // What each folder holds: recordings (their clean and edited copies go with them) and podcast episodes.
-  const mains = (recordings ?? []).filter((r) => !r.egressId.startsWith("CLEAN_") && !isHowTo(r.title));
+  const byId = new Map((recordings ?? []).map((r) => [r.id, r]));
+  // A copy filed away from its original is a card of its own in that folder, so it counts there (MyRecordings, filedAway).
+  const mains = (recordings ?? []).filter((r) => (!r.egressId.startsWith("CLEAN_") || filedAway(r, byId.get(sourceOf(r) ?? -1))) && !isHowTo(r.title));
   const folderCounts = new Map<number, number>();
   for (const x of [...mains, ...published]) if (x.folderId) folderCounts.set(x.folderId, (folderCounts.get(x.folderId) ?? 0) + 1);
   // Library (no folder open) holds only what isn't filed, like Drive (Andrew, 24 Nov).
