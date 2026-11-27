@@ -127,8 +127,8 @@ function Jobs() {
   const rows: [string, string, string, boolean | null][] = [
     ["Writer", "bios, intros, reads", on("headshots", "intros") ? "On" : "Off", on("headshots", "intros")],
     ["Coordinator", `daily ${s?.coordinatorAt ?? "8 am"}`, on("confirmations", "run_of_show") ? "On" : "Off", on("confirmations", "run_of_show")],
-    ["Emails", s ? `${s.held} held` : "", s ? (s.send ? "Sending on" : "Sending off") : "…", s ? s.send : null],
-    ["Voice", "approved scripts", s ? (s.voice ? "On" : "Off") : "…", s ? s.voice : null],
+    // Shown only once the switches can be read (not in the contract yet), never guessed.
+    ...(s ? [["Emails", `${s.held} held`, s.send ? "Sending on" : "Sending off", s.send], ["Voice", "approved scripts", s.voice ? "On" : "Off", s.voice]] as [string, string, string, boolean][] : []),
   ];
   return (
     <Card title="Her jobs" action={current && canManageAlex(current) ? <LinkBtn small href="/crew">Change</LinkBtn> : undefined} testId="alex-jobs">
