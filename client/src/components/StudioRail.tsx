@@ -502,7 +502,7 @@ function BannerPanel({
         className={FIELD}
         value={sub}
         maxLength={120}
-        placeholder="Underneath — Host · Semper Fi Radio"
+        placeholder="Underneath — Host · Show name"
         onChange={(e) => setSub(e.target.value)}
         data-testid="input-banner-subtitle"
       />
@@ -640,7 +640,7 @@ function TickerPanel({ studio, patch }: { studio: StudioRow | null; patch: (p: P
         className="min-h-[4.5rem] w-full rounded-md border border-white/25 bg-white/5 px-2.5 py-2 text-[13px] text-white placeholder:text-white/55 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F0A71F]"
         value={text}
         maxLength={600}
-        placeholder="Donate at militaryvoices.ai/give · Next up at 8:00 — Former Action Guys"
+        placeholder="Donate at militaryvoices.ai/give · Next up at 8:00 — Show name"
         onChange={(e) => setText(e.target.value)}
         data-testid="input-ticker-text"
       />

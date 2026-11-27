@@ -16,7 +16,7 @@ const FROM_LABEL: Record<Draft["from"], string> = { alex: "Alex", team: "the tea
 /**
  * Talk to Alex; she drafts; you send.
  *
- * "Send Frank an email saying thanks for your patience" becomes a draft card
+ * "Send a podcaster an email saying thanks for your patience" becomes a draft card
  * under her reply, with the recipient she found, editable, and one Send
  * button. Nothing goes out until that button. She answers questions about
  * the day too, from the same facts the help desk uses.
@@ -153,7 +153,7 @@ export function AdminChat({ eventId, endpoint = "/api/admin/chat", greeting, tit
           onChange={(e) => setInput(e.target.value)}
           onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); submit(); } }}
           rows={1}
-          placeholder={placeholder ?? 'Send Frank an email saying "Thanks for your patience…"'}
+          placeholder={placeholder ?? 'Send a podcaster an email saying "Thanks for your patience…"'}
           className="min-h-[40px] resize-none text-sm"
           data-testid="admin-chat-input"
         />
