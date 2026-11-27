@@ -1801,10 +1801,45 @@ export interface EpisodeEdit {
   focus?: boolean;
   /** Volume of the whole finished edit, 1 = as is (0.7 = 30% quieter). */
   gain?: number;
+  /** A show's voiced intro and outro (27 Nov 2026): introKey/outroKey are the card pictures, this says how they sound. */
+  voiced?: { preset: VoicedPreset; guestName: string; introText?: string };
   status: "queued" | "running" | "done" | "failed";
   error?: string;
   resultId?: number;
   at: string;
+}
+
+/**
+ * A show's voiced intro and outro (setting voiced:<email>; 27 Nov 2026, Andrew approved Riccoh's: "Perfect. Save
+ * those settings"). The show's music at full, a fade, the show's voice reading a line about this episode's guest and
+ * topic with the music under it, then the music up and out; the outro is the show's fixed outro audio. Made by the
+ * worker for every episode that gets its guest card (agent/voicedIntro.ts). Levels were measured from the approved mix.
+ */
+export interface VoicedPreset {
+  on: boolean;
+  voiceId: string;
+  model?: string;
+  settings?: { stability?: number; similarity_boost?: number; style?: number; speed?: number };
+  show: string;
+  host: string;
+  hostFull: string;
+  /** Spelled for the voice: { "Riccoh": "Reeko" }. */
+  say?: Record<string, string>;
+  /** show-assets keys: the long music bed, the fixed outro audio, the card background and the logo. */
+  bedKey: string;
+  outroAudioKey?: string;
+  cardBgKey: string;
+  logoKey?: string;
+  footerLeft?: string;
+  voiceLufs: number;
+  leadDb: number;
+  underDb: number;
+  swellDb: number;
+  leadSec: number;
+  fadeSec: number;
+  tailSec: number;
+  /** When no guest is found: email the host to add one (needs Andrew's go), or tell the team on Slack (default). */
+  askGuestByEmail?: boolean;
 }
 
 export const CLIP_FORMATS = ["vertical", "square", "wide"] as const;

@@ -54,6 +54,7 @@ import {
   CLIP_FORMATS,
   toCleanTime,
   type EpisodeEdit,
+  type VoicedPreset,
   type EpisodeMusic,
   EDIT_TRANSITIONS,
   type EditSuggest,
@@ -107,7 +108,7 @@ import {
   listIngressForRoom,
   webhooks,
 } from "./livekit.js";
-import { renderGuestCard } from "./guestCard.js";
+import { renderGuestCard, renderStyledCard } from "./guestCard.js";
 import { renderThumbnail } from "./thumbnail.js";
 import { ensureRecordingsBucket, signedRecordingUrl, signedRecordingUpload, putRecordingObject, startMultipart, signedPartUrl, completeMultipart, abortMultipart } from "./recordingStorage.js";
 import {
@@ -7638,11 +7639,12 @@ export function registerRoutes(app: Express): void {
             job: {
               recordingId: ed.id, title: ed.title, durationSec: ed.durationSec, downloadUrl: src, show: "", host: "",
               // Who talks when, for "focus on the speaker": the stored transcript, moved onto the clean version's timeline when that's the source.
-              transcript: !e.focus ? [] : storedTranscript(ed.transcriptJson).map((l) => (e!.source === "clean" && clean ? { ...l, startSec: toCleanTime(l.startSec, clean), endSec: toCleanTime(l.endSec, clean) } : l)),
+              transcript: !e.focus && !e.voiced ? [] : storedTranscript(ed.transcriptJson).map((l) => (e!.source === "clean" && clean ? { ...l, startSec: toCleanTime(l.startSec, clean), endSec: toCleanTime(l.endSec, clean) } : l)),
               episodeEdit: {
                 focus: !!e.focus,
                 trimStart: e.trimStart, trimEnd: e.trimEnd, cuts: e.cuts ?? [], introUrl: await sign(e.introKey), outroUrl: await sign(e.outroKey), introTransition: e.introTransition ?? "fade", outroTransition: e.outroTransition ?? "fade", gain: e.gain,
                 cardSec: e.cardSec, cardMusicUrl: e.cardMusicKey ? await sign((await storage.getMusic(e.cardMusicKey))?.url) : "",
+                ...(e.voiced ? { voiced: { ...e.voiced.preset, guestName: e.voiced.guestName, introText: e.voiced.introText, bedUrl: await sign(e.voiced.preset.bedKey), outroAudioUrl: e.voiced.preset.outroAudioKey ? await sign(e.voiced.preset.outroAudioKey) : undefined } } : {}),
                 // Music under parts of it: each track's file, signed, with where it goes in the episode.
                 music: (await Promise.all((e.music ?? []).map(async (m) => { const t = await storage.getMusic(m.key); const url = t?.url ? await sign(t.url) : ""; return url ? { url, from: m.from, to: m.to, level: m.level } : null; }))).filter(Boolean),
               },
@@ -8305,6 +8307,7 @@ export function registerRoutes(app: Express): void {
   //      start at once (covered by the package, no credits taken) and the edited episode is made with the guest card as the
   //      intro and outro and the show's music. The guest comes from the member's "next guest" if they set one before recording;
   //      if not, we ask them for it by email and the edit starts the moment they add it. Nothing is posted anywhere.
+  const voicedPreset = async (email: string): Promise<VoicedPreset | null> => { try { const v = JSON.parse((await storage.getSetting(`voiced:${email.trim().toLowerCase()}`)) || "null"); return v && typeof v === "object" && v.bedKey && v.cardBgKey && v.voiceId ? (v as VoicedPreset) : null; } catch { return null; } };
   const packageOn = async (email: string) => { try { return !!(JSON.parse((await storage.getSetting(`package:${email.trim().toLowerCase()}`)) ?? "{}") as { on?: boolean }).on; } catch { return false; } };
 
   /** The guest card for this recording, made and queued as the edit's intro and outro. */
@@ -8313,6 +8316,24 @@ export function registerRoutes(app: Express): void {
     const profile = await storage.getProfileByEmail(email);
     if (!profile?.photoUrl) throw new Error("Add your own photo to your profile first: it goes on the left of the card.");
     const hostPhoto = Buffer.from(await (await fetch(profile.photoUrl)).arrayBuffer());
+    // A show with its own voiced intro and outro (27 Nov 2026, Riccoh's Warriors' Voice): its own card, and the worker writes
+    // and reads the intro for this guest over the show's music. Lands as a private Library copy they can change in Edit episode.
+    const preset = await voicedPreset(email);
+    if (preset?.on) {
+      const get = async (k?: string) => (k ? Buffer.from(await (await fetch(await signedRecordingUrl(k, 600))).arrayBuffer()) : undefined);
+      const [background, logo] = await Promise.all([get(preset.cardBgKey), get(preset.logoKey)]);
+      const card = await renderStyledCard({ background: background!, logo, hostName: preset.hostFull || profile.hostName || "Host", hostPhoto, guestName, guestPhoto, footerLeft: preset.footerLeft });
+      const vkey = `show-assets/vc-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.png`;
+      await putRecordingObject(vkey, card, "image/png");
+      const ve: EpisodeEdit = {
+        source, trimStart: 0, trimEnd: 0,
+        introKey: vkey, introName: `Voiced intro: ${guestName}`, outroKey: preset.outroAudioKey ? vkey : undefined, outroName: preset.outroAudioKey ? `Voiced outro` : undefined,
+        voiced: { preset, guestName }, status: "queued", at: new Date().toISOString(),
+      };
+      await storage.setEpisodeEdit(rec.id, JSON.stringify(ve));
+      await storage.setSetting(`pkgwait:${rec.id}`, "");
+      return;
+    }
     const gc = await guestCardSettings(email);
     const png = await renderGuestCard({ hostName: profile.hostName || "Host", hostPhoto, guestName, guestPhoto, footerLeft: gc.footerLeft, footerRight: gc.footerRight });
     const key = `show-assets/gc-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.png`;
@@ -8371,6 +8392,11 @@ export function registerRoutes(app: Express): void {
       } catch (err) { console.error("Package guest card failed:", (err as Error).message); }
     }
     await storage.setSetting(`pkgwait:${rec.id}`, new Date().toISOString());
+    const vp = await voicedPreset(email);
+    if (vp?.on && !vp.askGuestByEmail) {
+      await slackNote(`:microphone: ${email}'s new recording "${rec.title || rec.id}" (Library #${rec.id}) is ready for its voiced intro, but no guest was found (no answered invite, no next guest). Add the guest in Admin, or ask the host. No email was sent.`).catch(() => undefined);
+      return;
+    }
     const link = `${PUBLIC_ORIGIN}/host/dashboard/postify?rec=${rec.id}`;
     const subject = `Your episode is in. Who was your guest?`;
     const text = `Hi,\n\nYour recording "${rec.title || "your episode"}" is in your Library, and we've started making your clips.\n\nTo finish the edited episode, we need your guest's name and photo for the card at the start and end. Open the episode, choose Edit episode, then Guest card, and add them. It only takes a minute.\n\n${link}\n\nThe MilitaryVoices.ai team\nhello@militaryvoices.ai`;
@@ -8429,6 +8455,43 @@ export function registerRoutes(app: Express): void {
       return res.status(409).json({ message: (err as Error).message });
     }
     res.json({ ok: true, recordingId: rec.id, source });
+  });
+
+  /**
+   * Admin: a show's voiced intro and outro (27 Nov 2026). With it on, every guest card the package makes for this account
+   * becomes the show's own card with a voiced intro written for that guest (agent/voicedIntro.ts). It only acts when the
+   * package is on (packageOn), or when an admin makes a guest-card edit by hand. GET ?email=  PUT { email, preset }.
+   */
+  app.get("/api/admin/voiced-bookends", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost || (req as any).eventAdmin) return res.status(403).json({ message: "Admins only." });
+    const email = String(req.query.email ?? "").trim().toLowerCase();
+    if (!email) return res.status(400).json({ message: "email?" });
+    res.json({ email, preset: await voicedPreset(email), packageOn: await packageOn(email) });
+  });
+  app.put("/api/admin/voiced-bookends", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost || (req as any).eventAdmin) return res.status(403).json({ message: "Admins only." });
+    const email = String(req.body?.email ?? "").trim().toLowerCase();
+    const p = req.body?.preset;
+    if (!email || !p || typeof p !== "object") return res.status(400).json({ message: "Give email and preset." });
+    const key = (v: unknown) => (typeof v === "string" && /^show-assets\/[\w.-]+$/.test(v) ? v : "");
+    const num = (v: unknown, lo: number, hi: number) => { const n = Number(v); return Number.isFinite(n) && n >= lo && n <= hi ? n : NaN; };
+    const txt = (v: unknown, n = 80) => String(v ?? "").trim().slice(0, n);
+    const say: Record<string, string> = {};
+    for (const [k, v] of Object.entries(p.say && typeof p.say === "object" ? p.say : {}).slice(0, 20)) if (txt(k) && txt(v)) say[txt(k)] = txt(v);
+    const preset: VoicedPreset = {
+      on: !!p.on, voiceId: txt(p.voiceId, 40), model: txt(p.model, 60) || undefined,
+      settings: p.settings && typeof p.settings === "object" ? { stability: num(p.settings.stability, 0, 1) || undefined, similarity_boost: num(p.settings.similarity_boost, 0, 1) || undefined, style: num(p.settings.style, 0, 1) || undefined } : undefined,
+      show: txt(p.show), host: txt(p.host), hostFull: txt(p.hostFull), say,
+      bedKey: key(p.bedKey), outroAudioKey: key(p.outroAudioKey) || undefined, cardBgKey: key(p.cardBgKey), logoKey: key(p.logoKey) || undefined, footerLeft: txt(p.footerLeft, 40) || undefined,
+      voiceLufs: num(p.voiceLufs, -40, -6), leadDb: num(p.leadDb, -40, 6), underDb: num(p.underDb, -60, 0), swellDb: num(p.swellDb, -40, 6),
+      leadSec: num(p.leadSec, 0, 15), fadeSec: num(p.fadeSec, 0, 10), tailSec: num(p.tailSec, 1, 20),
+      askGuestByEmail: !!p.askGuestByEmail,
+    };
+    const bad: string[] = (["voiceId", "show", "host", "hostFull", "bedKey", "cardBgKey"] as const).filter((k) => !preset[k]);
+    bad.push(...(["voiceLufs", "leadDb", "underDb", "swellDb", "leadSec", "fadeSec", "tailSec"] as const).filter((k) => Number.isNaN(preset[k])));
+    if (bad.length) return res.status(400).json({ message: `Check: ${bad.join(", ")}.` });
+    await storage.setSetting(`voiced:${email}`, JSON.stringify(preset));
+    res.json({ email, preset, packageOn: await packageOn(email) });
   });
 
   /**
@@ -8587,6 +8650,8 @@ export function registerRoutes(app: Express): void {
     const copy = await storage.saveEditedCopy(rec, videoKey, Number(req.body?.durationSec) || rec.durationSec);
     let e: any = {};
     try { e = JSON.parse(rec.episodeEdit); } catch { e = {}; }
+    const introText = typeof req.body?.introText === "string" ? req.body.introText.slice(0, 600) : "";
+    if (introText && e.voiced) e.voiced = { ...e.voiced, introText };
     await storage.setEpisodeEdit(rec.id, JSON.stringify({ ...e, status: "done", resultId: copy.id, error: undefined, at: new Date().toISOString() }));
     res.json({ id: copy.id });
     if (rec.email) pushAfter(rec.email, { title: "Your edited episode is ready", body: `${rec.title || "Your episode"} (edited) is in your Library.`, url: "/host/dashboard/recordings", tag: `edit-${rec.id}` });

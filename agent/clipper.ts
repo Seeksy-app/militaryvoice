@@ -58,6 +58,7 @@ import { cutList, snapToAudio, keepRanges, selectGraph, envelope, type Word } fr
 import { captionTrack, type CaptionStyle, type TimedWord } from "./wordCaptions.js";
 import { glimpseLane } from "./glimpse.js";
 import { analyzeFrame, findTiles, type FrameAnalysis } from "./layoutDetect.js";
+import { writeIntroLine, spoken, speak, mixIntro, cardVideo, type VoicedBookends } from "./voicedIntro.js";
 
 const API_BASE = (process.env.API_BASE || "http://localhost:3000").replace(/\/+$/, "");
 const AGENT_TOKEN = process.env.AGENT_TOKEN || "";
@@ -141,7 +142,9 @@ interface Job {
     /** "Focus on whoever's talking" (24 Nov 2026): two tiles → the speaker's tile in long stretches; one person → a gentle reframe. The transcript comes in job.transcript (in this video's own seconds) or is made here. */
     focus?: boolean;
     /** Volume of the whole finished edit, 1 = as is (27 Nov 2026: 0.7 for "30% quieter"). */
-    gain?: number };
+    gain?: number;
+    /** The show's voiced intro and outro over its guest card (agent/voicedIntro.ts). */
+    voiced?: VoicedBookends };
   /** Bring a recording in from elsewhere (Zoom): fetch downloadUrl with these headers, store it, report. */
   importFrom?: { headers: Record<string, string> };
   /** Clips to make from this episode (Pro: 6). Absent = CLIP_COUNT. */
@@ -2213,6 +2216,35 @@ async function handleEpisodeEdit(job: Job): Promise<void> {
       cardClips.set(u, clip);
       return clip;
     };
+    // The show's voiced intro (27 Nov 2026): a line about this guest and topic, read over the show's music, on the card.
+    let introText = "";
+    if (e.voiced && isCard(e.introUrl)) {
+      const v = e.voiced;
+      let lines: Line[] = job.transcript ?? [];
+      if (!v.introText && lines.length < 10) lines = await transcribeWithDeepgram(job.downloadUrl, dir);
+      introText = await writeIntroLine(v, lines);
+      console.log(`${tag}: voiced intro: "${introText}"`);
+      const png = path.join(dir, "voiced-card.png");
+      const r = await fetch(e.introUrl!); if (!r.ok) throw new Error("couldn't open the guest card");
+      await fs.writeFile(png, Buffer.from(await r.arrayBuffer()));
+      const voice = path.join(dir, "intro-voice.mp3");
+      await speak(v, spoken(v, introText), voice);
+      const sound = path.join(dir, "intro-sound.wav");
+      await mixIntro(v, voice, sound, dir);
+      const clip = path.join(dir, "voiced-intro.mp4");
+      await cardVideo(png, sound, clip, "in");
+      if (v.outroAudioUrl && isCard(e.outroUrl)) {
+        const o = await fetch(v.outroAudioUrl); if (!o.ok) throw new Error("couldn't open the outro audio");
+        const outroAudio = path.join(dir, "outro-sound" + (path.extname(new URL(v.outroAudioUrl).pathname) || ".m4a"));
+        await fs.writeFile(outroAudio, Buffer.from(await o.arrayBuffer()));
+        const outPng = e.outroUrl === e.introUrl ? png : path.join(dir, "voiced-card-outro.png");
+        if (outPng !== png) { const q = await fetch(e.outroUrl!); if (!q.ok) throw new Error("couldn't open the guest card"); await fs.writeFile(outPng, Buffer.from(await q.arrayBuffer())); }
+        const outClip = path.join(dir, "voiced-outro.mp4");
+        await cardVideo(outPng, outroAudio, outClip, "out");
+        e.outroUrl = outClip;
+      }
+      e.introUrl = clip;
+    }
     if (isCard(e.introUrl)) e.introUrl = await cardClip(e.introUrl!);
     if (isCard(e.outroUrl)) e.outroUrl = await cardClip(e.outroUrl!);
     const parts: { url: string; ss?: number; t?: number }[] = [];
@@ -2316,7 +2348,7 @@ async function handleEpisodeEdit(job: Job): Promise<void> {
     const out = path.join(dir, `${job.recordingId}-edited.mp4`);
     await run("ffmpeg", [...args, "-filter_complex_script", script, "-map", "[v]", "-map", "[a]", "-c:v", "libx264", "-preset", process.env.CLEAN_PRESET || "superfast", "-crf", "23", "-pix_fmt", "yuv420p", "-profile:v", "high", "-c:a", "aac", "-b:a", "160k", "-movflags", "+faststart", out]);
     const videoKey = await uploadBig(out, "video/mp4");
-    await api("POST", `/api/agent/episode-edits/${job.recordingId}/done`, { videoKey, durationSec: Math.round(total) });
+    await api("POST", `/api/agent/episode-edits/${job.recordingId}/done`, { videoKey, durationSec: Math.round(total), ...(introText ? { introText } : {}) });
     console.log(`${tag}: done`);
   } catch (err) {
     console.warn(`${tag} failed: ${(err as Error).message}`);

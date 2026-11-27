@@ -1,4 +1,4 @@
-import sharp from "sharp";
+import sharp, { type OverlayOptions } from "sharp";
 import { fitSize, textPath, textWidth } from "./textPath.js";
 
 // The guest card a show puts at the start and end of an episode: the host on
@@ -49,6 +49,68 @@ function nameLine(name: string, cx: number, y: number, maxW: number): string {
 
 function dotted(cx: number, y: number, w: number): string {
   return `<line x1="${cx - w / 2}" y1="${y}" x2="${cx + w / 2}" y2="${y}" stroke="${DOTS}" stroke-width="3" stroke-dasharray="1 7" stroke-linecap="round"/>`;
+}
+
+/**
+ * A show's own card, on its own background, with its logo in the corner (27 Nov 2026: Riccoh's Warriors' Voice,
+ * "card A": black with a soft silver wave, Andrew's pick). Same layout as the card Andrew approved: two photos in
+ * silver rings, names in white with a silver double rule, the web address bottom-left, the logo bottom-right.
+ */
+export interface StyledCardInput {
+  background: Buffer;
+  logo?: Buffer;
+  hostName: string;
+  hostPhoto: Buffer;
+  guestName: string;
+  guestPhoto: Buffer;
+  footerLeft?: string;
+}
+
+async function ringed(src: Buffer, r: number, ring: number): Promise<Buffer> {
+  const d = 2 * r, D = 2 * (r + ring);
+  // Head and shoulders: a wide photo keeps its middle, a tall one its top (the "attention" crop can land on a
+  // bright background instead of the face, as it did on a guest's landscape headshot).
+  const upright = await sharp(src).rotate().toBuffer();
+  const m = await sharp(upright).metadata();
+  const tall = (m.height ?? 1) > (m.width ?? 1) * 1.1;
+  const mask = Buffer.from(`<svg width="${d}" height="${d}"><circle cx="${d / 2}" cy="${d / 2}" r="${d / 2}" fill="#fff"/></svg>`);
+  const photo = await sharp(upright).resize(d, d, { fit: "cover", position: tall ? "north" : "centre" }).composite([{ input: mask, blend: "dest-in" }]).png().toBuffer();
+  const rim = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${D}" height="${D}"><circle cx="${D / 2}" cy="${D / 2}" r="${r + ring / 2}" fill="none" stroke="#cdcdd2" stroke-width="${ring}"/></svg>`);
+  return sharp({ create: { width: D, height: D, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+    .composite([{ input: photo, left: ring, top: ring }, { input: rim, left: 0, top: 0 }])
+    .png()
+    .toBuffer();
+}
+
+export async function renderStyledCard(i: StyledCardInput): Promise<Buffer> {
+  const { w, h } = GUEST_CARD;
+  const R = 190, ring = 5, cy = 285;
+  const lx = 330, rx = 950;
+  const nameY = cy + R + 34 + 32;
+  const ruleY = cy + R + 100;
+  const name = (n: string, cx: number) => {
+    const t = n.trim().toUpperCase();
+    return textPath(t, { x: cx, y: nameY, size: fitSize(t, "bold", 40, 22, 480), weight: "bold", fill: "#ececee", anchor: "middle" });
+  };
+  const rule = (cx: number) => `<line x1="${cx - 120}" y1="${ruleY}" x2="${cx + 120}" y2="${ruleY}" stroke="#96969c" stroke-width="2"/><line x1="${cx - 120}" y1="${ruleY + 6}" x2="${cx + 120}" y2="${ruleY + 6}" stroke="#96969c" stroke-width="2"/>`;
+  const foot = i.footerLeft ? textPath(i.footerLeft.toUpperCase(), { x: 44, y: h - 38, size: 22, weight: "bold", fill: "#bebec4" }) : "";
+  const shadow = (cx: number) => `<circle cx="${cx}" cy="${cy + 14}" r="${R}" fill="#000" fill-opacity="0.65" filter="url(#s)"/>`;
+  const svg = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${w}" height="${h}" viewBox="0 0 ${w} ${h}">
+  <defs><filter id="s" x="-30%" y="-30%" width="160%" height="160%"><feGaussianBlur stdDeviation="22"/></filter></defs>
+  ${shadow(lx)}${shadow(rx)}
+  ${name(i.hostName, lx)}${rule(lx)}${name(i.guestName, rx)}${rule(rx)}${foot}
+</svg>`);
+  const [host, guest] = await Promise.all([ringed(i.hostPhoto, R, ring), ringed(i.guestPhoto, R, ring)]);
+  const layers: OverlayOptions[] = [
+    { input: svg, left: 0, top: 0 },
+    { input: host, left: lx - R - ring, top: cy - R - ring },
+    { input: guest, left: rx - R - ring, top: cy - R - ring },
+  ];
+  if (i.logo) {
+    const m = await sharp(i.logo).metadata();
+    layers.push({ input: i.logo, left: w - (m.width ?? 146) - 40, top: h - (m.height ?? 176) - 26 });
+  }
+  return sharp(i.background).resize(w, h, { fit: "cover" }).composite(layers).png().toBuffer();
 }
 
 export async function renderGuestCard(i: GuestCardInput): Promise<Buffer> {
