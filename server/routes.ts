@@ -8501,7 +8501,7 @@ export function registerRoutes(app: Express): void {
     if ((req as any).studioHost || (req as any).eventAdmin) return res.status(403).json({ message: "Admins only." });
     const recordingId = Number(req.body?.recordingId);
     if (!Number.isInteger(recordingId) || recordingId <= 0) return res.status(400).json({ message: "recordingId?" });
-    try { res.json(await useRecordingForDraft(Number(req.params.id), recordingId)); }
+    try { res.json(await useRecordingForDraft(Number(req.params.id), recordingId, { keepBookends: req.body?.keepBookends === true })); }
     catch (err) { res.status((err as { status?: number }).status ?? 500).json({ message: (err as Error).message }); }
   });
 

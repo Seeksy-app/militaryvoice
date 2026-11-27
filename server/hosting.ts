@@ -1049,7 +1049,7 @@ export async function showEpisodesBySlug(slug: string) {
  * video. Its audio is made again from it by the worker, as for any episode from the Library; nothing is published, and the
  * recording it had is kept (swap back with its id). Refuses a published episode, or a recording that isn't theirs or ready.
  */
-export async function useRecordingForDraft(id: number, recordingId: number): Promise<{ episodeId: number; from: number | null; to: number; durationSec: number }> {
+export async function useRecordingForDraft(id: number, recordingId: number, opts: { keepBookends?: boolean } = {}): Promise<{ episodeId: number; from: number | null; to: number; durationSec: number }> {
   const fail = (status: number, message: string) => Object.assign(new Error(message), { status });
   const [e] = await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.id, id)).limit(1);
   if (!e) throw fail(404, "No such episode.");
@@ -1061,6 +1061,8 @@ export async function useRecordingForDraft(id: number, recordingId: number): Pro
   await db.update(hostedEpisodes).set({
     recordingId: rec.id, audioKey: "", audioUrl: "", mime: "audio/mpeg", sizeBytes: 0, durationSec: Math.round(rec.durationSec || 0),
     audioJob: "queued", audioJobAt: now(), servedSpots: "", bookendJob: "", bookendJobAt: "",
+    // A newer edit comes with its intro and outro in it already: the show's own aren't added on top (PM, 27 Nov).
+    ...(opts.keepBookends ? {} : { bookends: "off" }),
   }).where(eq(hostedEpisodes.id, e.id));
   // Ask my show learns it again from the new audio.
   await db.delete(showTranscripts).where(and(eq(showTranscripts.email, show.email), eq(showTranscripts.episodeKey, `hosted:${e.id}`))).catch(() => undefined);
