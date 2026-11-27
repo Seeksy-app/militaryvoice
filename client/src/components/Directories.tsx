@@ -19,7 +19,7 @@ import type { SocialPlatform } from "@shared/schema";
  */
 
 type Dir = { id: number; slug: string; name: string; description: string; kind: "all" | "verified" | "manual"; public: boolean; count: number; publicCount: number; faces: string[] };
-type Member = { profileId: number; name: string; show: string; photoUrl: string; branch: string; serviceStatus: string; platforms: { platform: string; followers: number | null }[]; followers: number | null; public: boolean; featured: boolean };
+type Member = { profileId: number; name: string; show: string; photoUrl: string; branch: string; serviceStatus: string; platforms: { platform: string; followers: number | null }[]; followers: number | null; public: boolean; featured: boolean; selfHidden?: boolean };
 type Opened = { directory: Omit<Dir, "count" | "publicCount" | "faces">; members: Member[] };
 type Audience = { key: string; label: string; count: number };
 
@@ -286,13 +286,13 @@ function OneDirectory({ slug, onBack }: { slug: string; onBack: () => void }) {
                     <Face url={m.photoUrl} />
                     <div className="min-w-0">
                       <p className="truncate text-sm font-semibold">{m.name}</p>
-                      <p className="truncate text-xs text-muted-foreground">{m.show || "No show yet"}<span className="md:hidden">{m.branch ? ` · ${m.branch}` : ""}</span></p>
+                      <p className="truncate text-xs text-muted-foreground">{!all && m.selfHidden ? "Hidden by them · " : ""}{m.show || "No show yet"}<span className="md:hidden">{m.branch ? ` · ${m.branch}` : ""}</span></p>
                     </div>
                   </div>
                   {/* Phone: the star and switch sit on the right of the name. */}
                   <div className="flex items-center gap-3 md:hidden">
                     <StarButton on={m.featured} onClick={() => set.mutate({ profileId: m.profileId, featured: !m.featured })} />
-                    <Switch checked={m.public} onCheckedChange={(v) => set.mutate({ profileId: m.profileId, public: v })} className={navySwitch} aria-label={`Public: ${m.name}`} />
+                    <Switch checked={m.public} disabled={!all && !!m.selfHidden} title={!all && m.selfHidden ? "They've hidden themselves from directories on their Profile" : undefined} onCheckedChange={(v) => set.mutate({ profileId: m.profileId, public: v })} className={navySwitch} aria-label={`Public: ${m.name}`} />
                   </div>
                   <div className="col-span-2 flex min-w-0 flex-wrap items-center gap-x-2.5 gap-y-1 pl-[44px] text-xs text-muted-foreground md:col-span-1 md:pl-0">
                     {m.platforms.map((p) => { const k = asPlat(p.platform); return k ? <span key={p.platform} className="inline-flex items-center gap-1 whitespace-nowrap" title={platformLabel(k)}><PlatformIcon platform={k} className="h-3.5 w-3.5" />{formatFollowers(p.followers ?? undefined) ?? ""}</span> : null; })}
@@ -304,7 +304,7 @@ function OneDirectory({ slug, onBack }: { slug: string; onBack: () => void }) {
                     {m.serviceStatus && <span className="whitespace-nowrap rounded-full border border-border px-2 py-0.5 text-[11.5px] font-semibold text-muted-foreground">{m.serviceStatus}</span>}
                   </div>
                   <span className="hidden text-right text-sm font-semibold tabular-nums md:block">{m.followers ? formatFollowers(m.followers) : "—"}</span>
-                  <span className="hidden md:block"><Switch checked={m.public} onCheckedChange={(v) => set.mutate({ profileId: m.profileId, public: v })} className={navySwitch} aria-label={`Public: ${m.name}`} /></span>
+                  <span className="hidden md:block"><Switch checked={m.public} disabled={!all && !!m.selfHidden} title={!all && m.selfHidden ? "They've hidden themselves from directories on their Profile" : undefined} onCheckedChange={(v) => set.mutate({ profileId: m.profileId, public: v })} className={navySwitch} aria-label={`Public: ${m.name}`} /></span>
                   <span className="hidden md:block"><StarButton on={m.featured} onClick={() => set.mutate({ profileId: m.profileId, featured: !m.featured })} /></span>
                   <span className="hidden justify-end md:flex">
                     {manual && <button type="button" title="Take out of this directory" onClick={() => remove.mutate(m.profileId)} className="rounded-full p-1.5 text-muted-foreground hover:bg-muted hover:text-foreground"><Trash2 className="h-4 w-4" /></button>}

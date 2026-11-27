@@ -57,6 +57,8 @@ async function verifiedEmails(): Promise<Set<string>> {
 type Member = {
   profileId: number; name: string; show: string; photoUrl: string; branch: string; serviceStatus: string;
   platforms: { platform: string; followers: number | null }[]; followers: number | null; public: boolean; featured: boolean;
+  /** They switched themselves off (Profile → Show me in the Member Directory): on no public page, whatever we set. */
+  selfHidden: boolean;
 };
 
 function platformsOf(p: Profile): Member["platforms"] {
@@ -95,7 +97,8 @@ async function membersOf(d: Dir): Promise<Member[]> {
       photoUrl: photoOf(p), branch: NO_BRANCH.has(p.branch.trim().toLowerCase()) ? "" : p.branch.trim(), serviceStatus: NO_BRANCH.has(p.serviceStatus.trim().toLowerCase()) ? "" : p.serviceStatus.trim(),
       platforms: plats, followers: total || null,
       // All subscribers: the member's own directory setting and the directory pin. Everywhere else: our row, public by default.
-      public: d.kind === "all" ? !p.directoryHidden : (f?.public ?? true),
+      public: d.kind === "all" ? !p.directoryHidden : !p.directoryHidden && (f?.public ?? true),
+      selfHidden: !!p.directoryHidden,
       featured: d.kind === "all" ? p.directoryOrder < 1000 : (f?.featured ?? false),
     };
   }).sort((a, b) => Number(b.featured) - Number(a.featured) || (b.followers ?? 0) - (a.followers ?? 0) || a.name.localeCompare(b.name));
@@ -231,7 +234,8 @@ export function registerDirectories(app: Express, requireAdmin: RequestHandler) 
     const d = await dirBySlug(String(req.params.slug));
     if (!d || !d.public || d.kind === "all") return res.status(404).json({ message: "No such directory." });
     res.setHeader("Cache-Control", "public, max-age=60");
-    const m = (await membersOf(d)).filter((x) => x.public && x.photoUrl);
+    // Never anyone who switched themselves off, nor house or test seats (candidates() leaves those out already).
+    const m = (await membersOf(d)).filter((x) => x.public && !x.selfHidden && x.photoUrl);
     const byId = new Map((await storage.listAllProfiles()).map((p) => [p.id, p]));
     res.json({
       name: d.name, description: d.description,
