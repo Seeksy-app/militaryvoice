@@ -50,7 +50,7 @@ export function SponsorDialog({
   children,
   eyebrow = "Become a sponsor",
   title = "Put your brand in front of the whole 26.2.",
-  description = "Sponsor logos run in the “Friends of the Marathon” strip on every page and get read on air between shows. Tell us a little about you and we'll send the packages.",
+  description = "Sponsor logos run in the sponsor strip on every page and get read on air between shows. Tell us a little about you and we'll send the packages.",
   sentTitle = "Thanks — we'll be in touch",
   sentDescription = "The team gets your note by email right away.",
   footNote = "We'll reply by email. No list, no spam.",

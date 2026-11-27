@@ -626,7 +626,8 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
         </button>
         <div className="min-w-0">
           <p className="truncate text-[15px] font-bold tracking-tight">{roomName}</p>
-          <p className="hidden truncate text-xs text-[#667085] sm:block">{today()} · {owner ? "Your studio" : "You're a guest"}</p>
+          {/* Which show a recording goes to, before Record is pressed (Andrew, 27 Nov: "yes"). From the studio, never typed in. */}
+          <p className="hidden truncate text-xs text-[#667085] sm:block" data-testid="my-studio-for">{today()} · {owner ? (studio?.showTitle ? `Recording for ${studio.showTitle}` : "Your studio") : "You're a guest"}</p>
         </div>
         {owner && studio && (
           // Two starts, one way per job (Andrew, 22 Nov: "you want to go live, or you want just to record, record and go
