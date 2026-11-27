@@ -166,11 +166,13 @@ function ActivityRow({ a }: { a: ActivityEntry }) {
   const d = new Date(a.at);
   const t = d.toDateString() === new Date().toDateString() ? d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
   const said = whatSays(a.what, a.subjectType);
-  const what = !alex && a.actor !== "script" ? said.charAt(0).toLowerCase() + said.slice(1) : said;
+  // The server's plain-words line names what it was about ("Panel: Building a second career"); it follows the verb.
+  const verb = !alex && a.actor !== "script" ? said.charAt(0).toLowerCase() + said.slice(1) : said;
+  const what = a.summary?.trim() ? `${verb} · ${a.summary.trim()}` : verb;
   return (
     <div className="flex items-center gap-2.5 border-b py-1.5 text-[13.5px] last:border-b-0" style={{ borderColor: C.line }}>
       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold" style={{ background: bg, color: "#0b2447" }} aria-label={alex ? "Alex" : undefined}>{letter}</span>
-      <span className="min-w-0 flex-1 truncate" title={`${a.who}: ${said}`}>{who}{what}</span>
+      <span className="min-w-0 flex-1 truncate" title={`${a.who}: ${what}`}>{who}{what}</span>
       <span className="shrink-0 text-[12.5px] tabular-nums" style={{ color: C.muted }}>{t}</span>
     </div>
   );
