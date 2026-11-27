@@ -141,7 +141,7 @@ Already an episode? The menu says which show it's in. With more than one show, M
 Post it sends the whole video to YouTube. Other apps get its clips (see below).
 Move to folder, or make a New folder….
 Delete, for uploads, Zoom imports and Pōstify's copies.
-A whole recording goes to YouTube only. For Instagram, TikTok, Facebook and LinkedIn, post its clips: short videos do better there, and Instagram only takes videos up to 15 minutes.
+A whole recording goes to YouTube only. For Instagram, TikTok, Facebook, LinkedIn, X and Threads, post its clips: short videos do better there, and Instagram only takes videos up to 15 minutes.
 5 Scheduled or Posted
 On the Clips tab, each clip shows where it stands:
 Scheduled (navy): waiting in your queue to go out.
@@ -224,8 +224,8 @@ Under Captions, drag Size to make the words bigger or smaller, and pick Where th
 Your clip's music stays when it's remade after a trim, new text or new captions.
 The same menu has downloads for each shape, Download subtitles (.srt), Copy the caption and Delete this clip.
 9 Posting
-Clips go anywhere: Instagram, TikTok, Facebook, LinkedIn, YouTube. Press Post on a clip, tick the accounts, pick the shape, write what to say, and choose Next open slot, Now or Pick a time.
-A whole episode goes to YouTube only. Instagram takes videos up to 15 minutes, and short videos do better on the other apps. So for Instagram, TikTok, Facebook and LinkedIn, post the episode's clips: Choose clips to post → takes you to them.
+Clips go anywhere: YouTube, Instagram, TikTok, Facebook, LinkedIn, X and Threads. Press Post on a clip, tick the accounts, pick the shape, write what to say, and choose Next open slot, Now or Pick a time.
+A whole episode goes to YouTube only. Instagram takes videos up to 15 minutes, and short videos do better on the other apps. So for Instagram, TikTok, Facebook, LinkedIn, X and Threads, post the episode's clips: Choose clips to post → takes you to them.
 Nothing goes out until you press the button. Everything you've sent or scheduled is on the Social calendar.
 Your podcast can post episodes to YouTube too. See your episodes on YouTube.
 10 Help and contact
@@ -420,7 +420,7 @@ No downloading the file, finding it, and uploading it again.
 Clips you'd pay an editor for
 Short vertical clips with captions, from every call.
 More people hear you
-The same talk on your podcast, YouTube, Instagram, TikTok, Facebook and LinkedIn.
+The same talk on your podcast, YouTube, Instagram, TikTok, Facebook, LinkedIn, X and Threads.
 2 Connect once
 In your dashboard, open Integrations and press Connect Zoom on the Zoom card. Zoom asks you to approve; press Allow and you're back with the card saying Connected as and your Zoom email.
 Zoom
@@ -468,7 +468,7 @@ Back to the usual
 Edit text and captions: a bigger size, and the captions moved to the top. On a clip, press ⋯ and choose Edit text and captions. Make them bigger or smaller with Size, and under Where they sit pick Top, Middle, Lower third or Bottom, or slide them exactly where you want. Back to the usual puts them back.
 6 Out to your podcast and social
 Your podcast: press ⋯ on the episode and choose Add as an episode. It goes to Apple Podcasts, Spotify and the rest through your feed.
-Social: press Post on a clip, tick your accounts (Instagram, TikTok, Facebook, LinkedIn, YouTube), and choose Now, Next open slot or Pick a time. Everything you've scheduled is on the Social calendar.
+Social: press Post on a clip, tick your accounts (YouTube, Instagram, TikTok, Facebook, LinkedIn, X, Threads), and choose Now, Next open slot or Pick a time. Everything you've scheduled is on the Social calendar.
 Nothing goes out until you press the button.
 7 Your Zoom stays yours
 We only read your cloud recordings. We never change, move or delete anything in Zoom.
@@ -610,7 +610,7 @@ Pro, $49 a month: 90 credits a month, 6 clips an episode.
 Both take the MilitaryVoices.ai bar off your SmartLink.
 a Open the account menu and press Plan & billing.
 b Press Upgrade to Scale or Upgrade to Pro. Checkout is secure, by Stripe.
-Paying yearly gets two months free: choose Yearly in Pōstify's Pick a plan window. Cancel any time.
+Scale paid yearly gets two months free: choose Yearly in Pōstify's Pick a plan window. Pro is paid every three months ($147). Cancel any time.
 3 Credits
 Credits pay for clips, clean episodes, and contact emails past your monthly ones. Credits you buy don't run out.
 An episode in Pōstify: 8 credits (12 on Pro) for every clip in all three shapes with animated captions, and the clean episode. Classic captions: 5 (7 on Pro).
