@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { TIP_TEXT, useLookCheck } from "@/components/room/lookCheck";
+import { TIP_TEXT, useLookCheck, type LookTip } from "@/components/room/lookCheck";
+import { BLUR_SLOW, BLUR_UNSUPPORTED, readBlur, saveBlur, useBlur, type BlurState } from "@/components/room/blur";
 import { PRACTICE_NAME, practice, usePractice } from "@/components/room/practiceGuest";
 import { startScreenShare } from "@/components/room/screenShare";
 import { BrandMark } from "@/components/BrandMark";
@@ -9,7 +10,7 @@ import {
   useLocalParticipant, useMediaDeviceSelect, useParticipantAttribute, useParticipants, useRoomContext, useRoomInfo, useSpeakingParticipants, useTracks,
   type TrackReferenceOrPlaceholder,
 } from "@livekit/components-react";
-import { ConnectionState, DisconnectReason, Track, type Participant } from "livekit-client";
+import { ConnectionState, DisconnectReason, LocalVideoTrack, Track, type Participant } from "livekit-client";
 import {
   ArrowLeft, Check, Circle, Clapperboard, Copy, ExternalLink, Image as ImageIcon, Loader2, LogOut, MessageSquare, Mic, MicOff, MonitorUp, MoreHorizontal, NotebookPen, Presentation,
   ChevronLeft, ChevronRight, LayoutDashboard, Lightbulb, Music, Type, Palette, Pause, Play, Plus, RotateCcw, Settings, Square, UserPlus, UserRound, Users, Video, VideoOff, X, } from "lucide-react";
@@ -211,12 +212,18 @@ function SetupScreen({ owner, roomName, blocked, defaultName, onEnter }: { owner
   const [busy, setBusy] = useState(false);
   const video = useRef<HTMLVideoElement>(null);
   const stream = useRef<MediaStream | null>(null);
+  // The preview's camera as a LiveKit track, so the same background blur as in the studio can run on it.
+  const [preview, setPreview] = useState<LocalVideoTrack | null>(null);
+  const [blur, setBlurState] = useState(readBlur);
+  const setBlur = (on: boolean) => { setBlurState(on); saveBlur(on); };
+  const blurState = useBlur(preview, blur, () => setBlur(false));
   useEffect(() => { if (defaultName && !name) setName(defaultName); }, [defaultName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The preview: their camera and mic, with a live level so they can see the mic works.
   useEffect(() => {
     let stop = false, raf = 0;
     let ctx: AudioContext | null = null;
+    let cam0: LocalVideoTrack | null = null;
     setLevel(0);
     if (!mic && !cam) { stream.current = null; return; }
     navigator.mediaDevices?.getUserMedia({ video: cam ? (camId ? { deviceId: { exact: camId } } : true) : false, audio: mic ? (micId ? { deviceId: { exact: micId } } : true) : false })
@@ -224,7 +231,12 @@ function SetupScreen({ owner, roomName, blocked, defaultName, onEnter }: { owner
         if (stop) { s.getTracks().forEach((t) => t.stop()); return; }
         stream.current = s;
         setProblem("");
-        if (video.current) video.current.srcObject = s;
+        const vt = s.getVideoTracks()[0];
+        if (vt) {
+          cam0 = new LocalVideoTrack(vt, undefined, true);
+          if (video.current) cam0.attach(video.current);
+          setPreview(cam0);
+        }
         setDevices(await navigator.mediaDevices.enumerateDevices());
         if (mic && s.getAudioTracks().length) {
           ctx = new AudioContext();
@@ -247,7 +259,13 @@ function SetupScreen({ owner, roomName, blocked, defaultName, onEnter }: { owner
       .catch((e: Error) => {
         setProblem(e.name === "NotAllowedError" ? "Allow your camera and microphone for this site (the icon in the address bar), then reload." : e.name === "NotFoundError" ? "We can't find a camera or mic. Plug one in, or go in with them off." : "Your camera or mic is busy in another app. Close it there, then reload.");
       });
-    return () => { stop = true; cancelAnimationFrame(raf); void ctx?.close(); stream.current?.getTracks().forEach((t) => t.stop()); stream.current = null; };
+    return () => {
+      stop = true; cancelAnimationFrame(raf); void ctx?.close();
+      const t = cam0;
+      setPreview(null);
+      if (t) void t.stopProcessor().catch(() => {}).finally(() => t.detach());
+      stream.current?.getTracks().forEach((x) => x.stop()); stream.current = null;
+    };
   }, [mic, cam, micId, camId]);
 
   const cams = devices.filter((d) => d.kind === "videoinput" && d.deviceId);
@@ -260,9 +278,12 @@ function SetupScreen({ owner, roomName, blocked, defaultName, onEnter }: { owner
     catch (e) { setError((e as { status?: number }).status === 401 ? "Sign in to open your studio." : say(e)); setBusy(false); }
   };
   const select = "h-10 rounded-lg border border-[#d0d5dd] bg-white pl-3 text-[13px] text-[#344054]";
-  // Look your best (Andrew, 24 Nov): tips about the picture, worked out in the browser. Never blocks going in.
-  const look = useLookCheck(video, cam && !problem);
-  const framed = look.status === "ok" && !look.tips.length;
+  // Look your best (Andrew, 24 Nov; 27 Nov: a 3-second scan, then one honest tip). Worked out in the browser, and it
+  // never blocks going in. It scans again for a new camera.
+  const look = useLookCheck(video, cam && !problem && !!preview, camId ?? "");
+  const scanning = look.status === "scanning";
+  // The guide's lines turn green once the head sits right (headroom and eye height), whatever else there is to say.
+  const framed = look.status === "ok" && !FRAMING_TIPS.includes(look.tip as LookTip);
 
   return (
     <div className="min-h-screen bg-[#f3f4f7] text-[#101828]" data-testid="my-studio-setup" style={{ fontFamily: INTER }}>
@@ -280,16 +301,18 @@ function SetupScreen({ owner, roomName, blocked, defaultName, onEnter }: { owner
           <section className="w-full rounded-2xl bg-white p-4 shadow-[0_8px_24px_rgba(16,24,40,0.08)] lg:w-[680px] lg:shrink-0">
             <div className="relative aspect-video overflow-hidden rounded-xl bg-[#0b1f4a]">
               <video ref={video} autoPlay muted playsInline className={`h-full w-full -scale-x-100 object-cover ${cam && !problem ? "" : "invisible"}`} />
-              {/* A faint framing guide: eyes about a third of the way down, a little room above the head. Fades once they're framed well. */}
-              {cam && !problem && (
-                // Andrew, 24 Nov: stronger lines that show on a light wall and a dark room alike (a soft dark shadow under each).
-                <div aria-hidden className={`pointer-events-none absolute inset-0 transition-opacity duration-500 ${framed ? "opacity-60" : "opacity-100"}`} data-testid="framing-guide">
-                  <div className="absolute inset-x-0 top-[9%] border-t-2 border-white/80 [filter:drop-shadow(0_1px_1.5px_rgba(0,0,0,0.55))]" />
-                  <span className="absolute left-4 top-[calc(9%+6px)] text-[13px] font-semibold text-white/95 [text-shadow:0_1px_3px_rgba(0,0,0,0.85),0_0_8px_rgba(0,0,0,0.45)]">A little room above your head</span>
-                  <div className="absolute inset-x-0 top-[33%] border-t-2 border-dashed border-white/90 [filter:drop-shadow(0_1px_1.5px_rgba(0,0,0,0.55))]" />
-                  <span className="absolute right-4 top-[calc(33%-24px)] text-[13px] font-semibold text-white/95 [text-shadow:0_1px_3px_rgba(0,0,0,0.85),0_0_8px_rgba(0,0,0,0.45)]">Eyes about here</span>
+              {/* A faint framing guide: eyes about a third of the way down, a little room above the head. Hidden while the
+                  scan runs; the lines turn green once the head sits right. Andrew, 24 Nov: lines that show on a light wall
+                  and a dark room alike (a soft dark shadow under each). */}
+              {cam && !problem && !scanning && (
+                <div aria-hidden className={`pointer-events-none absolute inset-0 transition-opacity duration-500 ${framed ? "opacity-70" : "opacity-100"}`} data-testid="framing-guide" data-framed={framed ? "1" : "0"}>
+                  <div className={`absolute inset-x-0 top-[7%] border-t-2 transition-colors [filter:drop-shadow(0_1px_1.5px_rgba(0,0,0,0.55))] ${framed ? "border-[#6ce9a6]" : "border-white/80"}`} />
+                  <span className="absolute left-4 top-[calc(7%+6px)] text-[11px] font-semibold sm:text-[13px] text-white/95 [text-shadow:0_1px_3px_rgba(0,0,0,0.85),0_0_8px_rgba(0,0,0,0.45)]">A little room above your head</span>
+                  <div className={`absolute inset-x-0 top-[33%] border-t-2 border-dashed transition-colors [filter:drop-shadow(0_1px_1.5px_rgba(0,0,0,0.55))] ${framed ? "border-[#6ce9a6]" : "border-white/90"}`} />
+                  <span className="absolute right-4 top-[calc(33%+6px)] text-[11px] font-semibold sm:top-[calc(33%-24px)] sm:text-[13px] text-white/95 [text-shadow:0_1px_3px_rgba(0,0,0,0.85),0_0_8px_rgba(0,0,0,0.45)]">Eyes about here</span>
                 </div>
               )}
+              {cam && !problem && scanning && <ScanSweep />}
               {(!cam || problem) && (
                 <div className="absolute inset-0 flex items-center justify-center">
                   <div className="flex h-28 w-28 items-center justify-center rounded-full bg-[#3a4f80] text-4xl font-bold text-white">{initials(name || "You")}</div>
@@ -310,22 +333,22 @@ function SetupScreen({ owner, roomName, blocked, defaultName, onEnter }: { owner
                 : heard ? <span className="flex items-center gap-1 rounded-full bg-[#d1fadf] px-3 py-1 text-[13px] font-semibold text-[#067647]" data-testid="mic-working"><Check className="h-3.5 w-3.5" /> Mic is working</span>
                   : <span className="rounded-full bg-[#f2f4f7] px-3 py-1 text-[13px] font-semibold text-[#475467]">Say something to test it</span>}
             </div>
-            {(cams.length > 1 || mics.length > 1) && (
-              <div className="mt-3 flex flex-col gap-2 px-1 sm:flex-row">
-                {cams.length > 1 && <Select wrap="flex-1" aria-label="Camera" className={select} value={camId ?? ""} onChange={(e) => setCamId(e.target.value || undefined)}><option value="">Camera: default</option>{cams.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Camera"}</option>)}</Select>}
-                {mics.length > 1 && <Select wrap="flex-1" aria-label="Microphone" className={select} value={micId ?? ""} onChange={(e) => setMicId(e.target.value || undefined)}><option value="">Mic: default</option>{mics.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Microphone"}</option>)}</Select>}
-              </div>
-            )}
+            {(cams.length > 1 || mics.length > 1 || (cam && !problem)) && <div className="mt-3 flex flex-col gap-2 px-1 sm:flex-row sm:items-center">
+              {cams.length > 1 && <Select wrap="flex-1 min-w-0" aria-label="Camera" className={select} value={camId ?? ""} onChange={(e) => setCamId(e.target.value || undefined)}><option value="">Camera: default</option>{cams.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Camera"}</option>)}</Select>}
+              {mics.length > 1 && <Select wrap="flex-1 min-w-0" aria-label="Microphone" className={select} value={micId ?? ""} onChange={(e) => setMicId(e.target.value || undefined)}><option value="">Mic: default</option>{mics.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Microphone"}</option>)}</Select>}
+              {cam && !problem && <BlurSwitch on={blur} state={blurState} onChange={setBlur} compact />}
+            </div>}
+            <BlurNote state={blurState} />
             {problem && <p className="mt-3 px-1 text-sm font-medium text-[#b42318]">{problem}</p>}
-            {look.status === "ok" && (look.tips.length ? (
-              <div className="mt-3 rounded-xl border border-[#fedf89] bg-[#fffaeb] px-3.5 py-3" data-testid="look-tips">
-                <p className="text-[13px] font-bold text-[#93370d]">Look your best</p>
-                <ul className="mt-1.5 space-y-1">{look.tips.map((k) => <li key={k} className="text-sm text-[#344054]">{TIP_TEXT[k]}</li>)}</ul>
+            {look.status === "ok" && (look.tip ? (
+              <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-[#fedf89] bg-[#fffaeb] px-3.5 py-3" data-testid="look-tip" data-tip={look.tip}>
+                <span className="mt-px flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-[#f79009] text-[13px] font-bold text-white">!</span>
+                <p className="text-balance text-sm font-semibold text-[#93370d]">{TIP_TEXT[look.tip]}</p>
               </div>
             ) : (
               <div className="mt-3 flex items-center gap-2.5 rounded-xl border border-[#abefc6] bg-[#ecfdf3] px-3.5 py-3" data-testid="look-great">
                 <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-[#12b76a] text-white"><Check className="h-3.5 w-3.5" /></span>
-                <p className="text-sm font-semibold text-[#067647]">You look great. Good light, good framing.</p>
+                <p className="text-balance text-sm font-semibold text-[#067647]">You look great. Good light, good framing.</p>
               </div>
             ))}
           </section>
@@ -341,13 +364,51 @@ function SetupScreen({ owner, roomName, blocked, defaultName, onEnter }: { owner
             <button type="button" onClick={() => void enter()} disabled={busy} className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-xl text-[16px] font-bold text-white shadow-[0_4px_12px_rgba(5,56,119,0.28)] disabled:opacity-70" style={{ background: NAVY }} data-testid="studio-enter">
               {busy && <Loader2 className="h-4 w-4 animate-spin" />}{owner ? "Enter studio" : "Join"}
             </button>
-            {look.status === "ok" && look.tips.length > 0 && <p className="mt-2 text-center text-[13px] text-[#667085]">The tips are only suggestions. You can go in any time.</p>}
+            {look.status === "ok" && look.tip && <p className="mt-2 text-center text-[13px] text-[#667085]">The tip is only a suggestion. You can go in any time.</p>}
             {error && <p className="mt-3 text-sm font-medium text-[#b42318]">{error}</p>}
           </section>
         </main>
       )}
     </div>
   );
+}
+
+/** The tips that are about where the head sits; the others (light, moving sideways) leave the guide's lines green. */
+const FRAMING_TIPS: LookTip[] = ["face", "back", "closer", "top", "raise"];
+
+/** The scan (Andrew, 27 Nov): a soft line sweeping over the picture while it's checked, about three seconds. */
+function ScanSweep() {
+  return (
+    <div aria-live="polite" className="pointer-events-none absolute inset-0" data-testid="look-scan">
+      <style>{"@keyframes mv-scan{from{top:-24%}to{top:100%}}.mv-scan-band{animation:mv-scan 1.5s cubic-bezier(.45,0,.55,1) infinite alternate}@media (prefers-reduced-motion:reduce){.mv-scan-band{display:none}}"}</style>
+      <div className="absolute inset-0 bg-[rgba(5,24,64,0.18)]" />
+      <div className="mv-scan-band absolute inset-x-0 h-[24%] bg-gradient-to-b from-transparent to-[rgba(125,211,252,0.32)]">
+        <div className="absolute inset-x-0 bottom-0 h-[2px] bg-[#bae6fd] shadow-[0_0_12px_3px_rgba(125,211,252,0.65)]" />
+      </div>
+      <div className="absolute left-1/2 top-4 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full bg-[rgba(5,18,48,0.78)] px-3 py-1.5 text-[13px] font-semibold text-white">
+        <Loader2 className="h-3.5 w-3.5 animate-spin" /> Checking your picture…
+      </div>
+    </div>
+  );
+}
+
+/** Blur my background (Andrew, 27 Nov), on the camera check and in the studio's Settings. Kept on this computer. */
+function BlurSwitch({ on, state, onChange, compact }: { on: boolean; state: BlurState; onChange: (on: boolean) => void; compact?: boolean }) {
+  return (
+    <label className={`flex shrink-0 cursor-pointer select-none items-center justify-between gap-3 ${compact ? "h-10 rounded-lg border border-[#d0d5dd] bg-white px-3" : "h-11 rounded-xl border border-[#d0d5dd] px-3.5"}`} data-testid="blur-switch">
+      <span className="flex items-center gap-2 text-[13px] font-semibold text-[#344054]">
+        {state === "starting" && on ? <Loader2 className="h-3.5 w-3.5 animate-spin text-[#667085]" /> : null}Blur my background
+      </span>
+      <button type="button" role="switch" aria-checked={on} onClick={() => onChange(!on)} className={`relative h-5 w-9 shrink-0 rounded-full transition-colors ${on ? "bg-[#053877]" : "bg-[#d0d5dd]"}`}>
+        <span className={`absolute top-0.5 h-4 w-4 rounded-full bg-white shadow-sm transition-all ${on ? "left-[18px]" : "left-0.5"}`} />
+      </button>
+    </label>
+  );
+}
+
+function BlurNote({ state }: { state: BlurState }) {
+  if (state !== "slow" && state !== "unsupported") return null;
+  return <p className="mt-2 px-1 text-[13px] text-[#667085]" data-testid="blur-note">{state === "slow" ? BLUR_SLOW : BLUR_UNSUPPORTED}</p>;
 }
 
 function PreviewToggle({ on, onClick, label, children }: { on: boolean; onClick: () => void; label: string; children: ReactNode }) {
@@ -390,8 +451,15 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
   const qc = useQueryClient();
   const room = useRoomContext();
   const state = useConnectionState();
-  const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } = useLocalParticipant();
+  const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled, cameraTrack } = useLocalParticipant();
   const now = useNow();
+  // Blur my background (27 Nov): set on the camera check, changed in Settings, and run on the camera as it's sent.
+  const [blurOn, setBlurOnState] = useState(readBlur);
+  const setBlurOn = (on: boolean) => { setBlurOnState(on); saveBlur(on); };
+  const blurState = useBlur(cameraTrack?.track instanceof LocalVideoTrack ? cameraTrack.track : null, blurOn, () => {
+    setBlurOn(false);
+    toast({ title: BLUR_SLOW });
+  });
   const [picked, setPicked] = useState<Tab | null>(null);
   const noteKey = owner ? String(studio?.id ?? "mine") : roomName;
   const [notes, setNotes, notesSync] = useStudioNotes(noteKey, owner && !!studio?.id);
@@ -664,7 +732,7 @@ function StudioFrame({ owner, roomName, studio, title, meKey }: { owner: boolean
       {sheet && owner && studio && <GoLiveSheet studio={studio} onClose={() => setSheet(false)} onAdd={() => { setSheet(false); setAddDest(true); }} />}
       {addDest && owner && studio && <AddDestinationSheet studio={studio} onClose={() => setAddDest(false)} />}
       {askPractice && <PracticeAsk what={askPractice} onCancel={() => setAskPractice(null)} onGo={() => { const what = askPractice; setAskPractice(null); practice.set(false); if (what === "record") void record(true); else goLive(); }} />}
-      {settings && <SettingsSheet onClose={() => setSettings(false)} />}
+      {settings && <SettingsSheet onClose={() => setSettings(false)} blur={<><BlurSwitch on={blurOn} state={blurState} onChange={setBlurOn} /><BlurNote state={blurState} /></>} />}
       {leaving && <LeaveDialog live={!!live} onEnd={() => void endAndLeave()} onKeep={() => { setLeaving(false); void go(); }} onCancel={() => { exitTo.current = null; setLeaving(false); }} />}
     </div>
   );
@@ -1569,13 +1637,14 @@ function GoLiveSheet({ studio, onClose, onAdd }: { studio: Studio; onClose: () =
   );
 }
 
-function SettingsSheet({ onClose }: { onClose: () => void }) {
+function SettingsSheet({ onClose, blur }: { onClose: () => void; blur: ReactNode }) {
   return (
     <Sheet onClose={onClose} width={480} testId="studio-settings">
       <h2 className="text-[22px] font-bold tracking-tight">Settings</h2>
       <p className="mt-1 text-[15px] text-[#475467]">Pick the camera, mic and speakers this computer uses.</p>
       <div className="mt-5 space-y-4">
         <DevicePick kind="videoinput" label="Camera" />
+        <div>{blur}</div>
         <DevicePick kind="audioinput" label="Microphone" />
         <DevicePick kind="audiooutput" label="Speakers" />
       </div>

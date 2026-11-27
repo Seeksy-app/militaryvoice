@@ -1,7 +1,7 @@
-// "Look your best" on the studio entry screen (Andrew, 24 Nov, from the mockup): up to three plain tips about the
-// camera picture, worked out in the browser (nothing is sent anywhere), and "You look great" when none apply. Only
-// a suggestion: it never stops anyone going in. Face detection is MediaPipe's short-range face detector, loaded
-// only here; if it can't load, the entry screen just shows the framing guide.
+// "Look your best" on the studio entry screen (Andrew, 24 Nov, from the mockup; honest framing 27 Nov). It works in the
+// browser and sends nothing anywhere. A short scan runs first. Then it gives one plain tip at a time, or "You look great"
+// when none apply. It's only a suggestion and never stops anyone going in. Face detection is MediaPipe's short-range face
+// detector, loaded only here. If that can't load, the entry screen just shows the framing guide.
 import { useEffect, useRef, useState } from "react";
 import type { FaceDetector } from "@mediapipe/tasks-vision";
 
@@ -9,15 +9,25 @@ const VERSION = "1.1.1"; // keep in step with package.json
 const WASM = `https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@${VERSION}/wasm`;
 const MODEL = "https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite";
 
-export type LookTip = "raise" | "lower" | "light" | "closer" | "face";
+/** In the order they're given: only the first that applies shows. */
+export type LookTip = "face" | "back" | "closer" | "top" | "raise" | "right" | "left" | "light";
 export const TIP_TEXT: Record<LookTip, string> = {
-  raise: "Raise your camera to eye level. You're low in the frame.",
-  lower: "Lower your camera a little. Your head is near the top.",
-  light: "A light in front of you would help. Your face is darker than the background.",
-  closer: "Move a little closer.",
   face: "Face the camera and move a little closer.",
+  back: "Sit back a little. That leaves room above your head.",
+  closer: "Move a little closer.",
+  top: "Tilt your camera up a little. Your head is near the top.",
+  raise: "Raise your camera to eye level. You're low in the frame.",
+  right: "Move a little to your right.",
+  left: "Move a little to your left.",
+  light: "A light in front of you would help. Your face is darker than the background.",
 };
-export type LookState = { status: "off" | "loading" | "noface" | "ok"; tips: LookTip[] };
+/** `scanning`: the scan is running. `ok`: `tip` is the one tip, or null when they look great. */
+export type LookState = { status: "off" | "scanning" | "ok"; tip: LookTip | null };
+
+/** How long the scan runs before the verdict shows (Andrew, 27 Nov: "a little scanning animation for 3 seconds"). */
+export const SCAN_MS = 3000;
+/** The longest the scan waits for the face detector to load before giving up quietly. */
+const SCAN_MAX_MS = 9000;
 
 let detector: Promise<FaceDetector> | null = null;
 export function loadDetector(): Promise<FaceDetector> {
@@ -48,66 +58,78 @@ function light(video: HTMLVideoElement, canvas: HTMLCanvasElement, box: { x: num
   return nin && nout ? { face: fin / nin, back: fout / nout } : null;
 }
 
-/** The tips for one look at the picture (positions are shares of the frame, 0 at the top). */
-// Tuned on test clips (24 Nov): a usual head-and-shoulders shot has the face box about a quarter of the frame's height;
-// a face under a sixth of it reads as far away. Backlit means the face well under the room's brightness, not a shade off.
-function tipsFor(eyeY: number, faceH: number, lum: { face: number; back: number } | null): LookTip[] {
-  const out: LookTip[] = [];
-  if (eyeY > 0.45) out.push("raise");
-  else if (eyeY < 0.2) out.push("lower");
-  if (lum && (lum.face < 60 || lum.face < lum.back * 0.6)) out.push("light");
-  if (faceH < 0.17) out.push("closer");
-  return out.slice(0, 3);
+/**
+ * Where the head sits, as shares of the frame (0 at the top). The detector's box runs from the brow to the chin, and the
+ * eyes sit about halfway down a head, so the top of the head is about as far above the eyes as the chin is below them.
+ * Calibrated on Andrew's own camera check (27 Nov): sitting close, his head came to three quarters of the frame's height,
+ * so no line could give him both headroom and eyes a third of the way down.
+ */
+export type Head = { top: number; eyes: number; chin: number; height: number; x: number };
+export function headFrom(eyeY: number, chinY: number, centerX: number): Head {
+  const half = Math.max(0, chinY - eyeY);
+  return { top: eyeY - half, eyes: eyeY, chin: chinY, height: 2 * half, x: centerX };
 }
 
-/** One look at the frame: the tips that apply now, or null when there's no face in it. */
-export function readLook(d: FaceDetector, v: HTMLVideoElement, canvas: HTMLCanvasElement): LookTip[] | null {
+/** The one tip for this picture (Andrew, 27 Nov: honest framing, one plain tip at a time), or null when it's good. */
+export function tipFor(h: Head, lum: { face: number; back: number } | null): LookTip | null {
+  if (h.height > 0.62) return "back"; // too close: no room above the head with the eyes in the top third
+  if (h.height < 0.3) return "closer";
+  if (h.top < 0.04) return "top";
+  if (h.eyes > 0.46) return "raise";
+  // The preview is a mirror, so the side they see themselves on is the side they're on.
+  if (h.x < 0.36) return "right";
+  if (h.x > 0.64) return "left";
+  if (lum && (lum.face < 60 || lum.face < lum.back * 0.6)) return "light";
+  return null;
+}
+
+/** One look at the frame: the tip that applies now ("face" when there's no face), and the head as the preview shows it. */
+export function readLook(d: FaceDetector, v: HTMLVideoElement, canvas: HTMLCanvasElement): { tip: LookTip | null; head: Head | null } {
   const f = d.detectForVideo(v, performance.now()).detections[0];
   const bb = f?.boundingBox;
-  if (!f || !bb) return null;
-  const eyes = f.keypoints.slice(0, 2);
-  const eyeY = eyes.length === 2 ? (eyes[0].y + eyes[1].y) / 2 : (bb.originY + bb.height * 0.4) / v.videoHeight;
+  if (!f || !bb) return { tip: "face", head: null };
   const box = { x: bb.originX / v.videoWidth, y: bb.originY / v.videoHeight, w: bb.width / v.videoWidth, h: bb.height / v.videoHeight };
-  return tipsFor(eyeY, box.h, light(v, canvas, box));
+  const eyes = f.keypoints.slice(0, 2);
+  const eyeY = eyes.length === 2 ? (eyes[0].y + eyes[1].y) / 2 : box.y + box.h * 0.27;
+  // Mirrored, like the preview.
+  const head = headFrom(eyeY, box.y + box.h, 1 - (box.x + box.w / 2));
+  return { tip: tipFor(head, light(v, canvas, box)), head };
 }
 
 /**
- * Checks the preview about once a second while `on`. A tip shows once it holds for two checks in a row and goes once
- * it's gone for two, so it doesn't flicker while they move.
+ * Scans the preview while `on`, again each time `scanKey` changes (a new camera), then checks it about once a second.
+ * A new tip shows once it holds for two checks in a row, so it doesn't flicker while they move.
  */
-export function useLookCheck(video: React.RefObject<HTMLVideoElement | null>, on: boolean): LookState {
-  const [state, setState] = useState<LookState>({ status: "off", tips: [] });
+export function useLookCheck(video: React.RefObject<HTMLVideoElement | null>, on: boolean, scanKey = ""): LookState {
+  const [state, setState] = useState<LookState>({ status: "off", tip: null });
   const canvas = useRef<HTMLCanvasElement | null>(null);
   useEffect(() => {
-    if (!on) { setState({ status: "off", tips: [] }); return; }
-    let stop = false, timer = 0, misses = 0;
-    let last: LookTip[] = [], shown: LookTip[] = [];
-    setState({ status: "loading", tips: [] });
+    if (!on) { setState({ status: "off", tip: null }); return; }
+    let stop = false, timer = 0;
+    const started = performance.now();
+    let read = false, shown: LookTip | null = null, last: LookTip | null | undefined;
+    setState({ status: "scanning", tip: null });
     canvas.current ??= document.createElement("canvas");
+    const giveUp = window.setTimeout(() => { if (!stop && !read) { stop = true; setState({ status: "off", tip: null }); } }, SCAN_MAX_MS);
     loadDetector().then((d) => {
       const check = () => {
         if (stop) return;
         const v = video.current;
         if (v && v.readyState >= 2 && v.videoWidth) {
           try {
-            const now = readLook(d, v, canvas.current!);
-            if (!now) {
-              // No face found (too far, turned away, very dark): one gentle tip.
-              if (++misses >= 2) { shown = []; last = []; setState({ status: "ok", tips: ["face"] }); }
-            } else {
-              misses = 0;
-              // A tip shows after two checks in a row, and goes after two without it.
-              shown = [...shown.filter((t) => now.includes(t) || last.includes(t)), ...now.filter((t) => last.includes(t) && !shown.includes(t))].slice(0, 3);
-              last = now;
-              setState({ status: "ok", tips: shown });
-            }
+            const now = readLook(d, v, canvas.current!).tip;
+            if (!read) { shown = now; read = true; } // the scan's own reading
+            else if (now === last && now !== shown) shown = now;
+            last = now;
           } catch { /* a frame it couldn't read; try the next one */ }
         }
-        timer = window.setTimeout(check, 900);
+        const scanning = performance.now() - started < SCAN_MS || !read;
+        setState(scanning ? { status: "scanning", tip: null } : { status: "ok", tip: shown });
+        timer = window.setTimeout(check, scanning ? 300 : 900);
       };
       check();
-    }).catch(() => { if (!stop) setState({ status: "off", tips: [] }); });
-    return () => { stop = true; clearTimeout(timer); };
-  }, [on, video]);
+    }).catch(() => { if (!stop) setState({ status: "off", tip: null }); });
+    return () => { stop = true; clearTimeout(timer); clearTimeout(giveUp); };
+  }, [on, video, scanKey]);
   return state;
 }
