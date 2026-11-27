@@ -663,6 +663,8 @@ async function requireMember(req: Request, opts: { free?: boolean } = {}): Promi
   // Admins always have Discovery: by their admin session, or the admin key.
   const adminEmail = getAdminEmail(req);
   if (adminEmail || (await adminKeyOk(req))) {
+    // admin@ is only the identity for admin-key calls (scripts): an internal key, never sent or shown. It keeps the old
+    // spelling because those calls' lookups and searches are stored under it (27 Nov).
     const e = (adminEmail || "admin@militaryvoice.ai").toLowerCase();
     return { email: e, member: (await memberFor(e)) ?? { id: 0, email: e, role: "admin", orgName: "MilitaryVoices", source: "admin", createdAt: "" }, free: false };
   }

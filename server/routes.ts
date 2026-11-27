@@ -71,6 +71,7 @@ import {
 } from "../shared/schema.js";
 import { isLiveOnlySlot, LIVE_ONLY_LABEL } from "../shared/slots.js";
 import { showClock } from "../shared/showClock.js";
+import { oldSpelling, sameMailbox } from "../shared/mailbox.js";
 import { registerDiscoveryRoutes, probeIc } from "./discovery.js";
 import { registerMce } from "./mce.js";
 import { registerCreatomate } from "./creatomate.js";
@@ -829,8 +830,10 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
  * send-now route — which is how `not-signed-up` would have ended up working in
  * one and silently missing from the other. One reader, both callers.
  */
-/** The address the event's own ceremony slots are booked under. */
+/** The address the event's own ceremony slots are booked under, and house assets are stored under. A stored key, so
+ *  it keeps the old spelling (rows already carry it); never sent or shown. Compare with isHouse, which takes either. */
 const HOUSE_EMAIL = "hello@militaryvoice.ai";
+const isHouse = (email: string | null | undefined) => sameMailbox(email, HOUSE_EMAIL);
 
 /**
  * When a booking is on air, written for the person who booked it.
@@ -939,7 +942,7 @@ async function resolveBroadcastRecipients(
     for (const r of await storage.listSignupContactsForEvent(broadcast.eventId)) {
       const key = r.email.toLowerCase();
       // The ceremony slots are ours, not a podcaster's — never write to them.
-      if (key === HOUSE_EMAIL) continue;
+      if (isHouse(key)) continue;
       if (counted.has(key) || connected.has(key)) continue;
       deduped.set(key, r);
     }
@@ -1422,7 +1425,7 @@ export function registerRoutes(app: Express): void {
     if (!b) return res.status(400).json({ message: "Say which email." });
     const senderMember = await resolveTeamSender(b.sender ?? "team");
     const rendered = renderBroadcastEmail({
-      to: "preview@militaryvoice.ai",
+      to: "preview@militaryvoices.ai",
       firstName: "Sam",
       subject: b.subject,
       bodyText: b.bodyText,
@@ -2860,7 +2863,7 @@ export function registerRoutes(app: Express): void {
   // audio extension as an audio episode (the card and equalizer), not a black frame.
   app.get("/api/studio/media/:id", async (req, res) => {
     const asset = await storage.getAsset(parseInt(req.params.id, 10));
-    if (!asset?.storageKey || asset.email !== HOUSE_EMAIL || !asset.storageKey.startsWith("studio/")) {
+    if (!asset?.storageKey || !isHouse(asset.email) || !asset.storageKey.startsWith("studio/")) {
       res.status(404).json({ message: "No such file." });
       return;
     }
@@ -5107,7 +5110,7 @@ export function registerRoutes(app: Express): void {
       console.warn("Standby list failed:", (err as Error).message);
     }
     for (const a of await storage.listAllAssets()) {
-      if (a.email !== HOUSE_EMAIL || !a.storageKey?.startsWith("studio/") || !/\([^()]*\bloop\)\s*$/i.test(a.label ?? "")) continue;
+      if (!isHouse(a.email) || !a.storageKey?.startsWith("studio/") || !/\([^()]*\bloop\)\s*$/i.test(a.label ?? "")) continue;
       const label = (a.label ?? "").replace(/\s*\([^()]*\bloop\)\s*$/i, "").trim();
       if (out.some((o) => o.label.toLowerCase() === label.toLowerCase())) continue;
       out.push({ label, url: `${PUBLIC_ORIGIN}/api/studio/media/${a.id}` });
@@ -5252,7 +5255,7 @@ export function registerRoutes(app: Express): void {
         .filter((a) => !/^(Pro preview|Help):/i.test(a.label))
         // Playable by everyone who needs to (the watch page, the recorder):
         // a public file, a link, or house media in R2 behind /api/studio/media.
-        .filter((a) => a.fileUrl || a.linkUrl || (a.email === HOUSE_EMAIL && a.storageKey.startsWith("studio/")))
+        .filter((a) => a.fileUrl || a.linkUrl || (isHouse(a.email) && a.storageKey.startsWith("studio/")))
         // The producer's order first (dragged in the studio), then newest.
         .sort((x, y) => (x.sortOrder || 1e9) - (y.sortOrder || 1e9) || y.id - x.id)
         .map((a) => {
@@ -5942,8 +5945,11 @@ export function registerRoutes(app: Express): void {
     // With no co-host at the desk, it's Michael's: the producer runs that hand-off.
     const team = await storage.listEventTeam(eventId).catch(() => []);
     const tm = team.find((m) => /michael/i.test(m.name));
-    const prodEmail = (tm?.email || "michael@militaryvoice.ai").trim().toLowerCase();
-    const prodProfile = tm?.photoUrl ? undefined : await storage.getProfileByEmail(prodEmail).catch(() => undefined);
+    // Sent and shown on the new spelling; his profile or desk login may still carry the old one (27 Nov), so match either.
+    const prodEmail = (tm?.email || "michael@militaryvoices.ai").trim().toLowerCase();
+    const prodProfile = tm?.photoUrl ? undefined
+      : (await storage.getProfileByEmail(prodEmail).catch(() => undefined))
+        ?? (oldSpelling(prodEmail) ? await storage.getProfileByEmail(oldSpelling(prodEmail)).catch(() => undefined) : undefined);
     const producer = { name: "Michael", photoUrl: tm?.photoUrl || prodProfile?.photoUrl || "", email: prodEmail, role: "producer" as const };
     const out: Record<number, { name: string; photoUrl: string; email: string; role: "cohost" | "producer" }> = {};
     // Hand-offs that play Alex's recorded clip show her, not Michael.
@@ -5955,7 +5961,7 @@ export function registerRoutes(app: Express): void {
       const next = rows.slice(i + 1).find((r) => r.kind === "Segment");
       if (!next) continue;
       const desk = (await deskAt(next.startAtUtc)) ?? (await deskAt(row.startAtUtc));
-      const mine = !desk || desk.email.trim().toLowerCase() === prodEmail;
+      const mine = !desk || sameMailbox(desk.email, prodEmail);
       out[row.id] = alexRows.has(row.id)
         ? { name: "Alex", photoUrl: "/alex.jpg", email: "", role: "cohost" }
         : mine
@@ -6308,7 +6314,7 @@ export function registerRoutes(app: Express): void {
     // the green room), so nobody is "missing" when he isn't waiting there.
     const team = signup ? await storage.listEventTeam(studio.eventId).catch(() => []) : [];
     const sgEmail = (signup?.email ?? "").trim().toLowerCase();
-    const hostsOwn = Boolean(signup) && (/ceremon/i.test(signup!.podcastName) || sgEmail === HOUSE_EMAIL || hosts.emails.has(sgEmail) || team.some((m) => m.email.trim().toLowerCase() === sgEmail));
+    const hostsOwn = Boolean(signup) && (/ceremon/i.test(signup!.podcastName) || isHouse(sgEmail) || hosts.emails.has(sgEmail) || team.some((m) => m.email.trim().toLowerCase() === sgEmail));
     const missing = guestScene && !hostsOwn && !present.some((p) => belongs(p));
     return { studio: updated, moved, missing: missing ? signup!.podcastName : null, keptHosts };
   }
@@ -12497,7 +12503,7 @@ The Podcast Marathon team`;
     };
     const senderMember = await resolveTeamSender(sender ?? "team");
     const rendered = renderBroadcastEmail({
-      to: "preview@militaryvoice.ai",
+      to: "preview@militaryvoices.ai",
       firstName: (firstName ?? "Sam").trim() || "Sam",
       subject: subject ?? "",
       bodyText: bodyText ?? "",
