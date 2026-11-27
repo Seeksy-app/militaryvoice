@@ -3,7 +3,10 @@ import {
   ALEX_EMAIL, ALEX_JOB_LABEL, ALEX_JOBS, ALEX_NAME, CLIENT_ROLES, CREW_ROLES, INVITABLE_ROLES, LIVE_TEST_CLIENT, LIVE_TEST_CREW, MV_ROLES,
   PRODUCTION_STATUSES, ROLE_LABEL, type AlexJob, type Approval, type ApprovalDecision, type AuditEntry, type LiveMe, type LiveOrg, type LiveRole, type Member, type MemberInput,
   type MemberPatch, type Production, type ProductionInput, type ProductionStatus, type Stage, type StageInput, type Venue, type VenueInput,
+  SESSION_KIND_LABEL, SESSION_KINDS, TEMPLATE_KIND_LABEL, type LiveSponsor, type LiveTemplate, type RunOfShow, type Script, type Session, type SessionInput,
+  type SessionKind, type Speaker, type SpeakerInput,
 } from "@shared/live";
+import { afterDecide, mineFor, mockPhase2, seedPhase2, type Db2 } from "./mock2";
 
 /**
  * Military Voices LIVE, phase 1 screens (Packet C) on Packet A's contract, shared/live.ts (frozen, add-only), under
@@ -113,14 +116,82 @@ export const usePatchOrg = (orgId: number) => useWrite<{ logoUrl?: string; brand
 export const useDecide = () =>
   useWrite<ApprovalDecision & { id: number }, Approval>("POST", (b) => `/approvals/${b.id}/decide`, ({ decision, note }) => ({ decision, note }));
 
+/* ------------------------------------------------------------------ phase 2: Programme (Packet A's contract, 27 Nov) */
+
+export type { LiveSponsor, LiveTemplate, RunOfShow, Script, Session, SessionInput, SessionKind, Speaker, SpeakerInput };
+export { SESSION_KIND_LABEL, SESSION_KINDS, TEMPLATE_KIND_LABEL };
+
+/**
+ * Alex's proposals waiting for MV (bio, headshot, cutout, pronunciation, an intro, a missing-info ask). Not in the
+ * frozen contract yet: asked of Podcasting 27 Nov, mocked as below until they answer. `proposed` is what she'd write.
+ */
+export type AlexKind = "bio" | "headshot" | "pronunciation" | "intro" | "sponsor_read" | "missing_info";
+export type AlexProposal = {
+  id: number; productionId: number; kind: AlexKind;
+  subjectType: "speaker" | "script" | "session"; subjectId: number;
+  /** One line: "Speaker name · Session title". */
+  title: string;
+  proposed: { text?: string; photoUrl?: string; cutoutUrl?: string; pronunciationText?: string; pronunciationAudioUrl?: string };
+  /** Where she found it, in plain words ("From the guest brief: their site"). */
+  source: string;
+  state: "proposed" | "accepted" | "rejected";
+  createdAt: string;
+};
+export type AlexState = { send: boolean; voice: boolean; held: number; coordinatorAt: string };
+export type AlexDecision = { decision: "accept" | "reject"; edited?: string };
+
+/** A route that hasn't landed answers 404: screens say "not switched on yet", never an error. */
+export const notYet = (e: LiveError | null | undefined) => e?.status === 404;
+
+export const useRunOfShow = (id: number | null, stageId: number | null) =>
+  useQuery<RunOfShow, LiveError>({ queryKey: [K, "productions", id, "ros", stageId], queryFn: () => live("GET", `/productions/${id}/stages/${stageId}/run-of-show`), enabled: !!id && !!stageId, retry: false });
+export const useSpeakers = (id: number | null) =>
+  useQuery<Speaker[], LiveError>({ queryKey: [K, "productions", id, "speakers"], queryFn: () => live("GET", `/productions/${id}/speakers`), enabled: !!id, retry: false });
+export const useTemplates = (id: number | null) =>
+  useQuery<LiveTemplate[], LiveError>({ queryKey: [K, "productions", id, "templates"], queryFn: () => live("GET", `/productions/${id}/templates`), enabled: !!id, retry: false });
+export const useAlexQueue = (id: number | null) =>
+  useQuery<AlexProposal[], LiveError>({ queryKey: [K, "productions", id, "ai-actions"], queryFn: () => live("GET", `/productions/${id}/ai-actions?state=proposed`), enabled: !!id, retry: false });
+export const useAlexState = (id: number | null) =>
+  useQuery<AlexState, LiveError>({ queryKey: [K, "productions", id, "alex"], queryFn: () => live("GET", `/productions/${id}/alex`), enabled: !!id, retry: false });
+/** The merged timeline (Packet A step 6); until it lands, the phase 1 audit log in the same shape. */
+export const useActivity = (id: number | null) =>
+  useQuery<AuditEntry[], LiveError>({
+    queryKey: [K, "productions", id, "activity"], enabled: !!id, retry: false,
+    queryFn: async () => {
+      try { return await live<AuditEntry[]>("GET", `/productions/${id}/activity`); } catch (e) { if (notYet(e as LiveError)) return live<AuditEntry[]>("GET", `/productions/${id}/audit`); throw e; }
+    },
+  });
+
+function useDelete(path: (x: number) => string) {
+  const qc = useQueryClient();
+  return useMutation<{ ok: true }, LiveError, number>({ mutationFn: (x) => live("DELETE", path(x)), onSuccess: () => qc.invalidateQueries({ queryKey: [K] }) });
+}
+export const useAddSession = (id: number) => useWrite<SessionInput, Session>("POST", () => `/productions/${id}/sessions`);
+export const usePatchSession = (id: number) => useWrite<SessionInput & { sessionId: number }, Session>("PATCH", (b) => `/productions/${id}/sessions/${b.sessionId}`, ({ sessionId: _, ...b }) => b);
+export const useDeleteSession = (id: number) => useDelete((x) => `/productions/${id}/sessions/${x}`);
+export const useAddSpeaker = (id: number) => useWrite<SpeakerInput, Speaker>("POST", () => `/productions/${id}/speakers`);
+export const usePatchSpeaker = (id: number) => useWrite<SpeakerInput & { speakerId: number }, Speaker>("PATCH", (b) => `/productions/${id}/speakers/${b.speakerId}`, ({ speakerId: _, ...b }) => b);
+export const usePatchScript = (id: number) => useWrite<{ scriptId: number; text: string }, Script>("PATCH", (b) => `/productions/${id}/scripts/${b.scriptId}`, ({ text }) => ({ text }));
+export const usePatchTemplate = (id: number) => useWrite<{ templateId: number; subject?: string; text?: string }, LiveTemplate>("PATCH", (b) => `/productions/${id}/templates/${b.templateId}`, ({ templateId: _, ...b }) => b);
+/** Ask for an approval: the run of show (subjectId = stageId), a speaker, a script or a template. Shape asked of Podcasting 27 Nov. */
+export const useRequestApproval = (id: number) =>
+  useWrite<{ subjectType: string; subjectId: number; version: number }, Approval>("POST", () => `/productions/${id}/approvals`);
+export const useDecideAlex = (id: number) =>
+  useWrite<AlexDecision & { actionId: number }, AlexProposal>("POST", (b) => `/productions/${id}/ai-actions/${b.actionId}`, ({ actionId: _, ...b }) => b);
+
 /* ------------------------------------------------------------------ dev mock (never in a production build) */
 
-type Db = { productions: Omit<Production, "myRole" | "can" | "stageCount" | "memberCount">[]; orgs: LiveOrg[]; venues: Venue[]; stages: Stage[]; members: Member[]; approvals: Approval[]; audit: AuditEntry[]; seq: number };
+export type Db = { productions: Omit<Production, "myRole" | "can" | "stageCount" | "memberCount">[]; orgs: LiveOrg[]; venues: Venue[]; stages: Stage[]; members: Member[]; approvals: Approval[]; audit: AuditEntry[]; seq: number } & Db2;
 let db: Db | null = null;
 const now = () => new Date().toISOString();
 const ME: Record<As, string> = { admin: "admin@militaryvoices.ai", client: LIVE_TEST_CLIENT, crew: LIVE_TEST_CREW };
 
 function seed(): Db {
+  const p2 = seedPhase2();
+  const b = seed1();
+  return { ...b, ...p2, audit: [...p2.audit, ...b.audit] };
+}
+function seed1(): Omit<Db, keyof Db2> {
   const client: LiveOrg = { id: 501, name: "Test Client Org", kind: "client", logoUrl: "", brandColor: "#7a1f2b", slug: "test-client" };
   const client2: LiveOrg = { id: 502, name: "Second Test Org", kind: "client", logoUrl: "", brandColor: "", slug: "second-test" };
   const vendor: LiveOrg = { id: 601, name: "Test AV Vendor", kind: "vendor", logoUrl: "", brandColor: "", slug: "test-av-vendor" };
@@ -134,7 +205,10 @@ function seed(): Db {
     ],
     orgs: [client, client2, vendor],
     venues: [{ id: 31, name: "Convention Center", address: "Test City, TX", timezone: "America/Chicago", power: "", network: "", createdAt: now() }],
-    stages: [{ id: 41, productionId: 1, name: "Exhibit Hall Stage", venue: { id: 31, name: "Convention Center" }, studioId: null, ingestProfile: "", createdAt: now() }],
+    stages: [
+      { id: 41, productionId: 1, name: "Exhibit Hall Stage", venue: { id: 31, name: "Convention Center" }, studioId: null, ingestProfile: "", createdAt: now() },
+      { id: 42, productionId: 1, name: "Main Hall", venue: { id: 31, name: "Convention Center" }, studioId: null, ingestProfile: "", createdAt: now() },
+    ],
     members: [
       m(10, 1, ALEX_EMAIL, ALEX_NAME, null, "alex", "active", "producer@militaryvoices.ai"),
       m(11, 1, "producer@militaryvoices.ai", "MV Producer", null, "mv_producer", "active", ""),
@@ -195,8 +269,10 @@ function mock(as: As, method: string, path: string, body: any): unknown {
   }
   if (parts[0] === "approvals") {
     const a = d.approvals.find((x) => x.id === Number(parts[1])) ?? nf()!;
-    if (!a.mine) deny();
+    const p = d.productions.find((x) => x.id === a.productionId);
+    if (!p || !mineFor(a, roleOn(p.id) ?? "client_viewer", me)) deny();
     Object.assign(a, { state: body?.decision, note: body?.note ?? "", decidedBy: me, decidedAt: now(), mine: false });
+    afterDecide(d, a);
     return a;
   }
   if (parts[0] !== "productions") nf();
@@ -222,7 +298,7 @@ function mock(as: As, method: string, path: string, body: any): unknown {
     Object.assign(p!, Object.fromEntries(Object.entries({ name, status, startsOn, endsOn, timezone, scope }).filter(([, x]) => x !== undefined)), { updatedAt: now() });
     log(pid, "Edited the production", "production", pid); return view(p!);
   }
-  if (sub === "stages") {
+  if (sub === "stages" && parts.length === 3) {
     if (method === "GET") return d.stages.filter((s) => s.productionId === pid);
     if (!v.can.stages) deny();
     const venue = d.venues.find((x) => x.id === body?.venueId);
@@ -261,9 +337,8 @@ function mock(as: As, method: string, path: string, body: any): unknown {
     Object.assign(x!, body?.role ? { role: body.role } : {}, body?.status ? { status: body.status } : {});
     log(pid, body?.status === "removed" ? `Removed ${x!.email}` : `Changed ${x!.email} to ${ROLE_LABEL[x!.role]}`, "member", x!.id); return x;
   }
-  if (sub === "approvals") { if (sideOf(v.myRole) === "crew") deny(); return d.approvals.filter((a) => a.productionId === pid); }
   if (sub === "audit") { if (!v.can.audit) deny(); return d.audit.filter((a) => a.productionId === pid || a.productionId === null).slice(0, 200); }
-  return nf();
+  return mockPhase2({ d, me, pid, v, parts, qs, method, body, nf, deny, log, next: () => ++d.seq, bad: (m) => { throw new LiveError(400, m); } });
 }
 
 const slugify = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");

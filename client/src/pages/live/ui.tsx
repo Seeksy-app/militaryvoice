@@ -62,9 +62,13 @@ export function LinkBtn({ href, children, primary, small, className = "", testId
   return <Link href={href} className={`${btnCls(primary, small)} ${className}`} style={btnStyle(primary)} data-testid={testId}>{children}</Link>;
 }
 
-export function Pill({ children, tone = "muted" }: { children: ReactNode; tone?: "muted" | "ok" | "warn" | "gold" }) {
+export type Tone = "muted" | "ok" | "warn" | "gold" | "bad" | "alex" | "info";
+export function Pill({ children, tone = "muted" }: { children: ReactNode; tone?: Tone }) {
   const s = {
     muted: { background: "rgba(255,255,255,.08)", color: C.muted },
+    bad: { background: "rgba(255,120,110,.14)", color: "#ff8a80" },
+    alex: { background: "rgba(185,166,245,.16)", color: "#c4b5fd" },
+    info: { background: "rgba(141,182,240,.16)", color: "#8db6f0" },
     ok: { background: "rgba(95,208,143,.14)", color: "#7fe0a6" },
     warn: { background: "rgba(240,192,80,.14)", color: "#f0c050" },
     gold: { background: C.gold, color: "#0b2447" },
@@ -126,3 +130,102 @@ export function brand(hex?: string) {
   return { bg, fg: 0.2126 * r + 0.7152 * g + 0.0722 * b > 0.4 ? "#0d1b2e" : "#fff" };
 }
 export const initials = (s: string) => s.split(/\s+/).filter(Boolean).slice(0, 2).map((w) => w[0]!.toUpperCase()).join("");
+
+/* ------------------------------------------------------------------ phase 2: times in the production's zone, faces, reads */
+
+const parts = (iso: string, tz: string) => {
+  const f = new Intl.DateTimeFormat("en-US", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  const o = Object.fromEntries(f.formatToParts(new Date(iso)).map((p) => [p.type, p.value]));
+  return { day: `${o.year}-${o.month}-${o.day}`, hm: `${o.hour}:${o.minute}` };
+};
+/** "2027-07-25" for an instant, in the production's time zone. */
+export const dayIn = (iso: string, tz: string) => parts(iso, tz).day;
+/** "14:05" (24 h) for an instant, for <input type="time">. */
+export const hmIn = (iso: string, tz: string) => parts(iso, tz).hm;
+/** "9:00", "1:45": the run of show's clock, no AM/PM (the day reads top to bottom). */
+export const clockIn = (iso: string, tz: string) => { const [h, m] = hmIn(iso, tz).split(":").map(Number); return `${h % 12 || 12}:${String(m).padStart(2, "0")}`; };
+/** A wall-clock day and time in a zone → ISO UTC. Two passes settle any offset, DST days included. */
+export function zonedIso(day: string, hm: string, tz: string) {
+  const want = Date.parse(`${day}T${hm}:00Z`);
+  let t = want;
+  for (let i = 0; i < 2; i++) { const p = parts(new Date(t).toISOString(), tz); t += want - Date.parse(`${p.day}T${p.hm}:00Z`); }
+  return new Date(t).toISOString();
+}
+export const dayTab = (day: string) => new Date(`${day}T12:00:00`).toLocaleDateString("en-US", { weekday: "short", month: "short", day: "numeric" });
+/** Each day from a to b (YYYY-MM-DD), at most 14. */
+export function daysBetween(a: string, b: string) {
+  const out: string[] = [];
+  if (!a) return out;
+  for (let d = new Date(`${a}T12:00:00Z`); out.length < 14 && d.toISOString().slice(0, 10) <= (b || a); d.setUTCDate(d.getUTCDate() + 1)) out.push(d.toISOString().slice(0, 10));
+  return out;
+}
+/** About 150 words a minute: "0:24 read". */
+export function readTime(text: string) {
+  const s = Math.max(1, Math.round(text.trim().split(/\s+/).filter(Boolean).length / 2.5));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, "0")} read`;
+}
+
+const FACE_BG = ["#e0b23a", "#8db6f0", "#7fe0a6", "#f2a0b5", "#b9a6f5", "#c9d3e2"];
+/** A person's headshot, or their initials on a steady colour. */
+export function Face({ name, photoUrl = "", size = 26, ring = C.card }: { name: string; photoUrl?: string; size?: number; ring?: string }) {
+  const i = name.split("").reduce((n, ch) => n + ch.charCodeAt(0), 0) % FACE_BG.length;
+  const st = { width: size, height: size, boxShadow: `0 0 0 2px ${ring}` };
+  return photoUrl
+    ? <img src={photoUrl} alt="" className="shrink-0 rounded-full object-cover" style={st} />
+    : <span className="flex shrink-0 items-center justify-center rounded-full font-bold" style={{ ...st, background: FACE_BG[i], color: "#0b2447", fontSize: Math.round(size * 0.4) }} aria-hidden>{initials(name)}</span>;
+}
+
+/** How to say a name, with Play when there's a recording. */
+export function SayIt({ text, audioUrl, light = false }: { text: string; audioUrl?: string; light?: boolean }) {
+  const [a] = useState(() => (typeof Audio !== "undefined" && audioUrl ? new Audio(audioUrl) : null));
+  if (!text && !audioUrl) return null;
+  return (
+    <span className="inline-flex flex-wrap items-center gap-x-1.5 text-[12.5px]" style={{ color: light ? "#4f5d72" : C.muted }}>
+      <span className="whitespace-nowrap">Say it:</span> <span style={{ color: light ? "#0d1b2e" : C.ink }}>{text || "listen"}</span>
+      {a && <button type="button" onClick={() => { a.currentTime = 0; void a.play(); }} className="font-semibold hover:underline" style={{ color: light ? "#1f4f8f" : "#8db6f0" }}>▶ Play</button>}
+    </span>
+  );
+}
+
+/** A small segmented control (stage tabs, day tabs, inbox tabs). */
+export function Tabs<K extends string | number>({ items, value, onChange, testId }: { items: { key: K; label: ReactNode }[]; value: K; onChange: (k: K) => void; testId?: string }) {
+  return (
+    <div className="flex max-w-full shrink-0 gap-0.5 overflow-x-auto rounded-md border p-0.5" style={{ borderColor: C.line, background: C.head }} role="tablist" data-testid={testId}>
+      {items.map((t) => {
+        const on = t.key === value;
+        return (
+          <button key={String(t.key)} type="button" role="tab" aria-selected={on} onClick={() => onChange(t.key)}
+            className="h-7 whitespace-nowrap rounded px-2.5 text-[13px] font-semibold"
+            style={on ? { background: C.active, color: "#fff" } : { color: C.muted }}>{t.label}</button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Filter chips (Alex's queue, approval types). */
+export function Chips<K extends string>({ items, value, onChange }: { items: { key: K; label: string; n?: number }[]; value: K; onChange: (k: K) => void }) {
+  return (
+    <div className="flex flex-wrap gap-1.5">
+      {items.map((t) => {
+        const on = t.key === value;
+        return (
+          <button key={t.key} type="button" onClick={() => onChange(t.key)} aria-pressed={on}
+            className="h-7 whitespace-nowrap rounded-full border px-2.5 text-[12.5px] font-semibold"
+            style={on ? { borderColor: "#8db6f0", background: "rgba(141,182,240,.14)", color: "#fff" } : { borderColor: C.line, color: C.muted }}>
+            {t.label}{t.n !== undefined && <span className="ml-1" style={{ color: on ? "#fff" : C.ink }}>{t.n}</span>}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Green Approve, as on the approved mockup (gold stays the page's one primary action). */
+export function ApproveBtn({ children = "Approve", ...p }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+  return <button type="button" {...p} className={`inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-md px-3 text-[13px] font-semibold text-white hover:brightness-110 disabled:opacity-50 ${p.className ?? ""}`} style={{ background: "#1f7a4a" }}>{children}</button>;
+}
+
+export const TextArea = (p: React.TextareaHTMLAttributes<HTMLTextAreaElement>) => (
+  <textarea {...p} className={`w-full min-w-0 rounded-md border bg-transparent px-2.5 py-2 text-[14px] leading-snug outline-none focus:ring-2 focus:ring-[#e0b23a]/60 ${p.className ?? ""}`} style={{ borderColor: C.line, color: C.ink, background: C.bg, colorScheme: "dark" }} />
+);
