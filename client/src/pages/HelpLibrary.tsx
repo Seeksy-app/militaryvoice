@@ -20,7 +20,7 @@ export default function HelpLibrary() {
       <HelpArticle
         eyebrow="Help · Your Library"
         title="Your Library: every recording and every clip"
-        lead={<>Everything you record or upload lands in your Library: your studio's recordings, your Marathon slot, videos you upload, Zoom calls, and the clean and edited episodes Pōstify makes. Your podcast's episodes and your clips live here too.</>}
+        lead={<>Everything you record or upload lands in your Library: your studio's recordings, your event slot, videos you upload, Zoom calls, and the clean and edited episodes Pōstify makes. Your podcast's episodes and your clips live here too.</>}
         toc={[["#top", "The counts at the top"], ["#tabs", "Recordings, Podcast episodes, Clips"], ["#versions", "Clean, Edited, Original"], ["#episode", "What you can do with a recording"], ["#clips", "Scheduled or Posted"], ["#delete", "Deleting"], ["#support", "Help and contact"]]}
       >
         <HelpSection n={1} id="top" title="The counts at the top">

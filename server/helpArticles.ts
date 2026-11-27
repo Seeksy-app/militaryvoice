@@ -110,7 +110,7 @@ Open my dashboard
 === MILITARYVOICES.AI PLATFORM · www.militaryvoices.ai/help/library ===
 All help Help · Your Library
 Your Library: every recording and every clip
-Everything you record or upload lands in your Library: your studio's recordings, your Marathon slot, videos you upload, Zoom calls, and the clean and edited episodes Pōstify makes. Your podcast's episodes and your clips live here too.
+Everything you record or upload lands in your Library: your studio's recordings, your event slot, videos you upload, Zoom calls, and the clean and edited episodes Pōstify makes. Your podcast's episodes and your clips live here too.
 1 The counts at the top
 Press Library in the menu. Across the top you'll see your Library at a glance. The ones with an arrow are buttons:
 Recordings → shows your recordings.
@@ -531,7 +531,7 @@ Two tabs on your show find people to have on, and shows to go on. They search Di
 a Press Podcast in the menu, open your show, and choose the Book a guest tab.
 b Search by a topic they're known for, or a name. People who've been guests on podcasts come up, the most-booked first.
 c Open someone. Under Book them:
-Invite to my show puts them on your Marathon slot's guest list. They get their own link into your green room: nothing to sign up for.
+Invite to my show puts them on your event slot's guest list. They get their own link into your green room: nothing to sign up for.
 Find their email (below).
 Save to Guests keeps them for later.
 2 Find their email

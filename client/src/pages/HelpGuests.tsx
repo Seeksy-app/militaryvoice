@@ -29,7 +29,7 @@ export default function HelpGuests() {
           <HelpStep k="b">Search by a topic they're known for, or a name. People who've been guests on podcasts come up, the most-booked first.</HelpStep>
           <HelpStep k="c">Open someone. Under <strong>Book them</strong>:</HelpStep>
           <ul className="mt-3 list-disc space-y-2 pl-12">
-            <li><strong>Invite to my show</strong> puts them on your Marathon slot's guest list. They get their own link into your green room: nothing to sign up for.</li>
+            <li><strong>Invite to my show</strong> puts them on your event slot's guest list. They get their own link into your green room: nothing to sign up for.</li>
             <li><strong>Find their email</strong> (below).</li>
             <li><strong>Save to Guests</strong> keeps them for later.</li>
           </ul>
