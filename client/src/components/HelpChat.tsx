@@ -1,3 +1,4 @@
+import { useHelpHiddenOnPhone } from "@/lib/helpPlacement";
 import { useEffect, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { AnswerActions, AnswerBody, type HelpAction } from "@/components/AlexAnswer";
@@ -22,9 +23,9 @@ type Msg = { role: "user" | "assistant"; content: string; actions?: HelpAction[]
 // Andrew, 20 Nov 2026: Ask Alex on the whole site for now (booths, Radio, show pages and podcasters' own pages
 // included), until there's a permanent placement. Still never on a page the recorder films (it would be on air
 // or in the recording: /dx/program, /studio/composite, /room/composite, the /promo renders), and not on /admin,
-// which has its own Ask Alex button (AdminChatDock) in the same corner. Not in My Studio either (PM, 27 Nov): on a phone it
-// sat on the camera check's Enter studio button.
-const HIDDEN_ON = ["/promo", "/studio/composite", "/room/composite", "/dx/", "/admin", "/my-studio"];
+// which has its own Ask Alex button (AdminChatDock) in the same corner. A screen can also ask for it to be hidden on a
+// phone only (useHideHelpOnPhone, lib/helpPlacement): My Studio's camera check, where it sat on Enter studio (PM, 27 Nov).
+const HIDDEN_ON = ["/promo", "/studio/composite", "/room/composite", "/dx/", "/admin"];
 
 const OPENER: Msg = {
   role: "assistant",
@@ -40,11 +41,14 @@ export function HelpChat() {
 function HelpChat_() {
   const [location] = useLocation();
   const g = useGuide();
+  // Off at phone width while a screen asks (display: contents keeps the page's layout as it was).
+  const phoneOff = useHelpHiddenOnPhone();
+  const wrap = phoneOff ? "hidden lg:contents" : "contents";
   if (g?.enabled) {
     if (HIDDEN_ON.some((p) => location.startsWith(p))) return null;
-    return <LoriGuide g={g} compact={/^\/host\/dashboard\/(postify|page)\b/.test(location) || location.startsWith("/black-friday")} />;
+    return <div className={wrap}><LoriGuide g={g} compact={/^\/host\/dashboard\/(postify|page)\b/.test(location) || location.startsWith("/black-friday")} /></div>;
   }
-  return <AlexChat />;
+  return <div className={wrap}><AlexChat /></div>;
 }
 
 function AlexChat() {

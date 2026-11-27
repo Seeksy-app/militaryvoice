@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { TIP_TEXT, useLookCheck, type LookTip } from "@/components/room/lookCheck";
 import { blurNote, readBlur, saveBlur, useBlur, type BlurState } from "@/components/room/blur";
+import { useHideHelpOnPhone } from "@/lib/helpPlacement";
 import { PRACTICE_NAME, practice, usePractice } from "@/components/room/practiceGuest";
 import { startScreenShare } from "@/components/room/screenShare";
 import { BrandMark } from "@/components/BrandMark";
@@ -217,6 +218,8 @@ function SetupScreen({ owner, roomName, blocked, defaultName, onEnter }: { owner
   const [blur, setBlurState] = useState(readBlur);
   const setBlur = (on: boolean) => { setBlurState(on); saveBlur(on); };
   const blurState = useBlur(preview, blur, () => setBlur(false));
+  // On a phone the Ask Alex bubble sat on Enter studio, so it stays off at phone width on this screen only (PM, 27 Nov).
+  useHideHelpOnPhone();
   useEffect(() => { if (defaultName && !name) setName(defaultName); }, [defaultName]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // The preview: their camera and mic, with a live level so they can see the mic works.
