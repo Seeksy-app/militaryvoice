@@ -284,11 +284,14 @@ function SetupScreen({ owner, roomName, blocked, defaultName, onEnter }: { owner
   const scanning = look.status === "scanning";
   // The guide's lines turn green once the head sits right (headroom and eye height), whatever else there is to say.
   const framed = look.status === "ok" && !FRAMING_TIPS.includes(look.tip as LookTip);
+  const heading = owner
+    ? { eyebrow: roomName || "Your studio", title: "Set up your studio", text: "Check your picture and sound. Going in doesn't start anything; you choose when to record and when to go live." }
+    : { eyebrow: `You're invited to ${roomName || "a show"}`, title: "Get ready to join", text: "Check your picture and sound. The host brings you in when you join." };
 
   return (
     <div className="min-h-screen bg-[#f3f4f7] text-[#101828]" data-testid="my-studio-setup" style={{ fontFamily: INTER }}>
-      <header className="flex h-16 items-center gap-4 border-b border-[#e4e7ec] bg-white px-5">
-        {owner ? <a href={DASHBOARD} aria-label="MilitaryVoices.ai, back to your dashboard"><Logo className="h-10" /></a> : <Logo className="h-10" />}
+      <header className="flex h-14 items-center gap-4 border-b border-[#e4e7ec] bg-white px-4 lg:h-16 lg:px-5">
+        {owner ? <a href={DASHBOARD} aria-label="MilitaryVoices.ai, back to your dashboard"><Logo className="h-9 lg:h-10" /></a> : <Logo className="h-9 lg:h-10" />}
         {owner && <a href="/host/dashboard/studio" className="ml-auto flex items-center gap-1.5 text-sm font-semibold text-[#475467] hover:text-[#101828]"><ArrowLeft className="h-4 w-4" /> Back to your dashboard</a>}
       </header>
       {blocked ? (
@@ -297,8 +300,14 @@ function SetupScreen({ owner, roomName, blocked, defaultName, onEnter }: { owner
           {owner && <a href="/host/dashboard/studio" className="mt-4 inline-flex h-11 items-center rounded-xl px-5 font-semibold text-white" style={{ background: NAVY }}>Sign in</a>}
         </div>
       ) : (
-        <main className="mx-auto flex max-w-[1180px] flex-col gap-8 px-4 py-6 lg:flex-row lg:items-start lg:px-8 lg:py-10">
-          <section className="w-full rounded-2xl bg-white p-4 shadow-[0_8px_24px_rgba(16,24,40,0.08)] lg:w-[680px] lg:shrink-0">
+        // On a phone (PM, 27 Nov: "all above the fold" at 390) the heading sits over the preview, name and title share a
+        // row, and the reassurance goes under the button, so Enter studio is on the first screen. A computer is unchanged.
+        <main className="mx-auto flex max-w-[1180px] flex-col gap-3 px-4 py-3 lg:flex-row lg:items-start lg:gap-8 lg:px-8 lg:py-10">
+          <div className="lg:hidden">
+            <p className="text-[12px] font-semibold uppercase tracking-[0.08em] text-[#667085]">{heading.eyebrow}</p>
+            <h1 className="text-balance text-[22px] font-bold leading-tight tracking-tight">{heading.title}</h1>
+          </div>
+          <section className="w-full rounded-2xl bg-white p-3 shadow-[0_8px_24px_rgba(16,24,40,0.08)] sm:p-4 lg:w-[680px] lg:shrink-0">
             <div className="relative aspect-video overflow-hidden rounded-xl bg-[#0b1f4a]">
               <video ref={video} autoPlay muted playsInline className={`h-full w-full -scale-x-100 object-cover ${cam && !problem ? "" : "invisible"}`} />
               {/* A faint framing guide: eyes about a third of the way down, a little room above the head. Hidden while the
@@ -324,7 +333,7 @@ function SetupScreen({ owner, roomName, blocked, defaultName, onEnter }: { owner
                 <PreviewToggle on={cam} onClick={() => setCam(!cam)} label={cam ? "Turn camera off" : "Turn camera on"}>{cam ? <Video className="h-5 w-5" /> : <VideoOff className="h-5 w-5" />}</PreviewToggle>
               </div>
             </div>
-            <div className="mt-4 flex items-center gap-3 px-1">
+            <div className="mt-3 flex items-center gap-3 px-1 sm:mt-4">
               <Mic className="h-5 w-5 shrink-0 text-[#475467]" />
               <div className="h-2.5 flex-1 overflow-hidden rounded-full bg-[#eaecf0]" aria-hidden>
                 <div className="h-full rounded-full bg-[#12b76a] transition-[width] duration-75" style={{ width: `${Math.round(level * 100)}%` }} />
@@ -333,20 +342,20 @@ function SetupScreen({ owner, roomName, blocked, defaultName, onEnter }: { owner
                 : heard ? <span className="flex items-center gap-1 rounded-full bg-[#d1fadf] px-3 py-1 text-[13px] font-semibold text-[#067647]" data-testid="mic-working"><Check className="h-3.5 w-3.5" /> Mic is working</span>
                   : <span className="rounded-full bg-[#f2f4f7] px-3 py-1 text-[13px] font-semibold text-[#475467]">Say something to test it</span>}
             </div>
-            {(cams.length > 1 || mics.length > 1 || (cam && !problem)) && <div className="mt-3 flex flex-col gap-2 px-1 sm:flex-row sm:items-center">
-              {cams.length > 1 && <Select wrap="flex-1 min-w-0" aria-label="Camera" className={select} value={camId ?? ""} onChange={(e) => setCamId(e.target.value || undefined)}><option value="">Camera: default</option>{cams.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Camera"}</option>)}</Select>}
-              {mics.length > 1 && <Select wrap="flex-1 min-w-0" aria-label="Microphone" className={select} value={micId ?? ""} onChange={(e) => setMicId(e.target.value || undefined)}><option value="">Mic: default</option>{mics.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Microphone"}</option>)}</Select>}
+            {(cams.length > 1 || mics.length > 1 || (cam && !problem)) && <div className="mt-2.5 flex flex-wrap items-center gap-2 px-1 sm:mt-3">
+              {cams.length > 1 && <Select wrap="min-w-[7.5rem] flex-1" aria-label="Camera" className={select} value={camId ?? ""} onChange={(e) => setCamId(e.target.value || undefined)}><option value="">Camera: default</option>{cams.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Camera"}</option>)}</Select>}
+              {mics.length > 1 && <Select wrap="min-w-[7.5rem] flex-1" aria-label="Microphone" className={select} value={micId ?? ""} onChange={(e) => setMicId(e.target.value || undefined)}><option value="">Mic: default</option>{mics.map((d) => <option key={d.deviceId} value={d.deviceId}>{d.label || "Microphone"}</option>)}</Select>}
               {cam && !problem && <BlurSwitch on={blur} state={blurState} onChange={setBlur} compact />}
             </div>}
             <BlurNote state={blurState} />
             {problem && <p className="mt-3 px-1 text-sm font-medium text-[#b42318]">{problem}</p>}
             {look.status === "ok" && (look.tip ? (
-              <div className="mt-3 flex items-start gap-2.5 rounded-xl border border-[#fedf89] bg-[#fffaeb] px-3.5 py-3" data-testid="look-tip" data-tip={look.tip}>
+              <div className="mt-2.5 flex items-start gap-2.5 rounded-xl border border-[#fedf89] bg-[#fffaeb] px-3.5 py-2.5 sm:mt-3 sm:py-3" data-testid="look-tip" data-tip={look.tip}>
                 <span className="mt-px flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-[#f79009] text-[13px] font-bold text-white">!</span>
                 <p className="text-balance text-sm font-semibold text-[#93370d]">{TIP_TEXT[look.tip]}</p>
               </div>
             ) : (
-              <div className="mt-3 flex items-center gap-2.5 rounded-xl border border-[#abefc6] bg-[#ecfdf3] px-3.5 py-3" data-testid="look-great">
+              <div className="mt-2.5 flex items-center gap-2.5 rounded-xl border border-[#abefc6] bg-[#ecfdf3] px-3.5 py-2.5 sm:mt-3 sm:py-3" data-testid="look-great">
                 <span className="flex h-[22px] w-[22px] shrink-0 items-center justify-center rounded-full bg-[#12b76a] text-white"><Check className="h-3.5 w-3.5" /></span>
                 <p className="text-balance text-sm font-semibold text-[#067647]">You look great. Good light, good framing.</p>
               </div>
@@ -354,18 +363,27 @@ function SetupScreen({ owner, roomName, blocked, defaultName, onEnter }: { owner
           </section>
 
           <section className="w-full lg:max-w-[420px] lg:pt-2">
-            <p className="text-sm font-semibold uppercase tracking-[0.08em] text-[#667085]">{owner ? roomName || "Your studio" : `You're invited to ${roomName || "a show"}`}</p>
-            <h1 className="mt-1 text-balance text-[28px] font-bold leading-tight tracking-tight">{owner ? "Set up your studio" : "Get ready to join"}</h1>
-            <p className="mt-2 text-[15px] leading-relaxed text-[#475467]">{owner ? "Check your picture and sound. Going in doesn't start anything; you choose when to record and when to go live." : "Check your picture and sound. The host brings you in when you join."}</p>
-            <label className="mt-6 block text-sm font-semibold" htmlFor="studio-name">Your name on screen</label>
-            <input id="studio-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder="Your name" className="mt-1.5 h-12 w-full rounded-xl border border-[#d0d5dd] bg-white px-4 text-[15px] outline-none focus:border-[#053877] focus:ring-2 focus:ring-[#053877]/15" data-testid="studio-name" />
-            <label className="mt-4 block text-sm font-semibold" htmlFor="studio-title">Your title <span className="font-normal text-[#667085]">(optional)</span></label>
-            <input id="studio-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={40} placeholder={owner ? "Host" : "e.g. Army veteran, author"} className="mt-1.5 h-12 w-full rounded-xl border border-[#d0d5dd] bg-white px-4 text-[15px] outline-none focus:border-[#053877] focus:ring-2 focus:ring-[#053877]/15" />
-            <button type="button" onClick={() => void enter()} disabled={busy} className="mt-6 flex h-12 w-full items-center justify-center gap-2 rounded-xl text-[16px] font-bold text-white shadow-[0_4px_12px_rgba(5,56,119,0.28)] disabled:opacity-70" style={{ background: NAVY }} data-testid="studio-enter">
+            <div className="hidden lg:block">
+              <p className="text-sm font-semibold uppercase tracking-[0.08em] text-[#667085]">{heading.eyebrow}</p>
+              <h1 className="mt-1 text-balance text-[28px] font-bold leading-tight tracking-tight">{heading.title}</h1>
+              <p className="mt-2 text-[15px] leading-relaxed text-[#475467]">{heading.text}</p>
+            </div>
+            <div className="mt-1 grid grid-cols-2 gap-3 lg:mt-6 lg:grid-cols-1 lg:gap-4">
+              <div className="min-w-0">
+                <label className="block text-sm font-semibold" htmlFor="studio-name">Your name on screen</label>
+                <input id="studio-name" value={name} onChange={(e) => setName(e.target.value)} maxLength={60} placeholder="Your name" className="mt-1.5 h-11 w-full rounded-xl border border-[#d0d5dd] bg-white px-3 text-[15px] outline-none focus:border-[#053877] focus:ring-2 focus:ring-[#053877]/15 lg:h-12 lg:px-4" data-testid="studio-name" />
+              </div>
+              <div className="min-w-0">
+                <label className="block text-sm font-semibold" htmlFor="studio-title">Your title <span className="font-normal text-[#667085]">(optional)</span></label>
+                <input id="studio-title" value={title} onChange={(e) => setTitle(e.target.value)} maxLength={40} placeholder={owner ? "Host" : "e.g. Army veteran"} className="mt-1.5 h-11 w-full rounded-xl border border-[#d0d5dd] bg-white px-3 text-[15px] outline-none focus:border-[#053877] focus:ring-2 focus:ring-[#053877]/15 lg:h-12 lg:px-4" />
+              </div>
+            </div>
+            <button type="button" onClick={() => void enter()} disabled={busy} className="mt-3 flex h-12 w-full lg:mt-6 items-center justify-center gap-2 rounded-xl text-[16px] font-bold text-white shadow-[0_4px_12px_rgba(5,56,119,0.28)] disabled:opacity-70" style={{ background: NAVY }} data-testid="studio-enter">
               {busy && <Loader2 className="h-4 w-4 animate-spin" />}{owner ? "Enter studio" : "Join"}
             </button>
             {look.status === "ok" && look.tip && <p className="mt-2 text-center text-[13px] text-[#667085]">The tip is only a suggestion. You can go in any time.</p>}
             {error && <p className="mt-3 text-sm font-medium text-[#b42318]">{error}</p>}
+            <p className="mt-3 text-[13px] leading-relaxed text-[#667085] lg:hidden">{heading.text}</p>
           </section>
         </main>
       )}
@@ -395,7 +413,7 @@ function ScanSweep() {
 /** Blur my background (Andrew, 27 Nov), on the camera check and in the studio's Settings. Kept on this computer. */
 function BlurSwitch({ on, state, onChange, compact }: { on: boolean; state: BlurState; onChange: (on: boolean) => void; compact?: boolean }) {
   return (
-    <label className={`flex shrink-0 cursor-pointer select-none items-center justify-between gap-3 ${compact ? "h-10 rounded-lg border border-[#d0d5dd] bg-white px-3" : "h-11 rounded-xl border border-[#d0d5dd] px-3.5"}`} data-testid="blur-switch">
+    <label className={`flex shrink-0 cursor-pointer select-none items-center justify-between ${compact ? "h-10 gap-2 rounded-lg border border-[#d0d5dd] bg-white px-2.5 sm:gap-3 sm:px-3" : "h-11 gap-3 rounded-xl border border-[#d0d5dd] px-3.5"}`} data-testid="blur-switch">
       <span className="flex items-center gap-2 text-[13px] font-semibold text-[#344054]">
         {state === "starting" && on ? <Loader2 className="h-3.5 w-3.5 animate-spin text-[#667085]" /> : null}Blur my background
       </span>
