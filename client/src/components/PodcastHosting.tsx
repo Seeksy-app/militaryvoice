@@ -40,6 +40,8 @@ type Hosted = { show: HostedShowRow; feedUrl: string; missing: string[]; ownerCo
 type Archived = { id: number; title: string; artworkUrl: string; archivedAt: string };
 type Resp = { shows: Hosted[]; archived?: Archived[]; categories: Record<string, string[]>; youtubeReady?: boolean };
 
+// Phone sweep (27 Nov): every button and link in the Podcast tab gets a 44px tap area without changing its look (as .tap-44).
+const TAP44 = "[&_:is(button,a[href]):not(.absolute,.fixed,.sticky)]:relative [&_:is(button,a[href])]:before:absolute [&_:is(button,a[href])]:before:content-[''] [&_:is(button,a[href])]:before:[inset:min(0px,calc((100%_-_44px)/2))]";
 const KEY = ["/api/host/hosting"];
 const compact = (n: number) => (n >= 1e6 ? `${(n / 1e6).toFixed(1)}M` : n >= 1e4 ? `${Math.round(n / 1e3)}K` : n >= 1e3 ? `${(n / 1e3).toFixed(1)}K` : String(n));
 const hms = (sec: number) => { const s = Math.round(sec); const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), x = s % 60; return h ? `${h}:${String(m).padStart(2, "0")}:${String(x).padStart(2, "0")}` : `${m}:${String(x).padStart(2, "0")}`; };
@@ -189,7 +191,7 @@ export function PodcastHosting() {
 
   if (!shows.length || inSetup) {
     return (
-      <section className="mt-2" data-testid="podcast-hosting">
+      <section className={`mt-2 ${TAP44}`} data-testid="podcast-hosting">
         {/* Their show first (the one from sign-up): one press to move it here. Then the way in: have one, or starting one. */}
         {feedUrl && !inSetup && <YourShowElsewhere name={profile?.podcastName ?? ""} rss={feedUrl} onMoved={refresh} />}
         <PodcastSetup initialFeed={feedUrl} onImported={() => { refresh(); toast({ title: "Alex: your episodes are here", description: "Next, point Apple and Spotify at your new feed so they read it instead of your old host. It is under Directories." }); }} onCreating={() => setInSetup(true)} onFinish={finishSetup} onBack={() => (shows.length ? setInSetup(false) : window.location.assign("/host/dashboard"))} backLabel={shows.length ? "Back" : "Skip — go to my dashboard"} />
@@ -214,7 +216,7 @@ export function PodcastHosting() {
 
   if (!h) {
     return (
-      <section className="mt-2" data-testid="podcast-hosting">
+      <section className={`mt-2 ${TAP44}`} data-testid="podcast-hosting">
         <h1 className="text-2xl font-bold tracking-tight">Your shows</h1>
         <p className="mt-1 text-sm text-muted-foreground">Each one has its own feed for Apple, Spotify and every podcast app.</p>
         <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-3 sm:gap-4 lg:grid-cols-4 2xl:grid-cols-5" data-testid="hosting-shows">
@@ -315,7 +317,7 @@ export function PodcastHosting() {
   );
 
   return (
-    <section className="mt-2 space-y-4 pb-24" data-testid="podcast-hosting">
+    <section className={`mt-2 space-y-4 pb-24 ${TAP44}`} data-testid="podcast-hosting">
       {bulkDialog}
       {shows.length > 1 && <button type="button" onClick={() => { endSelect(); setOpenId(null); }} className="inline-flex items-center gap-1 text-sm font-medium text-muted-foreground hover:text-foreground" data-testid="hosting-all-shows"><ChevronLeft className="h-4 w-4" /> All shows</button>}
       {/* The show: its art, its name, its feed. */}
@@ -420,8 +422,8 @@ export function PodcastHosting() {
                       {e.audioJob && e.audioJob !== "failed" && <Loader2 className="h-3 w-3 animate-spin" />}{STAGE[stageOf(e)].label}
                     </span>
                     <button type="button" onClick={() => (selecting ? setPicked((p) => (p.includes(e.id) ? p.filter((x) => x !== e.id) : [...p, e.id])) : setEditEp(e))} className="min-w-0 flex-1 text-left">
-                      <span className="line-clamp-2 text-sm font-medium sm:line-clamp-none sm:block sm:truncate">{e.episodeNumber != null ? `${e.episodeNumber}. ` : ""}{e.title}</span>
-                      <span className="block text-xs text-muted-foreground"><span className="font-semibold sm:hidden">{STAGE[stageOf(e)].label} · </span>{e.publishedAt ? dateOf(e.publishedAt) : "Not published"}{e.durationSec ? ` · ${hms(e.durationSec)}` : ""}{e.youtube ? " · on YouTube" : ""}</span>
+                      <span className="line-clamp-2 text-balance text-sm font-medium sm:line-clamp-none sm:block sm:truncate">{e.episodeNumber != null ? `${e.episodeNumber}. ` : ""}{e.title}</span>
+                      <span className="block text-xs text-muted-foreground"><span className="font-semibold sm:hidden">{STAGE[stageOf(e)].label} · </span><span className="whitespace-nowrap">{e.publishedAt ? dateOf(e.publishedAt) : "Not published"}{e.durationSec ? ` · ${hms(e.durationSec)}` : ""}</span>{e.youtube ? " · on YouTube" : ""}</span>
                       <DeliveryChips ep={e} />
                     </button>
                     <span className="hidden w-24 shrink-0 text-right text-xs tabular-nums text-muted-foreground sm:block"><b className="text-foreground">{compact(e.downloads)}</b> downloads</span>
@@ -598,7 +600,7 @@ function Directories({ h, ready, youtubeReady, onSaved, youtube }: { h: Hosted; 
           // "Spotify" under Spotify says nothing: the reach line only when it adds something (UI/UX, a1ee1d0d).
           // Status only once it's live (Andrew, 23 Nov): the reach line is for deciding to list it.
           const reach = d.reach === d.name || (live && d.key !== "youtube") ? "" : d.reach;
-          const badge = live ? "bg-emerald-600 text-white dark:bg-emerald-500"
+          const badge = live ? "bg-emerald-700 text-white"
             : st?.state === "submitted" ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : "!px-0 text-muted-foreground"; // a status, not a button: no pill
           return (
             <li key={d.key} className="py-3" data-testid={`hosting-dir-${d.key}`}>
@@ -760,7 +762,7 @@ function YouTubeEpisodes({ h, ready, onDone, embedded = false }: { h: Hosted; re
               : "Not on YouTube";
             return (
               <li key={e.id} className="flex flex-wrap items-center gap-2 py-2.5">
-                <span className="min-w-0 flex-1"><span className="block truncate text-sm font-medium">{e.title}</span><span className={`block text-xs ${yt.state === "failed" ? "text-destructive" : "text-muted-foreground"}`}>{status}</span></span>
+                <span className="min-w-[11rem] flex-1"><span className="block truncate text-sm font-medium">{e.title}</span><span className={`block text-xs ${yt.state === "failed" ? "text-destructive" : "text-muted-foreground"}`}>{status}</span></span>
                 {skipped ? (
                   <Button size="sm" variant="ghost" onClick={() => void act(e, "youtube/skip", { skip: false })} disabled={busy != null} className="h-8 rounded-full">Undo</Button>
                 ) : (
@@ -865,7 +867,7 @@ function MoveSubscribers({ h, onDone }: { h: Hosted; onDone: () => void }) {
   return (
     <div className={`rounded-2xl border p-5 shadow-sm ${s.redirectOk ? "border-emerald-500/40 bg-emerald-500/[0.05]" : "border-[#053877]/25 bg-card"}`} data-testid="hosting-move">
       <div className="flex flex-wrap items-start gap-3">
-        <div className="min-w-0 flex-1">
+        <div className="min-w-[16rem] flex-1">
           <p className="flex items-center gap-2 font-semibold">{s.redirectOk ? <><Check className="h-4 w-4 text-emerald-600" /> Your subscribers are following</> : "Bring your subscribers with you"}</p>
           {s.redirectOk ? (
             <p className="mt-1 text-sm text-muted-foreground">Your old feed forwards here{s.redirectCheckedAt ? ` (checked ${dateOf(s.redirectCheckedAt)})` : ""}. Keep your old host's account open for four weeks while every app catches up, then you can close it.</p>
@@ -884,7 +886,7 @@ function MoveSubscribers({ h, onDone }: { h: Hosted; onDone: () => void }) {
               <p className="mt-0.5 text-muted-foreground">Ask their support to turn on the redirect to your new feed; hosts do this even for paused or unpaid accounts. And if you own your Apple listing, you can change its feed address yourself in Apple Podcasts Connect (your show's information, RSS feed).</p>
             </div>
           )}
-          <p className="mt-2 text-xs text-muted-foreground">Old feed: <span className="font-mono">{s.importedFrom}</span></p>
+          <p className="mt-2 text-xs text-muted-foreground">Old feed: <span className="break-all font-mono">{s.importedFrom}</span></p>
         </div>
         <Button variant="outline" onClick={() => check.mutate()} disabled={check.isPending} className="h-9 gap-1.5 rounded-full" data-testid="hosting-redirect-check">{check.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : <Radio className="h-4 w-4" />} Check the redirect</Button>
       </div>
@@ -1145,7 +1147,7 @@ function DeleteShow({ show, onDeleted }: { show: HostedShowRow; onDeleted: () =>
   const [open, setOpen] = useState(false);
   return (
     <div className="mt-6 flex justify-center" data-testid="hosting-delete-area">
-      <button type="button" onClick={() => setOpen(true)} className="text-sm font-semibold text-destructive hover:underline" data-testid="hosting-delete">Delete this show</button>
+      <button type="button" onClick={() => setOpen(true)} className="text-sm font-semibold text-red-700 hover:underline dark:text-red-400" data-testid="hosting-delete">Delete this show</button>
       <DeleteShowDialog show={show} open={open} onClose={() => setOpen(false)} onDeleted={onDeleted} />
     </div>
   );
@@ -1493,7 +1495,7 @@ function EpisodePage({ ep, show, shows, onMoved, youtubeReady, production, onDir
             <div className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-sm">
               <span><b className="tabular-nums">{compact(ep.downloads)}</b> <span className="text-muted-foreground">downloads</span></span>
               {ep.durationSec > 0 && <span><b className="tabular-nums">{hms(ep.durationSec)}</b> <span className="text-muted-foreground">long</span></span>}
-              <span className="text-muted-foreground">{statusLine}</span>
+              <span className="text-pretty text-muted-foreground">{statusLine}</span>
               {hasAudio && ep.status === "draft" && !ep.audioJob && <button type="button" onClick={() => void removeAudio()} className="ml-auto text-xs font-semibold text-muted-foreground underline hover:text-foreground" data-testid="episode-remove-audio">Remove this audio and upload a new one</button>}
             </div>
           </div>
@@ -1544,7 +1546,7 @@ function EpisodePage({ ep, show, shows, onMoved, youtubeReady, production, onDir
               </div>
             )}
             {hasAudio && (
-              <label className="mt-3 flex items-center gap-2 rounded-xl border border-border px-3 py-2.5 text-sm" data-testid="hosting-ep-spots"><input type="checkbox" checked={!(v.spotsOff as boolean)} onChange={(e) => set("spotsOff", !e.target.checked)} /> Play your sponsor spots on this episode<button type="button" onClick={() => onAddSpot(ep.id)} className="ml-auto text-xs font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]" data-testid="episode-add-spot">+ Add a sponsor or shout-out to this episode</button></label>
+              <label className="mt-3 flex flex-wrap items-center gap-x-2 gap-y-1 rounded-xl border border-border px-3 py-2.5 text-sm" data-testid="hosting-ep-spots"><input type="checkbox" checked={!(v.spotsOff as boolean)} onChange={(e) => set("spotsOff", !e.target.checked)} /><span className="min-w-[10rem] flex-1 text-balance">Play your sponsor spots on this episode</span><button type="button" onClick={() => onAddSpot(ep.id)} className="ml-auto text-balance text-xs font-semibold text-[#053877] hover:underline dark:text-[#8fb5e8]" data-testid="episode-add-spot">+ Add a sponsor or shout-out to this episode</button></label>
             )}
             {/* The show's host details (Settings → Show details, episodeFooter) go under every episode's notes in the feed
                 unless footerOff. Shown here, ticked, so nobody types them into the notes as well (Andrew, 23 Nov: "otherwise
@@ -1572,7 +1574,7 @@ function EpisodePage({ ep, show, shows, onMoved, youtubeReady, production, onDir
           <div className="rounded-2xl border border-border bg-card shadow-sm">
             <div className={`rounded-t-2xl px-4 py-3 text-sm font-semibold ${stage === "live" ? "bg-emerald-600 text-white" : stage === "scheduled" ? "bg-[#053877] text-white" : stage === "final" ? "bg-[#F0A71F] text-[#3a2600]" : stage === "failed" ? "bg-destructive text-white" : "bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]"}`} data-testid="episode-stage">{stage === "live" ? "Live" : STAGE[stage].label}</div>
             <div className="space-y-3 p-4 text-sm">
-              <p className="text-muted-foreground">{statusLine}</p>
+              <p className="text-pretty text-muted-foreground">{statusLine}</p>
               {ep.delivery && ep.delivery.apps.length > 0 && (() => {
                 const d = ep.delivery!;
                 const big = d.apps.filter((a) => BIG_APPS.test(a.app));
@@ -1664,7 +1666,7 @@ function EpisodePage({ ep, show, shows, onMoved, youtubeReady, production, onDir
               </Popover>
             )}
             {mover.dialog}
-            <button type="button" onClick={() => void remove()} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-destructive hover:bg-destructive/10" data-testid="episode-delete"><Trash2 className="h-4 w-4" /> Delete this episode</button>
+            <button type="button" onClick={() => void remove()} className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-red-700 hover:bg-destructive/10 dark:text-red-400" data-testid="episode-delete"><Trash2 className="h-4 w-4" /> Delete this episode</button>
           </div>
         </aside>
       </div>
