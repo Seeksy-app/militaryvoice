@@ -52,16 +52,16 @@ export default function HelpPodcast() {
 
         <Section n={3} id="list" title="Listing your show">
           <p className="font-semibold text-foreground">Apple Podcasts</p>
-          <Step k="a" text={<>On your Podcast screen, open your show's <em>Directories</em> tab. When the list at the top is done, press <strong>List it</strong> beside Apple Podcasts: your feed is copied and Apple's page opens. Sign in with your Apple ID.</>} />
-          <Step k="b" text={<>Choose to add a new show with an <strong>RSS feed</strong>, and paste your feed address.</>} />
-          <Step k="c" text={<>Check the details and submit. Apple reviews it, usually within a few days, and emails the owner email.</>} />
-          <Step k="d" text={<>Once it's live, paste your show's Apple link under Apple Podcasts in <em>Directories</em> and press <strong>It's live</strong>, so your page and SmartLink link to it.</>} />
+          <Step k="a" text={<>On your Podcast screen, open your show's <em>Directories</em> tab. When the list at the top is done, press <strong>List it</strong> beside Apple Podcasts to see the steps. Open Apple's page from step 1 and sign in with your Apple ID.</>} />
+          <Step k="b" text={<>Choose to add a new show with an <strong>RSS feed</strong>, and paste your feed address. It's right there in the step, with a <strong>Copy</strong> button.</>} />
+          <Step k="c" text={<>Check the details and submit. Apple reviews it, usually in a day or two, and emails the owner email.</>} />
+          <Step k="d" text={<>Once it's live, paste your show's Apple link under Apple Podcasts in <em>Directories</em> and press <strong>Save link</strong>, so your page and SmartLink link to it.</>} />
 
           <p className="mt-6 font-semibold text-foreground">Spotify</p>
-          <Step k="a" text={<>Press <strong>List it</strong> beside Spotify in <em>Directories</em> (or go to creators.spotify.com) and sign in.</>} />
-          <Step k="b" text={<>Choose to add a podcast you already host somewhere else, and paste your feed address.</>} />
+          <Step k="a" text={<>Press <strong>List it</strong> beside Spotify in <em>Directories</em>, open Spotify for Creators from step 1 (or go to creators.spotify.com) and sign in.</>} />
+          <Step k="b" text={<>Choose to add a podcast you already host somewhere else, and paste your feed address (press <strong>Copy</strong> beside it in the step).</>} />
           <Step k="c" text={<>Spotify emails a code to your owner email. Enter it, check the details, and submit. It's usually live within hours.</>} />
-          <Step k="d" text={<>Paste the Spotify link under Spotify in <em>Directories</em> and press <strong>It's live</strong>. YouTube Music, Amazon Music, iHeartRadio, Pocket Casts and Podcast Index are listed there the same way.</>} />
+          <Step k="d" text={<>Paste the Spotify link under Spotify in <em>Directories</em> and press <strong>Save link</strong>. YouTube Music, Amazon Music, iHeartRadio, Pocket Casts and Podcast Index are listed there the same way.</>} />
         </Section>
 
         <Section n={4} id="youtube" title="Your episodes on YouTube">

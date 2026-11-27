@@ -504,13 +504,14 @@ const FIND: Record<string, (t: string) => string> = {
   pocketcasts: (t) => `https://pocketcasts.com/search?q=${encodeURIComponent(t)}`,
   podcastindex: (t) => `https://podcastindex.org/search?q=${encodeURIComponent(t)}&type=all`,
 };
-const DIRS: { key: string; name: string; reach: string; url: string; steps: string[]; link: string; auto?: boolean }[] = [
-  { key: "apple", name: "Apple Podcasts", reach: "Apple Podcasts, and the apps that read Apple's list (Overcast, Castro)", url: "https://podcastsconnect.apple.com/my-podcasts/new-feed", steps: ["Sign in with your Apple ID.", "Choose to add a show with an RSS feed, and paste your feed (it's copied).", "Submit. Apple reviews it, usually in a day or two, and writes to your owner email."], link: "https://podcasts.apple.com/…" },
-  { key: "spotify", name: "Spotify", reach: "Spotify", url: "https://creators.spotify.com/", steps: ["Sign in to Spotify for Creators (it opens in a new tab).", "Choose to add a podcast you already have on another host, and paste your feed.", "Spotify emails a code to your owner email: type it in. It's live within hours."], link: "https://open.spotify.com/show/…" },
+// "live": how long after the last step it shows up, said once, under the steps (Andrew via PM, 27 Nov: the steps and the line under them disagreed).
+const DIRS: { key: string; name: string; reach: string; url: string; steps: string[]; link: string; auto?: boolean; live?: string }[] = [
+  { key: "apple", name: "Apple Podcasts", reach: "Apple Podcasts, and the apps that read Apple's list (Overcast, Castro)", url: "https://podcastsconnect.apple.com/my-podcasts/new-feed", steps: ["Sign in with your Apple ID.", "Choose to add a show with an RSS feed, and paste your feed.", "Submit. Apple reviews it and writes to your owner email."], link: "https://podcasts.apple.com/…", live: "usually in a day or two" },
+  { key: "spotify", name: "Spotify", reach: "Spotify", url: "https://creators.spotify.com/", steps: ["Sign in to Spotify for Creators.", "Choose to add a podcast you already have on another host, and paste your feed.", "Spotify emails a code to your owner email: type it in."], link: "https://open.spotify.com/show/…", live: "usually within a few hours" },
   { key: "amazon", name: "Amazon Music & Audible", reach: "Amazon Music, Audible and Alexa", url: "https://podcasters.amazon.com/", steps: ["Sign in with an Amazon account.", "Add your podcast and paste your feed.", "Confirm with the code sent to your owner email."], link: "https://music.amazon.com/podcasts/…" },
   { key: "iheart", name: "iHeartRadio", reach: "iHeartRadio", url: "https://podcasters.iheart.com/", steps: ["Open iHeart's podcast submission page and sign in.", "Paste your feed and submit."], link: "https://www.iheart.com/podcast/…" },
   { key: "pocketcasts", name: "Pocket Casts", reach: "Pocket Casts", url: "https://pocketcasts.com/submit/", steps: ["Paste your feed and press Submit. No account needed."], link: "https://pca.st/…" },
-  { key: "tunein", name: "TuneIn", reach: "TuneIn and the radios and smart speakers that use it", url: "https://help.tunein.com/contact/add-your-podcast-S19TR3Sdf", steps: ["Open TuneIn's form to add a podcast (your feed is copied).", "Paste your feed, and your show's name, then send it.", "TuneIn reviews it and lists it, usually within a few days."], link: "https://tunein.com/podcasts/…" },
+  { key: "tunein", name: "TuneIn", reach: "TuneIn and the radios and smart speakers that use it", url: "https://help.tunein.com/contact/add-your-podcast-S19TR3Sdf", steps: ["Open TuneIn's form to add a podcast.", "Paste your feed, and your show's name, then send it.", "TuneIn reviews it and lists it."], link: "https://tunein.com/podcasts/…" },
   { key: "deezer", name: "Deezer", reach: "Deezer", url: "https://podcasters.deezer.com/", steps: ["Sign in to Deezer for Creators, or make a free account.", "Add a podcast and paste your feed.", "Confirm with the code Deezer emails to your owner email."], link: "https://www.deezer.com/show/…" },
   { key: "playerfm", name: "Player FM", reach: "Player FM", url: "https://player.fm/importer/feed", steps: ["Paste your feed and press Import. No account needed."], link: "https://player.fm/series/…" },
   { key: "castbox", name: "Castbox", reach: "Castbox", url: "https://castbox.fm/", steps: ["Open Castbox and search for your show. If it isn't there, choose Submit a podcast and paste your feed.", "Confirm with the code Castbox emails to your owner email."], link: "https://castbox.fm/channel/…" },
@@ -574,10 +575,10 @@ function Directories({ h, ready, youtubeReady, onSaved, youtube }: { h: Hosted; 
     onError: (e: Error) => toast({ title: "Couldn't save that", description: e.message.replace(/^\d+:\s*/, ""), variant: "destructive" }),
   });
   const put = (key: string, v: DirState | null) => { const next = { ...dirs }; if (v) next[key] = v; else delete next[key]; save.mutate(next); };
-  const listIt = async (d: (typeof DIRS)[number]) => {
-    await navigator.clipboard.writeText(h.feedUrl).catch(() => {});
-    window.open(d.url, "_blank", "noopener");
-    setOpen(d.key);
+  // "List it" drops the steps open, like the row (Andrew, 27 Nov: the buttons looked disabled and he'd have called support);
+  // the app's own site opens from step 1's link, which also copies the feed and marks it submitted.
+  const openSite = (d: (typeof DIRS)[number]) => {
+    void navigator.clipboard.writeText(h.feedUrl).catch(() => {});
     if (!dirs[d.key]?.state) put(d.key, { state: "submitted", url: "", at: new Date().toISOString() });
     toast({ title: "Your feed is copied", description: `Paste it into ${d.name}.` });
   };
@@ -589,7 +590,8 @@ function Directories({ h, ready, youtubeReady, onSaved, youtube }: { h: Hosted; 
   const renderRow = (d: (typeof DIRS)[number]) => {
           const st = dirs[d.key];
           const live = isLive(d.key);
-          const isOpen = open === d.key;
+          const isOpen = open === d.key || (st?.state === "submitted" && !live && open !== `-${d.key}`);
+          const toggle = () => setOpen(isOpen ? `-${d.key}` : d.key);
           // A moved show whose old feed forwards: the app follows on its own, so the row is its status only (Andrew,
           // 23 Nov). Listing it by hand is inside the row, for the rare app that never had it.
           const quiet = moved && !!s.redirectOk && !st?.state && !live && !d.auto;
@@ -597,13 +599,13 @@ function Directories({ h, ready, youtubeReady, onSaved, youtube }: { h: Hosted; 
           // Status only once it's live (Andrew, 23 Nov): the reach line is for deciding to list it.
           const reach = d.reach === d.name || (live && d.key !== "youtube") ? "" : d.reach;
           const badge = live ? "bg-emerald-600 text-white dark:bg-emerald-500"
-            : st?.state === "submitted" ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : "bg-muted text-muted-foreground";
+            : st?.state === "submitted" ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : "!px-0 text-muted-foreground"; // a status, not a button: no pill
           return (
             <li key={d.key} className="py-3" data-testid={`hosting-dir-${d.key}`}>
               <div className="flex flex-wrap items-center gap-3">
                 {DIR_ICON[d.key] ? (() => { const I = DIR_ICON[d.key].icon; return <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white shadow-sm ring-1 ring-border"><I className="h-5 w-5" style={{ color: DIR_ICON[d.key].color }} /></span>; })()
                   : <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[#053877]/10 text-sm font-bold text-[#053877] dark:bg-white/10 dark:text-[#8fb5e8]">{d.name[0]}</span>}
-                <button type="button" onClick={() => setOpen(isOpen || st?.state === "submitted" ? `-${d.key}` : d.key)} className="min-w-0 flex-1 text-left">
+                <button type="button" onClick={toggle} aria-expanded={isOpen} className="min-w-0 flex-1 text-left">
                   <span className="block text-sm font-semibold">{d.name}{d.auto && <span className="ml-2 align-middle text-[10px] font-medium uppercase tracking-wide text-muted-foreground">Powered by Listen Notes</span>}</span>
                   {/* Wraps on a phone (it was cut to "Amazon Mu…" at 390, 21 Nov); one line on a computer. */}
                   {reach && <span className="block text-xs text-muted-foreground sm:truncate">{reach}</span>}
@@ -623,21 +625,27 @@ function Directories({ h, ready, youtubeReady, onSaved, youtube }: { h: Hosted; 
                   </span>
                 ) : st?.state === "live" ? (st.url
                   ? <Button asChild size="sm" variant="outline" className="h-8 gap-1 rounded-full"><a href={st.url} target="_blank" rel="noreferrer">Open <ExternalLink className="h-3 w-3" /></a></Button>
-                  : <Button size="sm" variant="outline" onClick={() => setOpen(isOpen ? `-${d.key}` : d.key)} className="h-8 rounded-full" data-testid={`hosting-dir-confirm-${d.key}`}>Confirm</Button>
+                  : <Button size="sm" variant="outline" onClick={toggle} className="h-8 rounded-full" data-testid={`hosting-dir-confirm-${d.key}`}>Confirm</Button>
                 ) : quiet ? null : (
-                  <Button size="sm" variant={moved ? "outline" : "default"} onClick={() => void listIt(d)} disabled={!ready} title={ready ? undefined : "Finish what the apps need first (above)"} className={`h-8 gap-1 rounded-full ${moved ? "" : "bg-[#053877] text-white hover:bg-[#0a4a99]"}`} data-testid={`hosting-dir-list-${d.key}`}>{st?.state === "submitted" ? "Open again" : moved ? "Not there? List it" : "List it"} <ExternalLink className="h-3 w-3" /></Button>
+                  <Button size="sm" onClick={toggle} aria-expanded={isOpen} className={`h-8 rounded-full ${isOpen ? "border border-[#053877] bg-transparent text-[#053877] hover:bg-[#053877]/10 dark:border-[#8fb5e8] dark:text-[#8fb5e8]" : "bg-[#053877] text-white hover:bg-[#0a4a99]"}`} data-testid={`hosting-dir-list-${d.key}`}>{isOpen ? "Hide steps" : st?.state === "submitted" ? "Steps" : moved ? "Not there? List it" : "List it"}</Button>
                 )}
                 </span>
               </div>
-              {(isOpen || (st?.state === "submitted" && !live && open !== `-${d.key}`)) && (
+              {isOpen && (
                 <div className="ml-12 mt-2 space-y-2 text-sm">
                   {live ? (
                     <p className="text-xs text-foreground">{d.name} gets your episodes from your new feed. <span className="text-muted-foreground">Optional: <a href={FIND[d.key]?.(s.title) ?? d.url} target="_blank" rel="noreferrer" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">find your show on {d.name}</a> and paste its address below to put a {d.name} button on your show page.</span></p>
                   ) : <>
                   {quiet && <p className="text-xs text-foreground">{d.name} follows your forward on its own. Not there after a week? List it once:</p>}
-                  <ol className="list-decimal space-y-1 pl-5 text-foreground">{d.steps.map((x) => <li key={x}>{x}</li>)}</ol>
-                  {quiet && <Button size="sm" variant="outline" onClick={() => void listIt(d)} disabled={!ready} className="h-8 gap-1 rounded-full" data-testid={`hosting-dir-list-${d.key}`}>List it on {d.name} <ExternalLink className="h-3 w-3" /></Button>}
-                  <p className="text-xs text-foreground">That's all: it goes live on its own once {d.name} approves it, usually within a few days. <span className="text-muted-foreground">Optional: <a href={FIND[d.key]?.(s.title) ?? d.url} target="_blank" rel="noreferrer" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">find your show on {d.name}</a> and paste its address below to put a {d.name} button on your show page.</span></p>
+                  {!ready && <p className="rounded-lg bg-[#F0A71F]/15 px-3 py-2 text-xs text-[#8a5a00] dark:text-[#F0A71F]" data-testid={`hosting-dir-notready-${d.key}`}>First finish what the apps need (above). {d.name} turns a show away without it.</p>}
+                  <ol className="list-decimal space-y-2 pl-5 text-foreground">{d.steps.map((x, i) => (
+                    <li key={x}>
+                      {x}
+                      {i === 0 && ready && <> <a href={d.url} target="_blank" rel="noreferrer" onClick={() => openSite(d)} className="inline-flex items-center gap-1 font-semibold text-[#053877] underline dark:text-[#8fb5e8]" data-testid={`hosting-dir-site-${d.key}`}>Open {d.name} <ExternalLink className="h-3 w-3" /></a></>}
+                      {/paste your feed/i.test(x) && <FeedCopy url={h.feedUrl} testId={`hosting-dir-feed-${d.key}`} />}
+                    </li>
+                  ))}</ol>
+                  <p className="text-xs text-foreground">That's all: it goes live on its own once {d.name} approves it, {d.live ?? "usually within a few days"}. <span className="text-muted-foreground">Optional: <a href={FIND[d.key]?.(s.title) ?? d.url} target="_blank" rel="noreferrer" className="font-semibold text-[#053877] underline dark:text-[#8fb5e8]">find your show on {d.name}</a> and paste its address below to put a {d.name} button on your show page.</span></p>
                   </>}
                   <form onSubmit={(e) => {
                     e.preventDefault();
@@ -920,6 +928,32 @@ function OwnerEmail({ h, onDone }: { h: Hosted; onDone: () => void }) {
         </>
       )}
     </div>
+  );
+}
+
+/** Copies text; falls back to a hidden textarea where the clipboard API is refused (an embedded browser, an older Safari). */
+async function copyText(t: string): Promise<boolean> {
+  try { await navigator.clipboard.writeText(t); return true; } catch { /* fall back */ }
+  try {
+    const el = document.createElement("textarea");
+    el.value = t; el.setAttribute("readonly", ""); el.style.position = "fixed"; el.style.opacity = "0";
+    document.body.appendChild(el); el.select();
+    const ok = document.execCommand("copy");
+    el.remove();
+    return ok;
+  } catch { return false; }
+}
+
+/** The show's feed address inside a "paste your feed" step, with Copy (Andrew, 27 Nov: "we need to give them the URL"). */
+function FeedCopy({ url, testId }: { url: string; testId?: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <span className="mt-1 flex max-w-full items-center gap-2 rounded-lg border border-border bg-muted/50 py-1 pl-3 pr-1" data-testid={testId}>
+      <span className="min-w-0 flex-1 truncate font-mono text-xs" title={url}>{url}</span>
+      <Button type="button" size="sm" variant="outline" onClick={() => { void copyText(url).then((ok) => { if (ok) { setCopied(true); setTimeout(() => setCopied(false), 2000); } }); }} className="h-7 shrink-0 gap-1 rounded-md px-2 text-xs" data-testid={testId ? `${testId}-copy` : undefined}>
+        {copied ? <><Check className="h-3 w-3" /> Copied</> : <><Copy className="h-3 w-3" /> Copy</>}
+      </Button>
+    </span>
   );
 }
 
