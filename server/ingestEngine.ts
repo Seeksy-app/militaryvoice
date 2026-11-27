@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { beat } from "./health.js";
 import { slackNote } from "./slack.js";
-import { capSeconds, keyHash, ownBoxAlive, ownUrl, ownWatchOn, showName, testArmed, usedSeconds, watchIdKey } from "./streamIn.js";
+import { capSeconds, keyHash, ownBoxAlive, ownUrl, ownWatchOn, showName, streamInHome, testArmed, usedSeconds, watchIdKey } from "./streamIn.js";
 import { streamInOutOn } from "./livePage.js";
 import { liveTargetsOf } from "./myStudio.js";
 import { streamKeys, streamSessions, type StreamKeyRow } from "../shared/schema.js";
@@ -125,10 +125,10 @@ export function registerIngest(app: Express, requireAdmin: RequestHandler): void
     const egressId = `OWN_${s.id}`;
     const when = new Intl.DateTimeFormat("en-US", { month: "short", day: "numeric", timeZone: "America/New_York" }).format(new Date(s.startedAt));
     const title = `${(await showName(c.ownerEmail)) || "Live stream"} · ${when}`;
-    // A Library recording like any other; the event and studio are only bookkeeping.
-    const event = await storage.getFeaturedEvent();
-    const studio = await storage.getOrCreateStudio(event.id);
-    const rec = await storage.createRecording({ eventId: event.id, studioId: studio.id, signupId: null, email: c.ownerEmail, title, egressId, filepath: objectKey });
+    // A Library recording like any other; the event and studio are only bookkeeping. With events:explicit:ingress on
+    // (Track R, R-C) it's 0/0, "no event, no studio, theirs alone", as My Studio's recordings are.
+    const where = await streamInHome();
+    const rec = await storage.createRecording({ eventId: where.eventId, studioId: where.studioId, signupId: null, email: c.ownerEmail, title, egressId, filepath: objectKey });
     await storage.finishRecording(egressId, { status: "Ready", url: objectKey, durationSec, sizeBytes, error: "" });
     // A finished recording is a clip job, picked up by the worker (as with every other recording).
     if ((process.env.AGENT_TOKEN ?? "").trim()) await storage.setClipStatus(rec.id, "queued", "");

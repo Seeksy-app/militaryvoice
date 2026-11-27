@@ -16,7 +16,8 @@ import { eq, sql } from "drizzle-orm";
 import { db, storage } from "./storage.js";
 import { discoveryCache } from "../shared/schema.js";
 import { egress, isLiveKitConfigured, rooms } from "./livekit.js";
-import { stageStudios } from "./stageStudio.js";
+import { stageStudios, mvEventStudios } from "./stageStudio.js";
+import { explicitOn } from "./mvEvents.js";
 import { signedRecordingUrl } from "./recordingStorage.js";
 import { podscanUsedToday } from "./podscan.js";
 import { fallbackSummary } from "./mvEvents.js";
@@ -86,7 +87,12 @@ const DEFS: Def[] = [
       const lost: string[] = [];
       let live = 0, recording = 0;
       // The featured event's studios as before, plus each LIVE stage's studio (Packet B), each counted once.
-      const studios = await storage.listStudios(ev.id);
+      // Track R (R-C), events:explicit:health on: every MV event on now (Radio's days included), all its studios.
+      const studios = (await explicitOn("health")) ? [] : await storage.listStudios(ev.id);
+      const extra = (await explicitOn("health"))
+        ? (await mvEventStudios({ radio: true, liveOnly: true }).catch(() => [])).map((s) => s.event.id)
+        : [];
+      for (const id of extra) for (const st of await storage.listStudios(id)) if (!studios.some((x) => x.id === st.id)) studios.push(st);
       for (const s of await stageStudios().catch(() => [])) if (!studios.some((x) => x.id === s.studio.id)) studios.push(s.studio);
       for (const st of studios) {
         if (st.broadcastEgressId) { if (running.has(st.broadcastEgressId)) live++; else lost.push(`${st.name || "Studio"}'s broadcast`); }

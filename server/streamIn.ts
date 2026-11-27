@@ -5,6 +5,7 @@ import { requireHostSession, getSessionEmail } from "./session.js";
 import crypto from "node:crypto";
 import { createRtmpIngress, deleteIngress, listIngressForRoom, isLiveKitConfigured, isRecordingConfigured, runningEgressIds, startBroadcast, startRoomRecording, stopEgressById } from "./livekit.js";
 import { streamInOutOn } from "./livePage.js";
+import { explicitOn } from "./mvEvents.js";
 import { liveTargetsOf } from "./myStudio.js";
 import { sendImportReadyEmail } from "./email.js";
 import { cleanupRadioFeeds } from "./radioStreamIn.js";
@@ -145,10 +146,10 @@ async function startClaimed(c: StreamKeyRow, continued?: string): Promise<Stream
   const test = !continued && (await testArmed(c));
   const title = continued ? `${continued.replace(/ \(continued\)$/, "")} (continued)` : test ? `Test stream · ${when}` : `${name || "Live stream"} · ${when}`;
   const egressId = await startRoomRecording(c.room, filepath);
-  // A Library recording like any other; the event and studio are only bookkeeping.
-  const event = await storage.getFeaturedEvent();
-  const studio = await storage.getOrCreateStudio(event.id);
-  const rec = await storage.createRecording({ eventId: event.id, studioId: studio.id, signupId: null, email: c.ownerEmail, title, egressId, filepath });
+  // A Library recording like any other; the event and studio are only bookkeeping. With events:explicit:ingress on
+  // (Track R, R-C) it's 0/0, "no event, no studio, theirs alone", as My Studio's recordings are.
+  const where = await streamInHome();
+  const rec = await storage.createRecording({ eventId: where.eventId, studioId: where.studioId, signupId: null, email: c.ownerEmail, title, egressId, filepath });
   await db.insert(streamSessions).values({ keyId: c.id, ownerEmail: c.ownerEmail, recordingId: rec.id, egressId, startedAt: now() });
   if (test) {
     await storage.setSetting(testRecKey(rec.id), now());
@@ -213,6 +214,13 @@ export async function testArmed(c: StreamKeyRow): Promise<boolean> {
   return !!at && Date.now() - Date.parse(at) < TEST_WINDOW_MS;
 }
 /** Whether a finished Library recording came from a test or a too-short stream in, so it gets no clips. */
+/** Where a stream-in recording is filed: the featured event's studio (legacy), or 0/0 once events:explicit:ingress is on. */
+export async function streamInHome(): Promise<{ eventId: number; studioId: number }> {
+  if (await explicitOn("ingress")) return { eventId: 0, studioId: 0 };
+  const event = await storage.getFeaturedEvent();
+  return { eventId: event.id, studioId: (await storage.getOrCreateStudio(event.id)).id };
+}
+
 export async function streamInSkipsClips(rec: { id: number; durationSec: number }): Promise<boolean> {
   const [s] = await db.select().from(streamSessions).where(eq(streamSessions.recordingId, rec.id)).limit(1);
   if (!s) return false;

@@ -7,6 +7,7 @@ import { asc, desc, eq } from "drizzle-orm";
 import { db, storage, schemaIsReady } from "./storage.js";
 import { sceneTakes } from "../shared/schema.js";
 import { studioForStage } from "./stageStudio.js";
+import { eventFor, eventPickStatus } from "./mvEvents.js";
 
 export async function logSceneTake(sceneId: number, how: string): Promise<void> {
   await schemaIsReady();
@@ -37,10 +38,18 @@ export function registerSceneLog(app: Express, requireAdmin: RequestHandler) {
   app.get("/api/admin/scene-takes", requireAdmin, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     await schemaIsReady();
-    // ?eventId= wins; else a LIVE stage's event (?stageId=, Packet B); else the featured event, as before.
+    // ?eventId= wins; else a LIVE stage's event (?stageId=, Packet B); else the featured event, as before, until
+    // events:explicit:scenes is on (Track R, R-C): then no event named is a 400 "Pick an event".
     const byStage = Number(req.query.stageId) > 0 ? await studioForStage(Number(req.query.stageId)) : undefined;
     if (byStage === null) return res.status(404).json({ message: "That stage has no studio yet." });
-    const eventId = Number(req.query.eventId) || byStage?.event.id || (await storage.getFeaturedEvent()).id;
+    let eventId: number;
+    try {
+      eventId = Number(req.query.eventId) || byStage?.event.id || (await eventFor(req, "scenes")).id;
+    } catch (err) {
+      const pick = eventPickStatus(err);
+      if (pick) return res.status(pick.status).json({ message: pick.message });
+      throw err;
+    }
     const rows = await db.select().from(sceneTakes).where(eq(sceneTakes.eventId, eventId)).orderBy(asc(sceneTakes.id));
     if (req.query.format !== "chapters") return res.json(rows);
     const from = Date.parse(String(req.query.from ?? "")) || (rows[0] ? Date.parse(rows[0].takenAt) : Date.now());

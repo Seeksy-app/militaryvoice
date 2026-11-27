@@ -140,7 +140,8 @@ import { registerMagazine, planSegments, claimSegmentCut } from "./magazine.js";
 import { registerSurvey } from "./survey.js";
 import { registerSms } from "./sms.js";
 import { logSceneTake, registerSceneLog } from "./sceneLog.js";
-import { studioForStage, stageStudios, eventForStudio } from "./stageStudio.js";
+import { studioForStage, stageStudios, eventForStudio, mvEventStudios, type StageStudio } from "./stageStudio.js";
+import { eventFor, eventPickStatus, explicitOn, listMvEvents } from "./mvEvents.js";
 import { audienceRecipients, registerPeople } from "./people.js";
 import { registerOrganizer } from "./organizer.js";
 import { registerProjects } from "./projects.js";
@@ -2991,9 +2992,32 @@ export function registerRoutes(app: Express): void {
   //      soundboard and won't give that up for a web page. We hand them an
   //      RTMP URL and key instead; their feed arrives in the room as an
   //      ordinary participant and the producer promotes them like anyone else.
-  /** Their encoder key: any of theirs with no stage (as before), or the one in that stage's studio. */
-  async function ingressFor(email: string, stageId: unknown): Promise<IngressRow | undefined> {
-    if (!(Number(stageId) > 0)) {
+  /**
+   * Where a host's encoder feeds. A LIVE stage: its own studio (Packet B). No stage, events:explicit:ingress off: the
+   * featured event's first studio, as before (counted as a fallback). On (Track R, R-C): the event the request names,
+   * else the MV event on now that they're confirmed for; neither → 400 "Pick an event". null: the stage has no studio.
+   */
+  async function ingressWhere(req: Request, email: string): Promise<StageStudio | null> {
+    const stageId = Number(req.body?.stageId ?? req.query.stageId) || 0;
+    if (stageId > 0) return studioForStage(stageId);
+    const explicit = await explicitOn("ingress");
+    const event = await eventFor(req, "ingress", explicit ? () => ownMvEventToday(email) : undefined);
+    return { event, studio: await storage.getOrCreateStudio(event.id), stageId: null };
+  }
+  /** The MV event on now (Radio's days included) with a confirmed booking for this email, if any. */
+  async function ownMvEventToday(email: string): Promise<number | null> {
+    for (const e of await listMvEvents()) {
+      for (const d of e.days ?? [e]) {
+        if (d.status !== "live") continue;
+        if ((await storage.listSignups(d.id)).some((sg) => sg.email.toLowerCase().trim() === email && sg.status === "confirmed")) return d.id;
+      }
+    }
+    return null;
+  }
+  /** Their encoder key: any of theirs with no stage and the switch off (as before), else the one in that studio. */
+  async function ingressFor(req: Request, email: string): Promise<IngressRow | undefined> {
+    const stageId = Number(req.body?.stageId ?? req.query.stageId) || 0;
+    if (!stageId && !(await explicitOn("ingress"))) {
       const row = await storage.getIngressByEmail(email);
       // Never hand the featured path a key that feeds a LIVE stage's room.
       const staged = row ? new Set((await stageStudios().catch(() => [])).map((s) => s.studio.id)) : null;
@@ -3001,7 +3025,7 @@ export function registerRoutes(app: Express): void {
       const featured = (await studioForStage())!;
       return (await storage.listIngresses(featured.event.id)).find((r) => r.ownerEmail === email && !staged.has(r.studioId));
     }
-    const where = await studioForStage(Number(stageId));
+    const where = await ingressWhere(req, email);
     if (!where) return undefined;
     return (await storage.listIngresses(where.event.id)).find((r) => r.studioId === where.studio.id && r.ownerEmail === email);
   }
@@ -3012,7 +3036,14 @@ export function registerRoutes(app: Express): void {
       return;
     }
     const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
-    const row = await ingressFor(email, req.query.stageId);
+    let row: IngressRow | undefined;
+    try {
+      row = await ingressFor(req, email);
+    } catch (err) {
+      const pick = eventPickStatus(err);
+      if (pick) return res.status(pick.status).json({ message: pick.message });
+      throw err;
+    }
     // Their own key, for their own encoder — this one they're meant to see.
     res.json({
       configured: true,
@@ -3026,14 +3057,20 @@ export function registerRoutes(app: Express): void {
       return;
     }
     const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
-    // No stage: the featured event's studio, as before. A LIVE stage: its own studio (Packet B).
-    const stageId = req.body?.stageId ?? req.query.stageId;
-    const where = await studioForStage(Number(stageId) || null);
+    let where: StageStudio | null;
+    let existing: IngressRow | undefined;
+    try {
+      where = await ingressWhere(req, email);
+      existing = where ? await ingressFor(req, email) : undefined;
+    } catch (err) {
+      const pick = eventPickStatus(err);
+      if (pick) return res.status(pick.status).json({ message: pick.message });
+      throw err;
+    }
     if (!where) {
       res.status(404).json({ message: "That stage has no studio yet." });
       return;
     }
-    const existing = await ingressFor(email, stageId);
     if (existing) {
       res.json({ id: existing.id, url: existing.url, streamKey: existing.streamKey, displayName: existing.displayName });
       return;
@@ -3069,7 +3106,14 @@ export function registerRoutes(app: Express): void {
   /** Regenerating is delete-then-create: a leaked key should stop working. */
   app.delete("/api/host/ingress", requireHostSession, async (req, res) => {
     const email = (getSessionEmail(req) ?? "").toLowerCase().trim();
-    const row = await ingressFor(email, req.body?.stageId ?? req.query.stageId);
+    let row: IngressRow | undefined;
+    try {
+      row = await ingressFor(req, email);
+    } catch (err) {
+      const pick = eventPickStatus(err);
+      if (pick) return res.status(pick.status).json({ message: pick.message });
+      throw err;
+    }
     if (!row) {
       res.json({ ok: true });
       return;
@@ -3081,7 +3125,14 @@ export function registerRoutes(app: Express): void {
 
   app.get("/api/admin/ingress", requireAdmin, async (req, res) => {
     noStore(res);
-    const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
+    let eventId: number;
+    try {
+      eventId = (await eventFor(req, "ingress")).id;
+    } catch (err) {
+      const pick = eventPickStatus(err);
+      if (pick) return res.status(pick.status).json({ message: pick.message });
+      throw err;
+    }
     const rows = await storage.listIngresses(eventId);
     // Whether anything is actually arriving, straight from LiveKit.
     let statuses = new Map<string, string>();
@@ -6537,6 +6588,15 @@ export function registerRoutes(app: Express): void {
     if (secret && (req.headers.authorization ?? "").replace(/^Bearer\s+/i, "") !== secret) return res.status(401).json({ message: "Not authorised." });
     // Every minute: Vercel's scheduler is running.
     void beat("cron");
+    // Track R (R-C): with events:explicit:cron on, every MV event's own studio (Radio's days excepted: its dx:events
+    // cron runs them), never the featured singleton. Off: exactly as below.
+    if (await explicitOn("cron")) {
+      const studios: unknown[] = [];
+      for (const s of await mvEventStudios({ radio: false, liveOnly: false })) {
+        studios.push({ eventId: s.event.id, studioId: s.studio.id, ...(await studioChannels(s.event, s.studio).catch((err) => ({ error: (err as Error).message }))) });
+      }
+      return res.json({ explicit: true, studios });
+    }
     // The featured studio exactly as before, then each LIVE stage's own studio (Packet B): each one only ever
     // touches its own event's line-up and destinations.
     const featured = (await studioForStage())!;
