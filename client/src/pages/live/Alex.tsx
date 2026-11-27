@@ -1,9 +1,9 @@
 import { useState } from "react";
 import { ArrowRight } from "lucide-react";
 import { useLive } from "./LiveApp";
-import { canManageAlex, notYet, useActivity, useAlexQueue, useAlexState, useDecideAlex, useMembers, type AlexKind, type AlexProposal, type AuditEntry } from "./api";
+import { canManageAlex, notYet, useActivity, useAlexQueue, useAlexState, useDecideAlex, useMembers, whatSays, type ActivityEntry, type AiProposal, type AiProposalKind } from "./api";
 import { shortWho } from "./Approvals";
-import { ApproveBtn, Btn, C, Card, Chips, FONT_COND, LinkBtn, Pill, SayIt, TextArea, type Tone } from "./ui";
+import { ApproveBtn, Btn, C, Card, Chips, FONT_COND, LinkBtn, Pill, readTime, SayIt, TextArea, type Tone } from "./ui";
 
 /**
  * Alex (phase 2, the approved mockup of 27 Nov): what she has drafted, waiting for MV to approve, edit or reject;
@@ -11,11 +11,18 @@ import { ApproveBtn, Btn, C, Card, Chips, FONT_COND, LinkBtn, Pill, SayIt, TextA
  * used until a person approves it, and she never approves anything herself.
  */
 
-const KIND: Record<AlexKind, [string, Tone]> = {
-  bio: ["Bio", "alex"], headshot: ["Headshot", "alex"], pronunciation: ["How to say it", "alex"], intro: ["Intro", "alex"], sponsor_read: ["Sponsor read", "alex"], missing_info: ["Missing info", "bad"],
+const KIND: Record<AiProposalKind, [string, Tone]> = {
+  bio: ["Bio", "alex"], headshot: ["Headshot", "alex"], cutout: ["Cutout", "alex"], pronunciation: ["How to say it", "alex"], links: ["Links", "alex"],
+  intro: ["Intro", "alex"], transition: ["Transition", "alex"], sponsor_read: ["Sponsor read", "alex"], missing_info: ["Missing info", "bad"],
 };
 type Filter = "all" | "bio" | "headshot" | "intro" | "missing_info";
-const inFilter = (f: Filter, k: AlexKind) => f === "all" || k === f || (f === "headshot" && k === "pronunciation") || (f === "intro" && k === "sponsor_read");
+const GROUP: Record<AiProposalKind, Filter> = { bio: "bio", links: "bio", headshot: "headshot", cutout: "headshot", pronunciation: "headshot", intro: "intro", transition: "intro", sponsor_read: "intro", missing_info: "missing_info" };
+const inFilter = (f: Filter, k: AiProposalKind) => f === "all" || GROUP[k] === f;
+/** The one words field a proposal sets, which Edit changes ("" when it's a picture or a flag). */
+const WORDS = ["bio", "text", "pronunciationText"] as const;
+const wordsKey = (a: AiProposal) => WORDS.find((k) => typeof a.proposed[k] === "string") ?? "";
+const str = (v: unknown) => (typeof v === "string" ? v : "");
+const SOURCE = (s: string) => (!s ? "" : /^https?:\/\//.test(s) ? `From ${s.replace(/^https?:\/\/(www\.)?/, "").replace(/\/.*$/, "")}` : `From the ${s}`);
 
 export default function Alex() {
   const { current } = useLive();
@@ -52,51 +59,49 @@ export default function Alex() {
   );
 }
 
-function Proposal({ a, pid }: { a: AlexProposal; pid: number }) {
+function Proposal({ a, pid }: { a: AiProposal; pid: number }) {
   const act = useDecideAlex(pid);
+  const key = wordsKey(a);
   const [editing, setEditing] = useState(false);
-  const [text, setText] = useState(a.proposed.text ?? a.proposed.pronunciationText ?? "");
+  const [text, setText] = useState(str(a.proposed[key]));
   const [label, tone] = KIND[a.kind];
-  const editable = a.kind !== "missing_info" && a.kind !== "headshot";
-  const decide = (decision: "accept" | "reject", edited?: string) => act.mutate({ actionId: a.id, decision, ...(edited !== undefined ? { edited } : {}) });
+  const words = str(a.proposed[key]);
+  const was = str(a.current[key]);
+  const links = Array.isArray(a.proposed.links) ? (a.proposed.links as { label?: string; url?: string }[]) : [];
+  const decide = (decision: "accept" | "reject", edited?: Record<string, unknown>) => act.mutate({ actionId: a.id, decision, ...(edited ? { edited } : {}) });
+  const quoted = a.kind === "intro" || a.kind === "transition" || a.kind === "sponsor_read";
   return (
     <div className="flex flex-wrap gap-x-4 gap-y-2 border-b px-3.5 py-3 last:border-b-0 md:flex-nowrap" style={{ borderColor: C.line }} data-testid={`alex-${a.id}`}>
       <span className="w-[104px] shrink-0"><Pill tone={tone}>{label}</Pill></span>
       <div className="min-w-0 flex-1 basis-full md:basis-auto">
-        {a.kind === "headshot" ? (
-          <>
-            <p className="text-[14.5px] font-semibold">{a.title}</p>
-            <div className="mt-1.5 flex items-center gap-2.5">
-              <Thumb url={a.proposed.photoUrl} word="Photo" />
-              <ArrowRight className="h-4 w-4 shrink-0" style={{ color: C.muted }} aria-hidden />
-              <Thumb url={a.proposed.cutoutUrl} word="Cutout" checker />
-            </div>
-            <div className="mt-1.5"><SayIt text={a.proposed.pronunciationText ?? ""} audioUrl={a.proposed.pronunciationAudioUrl} /></div>
-          </>
-        ) : (
-          <>
-            <p className="text-[14.5px] font-semibold">{a.title}</p>
-            {editing ? (
-              <TextArea rows={3} value={text} onChange={(e) => setText(e.target.value)} autoFocus className="mt-1" />
-            ) : (
-              <p className="mt-0.5 text-[13.5px] leading-snug">{a.kind === "intro" || a.kind === "sponsor_read" ? `"${a.proposed.text}"` : a.proposed.text}</p>
-            )}
-          </>
+        <p className="text-[14.5px] font-semibold">{a.title}{quoted && words ? ` · ${readTime(words)}` : ""}</p>
+        {(a.kind === "headshot" || a.kind === "cutout") && (
+          <div className="mt-1.5 flex items-center gap-2.5">
+            <Thumb url={a.kind === "cutout" ? str(a.current.photoUrl) : str(a.proposed.photoUrl)} word="Photo" />
+            {a.kind === "cutout" && <><ArrowRight className="h-4 w-4 shrink-0" style={{ color: C.muted }} aria-hidden /><Thumb url={str(a.proposed.cutoutUrl)} word="Cutout" checker /></>}
+          </div>
         )}
-        {a.source && <p className="mt-1 text-[12.5px]" style={{ color: C.muted }}>{a.source}</p>}
+        {a.kind === "pronunciation" && !editing && <div className="mt-1"><SayIt text={words} audioUrl={str(a.proposed.pronunciationAudioUrl)} /></div>}
+        {a.kind === "links" && <p className="mt-0.5 text-[13.5px]">{links.map((l) => l.label || l.url).join(" · ")}</p>}
+        {a.kind === "missing_info" && <p className="mt-0.5 text-[13.5px] leading-snug">Approve to ask them with the "Missing information" message. It's held until sending is switched on.</p>}
+        {key && a.kind !== "pronunciation" && !editing && <p className="mt-0.5 text-[13.5px] leading-snug">{quoted ? `"${words}"` : words}</p>}
+        {editing && <TextArea rows={key === "pronunciationText" ? 1 : 3} value={text} onChange={(e) => setText(e.target.value)} autoFocus className="mt-1" />}
+        <p className="mt-1 text-[12.5px]" style={{ color: C.muted }}>
+          {[SOURCE(a.source), was && key !== "text" ? "Replaces what's there now" : "", quoted ? "Her voice is made only after this is approved" : ""].filter(Boolean).join(" · ")}
+        </p>
         {act.error && <p className="mt-1 text-[12.5px]" style={{ color: "#ff8a80" }}>{act.error.message}</p>}
       </div>
       <div className="ml-auto flex shrink-0 items-start gap-2">
         {editing ? (
           <>
-            <ApproveBtn disabled={act.isPending || !text.trim()} onClick={() => decide("accept", text.trim())}>Save and approve</ApproveBtn>
-            <Btn small className="!h-8" onClick={() => { setEditing(false); setText(a.proposed.text ?? ""); }}>Cancel</Btn>
+            <ApproveBtn disabled={act.isPending || !text.trim()} onClick={() => decide("accept", { ...a.proposed, [key]: text.trim() })}>Save and approve</ApproveBtn>
+            <Btn small className="!h-8" onClick={() => { setEditing(false); setText(words); }}>Cancel</Btn>
           </>
         ) : (
           <>
             <ApproveBtn disabled={act.isPending} onClick={() => decide("accept")} data-testid={`alex-approve-${a.id}`}>Approve</ApproveBtn>
-            {editable && <Btn small className="!h-8" onClick={() => setEditing(true)} data-testid={`alex-edit-${a.id}`}>Edit</Btn>}
-            <Btn small className="!h-8" disabled={act.isPending} onClick={() => decide("reject")} data-testid={`alex-reject-${a.id}`}>Reject</Btn>
+            {key && <Btn small className="!h-8" onClick={() => setEditing(true)} data-testid={`alex-edit-${a.id}`}>Edit</Btn>}
+            <Btn small className="!h-8" disabled={act.isPending} onClick={() => decide("reject")} data-testid={`alex-reject-${a.id}`}>{a.kind === "missing_info" ? "Dismiss" : "Reject"}</Btn>
           </>
         )}
       </div>
@@ -153,18 +158,19 @@ function Activity() {
   );
 }
 
-function ActivityRow({ a }: { a: AuditEntry }) {
+function ActivityRow({ a }: { a: ActivityEntry }) {
   const alex = a.actor === "alex";
   const mv = /@militaryvoices?\.ai$/i.test(a.who);
   const [letter, bg] = alex ? ["A", "#b9a6f5"] : a.actor === "script" ? ["S", "#c9d3e2"] : mv ? ["P", "#c9d3e2"] : ["C", "#e0b23a"];
   const who = alex ? "" : a.actor === "script" ? "Automatic: " : mv ? `${shortWho(a.who)} ` : "Client ";
   const d = new Date(a.at);
   const t = d.toDateString() === new Date().toDateString() ? d.toLocaleTimeString("en-US", { hour: "numeric", minute: "2-digit" }) : d.toLocaleDateString("en-US", { month: "short", day: "numeric" });
-  const what = !alex && a.actor !== "script" ? a.what.charAt(0).toLowerCase() + a.what.slice(1) : a.what;
+  const said = whatSays(a.what, a.subjectType);
+  const what = !alex && a.actor !== "script" ? said.charAt(0).toLowerCase() + said.slice(1) : said;
   return (
     <div className="flex items-center gap-2.5 border-b py-1.5 text-[13.5px] last:border-b-0" style={{ borderColor: C.line }}>
       <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11px] font-bold" style={{ background: bg, color: "#0b2447" }} aria-label={alex ? "Alex" : undefined}>{letter}</span>
-      <span className="min-w-0 flex-1 truncate" title={`${a.who}: ${a.what}`}>{who}{what}</span>
+      <span className="min-w-0 flex-1 truncate" title={`${a.who}: ${said}`}>{who}{what}</span>
       <span className="shrink-0 text-[12.5px] tabular-nums" style={{ color: C.muted }}>{t}</span>
     </div>
   );

@@ -1,5 +1,5 @@
 import { ALEX_EMAIL, CLIENT_CONTENT_SUBJECTS, CLIENT_ROLES, LIVE_TEST_REVIEWER, MV_ROLES, type Approval, type AuditEntry, type LiveRole, type LiveTemplate, type Production, type RunOfShow, type Script, type Session, type Speaker, TEMPLATE_KINDS, TEMPLATE_KIND_LABEL } from "@shared/live";
-import type { AlexProposal, AlexState, Db } from "./api";
+import type { AiProposal, AlexState, Db } from "./api";
 
 /**
  * Phase 2's half of the dev mock (?mock=admin|client|crew): sessions, speakers, scripts, templates, approvals and
@@ -8,7 +8,7 @@ import type { AlexProposal, AlexState, Db } from "./api";
  */
 
 type Ros = Omit<RunOfShow, "sessions" | "stageName" | "timezone" | "productionId" | "stageId">;
-export type Db2 = { sessions: Session[]; speakers: Speaker[]; scripts: Script[]; templates: LiveTemplate[]; ai: AlexProposal[]; ros: Record<number, Ros>; alex: AlexState };
+export type Db2 = { sessions: Session[]; speakers: Speaker[]; scripts: Script[]; templates: LiveTemplate[]; ai: AiProposal[]; ros: Record<number, Ros>; alex: AlexState };
 
 const T = (day: string, hm: string) => new Date(`${day}T${hm}:00-05:00`).toISOString(); // July in Chicago: UTC-5
 const NOW = () => new Date().toISOString();
@@ -83,14 +83,17 @@ export function seedPhase2(): Db2 & { approvals: Approval[]; audit: AuditEntry[]
     ap(906, "run_of_show", 41, 2, "Sat Jul 25 · Exhibit Hall Stage · v2", "client_reviewer", "approved", NOV26, LIVE_TEST_REVIEWER),
     ap(907, "speaker", 301, 1, "Dana Whitfield · bio", "client_reviewer", "approved", NOV26, LIVE_TEST_REVIEWER),
   ];
-  const al = (aid: number, kind: AlexProposal["kind"], subjectType: AlexProposal["subjectType"], subjectId: number, title: string, proposed: AlexProposal["proposed"], source: string, min: number): AlexProposal =>
-    ({ id: aid, productionId: 1, kind, subjectType, subjectId, title, proposed, source, state: "proposed", createdAt: new Date(Date.parse("2026-11-27T20:02:00Z") - min * 60000).toISOString() });
+  const al = (aid: number, kind: AiProposal["kind"], subjectType: AiProposal["subjectType"], subjectId: number, title: string, proposed: Record<string, unknown>, current: Record<string, unknown>, source: string, min: number): AiProposal => {
+    const at = new Date(Date.parse("2026-11-27T20:02:00Z") - min * 60000).toISOString();
+    return { id: aid, productionId: 1, kind, subjectType, subjectId, title, proposed, current, source, state: "proposed", decidedBy: "", createdAt: at, updatedAt: at };
+  };
   const ai = [
-    al(1, "bio", "speaker", 302, "Marcus Bell · Keynote", { text: "An Army veteran and founder of a veteran-owned logistics firm, Marcus speaks on turning service skills into a second career, and hires veterans first." }, "From the guest brief: their site and LinkedIn", 0),
-    al(2, "headshot", "speaker", 303, "Priya Natarajan · Panel", { photoUrl: "", cutoutUrl: "", pronunciationText: "PREE-yah nah-tah-RAH-jun" }, "From the guest brief: their organization's team page", 1),
-    al(3, "intro", "script", 4030, "Opening remarks · 0:12 read", { text: scripts[0].text }, "Drafted when the session was made. Her voice is made only after this is approved.", 3),
-    al(4, "bio", "speaker", 304, "Tom Okafor · Panel", { text: "A Marine Corps veteran who now leads hiring at a regional hospital network, Tom helps veterans turn their service record into a résumé." }, "From the guest brief: their LinkedIn", 9),
-    al(5, "missing_info", "speaker", 306, "Jordan Hale · Fireside chat", { text: "No bio or photo, and the guest brief found nothing. Approve to ask them with the \"Missing information\" email." }, "Held until sending is switched on.", 362),
+    al(1, "bio", "speaker", 302, "Bio for Marcus Bell · Keynote", { bio: "An Army veteran and founder of a veteran-owned logistics firm, Marcus speaks on turning service skills into a second career, and hires veterans first." }, { bio: speakers[1].bio }, "guest brief", 0),
+    al(2, "cutout", "speaker", 303, "Cutout for Priya Natarajan · Panel", { cutoutUrl: "" }, { photoUrl: "" }, "guest brief", 1),
+    al(3, "pronunciation", "speaker", 303, "How to say Priya Natarajan", { pronunciationText: "PREE-yah nah-tah-RAH-jun" }, { pronunciationText: "" }, "guest brief", 2),
+    al(4, "intro", "script", 4030, "Intro for Opening remarks", { text: scripts[0].text }, { text: "" }, "guest brief", 3),
+    al(5, "bio", "speaker", 304, "Bio for Tom Okafor · Panel", { bio: "A Marine Corps veteran who now leads hiring at a regional hospital network, Tom helps veterans turn their service record into a résumé." }, { bio: "" }, "https://www.linkedin.com/", 9),
+    al(6, "missing_info", "speaker", 306, "Jordan Hale · Fireside chat: no bio or photo", {}, {}, "guest brief", 362),
   ];
   const A = (aid: number, what: string, at: string, actor: "alex" | "person" = "alex", who = ALEX_EMAIL): AuditEntry =>
     ({ id: aid, productionId: 1, who, what, subjectType: "speaker", subjectId: null, before: null, after: null, at, actor, aiActionId: actor === "alex" ? aid : null });
@@ -165,7 +168,9 @@ export function mockPhase2(c: Ctx): unknown {
         .map((a) => Object.assign(a, { mine: mineFor(a, role, me) }));
     }
     if (!canEdit) deny();
-    const { subjectType, subjectId, version } = body ?? {};
+    const { subjectType, subjectId } = body ?? {};
+    if (!["run_of_show", "speaker", "script"].includes(subjectType)) c.bad("Send a run of show, a speaker or a script.");
+    const version = subjectType === "run_of_show" ? d.ros[subjectId]?.version ?? 1 : subjectType === "speaker" ? d.speakers.find((x) => x.id === subjectId)?.version ?? 1 : d.scripts.find((x) => x.id === subjectId)?.version ?? 1;
     const client = (CLIENT_CONTENT_SUBJECTS as readonly string[]).includes(subjectType);
     const stage = d.stages.find((x) => x.id === subjectId);
     const summary = subjectType === "run_of_show" ? `${stage?.name ?? "Stage"} · run of show · v${version}`
@@ -243,13 +248,13 @@ export function mockPhase2(c: Ctx): unknown {
     const x = d.ai.find((y) => y.id === Number(parts[3])) ?? nf();
     if (!canEdit && role !== "mv_editor") deny();
     x.state = body?.decision === "accept" ? "accepted" : "rejected";
-    const text = body?.edited ?? x.proposed.text;
+    x.decidedBy = me;
+    const set = (body?.edited ?? x.proposed) as Record<string, unknown>;
     if (x.state === "accepted") {
       const s = x.subjectType === "speaker" ? d.speakers.find((y) => y.id === x.subjectId) : null;
-      if (s && x.kind === "bio") Object.assign(s, { bio: text, version: s.version + 1 });
-      if (s && x.kind === "headshot") Object.assign(s, { photoUrl: x.proposed.photoUrl || s.photoUrl, cutoutUrl: x.proposed.cutoutUrl || s.cutoutUrl, pronunciationText: x.proposed.pronunciationText ?? s.pronunciationText });
+      if (s && x.kind !== "missing_info") Object.assign(s, set, { version: s.version + 1 });
       const sc = x.subjectType === "script" ? d.scripts.find((y) => y.id === x.subjectId) : null;
-      if (sc) Object.assign(sc, { text, draftedBy: me });
+      if (sc && typeof set.text === "string") Object.assign(sc, { text: set.text, draftedBy: me });
     }
     log(pid, `${x.state === "accepted" ? (body?.edited ? "Edited and accepted" : "Accepted") : "Rejected"} Alex's ${x.kind.replace("_", " ")}: ${x.title}`, x.subjectType, x.subjectId);
     return x;

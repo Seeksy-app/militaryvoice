@@ -82,7 +82,7 @@ function Sessions({ pid, tz, startsOn, endsOn, canEdit }: { pid: number; tz: str
           {canEdit && ros && (
             <Btn primary disabled={!sendable || send.isPending} data-testid="ros-send"
               title={ros.state === "in_review" ? "It's with the client now." : ros.state === "approved" ? "Nothing has changed since the client approved it." : undefined}
-              onClick={() => send.mutate({ subjectType: "run_of_show", subjectId: ros.stageId, version: ros.version })}>
+              onClick={() => send.mutate({ subjectType: "run_of_show", subjectId: ros.stageId })}>
               {send.isPending ? "Sending…" : ros.state === "in_review" ? "With the client" : "Send to client"}
             </Btn>
           )}

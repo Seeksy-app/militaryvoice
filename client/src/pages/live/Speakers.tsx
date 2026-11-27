@@ -62,7 +62,7 @@ function SpeakerCard({ p, s, onEdit }: { p: Production; s: Speaker; onEdit?: () 
         {onEdit && (
           <div className="mt-2 flex flex-wrap items-center gap-2">
             <Btn small onClick={onEdit} data-testid={`speaker-edit-${s.id}`}>Edit</Btn>
-            {canSend && <Btn small disabled={send.isPending} onClick={() => send.mutate({ subjectType: "speaker", subjectId: s.id, version: s.version })} data-testid={`speaker-send-${s.id}`}>{send.isPending ? "Sending…" : "Send to client"}</Btn>}
+            {canSend && <Btn small disabled={send.isPending} onClick={() => send.mutate({ subjectType: "speaker", subjectId: s.id })} data-testid={`speaker-send-${s.id}`}>{send.isPending ? "Sending…" : "Send to client"}</Btn>}
             {send.error && <span className="text-[12.5px]" style={{ color: "#ff8a80" }}>{send.error.message}</span>}
           </div>
         )}
@@ -132,7 +132,6 @@ function TemplateRow({ p, t }: { p: Production; t: LiveTemplate }) {
   const [open, setOpen] = useState(false);
   const [f, setF] = useState({ subject: t.subject, text: t.text });
   const patch = usePatchTemplate(p.id);
-  const send = useRequestApproval(p.id);
   const [label, tone] = TSTATE[t.state];
   const mv = p.myRole.startsWith("mv_");
   return (
@@ -145,9 +144,6 @@ function TemplateRow({ p, t }: { p: Production; t: LiveTemplate }) {
         {t.sendable && <Pill tone="ok">✓ Sendable</Pill>}
         {!t.sendable && <Pill tone={tone}>{label}</Pill>}
         {mv && <Btn small onClick={() => setOpen(!open)}>{open ? "Close" : "Edit"}</Btn>}
-        {mv && (t.state === "draft" || t.state === "changes_requested") && t.text && (
-          <Btn small disabled={send.isPending} onClick={() => send.mutate({ subjectType: "template", subjectId: t.id, version: t.version })}>{send.isPending ? "Sending…" : "Send for approval"}</Btn>
-        )}
       </div>
       {open && (
         <form className="mt-2 flex flex-col gap-2" onSubmit={(e) => { e.preventDefault(); patch.mutate({ templateId: t.id, ...f }, { onSuccess: () => setOpen(false) }); }}>
@@ -160,7 +156,6 @@ function TemplateRow({ p, t }: { p: Production; t: LiveTemplate }) {
           </div>
         </form>
       )}
-      {send.error && <p className="mt-1 text-[12.5px]" style={{ color: "#ff8a80" }}>{send.error.message}</p>}
     </div>
   );
 }

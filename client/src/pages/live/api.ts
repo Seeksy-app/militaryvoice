@@ -4,7 +4,7 @@ import {
   PRODUCTION_STATUSES, ROLE_LABEL, type AlexJob, type Approval, type ApprovalDecision, type AuditEntry, type LiveMe, type LiveOrg, type LiveRole, type Member, type MemberInput,
   type MemberPatch, type Production, type ProductionInput, type ProductionStatus, type Stage, type StageInput, type Venue, type VenueInput,
   SESSION_KIND_LABEL, SESSION_KINDS, TEMPLATE_KIND_LABEL, type LiveSponsor, type LiveTemplate, type RunOfShow, type Script, type Session, type SessionInput,
-  type SessionKind, type Speaker, type SpeakerInput,
+  type SessionKind, type Speaker, type SpeakerInput, type ActivityEntry, type AiDecision, type AiProposal, type AiProposalKind, type ApprovalRequest,
 } from "@shared/live";
 import { afterDecide, mineFor, mockPhase2, seedPhase2, type Db2 } from "./mock2";
 
@@ -43,6 +43,30 @@ export function assignable(p: Production | null | undefined): MemberRole[] {
   if (p.myRole === "crew_lead") return ["crew_operator"];
   if (p.myRole === "client_admin") return ["client_reviewer", "client_viewer"];
   return [];
+}
+
+/** Audit and activity lines are codes ("session.updated", "alex.proposed.bio"); screens say them in plain words. */
+const SUBJECT_WORD: Record<string, string> = {
+  run_of_show: "the run of show", speaker: "a speaker", script: "a script", session: "a session", template: "a message", go_no_go: "a go / no-go",
+  production: "the production", member: "a person", stage: "a stage", venue: "a venue", org: "the client's look", sponsor: "a sponsor", asset: "a clip",
+};
+const VERB: Record<string, string> = { created: "Added", updated: "Edited", removed: "Removed", invited: "Saved an invite for", reinvited: "Saved a new invite for", added: "Added", joined: "Joined" };
+const ALEX_WORD: Record<string, string> = {
+  bio: "Drafted a bio", headshot: "Found a headshot", cutout: "Cut out a headshot", pronunciation: "Guessed how to say a name", links: "Found links",
+  intro: "Drafted an intro", transition: "Drafted a transition", sponsor_read: "Drafted a sponsor read", missing_info: "Flagged missing information",
+};
+export function whatSays(what: string, subjectType = ""): string {
+  if (!/^[a-z_]+(\.[a-z_]+)+$/.test(what)) return what; // already words
+  const [a, b, c] = what.split(".");
+  const subj = SUBJECT_WORD[subjectType] ?? SUBJECT_WORD[a] ?? (subjectType || a).replace(/_/g, " ");
+  if (a === "alex") return b === "proposed" ? ALEX_WORD[c] ?? `Proposed ${c?.replace(/_/g, " ")}` : `${b === "accepted" ? "Had a draft accepted" : b === "rejected" ? "Had a draft turned down" : what}`;
+  if (a === "approval") return b === "requested" ? `Sent ${subj} for approval` : b === "approved" ? `Approved ${subj}` : b === "changes_requested" ? `Asked for changes to ${subj}` : b === "withdrawn" ? `Replaced an older request for ${subj}` : `${b} ${subj}`;
+  if (a === "run_of_show" && b === "frozen") return "Locked in the approved run of show";
+  if (a === "console" && b === "updated") return "Updated the stage studio's console";
+  if (a === "production" && b === "created") return "Created the production";
+  if (a === "member" && b === "joined") return "Joined the production";
+  if (a === "member" && b === "updated") return "Changed a person's role or access";
+  return `${VERB[b] ?? b.replace(/_/g, " ")} ${SUBJECT_WORD[a] ?? a.replace(/_/g, " ")}`;
 }
 
 /* ------------------------------------------------------------------ transport */
@@ -121,24 +145,9 @@ export const useDecide = () =>
 export type { LiveSponsor, LiveTemplate, RunOfShow, Script, Session, SessionInput, SessionKind, Speaker, SpeakerInput };
 export { SESSION_KIND_LABEL, SESSION_KINDS, TEMPLATE_KIND_LABEL };
 
-/**
- * Alex's proposals waiting for MV (bio, headshot, cutout, pronunciation, an intro, a missing-info ask). Not in the
- * frozen contract yet: asked of Podcasting 27 Nov, mocked as below until they answer. `proposed` is what she'd write.
- */
-export type AlexKind = "bio" | "headshot" | "pronunciation" | "intro" | "sponsor_read" | "missing_info";
-export type AlexProposal = {
-  id: number; productionId: number; kind: AlexKind;
-  subjectType: "speaker" | "script" | "session"; subjectId: number;
-  /** One line: "Speaker name · Session title". */
-  title: string;
-  proposed: { text?: string; photoUrl?: string; cutoutUrl?: string; pronunciationText?: string; pronunciationAudioUrl?: string };
-  /** Where she found it, in plain words ("From the guest brief: their site"). */
-  source: string;
-  state: "proposed" | "accepted" | "rejected";
-  createdAt: string;
-};
+export type { ActivityEntry, AiDecision, AiProposal, AiProposalKind, ApprovalRequest };
+/** Alex's switches on this production. Not in the contract yet (asked of Podcasting 27 Nov); mocked until then. */
 export type AlexState = { send: boolean; voice: boolean; held: number; coordinatorAt: string };
-export type AlexDecision = { decision: "accept" | "reject"; edited?: string };
 
 /** A route that hasn't landed answers 404: screens say "not switched on yet", never an error. */
 export const notYet = (e: LiveError | null | undefined) => e?.status === 404;
@@ -150,15 +159,19 @@ export const useSpeakers = (id: number | null) =>
 export const useTemplates = (id: number | null) =>
   useQuery<LiveTemplate[], LiveError>({ queryKey: [K, "productions", id, "templates"], queryFn: () => live("GET", `/productions/${id}/templates`), enabled: !!id, retry: false });
 export const useAlexQueue = (id: number | null) =>
-  useQuery<AlexProposal[], LiveError>({ queryKey: [K, "productions", id, "ai-actions"], queryFn: () => live("GET", `/productions/${id}/ai-actions?state=proposed`), enabled: !!id, retry: false });
+  useQuery<AiProposal[], LiveError>({ queryKey: [K, "productions", id, "ai-actions"], queryFn: () => live("GET", `/productions/${id}/ai-actions?state=proposed`), enabled: !!id, retry: false });
 export const useAlexState = (id: number | null) =>
   useQuery<AlexState, LiveError>({ queryKey: [K, "productions", id, "alex"], queryFn: () => live("GET", `/productions/${id}/alex`), enabled: !!id, retry: false });
 /** The merged timeline (Packet A step 6); until it lands, the phase 1 audit log in the same shape. */
-export const useActivity = (id: number | null) =>
-  useQuery<AuditEntry[], LiveError>({
-    queryKey: [K, "productions", id, "activity"], enabled: !!id, retry: false,
+export const useActivity = (id: number | null, who: "" | "alex" = "") =>
+  useQuery<ActivityEntry[], LiveError>({
+    queryKey: [K, "productions", id, "activity", who], enabled: !!id, retry: false,
     queryFn: async () => {
-      try { return await live<AuditEntry[]>("GET", `/productions/${id}/activity`); } catch (e) { if (notYet(e as LiveError)) return live<AuditEntry[]>("GET", `/productions/${id}/audit`); throw e; }
+      try { return await live<ActivityEntry[]>("GET", `/productions/${id}/activity${who ? `?who=${who}` : ""}`); } catch (e) {
+        if (!notYet(e as LiveError)) throw e;
+        const rows = await live<AuditEntry[]>("GET", `/productions/${id}/audit`);
+        return rows.map((r) => ({ id: `audit-${r.id}`, at: r.at, who: r.who, actor: r.actor ?? "person", what: r.what, subjectType: r.subjectType, subjectId: r.subjectId, aiActionId: r.aiActionId ?? null }));
+      }
     },
   });
 
@@ -173,11 +186,11 @@ export const useAddSpeaker = (id: number) => useWrite<SpeakerInput, Speaker>("PO
 export const usePatchSpeaker = (id: number) => useWrite<SpeakerInput & { speakerId: number }, Speaker>("PATCH", (b) => `/productions/${id}/speakers/${b.speakerId}`, ({ speakerId: _, ...b }) => b);
 export const usePatchScript = (id: number) => useWrite<{ scriptId: number; text: string }, Script>("PATCH", (b) => `/productions/${id}/scripts/${b.scriptId}`, ({ text }) => ({ text }));
 export const usePatchTemplate = (id: number) => useWrite<{ templateId: number; subject?: string; text?: string }, LiveTemplate>("PATCH", (b) => `/productions/${id}/templates/${b.templateId}`, ({ templateId: _, ...b }) => b);
-/** Ask for an approval: the run of show (subjectId = stageId), a speaker, a script or a template. Shape asked of Podcasting 27 Nov. */
+/** Send to the client at its current version: a run of show (subjectId = stage id), a speaker or a script. */
 export const useRequestApproval = (id: number) =>
-  useWrite<{ subjectType: string; subjectId: number; version: number }, Approval>("POST", () => `/productions/${id}/approvals`);
+  useWrite<ApprovalRequest, Approval>("POST", () => `/productions/${id}/approvals`);
 export const useDecideAlex = (id: number) =>
-  useWrite<AlexDecision & { actionId: number }, AlexProposal>("POST", (b) => `/productions/${id}/ai-actions/${b.actionId}`, ({ actionId: _, ...b }) => b);
+  useWrite<AiDecision & { actionId: number }, AiProposal>("POST", (b) => `/productions/${id}/ai-actions/${b.actionId}`, ({ actionId: _, ...b }) => b);
 
 /* ------------------------------------------------------------------ dev mock (never in a production build) */
 
