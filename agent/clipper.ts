@@ -1420,7 +1420,7 @@ async function cleanEpisode(job: Job, source: string, dir: string, keepVideo?: s
     const keeps = keepRanges(cuts, duration);
     const removed = cuts.reduce((t, c) => t + (c.end - c.start), 0);
     const count = (why: string) => cuts.filter((c) => c.why === why).length;
-    console.log(`[${job.recordingId}]   ${count("filler")} fillers, ${count("false-start")} false starts, ${count("silence")} pauses — ${Math.round(removed)}s off`);
+    console.log(`[${job.recordingId}]   ${count("filler")} fillers, ${count("noise")} throat clears/coughs, ${count("false-start")} false starts, ${count("silence")} pauses, lead ${cuts.find((c) => c.why === "lead") ? "trimmed" : "kept"}, tail ${cuts.find((c) => c.why === "tail") ? "trimmed" : "kept"} — ${Math.round(removed)}s off`);
     if (keeps.length < 2) {
       await report({ status: "done", fillers: 0, falseStarts: 0, pauses: 0, removedSec: 0, durationSec: duration });
       return null;
@@ -1434,7 +1434,7 @@ async function cleanEpisode(job: Job, source: string, dir: string, keepVideo?: s
     const audioKey = await uploadBig(mp3, "audio/mpeg");
     await fs.rm(mp3, { force: true });
     console.log(`[${job.recordingId}]   clean audio uploaded`);
-    await report({ status: "running", audioKey, fillers: count("filler"), falseStarts: count("false-start"), pauses: count("silence"), removedSec: Math.round(removed), durationSec: Math.round(duration) });
+    await report({ status: "running", audioKey, fillers: count("filler") + count("noise"), falseStarts: count("false-start"), pauses: count("silence") + count("lead") + count("tail"), removedSec: Math.round(removed), durationSec: Math.round(duration) });
 
     // Video, 720p — the heavy part, and optional.
     let videoKey: string | undefined;
@@ -1454,7 +1454,7 @@ async function cleanEpisode(job: Job, source: string, dir: string, keepVideo?: s
     // The kept stretches, so times in the original (chapters, clips) can be
     // placed exactly in the clean one.
     const kept = keeps.map((k) => [Math.round(k.start * 100) / 100, Math.round(k.end * 100) / 100]);
-    await report({ status: "done", audioKey, videoKey, fillers: count("filler"), falseStarts: count("false-start"), pauses: count("silence"), removedSec: Math.round(removed), durationSec: Math.round(duration), keeps: kept });
+    await report({ status: "done", audioKey, videoKey, fillers: count("filler") + count("noise"), falseStarts: count("false-start"), pauses: count("silence") + count("lead") + count("tail"), removedSec: Math.round(removed), durationSec: Math.round(duration), keeps: kept });
     console.log(`[${job.recordingId}] clean episode done`);
     return keeps;
   } catch (err) {

@@ -36,12 +36,21 @@ export interface Word {
 export interface Span {
   start: number;
   end: number;
-  why: "filler" | "false-start" | "silence";
+  /** lead / tail: the non-speech before the first word and after the last (27 Nov); noise: a throat clear or cough. */
+  why: "filler" | "false-start" | "silence" | "noise" | "lead" | "tail";
   text: string;
 }
 
 /** The seven Deepgram tags plus the ones any transcriber spells out. */
 const FILLER = /^(um+|uh+|erm?|ah|hmm+|mm-?hmm|mhmm|uh-huh|uh-uh|nuh-uh)[.,!?…]*$/i;
+
+/** Scribe tags sounds as audio events: "(clears throat)", "(coughs)". Only these two are cut mid-episode (27 Nov:
+ *  Andrew heard Riccoh clear his throat before "Welcome to"); laughter, applause and breaths stay. */
+const NOISE = /\b(clear(s|ing|ed)?\s+(his|her|their|my)?\s*throat|throat\s+clear\w*|cough(s|ing|ed)?)\b/i;
+/** The lead-in kept before the first word, so the open doesn't sound clipped. */
+const LEAD_IN = 0.15;
+/** A lone cue before the real open ("Okay." … [clears throat] … "Welcome to"): pre-roll, not the show. */
+const CUE = /^(okay|ok|alright|all right|right|ready|so|and|alrighty)[.,!?…]*$/i;
 
 /** Scribe marks an abandoned word with a trailing hyphen: "honest-", "ex-". */
 const FALSE_START = /[A-Za-z0-9]-$/;
@@ -88,6 +97,28 @@ export function cutList(words: Word[], opts: RefineOptions = {}): Span[] {
     const end = Math.min(nextStart, cur.end + pad);
     if (end - start < minCut) continue;
     spans.push({ start, end, why: isFiller ? "filler" : "false-start", text: cur.text });
+  }
+
+  // Where the show starts: the first word, unless it's a lone cue ("Okay.") within the first 15 s and the next word
+  // comes 1.5 s or more after it.
+  const first = w.length > 1 && CUE.test(w[0].text.trim()) && w[1].start - w[0].end >= 1.5 && w[1].start <= 15 ? 1 : 0;
+
+  // A throat clear or cough between two words (6 s at most): the gap between them, placed on the sound by snapToAudio.
+  const events = words.filter((x) => x.type === "audio_event" && NOISE.test(x.text));
+  for (const ev of events) {
+    const prev = [...w].reverse().find((x) => x.end <= ev.start + 0.05);
+    const next = w.find((x) => x.start >= ev.end - 0.05);
+    // Before the show's first word or after the last: the lead / tail cut takes it.
+    if (!prev || !next || w.indexOf(prev) < first) continue;
+    if (next.start - prev.end > 6) continue;
+    spans.push({ start: prev.end, end: next.start, why: "noise", text: ev.text });
+  }
+
+  // Before the first word and after the last: throat clears, chair noise, breaths. Placed on the sound by snapToAudio.
+  if (w.length) {
+    if (w[first].start > LEAD_IN + minCut) spans.push({ start: 0, end: w[first].start, why: "lead", text: "" });
+    const last = w[w.length - 1];
+    spans.push({ start: last.end, end: Number.POSITIVE_INFINITY, why: "tail", text: "" });
   }
 
   // Dead air between words, once the above has been taken out of the picture.
@@ -280,6 +311,43 @@ export function snapToAudio(cuts: Span[], env: number[], opts: RefineOptions = {
     const floor = pctile(local, 0.2);
     const loud = pctile(local, 0.95);
     const line = floor + 0.2 * (loud - floor);
+    // Edges and noises sit next to long loud stretches (a throat clear, a whole answer), so their floor is the room's
+    // quietest 5%, not 20%: otherwise the line lands on the speech and no word is found.
+    const quiet = pctile(local, 0.05);
+    const edge = quiet + 0.2 * (loud - quiet);
+
+    // Where a word's sound starts, given Scribe's (late) start: cut up to the quietest point within the lead-in before
+    // it. A burst that began well before the word is a noise run into it: use the quiet just before where the word
+    // should start. No sound found: 0.35 s early, which is safe because Scribe runs late.
+    const lead = Math.round(LEAD_IN / FRAME);
+    const upTo = (wordStart: number) => {
+      const voiced = runs(env, f(wordStart - 0.6), f(wordStart + 0.4), edge).filter((r) => r.off * FRAME > wordStart - 0.12);
+      let onset = voiced.length ? voiced[0].on : -1;
+      if (onset >= 0 && onset * FRAME < wordStart - 0.4) onset = valley(env, f(wordStart - 0.35), f(wordStart - 0.05));
+      return onset >= 0 ? valley(env, onset - lead, onset + 1) * FRAME : wordStart - 0.35;
+    };
+    // Where a word's sound ends: keep the lead-in's worth after it (or to the quiet, if that's later).
+    const from = (wordEnd: number) => {
+      const voiced = runs(env, f(wordEnd - 0.6), f(wordEnd + 0.6), edge).filter((r) => r.on * FRAME < wordEnd + 0.1);
+      const off = voiced.length ? voiced[voiced.length - 1].off : f(wordEnd + 0.35);
+      return Math.max(off + lead, valley(env, off, off + 30)) * FRAME;
+    };
+    if (c.why === "lead") {
+      const to = upTo(c.end);
+      if (to >= 0.08) out.push({ ...c, start: 0, end: to });
+      continue;
+    }
+    if (c.why === "tail") {
+      const s = from(c.start), e = env.length * FRAME;
+      if (e - s >= 0.08) out.push({ ...c, start: s, end: e });
+      continue;
+    }
+    if (c.why === "noise") {
+      // The gap between the two words, from just after the one to just before the other: a natural pause stays.
+      const s = from(c.start), e = upTo(c.end);
+      if (e - s >= 0.08) out.push({ ...c, start: s, end: e });
+      continue;
+    }
 
     if (c.why === "silence") {
       // The longest stretch under the line between the two words, measured.
@@ -325,6 +393,8 @@ export function summarise(cuts: Span[], duration: number): string {
     n("filler") ? `${n("filler")} fillers` : "",
     n("false-start") ? `${n("false-start")} false starts` : "",
     n("silence") ? `${n("silence")} long pauses` : "",
+    n("noise") ? `${n("noise")} throat clears and coughs` : "",
+    n("lead") || n("tail") ? "the quiet before and after" : "",
   ].filter(Boolean);
   return `${parts.join(", ") || "nothing to cut"} — ${removed.toFixed(0)}s off ${duration.toFixed(0)}s (${pct.toFixed(1)}%)`;
 }
