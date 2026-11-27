@@ -119,7 +119,7 @@ function Library_({ socialAccounts }: { socialAccounts?: string | null }) {
           <span className="hidden sm:contents"><ZoomWayIn /><SendLink /></span>
           <UploadRecording button autoOpen initialFile={dropped} />
         </div>
-        <div className="grid w-full grid-cols-2 gap-2 empty:hidden sm:hidden"><ZoomWayIn wide /><SendLink wide /></div>
+        <div className="grid w-full grid-cols-[auto_minmax(0,1fr)] gap-2 empty:hidden sm:hidden"><ZoomWayIn wide /><SendLink wide /></div>
       </div>
 
       {open == null && <Finished recordings={recordings ?? []} clips={clips ?? []} posts={posts ?? []} clipCounts={clipCounts} />}
@@ -319,7 +319,7 @@ function SendLink({ wide = false }: { wide?: boolean }) {
   return (
     <>
       <button type="button" onClick={() => setOpen(true)} className={`${wide ? "justify-center" : ""} inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-card px-3.5 text-[13px] font-semibold text-foreground hover:border-[#053877]/40`} data-testid="library-send-recording">
-        <Link2 className="h-4 w-4 text-[#053877] dark:text-[#8fb5e8]" /><span className="sm:hidden">Send a link</span><span className="hidden sm:inline">Send us a recording</span>
+        <Link2 className="h-4 w-4 text-[#053877] dark:text-[#8fb5e8]" />Send us a recording
       </button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-2xl">
