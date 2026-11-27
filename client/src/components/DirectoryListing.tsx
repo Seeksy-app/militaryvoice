@@ -16,7 +16,7 @@ export function DirectoryListing({ hidden, hasPhoto }: { hidden: boolean; hasPho
   return (
     <div className="mb-5 flex max-w-2xl items-start gap-3 rounded-xl border border-border bg-card px-4 py-3" data-testid="directory-listing">
       <div className="min-w-0 flex-1">
-        <label htmlFor="directory-listed" className="block text-sm font-semibold">Show me in the Member Directory</label>
+        <label htmlFor="directory-listed" className="block text-sm font-semibold">Show me in the Member&nbsp;Directory</label>
         <p className="mt-0.5 text-[13px] leading-snug text-muted-foreground">
           {on
             ? hasPhoto ? "Your card is on the public directory, where event organizers find you. " : "Your card shows once you add a photo below. "

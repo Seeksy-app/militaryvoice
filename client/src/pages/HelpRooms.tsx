@@ -76,7 +76,7 @@ export default function HelpRooms() {
           <HelpStep k="b">Type a name (like Facebook), paste the server (it starts rtmp:// or rtmps://) and the stream key, then save it.</HelpStep>
           <HelpStep k="c">On the Studio screen, each key has a switch to turn it on or off for your next Go live. The bin removes it.</HelpStep>
           <p className="mt-3">You can add up to six. Go live needs at least one place to go: YouTube or a key.</p>
-          <p className="mt-3">On Radio or Marathon day, your slot goes out from your Radio show or the green room, not your studio. See <a href="/prepare" className="font-medium text-primary hover:underline">the podcaster guide</a>.</p>
+          <p className="mt-3">On a Radio or live event day, your slot goes out from your Radio show or the green room, not your studio. See <a href="/prepare" className="font-medium text-primary hover:underline">the podcaster guide</a>.</p>
         </HelpSection>
 
         <HelpContact n={8} />

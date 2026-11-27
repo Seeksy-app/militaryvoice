@@ -249,7 +249,7 @@ function AlexChat() {
                 {/* Something to tap on the way in (8 Oct): the questions people actually ask first. */}
                 {msgs.length === 1 && !ask.isPending && (
                   <div className="flex flex-wrap gap-2 pl-8" data-testid="help-starters">
-                    {["How do I get my podcast on Spotify and Apple?", "How do I make clips from an episode?", "Where are my Marathon recording and clips?", "How do I connect Zoom?"].map((q) => (
+                    {["How do I get my podcast on Spotify and Apple?", "How do I make clips from an episode?", "Where are my recordings and clips?", "How do I connect Zoom?"].map((q) => (
                       <button key={q} type="button" onClick={() => send(q)} className="rounded-full border border-[#053877]/30 bg-[#053877]/[0.05] px-3 py-1.5 text-left text-xs font-medium text-[#053877] hover:bg-[#053877]/10 dark:border-[#8ab4f8]/30 dark:text-[#8ab4f8]">{q}</button>
                     ))}
                   </div>

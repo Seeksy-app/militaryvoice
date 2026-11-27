@@ -319,7 +319,7 @@ export function HostNav({
   const link = (it: Item, compact: boolean) => {
     const el = rawLink(it, compact);
     if (compact) return el;
-    const tip = !!it.locked && !proOpen ? "Coming after the Marathon" : it.hint;
+    const tip = !!it.locked && !proOpen ? "Coming soon" : it.hint;
     return (
       <Tooltip key={`tip-${it.key}-${it.feature ?? it.href ?? ""}`} delayDuration={350}>
         <TooltipTrigger asChild>{el}</TooltipTrigger>
@@ -463,7 +463,7 @@ function PhoneTabs({ screen, onGo, pathFor, more, badge, proOpen }: { screen: Ho
                   <it.icon className="h-5 w-5 shrink-0 text-[#053877] dark:text-[#8fb5e8]" />
                   <span className="min-w-0 flex-1">
                     <span className="flex items-center gap-2 text-[15px] font-medium">{it.label}{it.badge != null && <span className="rounded-full bg-[#F0A71F] px-1.5 text-[11px] font-bold text-[#1a1200]">{it.badge}</span>}{it.locked && <Lock className="h-3.5 w-3.5 opacity-60" />}</span>
-                    <span className="line-clamp-2 block text-xs text-muted-foreground">{inert ? "Coming after the Marathon" : it.hint}</span>
+                    <span className="line-clamp-2 block text-xs text-muted-foreground">{inert ? "Coming soon" : it.hint}</span>
                   </span>
                 </button>
               );
