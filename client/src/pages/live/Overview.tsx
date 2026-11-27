@@ -1,7 +1,7 @@
 import { Link } from "wouter";
 import { AlertTriangle, Info } from "lucide-react";
 import { useLive } from "./LiveApp";
-import { assignable, sideOf, STATUS_LABEL, useApprovals, useAudit, useMembers, useStages, type Member } from "./api";
+import { assignable, auditWho, sideOf, STATUS_LABEL, useApprovals, useAudit, useMembers, useStages, type Member } from "./api";
 import { LinkBtn, C, Card, Coming, FONT_COND, fmtRange, fmtWhen, Row } from "./ui";
 
 /**
@@ -82,7 +82,7 @@ export default function Overview() {
 
       {current.can.audit && (
         <Card title="Recent changes" testId="live-card-audit">
-          {(audit.data ?? []).slice(0, 4).map((r) => <Row key={r.id} label={`${r.what} · ${r.who}`}>{fmtWhen(r.at)}</Row>)}
+          {(audit.data ?? []).slice(0, 4).map((r) => <Row key={r.id} label={`${r.what} · ${auditWho(r)}`}>{fmtWhen(r.at)}</Row>)}
           {!audit.data?.length && <p className="text-[13.5px]" style={{ color: C.muted }}>{audit.isLoading ? "Loading…" : "No changes yet."}</p>}
         </Card>
       )}

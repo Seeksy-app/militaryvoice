@@ -1,7 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  CLIENT_ROLES, CREW_ROLES, LIVE_TEST_CLIENT, LIVE_TEST_CREW, MV_ROLES, PRODUCTION_STATUSES, ROLE_LABEL,
-  type Approval, type ApprovalDecision, type AuditEntry, type LiveMe, type LiveOrg, type LiveRole, type Member, type MemberInput,
+  ALEX_EMAIL, ALEX_JOB_LABEL, ALEX_JOBS, ALEX_NAME, CLIENT_ROLES, CREW_ROLES, INVITABLE_ROLES, LIVE_TEST_CLIENT, LIVE_TEST_CREW, MV_ROLES,
+  PRODUCTION_STATUSES, ROLE_LABEL, type AlexJob, type Approval, type ApprovalDecision, type AuditEntry, type LiveMe, type LiveOrg, type LiveRole, type Member, type MemberInput,
   type MemberPatch, type Production, type ProductionInput, type ProductionStatus, type Stage, type StageInput, type Venue, type VenueInput,
 } from "@shared/live";
 
@@ -16,7 +16,8 @@ import {
 export type Role = LiveRole;
 export type MemberRole = Exclude<LiveRole, "mv_admin">;
 export type { Approval, AuditEntry, LiveMe, LiveOrg, Member, Production, Stage, Venue };
-export { CLIENT_ROLES, CREW_ROLES, MV_ROLES, ROLE_LABEL };
+export { ALEX_JOB_LABEL, ALEX_JOBS, CLIENT_ROLES, CREW_ROLES, MV_ROLES, ROLE_LABEL };
+export type { AlexJob };
 export type Status = ProductionStatus;
 export const STATUSES = PRODUCTION_STATUSES;
 export const STATUS_LABEL: Record<Status, string> = {
@@ -24,12 +25,18 @@ export const STATUS_LABEL: Record<Status, string> = {
 };
 
 export type Side = "mv" | "crew" | "client";
-export const sideOf = (r: Role | null | undefined): Side => (!r || r.startsWith("mv_") ? "mv" : r.startsWith("crew_") ? "crew" : "client");
+/** Alex is MV's own team member (no org), so she sits with MilitaryVoices.ai, never with the client. */
+export const sideOf = (r: Role | null | undefined): Side => (!r || r === "alex" || r.startsWith("mv_") ? "mv" : r.startsWith("crew_") ? "crew" : "client");
+/** Who may change Alex's jobs or take her off and back on (the server checks too). */
+export const canManageAlex = (p: Production | null | undefined) => p?.myRole === "mv_admin" || p?.myRole === "mv_coordinator";
+/** The name an audit line shows: Alex under her name, our scripts as "Automatic", people by email. */
+export const auditWho = (a: AuditEntry) => (a.actor === "alex" ? ALEX_NAME : a.actor === "script" ? "Automatic" : a.who);
 
 /** Roles this person may give on a production (from can.invite and their role, as the routes table says). */
 export function assignable(p: Production | null | undefined): MemberRole[] {
   if (!p?.can.invite) return [];
-  if (p.myRole === "mv_admin" || p.myRole === "mv_coordinator") return [...MV_ROLES, ...CREW_ROLES, ...CLIENT_ROLES].filter((r): r is MemberRole => r !== "mv_admin");
+  // INVITABLE_ROLES: never Alex, who comes with the production.
+  if (p.myRole === "mv_admin" || p.myRole === "mv_coordinator") return [...INVITABLE_ROLES];
   if (p.myRole === "crew_lead") return ["crew_operator"];
   if (p.myRole === "client_admin") return ["client_reviewer", "client_viewer"];
   return [];
@@ -119,7 +126,7 @@ function seed(): Db {
   const vendor: LiveOrg = { id: 601, name: "Test AV Vendor", kind: "vendor", logoUrl: "", brandColor: "", slug: "test-av-vendor" };
   const base = { timezone: "America/Chicago", eventId: null, createdAt: now(), updatedAt: now() };
   const m = (id: number, productionId: number, email: string, name: string, org: LiveOrg | null, role: MemberRole, status: Member["status"], invitedBy = "producer@militaryvoices.ai"): Member =>
-    ({ id, productionId, email, name, org, role, status, invitedBy, createdAt: now(), inviteSent: false });
+    ({ id, productionId, email, name, org, role, status, invitedBy, createdAt: now(), inviteSent: false, ai: role === "alex", jobs: role === "alex" ? [...ALEX_JOBS] : [] });
   return {
     productions: [
       { ...base, id: 1, name: "National Convention · Exhibit Hall Stage", status: "planning", org: client, startsOn: "2027-07-24", endsOn: "2027-07-27", scope: "One stage, three cameras, remote production, client approvals, post within 14 days." },
@@ -129,15 +136,20 @@ function seed(): Db {
     venues: [{ id: 31, name: "Convention Center", address: "Test City, TX", timezone: "America/Chicago", power: "", network: "", createdAt: now() }],
     stages: [{ id: 41, productionId: 1, name: "Exhibit Hall Stage", venue: { id: 31, name: "Convention Center" }, studioId: null, ingestProfile: "", createdAt: now() }],
     members: [
+      m(10, 1, ALEX_EMAIL, ALEX_NAME, null, "alex", "active", "producer@militaryvoices.ai"),
       m(11, 1, "producer@militaryvoices.ai", "MV Producer", null, "mv_producer", "active", ""),
       m(12, 1, LIVE_TEST_CREW, "Test Crew Lead", vendor, "crew_lead", "active"),
       m(13, 1, "cam1@example.com", "Camera operator", vendor, "crew_operator", "invited", LIVE_TEST_CREW),
       m(14, 1, LIVE_TEST_CLIENT, "Test Client Admin", client, "client_admin", "active"),
       m(15, 1, "reviewer@example.com", "Client reviewer", client, "client_reviewer", "invited", LIVE_TEST_CLIENT),
+      m(20, 2, ALEX_EMAIL, ALEX_NAME, null, "alex", "active", "producer@militaryvoices.ai"),
       m(21, 2, "producer@militaryvoices.ai", "MV Producer", null, "mv_producer", "active", ""),
     ],
     approvals: [], seq: 1000,
-    audit: [{ id: 1, productionId: 1, who: "producer@militaryvoices.ai", what: "Created the production", subjectType: "production", subjectId: 1, before: null, after: null, at: now() }],
+    audit: [
+      { id: 2, productionId: 1, who: ALEX_EMAIL, what: "Drafted the run of show", subjectType: "production", subjectId: 1, before: null, after: null, at: now(), actor: "alex", aiActionId: 1 },
+      { id: 1, productionId: 1, who: "producer@militaryvoices.ai", what: "Created the production", subjectType: "production", subjectId: 1, before: null, after: null, at: now(), actor: "person", aiActionId: null },
+    ],
   };
 }
 
@@ -149,7 +161,7 @@ function mock(as: As, method: string, path: string, body: any): unknown {
   const deny = () => { throw new LiveError(403, "You don't have access to that."); };
   const mine = (pid: number) => d.members.find((x) => x.productionId === pid && x.email === me && x.status !== "removed");
   const roleOn = (pid: number): Role | null => (as === "admin" ? "mv_admin" : mine(pid)?.role ?? null);
-  const log = (pid: number | null, what: string, subjectType: string, subjectId: number) => d.audit.unshift({ id: ++d.seq, productionId: pid, who: me, what, subjectType, subjectId, before: null, after: null, at: now() });
+  const log = (pid: number | null, what: string, subjectType: string, subjectId: number) => d.audit.unshift({ id: ++d.seq, productionId: pid, who: me, what, subjectType, subjectId, before: null, after: null, at: now(), actor: "person", aiActionId: null });
   const view = (p: Db["productions"][number]): Production => {
     const r = roleOn(p.id)!;
     const mvEdit = r === "mv_admin" || r === "mv_producer" || r === "mv_coordinator";
@@ -194,7 +206,9 @@ function mock(as: As, method: string, path: string, body: any): unknown {
     let org: LiveOrg | null = d.orgs.find((o) => o.id === body?.orgId) ?? null;
     if (body?.newOrg?.name) { org = { id: ++d.seq, name: body.newOrg.name, kind: "client", logoUrl: "", brandColor: body.newOrg.brandColor ?? "", slug: slugify(body.newOrg.name) }; d.orgs.push(org); }
     const p = { id: ++d.seq, name: String(body?.name ?? "").trim(), status: "scoping" as Status, org, startsOn: body?.startsOn ?? "", endsOn: body?.endsOn ?? "", timezone: body?.timezone ?? "America/New_York", scope: body?.scope ?? "", eventId: null, createdAt: now(), updatedAt: now() };
-    d.productions.unshift(p); log(p.id, "Created the production", "production", p.id); return view(p);
+    d.productions.unshift(p); log(p.id, "Created the production", "production", p.id);
+    d.members.push({ id: ++d.seq, productionId: p.id, email: ALEX_EMAIL, name: ALEX_NAME, org: null, role: "alex", status: "active", invitedBy: me, createdAt: now(), inviteSent: false, ai: true, jobs: [...ALEX_JOBS] });
+    return view(p);
   }
   const pid = Number(parts[1]);
   const p = d.productions.find((x) => x.id === pid);
@@ -218,13 +232,15 @@ function mock(as: As, method: string, path: string, body: any): unknown {
   if (sub === "members") {
     const self = mine(pid);
     const side = sideOf(v.myRole);
-    const seen = (x: Member) => x.productionId === pid && x.status !== "removed" && (side === "mv" || ((v.myRole === "crew_lead" || v.myRole === "client_admin") ? x.org?.id === self?.org?.id : x.email === me));
+    // As the server: MV see every row, removed ones too; Crew Leads and Client Admins their own org's live rows; others themselves.
+    const seen = (x: Member) => x.productionId === pid && (side === "mv" || (x.status !== "removed" && ((v.myRole === "crew_lead" || v.myRole === "client_admin") ? x.org?.id === self?.org?.id : x.email === me)));
     if (method === "GET") return d.members.filter(seen);
     const allowed = assignable(v);
     if (method === "POST") {
       if (!allowed.includes(body?.role)) deny();
       const email = String(body?.email ?? "").trim().toLowerCase();
       if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new LiveError(400, "That email doesn't look right.");
+      if (email === ALEX_EMAIL) throw new LiveError(400, "Alex is added with the production.");
       if (d.members.some((x) => x.productionId === pid && x.email === email && x.status !== "removed")) throw new LiveError(409, "They're already on this production.");
       let org: LiveOrg | null = side === "mv" ? d.orgs.find((o) => o.id === body?.orgId) ?? null : self?.org ?? null;
       if (side === "mv" && body?.newOrg?.name) { org = { id: ++d.seq, name: body.newOrg.name, kind: body.newOrg.kind, logoUrl: "", brandColor: "", slug: slugify(body.newOrg.name) }; d.orgs.push(org); }
@@ -234,6 +250,13 @@ function mock(as: As, method: string, path: string, body: any): unknown {
     }
     const x = d.members.find((y) => y.id === Number(parts[3]));
     if (!x || !seen(x)) nf();
+    if (x!.role === "alex") {
+      if (!canManageAlex(v)) throw new LiveError(403, "You can't change Alex's jobs.");
+      if (body?.role !== undefined || body?.name !== undefined) throw new LiveError(400, "Alex's role and name don't change.");
+      if (body?.jobs !== undefined) x!.jobs = (ALEX_JOBS as readonly AlexJob[]).filter((j) => body.jobs.includes(j));
+      if (body?.status) x!.status = body.status;
+      log(pid, body?.status === "removed" ? "Took Alex off" : body?.status === "active" ? "Put Alex back" : "Changed Alex's jobs", "member", x!.id); return x;
+    }
     if (x!.email === me || !allowed.includes(x!.role) || (body?.role && !allowed.includes(body.role))) deny();
     Object.assign(x!, body?.role ? { role: body.role } : {}, body?.status ? { status: body.status } : {});
     log(pid, body?.status === "removed" ? `Removed ${x!.email}` : `Changed ${x!.email} to ${ROLE_LABEL[x!.role]}`, "member", x!.id); return x;

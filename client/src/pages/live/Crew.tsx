@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { X } from "lucide-react";
 import { useLive } from "./LiveApp";
-import { assignable as rolesFor, ROLE_LABEL, sideOf, useInvite, useMembers, useOrgs, usePatchMember, type Member, type MemberRole, type Side } from "./api";
+import { ALEX_JOB_LABEL, ALEX_JOBS, assignable as rolesFor, canManageAlex, ROLE_LABEL, sideOf, useInvite, useMembers, useOrgs, usePatchMember, type AlexJob, type Member, type MemberRole, type Side } from "./api";
 import { Btn, C, Card, Coming, Field, FONT_COND, Input, Pill, Select } from "./ui";
 
 const NEW = "new";
@@ -21,7 +21,8 @@ export default function Crew() {
   const [tab, setTab] = useState<"crew" | "kit" | "signal">("crew");
   const members = useMembers(current?.id ?? null);
   if (!current) return <p style={{ color: C.muted }}>Pick or create a production first.</p>;
-  const rows = (members.data ?? []).filter((m) => m.status !== "removed");
+  // Alex stays listed when she's off, so MV can put her back. She leads the MilitaryVoices.ai group.
+  const rows = (members.data ?? []).filter((m) => m.status !== "removed" || m.ai).sort((a, b) => Number(!!b.ai) - Number(!!a.ai));
   const assignable = rolesFor(current);
   // Crew see only their own vendor's people; MV see everyone, grouped.
   const groups = side === "mv" ? GROUPS : GROUPS.filter((g) => g.side === side);
@@ -59,7 +60,7 @@ export default function Crew() {
               return (
                 <div key={g.side} className={i ? "mt-3" : ""} data-testid={`live-group-${g.side}`}>
                   <p className="mb-0.5 text-[13px] font-semibold uppercase" style={{ fontFamily: FONT_COND, letterSpacing: ".08em", color: C.muted }}>{g.title} · {list.length}</p>
-                  {list.length ? list.map((m) => <MemberRow key={m.id} m={m} roles={assignable} productionId={current.id} self={m.email === email} />) : <p className="py-1 text-[13.5px]" style={{ color: C.muted }}>No one yet.</p>}
+                  {list.length ? list.map((m) => m.ai ? <AlexRow key={m.id} m={m} productionId={current.id} canManage={canManageAlex(current)} /> : <MemberRow key={m.id} m={m} roles={assignable} productionId={current.id} self={m.email === email} />) : <p className="py-1 text-[13.5px]" style={{ color: C.muted }}>No one yet.</p>}
                 </div>
               );
             })}
@@ -122,6 +123,74 @@ function Invite({ productionId, roles, asMv }: { productionId: number; roles: Me
         {save.error?.message ?? (done || "Invites are saved, not emailed. We'll send them when invites are switched on.")}
       </p>
     </Card>
+  );
+}
+
+/**
+ * Alex, the AI team member (Andrew, 26 Nov): on every production, never invited, never approves. Her role doesn't
+ * change; MV Admin and MV Coordinator pick her jobs or take her off and back on.
+ */
+function AlexRow({ m, productionId, canManage }: { m: Member; productionId: number; canManage: boolean }) {
+  const patch = usePatchMember(productionId, m.id);
+  const [editing, setEditing] = useState(false);
+  const [jobs, setJobs] = useState<AlexJob[]>(m.jobs ?? []);
+  const off = m.status === "removed";
+  const has = m.jobs ?? [];
+  const toggle = (j: AlexJob) => setJobs((x) => (x.includes(j) ? x.filter((y) => y !== j) : [...x, j]));
+  const save = () => patch.mutate({ jobs: ALEX_JOBS.filter((j) => jobs.includes(j)) }, { onSuccess: () => setEditing(false) });
+  return (
+    <div className="border-b py-1.5 text-[13.5px] last:border-b-0" style={{ borderColor: C.line }} data-testid={`live-member-${m.id}`}>
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+        <div className="flex min-w-0 basis-full items-center gap-2.5 sm:basis-0 sm:flex-1">
+          <img src="/alex.jpg" alt="" className="h-7 w-7 shrink-0 rounded-full object-cover" style={off ? { filter: "grayscale(1)", opacity: 0.6 } : undefined} />
+          <div className="min-w-0">
+            <p className="truncate font-semibold">Alex <span className="font-normal" style={{ color: C.muted }}>· AI team member</span></p>
+            <p className="text-[12.5px] leading-snug" style={{ color: C.muted }} data-testid="live-alex-jobs">
+              {off ? "Off this production. Alex's jobs here wait until Alex is back." : has.length ? has.map((j) => ALEX_JOB_LABEL[j]).join(" · ") : "No jobs on this production"}
+            </p>
+          </div>
+        </div>
+        {off ? <Pill>Off</Pill> : <Pill tone="ok">Active</Pill>}
+        <span className="w-[150px] text-[13px]" style={{ color: C.muted }}>{ROLE_LABEL.alex}</span>
+        {canManage ? (
+          off ? (
+            <Btn small onClick={() => patch.mutate({ status: "active" })} disabled={patch.isPending} data-testid="live-alex-back">Put back</Btn>
+          ) : (
+            <>
+              <Btn small onClick={() => { setJobs(has); setEditing((e) => !e); }} aria-expanded={editing} data-testid="live-alex-edit">Jobs</Btn>
+              <button
+                type="button"
+                onClick={() => { if (window.confirm("Take Alex off this production? Alex stops doing these jobs here until you put Alex back.")) patch.mutate({ status: "removed" }); }}
+                className="flex h-8 w-8 items-center justify-center rounded-md hover:bg-white/10"
+                style={{ color: C.muted }}
+                aria-label="Take Alex off this production"
+                title="Take off"
+              >
+                <X className="h-4 w-4" aria-hidden />
+              </button>
+            </>
+          )
+        ) : <span className="w-8" />}
+      </div>
+      {editing && !off && (
+        <div className="mt-2 rounded-md border p-2.5" style={{ borderColor: C.line }} data-testid="live-alex-jobs-edit">
+          <div className="grid grid-cols-1 gap-x-4 gap-y-1.5 sm:grid-cols-3">
+            {ALEX_JOBS.map((j) => (
+              <label key={j} className="flex cursor-pointer items-center gap-2 text-[13px]">
+                <input type="checkbox" checked={jobs.includes(j)} onChange={() => toggle(j)} className="h-4 w-4 accent-[#e0b23a]" />
+                {ALEX_JOB_LABEL[j]}
+              </label>
+            ))}
+          </div>
+          <div className="mt-2.5 flex items-center gap-2">
+            <Btn small primary onClick={save} disabled={patch.isPending} data-testid="live-alex-save">{patch.isPending ? "Saving…" : "Save jobs"}</Btn>
+            <Btn small onClick={() => setEditing(false)}>Cancel</Btn>
+            <span className="text-[12.5px]" style={{ color: C.muted }}>Alex never approves anything: approvals stay with people.</span>
+          </div>
+        </div>
+      )}
+      {patch.error && <p className="mt-1 text-[12px] text-[#ff8a80]">{patch.error.message}</p>}
+    </div>
   );
 }
 
