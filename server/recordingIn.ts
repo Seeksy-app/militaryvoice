@@ -111,16 +111,23 @@ export function registerRecordingIn(app: Express, requireHostSession: RequestHan
       const [show] = await db.select({ id: hostedShows.id }).from(hostedShows).where(and(eq(hostedShows.id, showId), eq(hostedShows.email, email))).limit(1);
       if (show) nextDate = await suggestedDate(show.id).catch(() => "");
     }
-    res.json({ sent: rows.map(mineView), nextDate });
+    // From the Library (no show given): their shows, each with its next release day, so the form can ask which.
+    const shows = showId ? [] : await Promise.all(
+      (await db.select({ id: hostedShows.id, title: hostedShows.title, archivedAt: hostedShows.archivedAt }).from(hostedShows).where(eq(hostedShows.email, email)))
+        .filter((x) => !x.archivedAt)
+        .map(async (x) => ({ id: x.id, title: x.title || "Untitled show", nextDate: await suggestedDate(x.id).catch(() => "") })),
+    );
+    res.json({ sent: rows.map(mineView), nextDate, shows });
   });
 
   app.post("/api/host/recordings-in", requireHostSession, async (req, res) => {
     res.setHeader("Cache-Control", "no-store");
     const email = me(req);
     if (!email) return res.status(401).json({ message: "Please sign in again." });
+    // No show (0) is fine from the Library: someone not hosting with us yet, or a recording that isn't for a show.
     const showId = Number(req.body?.showId) || 0;
-    const [show] = await db.select().from(hostedShows).where(and(eq(hostedShows.id, showId), eq(hostedShows.email, email))).limit(1);
-    if (!show) return res.status(404).json({ message: "We couldn't find that show." });
+    const [show] = showId ? await db.select().from(hostedShows).where(and(eq(hostedShows.id, showId), eq(hostedShows.email, email))).limit(1) : [null];
+    if (showId && !show) return res.status(404).json({ message: "We couldn't find that show." });
     const checked = checkLink(str(req.body?.link, 1200));
     if (!checked) return res.status(400).json({ message: "Paste the full share link, starting with https://" });
     const passcode = str(req.body?.passcode, 200);
@@ -137,11 +144,11 @@ export function registerRecordingIn(app: Express, requireHostSession: RequestHan
       return res.status(503).json({ message: "We can't take this right now. Please write to hello@militaryvoices.ai and we'll find another way." });
     }
     const id = crypto.randomBytes(18).toString("base64url");
-    const row: Row = { email, showId: show.id, showTitle: show.title || "Untitled show", site: checked.site, note, publishDate, hasPasscode: !!passcode, status: "sent", createdAt: new Date().toISOString(), box };
+    const row: Row = { email, showId: show?.id ?? 0, showTitle: show ? show.title || "Untitled show" : "", site: checked.site, note, publishDate, hasPasscode: !!passcode, status: "sent", createdAt: new Date().toISOString(), box };
     await save(id, row);
     // The team hears which show and where the link points, never the link or the passcode.
     void slackNote(
-      `:inbox_tray: ${row.showTitle} (${email}) sent a recording: a ${checked.site} link${passcode ? " with a passcode" : ""}.${publishDate ? ` Publish date: ${publishDate}.` : " No publish date given."}${note ? ` Note: ${note}` : ""}`,
+      `:inbox_tray: ${row.showTitle || "No show"} (${email}) sent a recording: a ${checked.site} link${passcode ? " with a passcode" : ""}.${publishDate ? ` Publish date: ${publishDate}.` : " No publish date given."}${note ? ` Note: ${note}` : ""}`,
       { label: "Open recordings sent in", url: "/admin-logins" },
     );
     res.json(mineView({ ...row, id }));

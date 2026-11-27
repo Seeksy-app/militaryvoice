@@ -1,6 +1,6 @@
 import { shrinkImage } from "@/lib/shrinkImage";
 import { GuestInvites } from "@/components/GuestInvites";
-import { SendRecordingButton } from "@/components/SendRecording";
+import { SendRecording } from "@/components/SendRecording";
 import { Select } from "@/components/room/Select";
 import type { IconType } from "react-icons";
 import { SiApplepodcasts, SiCastbox, SiDeezer, SiIheartradio, SiPlayerfm, SiPocketcasts, SiPodcastindex, SiSpotify, SiYoutube, SiYoutubemusic } from "react-icons/si";
@@ -21,7 +21,7 @@ import { durationOf, uploadToStorage } from "@/lib/upload";
 import { GuestFinder, ShowFinder, INVITE_KEY } from "@/components/DiscoverPodcasts";
 import type { HostedEpisodeRow, HostedShowRow, HostedSpotRow, PodcastStatsData, RecordingRow } from "@shared/schema";
 import { fillFooter, FOOTER_TOKENS } from "@shared/footer";
-import { AlertCircle, BarChart3, Check, ChevronLeft, Copy, Download, ExternalLink, Film, ImagePlus, Loader2, Mic2, Pause, Pencil, Play, Plus, Podcast, Radio, Send, Sparkles, Trash2, Upload } from "lucide-react";
+import { AlertCircle, BarChart3, Check, ChevronLeft, Copy, Download, ExternalLink, Film, ImagePlus, Link2, Loader2, Mic2, Pause, Pencil, Play, Plus, Podcast, Radio, Send, Sparkles, Trash2, Upload } from "lucide-react";
 import { IconTile } from "@/components/ui/icon-tile";
 import { MoreHorizontal } from "lucide-react";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
@@ -373,8 +373,6 @@ export function PodcastHosting() {
                   </Button>
                 )}
                 {shows.length > 1 && h.episodes.length > 0 && <Button variant="outline" onClick={() => (selecting ? endSelect() : setSelecting(true))} className="h-9 rounded-lg" data-testid="hosting-select">{selecting ? "Done" : "Select"}</Button>}
-                {/* A share link (Zoom, Dropbox, Drive) the team brings into their Library (Engineering, 27 Nov). */}
-                <SendRecordingButton key={s.id} showId={s.id} />
                 <Button onClick={() => setAdding(true)} className="h-9 gap-1.5 rounded-lg bg-[#053877] text-white hover:bg-[#0a4a99]" data-testid="hosting-new-episode"><Plus className="h-4 w-4" /> New episode</Button>
               </div>
             </div>
@@ -1939,7 +1937,7 @@ function BookendCard({ show, kind, onSaved }: { show: HostedShowRow; kind: "intr
 function NewEpisodePage({ show, onBack, onCreated }: { show: HostedShowRow; onBack: () => void; onCreated: (e: HostedEpisodeRow) => void }) {
   const { toast } = useToast();
   const [pct, setPct] = useState<number | null>(null);
-  const [more, setMore] = useState<"" | "rss" | "library">("");
+  const [more, setMore] = useState<"" | "rss" | "library" | "link">("");
   const [over, setOver] = useState(false);
   const [feed, setFeed] = useState(show.importedFrom ?? "");
   const [found, setFound] = useState<{ url: string; show: string; episodes: { guid: string; title: string; published: string; durationSec: number; have: boolean }[] } | null>(null);
@@ -1998,7 +1996,7 @@ function NewEpisodePage({ show, onBack, onCreated }: { show: HostedShowRow; onBa
         )}
       </div>
       <div className="flex flex-wrap gap-2">
-        {([["rss", "Import from an RSS feed", Radio], ["library", "From your Library", Film]] as const).map(([k, l, I]) => (
+        {([["rss", "Import from an RSS feed", Radio], ["library", "From your Library", Film], ["link", "Send us a recording link", Link2]] as const).map(([k, l, I]) => (
           <button key={k} type="button" onClick={() => setMore(more === k ? "" : k)} className={`inline-flex items-center gap-1.5 rounded-full border px-4 py-2 text-sm font-semibold ${more === k ? "border-[#053877] bg-[#053877] text-white" : "border-border bg-card hover:bg-muted"}`} data-testid={`new-episode-${k}`}><I className="h-4 w-4" /> {l}</button>
         ))}
       </div>
@@ -2019,6 +2017,13 @@ function NewEpisodePage({ show, onBack, onCreated }: { show: HostedShowRow; onBa
               )) : <li className="py-6 text-center text-sm text-muted-foreground">No episodes in that feed.</li>}
             </ul>
           )}
+        </div>
+      )}
+      {/* Zoom, Dropbox or Drive: the team brings it into the Library (Engineering, 27 Nov). */}
+      {more === "link" && (
+        <div className="rounded-2xl border border-border bg-card p-4 shadow-sm" data-testid="new-episode-link">
+          <p className="mb-2 text-sm text-muted-foreground [text-wrap:pretty]">Recorded on Zoom, or saved in Dropbox or Google Drive? Paste the share link and we'll bring it into your Library.</p>
+          <SendRecording showId={show.id} bare />
         </div>
       )}
       {more === "library" && (

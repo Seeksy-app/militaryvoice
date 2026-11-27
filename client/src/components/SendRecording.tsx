@@ -33,14 +33,15 @@ export function siteName(site: string): string {
 const day = (iso: string) => { try { return new Date(/^\d{4}-\d{2}-\d{2}$/.test(iso) ? `${iso}T12:00:00` : iso).toLocaleDateString([], { month: "short", day: "numeric" }); } catch { return ""; } };
 
 /**
- * The way in, beside New episode at the top of Episodes (27 Nov: under a long episode list the card was out of sight).
- * Opens the card in a dialog.
+ * The Library's way in, beside Upload a video (Andrew, 27 Nov: "when we pull it from Zoom, aren't we going to put it in
+ * the library"). Opens the form in a dialog; with no show given it asks which show when they have more than one.
+ * New episode has its own way in (an option beside Import from an RSS feed).
  */
-export function SendRecordingButton({ showId }: { showId: number }) {
+export function SendRecordingButton({ showId }: { showId?: number }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <Button variant="outline" onClick={() => setOpen(true)} className="h-9 gap-1.5 rounded-lg" data-testid="hosting-send-recording"><Link2 className="h-4 w-4" /> Send us a recording</Button>
+      <button type="button" onClick={() => setOpen(true)} className="inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-card px-4 text-[14px] font-semibold text-foreground hover:bg-muted" title="A Zoom, Dropbox or Google Drive share link. We bring it into your Library." data-testid="send-recording-open"><Link2 className="h-4 w-4" /> Send us a recording link</button>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
@@ -54,16 +55,21 @@ export function SendRecordingButton({ showId }: { showId: number }) {
   );
 }
 
-export function SendRecording({ showId, bare = false }: { showId: number; /** In the dialog: no card frame or heading of its own. */ bare?: boolean }) {
+type ShowPick = { id: number; title: string; nextDate: string };
+
+export function SendRecording({ showId, bare = false }: { /** One show (New episode); left out, the form asks which (the Library). */ showId?: number; /** In a dialog or panel: no card frame or heading of its own. */ bare?: boolean }) {
   const qc = useQueryClient();
-  const key = ["/api/host/recordings-in", showId];
-  const { data } = useQuery<{ sent: Sent[]; nextDate: string }>({ queryKey: key, queryFn: async () => (await apiRequest("GET", `/api/host/recordings-in?showId=${showId}`)).json() });
+  const key = ["/api/host/recordings-in", showId ?? "all"];
+  const { data } = useQuery<{ sent: Sent[]; nextDate: string; shows?: ShowPick[] }>({ queryKey: key, queryFn: async () => (await apiRequest("GET", `/api/host/recordings-in${showId ? `?showId=${showId}` : ""}`)).json() });
   const sent = data?.sent ?? [];
+  const shows = data?.shows ?? [];
+  const [picked, setPicked] = useState<number | null>(null);
+  const forShow = showId ?? picked ?? shows[0]?.id ?? 0;
   // The show's next release day when it keeps a steady rhythm (Andrew, 27 Nov): filled in, theirs to change.
-  const nextDate = data?.nextDate ?? "";
+  const nextDate = showId ? data?.nextDate ?? "" : shows.find((x) => x.id === forShow)?.nextDate ?? "";
   const [publishDate, setPublishDate] = useState("");
   const [touched, setTouched] = useState(false);
-  useEffect(() => { if (!touched && nextDate) setPublishDate(nextDate); }, [nextDate, touched]);
+  useEffect(() => { if (!touched) setPublishDate(nextDate); }, [nextDate, touched]);
   const [link, setLink] = useState("");
   const [passcode, setPasscode] = useState("");
   const [note, setNote] = useState("");
@@ -77,7 +83,7 @@ export function SendRecording({ showId, bare = false }: { showId: number; /** In
     if (!link.trim()) { setErr("Paste the share link first."); return; }
     setBusy(true);
     try {
-      await apiRequest("POST", "/api/host/recordings-in", { showId, link, passcode, note, publishDate });
+      await apiRequest("POST", "/api/host/recordings-in", { showId: forShow, link, passcode, note, publishDate });
       setLink(""); setPasscode(""); setNote(""); setPublishDate(nextDate); setTouched(false);
       setDone(true);
       void qc.invalidateQueries({ queryKey: key });
@@ -95,6 +101,14 @@ export function SendRecording({ showId, bare = false }: { showId: number; /** In
         <p className="mt-0.5 text-xs text-muted-foreground [text-wrap:pretty]">Recorded on Zoom, or saved in Dropbox or Google Drive? Paste the share link and we'll bring it into your Library.</p>
       </>}
       <form className={`${bare ? "" : "mt-3 "}grid gap-2 sm:grid-cols-[minmax(0,1fr)_170px]`} onSubmit={(e) => { e.preventDefault(); void send(); }}>
+        {!showId && shows.length > 1 && (
+          <label className="block sm:col-span-2">
+            <span className="mb-1 block text-xs font-medium">Which show</span>
+            <select value={forShow} onChange={(e) => setPicked(Number(e.target.value))} className="h-9 w-full rounded-md border border-input bg-background px-3 text-sm" data-testid="send-recording-show">
+              {shows.map((x) => <option key={x.id} value={x.id}>{x.title}</option>)}
+            </select>
+          </label>
+        )}
         <label className="block">
           <span className="mb-1 block text-xs font-medium">Recording link</span>
           <Input value={link} onChange={(e) => setLink(e.target.value)} placeholder="Paste the share link" inputMode="url" autoComplete="off" spellCheck={false} className="h-9" data-testid="send-recording-link" />
