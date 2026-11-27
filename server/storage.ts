@@ -2100,7 +2100,17 @@ class DatabaseStorage implements IStorage {
     await ready();
     const egressId = `CLEAN_${source.id}`;
     const [existing] = await db.select().from(recordings).where(eq(recordings.egressId, egressId)).limit(1);
-    if (existing) return existing;
+    if (existing) {
+      // A re-clean makes a new file: the copy follows it, unless something is already built on the old one
+      // (clips, an edit, a transcript), which would no longer line up. Title, folder and the rest stay as they are.
+      if (existing.url === videoKey) return existing;
+      if (existing.clipStatus !== "none" || existing.episodeEdit || existing.editDraft || existing.transcriptJson) {
+        console.warn(`Clean copy ${existing.id} kept on its old file: something is built on it.`);
+        return existing;
+      }
+      const [row] = await db.update(recordings).set({ url: videoKey, durationSec: Math.round(durationSec) }).where(eq(recordings.id, existing.id)).returning();
+      return row;
+    }
     const now = new Date().toISOString();
     const [row] = await db
       .insert(recordings)

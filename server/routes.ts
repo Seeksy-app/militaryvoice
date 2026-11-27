@@ -9510,6 +9510,16 @@ export function registerRoutes(app: Express): void {
     res.json({ ok: true });
   });
 
+  /** Point the Library's clean copy at the current clean file (after a re-clean made before the copy followed it). */
+  app.post("/api/admin/recordings/:id/clean/copy", requireAdmin, async (req, res) => {
+    const rec = await storage.getRecording(Number(req.params.id));
+    let c: CleanResult | null = null;
+    try { c = rec?.clean ? JSON.parse(rec.clean) : null; } catch { c = null; }
+    if (!rec || c?.status !== "done" || !c.videoKey) return res.status(409).json({ message: "The clean episode isn't ready yet." });
+    const copy = await storage.saveCleanCopy(rec, c.videoKey, Math.max(0, (c.durationSec ?? rec.durationSec) - (c.removedSec ?? 0)));
+    res.json({ id: copy.id, url: copy.url, durationSec: copy.durationSec, follows: copy.url === c.videoKey });
+  });
+
   /** Take a job out of the queue (one that keeps freezing and holds up the rest); "Clip again" puts it back. */
   app.post("/api/admin/recordings/:id/hold", requireAdmin, async (req, res) => {
     const rec = await storage.getRecording(Number(req.params.id));
