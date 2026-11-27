@@ -23,6 +23,8 @@ import type { HostedEpisodeRow, HostedShowRow, HostedSpotRow, PodcastStatsData, 
 import { fillFooter, FOOTER_TOKENS } from "@shared/footer";
 import { AlertCircle, BarChart3, Check, ChevronLeft, Copy, Download, ExternalLink, Film, ImagePlus, Loader2, Mic2, Pause, Pencil, Play, Plus, Podcast, Radio, Send, Sparkles, Trash2, Upload } from "lucide-react";
 import { IconTile } from "@/components/ui/icon-tile";
+import { MoreHorizontal } from "lucide-react";
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
 import { useMoveEpisode } from "@/components/MoveEpisode";
 
 /**
@@ -115,6 +117,7 @@ export function PodcastHosting() {
     onError: (e: Error) => toast({ title: "Couldn't set that up", description: e.message, variant: "destructive" }),
   });
   // Which show is open (none: the grid of shows), and which of its tabs.
+  const [cardDelete, setCardDelete] = useState<HostedShowRow | null>(null);
   const [openId, setOpenId] = useState<number | null>(() => { try { const v = Number(sessionStorage.getItem(OPEN_SHOW_KEY)) || null; sessionStorage.removeItem(OPEN_SHOW_KEY); return v; } catch { return null; } });
   // Podcast always opens on Episodes (not wherever they last wandered).
   // ...unless a link asks for a tab (?tab=directories, from Ask Alex's "Take me there").
@@ -222,7 +225,8 @@ export function PodcastHosting() {
             const xd = parseDirs(x.show.directories);
             const listed = DIRS.filter((d) => liveOn(x, xd, d.key)).length;
             return (
-              <button key={x.show.id} type="button" onClick={() => setOpenId(x.show.id)} className="group overflow-hidden rounded-2xl border border-border bg-card text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#053877]/40 hover:shadow-md" data-testid={`hosting-show-${x.show.id}`}>
+              <div key={x.show.id} className="relative">
+              <button type="button" onClick={() => setOpenId(x.show.id)} className="group w-full overflow-hidden rounded-2xl border border-border bg-card text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-[#053877]/40 hover:shadow-md" data-testid={`hosting-show-${x.show.id}`}>
                 <div className="aspect-square w-full bg-muted">{x.show.artworkUrl ? <img src={x.show.artworkUrl} alt="" className="h-full w-full object-cover" /> : <span className="flex h-full items-center justify-center text-muted-foreground"><Podcast className="h-10 w-10" /></span>}</div>
                 <div className="p-3 sm:p-3.5">
                   <p className="line-clamp-2 text-balance text-sm font-semibold leading-snug group-hover:text-[#053877] dark:group-hover:text-[#8fb5e8]">{x.show.title || "Untitled show"}</p>
@@ -230,6 +234,16 @@ export function PodcastHosting() {
                   <span className={`mt-2 inline-block rounded-full px-2 py-0.5 text-[11px] font-semibold ${drafts ? "bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]" : listed ? "bg-emerald-500/15 text-emerald-700 dark:text-emerald-400" : x.missing.length ? "bg-[#F0A71F]/20 text-[#8a5a00] dark:text-[#F0A71F]" : "bg-[#053877]/10 text-[#053877] dark:text-[#8fb5e8]"}`}>{drafts ? `${drafts} to publish` : listed ? `Listed on ${listed} ${listed === 1 ? "app" : "apps"}` : x.missing.length ? "Getting set up" : "Ready to list"}</span>
                 </div>
               </button>
+              {/* More (Andrew, 27 Nov): delete from here too, the same confirm as under Settings → Redirect. */}
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <button type="button" aria-label={`More for ${x.show.title || "this show"}`} className="absolute right-2 top-2 flex h-8 w-8 items-center justify-center rounded-full bg-black/45 text-white shadow-sm backdrop-blur-sm transition-colors hover:bg-black/65 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white" data-testid={`hosting-show-more-${x.show.id}`}><MoreHorizontal className="h-4 w-4" /></button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end" className="w-40">
+                  <DropdownMenuItem onSelect={() => setCardDelete(x.show)} className="text-destructive focus:text-destructive" data-testid={`hosting-show-delete-${x.show.id}`}><Trash2 className="mr-2 h-4 w-4" /> Delete show</DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+              </div>
             );
           })}
           <button type="button" onClick={() => setInSetup(true)} className="flex min-h-[12rem] flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border text-muted-foreground transition-colors hover:border-[#053877]/40 hover:text-[#053877] dark:hover:text-[#8fb5e8]" data-testid="hosting-add-show">
@@ -237,6 +251,7 @@ export function PodcastHosting() {
           </button>
         </div>
         {addShowDialog}
+        {cardDelete && <DeleteShowDialog show={cardDelete} open onClose={() => setCardDelete(null)} onDeleted={() => { setCardDelete(null); refresh(); }} fromCard />}
       </section>
     );
   }
@@ -1095,38 +1110,45 @@ function ArchivedShows({ list, onBack }: { list: Archived[]; onBack: (id: number
 }
 
 function DeleteShow({ show, onDeleted }: { show: HostedShowRow; onDeleted: () => void }) {
-  const { toast } = useToast();
   const [open, setOpen] = useState(false);
+  return (
+    <div className="mt-6 flex justify-center" data-testid="hosting-delete-area">
+      <button type="button" onClick={() => setOpen(true)} className="text-sm font-semibold text-destructive hover:underline" data-testid="hosting-delete">Delete this show</button>
+      <DeleteShowDialog show={show} open={open} onClose={() => setOpen(false)} onDeleted={onDeleted} />
+    </div>
+  );
+}
+
+/** The one delete confirm, from Settings → Redirect or a show card's ⋯ menu: type the name, 15 days in Recently deleted. */
+function DeleteShowDialog({ show, open, onClose, onDeleted, fromCard }: { show: HostedShowRow; open: boolean; onClose: () => void; onDeleted: () => void; fromCard?: boolean }) {
+  const { toast } = useToast();
   const [sure, setSure] = useState("");
   const del = useMutation({
     mutationFn: async () => (await apiRequest("DELETE", `/api/host/hosting/shows/${show.id}`, { confirm: sure })).json(),
-    onSuccess: () => { setOpen(false); setSure(""); onDeleted(); toast({ title: "Show deleted", description: "Its feed has stopped. Put it back from Recently deleted within 15 days." }); },
+    onSuccess: () => { setSure(""); onClose(); onDeleted(); toast({ title: "Show deleted", description: "Its feed has stopped. Put it back from Recently deleted within 15 days." }); },
     onError: (e: Error) => toast({ title: "Not deleted", description: e.message.replace(/^\d+:\s*/, "").replace(/^\{"message":"|"\}$/g, ""), variant: "destructive" }),
   });
-  const close = () => { setOpen(false); setSure(""); };
+  const close = () => { setSure(""); onClose(); };
   return (
-    <div className="mt-6 flex justify-center" data-testid="hosting-delete-area">
-      <button type="button" onClick={() => setOpen(true)} className="text-sm font-semibold text-destructive hover:underline" data-testid="hosting-delete">Delete this show…</button>
-      <Dialog open={open} onOpenChange={(o) => (o ? setOpen(true) : close())}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Delete {show.title}?</DialogTitle>
-            <DialogDescription>Are you sure? All of your episodes will be deleted, and your feed stops, so Apple, Spotify and the other apps lose the&nbsp;show.</DialogDescription>
-          </DialogHeader>
-          <div className="space-y-3 text-sm">
-            {show.newFeedUrl
-              ? <p className="rounded-lg bg-muted/60 px-3 py-2"><b>Your move is on.</b> Deleting stops the forward, so any app that hasn't followed yet loses the show. Wait until Apple and Spotify show your new&nbsp;host.</p>
-              : <p className="rounded-lg bg-muted/60 px-3 py-2"><b>Moving to a new host?</b> Do that first with the steps above: they copy every episode over and your subscribers come with you. Download your stats there too.</p>}
-            <p>We keep it in Recently deleted for 15 days, in case you change your mind. Type the show's name to delete&nbsp;it.</p>
-            <Input value={sure} onChange={(e) => setSure(e.target.value)} placeholder={show.title} data-testid="hosting-delete-confirm" />
-          </div>
-          <DialogFooter className="gap-2">
-            <Button variant="outline" onClick={close}>Keep it</Button>
-            <Button onClick={() => del.mutate()} disabled={del.isPending || sure.trim().toLowerCase() !== show.title.trim().toLowerCase()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90" data-testid="hosting-delete-go">{del.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Delete this show</Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </div>
+    <Dialog open={open} onOpenChange={(o) => { if (!o) close(); }}>
+      <DialogContent className="sm:max-w-md">
+        <DialogHeader>
+          <DialogTitle>Delete {show.title}?</DialogTitle>
+          <DialogDescription>Are you sure? All of your episodes will be deleted, and your feed stops, so Apple, Spotify and the other apps lose the&nbsp;show.</DialogDescription>
+        </DialogHeader>
+        <div className="space-y-3 text-sm">
+          {show.newFeedUrl
+            ? <p className="rounded-lg bg-muted/60 px-3 py-2"><b>Your move is on.</b> Deleting stops the forward, so any app that hasn't followed yet loses the show. Wait until Apple and Spotify show your new&nbsp;host.</p>
+            : <p className="rounded-lg bg-muted/60 px-3 py-2"><b>Moving to a new host?</b> Do that first {fromCard ? <>under the show's Settings → Redirect</> : <>with the steps above</>}: they copy every episode over and your subscribers come with you. Download your stats there too.</p>}
+          <p>We keep it in Recently deleted for 15 days, in case you change your mind. Type the show's name to delete&nbsp;it.</p>
+          <Input value={sure} onChange={(e) => setSure(e.target.value)} placeholder={show.title} data-testid="hosting-delete-confirm" />
+        </div>
+        <DialogFooter className="gap-2">
+          <Button variant="outline" onClick={close}>Keep it</Button>
+          <Button onClick={() => del.mutate()} disabled={del.isPending || sure.trim().toLowerCase() !== show.title.trim().toLowerCase()} className="bg-destructive text-destructive-foreground hover:bg-destructive/90" data-testid="hosting-delete-go">{del.isPending ? <Loader2 className="h-4 w-4 animate-spin" /> : null} Delete this show</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   );
 }
 
