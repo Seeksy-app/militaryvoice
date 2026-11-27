@@ -8428,6 +8428,38 @@ export function registerRoutes(app: Express): void {
     res.json({ ok: true, recordingId: rec.id, source });
   });
 
+  /**
+   * Admin: an intro and outro we made as video clips (e.g. a voiced intro over the guest card, 27 Nov 2026 for Riccoh's
+   * sample), put on one recording as a new Library copy for its owner. Nothing is published or posted; the original, its
+   * draft and any earlier copy are untouched. { introKey, outroKey, introName?, outroName?, source?: "clean" | "original" },
+   * keys under show-assets/ ending .mp4 (uploaded beforehand).
+   */
+  app.post("/api/admin/recordings/:id/bookend-edit", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost || (req as any).eventAdmin) return res.status(403).json({ message: "Admins only." });
+    const rec = await storage.getRecording(Number(req.params.id));
+    if (!rec || rec.status !== "Ready") return res.status(404).json({ message: "No such recording." });
+    let prev: EpisodeEdit | null = null;
+    try { prev = rec.episodeEdit ? JSON.parse(rec.episodeEdit) : null; } catch { prev = null; }
+    if (prev && (prev.status === "queued" || prev.status === "running")) return res.status(409).json({ message: "An edit of this episode is already being made." });
+    const clip = (v: unknown) => (typeof v === "string" && /^show-assets\/[\w.-]+\.mp4$/.test(v) ? v : "");
+    const introKey = clip(req.body?.introKey), outroKey = clip(req.body?.outroKey);
+    if (!introKey && !outroKey) return res.status(400).json({ message: "Give an intro or an outro clip (show-assets/….mp4)." });
+    const source: EpisodeEdit["source"] = req.body?.source === "clean" ? "clean" : "original";
+    if (source === "clean") {
+      let clean: CleanResult | null = null;
+      try { clean = rec.clean ? JSON.parse(rec.clean) : null; } catch { clean = null; }
+      if (clean?.status !== "done" || !clean?.videoKey) return res.status(409).json({ message: "The clean episode isn't ready yet." });
+    }
+    const e: EpisodeEdit = {
+      source, trimStart: 0, trimEnd: 0,
+      introKey: introKey || undefined, introName: String(req.body?.introName ?? "Intro").slice(0, 120),
+      outroKey: outroKey || undefined, outroName: String(req.body?.outroName ?? "Outro").slice(0, 120),
+      status: "queued", at: new Date().toISOString(),
+    };
+    await storage.setEpisodeEdit(rec.id, JSON.stringify(e));
+    res.json({ ok: true, recordingId: rec.id, source, introKey, outroKey });
+  });
+
   /** Admin: switch a member's package on or off (the template: settings guestcard:<email>). */
   app.post("/api/admin/package", requireAdmin, async (req, res) => {
     if ((req as any).studioHost || (req as any).eventAdmin) return res.status(403).json({ message: "Admins only." });
