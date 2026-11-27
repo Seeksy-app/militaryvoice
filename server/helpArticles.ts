@@ -253,15 +253,15 @@ A category, in Show details.
 One published episode. New episode → upload the audio (or pick a clean episode from your Library) → Publish.
 3 Listing your show
 Apple Podcasts
-a On your Podcast screen, open your show's Directories tab. When the list at the top is done, press List it beside Apple Podcasts: your feed is copied and Apple's page opens. Sign in with your Apple ID.
-b Choose to add a new show with an RSS feed, and paste your feed address.
-c Check the details and submit. Apple reviews it, usually within a few days, and emails the owner email.
-d Once it's live, paste your show's Apple link under Apple Podcasts in Directories and press It's live, so your page and SmartLink link to it.
+a On your Podcast screen, open your show's Directories tab. When the list at the top is done, press List it beside Apple Podcasts to see the steps. Open Apple's page from step 1 and sign in with your Apple ID.
+b Choose to add a new show with an RSS feed, and paste your feed address. It's right there in the step, with a Copy button.
+c Check the details and submit. Apple reviews it, usually in a day or two, and emails the owner email.
+d Once it's live, paste your show's Apple link under Apple Podcasts in Directories and press Save link, so your page and SmartLink link to it.
 Spotify
-a Press List it beside Spotify in Directories (or go to creators.spotify.com) and sign in.
-b Choose to add a podcast you already host somewhere else, and paste your feed address.
+a Press List it beside Spotify in Directories, open Spotify for Creators from step 1 (or go to creators.spotify.com) and sign in.
+b Choose to add a podcast you already host somewhere else, and paste your feed address (press Copy beside it in the step).
 c Spotify emails a code to your owner email. Enter it, check the details, and submit. It's usually live within hours.
-d Paste the Spotify link under Spotify in Directories and press It's live. YouTube Music, Amazon Music, iHeartRadio, Pocket Casts and Podcast Index are listed there the same way.
+d Paste the Spotify link under Spotify in Directories and press Save link. YouTube Music, Amazon Music, iHeartRadio, Pocket Casts and Podcast Index are listed there the same way.
 4 Your episodes on YouTube
 An episode made from a video (an MP4 you upload, or a Library recording) can go to your YouTube channel too, with its title, notes and picture. Connect your channel once on the Social screen.
 Choose once, for each show
