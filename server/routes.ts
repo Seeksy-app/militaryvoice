@@ -160,6 +160,7 @@ import { registerPromo, noteFoundingTrial } from "./promo.js";
 import { socialTrial, socialBlocked } from "./socialTrial.js";
 import { registerMarathonFounding } from "./marathonFounding.js";
 import { registerShareLogin } from "./shareLogin.js";
+import { registerRecordingIn } from "./recordingIn.js";
 import { orgMemberEmails, registerOrgs } from "./orgs.js";
 import { registerProspects } from "./prospects.js";
 import { registerTravel } from "./travel.js";
@@ -759,7 +760,7 @@ async function requireAdmin(req: Request, res: Response, next: NextFunction) {
   if (givenKey && readKey.length >= 32) {
     const ok = givenKey.length === readKey.length && crypto.timingSafeEqual(Buffer.from(givenKey), Buffer.from(readKey));
     const read = req.method === "GET" || req.method === "HEAD";
-    const kept = /^\/api\/admin\/(share-logins?|export\.csv|finance-[\w-]+|production-costs)(\/|$)/.test(req.path);
+    const kept = /^\/api\/admin\/(share-logins?|recordings-in|export\.csv|finance-[\w-]+|production-costs)(\/|$)/.test(req.path);
     if (ok && read && !kept) { (req as any).adminEmail = "claude-vps@militaryvoices.ai"; next(); return; }
     res.status(403).json({ message: ok ? "The read key only opens admin reads." : "Admins only." });
     return;
@@ -7411,6 +7412,7 @@ export function registerRoutes(app: Express): void {
   registerPromo(app, requireAdmin);
   registerMarathonFounding(app, requireAdmin);
   registerShareLogin(app, requireAdmin);
+  registerRecordingIn(app, requireHostSession, requireAdmin);
   registerHealth(app, requireAdmin);
   // Track R (26 Nov): the MV events list for the admin picker, with the featured-event fallback counts.
   registerMvEvents(app, requireAdmin);

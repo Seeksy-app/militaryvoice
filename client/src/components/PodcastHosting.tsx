@@ -1,5 +1,6 @@
 import { shrinkImage } from "@/lib/shrinkImage";
 import { GuestInvites } from "@/components/GuestInvites";
+import { SendRecording } from "@/components/SendRecording";
 import { Select } from "@/components/room/Select";
 import type { IconType } from "react-icons";
 import { SiApplepodcasts, SiCastbox, SiDeezer, SiIheartradio, SiPlayerfm, SiPocketcasts, SiPodcastindex, SiSpotify, SiYoutube, SiYoutubemusic } from "react-icons/si";
@@ -417,6 +418,8 @@ export function PodcastHosting() {
               <p className="py-6 text-center text-sm text-muted-foreground">No episodes yet. Add your first: upload the audio or the video, or use a recording from your Library.</p>
             )}
           </div>
+          {/* A share link (Zoom, Dropbox, Drive) the team brings into their Library (Engineering, 27 Nov). */}
+          <SendRecording key={s.id} showId={s.id} />
         </>
       )}
 

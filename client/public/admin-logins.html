@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <meta name="robots" content="noindex,nofollow">
 <meta name="referrer" content="no-referrer">
-<title>Shared logins · MilitaryVoices.ai</title>
+<title>Shared logins and recordings · MilitaryVoices.ai</title>
 <style>
   *{box-sizing:border-box}
   body{margin:0;background:#f8fafc;font:15px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Arial,sans-serif;color:#0f172a;padding:28px 16px}
@@ -29,6 +29,8 @@
   .new{display:flex;gap:8px;margin:0 0 22px;flex-wrap:wrap}
   .new input{flex:1;min-width:180px;font:inherit;padding:10px 12px;border:1.5px solid #cbd5e1;border-radius:12px}
   .msg{color:#b91c1c;margin:8px 0}
+  .picked{background:#fef3c7;color:#92400e}.lib{background:#dcfce7;color:#15803d}.sent{background:#e0e7ff;color:#3730a3}
+  h2{font-size:17px;margin:28px 0 4px}
   .link{font-size:13px;word-break:break-all;background:#eff6ff;border-radius:10px;padding:10px 12px;margin:-10px 0 18px}
 </style>
 </head>
@@ -44,6 +46,9 @@
   <div id="newlink"></div>
   <div id="msg" class="msg"></div>
   <div id="list">Loading…</div>
+  <h2>Recordings sent in</h2>
+  <p class="sub">From "Send us a recording" on a podcaster's Podcast tab. Show the link, bring it into their Library, then mark it. In your Library forgets the link and passcode.</p>
+  <div id="recs">Loading…</div>
 </main>
 <script>
 var list=document.getElementById("list"), msg=document.getElementById("msg");
@@ -90,7 +95,43 @@ document.getElementById("make").onsubmit=function(ev){
       document.getElementById("who").value=""; load();
     });
 };
+var recs=document.getElementById("recs");
+var REC={sent:["Sent","sent"],picked:["Picked up","picked"],library:["In your Library","lib"]};
+function loadRecs(){
+  api("/api/admin/recordings-in").then(function(r){ if(!r.ok) throw 0; return r.json(); }).then(function(rows){
+    if(!rows.length){ recs.innerHTML='<p class="sub">Nothing yet.</p>'; return; }
+    recs.innerHTML = rows.map(function(r){
+      var st=REC[r.status]||REC.sent;
+      return '<div class="row" data-id="'+esc(r.id)+'"><div class="top"><div><div class="name">'+esc(r.showTitle)+' · '+esc(r.site)+'</div><div class="meta">'+esc(r.email)+' · sent '+when(r.createdAt)+(r.hasPasscode?' · has a passcode':'')+(r.revealedAt?' · read '+when(r.revealedAt):'')+'</div>'+(r.note?'<div class="meta">'+esc(r.note)+'</div>':'')+'</div><span class="pill '+st[1]+'">'+st[0]+'</span></div><div class="actions">'
+        +(r.stored?'<button class="primary" data-a="show">Show link</button>':'')
+        +(r.status==="sent"?'<button data-a="picked">Mark picked up</button>':'')
+        +(r.status!=="library"?'<button data-a="library">Mark in their Library</button>':'')
+        +'<button class="danger" data-a="del">Delete</button></div><div class="out"></div></div>';
+    }).join("");
+  }).catch(function(){ recs.innerHTML=''; });
+}
+recs.addEventListener("click", function(ev){
+  var b=ev.target.closest("button"); if(!b||!b.dataset.a) return;
+  var row=b.closest(".row"), id=row.dataset.id, out=row.querySelector(".out");
+  if(b.dataset.a==="show"){
+    api("/api/admin/recordings-in/"+id+"/reveal").then(function(r){ return r.json(); }).then(function(j){
+      if(j.message){ out.innerHTML='<div class="msg">'+esc(j.message)+'</div>'; return; }
+      var safe=/^https?:\/\//i.test(j.link);
+      out.innerHTML='<div class="login"><div><span>'+esc(j.link)+'</span><span>'+(safe?'<a class="btn" style="padding:3px 10px;font-size:12px" href="'+esc(j.link)+'" target="_blank" rel="noreferrer noopener">Open</a> ':'')+'<button data-c="1">Copy</button></span></div>'+(j.passcode?'<div><span>'+esc(j.passcode)+'</span><button data-c="2">Copy</button></div>':'<div><span>No passcode</span></div>')+'</div>';
+      var c1=out.querySelector('[data-c="1"]'), c2=out.querySelector('[data-c="2"]');
+      c1.onclick=function(){ navigator.clipboard.writeText(j.link); this.textContent="Copied"; };
+      if(c2) c2.onclick=function(){ navigator.clipboard.writeText(j.passcode); this.textContent="Copied"; };
+    });
+  } else if(b.dataset.a==="picked"||b.dataset.a==="library"){
+    if(b.dataset.a==="library"&&!confirm("Mark it in their Library? The link and passcode are forgotten.")) return;
+    api("/api/admin/recordings-in/"+id+"/status", {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify({status:b.dataset.a})}).then(loadRecs);
+  } else if(b.dataset.a==="del"){
+    if(!confirm("Delete this for good? The link and passcode can't be read again.")) return;
+    api("/api/admin/recordings-in/"+id, {method:"DELETE"}).then(loadRecs);
+  }
+});
 load();
+loadRecs();
 </script>
 </body>
 </html>
