@@ -1,9 +1,10 @@
 import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { Link } from "wouter";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, FileText, Handshake, Loader2, Mic, Pause, Play, Rss, Search, X } from "lucide-react";
+import { ArrowLeft, ArrowRight, CheckCircle2, ChevronDown, FileText, Handshake, Loader2, Pause, Play, Rss, Search, X } from "lucide-react";
 import NotFound from "@/pages/not-found";
 import { PlatformIcon, platformLabel } from "@/components/SocialIcons";
+import { BrandMark } from "@/components/BrandMark";
 import { onColor, standOut } from "@shared/bio";
 import type { SocialPlatform } from "@shared/schema";
 import type { SiteEpisode, SiteEpisodeFull, SitePublic } from "@shared/site";
@@ -204,9 +205,9 @@ function Home({ d }: { d: SitePublic }) {
     return f ? d.episodes.filter((e) => `${e.title} ${e.summary}`.toLowerCase().includes(f)) : d.episodes;
   }, [find, d.episodes]);
   const listen: [string, string, ReactNode][] = [
-    ...(show?.appleUrl ? [["Apple Podcasts", show.appleUrl, <Mic key="a" className="h-4 w-4" />] as [string, string, ReactNode]] : []),
-    ...(show?.spotifyUrl ? [["Spotify", show.spotifyUrl, <PlatformIcon key="s" platform={"spotify" as SocialPlatform} className="h-4 w-4" />] as [string, string, ReactNode]] : []),
-    ...(d.youtubeUrl ? [["YouTube", d.youtubeUrl, <PlatformIcon key="y" platform={"youtube" as SocialPlatform} className="h-4 w-4" />] as [string, string, ReactNode]] : []),
+    ...(show?.appleUrl ? [["Apple Podcasts", show.appleUrl, <BrandMark key="a" brand="apple-podcasts" className="h-4 w-4" />] as [string, string, ReactNode]] : []),
+    ...(show?.spotifyUrl ? [["Spotify", show.spotifyUrl, <BrandMark key="s" brand="spotify" className="h-4 w-4" />] as [string, string, ReactNode]] : []),
+    ...(d.youtubeUrl ? [["YouTube", d.youtubeUrl, <BrandMark key="y" brand="youtube" className="h-4 w-4" />] as [string, string, ReactNode]] : []),
     ...(show?.feedUrl ? [["RSS", show.feedUrl, <Rss key="r" className="h-4 w-4" />] as [string, string, ReactNode]] : []),
   ];
   const p = usePlayer();
