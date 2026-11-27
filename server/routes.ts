@@ -195,7 +195,7 @@ import { registerReview } from "./review.js";
 import { registerSponsorFinder } from "./sponsorFinder.js";
 import { registerPodcastStats } from "./podcastStats.js";
 import { registerRadioLibrary, claimRadioShowCut } from "./radioLibrary.js";
-import { registerHosting, startEpisodeFromRecording, listHostEpisodes, claimEpisodeAudio, claimEpisodeBookends, claimEpisodeStill, claimEpisodeVideo, podcastYouTubeAt } from "./hosting.js";
+import { registerHosting, publishShowDrafts, startEpisodeFromRecording, listHostEpisodes, claimEpisodeAudio, claimEpisodeBookends, claimEpisodeStill, claimEpisodeVideo, podcastYouTubeAt } from "./hosting.js";
 import { decideAdvance } from "../shared/showClock.js";
 import type { StageThanks } from "../shared/stageMeta.js";
 import { registerBioPage, registerBioAgent, claimLivingSqueeze, subscribersFor, publishedBioUrl } from "./bioPage.js";
@@ -8459,6 +8459,18 @@ export function registerRoutes(app: Express): void {
       return res.status(409).json({ message: (err as Error).message });
     }
     res.json({ ok: true, recordingId: rec.id, source });
+  });
+
+  /**
+   * Admin: publish every draft (with audio) in one hosted show, on its own dates (27 Nov 2026, Warriors' Voice). Sends no
+   * email or push. Listen Notes and the app pings (WebSub, Podcast Index, Podping) only with listenNotes / announce true.
+   * { dryRun?: boolean, listenNotes?: boolean, announce?: boolean }; dryRun defaults to true.
+   */
+  app.post("/api/admin/hosted-shows/:id/publish-drafts", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost || (req as any).eventAdmin) return res.status(403).json({ message: "Admins only." });
+    try {
+      res.json(await publishShowDrafts(Number(req.params.id), { dryRun: req.body?.dryRun !== false, listenNotes: req.body?.listenNotes === true, announce: req.body?.announce === true }));
+    } catch (err) { res.status(404).json({ message: (err as Error).message }); }
   });
 
   /**

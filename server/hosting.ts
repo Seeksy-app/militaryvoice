@@ -905,6 +905,25 @@ async function postEpisodeToYouTube(e: HostedEpisodeRow, show: HostedShowRow, pr
  * answers "found" once accepted. At most once a day per show. Never an
  * AI-voiced show: Listen Notes refuses them, and blocks whoever sends them.
  */
+/**
+ * Admin (27 Nov 2026, Warriors' Voice): every draft in one show that has its audio, published with the date it already
+ * carries (an import's original date), else now. Listen Notes and the app pings only when asked. dryRun counts and changes nothing.
+ */
+export async function publishShowDrafts(showId: number, o: { announce?: boolean; listenNotes?: boolean; dryRun?: boolean } = {}): Promise<{ show: string; published: number; skippedNoAudio: number; alreadyLive: number; dates: { first: string; last: string } }> {
+  const [show] = await db.select().from(hostedShows).where(eq(hostedShows.id, showId)).limit(1);
+  if (!show) throw new Error("No such show.");
+  const eps = await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.showId, show.id));
+  const drafts = eps.filter((e) => e.status === "draft");
+  const ready = drafts.filter((e) => (e.audioKey || e.audioUrl) && !e.audioJob);
+  const dates = ready.map((e) => e.publishedAt || "").filter(Boolean).sort();
+  if (!o.dryRun) {
+    for (const e of ready) await db.update(hostedEpisodes).set({ status: "published", publishedAt: e.publishedAt || now() }).where(eq(hostedEpisodes.id, e.id));
+    if (ready.length && o.listenNotes) await listOnListenNotes(show.id).catch(() => undefined);
+    if (ready.length && o.announce) await announceShow(show.id).catch(() => null);
+  }
+  return { show: show.title, published: ready.length, skippedNoAudio: drafts.length - ready.length, alreadyLive: eps.filter((e) => e.status === "published").length, dates: { first: dates[0] ?? "", last: dates[dates.length - 1] ?? "" } };
+}
+
 export async function listOnListenNotes(showId: number, force = false): Promise<void> {
   if (!isListenNotesConfigured()) return;
   const [show] = await db.select().from(hostedShows).where(eq(hostedShows.id, showId)).limit(1);
