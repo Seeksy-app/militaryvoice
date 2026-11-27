@@ -8464,13 +8464,18 @@ export function registerRoutes(app: Express): void {
   /**
    * Admin: publish every draft (with audio) in one hosted show, on its own dates (27 Nov 2026, Warriors' Voice). Sends no
    * email or push. Listen Notes and the app pings (WebSub, Podcast Index, Podping) only with listenNotes / announce true.
-   * { dryRun?: boolean, listenNotes?: boolean, announce?: boolean }; dryRun defaults to true.
+   * { dryRun?: boolean (default true), mode: "today" | "weekly", skipIds?: number[], listenNotes?: boolean, announce?: boolean }.
    */
   app.post("/api/admin/hosted-shows/:id/publish-drafts", requireAdmin, async (req, res) => {
     if ((req as any).studioHost || (req as any).eventAdmin) return res.status(403).json({ message: "Admins only." });
     try {
-      res.json(await publishShowDrafts(Number(req.params.id), { dryRun: req.body?.dryRun !== false, listenNotes: req.body?.listenNotes === true, announce: req.body?.announce === true }));
-    } catch (err) { res.status(404).json({ message: (err as Error).message }); }
+      const b = req.body ?? {};
+      res.json(await publishShowDrafts(Number(req.params.id), {
+        dryRun: b.dryRun !== false, listenNotes: b.listenNotes === true, announce: b.announce === true,
+        mode: b.mode === "today" || b.mode === "weekly" ? b.mode : undefined,
+        skipIds: Array.isArray(b.skipIds) ? b.skipIds.map(Number).filter(Number.isFinite) : [],
+      }));
+    } catch (err) { res.status(400).json({ message: (err as Error).message }); }
   });
 
   /**

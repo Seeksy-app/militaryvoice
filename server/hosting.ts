@@ -906,22 +906,30 @@ async function postEpisodeToYouTube(e: HostedEpisodeRow, show: HostedShowRow, pr
  * AI-voiced show: Listen Notes refuses them, and blocks whoever sends them.
  */
 /**
- * Admin (27 Nov 2026, Warriors' Voice): every draft in one show that has its audio, published with the date it already
- * carries (an import's original date), else now. Listen Notes and the app pings only when asked. dryRun counts and changes nothing.
+ * Admin (27 Nov 2026, Warriors' Voice): publish a show's drafts that have their audio and an episode number, dated in
+ * episode order (the highest number newest). mode "today": minutes apart, the newest now; "weekly": a week apart, the
+ * newest now. Drafts without a number (or in skipIds) are listed and left alone. Listen Notes and the app pings only when
+ * asked. dryRun lists and changes nothing.
  */
-export async function publishShowDrafts(showId: number, o: { announce?: boolean; listenNotes?: boolean; dryRun?: boolean } = {}): Promise<{ show: string; published: number; skippedNoAudio: number; alreadyLive: number; dates: { first: string; last: string } }> {
+export async function publishShowDrafts(showId: number, o: { mode?: "today" | "weekly"; skipIds?: number[]; announce?: boolean; listenNotes?: boolean; dryRun?: boolean } = {}) {
   const [show] = await db.select().from(hostedShows).where(eq(hostedShows.id, showId)).limit(1);
   if (!show) throw new Error("No such show.");
   const eps = await db.select().from(hostedEpisodes).where(eq(hostedEpisodes.showId, show.id));
   const drafts = eps.filter((e) => e.status === "draft");
-  const ready = drafts.filter((e) => (e.audioKey || e.audioUrl) && !e.audioJob);
-  const dates = ready.map((e) => e.publishedAt || "").filter(Boolean).sort();
+  const skip = new Set(o.skipIds ?? []);
+  const go = drafts.filter((e) => (e.audioKey || e.audioUrl) && !e.audioJob && e.episodeNumber != null && !skip.has(e.id))
+    .sort((a, b) => (a.episodeNumber ?? 0) - (b.episodeNumber ?? 0));
+  const step = o.mode === "weekly" ? 7 * 24 * 3600_000 : 5 * 60_000;
+  const end = Date.now();
+  const plan = go.map((e, i) => ({ id: e.id, episodeNumber: e.episodeNumber, title: e.title, publishedAt: new Date(end - (go.length - 1 - i) * step).toISOString() }));
+  const left = drafts.filter((e) => !go.includes(e)).map((e) => ({ id: e.id, episodeNumber: e.episodeNumber, title: e.title, createdAt: e.createdAt, recordingId: e.recordingId, hasAudio: !!(e.audioKey || e.audioUrl), why: !(e.audioKey || e.audioUrl) || e.audioJob ? "no audio yet" : skip.has(e.id) ? "skipped" : "no episode number" }));
   if (!o.dryRun) {
-    for (const e of ready) await db.update(hostedEpisodes).set({ status: "published", publishedAt: e.publishedAt || now() }).where(eq(hostedEpisodes.id, e.id));
-    if (ready.length && o.listenNotes) await listOnListenNotes(show.id).catch(() => undefined);
-    if (ready.length && o.announce) await announceShow(show.id).catch(() => null);
+    if (o.mode !== "today" && o.mode !== "weekly") throw new Error('Pick mode "today" or "weekly".');
+    for (const p of plan) await db.update(hostedEpisodes).set({ status: "published", publishedAt: p.publishedAt }).where(eq(hostedEpisodes.id, p.id));
+    if (plan.length && o.listenNotes) await listOnListenNotes(show.id).catch(() => undefined);
+    if (plan.length && o.announce) await announceShow(show.id).catch(() => null);
   }
-  return { show: show.title, published: ready.length, skippedNoAudio: drafts.length - ready.length, alreadyLive: eps.filter((e) => e.status === "published").length, dates: { first: dates[0] ?? "", last: dates[dates.length - 1] ?? "" } };
+  return { show: show.title, dryRun: !!o.dryRun, mode: o.mode ?? "", publish: plan, leftAsDraft: left, alreadyLive: eps.filter((e) => e.status === "published").length };
 }
 
 export async function listOnListenNotes(showId: number, force = false): Promise<void> {
