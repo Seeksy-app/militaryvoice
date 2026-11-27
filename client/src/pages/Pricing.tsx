@@ -424,7 +424,7 @@ export default function Pricing() {
                 <Button
                   onClick={() => void go(p.key, () => startPlanCheckout(p.key, quarterly ? "quarter" : yearly ? "year" : "month", addProd ? ["production"] : addDisc ? ["discovery"] : []))}
                   disabled={busy !== null}
-                  className={`mt-4 h-auto min-h-10 w-full gap-2 whitespace-normal rounded-full py-2.5 ${popular ? "bg-[#053877] text-white hover:bg-[#0a4a99]" : ""}`}
+                  className={`mt-4 h-auto min-h-10 w-full gap-2 whitespace-normal rounded-full py-2.5 [text-wrap:balance] ${popular ? "bg-[#053877] text-white hover:bg-[#0a4a99]" : ""}`}
                   variant={popular ? "default" : "outline"}
                 >
                   {busy === p.key && <Loader2 className="h-4 w-4 animate-spin" />}
