@@ -43,6 +43,8 @@ const GROWTH: Feature[] = [
 const PLAN_FEATURES: Record<string, Feature[]> = {
   creator: [
     { t: `Live Studio, ${STUDIO_HOURS.creator} hours a month`, tip: "More time in the Studio each month. Everything it does is listed below." },
+    // Social posting is a Scale/Pro feature (Growth's 30-day trial stays off the page: Andrew, 27 Nov "Leave it off" / "we definitely want to show the social media posting aspects").
+    { t: "Post to all your socials", tip: "Send your clips to YouTube, Instagram, TikTok, Facebook, LinkedIn, X and Threads. Post now, at the next open slot or a time you pick, and see it all on your Social calendar." },
     { t: "30 Pōstify credits a month", tip: "About 3 episodes a month with animated captions, or 6 with Classic." },
     { t: "4 captioned clips an episode", tip: "Picked by SI from your episode, in vertical, square and wide, ready for every platform." },
     { t: "A clean episode, every time", tip: "Ums, false starts and dead air taken out, as MP3 and MP4. Your original is never changed." },
