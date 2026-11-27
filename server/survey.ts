@@ -15,6 +15,8 @@ import { peopleFor, sendSms, toE164 } from "./sms.js";
 import { sendFoundingReminders } from "./foundingReminder.js";
 import { MARATHON_KIND, marathonSkip, senderFrom, bccForSender } from "./marathonFounding.js";
 import { SURVEY_QUESTIONS } from "../shared/survey.js";
+import { EPISODE_DAY_KIND, episodeDayMail } from "./episodeDayMail.js";
+import { slackNote } from "./slack.js";
 
 const ORIGIN = (process.env.PUBLIC_ORIGIN || "https://www.militaryvoices.ai").replace(/\/+$/, "");
 const SURVEY = "marathon-2026";
@@ -341,13 +343,47 @@ export function registerSurvey(app: Express, requireAdmin: RequestHandler): void
     res.json({ mail: rows, grants });
   });
 
+  /**
+   * The episode-day email (episodeDayMail.ts): GET .../preview builds it now (or says what's missing); POST queues one for
+   * { episodeId, to, sendAt }, PARKED by default: a parked row never sends until /api/admin/outbox/release lets it go,
+   * once the owner of the decision has said yes. Filled with real links when it sends; held, never sent with a gap.
+   */
+  app.get("/api/admin/episode-day-mail/:episodeId/preview", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost || (req as any).eventAdmin) return res.status(403).json({ message: "Admins only." });
+    res.setHeader("Cache-Control", "no-store");
+    res.json(await episodeDayMail(Number(req.params.episodeId)));
+  });
+  app.post("/api/admin/episode-day-mail", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost || (req as any).eventAdmin) return res.status(403).json({ message: "Admins only." });
+    await schemaIsReady();
+    const episodeId = Number(req.body?.episodeId);
+    const to = String(req.body?.to ?? "").trim().toLowerCase();
+    const sendAt = String(req.body?.sendAt ?? "");
+    if (!Number.isInteger(episodeId) || episodeId <= 0 || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(to) || Number.isNaN(Date.parse(sendAt))) return res.status(400).json({ message: "episodeId, to and sendAt (ISO)?" });
+    const kind = `${EPISODE_DAY_KIND}${episodeId}`;
+    const [had] = await db.select({ id: outboxMail.id, status: outboxMail.status }).from(outboxMail).where(and(eq(outboxMail.kind, kind), eq(outboxMail.to, to), inArray(outboxMail.status, ["parked", "queued", "held"])));
+    if (had) return res.json({ id: had.id, status: had.status, already: true });
+    const [row] = await db.insert(outboxMail).values({ to, subject: "(filled in when it sends)", html: "", text: "", sender: "riccoh", kind, sendAt: new Date(sendAt).toISOString(), status: req.body?.parked === false ? "queued" : "parked", createdAt: new Date().toISOString() }).returning({ id: outboxMail.id, status: outboxMail.status, sendAt: outboxMail.sendAt });
+    res.status(201).json(row);
+  });
+  /** Let parked (or held) mail go: { ids }. It sends at its time, or on the next run if that has passed. */
+  app.post("/api/admin/outbox/release", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost || (req as any).eventAdmin) return res.status(403).json({ message: "Admins only." });
+    await schemaIsReady();
+    const ids = (Array.isArray(req.body?.ids) ? req.body.ids : []).map(Number).filter((n: number) => Number.isInteger(n) && n > 0);
+    if (!ids.length) return res.status(400).json({ message: "ids?" });
+    const rows = await db.update(outboxMail).set({ status: "queued", error: "" }).where(and(inArray(outboxMail.id, ids), inArray(outboxMail.status, ["parked", "held"]))).returning({ id: outboxMail.id, sendAt: outboxMail.sendAt });
+    res.json({ released: rows });
+  });
+
   /** Stop something before it goes: one row, or a whole kind (`?kind=`). */
   app.post("/api/admin/outbox/cancel", requireAdmin, async (req, res) => {
     await schemaIsReady();
     const id = Number(req.body?.id) || 0;
     const kind = String(req.body?.kind ?? "");
     if (!id && !kind) return res.status(400).json({ message: "Which one?" });
-    const where = id ? and(eq(outboxMail.id, id), eq(outboxMail.status, "queued")) : and(eq(outboxMail.kind, kind), eq(outboxMail.status, "queued"));
+    const waiting = inArray(outboxMail.status, ["queued", "parked", "held"]);
+    const where = id ? and(eq(outboxMail.id, id), waiting) : and(eq(outboxMail.kind, kind), waiting);
     const rows = await db.update(outboxMail).set({ status: "cancelled" }).where(where).returning({ id: outboxMail.id });
     res.json({ cancelled: rows.length });
   });
@@ -439,6 +475,17 @@ export function registerSurvey(app: Express, requireAdmin: RequestHandler): void
       if (m.kind.startsWith(MARATHON_KIND)) {
         const why = await marathonSkip(m.to, m.kind).catch(() => "Couldn't check, so held.");
         if (why) { await db.update(outboxMail).set({ status: "cancelled", error: why }).where(eq(outboxMail.id, m.id)); continue; }
+      }
+      // The episode-day email is written now, from what's live; anything missing holds it (never a gap).
+      if (m.kind.startsWith(EPISODE_DAY_KIND)) {
+        const built = await episodeDayMail(Number(m.kind.slice(EPISODE_DAY_KIND.length))).catch((err: Error) => ({ ok: false as const, why: `couldn't check: ${err.message}` }));
+        if (!built.ok) {
+          await db.update(outboxMail).set({ status: "held", error: built.why.slice(0, 300) }).where(eq(outboxMail.id, m.id));
+          await slackNote(`Episode-day email #${m.id} to ${m.to} is held, not sent: ${built.why}. Release it from Admin when it's fixed (POST /api/admin/outbox/release).`).catch(() => undefined);
+          continue;
+        }
+        Object.assign(m, { subject: built.subject, html: built.html, text: built.text });
+        await db.update(outboxMail).set({ subject: built.subject, html: built.html, text: built.text }).where(eq(outboxMail.id, m.id));
       }
       try {
         const id = await sendOneOffEmail({ to: m.to, subject: m.subject, html: m.html, text: m.text, kind: m.kind, from: senderFrom(m.sender), bcc: m.sender === "riccoh" ? bccFor("riccoh", m.to) : bccForSender(m.sender, m.to) });
