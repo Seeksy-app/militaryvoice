@@ -142,6 +142,7 @@ import { registerSurvey } from "./survey.js";
 import { registerSms } from "./sms.js";
 import { logSceneTake, registerSceneLog } from "./sceneLog.js";
 import { studioForStage, stageStudios, eventForStudio, mvEventStudios, type StageStudio } from "./stageStudio.js";
+import { consoleText, stageOfStudio, stageTimeUp, syncStageScenes } from "./stageConsole.js";
 import { eventFor, eventPickStatus, explicitOn, listMvEvents } from "./mvEvents.js";
 import { audienceRecipients, registerPeople } from "./people.js";
 import { registerOrganizer } from "./organizer.js";
@@ -4288,7 +4289,8 @@ export function registerRoutes(app: Express): void {
 
   // ---- Run of show ------------------------------------------------------------
   app.get("/api/admin/run-of-show", requireAdmin, async (req, res) => {
-    const eventId = Number(req.query.eventId) || (await storage.getFeaturedEvent()).id;
+    // A console that names its studio (a LIVE stage studio) reads that studio's own event (Packet B, 27 Nov).
+    const eventId = Number(req.query.eventId) || (Number(req.query.studioId) ? (await adminStudio(req)).studio.eventId : (await storage.getFeaturedEvent()).id);
     // A row that rolls a file says how long the file runs, so a 77-minute
     // episode in a 25-minute slot is seen here and not at 9:31 on the day.
     const rows = await storage.listRunOfShow(eventId);
@@ -5577,6 +5579,15 @@ export function registerRoutes(app: Express): void {
     res.json({ created, total: items.length });
   });
 
+  /** A LIVE stage studio's rail, rebuilt from its approved run of show (Packet B). Packet A calls syncStageScenes
+   *  itself on approval; this is the same thing by hand. 409 for a studio with no stage (Radio, the Marathon). */
+  app.post("/api/admin/scenes/sync-stage", requireAdmin, async (req, res) => {
+    if (await scenesLocked(req)) return lockedNo(res);
+    const { studio } = await adminStudio(req);
+    if (!(await stageOfStudio(studio.id))) return res.status(409).json({ message: "This studio doesn't run a stage." });
+    res.json(await syncStageScenes(studio.id));
+  });
+
   /** Create a scene from a specific run-of-show item. */
   app.post("/api/admin/scenes/from-agenda", requireAdmin, async (req, res) => {
     if (await scenesLocked(req)) return lockedNo(res);
@@ -5800,7 +5811,9 @@ export function registerRoutes(app: Express): void {
         // A hand-off that plays Alex's recorded clip is hers, not Michael's: her name on the bar.
         const deskRaw = row.kind === "Handoff" && !who ? handoff?.desk ?? null : null;
         // Whoever holds the hour, a hand-off playing Alex's clip is Alex's (Amy's name was on the 10:25).
-        const desk = row.kind === "Handoff" && !who && scene.mediaUrl ? { name: "Alex", photoUrl: "/alex.jpg", email: "" } : deskRaw;
+        // The words on screen: the Marathon's, or the production's on a LIVE stage with live:console on (Packet B).
+        const words = await consoleText(studio.id);
+        const desk = row.kind === "Handoff" && !who && scene.mediaUrl ? { name: words.aiName, photoUrl: words.aiPhoto, email: "" } : deskRaw;
         // The booking's co-host on the card too: both names, both faces.
         const whoCo = who?.coHostEmail ? await storage.getProfileByEmail(who.coHostEmail.trim().toLowerCase()).catch(() => undefined) : undefined;
         const rowMedia = handoff?.thanks && !scene.mediaUrl ? "" : mediaUrl;
@@ -5851,7 +5864,7 @@ export function registerRoutes(app: Express): void {
           ...(sponsor && banner.bannerTitle ? { bannerSubtitle: [banner.bannerSubtitle, `Presented by ${sponsor.name}`].filter(Boolean).join(" · ") } : {}),
           // At the desk the lower third is the co-host's name. Not over Alex's
           // own clips: she's on screen, and the bar covered the slides.
-          ...(desk && !banner.bannerTitle && !(row.kind === "Handoff" && scene.mediaUrl) ? { bannerTitle: desk.name, bannerSubtitle: `${/^michael\b/i.test(desk.name) ? "Producer" : "Co-host"} · The Podcast Marathon`, bannerVisible: true } : {}),
+          ...(desk && !banner.bannerTitle && !(row.kind === "Handoff" && scene.mediaUrl) ? { bannerTitle: desk.name, bannerSubtitle: `${/^michael\b/i.test(desk.name) ? "Producer" : "Co-host"} · ${words.brand}`, bannerVisible: true } : {}),
         });
         if (withScene) {
           const ev = await storage.getEventById(studio.eventId);
@@ -6071,7 +6084,15 @@ export function registerRoutes(app: Express): void {
     const i = list.findIndex((x) => x.id === studio.currentSceneId);
     const cur = i >= 0 ? list[i] : undefined;
     const next = i >= 0 ? list[i + 1] : undefined;
-    if (!cur || !next) return res.json({ action: "none" });
+    if (!cur) return res.json({ action: "none" });
+    // A LIVE stage studio never cuts on the clock (Packet B, 27 Nov): at the session's zero the console asks
+    // "Are they done?", and only that press (or the producer taking a scene) moves on. Radio and the Marathon
+    // studios have no stage and carry on below, unchanged.
+    if (await stageOfStudio(studio.id)) {
+      const up = await stageTimeUp(studio, cur, next);
+      return res.json(up ? { action: "ask-done", why: up.why, deskName: "", at: up.at } : { action: "none" });
+    }
+    if (!next) return res.json({ action: "none" });
     if (transitionOf(studio, cur) === "manual") return res.json({ action: "none" });
     // Nothing moves on the clock while anyone live is on stage: only their
     // "We're done" (or the producer's press) does. The console says so.
@@ -6319,21 +6340,23 @@ export function registerRoutes(app: Express): void {
     return { studio: updated, moved, missing: missing ? signup!.podcastName : null, keptHosts };
   }
 
+  // The rows come from the studio's own event (adminStudio already falls back to the body's event, then the
+  // featured one, exactly as before), so a stage studio's console takes its own rows.
   app.post("/api/admin/run-of-show/:id/take", requireAdmin, async (req, res) => {
-    const items = await storage.listRunOfShow(Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id);
+    const { studio } = await adminStudio(req);
+    const items = await storage.listRunOfShow(Number(req.body?.eventId) || studio.eventId);
     const row = items.find((r) => r.id === Number(req.params.id));
     if (!row) {
       res.status(404).json({ message: "Not found" });
       return;
     }
-    const { studio } = await adminStudio(req);
     res.json(await takeRunRow(studio, row));
   });
 
   /** The row after the one on now (or the first). What "next scene" presses. */
   app.post("/api/admin/run-of-show/next", requireAdmin, async (req, res) => {
-    const items = await storage.listRunOfShow(Number(req.body?.eventId) || (await storage.getFeaturedEvent()).id);
     const { studio } = await adminStudio(req);
+    const items = await storage.listRunOfShow(Number(req.body?.eventId) || studio.eventId);
     const idx = items.findIndex((r) => r.id === studio.currentRunItemId);
     const row = items[idx + 1];
     if (!row) {
