@@ -123,7 +123,7 @@ export function HostNav({
         { key: "dashboard", label: "Home", hint: "Your saved creators, your team and what's next", icon: LayoutDashboard },
         { key: "discovery", label: "Find creators", hint: "Search military and veteran creators: reach, audience and engagement on every profile", icon: Compass },
         { key: "requests", label: "Requests", hint: "What you've asked creators for, their answers and rates, and your threads", icon: Send },
-        { key: "verified", label: "Verified creators", hint: "Creators we know personally, each one checked by our team", icon: BadgeCheck },
+        { key: "verified", label: "Verified creators", hint: "Creators who've been on a MilitaryVoices event lineup", icon: BadgeCheck },
         { key: "organization", label: "Your team", hint: "Your company's account: invite the people you work with; lists are shared", icon: Building2 },
       ],
     },
@@ -212,7 +212,7 @@ export function HostNav({
       items: [
         { key: "fans", label: "Email", hint: "Write to everyone who signed up on your SmartLink: blocks, live preview, schedule, opens and clicks", icon: Mail },
         { key: "discovery", label: "Discovery", hint: discoveryLocked ? "Search military and veteran creators to find guests, partners and sponsors. Comes with Scale and Pro." : "Search military and veteran creators to find guests, partners and sponsors", icon: Compass, ...(discoveryLocked ? { upsell: true, tag: "Upgrade" } : {}) },
-        { key: "verified", label: "Verified creators", hint: discoveryLocked ? "Creators on MilitaryVoices we've checked ourselves, to invite as guests or collaborators. Comes with Scale and Pro." : verifiedLocked ? "Creators on MilitaryVoices we know personally. $10 a month, or included with Discovery Pro." : "Creators on MilitaryVoices we know personally, each one checked by our team", icon: BadgeCheck, ...(discoveryLocked || verifiedLocked ? { upsell: true, tag: "Upgrade" } : {}) },
+        { key: "verified", label: "Verified creators", hint: discoveryLocked ? "Creators who've been on a MilitaryVoices event lineup, to invite as guests or collaborators. Comes with Scale and Pro." : verifiedLocked ? "Creators who've been on a MilitaryVoices event lineup. $10 a month, or included with Discovery Pro." : "Creators who've been on a MilitaryVoices event lineup", icon: BadgeCheck, ...(discoveryLocked || verifiedLocked ? { upsell: true, tag: "Upgrade" } : {}) },
         ...(contactsCount > 0 ? [{ key: "contacts" as const, label: "Contacts", hint: `${contactsCount} ${contactsCount === 1 ? "person wants" : "people want"} to hear from you`, icon: Users }] : []),
       ],
     },

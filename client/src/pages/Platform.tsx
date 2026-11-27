@@ -53,7 +53,7 @@ const HEADLINE_FONT = { fontFamily: "'General Sans', 'Inter', sans-serif" } as c
 const DISCOVERY_FEATURES = [
   { icon: Search, title: "300M+ profiles", body: "Instagram, YouTube and TikTok, searched by name, by bio, or by what you describe." },
   { icon: Wand2, title: "SI search", body: "Ask in plain English: \"Army veterans who talk about life after service.\"" },
-  { icon: BadgeCheck, title: "Verified military", body: "The gold badge means our team checked who they are and that they served or serve alongside." },
+  { icon: BadgeCheck, title: "Verified on MilitaryVoices", body: "The gold badge means they've been on a MilitaryVoices event lineup." },
   { icon: Globe2, title: "Who's really listening", body: "Audience age, gender, country, city and language, with a credibility score and real reach." },
   { icon: TrendingUp, title: "Engagement & growth", body: "Engagement rate, six months of follower growth, and how often they post." },
   { icon: Handshake, title: "Brand history", body: "Paid partnerships with dates, the sponsored posts themselves, and the brands their audience follows." },

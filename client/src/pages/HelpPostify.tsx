@@ -106,8 +106,8 @@ export default function HelpPostify() {
 
         <HelpSection n={9} id="post" title="Posting">
           <ul className="list-disc space-y-2 pl-5">
-            <li><strong>Clips</strong> go anywhere: Instagram, TikTok, Facebook, LinkedIn, YouTube. Press <strong>Post</strong> on a clip, tick the accounts, pick the shape, write what to say, and choose <strong>Next open slot</strong>, <strong>Now</strong> or <strong>Pick a time</strong>.</li>
-            <li><strong>A whole episode</strong> goes to YouTube only. Instagram takes videos up to 15 minutes, and short videos do better on the other apps. So for Instagram, TikTok, Facebook and LinkedIn, post the episode's clips: <strong>Choose clips to post →</strong> takes you to them.</li>
+            <li><strong>Clips</strong> go anywhere: YouTube, Instagram, TikTok, Facebook, LinkedIn, X and Threads. Press <strong>Post</strong> on a clip, tick the accounts, pick the shape, write what to say, and choose <strong>Next open slot</strong>, <strong>Now</strong> or <strong>Pick a time</strong>.</li>
+            <li><strong>A whole episode</strong> goes to YouTube only. Instagram takes videos up to 15 minutes, and short videos do better on the other apps. So for Instagram, TikTok, Facebook, LinkedIn, X and Threads, post the episode's clips: <strong>Choose clips to post →</strong> takes you to them.</li>
             <li>Nothing goes out until you press the button. Everything you've sent or scheduled is on the <strong>Social</strong> calendar.</li>
           </ul>
           <p className="mt-3">Your podcast can post episodes to YouTube too. See <Link href="/help/podcast#youtube" className="font-medium text-primary hover:underline">your episodes on YouTube</Link>.</p>

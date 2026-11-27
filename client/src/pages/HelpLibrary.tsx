@@ -67,7 +67,7 @@ export default function HelpLibrary() {
             <li><strong>Move to folder</strong>, or make a <strong>New folder…</strong>.</li>
             <li><strong>Delete</strong>, for uploads, Zoom imports and Pōstify's copies.</li>
           </ul>
-          <HelpNote>A whole recording goes to YouTube only. For Instagram, TikTok, Facebook and LinkedIn, post its clips: short videos do better there, and Instagram only takes videos up to 15 minutes.</HelpNote>
+          <HelpNote>A whole recording goes to YouTube only. For Instagram, TikTok, Facebook, LinkedIn, X and Threads, post its clips: short videos do better there, and Instagram only takes videos up to 15 minutes.</HelpNote>
         </HelpSection>
 
         <HelpSection n={5} id="clips" title="Scheduled or Posted">

@@ -59,7 +59,7 @@ const PLAN_FEATURES: Record<string, Feature[]> = {
     { t: "Book a guest", tip: "Search people who have been guests on podcasts, the most-booked first. Invite them onto your show, find their email, or save them for later." },
     { t: "Be a guest", tip: "Find shows that take guests in your field, and have SI help write your pitch." },
     { t: "Discovery Pro included", tip: "Search 800M+ creator profiles for military and veteran guests, partners and sponsors: 100 searches, 25 full profiles and 50 contact emails a month. $50 a month on its own." },
-    { t: "Verified creators included", tip: "Everyone MilitaryVoices knows, with their pictures and real numbers, ready to invite as guests or collaborators. $10 a month on its own." },
+    { t: "Verified creators included", tip: "Creators who've been on a MilitaryVoices event lineup, with their pictures and real numbers, ready to invite as guests or collaborators. $10 a month on its own." },
   ],
 };
 

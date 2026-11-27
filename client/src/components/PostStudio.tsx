@@ -7,7 +7,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from "@/components/ui/tooltip
 import { CreditsInfo } from "@/components/CreditsInfo";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuSeparator, DropdownMenuTrigger } from "@/components/ui/dropdown-menu";
-import { PLANS, CREDIT_PACKS, OVERAGE_CAP_CHOICES, episodeCredits, cents, SHORT_VIDEO_SEC, type PlanKey } from "@shared/tokens";
+import { PLANS, QUARTERLY_ONLY, CREDIT_PACKS, OVERAGE_CAP_CHOICES, episodeCredits, cents, SHORT_VIDEO_SEC, type PlanKey } from "@shared/tokens";
 import { CLIP_FORMATS, DEFAULT_CLIP_OPTIONS, parseClipOptions, parseMusicMix, parseEditSuggest, type ClipFormat, type ClipOptions, type EpisodeEdit, type EpisodeMusic, type EditSuggestion, type EditTransition } from "@shared/schema";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -518,15 +518,18 @@ function PlanDialog({ open, onOpenChange, beta, plan, note }: { open: boolean; o
             <div className="grid gap-3 sm:grid-cols-2">
               {Object.values(PLANS).map((p) => {
                 const popular = "popular" in p && p.popular;
+                // Pro is paid every three months only (QUARTERLY_ONLY; the server bills it that way), so Yearly never prices it.
+                const quarterly = QUARTERLY_ONLY.includes(p.key);
+                const showYearly = yearly && !quarterly;
                 return (
                   <div key={p.key} className={`flex flex-col rounded-2xl border p-4 ${popular ? "border-[#053877] bg-[#053877]/[0.04]" : "border-border"}`}>
                     <p className="text-sm font-semibold text-muted-foreground">{p.name}</p>
-                    <p className="mt-1 text-3xl font-bold text-foreground">{cents(yearly ? Math.round(p.yearCents / 12) : p.cents)}<span className="text-sm font-medium text-muted-foreground"> /month</span></p>
+                    <p className="mt-1 text-3xl font-bold text-foreground">{cents(showYearly ? Math.round(p.yearCents / 12) : p.cents)}<span className="text-sm font-medium text-muted-foreground"> /month</span></p>
                     {/* From the social upgrade: say first that the plan is what keeps posting going (PM, 21 Nov). */}
                     {note && <p className="mt-1 flex items-center gap-1.5 text-sm font-semibold text-foreground" data-testid={`plan-${p.key}-posting`}><Check className="h-4 w-4 shrink-0 text-[#079455]" /> Post to all your socials</p>}
-                    <p className="mt-1 text-sm font-semibold text-foreground">{yearly ? `${(p.credits * 12).toLocaleString()} credits a year, at once` : `${p.credits} credits a month`}</p>
-                    <p className="mt-1 flex-1 text-xs text-muted-foreground">{p.blurb} {yearly ? `${cents(p.yearCents)} billed yearly.` : `Extra credits ${cents(p.overageCents)} each.`}</p>
-                    <Button onClick={() => void go(p.key, () => startPlanCheckout(p.key, yearly ? "year" : "month"))} disabled={busy !== null} className={`mt-3 gap-2 rounded-full ${popular ? "bg-[#053877] text-white hover:bg-[#0a4a99]" : ""}`} variant={popular ? "default" : "outline"} data-testid={`plan-${p.key}`}>
+                    <p className="mt-1 text-sm font-semibold text-foreground">{showYearly ? `${(p.credits * 12).toLocaleString()} credits a year, at once` : quarterly ? `${(p.credits * 3).toLocaleString()} credits every 3 months, at once` : `${p.credits} credits a month`}</p>
+                    <p className="mt-1 flex-1 text-xs text-muted-foreground">{p.blurb} {showYearly ? `${cents(p.yearCents)} billed yearly.` : quarterly ? `Paid every 3 months: ${cents("quarterCents" in p ? p.quarterCents : p.cents * 3)}. Extra credits ${cents(p.overageCents)} each.` : `Extra credits ${cents(p.overageCents)} each.`}</p>
+                    <Button onClick={() => void go(p.key, () => startPlanCheckout(p.key, showYearly ? "year" : "month"))} disabled={busy !== null} className={`mt-3 gap-2 rounded-full ${popular ? "bg-[#053877] text-white hover:bg-[#0a4a99]" : ""}`} variant={popular ? "default" : "outline"} data-testid={`plan-${p.key}`}>
                       {busy === p.key && <Loader2 className="h-4 w-4 animate-spin" />} Choose {p.name}
                     </Button>
                   </div>

@@ -272,7 +272,7 @@ export const HELP_INDEX: HelpEntry[] = [
   },
   {
     title: "Post an episode or its clips",
-    summary: "A whole episode goes to YouTube only. Post its clips to Instagram, TikTok, Facebook and LinkedIn.",
+    summary: "A whole episode goes to YouTube only. Post its clips to Instagram, TikTok, Facebook, LinkedIn, X and Threads.",
     href: "/help/postify#post",
     keywords: "post posting share instagram tiktok facebook linkedin youtube 15 minutes too long schedule next open slot social calendar",
     audience: "podcasters",

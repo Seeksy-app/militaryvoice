@@ -36,7 +36,7 @@ export default function HelpZoomStory() {
           <ul className="mt-5 grid gap-3 sm:grid-cols-3">
             <Win icon={CalendarClock} title="Hours back each week" text="No downloading the file, finding it, and uploading it again." />
             <Win icon={Scissors} title="Clips you'd pay an editor for" text="Short vertical clips with captions, from every call." />
-            <Win icon={Share2} title="More people hear you" text="The same talk on your podcast, YouTube, Instagram, TikTok, Facebook and LinkedIn." />
+            <Win icon={Share2} title="More people hear you" text="The same talk on your podcast, YouTube, Instagram, TikTok, Facebook, LinkedIn, X and Threads." />
           </ul>
         </HelpSection>
 
@@ -80,7 +80,7 @@ export default function HelpZoomStory() {
         <HelpSection n={6} id="share" title="Out to your podcast and social">
           <ul className="list-disc space-y-2 pl-5">
             <li><strong>Your podcast:</strong> press <strong>⋯</strong> on the episode and choose <strong>Add as an episode</strong>. It goes to Apple Podcasts, Spotify and the rest through your feed.</li>
-            <li><strong>Social:</strong> press <strong>Post</strong> on a clip, tick your accounts (Instagram, TikTok, Facebook, LinkedIn, YouTube), and choose <strong>Now</strong>, <strong>Next open slot</strong> or <strong>Pick a time</strong>. Everything you've scheduled is on the <strong>Social</strong> calendar.</li>
+            <li><strong>Social:</strong> press <strong>Post</strong> on a clip, tick your accounts (YouTube, Instagram, TikTok, Facebook, LinkedIn, X, Threads), and choose <strong>Now</strong>, <strong>Next open slot</strong> or <strong>Pick a time</strong>. Everything you've scheduled is on the <strong>Social</strong> calendar.</li>
           </ul>
           <p className="mt-3">Nothing goes out until you press the button.</p>
         </HelpSection>

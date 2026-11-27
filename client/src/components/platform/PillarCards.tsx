@@ -142,8 +142,8 @@ export const PILLARS: Pillar[] = [
   {
     key: "verified", art: "shield", kicker: "Verified", tint: "from-[#e7f6ee] to-[#f6fcf9] dark:from-[#0a2a1c] dark:to-[#0a1433]", Scene: VerifiedScene,
     title: "Every speaker becomes a verified voice",
-    body: "Our team checks that the people who take part are who they say they are, and that they served or serve alongside. The badge goes with them, so brands and shows can find them.",
-    points: ["Identity and service checked by our team", "A badge that travels with them", "Introductions made through us, with their say-so"],
+    body: "Everyone on a MilitaryVoices event lineup gets the Verified badge. It goes with them, so brands and shows can find them.",
+    points: ["Given for being on an event lineup", "A badge that travels with them", "Introductions made through us, with their say-so"],
   },
 ];
 

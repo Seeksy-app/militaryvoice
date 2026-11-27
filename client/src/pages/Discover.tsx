@@ -1605,7 +1605,7 @@ function Welcome({ sample, onOpenSample, verified, isMember, isAdmin, signedIn, 
           <h2 className="flex items-center gap-2 text-xl font-semibold tracking-tight">
             <BadgeCheck className="h-5 w-5 text-[#F0A71F]" /> Verified on MilitaryVoices
           </h2>
-          <p className="text-sm text-muted-foreground">Creators we know personally. Every one checked by our team.</p>
+          <p className="text-sm text-muted-foreground">Creators who've been on a MilitaryVoices event lineup.</p>
         </div>
         <div className={`mt-5 ${answer(!sample)}`}>
           {verified.length === 0 ? <ResultsSkeleton /> : <ResultsList rows={verified} saved={saved} isMember={isMember} isAdmin={isAdmin} onOpen={onOpenVerified} onSave={onSaveVerified} onSaveMany={onSaveMany} />}

@@ -28,7 +28,7 @@ const STEPS = [
 ];
 const WHY = [
   { icon: BarChart3, title: "Measured, not guessed", line: "Followers, engagement and audience quality from the platforms themselves, not a creator's own screenshot." },
-  { icon: BadgeCheck, title: "Verified by people", line: "Creators on MilitaryVoices we know personally, each one checked by our team." },
+  { icon: BadgeCheck, title: "Verified by us", line: "Creators who've been on a MilitaryVoices event lineup or host their show with us." },
   { icon: Clapperboard, title: "Your moment, clipped", line: "Shows recorded in our studio are clipped the same day, so a sponsor read can live on as Shorts and Reels." },
   { icon: Link2, title: "Links that count", line: "Every sponsor link is counted, so you know what a mention actually sent you." },
 ];

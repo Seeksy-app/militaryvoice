@@ -40,7 +40,7 @@ export default function HelpAccount() {
           </ul>
           <HelpStep k="a">Open the account menu and press <strong>Plan &amp; billing</strong>.</HelpStep>
           <HelpStep k="b">Press <strong>Upgrade to {PLANS.creator.name}</strong> or <strong>Upgrade to {PLANS.pro.name}</strong>. Checkout is secure, by Stripe.</HelpStep>
-          <p className="mt-3">Paying yearly gets two months free: choose <strong>Yearly</strong> in Pōstify's <strong>Pick a plan</strong> window. Cancel any time.</p>
+          <p className="mt-3">{PLANS.creator.name} paid yearly gets two months free: choose <strong>Yearly</strong> in Pōstify's <strong>Pick a plan</strong> window. {PLANS.pro.name} is paid every three months ({cents(PLANS.pro.quarterCents)}). Cancel any time.</p>
         </HelpSection>
 
         <HelpSection n={3} id="credits" title="Credits">
