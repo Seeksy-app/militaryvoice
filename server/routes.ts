@@ -8305,7 +8305,7 @@ export function registerRoutes(app: Express): void {
   const packageOn = async (email: string) => { try { return !!(JSON.parse((await storage.getSetting(`package:${email.trim().toLowerCase()}`)) ?? "{}") as { on?: boolean }).on; } catch { return false; } };
 
   /** The guest card for this recording, made and queued as the edit's intro and outro. */
-  async function attachGuest(rec: { id: number; email: string; clean: string; url: string }, guestName: string, guestPhoto: Buffer): Promise<void> {
+  async function attachGuest(rec: { id: number; email: string; clean: string; url: string }, guestName: string, guestPhoto: Buffer, source: EpisodeEdit["source"] = "original"): Promise<void> {
     const email = rec.email.trim().toLowerCase();
     const profile = await storage.getProfileByEmail(email);
     if (!profile?.photoUrl) throw new Error("Add your own photo to your profile first: it goes on the left of the card.");
@@ -8315,7 +8315,7 @@ export function registerRoutes(app: Express): void {
     const key = `show-assets/gc-${Date.now()}-${crypto.randomBytes(4).toString("hex")}.png`;
     await putRecordingObject(key, png, "image/png");
     const e: EpisodeEdit = {
-      source: "original", trimStart: 0, trimEnd: 0,
+      source, trimStart: 0, trimEnd: 0,
       introKey: key, introName: `Guest card: ${guestName}`, outroKey: key, outroName: `Guest card: ${guestName}`,
       cardMusicKey: gc.musicKey || undefined, cardSec: gc.sec, status: "queued", at: new Date().toISOString(),
     };
@@ -8396,6 +8396,36 @@ export function registerRoutes(app: Express): void {
       try { await attachGuest(waiting, guestName, body); await storage.setSetting(`nextguest:${email}`, ""); return res.json({ ok: true, started: waiting.title }); } catch (err) { return res.status(409).json({ message: (err as Error).message }); }
     }
     res.json({ ok: true });
+  });
+
+  /**
+   * Admin: the guest card as the intro and outro of one recording, made into a new Library copy for its owner (27 Nov 2026,
+   * Andrew: "Yes, make a sample" for Riccoh). The same as the package's: their profile photo on the left, the guest on the
+   * right, their card settings and music. Nothing is published or posted; the original and its draft are untouched.
+   * { guestName, photo: data URL, source?: "clean" | "original" }.
+   */
+  app.post("/api/admin/recordings/:id/guest-card-edit", requireAdmin, async (req, res) => {
+    if ((req as any).studioHost || (req as any).eventAdmin) return res.status(403).json({ message: "Admins only." });
+    const rec = await storage.getRecording(Number(req.params.id));
+    if (!rec || rec.status !== "Ready") return res.status(404).json({ message: "No such recording." });
+    let prev: EpisodeEdit | null = null;
+    try { prev = rec.episodeEdit ? JSON.parse(rec.episodeEdit) : null; } catch { prev = null; }
+    if (prev && (prev.status === "queued" || prev.status === "running")) return res.status(409).json({ message: "An edit of this episode is already being made." });
+    const guestName = String(req.body?.guestName ?? "").trim().slice(0, 60);
+    const m = /^data:image\/(?:jpeg|png|webp);base64,(.+)$/i.exec(String(req.body?.photo ?? ""));
+    if (!guestName || !m) return res.status(400).json({ message: "Add the guest's name and photo." });
+    const source: EpisodeEdit["source"] = req.body?.source === "clean" ? "clean" : "original";
+    if (source === "clean") {
+      let clean: CleanResult | null = null;
+      try { clean = rec.clean ? JSON.parse(rec.clean) : null; } catch { clean = null; }
+      if (clean?.status !== "done" || !clean?.videoKey) return res.status(409).json({ message: "The clean episode isn't ready yet." });
+    }
+    try {
+      await attachGuest(rec, guestName, Buffer.from(m[1], "base64"), source);
+    } catch (err) {
+      return res.status(409).json({ message: (err as Error).message });
+    }
+    res.json({ ok: true, recordingId: rec.id, source });
   });
 
   /** Admin: switch a member's package on or off (the template: settings guestcard:<email>). */
