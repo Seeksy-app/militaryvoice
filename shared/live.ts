@@ -163,7 +163,7 @@ export type ApprovalDecision = { decision: "approved" | "changes_requested"; not
  *  of show (subjectId = stage id), a speaker or a script to the client at its current version (MV Editor: scripts only).
  *  An older pending request for the same thing is withdrawn; a script goes to in_review. Approving a run of show
  *  freezes it and the stage studio's console follows that copy. GET .../approvals?mine=1 → only what I can decide now. */
-export type ApprovalRequest = { subjectType: "run_of_show" | "speaker" | "script"; subjectId: number; approverRole?: "client_reviewer" | "client_admin"; summary?: string };
+export type ApprovalRequest = { subjectType: "run_of_show" | "speaker" | "script" | "template"; subjectId: number; approverRole?: "client_reviewer" | "client_admin"; summary?: string };
 
 /** GET /api/production/productions/:id/audit → AuditEntry[] (newest first, 200 max; ?before=<id> for more). MV Admin, Producer, Coordinator. */
 export type AuditEntry = { id: number; productionId: number | null; who: string; what: string; subjectType: string; subjectId: number | null; before: unknown; after: unknown; at: string;
@@ -417,4 +417,16 @@ export type ActivityEntry = {
   subjectType: string;
   subjectId: number | null;
   aiActionId: number | null;
+  /** Plain words for the line, e.g. "Panel: Building a second career" (built from before/after for older rows). */
+  summary: string;
 };
+/** GET /api/production/productions/:id/alex → AlexStatus (MV roles): her switches as they stand, for "Her jobs". */
+export type AlexStatus = {
+  send: boolean; // live:send (off: her mail is held, except to the hello+live*@ test addresses)
+  voice: boolean; // live:voice
+  held: number; // her messages for this production waiting as held
+  coordinatorAt: string; // when her daily check runs, in the production's time zone, e.g. "8 am"
+};
+/** Templates (phase 2, step 3): POST .../approvals { subjectType: "template", subjectId } makes two rows: MV Admin
+ *  (the exact text Andrew OKs) and, when it goes out in the client's name, Client Admin. It's sendable once both
+ *  that apply are approved. MV starters (orgId 0) need MV Admin only. */
