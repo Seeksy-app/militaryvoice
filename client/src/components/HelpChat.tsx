@@ -22,8 +22,9 @@ type Msg = { role: "user" | "assistant"; content: string; actions?: HelpAction[]
 // Andrew, 20 Nov 2026: Ask Alex on the whole site for now (booths, Radio, show pages and podcasters' own pages
 // included), until there's a permanent placement. Still never on a page the recorder films (it would be on air
 // or in the recording: /dx/program, /studio/composite, /room/composite, the /promo renders), and not on /admin,
-// which has its own Ask Alex button (AdminChatDock) in the same corner.
-const HIDDEN_ON = ["/promo", "/studio/composite", "/room/composite", "/dx/", "/admin"];
+// which has its own Ask Alex button (AdminChatDock) in the same corner. Not in My Studio either (PM, 27 Nov): on a phone it
+// sat on the camera check's Enter studio button.
+const HIDDEN_ON = ["/promo", "/studio/composite", "/room/composite", "/dx/", "/admin", "/my-studio"];
 
 const OPENER: Msg = {
   role: "assistant",
