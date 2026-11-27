@@ -163,7 +163,7 @@ export function BioPageView({ data, preview = false, onEvent, onAsk, onAskAi, on
       )}
       {/* Our mark: a small bar at the foot of the page (it doesn't float, so it never sits on the chat or the intro). A paid plan can switch it off. */}
       {(t.branding ?? true) ? (
-        <div className="mt-auto flex justify-center px-4 pt-12" data-testid="bio-branding-bar">
+        <div className="mt-auto flex justify-center px-4 pb-14 pt-12 sm:pb-0" data-testid="bio-branding-bar">
           <a href={preview ? undefined : "https://www.militaryvoices.ai/?ref=smartlink"} target="_blank" rel="noopener" onClick={() => ev("click", "MilitaryVoices.ai bar")} className="inline-flex items-center gap-2 rounded-full py-1.5 pl-1.5 pr-3.5 text-xs font-semibold shadow-lg backdrop-blur-md" style={{ background: dark ? "rgba(22,26,40,0.88)" : "rgba(255,255,255,0.92)", color: ink, border: `1px solid ${line}` }}>
             <img src="/favicon.png" alt="" className="h-5 w-5 rounded-full" />
             MilitaryVoices.ai
@@ -523,12 +523,12 @@ function PodcastCard({ p, siteUrl, onAsk, opts, style, full, fallbackArt, accent
   );
   // Ask the show's AI about this episode (when it has learned the show).
   const askBtn = (e: E) => onAsk && (
-    <button type="button" onClick={() => onAsk({ id: e.id, title: e.title })} aria-label={`Ask about ${e.title}`} title="Ask about this episode" className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-transform hover:scale-110" style={{ background: `${accent}22`, color: accent }} data-testid="bio-ep-ask">
+    <button type="button" onClick={() => onAsk({ id: e.id, title: e.title })} aria-label={`Ask about ${e.title}`} title="Ask about this episode" className="tap-44 flex h-9 w-9 shrink-0 items-center justify-center rounded-full transition-transform hover:scale-110" style={{ background: `${accent}22`, color: accent }} data-testid="bio-ep-ask">
       <MessageCircle className="h-4 w-4" />
     </button>
   );
   const shareBtn = (e: E) => (
-    <button type="button" onClick={() => share(e.title, e.id)} aria-label={`Share ${e.title}`} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full" style={{ color: sub }}>
+    <button type="button" onClick={() => share(e.title, e.id)} aria-label={`Share ${e.title}`} className="tap-44 flex h-9 w-9 shrink-0 items-center justify-center rounded-full" style={{ color: sub }}>
       {copied === e.id ? <Check className="h-4 w-4" /> : <Share2 className="h-4 w-4" />}
     </button>
   );

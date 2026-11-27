@@ -127,8 +127,9 @@ export default function ForBrands() {
       <section className="border-b border-border">
         <div className="mx-auto flex max-w-6xl flex-wrap items-center gap-6 px-4 py-12 sm:px-6">
           <CalendarDays className="h-8 w-8 shrink-0 text-[#053877] dark:text-[#9cc2ff]" />
-          <div className="min-w-0 flex-1">
-            <h2 className="text-xl font-bold text-foreground" style={HEAD}>Sponsor one of our live events</h2>
+          {/* basis-64: on a phone the words keep a real width and the button goes under them (it squeezed them to ~100px). */}
+          <div className="min-w-0 flex-1 basis-64">
+            <h2 className="text-balance text-xl font-bold text-foreground" style={HEAD}>Sponsor one of our live events</h2>
             <p className="mt-1 text-sm text-muted-foreground">National Military Podcast Day and the events that follow: your brand on air, on the watch page and in the keepsake magazine.</p>
           </div>
           <Link href="/sponsor"><Button variant="outline" className="gap-1.5 rounded-full">Event sponsorship <ArrowRight className="h-4 w-4" /></Button></Link>

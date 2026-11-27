@@ -139,7 +139,7 @@ export function NavBar({ product, account, tone = "light", bare = false }: { pro
               <Button
                 size="sm"
                 variant={location.startsWith("/host") ? "default" : "outline"}
-                className={dark ? "gap-1.5 rounded-full border-white/25 bg-white/5 text-white hover:bg-white/15 hover:text-white" : "gap-1.5 rounded-full"}
+                className={dark ? "tap-44 gap-1.5 rounded-full border-white/25 bg-white/5 text-white hover:bg-white/15 hover:text-white" : "tap-44 gap-1.5 rounded-full"}
               >
                 {signedIn ? <LayoutDashboard className="h-3.5 w-3.5" /> : <LogIn className="h-3.5 w-3.5" />}
                 <span>{signedIn ? "Dashboard" : "Sign in"}</span>
@@ -149,7 +149,7 @@ export function NavBar({ product, account, tone = "light", bare = false }: { pro
           <Button
             variant="ghost"
             size="icon"
-            className={dark ? "text-white hover:bg-white/10 hover:text-white" : undefined}
+            className={dark ? "tap-44 text-white hover:bg-white/10 hover:text-white" : "tap-44"}
             onClick={toggle}
             aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} mode`}
             data-testid="button-theme-toggle"
@@ -160,7 +160,7 @@ export function NavBar({ product, account, tone = "light", bare = false }: { pro
           {/* Mobile menu */}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="ghost" size="icon" className={`lg:hidden ${dark ? "text-white hover:bg-white/10 hover:text-white" : ""}`} aria-label="Open menu" data-testid="button-nav-menu">
+              <Button variant="ghost" size="icon" className={`tap-44 lg:hidden ${dark ? "text-white hover:bg-white/10 hover:text-white" : ""}`} aria-label="Open menu" data-testid="button-nav-menu">
                 <Menu className="h-5 w-5" />
               </Button>
             </DropdownMenuTrigger>

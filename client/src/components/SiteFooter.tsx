@@ -60,7 +60,8 @@ export function SiteFooter({ slug, note }: { slug?: string; /** A small line abo
 
   return (
     <footer className="text-white" style={{ backgroundColor: NAVY }} data-testid="site-footer">
-      <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
+      {/* pb-24 on phones: the last links scroll clear of the floating Ask Alex button. */}
+      <div className="mx-auto max-w-6xl px-4 pb-24 pt-12 sm:px-6 sm:pb-12">
         <div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between">
           {/* Always the dark-ground lockup: this band is navy in both themes,
               so the theme-swapping one puts near-black letters on navy. */}
@@ -92,7 +93,7 @@ export function SiteFooter({ slug, note }: { slug?: string; /** A small line abo
         <div className="mt-10 flex flex-col gap-3 border-t border-white/15 pt-6 text-xs text-white/50 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <p>© {new Date().getFullYear()} OHIOWA Management Group LLC, the company behind MilitaryVoices.ai. All rights reserved.</p>
-            {note && <p className="mt-1 text-white/40">{note}</p>}
+            {note && <p className="mt-1 text-white/60">{note}</p>}
           </div>
           <nav className="flex flex-wrap gap-x-5 gap-y-2">
             <Link href="/privacy" className="transition-colors hover:text-white">

@@ -394,7 +394,7 @@ export function MyRecordings({
                     e.preventDefault();
                     void postifyIt(main);
                   }}
-                  className={`order-3 inline-flex h-8 w-full items-center justify-center gap-1 whitespace-nowrap rounded-full px-1.5 text-xs font-semibold sm:gap-1.5 sm:px-3 ${main.clipStatus === "none" || main.clipStatus === "failed" ? "bg-[#F0A71F] text-[#1a1200] hover:bg-[#f5b94a]" : "border border-border text-foreground hover:bg-muted"}`}
+                  className={`tap-44 order-3 inline-flex h-8 w-full items-center justify-center gap-1 whitespace-nowrap rounded-full px-1.5 text-xs font-semibold sm:gap-1.5 sm:px-3 ${main.clipStatus === "none" || main.clipStatus === "failed" ? "bg-[#F0A71F] text-[#1a1200] hover:bg-[#f5b94a]" : "border border-border text-foreground hover:bg-muted"}`}
                   data-testid={`button-postify-card-${main.id}`}
                 >
                   {starting === main.id ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <Wand2 className="h-3.5 w-3.5" />} {starting === main.id ? "Starting…" : main.clipStatus === "none" || main.clipStatus === "failed" ? "Pōstify it" : main.clipStatus === "done" ? "Open in Pōstify" : "Pōstifying…"}
@@ -403,7 +403,7 @@ export function MyRecordings({
               {r.status !== "Recording" && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
-                    <Button size="icon" variant="ghost" className="order-2 -mr-1.5 -mt-1 h-8 w-8 shrink-0 rounded-full" aria-label="More" data-testid={`menu-recording-${r.id}`}>
+                    <Button size="icon" variant="ghost" className="tap-44 order-2 -mr-1.5 -mt-1 h-8 w-8 shrink-0 rounded-full" aria-label="More" data-testid={`menu-recording-${r.id}`}>
                       <MoreHorizontal className="h-4 w-4" />
                     </Button>
                   </DropdownMenuTrigger>

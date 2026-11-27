@@ -304,7 +304,7 @@ function ZoomWayIn({ wide = false }: { wide?: boolean }) {
   const zoom = useQuery<{ configured: boolean; connected: boolean }>({ queryKey: ["/api/host/zoom"], queryFn: async () => (await apiRequest("GET", "/api/host/zoom")).json(), staleTime: 60_000 });
   if (!zoom.data?.configured) return null;
   return (
-    <a href="/host/dashboard/integrations#section-content" className={`${wide ? "justify-center" : ""} inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-card px-3.5 text-[13px] font-semibold text-foreground hover:border-[#053877]/40`} data-testid="library-zoom">
+    <a href="/host/dashboard/integrations#section-content" className={`${wide ? "justify-center gap-1.5 whitespace-nowrap px-3 text-[12.5px]" : "gap-2 px-3.5 text-[13px]"} inline-flex h-10 shrink-0 items-center rounded-full border border-border bg-card font-semibold text-foreground hover:border-[#053877]/40`} data-testid="library-zoom">
       <Video className="h-4 w-4 text-[#2D8CFF]" /> {zoom.data.connected ? "From Zoom" : "Connect Zoom"}
     </a>
   );
@@ -316,7 +316,7 @@ function SendLink({ wide = false }: { wide?: boolean }) {
   const [open, setOpen] = useState(false);
   return (
     <>
-      <button type="button" onClick={() => setOpen(true)} className={`${wide ? "justify-center" : ""} inline-flex h-10 shrink-0 items-center gap-2 rounded-full border border-border bg-card px-3.5 text-[13px] font-semibold text-foreground hover:border-[#053877]/40`} title="A Zoom, Dropbox or Google Drive share link. We bring it into your Library." data-testid="library-send-recording">
+      <button type="button" onClick={() => setOpen(true)} className={`${wide ? "justify-center gap-1.5 whitespace-nowrap px-3 text-[12.5px]" : "gap-2 px-3.5 text-[13px]"} inline-flex h-10 shrink-0 items-center rounded-full border border-border bg-card font-semibold text-foreground hover:border-[#053877]/40`} title="A Zoom, Dropbox or Google Drive share link. We bring it into your Library." data-testid="library-send-recording">
         <Link2 className="h-4 w-4 text-[#053877] dark:text-[#8fb5e8]" />Send us a recording
       </button>
       <Dialog open={open} onOpenChange={setOpen}>

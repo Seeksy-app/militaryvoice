@@ -394,3 +394,7 @@
 /* While a dialog or sheet is open the page behind can't be clicked, so the Ask Alex bubble only covers the
    dialog's own buttons (the Post window's button on a phone, 22 Nov 2026). Hide it until the dialog closes. */
 body[data-scroll-locked] [data-testid="button-help-open"] { display: none; }
+
+/* A 44px tap area without changing how a small control looks (phones; WCAG target size). Not for positioned elements. */
+.tap-44:not(.absolute):not(.fixed):not(.sticky) { position: relative; }
+.tap-44::before { content: ""; position: absolute; top: min(0px, calc((100% - 44px) / 2)); bottom: min(0px, calc((100% - 44px) / 2)); left: min(0px, calc((100% - 44px) / 2)); right: min(0px, calc((100% - 44px) / 2)); }
